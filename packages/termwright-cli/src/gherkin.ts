@@ -24,8 +24,8 @@ export function gherkinPlugin(options: GherkinPluginOptions = {}) {
   return packageGherkinPlugin({
     ...options,
     generatedImports: {
-      test: 'termwright/test',
-      runtime: 'termwright/gherkin/runtime',
+      test: options.generatedImports?.test ?? 'termwright/test',
+      runtime: options.generatedImports?.runtime ?? 'termwright/gherkin/runtime',
     },
   });
 }

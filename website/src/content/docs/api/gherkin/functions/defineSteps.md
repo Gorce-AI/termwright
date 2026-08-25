@@ -11,21 +11,27 @@ editUrl: false
 
 # Function: defineSteps()
 
-> **defineSteps**(...`definitions`): [`GherkinDefinitions`](../../type-aliases/gherkindefinitions/)
+> **defineSteps**\<`Fixtures`\>(...`definitions`): [`GherkinDefinitions`](../../type-aliases/gherkindefinitions/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:149](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L149)
+Defined in: [definitions.ts:176](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L176)
 
 Creates the default export of a paired glue module.
 
 Definitions are data, not global registrations. This is what lets two feature
 files load different nearest-scope definitions safely in the same Vitest worker.
 
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
+
 ## Parameters
 
 ### definitions
 
-...readonly [`GherkinDefinition`](../../type-aliases/gherkindefinition/)[]
+...readonly [`GherkinDefinition`](../../type-aliases/gherkindefinition/)\<`Fixtures`\>[]
 
 ## Returns
 
-[`GherkinDefinitions`](../../type-aliases/gherkindefinitions/)
+[`GherkinDefinitions`](../../type-aliases/gherkindefinitions/)\<`Fixtures`\>

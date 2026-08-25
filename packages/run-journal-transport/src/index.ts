@@ -1,8 +1,4 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { createServer, connect, type Server, type Socket } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { createServer, connect, type Socket } from 'node:net';
 import {
   RunIdFactory,
   parseRunId,
@@ -11,9 +7,24 @@ import {
   type RunEventProducerId,
   type RunId,
 } from '@termwright/protocol/run-events';
+import {
+  bindLocalEndpoint,
+  createLocalToken,
+  endWithLocalFrame,
+  LocalJsonDecoder,
+  LocalTransportError,
+  parseRequestEnvelope,
+  parseResponseEnvelope,
+  responseEnvelope,
+  sameLocalSecret,
+  writeLocalFrame,
+} from '@termwright/local-transport';
 
 const VERSION = 1;
 const MAX_FRAME_BYTES = 384 * 1024;
+const MAX_CONNECTIONS = 1_000;
+const MAX_REQUESTS_PER_CONNECTION = 100_000;
+const HANDSHAKE_TIMEOUT_MS = 5_000;
 
 export class RunJournalTransportError extends Error {
   readonly code: 'authentication-failed' | 'connection-closed' | 'protocol-error' | 'stale-worker' | 'timeout';
@@ -59,51 +70,67 @@ export interface StartRunJournalServerOptions {
 
 interface Connection {
   readonly socket: Socket;
-  readonly decoder: Decoder;
+  readonly decoder: LocalJsonDecoder;
   chain: Promise<void>;
   identity: RunJournalWorkerIdentity | null;
   binding: RunJournalProducerBinding | null;
+  readonly seenRequests: Set<string>;
+  handshakeTimer: ReturnType<typeof setTimeout> | undefined;
+  failed: boolean;
   closed: boolean;
 }
 
 export async function startRunJournalServer(options: StartRunJournalServerOptions): Promise<RunJournalServer> {
   options.signal?.throwIfAborted();
   parseRunId('run', options.runId);
-  const token = options.token ?? randomBytes(32).toString('base64url');
-  if (token.length < 32 || token.length > 512) throw protocol('journal token must contain 32..512 characters');
-  const allocated = options.endpoint === undefined ? await allocateEndpoint() : { endpoint: options.endpoint };
-  if (options.signal?.aborted === true) {
-    await allocated.cleanup?.();
-    options.signal.throwIfAborted();
-  }
+  let token: string;
+  try { token = createLocalToken(options.token); }
+  catch (error) { throw protocol('journal token must contain 32..512 characters', error); }
   const ids = new RunIdFactory();
   const connections = new Set<Connection>();
+  const drainingConnections = new Set<Connection>();
   const workers = new Map<string, { readonly epoch: number; readonly connection: Connection }>();
+  const appendFailures: unknown[] = [];
   let closing = false;
+  let closePromise: Promise<void> | undefined;
 
   const server = createServer((socket) => {
-    if (closing) { socket.destroy(); return; }
+    if (closing || connections.size >= MAX_CONNECTIONS) { socket.destroy(); return; }
     socket.setNoDelay(true);
     const connection: Connection = {
       socket,
-      decoder: undefined as unknown as Decoder,
+      decoder: undefined as unknown as LocalJsonDecoder,
       chain: Promise.resolve(),
       identity: null,
       binding: null,
+      seenRequests: new Set(),
+      handshakeTimer: undefined,
+      failed: false,
       closed: false,
     };
-    const decoder = new Decoder((message) => {
-      const requestId = typeof message === 'object' && message !== null && !Array.isArray(message) &&
-        typeof (message as Record<string, unknown>).requestId === 'string'
-        ? (message as Record<string, unknown>).requestId as string
-        : 'connection';
-      connection.chain = connection.chain.then(() => dispatch(connection, message)).catch((error: unknown) => {
-        respond(connection.socket, requestId, false, wireError(error));
-        connection.socket.end();
+    drainingConnections.add(connection);
+    const decoder = new LocalJsonDecoder(MAX_FRAME_BYTES, (message) => {
+      const requestId = failureRequestId(message);
+      connection.chain = connection.chain.then(async () => {
+        if (connection.failed) return;
+        await dispatch(connection, message);
+      }).catch((error: unknown) => {
+        if (connection.failed || connection.closed) return;
+        connection.failed = true;
+        endWithLocalFrame(
+          connection.socket,
+          responseEnvelope(VERSION, requestId, false, wireError(error)),
+          MAX_FRAME_BYTES,
+        );
       });
     });
     Object.defineProperty(connection, 'decoder', { value: decoder });
     connections.add(connection);
+    connection.handshakeTimer = setTimeout(() => {
+      connection.failed = true;
+      socket.destroy();
+    }, HANDSHAKE_TIMEOUT_MS);
+    connection.handshakeTimer.unref?.();
     socket.on('data', (chunk) => {
       try { decoder.push(chunk); } catch (error) { socket.destroy(error as Error); }
     });
@@ -112,14 +139,17 @@ export async function startRunJournalServer(options: StartRunJournalServerOption
   });
 
   async function dispatch(connection: Connection, value: unknown): Promise<void> {
-    const message = record(value, 'message');
-    if (message.v !== VERSION) throw protocol('unsupported journal transport version');
-    const requestId = text(message.requestId, 'requestId', 256);
-    const type = text(message.type, 'type', 64);
+    const message = parseRequestEnvelope(value, VERSION);
+    const { requestId, type } = message;
+    if (connection.seenRequests.has(requestId)) throw protocol(`duplicate requestId ${requestId}`);
+    if (connection.seenRequests.size >= MAX_REQUESTS_PER_CONNECTION) {
+      throw protocol(`connection exceeded ${MAX_REQUESTS_PER_CONNECTION} requests`);
+    }
+    connection.seenRequests.add(requestId);
     if (connection.identity === null) {
       if (type !== 'hello') throw protocol('hello must be the first message');
       const presented = text(message.token, 'token', 512);
-      if (!sameSecret(token, presented)) throw new RunJournalTransportError('authentication-failed', 'journal token rejected');
+      if (!sameLocalSecret(token, presented)) throw new RunJournalTransportError('authentication-failed', 'journal token rejected');
       const runId = parseRunId('run', message.runId);
       if (runId !== options.runId) throw protocol('journal run id does not match server');
       const workerId = text(message.workerId, 'workerId', 256);
@@ -131,6 +161,8 @@ export async function startRunJournalServer(options: StartRunJournalServerOption
       connection.identity = Object.freeze({ runId, workerId, workerEpoch });
       connection.binding = Object.freeze({ producerId: ids.create('producer'), producerEpoch: workerEpoch });
       workers.set(workerId, { epoch: workerEpoch, connection });
+      if (connection.handshakeTimer !== undefined) clearTimeout(connection.handshakeTimer);
+      connection.handshakeTimer = undefined;
       respond(connection.socket, requestId, true, connection.binding);
       previous?.connection.socket.destroy();
       return;
@@ -147,7 +179,12 @@ export async function startRunJournalServer(options: StartRunJournalServerOption
       if (event.identity.runId !== options.runId || event.producerId !== binding.producerId || event.epoch !== binding.producerEpoch) {
         throw protocol('event producer/run binding does not match authenticated worker');
       }
-      await options.append(event);
+      try {
+        await options.append(event);
+      } catch (error) {
+        appendFailures.push(error);
+        throw error;
+      }
       respond(connection.socket, requestId, true, null);
       return;
     }
@@ -162,18 +199,38 @@ export async function startRunJournalServer(options: StartRunJournalServerOption
     if (connection.closed) return;
     connection.closed = true;
     connections.delete(connection);
+    if (connection.handshakeTimer !== undefined) clearTimeout(connection.handshakeTimer);
+    const drain = connection.chain;
+    void drain.then(
+      () => { if (connection.chain === drain) drainingConnections.delete(connection); },
+      () => { if (connection.chain === drain) drainingConnections.delete(connection); },
+    );
   }
 
-  try { await listen(server, allocated.endpoint, options.signal); }
-  catch (error) { await allocated.cleanup?.(); throw error; }
+  const endpoint = await bindLocalEndpoint({
+    server,
+    name: 'journal',
+    ...(options.endpoint === undefined ? {} : { endpoint: options.endpoint }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
   return Object.freeze({
-    endpoint: allocated.endpoint,
+    endpoint: endpoint.endpoint,
     token,
-    async close(): Promise<void> {
-      closing = true;
-      for (const connection of connections) connection.socket.destroy();
-      await closeServer(server);
-      await allocated.cleanup?.();
+    close(): Promise<void> {
+      closePromise ??= (async () => {
+        closing = true;
+        for (const connection of connections) connection.socket.destroy();
+        const draining = [...drainingConnections];
+        await Promise.allSettled(draining.map(async (connection) => connection.chain));
+        const failures: unknown[] = [...appendFailures];
+        try {
+          await endpoint.close();
+        } catch (error) {
+          failures.push(error);
+        }
+        if (failures.length > 0) throw new AggregateError(failures, 'journal server close failed');
+      })();
+      return closePromise;
     },
   });
 }
@@ -193,15 +250,18 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
   let sequence = 0;
   let closed = false;
   let serial = Promise.resolve();
-  const decoder = new Decoder((value) => {
-    const message = record(value, 'response');
-    const requestId = text(message.requestId, 'response.requestId', 256);
-    const request = pending.get(requestId);
-    if (request === undefined) return;
-    pending.delete(requestId);
-    if (request.timer !== undefined) clearTimeout(request.timer);
-    if (message.ok === true) request.resolve(message.result);
-    else request.reject(errorFromWire(message.error));
+  const decoder = new LocalJsonDecoder(MAX_FRAME_BYTES, (value) => {
+    try {
+      const message = parseResponseEnvelope(value, VERSION);
+      const request = pending.get(message.requestId);
+      if (request === undefined) return;
+      pending.delete(message.requestId);
+      if (request.timer !== undefined) clearTimeout(request.timer);
+      if (message.ok) request.resolve(message.result);
+      else request.reject(errorFromWire(message.error));
+    } catch (error) {
+      fail(journalTransportError(error, 'invalid journal response'));
+    }
   });
   const fail = (error: Error): void => {
     if (closed) return;
@@ -213,7 +273,10 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
     }
     pending.clear();
   };
-  socket.on('data', (chunk) => { try { decoder.push(chunk); } catch (error) { fail(error as Error); } });
+  socket.on('data', (chunk) => {
+    try { decoder.push(chunk); }
+    catch (error) { fail(journalTransportError(error, 'invalid journal frame')); }
+  });
   socket.once('error', (error) => fail(new RunJournalTransportError('connection-closed', error.message, { cause: error })));
   socket.once('close', () => fail(new RunJournalTransportError('connection-closed', 'journal connection closed')));
 
@@ -236,74 +299,73 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
     });
   };
 
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new RunJournalTransportError('timeout', 'journal connect deadline expired')),
-      options.handshakeDeadline - monotonicEpochNow());
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new RunJournalTransportError('timeout', 'journal connect deadline expired'));
+      }, options.handshakeDeadline - monotonicEpochNow());
     timer.unref?.();
-    socket.once('connect', () => { clearTimeout(timer); resolve(); });
-    socket.once('error', (error) => { clearTimeout(timer); reject(error); });
-  });
-  const hello = record(await request('hello', {
-    token: options.token, runId: options.runId, workerId: options.workerId, workerEpoch: options.workerEpoch,
-  }, options.handshakeDeadline), 'hello response');
-  const binding = Object.freeze({
-    producerId: parseRunId('producer', hello.producerId),
-    producerEpoch: integer(hello.producerEpoch, 'producerEpoch'),
-  });
-  const identity = Object.freeze({ runId: options.runId, workerId: options.workerId, workerEpoch: options.workerEpoch });
-  return Object.freeze({
-    identity,
-    binding,
-    append(event: RunEvent, deadline: number): Promise<void> {
-      const operation = serial.then(async () => { await request('append', { event }, deadline); });
-      serial = operation.catch(() => undefined);
-      return operation;
-    },
-    async flush(deadline: number): Promise<void> {
-      await serial;
-      await request('flush', {}, deadline);
-    },
-    async close(): Promise<void> {
-      if (closed) return;
-      await serial;
-      closed = true;
-      socket.end();
-    },
-  });
-}
-
-class Decoder {
-  #buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
-  constructor(readonly onMessage: (value: unknown) => void) {}
-  push(chunk: Buffer): void {
-    this.#buffer = this.#buffer.length === 0 ? chunk : Buffer.concat([this.#buffer, chunk]);
-    while (this.#buffer.length >= 4) {
-      const length = this.#buffer.readUInt32BE(0);
-      if (length <= 0 || length > MAX_FRAME_BYTES) throw protocol(`invalid journal frame length ${length}`);
-      if (this.#buffer.length < length + 4) return;
-      const body = this.#buffer.subarray(4, length + 4);
-      this.#buffer = this.#buffer.subarray(length + 4);
-      try { this.onMessage(JSON.parse(body.toString('utf8'))); }
-      catch (error) { throw protocol('journal frame is not valid JSON', error); }
-    }
+      const onConnect = (): void => { cleanup(); resolve(); };
+      const onError = (error: Error): void => { cleanup(); reject(error); };
+      const cleanup = (): void => {
+        clearTimeout(timer);
+        socket.removeListener('connect', onConnect);
+        socket.removeListener('error', onError);
+      };
+      socket.once('connect', onConnect);
+      socket.once('error', onError);
+    });
+    const hello = record(await request('hello', {
+      token: options.token, runId: options.runId, workerId: options.workerId, workerEpoch: options.workerEpoch,
+    }, options.handshakeDeadline), 'hello response');
+    const binding = Object.freeze({
+      producerId: parseRunId('producer', hello.producerId),
+      producerEpoch: integer(hello.producerEpoch, 'producerEpoch'),
+    });
+    const identity = Object.freeze({ runId: options.runId, workerId: options.workerId, workerEpoch: options.workerEpoch });
+    return Object.freeze({
+      identity,
+      binding,
+      append(event: RunEvent, deadline: number): Promise<void> {
+        const operation = serial.then(async () => { await request('append', { event }, deadline); });
+        serial = operation.catch(() => undefined);
+        return operation;
+      },
+      async flush(deadline: number): Promise<void> {
+        await serial;
+        await request('flush', {}, deadline);
+      },
+      async close(): Promise<void> {
+        if (closed) return;
+        await serial;
+        closed = true;
+        socket.end();
+      },
+    });
+  } catch (error) {
+    socket.destroy();
+    throw error;
   }
 }
 
 function write(socket: Socket, message: unknown): void {
-  const body = Buffer.from(JSON.stringify(message));
-  if (body.length <= 0 || body.length > MAX_FRAME_BYTES) throw protocol(`journal frame contains ${body.length} bytes`);
-  const frame = Buffer.allocUnsafe(body.length + 4);
-  frame.writeUInt32BE(body.length, 0);
-  body.copy(frame, 4);
-  socket.write(frame);
+  try { writeLocalFrame(socket, message, MAX_FRAME_BYTES); }
+  catch (error) { throw journalTransportError(error, 'journal frame could not be written'); }
 }
 function respond(socket: Socket, requestId: string, ok: boolean, result: unknown): void {
-  write(socket, ok ? { v: VERSION, type: 'response', requestId, ok, result }
-    : { v: VERSION, type: 'response', requestId, ok, error: result });
+  write(socket, responseEnvelope(VERSION, requestId, ok, result));
 }
 function wireError(error: unknown): Record<string, string> {
   return { code: error instanceof RunJournalTransportError ? error.code : 'protocol-error',
     message: error instanceof Error ? error.message : 'unknown journal failure' };
+}
+function failureRequestId(value: unknown): string {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'connection';
+  const requestId = (value as Record<string, unknown>).requestId;
+  return typeof requestId === 'string' && requestId.length > 0 && requestId.length <= 256
+    ? requestId
+    : 'connection';
 }
 function errorFromWire(value: unknown): RunJournalTransportError {
   const error = record(value, 'response.error');
@@ -327,37 +389,9 @@ function integer(value: unknown, name: string): number {
 function protocol(message: string, cause?: unknown): RunJournalTransportError {
   return new RunJournalTransportError('protocol-error', message, cause === undefined ? undefined : { cause });
 }
-function sameSecret(expected: string, actual: string): boolean {
-  const a = Buffer.from(expected); const b = Buffer.from(actual);
-  return a.length === b.length && timingSafeEqual(a, b);
+function journalTransportError(error: unknown, fallback: string): RunJournalTransportError {
+  if (error instanceof RunJournalTransportError) return error;
+  if (error instanceof LocalTransportError) return protocol(error.message, error);
+  return protocol(fallback, error);
 }
 function monotonicEpochNow(): number { return performance.timeOrigin + performance.now(); }
-async function allocateEndpoint(): Promise<{ endpoint: string; cleanup?: () => Promise<void> }> {
-  const suffix = randomBytes(12).toString('hex');
-  if (process.platform === 'win32') return { endpoint: `\\\\.\\pipe\\termwright-journal-${suffix}` };
-  const directory = await mkdtemp(join(tmpdir(), 'termwright-journal-'));
-  return { endpoint: join(directory, 'journal.sock'), cleanup: () => rm(directory, { recursive: true, force: true }) };
-}
-function listen(server: Server, endpoint: string, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onError = (error: Error): void => { cleanup(); reject(error); };
-    const onListening = (): void => { cleanup(); resolve(); };
-    const onClose = (): void => {
-      cleanup();
-      reject(signal?.reason ?? new Error('journal server closed before listening'));
-    };
-    const cleanup = (): void => {
-      server.removeListener('error', onError);
-      server.removeListener('listening', onListening);
-      server.removeListener('close', onClose);
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.once('close', onClose);
-    server.listen({ path: endpoint, signal });
-  });
-}
-function closeServer(server: Server): Promise<void> {
-  if (!server.listening) return Promise.resolve();
-  return new Promise((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)));
-}

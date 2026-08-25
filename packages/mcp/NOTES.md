@@ -3,6 +3,44 @@
 Decisions that are not obvious from the code, and the open threads other package
 owners need to know about.
 
+## Streamable HTTP threat model
+
+The HTTP transport is a remote-control boundary, not a read-only diagnostics
+endpoint. An admitted MCP client can launch arbitrary argv under the server
+account, opt into the server environment, send terminal input and open traces.
+We therefore assume that the network, browser origins, session ids and request
+bodies are hostile. The generated bearer is the authority; `Mcp-Session-Id`
+only selects state owned by an already authenticated client.
+
+The library returns that capability as `HttpServerHandle.authToken`. The CLI
+does not print it by default because stderr is routinely captured by CI and
+process supervisors; `--show-auth-token` is an explicit disclosure decision for
+an operator who is about to configure a client. The token is never accepted in
+a URL, where browser history, referrers and access logs would copy it.
+
+Admission order is load-bearing: exact Origin policy and constant-time bearer
+comparison precede the authenticated per-peer limiter. An allowlisted CORS
+preflight is the sole bearer-free case, has an independent limiter instance and
+authorizes no MCP operation; its requested method and headers are closed sets.
+URL routing, body parsing, session lookup/touch and initialize happen only after
+bearer authentication.
+This prevents an unauthenticated peer from using path/session responses as an
+oracle, extending a guessed session's TTL, allocating terminals, or making the
+server buffer a large body.
+
+Loopback is the default containment boundary. Hostnames other than `localhost`
+and explicit loopback addresses are treated as remote, including wildcard
+binds, and require `allowNonLoopback`. That flag is acknowledgement, not
+encryption: remote deployments must supply their own TLS/private-network
+boundary. Browser-like clients are denied unless their exact HTTP(S) origin is
+allowlisted; missing Origin remains valid for ordinary non-browser MCP clients.
+
+The limiter also bounds its identity map. Once all unexpired identity slots are
+occupied, a new address receives 429 rather than evicting an active bucket and
+resetting an attacker's quota. There is no cleanup timer: expired buckets are
+reclaimed synchronously on admission, so the security layer owns no background
+resource or shutdown race.
+
 ## Two revision counters, and which one is which
 
 The compact format has one `revision` in its header and one inside every ref.

@@ -23,7 +23,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openTrace, type TraceReader } from '@termwright/trace';
-import { createRunId, parseRunId, type RunId } from '@termwright/protocol';
+import {
+  createRunId,
+  DEFAULT_LIMITS,
+  parseRunId,
+  validateSnapshot,
+  type RunId,
+} from '@termwright/protocol';
 import { watch } from 'chokidar';
 import {
   fromBase64,
@@ -123,8 +129,13 @@ export interface AttachedSession {
 export interface UiServer {
   /** Base URL including the token: open this and the app authenticates itself. */
   readonly url: string;
+  /** Worker-only URL carrying a producer-scoped credential. Never show this to a viewer. */
+  readonly producerUrl: string;
   readonly port: number;
+  /** Viewer/API credential. It cannot authenticate a producer socket. */
   readonly token: string;
+  /** Producer credential. It cannot authenticate viewer sockets or HTTP APIs. */
+  readonly producerToken: string;
   readonly mode: UiServerMode;
   readonly hub: UiHub;
   /** The recorder, in record mode. */
@@ -153,6 +164,7 @@ export interface UiServer {
  */
 export async function startUiServer(options: UiServerOptions = {}): Promise<UiServer> {
   const token = randomBytes(MIN_TOKEN_BYTES).toString('base64url');
+  const producerToken = randomBytes(MIN_TOKEN_BYTES).toString('base64url');
   const hub = new UiHub(options.hub ?? {});
   const sessions = new Map<string, AttachedSession>();
   const appDir = options.appDir ?? fileURLToPath(new URL('../dist/app/', import.meta.url));
@@ -166,12 +178,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   let stopping = false;
   let nextRequestedRunGeneration = 0;
   let requestedRun: { readonly generation: number; readonly runId?: RunId } | undefined;
-  let nextProducerGeneration = 0;
-  const producerRuns = new Map<
-    WebSocket,
-    { readonly generation: number; readonly requestedRunGeneration: number | undefined }
-  >();
-  const producerSessions = new Map<string, WebSocket>();
+  const producerSessions = new Map<string, { readonly socket: WebSocket; readonly generation: number }>();
+  const producerRevisions = new Map<string, number>();
+  const rejectedProducers = new WeakSet<WebSocket>();
   let nextInspectionRequest = 0;
   const pendingInspections = new Map<string, { readonly viewer: WebSocket; readonly clientRequestId: string; readonly timer: ReturnType<typeof setTimeout> }>();
   let reader: TraceReader | undefined;
@@ -291,12 +300,6 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     return source;
   };
 
-  if (options.trace !== undefined) {
-    await openArchive(options.trace);
-  } else if (options.record !== undefined) {
-    await beginRecording(options.record);
-  }
-
   /**
    * The last listing, kept so `/api/specs` knows which files to describe
    * without listing the project again — a listing takes seconds and the
@@ -305,6 +308,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   let discovered: readonly DiscoveredTest[] = [];
   let discoveryGeneration = 0;
   let discoveryReady = options.discovery === undefined;
+  const activeDiscoveries = new Set<Promise<void>>();
 
   /** Lists the project's tests and publishes them. Failure is not fatal. */
   const publishDiscovery = async (): Promise<void> => {
@@ -329,6 +333,13 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     }
   };
 
+  const scheduleDiscovery = (): Promise<void> => {
+    const task = publishDiscoveryManaged();
+    activeDiscoveries.add(task);
+    void task.finally(() => activeDiscoveries.delete(task));
+    return task;
+  };
+
   const http = createServer((request, response) => {
     void handleRequest(request, response).catch((error: unknown) => {
       sendJson(response, 500, { error: describeError(error) });
@@ -342,20 +353,25 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     // A cookie is host-wide rather than port/origin-bound. Another service on
     // 127.0.0.1 must not be able to use the browser's Termwright cookie to
     // become a producer or send control messages.
-    if (!authorized(request, token, false)) {
+    const role = new URL(request.url ?? '/', 'http://localhost').searchParams.get('role');
+    const expectedToken = role === 'producer' ? producerToken : token;
+    if (!authorized(request, expectedToken, false)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }
     wss.handleUpgrade(request, socket, head, (ws) => {
-      const role = new URL(request.url ?? '/', 'http://localhost').searchParams.get('role');
       if (role === 'producer') acceptProducer(ws);
       else acceptViewer(ws);
     });
   });
 
   function acceptViewer(ws: WebSocket): void {
-    const remove = hub.addClient({ send: (data) => ws.send(data) });
+    const remove = hub.addClient({
+      send: (data) => ws.send(data),
+      bufferedBytes: () => ws.bufferedAmount,
+      close: (reason) => ws.close(1008, reason.slice(0, 123)),
+    });
     ws.on('message', (raw: Buffer) => {
       let message: ClientMessage;
       try {
@@ -380,6 +396,11 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     ws.on('error', remove);
   }
 
+  function rejectProducer(socket: WebSocket, reason: string): void {
+    rejectedProducers.add(socket);
+    socket.close(1008, reason.slice(0, 123));
+  }
+
   /** An attached terminal-session producer publishes into the projection hub. */
   function acceptProducer(ws: WebSocket): void {
     // Producers are observers living in test workers. A worker can disappear
@@ -387,44 +408,78 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     // server down with it.
     ws.on('error', () => undefined);
     ws.on('message', (raw: Buffer) => {
+      if (rejectedProducers.has(ws)) return;
       let message: ServerMessage;
       try {
         message = parseServerMessage(raw);
       } catch (error) {
-        if (error instanceof UiProtocolError) return; // a bad frame is not fatal
+        if (error instanceof UiProtocolError) {
+          rejectProducer(ws, 'malformed producer frame');
+          return;
+        }
         throw error;
       }
-      if (message.type === 'run-start') {
-        producerRuns.set(ws, {
-          generation: ++nextProducerGeneration,
-          requestedRunGeneration: requestedRun?.generation,
-        });
-      } else if (message.type === 'run-end' || message.type === 'run-cancelled') {
-        // A producer owns its lifecycle. Never let an old watcher completion
-        // release a newer browser run (or vice versa).
-        producerRuns.delete(ws);
-      } else if (message.type === 'session') {
-        producerSessions.set(message.sessionId, ws);
+      if (!isProducerMessage(message)) {
+        rejectProducer(ws, `producer cannot publish ${message.type}`);
+        return;
+      }
+      if (message.type === 'session') {
+        const owner = producerSessions.get(message.sessionId);
+        const generation = hub.runGeneration;
+        if (owner !== undefined && owner.generation === generation && owner.socket !== ws && owner.socket.readyState === WebSocket.OPEN) {
+          rejectProducer(ws, 'session is already owned by another producer');
+          return;
+        }
+        producerSessions.set(message.sessionId, { socket: ws, generation });
+        if (owner === undefined || owner.socket !== ws || owner.generation !== generation) {
+          producerRevisions.delete(message.sessionId);
+        }
       } else if (message.type === 'actionability-inspection') {
         const pending = pendingInspections.get(message.requestId);
-        if (pending === undefined || producerSessions.get(message.sessionId) !== ws) return;
+        const owner = producerSessions.get(message.sessionId);
+        if (pending === undefined || owner?.socket !== ws || owner.generation !== hub.runGeneration) return;
         clearTimeout(pending.timer);
         pendingInspections.delete(message.requestId);
         if (pending.viewer.readyState === WebSocket.OPEN) pending.viewer.send(encodeMessage({ ...message, requestId: pending.clientRequestId }));
         return;
+      } else if ('sessionId' in message && message.sessionId !== undefined) {
+        const owner = producerSessions.get(message.sessionId);
+        if (owner?.socket !== ws || owner.generation !== hub.runGeneration) {
+          rejectProducer(ws, 'producer must claim the session before publishing events');
+          return;
+        }
+        if (message.type === 'semantic') {
+          const checked = validateSnapshot(message.snapshot, DEFAULT_LIMITS);
+          if (!checked.ok || checked.snapshot.sessionId !== message.sessionId ||
+              checked.snapshot.revision !== message.revision) {
+            rejectProducer(ws, checked.ok ? 'semantic envelope does not match its snapshot' : `invalid semantic snapshot: ${checked.code}`);
+            return;
+          }
+          const previous = producerRevisions.get(message.sessionId) ?? 0;
+          if (message.revision <= previous) {
+            rejectProducer(ws, 'semantic revisions must increase strictly');
+            return;
+          }
+          producerRevisions.set(message.sessionId, message.revision);
+          hub.publish({ ...message, snapshot: checked.snapshot });
+          return;
+        }
       }
       hub.publish(message);
     });
     // Session producers can disappear at any time. Drop their projection
     // ownership; authoritative run lifecycle is owned by the native host.
     ws.on('close', () => {
-      producerRuns.delete(ws);
-      for (const [sessionId, producer] of producerSessions) if (producer === ws) producerSessions.delete(sessionId);
+      for (const [sessionId, producer] of producerSessions) {
+        if (producer.socket !== ws) continue;
+        producerSessions.delete(sessionId);
+        producerRevisions.delete(sessionId);
+      }
     });
   }
 
   function runIsBusy(): boolean {
-    return stopping || requestedRun !== undefined || producerRuns.size > 0;
+    return stopping || requestedRun !== undefined || hub.runBusy;
   }
 
   function validateRunTargets(runnerTaskIds: readonly string[] | undefined): void {
@@ -512,14 +567,14 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           return;
         }
         const producer = producerSessions.get(message.sessionId);
-        if (producer === undefined || producer.readyState !== WebSocket.OPEN) {
+        if (producer === undefined || producer.generation !== hub.runGeneration || producer.socket.readyState !== WebSocket.OPEN) {
           viewer.send(encodeMessage({ v: 1, type: 'actionability-inspection', requestId: message.requestId, sessionId: message.sessionId, nodeId: message.nodeId, error: 'the live session owner is unavailable' }));
           return;
         }
         const internalRequestId = `server-inspect:${++nextInspectionRequest}`;
         const timer = setTimeout(() => pendingInspections.delete(internalRequestId), 5_000);
         pendingInspections.set(internalRequestId, { viewer, clientRequestId: message.requestId, timer });
-        producer.send(encodeMessage({ ...message, requestId: internalRequestId }));
+        producer.socket.send(encodeMessage({ ...message, requestId: internalRequestId }));
         return;
       }
     }
@@ -971,40 +1026,77 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     }
   }
 
-  // Discovery runs in the background: the server is useful before it finishes,
-  // and a project whose listing takes ten seconds should not delay the page.
-  void publishDiscoveryManaged();
-  const stopWatching = options.discovery?.watch === true
-    ? await watchForChanges(options.discovery.cwd, publishDiscoveryManaged)
-    : undefined;
-
   const port = await listen(http, options.port ?? 0, options.host ?? '127.0.0.1');
+  let stopWatching: (() => Promise<void>) | undefined;
+  let closing: Promise<void> | undefined;
+  const closeOwnedResources = (awaitDiscoveries = true): Promise<void> => {
+    closing ??= (async () => {
+      const wssClosed = new Promise<void>((resolveClose, rejectClose) => {
+        for (const client of wss.clients) client.terminate();
+        wss.close((error) => error === undefined ? resolveClose() : rejectClose(error));
+      });
+      const httpClosed = new Promise<void>((resolveClose, rejectClose) => {
+        http.close((error) => error === undefined ? resolveClose() : rejectClose(error));
+        http.closeAllConnections();
+      });
+      const watcherResult = await Promise.allSettled([
+        Promise.resolve().then(() => stopWatching?.()),
+      ]);
+      // Closing the watcher prevents a new refresh from entering the set. The
+      // initial listing is tracked separately because it predates the watcher.
+      const results = await Promise.allSettled([
+        ...(awaitDiscoveries ? [...activeDiscoveries] : []),
+        Promise.resolve().then(() => detachRecorder?.()),
+        wssClosed,
+        httpClosed,
+        recorder?.close(),
+        reader?.close(),
+      ]);
+      const failures = [...watcherResult, ...results]
+        .flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+      if (failures.length > 0) throw new AggregateError(failures, 'Termwright UI failed to close cleanly');
+    })();
+    return closing;
+  };
+  try {
+    if (options.trace !== undefined) {
+      await openArchive(options.trace);
+    } else if (options.record !== undefined) {
+      await beginRecording(options.record);
+    }
+    // Discovery runs in the background: the server is useful before it finishes,
+    // and a project whose listing takes ten seconds should not delay the page.
+    void scheduleDiscovery();
+    stopWatching = options.discovery?.watch === true
+      ? await watchForChanges(options.discovery.cwd, scheduleDiscovery)
+      : undefined;
+  } catch (error) {
+    try {
+      // In runUi the discovery callback awaits a host which is created only
+      // after this function returns. Awaiting it during failed startup would
+      // deadlock rollback; the caller rejects that deferred host immediately.
+      await closeOwnedResources(false);
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], 'Termwright UI startup and rollback failed');
+    }
+    throw error;
+  }
   const host = options.host ?? '127.0.0.1';
   const url = `http://${host}:${port}/?token=${token}`;
+  const producerUrl = `http://${host}:${port}/?token=${producerToken}`;
 
   return {
     url,
+    producerUrl,
     port,
     token,
+    producerToken,
     mode,
     hub,
     recorder,
     trace: reader,
     attach,
-    async close(): Promise<void> {
-      await stopWatching?.();
-      detachRecorder?.();
-      for (const client of wss.clients) client.terminate();
-      await new Promise<void>((done) => wss.close(() => done()));
-      const closed = new Promise<void>((done) => http.close(() => done()));
-      // `close()` only stops new connections; it then waits for the open ones,
-      // and a browser holds its keep-alive sockets open indefinitely. Without
-      // this the promise never settles when the pages outlive the server.
-      http.closeAllConnections();
-      await closed;
-      await recorder?.close();
-      await reader?.close();
-    },
+    close: closeOwnedResources,
   };
 }
 
@@ -1080,6 +1172,24 @@ function listen(server: Server, port: number, host: string): Promise<number> {
       done(address.port);
     });
   });
+}
+
+/** Worker sockets project session state only; run/test lifecycle comes from the host journal. */
+function isProducerMessage(message: ServerMessage): boolean {
+  switch (message.type) {
+    case 'session':
+    case 'output':
+    case 'semantic':
+    case 'app-log':
+    case 'action-start':
+    case 'action':
+    case 'actionability-inspection':
+      return true;
+    case 'diagnostic-gap':
+      return message.source === 'live-session-producer';
+    default:
+      return false;
+  }
 }
 
 /**
@@ -1175,13 +1285,21 @@ async function serveStatic(
     response.writeHead(200, {
       'content-type': CONTENT_TYPES[extname(file)] ?? 'application/octet-stream',
       'cache-control': 'no-store',
+      // The bootstrap URL contains a one-shot credential until the app moves
+      // it into tab-scoped storage. Never copy that URL into subresource or
+      // outbound Referer headers during this interval.
+      'referrer-policy': 'no-referrer',
       // The page needs to fetch its own bundle, which carries no query token.
       'set-cookie': `${COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; SameSite=Strict; HttpOnly`,
     });
     createReadStream(file).pipe(response);
   } catch {
     if (relative === '') {
-      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      response.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer',
+      });
       response.end(notBuiltPage(appDir));
       return;
     }

@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, expectTypeOf, test, vi } from 'vitest';
 import {
   After,
   Before,
@@ -28,6 +28,29 @@ function context(): { value: GherkinContext; titles: string[] } {
 }
 
 describe('feature-local runtime', () => {
+  test('types project fixtures alongside the native Gherkin context', () => {
+    interface ProjectFixtures {
+      readonly account: { readonly name: string };
+    }
+    const definitions = defineSteps<ProjectFixtures>(
+      Before<ProjectFixtures>(({ account, terminal }) => {
+        expectTypeOf(account.name).toEqualTypeOf<string>();
+        expectTypeOf(terminal).toBeObject();
+      }),
+      Given<ProjectFixtures>('an account', ({ account, world }) => {
+        expectTypeOf(account.name).toEqualTypeOf<string>();
+        expectTypeOf(world).toEqualTypeOf<Record<string, unknown>>();
+        // @ts-expect-error Only explicitly declared project fixtures pass through.
+        void account.missing;
+      }),
+      After<ProjectFixtures>(({ account }) => {
+        expectTypeOf(account.name).toEqualTypeOf<string>();
+      }),
+    );
+
+    expect(definitions).toHaveLength(3);
+  });
+
   test('uses only matches from the nearest tier', async () => {
     const nearest = vi.fn();
     const global = vi.fn();

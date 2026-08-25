@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: StepDefinitionBody"
+title: "Type Alias: StepDefinitionBody\\<Fixtures\\>"
 editUrl: false
 ---
 
@@ -9,19 +9,25 @@ editUrl: false
 
 [@termwright/gherkin](../../) / StepDefinitionBody
 
-# Type Alias: StepDefinitionBody
+# Type Alias: StepDefinitionBody\<Fixtures\>
 
-> **StepDefinitionBody** = (`context`, ...`captures`) => `unknown` \| `Promise`\<`unknown`\>
+> **StepDefinitionBody**\<`Fixtures`\> = (`context`, ...`captures`) => `unknown` \| `Promise`\<`unknown`\>
 
-Defined in: [gherkin/src/definitions.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L37)
+Defined in: [definitions.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L37)
 
 Body of a Given/When/Then definition. Captures follow the context argument.
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ## Parameters
 
 ### context
 
-[`GherkinContext`](../../interfaces/gherkincontext/)
+[`GherkinContext`](../gherkincontext/)\<`Fixtures`\>
 
 ### captures
 

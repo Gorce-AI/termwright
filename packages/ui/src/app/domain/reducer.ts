@@ -37,6 +37,7 @@ export type AppAction =
       readonly commands: TraceCommands;
       readonly traceState: TraceStatePayload | null;
       readonly logs: TraceLogs;
+      readonly timeMs: number;
     }
   | { readonly type: 'replay-error'; readonly executionId: string; readonly traceRef: string; readonly error: string }
   | { readonly type: 'replay-time'; readonly timeMs: number }
@@ -126,7 +127,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             commands: action.commands.commands,
             traceState: action.traceState,
             logs: action.logs,
-            timeMs: 0,
+            timeMs: Math.min(Math.max(action.timeMs, 0), action.overview.durationMs),
             playing: false,
             speed: 1,
             loading: false,

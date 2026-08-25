@@ -27,6 +27,18 @@ const output = (text: string, t = 0): ServerMessage => ({
 });
 
 describe('UiHub', () => {
+  it('rejects non-finite, fractional and negative memory ceilings', () => {
+    for (const options of [
+      { maxMessages: Number.NaN },
+      { maxOutputBytes: -1 },
+      { maxBacklogBytes: Number.POSITIVE_INFINITY },
+      { maxClientBufferedBytes: 1.5 },
+      { maxSessions: -1 },
+    ]) {
+      expect(() => new UiHub(options)).toThrow(/non-negative safe integer/u);
+    }
+  });
+
   it('replays the backlog to a client that connects late', () => {
     const hub = new UiHub();
     hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
@@ -101,6 +113,103 @@ describe('UiHub', () => {
       source: 'ui-hub',
       droppedMessages: 9,
     });
+  });
+
+  it('bounds the complete encoded backlog, not only terminal output', () => {
+    const hub = new UiHub({ maxBacklogBytes: 512 });
+    for (let index = 0; index < 20; index += 1) {
+      hub.publish({
+        v: 1,
+        type: 'app-log',
+        sessionId: 's1',
+        t: index,
+        source: 'file',
+        level: null,
+        message: `log-${index}-${'x'.repeat(100)}`,
+        label: 'app.log',
+      });
+    }
+    const encodedBytes = hub.backlog.reduce((total, message) => total + encodeMessage(message).length, 0);
+    expect(encodedBytes).toBeLessThanOrEqual(512);
+    expect(hub.backlog.some((message) => message.type === 'diagnostic-gap')).toBe(true);
+  });
+
+  it('measures the replay ceiling in UTF-8 bytes rather than JavaScript code units', () => {
+    const hub = new UiHub({ maxBacklogBytes: 512 });
+    for (let index = 0; index < 10; index += 1) {
+      hub.publish({
+        v: 1,
+        type: 'app-log',
+        sessionId: 's1',
+        t: index,
+        source: 'file',
+        level: null,
+        message: '😀'.repeat(70),
+        label: 'unicode.log',
+      });
+    }
+    const encodedBytes = hub.backlog.reduce(
+      (total, message) => total + Buffer.byteLength(encodeMessage(message)),
+      0,
+    );
+    expect(encodedBytes).toBeLessThanOrEqual(512);
+  });
+
+  it('enforces the byte ceiling after coalescing and protected-session replacement', () => {
+    const hub = new UiHub({ maxBacklogBytes: 512 });
+    hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 's1',
+      terminalProfile: 'default',
+      columns: 80,
+      rows: 24,
+    });
+    hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 's1',
+      terminalProfile: 'y'.repeat(2_000),
+      columns: 80,
+      rows: 24,
+    });
+    const encodedBytes = hub.backlog.reduce((total, message) => total + encodeMessage(message).length, 0);
+    expect(encodedBytes).toBeLessThanOrEqual(512);
+    expect(hub.backlog).toEqual([expect.objectContaining({ type: 'diagnostic-gap' })]);
+  });
+
+  it('keeps authoritative busy state outside the evictable replay cache', () => {
+    const hub = new UiHub({ maxMessages: 3, maxBacklogBytes: 256 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
+    expect(hub.runBusy).toBe(true);
+    hub.publish({ v: 1, type: 'run-end', summary: { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } });
+    for (let index = 0; index < 10; index += 1) hub.publish(output(`flood-${index}`));
+    expect(hub.runBusy).toBe(false);
+  });
+
+  it('disconnects one slow client without delaying another viewer', () => {
+    const hub = new UiHub({ maxClientBufferedBytes: 8 });
+    const slow: ServerMessage[] = [];
+    let buffered = 0;
+    let reason: string | undefined;
+    hub.addClient({
+      send(data) {
+        slow.push(parseServerMessage(data));
+        buffered = 9;
+      },
+      bufferedBytes: () => buffered,
+      close: (found) => { reason = found; },
+    });
+    const healthy = new RecordingClient();
+    hub.addClient(healthy);
+
+    hub.publish(output('first'));
+    hub.publish(output('second'));
+
+    expect(slow).toHaveLength(1);
+    expect(reason).toContain('buffer exceeded');
+    expect(healthy.received).toHaveLength(2);
+    expect(hub.clientCount).toBe(1);
   });
 
   it('coalesces and retains the newest session state under backlog pressure', () => {
@@ -271,7 +380,7 @@ describe('attachSession', () => {
     ]);
   });
 
-  it('publishes the exact tree carried by each revision instead of reading newer state', () => {
+  it('coalesces semantic state so a late viewer receives only the newest exact tree', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
     const first = snapshot(7, [node({ id: 'n1', role: 'button', name: 'First' })]);
@@ -281,7 +390,6 @@ describe('attachSession', () => {
 
     attachSession(hub, session);
     expect(afterAnnouncement(hub)).toEqual([
-      { v: 1, type: 'semantic', sessionId: 's1', revision: 7, snapshot: first },
       { v: 1, type: 'semantic', sessionId: 's1', revision: 8, snapshot: second },
     ]);
   });

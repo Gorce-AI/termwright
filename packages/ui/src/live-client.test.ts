@@ -18,7 +18,7 @@ describe('connectLiveSession', () => {
     const server = await startUiServer();
     servers.push(server);
     const session = new FakeSession('worker-session');
-    const connection = connectLiveSession(session, { url: server.url, testId: 'test-42' });
+    const connection = connectLiveSession(session, { url: server.producerUrl, testId: 'test-42' });
     connections.push(connection);
 
     // Deliberately publish synchronously: all of these occur before the local
@@ -69,7 +69,7 @@ describe('connectLiveSession', () => {
     const server = await startUiServer();
     servers.push(server);
     const session = new FakeSession('flooded-worker-session');
-    const connection = connectLiveSession(session, { url: server.url });
+    const connection = connectLiveSession(session, { url: server.producerUrl });
     connections.push(connection);
 
     for (let index = 0; index < 4_200; index += 1) session.output(`line ${index}`);
@@ -120,7 +120,7 @@ describe('connectLiveSession', () => {
   it('makes close idempotent', async () => {
     const server = await startUiServer();
     servers.push(server);
-    const connection = connectLiveSession(new FakeSession(), { url: server.url });
+    const connection = connectLiveSession(new FakeSession(), { url: server.producerUrl });
     connections.push(connection);
     const first = connection.close();
     expect(connection.close()).toBe(first);
@@ -144,7 +144,7 @@ describe('connectLiveSession', () => {
         strategy: action === 'type' ? 'focused-keyboard-type' : 'production-plan',
       };
     };
-    const connection = connectLiveSession(session, { url: server.url });
+    const connection = connectLiveSession(session, { url: server.producerUrl });
     connections.push(connection);
     await until(() => server.hub.backlog.some((message) => message.type === 'session' && message.sessionId === session.sessionId), 'producer session');
 

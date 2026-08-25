@@ -110,16 +110,18 @@ function testListing(json: string): readonly DiscoveredTest[] {
 class Viewer {
   readonly received: ServerMessage[] = [];
   readonly #socket: WebSocket;
+  readonly #closed: Promise<{ readonly code: number; readonly reason: string }>;
 
   private constructor(socket: WebSocket) {
     this.#socket = socket;
+    this.#closed = new Promise((done) => socket.once("close", (code, reason) => done({ code, reason: reason.toString() })));
     socket.on("message", (raw: Buffer) => {
       this.received.push(parseServerMessage(raw));
     });
   }
 
   static async connect(server: UiServer, role?: string): Promise<Viewer> {
-    const url = new URL(server.url);
+    const url = new URL(role === "producer" ? server.producerUrl : server.url);
     url.protocol = "ws:";
     url.pathname = "/ws";
     if (role !== undefined) url.searchParams.set("role", role);
@@ -144,6 +146,10 @@ class Viewer {
 
   close(): void {
     this.#socket.close();
+  }
+
+  closed(): Promise<{ readonly code: number; readonly reason: string }> {
+    return this.#closed;
   }
 
   /** Waits until `predicate` holds over the collected messages. */
@@ -184,12 +190,24 @@ async function waitUntil(
   throw new Error(`timed out waiting for ${label}`);
 }
 
+async function expectWebSocketRejection(url: URL, pattern: RegExp): Promise<void> {
+  const socket = new WebSocket(url);
+  await expect(new Promise((done, fail) => {
+    socket.once("open", () => done("opened"));
+    socket.once("error", fail);
+  })).rejects.toThrow(pattern);
+}
+
 describe("authentication", () => {
   it("generates a token with 192 bits of secret material by default", async () => {
     const server = await start();
     const bytes = Buffer.from(server.token, "base64url");
+    const producerBytes = Buffer.from(server.producerToken, "base64url");
     expect(bytes).toHaveLength(24);
+    expect(producerBytes).toHaveLength(24);
     expect(bytes.toString("base64url")).toBe(server.token);
+    expect(producerBytes.toString("base64url")).toBe(server.producerToken);
+    expect(server.producerToken).not.toBe(server.token);
   });
 
   it("rejects HTTP without the token", async () => {
@@ -212,6 +230,13 @@ describe("authentication", () => {
       }),
     });
     expect(response.status).toBe(401);
+  });
+
+  it("does not forward the token-bearing bootstrap URL as a referrer", async () => {
+    const server = await start();
+    const response = await fetch(server.url);
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   it("rejects a WebSocket upgrade without the token", async () => {
@@ -253,6 +278,64 @@ describe("authentication", () => {
     });
     expect(response.status).toBe(200);
   });
+
+  it("keeps viewer and producer credentials in separate capabilities", async () => {
+    const server = await start();
+    const viewerAsProducer = new URL(server.url);
+    viewerAsProducer.protocol = "ws:";
+    viewerAsProducer.pathname = "/ws";
+    viewerAsProducer.searchParams.set("role", "producer");
+    await expectWebSocketRejection(viewerAsProducer, /401/);
+
+    const producerAsViewer = new URL(server.producerUrl);
+    producerAsViewer.protocol = "ws:";
+    producerAsViewer.pathname = "/ws";
+    await expectWebSocketRejection(producerAsViewer, /401/);
+
+    const apiWithProducer = new URL("/api/state", server.url);
+    apiWithProducer.searchParams.set("token", server.producerToken);
+    expect((await fetch(apiWithProducer)).status).toBe(401);
+  });
+});
+
+describe("startup ownership", () => {
+  it("binds before acquiring a recorder so bind failure has nothing to roll back", async () => {
+    const occupied = await start();
+    await expect(startUiServer({
+      port: occupied.port,
+      record: { command: ["termwright-command-that-must-never-start"] },
+    })).rejects.toMatchObject({ code: "EADDRINUSE" });
+  });
+
+  it("releases the listener when resource initialization fails after bind", async () => {
+    const reservation = await startUiServer();
+    const port = reservation.port;
+    await reservation.close();
+
+    await expect(startUiServer({
+      port,
+      trace: join(tmpdir(), `missing-${Date.now()}.twtrace`),
+    })).rejects.toBeDefined();
+
+    const rebound = await start({ port });
+    expect(rebound.port).toBe(port);
+  });
+
+  it("waits for the initial discovery before completing teardown", async () => {
+    let release!: (tests: readonly DiscoveredTest[]) => void;
+    const listing = new Promise<readonly DiscoveredTest[]>((resolve) => {
+      release = resolve;
+    });
+    const server = await startUiServer({
+      discovery: { cwd: process.cwd(), load: () => listing },
+    });
+    let closed = false;
+    const closing = server.close().then(() => { closed = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(closed).toBe(false);
+    release([]);
+    await closing;
+  });
 });
 
 describe("live mode", () => {
@@ -292,7 +375,7 @@ describe("live mode", () => {
     viewer.close();
   });
 
-  it("delivers a run published by a producer to every viewer", async () => {
+  it("rejects lifecycle events from a session producer", async () => {
     const server = await start();
     const producer = await Viewer.connect(server, "producer");
     const viewer = await Viewer.connect(server);
@@ -304,35 +387,111 @@ describe("live mode", () => {
       mode: "live",
       startedAt: 1,
     });
-    producer.send({
-      v: 1,
-      type: "test-start",
-      id: "t1",
-      title: "login",
-      file: "/repo/a.test.ts",
-      startedAt: 1,
-    });
-    producer.send({
-      v: 1,
-      type: "test-end",
-      id: "t1",
-      status: "passed",
-      durationMs: 12,
-      flaky: false,
-      lostLogRecords: 0,
-    });
-
-    await viewer.until(
-      (messages) => messages.some((m) => m.type === "test-end"),
-      "the test result",
-    );
-    expect(viewer.received.map((message) => message.type)).toEqual([
-      "run-start",
-      "test-start",
-      "test-end",
-    ]);
+    await expect(producer.closed()).resolves.toMatchObject({ code: 1008, reason: "producer cannot publish run-start" });
+    expect(viewer.received).toEqual([]);
     viewer.close();
     producer.close();
+  });
+
+  it("requires session ownership and validates semantic snapshots at the producer boundary", async () => {
+    const server = await start();
+    const unclaimed = await Viewer.connect(server, "producer");
+    const tree = snapshot(2, [node({ id: "save", role: "button", name: "Save" })], "owned-session");
+    unclaimed.send({ v: 1, type: "semantic", sessionId: "owned-session", revision: 2, snapshot: tree });
+    await expect(unclaimed.closed()).resolves.toMatchObject({
+      code: 1008,
+      reason: "producer must claim the session before publishing events",
+    });
+
+    const mismatched = await Viewer.connect(server, "producer");
+    mismatched.send({
+      v: 1,
+      type: "session",
+      sessionId: "owned-session",
+      terminalProfile: "default",
+      columns: 80,
+      rows: 24,
+    });
+    mismatched.send({
+      v: 1,
+      type: "semantic",
+      sessionId: "owned-session",
+      revision: 2,
+      snapshot: { ...tree, sessionId: "foreign-session" },
+    });
+    await expect(mismatched.closed()).resolves.toMatchObject({
+      code: 1008,
+      reason: "semantic envelope does not match its snapshot",
+    });
+    expect(server.hub.backlog.some((message) => message.type === "semantic")).toBe(false);
+  });
+
+  it("rejects duplicate or regressing semantic revisions from an owned session", async () => {
+    const server = await start();
+    const producer = await Viewer.connect(server, "producer");
+    const tree = snapshot(2, [node({ id: "save", role: "button", name: "Save" })], "owned-session");
+    producer.send({
+      v: 1,
+      type: "session",
+      sessionId: "owned-session",
+      terminalProfile: "default",
+      columns: 80,
+      rows: 24,
+    });
+    producer.send({ v: 1, type: "semantic", sessionId: "owned-session", revision: 2, snapshot: tree });
+    await waitUntil(() => server.hub.backlog.some((message) => message.type === "semantic"), "validated semantic snapshot");
+    producer.send({
+      v: 1,
+      type: "session",
+      sessionId: "owned-session",
+      terminalProfile: "default",
+      columns: 80,
+      rows: 24,
+    });
+    producer.send({ v: 1, type: "semantic", sessionId: "owned-session", revision: 2, snapshot: tree });
+    await expect(producer.closed()).resolves.toMatchObject({
+      code: 1008,
+      reason: "semantic revisions must increase strictly",
+    });
+    expect(server.hub.backlog.filter((message) => message.type === "semantic")).toHaveLength(1);
+  });
+
+  it("expires producer ownership at the next authoritative run generation", async () => {
+    const server = await start();
+    const producer = await Viewer.connect(server, "producer");
+    producer.send({
+      v: 1,
+      type: "session",
+      sessionId: "old-session",
+      terminalProfile: "default",
+      columns: 80,
+      rows: 24,
+    });
+    await waitUntil(() => server.hub.backlog.some((message) => message.type === "session"), "old session claim");
+    server.hub.publish({ v: 1, type: "run-start", runId: "run:next", mode: "live", startedAt: 2 });
+    producer.send({ v: 1, type: "output", sessionId: "old-session", dataB64: "eA==", t: 3 });
+    await expect(producer.closed()).resolves.toMatchObject({
+      code: 1008,
+      reason: "producer must claim the session before publishing events",
+    });
+  });
+
+  it("disconnects a producer after a malformed frame", async () => {
+    const server = await start();
+    const producer = await Viewer.connect(server, "producer");
+    producer.sendRaw('{"v":1,"type":"semantic"}');
+    producer.send({
+      v: 1,
+      type: "session",
+      sessionId: "must-not-be-claimed",
+      terminalProfile: "default",
+      columns: 80,
+      rows: 24,
+    });
+    await expect(producer.closed()).resolves.toMatchObject({ code: 1008, reason: "malformed producer frame" });
+    expect(server.hub.backlog.some(
+      (message) => message.type === "session" && message.sessionId === "must-not-be-claimed",
+    )).toBe(false);
   });
 
   it("routes rerun and stop to the callbacks the runner supplied", async () => {
@@ -384,10 +543,16 @@ describe("live mode", () => {
         }),
       onStop: () => stopped,
     });
+    const viewer = await Viewer.connect(server);
+    const runResponse = await api(server, "/api/run", {
+      method: "POST",
+      body: "{}",
+    });
+    const { runId } = (await runResponse.json()) as { runId: string };
     server.hub.publish({
       v: 1,
       type: "run-start",
-      runId: "run:test",
+      runId,
       mode: "live",
       startedAt: Date.now() - 20,
     });
@@ -399,12 +564,6 @@ describe("live mode", () => {
       file: "long.test.ts",
       startedAt: Date.now() - 10,
     });
-    const viewer = await Viewer.connect(server);
-    const runResponse = await api(server, "/api/run", {
-      method: "POST",
-      body: "{}",
-    });
-    const { runId } = (await runResponse.json()) as { runId: string };
     const stopRequest = api(server, "/api/stop", {
       method: "POST",
       body: JSON.stringify({ runId }),
@@ -1261,8 +1420,7 @@ describe("starting a run from the panel", () => {
     const server = await start({
       onRun: (testIds) => void asked.push(testIds),
     });
-    const producer = await Viewer.connect(server, "producer");
-    producer.send({
+    server.hub.publish({
       v: 1,
       type: "run-start",
       runId: "run:test",
@@ -1279,7 +1437,7 @@ describe("starting a run from the panel", () => {
     ).toBe(409);
     expect(asked).toEqual([]);
 
-    producer.send({
+    server.hub.publish({
       v: 1,
       type: "run-end",
       summary: {
@@ -1299,36 +1457,22 @@ describe("starting a run from the panel", () => {
       (await api(server, "/api/run", { method: "POST", body: "{}" })).status,
     ).toBe(202);
     expect(asked).toEqual([undefined]);
-    producer.close();
   });
 
-  it("keeps another producer generation busy when an older producer ends", async () => {
+  it("does not let a producer forge a terminal edge for an authoritative run", async () => {
     const asked: (readonly string[] | undefined)[] = [];
     const server = await start({
       onRun: (testIds) => void asked.push(testIds),
     });
-    const older = await Viewer.connect(server, "producer");
-    const newer = await Viewer.connect(server, "producer");
-    older.send({
+    server.hub.publish({
       v: 1,
       type: "run-start",
       runId: "run:test",
       mode: "live",
       startedAt: 1,
     });
-    newer.send({
-      v: 1,
-      type: "run-start",
-      runId: "run:test",
-      mode: "live",
-      startedAt: 2,
-    });
-    await waitUntil(() => {
-      const message = server.hub.backlog.at(0);
-      return message?.type === "run-start" && message.startedAt === 2;
-    }, "both producer starts");
-
-    older.send({
+    const producer = await Viewer.connect(server, "producer");
+    producer.send({
       v: 1,
       type: "run-end",
       summary: {
@@ -1340,25 +1484,16 @@ describe("starting a run from the panel", () => {
         durationMs: 1,
       },
     });
-    await waitUntil(
-      () => server.hub.backlog.at(-1)?.type === "run-end",
-      "the older producer end",
-    );
+    await expect(producer.closed()).resolves.toMatchObject({ code: 1008, reason: "producer cannot publish run-end" });
     expect(
       (await api(server, "/api/run", { method: "POST", body: "{}" })).status,
     ).toBe(409);
     expect(asked).toEqual([]);
 
-    newer.send({ v: 1, type: "run-cancelled", stoppedAt: 3 });
-    await waitUntil(
-      () => server.hub.backlog.at(-1)?.type === "run-cancelled",
-      "the newer producer cancellation",
-    );
+    server.hub.publish({ v: 1, type: "run-cancelled", stoppedAt: 3 });
     expect(
       (await api(server, "/api/run", { method: "POST", body: "{}" })).status,
     ).toBe(202);
-    older.close();
-    newer.close();
   });
 
   it("refuses a run while Stop is still settling", async () => {

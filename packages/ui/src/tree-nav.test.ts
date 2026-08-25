@@ -25,6 +25,11 @@ describe('navigateTree', () => {
     expect(navigateTree(rows, at('d1'), 'up').selectedId).toBe('d1');
   });
 
+  it('moves directly to the first and last visible rows', () => {
+    expect(navigateTree(rows, at('b1'), 'home').selectedId).toBe('d1');
+    expect(navigateTree(rows, at('b1'), 'end').selectedId).toBe('i1');
+  });
+
   it('lands on the first row when nothing is selected yet', () => {
     expect(navigateTree(rows, at(null), 'down').selectedId).toBe('d1');
     expect(navigateTree(rows, at(null), 'up').selectedId).toBe('d1');

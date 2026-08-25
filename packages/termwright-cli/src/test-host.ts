@@ -1,24 +1,11 @@
 /** First-class Termwright process host backed by the exact-certified Vitest engine. */
 
-import { createRequire } from 'node:module';
-import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
-import { inspect, promisify } from 'node:util';
+import { inspect } from 'node:util';
 import { ResourceBroker, type ResourceVector } from '@termwright/resource-broker';
 import { startResourceBrokerServer, type ResourceBrokerServer } from '@termwright/resource-broker/transport';
 import { startRunJournalServer, type RunJournalServer } from '@termwright/run-journal-transport';
+import { type NativeRunAttempt, type RunManifestWriter } from '@termwright/run-history';
 import {
-  RUN_MANIFEST_VERSION,
-  beginRunManifest,
-  type NativeRunAttempt,
-  type RunManifest,
-  type RunManifestTransaction,
-  type RunManifestWriter,
-  type RunStartProvenance,
-} from '@termwright/run-history';
-import {
-  RunEventJournal,
   RunEventProducer,
   RunIdFactory,
   canTransitionRunState,
@@ -32,27 +19,33 @@ import {
   type SpecId,
   type TerminalRunState,
 } from '@termwright/protocol';
-import type {
-  TermwrightHostTaskIdentity,
-  TermwrightRunnerContext,
-} from '@termwright/test/runner';
+import type { TermwrightHostTaskIdentity } from '@termwright/test/runner';
 import {
-  CERTIFIED_VITEST_VERSION,
-  TERMWRIGHT_RUNNER_CONTEXT_KEY,
   assertCertifiedVitestRuntime,
 } from '@termwright/test/vitest-engine';
 import type { UserConsoleLog } from 'vitest';
-import { createVitest, parseCLI, type Reporter, type TestCase, type TestRunResult, type Vitest } from 'vitest/node';
-import { uiVitestViteOverrides } from './ui-vitest-config.js';
+import type { TestCase } from 'vitest/node';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
 import { preflightTestHost, type TermwrightHostPreflightOptions } from './preflight.js';
+import {
+  classifyVitestResult,
+  createCertifiedVitestEngine,
+  hostRelativeFilters,
+  type TermwrightVitestEngine,
+} from './test-host-engine.js';
+import {
+  HostRunBudget,
+  RunEventPersistence,
+  RunHistoryPersistence,
+  SYSTEM_HOST_DEADLINE_RUNTIME,
+  TermwrightHostStartupCleanupError,
+  TermwrightHostTimeoutError,
+  withinHostDeadline,
+} from './test-host-persistence.js';
 
-const executeFile = promisify(execFile);
-const CI_PROVENANCE_KEYS = [
-  'CI', 'GITHUB_ACTIONS', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_WORKFLOW', 'GITHUB_JOB',
-  'GITLAB_CI', 'CI_PIPELINE_ID', 'CI_JOB_ID', 'BUILDKITE', 'BUILDKITE_BUILD_ID',
-  'TF_BUILD', 'BUILD_BUILDID', 'JENKINS_URL', 'BUILD_ID',
-] as const;
+export { HostRunBudget, TermwrightHostStartupCleanupError, TermwrightHostTimeoutError } from './test-host-persistence.js';
+export type { TermwrightHostDeadlineRuntime } from './test-host-persistence.js';
+export type { TermwrightVitestEngine } from './test-host-engine.js';
 
 export { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
 export type { TermwrightResourceProfile, TermwrightResourceProfileName } from './resource-profiles.js';
@@ -97,26 +90,6 @@ export const DEFAULT_TERMWRIGHT_HOST_TIMEOUTS: TermwrightHostTimeouts = Object.f
   finalizationReserveMs: 30_000,
 });
 
-export class TermwrightHostTimeoutError extends Error {
-  readonly code = 'TW_HOST_TIMEOUT';
-  constructor(
-    readonly phase: string,
-    readonly totalMs: number,
-  ) {
-    super(`Termwright native host exceeded its ${totalMs} ms total deadline during ${phase}`);
-    this.name = 'TermwrightHostTimeoutError';
-  }
-}
-
-/** @internal A timed-out startup could not prove that its resource was released. */
-export class TermwrightHostStartupCleanupError extends AggregateError {
-  readonly code = 'TW_HOST_STARTUP_CLEANUP';
-  constructor(timeout: TermwrightHostTimeoutError, cleanup: unknown) {
-    super([timeout, cleanup], `${timeout.phase} did not abort cleanly before the host deadline`);
-    this.name = 'TermwrightHostStartupCleanupError';
-  }
-}
-
 export interface RunCompletion {
   readonly invocationId: InvocationId;
   readonly runId: RunId;
@@ -151,6 +124,8 @@ export interface TermwrightTestHostOptions {
   readonly runManifestWriter?: RunManifestWriter;
   /** Normal Vitest/Vite arguments. Termwright owns only certification-critical overrides. */
   readonly vitestArgs?: readonly string[];
+  /** Explicit variables installed in Vitest workers without mutating host process state. */
+  readonly workerEnv?: Readonly<Record<string, string>>;
   readonly filters?: readonly string[];
   readonly journalSink?: (events: readonly RunEvent[]) => void | Promise<void>;
   /** Best-effort live projection. Canonical persistence never depends on it. */
@@ -158,39 +133,6 @@ export interface TermwrightTestHostOptions {
   readonly timeouts?: Partial<TermwrightHostTimeouts>;
   /** Cheap, caller-declared prerequisites checked before the engine starts. */
   readonly preflight?: TermwrightHostPreflightOptions;
-}
-
-/** @internal Controlled only by the in-process engine test seam. */
-export interface TermwrightHostDeadlineRuntime {
-  readonly now: () => number;
-  readonly schedule: (delayMs: number, elapsed: () => void) => () => void;
-}
-
-const SYSTEM_HOST_DEADLINE_RUNTIME: TermwrightHostDeadlineRuntime = Object.freeze({
-  now: () => performance.now(),
-  schedule(delayMs: number, elapsed: () => void) {
-    const timer = setTimeout(elapsed, delayMs);
-    timer.unref?.();
-    return () => clearTimeout(timer);
-  },
-});
-
-interface EngineCollection {
-  readonly result: TestRunResult;
-  readonly tests: readonly TestCase[];
-}
-
-/** Narrow seam around the exact engine APIs this host certifies. */
-export interface TermwrightVitestEngine {
-  readonly version: string;
-  setRunnerContext(context: TermwrightRunnerContext): void;
-  collect(filters: readonly string[]): Promise<EngineCollection>;
-  run(nativeModuleIds: ReadonlySet<string>): Promise<TestRunResult>;
-  cancel(): Promise<void>;
-  onSourceChange(listener: (file: string) => void): () => void;
-  /** Exact structured console channel; human reporter stdout is never parsed. */
-  onUserConsoleLog?(listener: (log: UserConsoleLog) => void): () => void;
-  close(): Promise<void>;
 }
 
 export interface WatchHandle {
@@ -203,11 +145,8 @@ interface ActiveRun {
   state: RunState;
   cancellationRequested: boolean;
   catalog?: NativeTestCatalog;
-  readonly journal: RunEventJournal;
-  /** Canonical accepted log, independent of best-effort external projections. */
-  readonly recorded: RunEvent[];
-  readonly persisted: RunEvent[];
-  readonly history: Promise<RunManifestTransaction>;
+  readonly persistence: RunEventPersistence;
+  readonly history: Promise<RunHistoryPersistence>;
   readonly attempts: Map<AttemptId, ObservedAttempt>;
   readonly controlFailures: Error[];
   readonly budget: HostRunBudget;
@@ -313,10 +252,12 @@ export class TermwrightTestHost {
     if (this.#active !== undefined) throw new Error(`run ${this.#active.runId} is still active`);
 
     const runId = this.#ids.create('run');
-    const journal = new RunEventJournal({
+    const persistence = new RunEventPersistence({
       invocationId: this.invocationId,
       runId,
       gapProducer: this.#gapProducer,
+      sink: this.#sink,
+      ...(this.#eventObserver === undefined ? {} : { observer: this.#eventObserver }),
     });
     let settle!: (completion: RunCompletion) => void;
     const completed = new Promise<RunCompletion>((resolve) => {
@@ -331,9 +272,7 @@ export class TermwrightTestHost {
       runId,
       state: 'requested',
       cancellationRequested: false,
-      journal,
-      recorded: [],
-      persisted: [],
+      persistence,
       history: this.#beginHistory(runId, startedAt, budget),
       attempts: new Map(),
       controlFailures: [],
@@ -420,7 +359,7 @@ export class TermwrightTestHost {
     const attempts = active.attempts;
     let resourceFailure: Error | undefined;
     let resourceCancellation: Promise<void> | undefined;
-    let history: RunManifestTransaction | undefined;
+    let history: RunHistoryPersistence | undefined;
     try {
       history = await active.budget.execution('run history startup', () => active.history);
       const broker = new ResourceBroker({ runId: active.runId, capacities: this.#resourceProfile.capacities });
@@ -435,12 +374,10 @@ export class TermwrightTestHost {
           signal,
           append: (event) => {
           observeAttemptEvent(event, expectedTasks, attempts);
-          const appended = active.journal.append(event);
+          const appended = active.persistence.append(event);
           if (!appended.ok) {
             throw new Error(`run journal rejected worker event: ${appended.code}: ${appended.detail}`);
           }
-          active.recorded.push(event);
-          this.#observe(event);
           if (event.type === 'attempt.finished' && event.identity.attemptId !== undefined) {
             const snapshot = broker.snapshot();
             const attemptId = event.identity.attemptId;
@@ -657,7 +594,7 @@ export class TermwrightTestHost {
         // only the terminal event is missing". Those have different causes and
         // the barrier is where a reader finds out which one happened.
         const lastSeen = (attemptId: string): string => {
-          const events = active.recorded.filter((event) => event.identity.attemptId === attemptId);
+          const events = active.persistence.recorded.filter((event) => event.identity.attemptId === attemptId);
           const last = events.at(-1);
           return last === undefined ? 'no events' : `${events.length} events, last ${last.type}`;
         };
@@ -701,7 +638,7 @@ export class TermwrightTestHost {
       // successful terminal state. A failed sink therefore cannot leave a
       // durable journal that says "passed" while the returned run is
       // incomplete.
-      await active.budget.finalization('pre-terminal journal flush', () => this.#flush(active));
+      await active.budget.finalization('pre-terminal journal flush', () => active.persistence.flush());
     } catch (error) {
       failure = failure === undefined ? error : new AggregateError([failure, error], 'run and journal finalization failed');
       terminal = 'incomplete';
@@ -712,7 +649,7 @@ export class TermwrightTestHost {
     if (canTransitionRunState(active.state, terminal)) this.#transition(active, terminal);
 
     try {
-      await active.budget.finalization('terminal journal flush', () => this.#flush(active));
+      await active.budget.finalization('terminal journal flush', () => active.persistence.flush());
     } catch (error) {
       failure = failure === undefined
         ? error
@@ -729,7 +666,7 @@ export class TermwrightTestHost {
       }
       // A projection is not a competing source of truth. Retry once so it can
       // receive both the retained terminal event and the explicit failure.
-      await this.#flush(active).catch(() => undefined);
+      await active.persistence.flush().catch(() => undefined);
     }
 
     if (history !== undefined) {
@@ -739,7 +676,7 @@ export class TermwrightTestHost {
         // commit; a staging directory is always read as incomplete.
         await active.budget.finalization(
           'run history prepare',
-          () => history.prepare(this.#manifest(active, attempts, terminal, history.start)),
+          () => history.prepare(this.#manifestInput(active, attempts, terminal)),
         );
         await active.budget.finalization('run history commit', () => history.commitPrepared());
       } catch (error) {
@@ -749,7 +686,7 @@ export class TermwrightTestHost {
           this.#recordPersistenceFailure(active, 'canonical-run-history', error);
           // The canonical store remains staging/incomplete. This best-effort
           // projection corrects any observer that already saw run.state=passed.
-          await this.#flush(active);
+          await active.persistence.flush();
         } catch (projectionError) {
           failure = new AggregateError(
             [failure, projectionError],
@@ -766,7 +703,7 @@ export class TermwrightTestHost {
       runId: active.runId,
       state: terminal,
       catalog: active.catalog,
-      events: Object.freeze([...active.recorded]),
+      events: Object.freeze([...active.persistence.recorded]),
       failures: Object.freeze([...testFailures]),
       ...(failure === undefined ? {} : { error: failure }),
     });
@@ -848,10 +785,8 @@ export class TermwrightTestHost {
       identity: { invocationId: this.invocationId, runId: active.runId },
       payload: { state },
     });
-    const appended = active.journal.append(event);
+    const appended = active.persistence.append(event);
     if (!appended.ok) throw new Error(`run journal rejected state event: ${appended.code}: ${appended.detail}`);
-    active.recorded.push(event);
-    this.#observe(event);
   }
 
   #recordTestFailure(active: ActiveRun, test: NativeTestCase, errors: readonly string[]): void {
@@ -872,10 +807,8 @@ export class TermwrightTestHost {
         errors,
       },
     });
-    const appended = active.journal.append(event);
+    const appended = active.persistence.append(event);
     if (!appended.ok) throw new Error(`run journal rejected test failure event: ${appended.code}: ${appended.detail}`);
-    active.recorded.push(event);
-    this.#observe(event);
   }
 
   #recordConfiguration(active: ActiveRun): void {
@@ -898,18 +831,8 @@ export class TermwrightTestHost {
         },
       },
     });
-    const appended = active.journal.append(event);
+    const appended = active.persistence.append(event);
     if (!appended.ok) throw new Error(`run journal rejected configuration event: ${appended.code}: ${appended.detail}`);
-    active.recorded.push(event);
-    this.#observe(event);
-  }
-
-  async #flush(active: ActiveRun): Promise<void> {
-    const barrier = active.journal.barrier();
-    await active.journal.flushThrough(barrier, async (events) => {
-      await this.#sink(events);
-      active.persisted.push(...events);
-    });
   }
 
   #recordPersistenceFailure(active: ActiveRun, stage: string, error: unknown): void {
@@ -919,10 +842,8 @@ export class TermwrightTestHost {
       identity: { invocationId: this.invocationId, runId: active.runId },
       payload: { stage, detail: describeFailure(error) },
     });
-    const appended = active.journal.append(event);
+    const appended = active.persistence.append(event);
     if (!appended.ok) throw new Error(`run journal rejected persistence failure: ${appended.code}: ${appended.detail}`);
-    active.recorded.push(event);
-    this.#observe(event);
   }
 
   #recordInfrastructureFailure(active: ActiveRun, error: unknown): void {
@@ -935,10 +856,8 @@ export class TermwrightTestHost {
         detail: describeFailure(error).slice(0, 32 * 1024),
       },
     });
-    const appended = active.journal.append(event);
+    const appended = active.persistence.append(event);
     if (!appended.ok) throw new Error(`run journal rejected infrastructure failure: ${appended.code}: ${appended.detail}`);
-    active.recorded.push(event);
-    this.#observe(event);
   }
 
   #recordUserConsoleLog(log: UserConsoleLog): void {
@@ -996,62 +915,36 @@ export class TermwrightTestHost {
           ...(log.browser === undefined ? {} : { browser: Boolean(log.browser) }),
         },
       });
-      const appended = active.journal.append(event);
+      const appended = active.persistence.append(event);
       if (!appended.ok) {
         active.controlFailures.push(new Error(
           `run journal rejected structured test output: ${appended.code}: ${appended.detail}`,
         ));
         continue;
       }
-      active.recorded.push(event);
-      this.#observe(event);
     }
   }
 
-  #observe(event: RunEvent): void {
-    try {
-      this.#eventObserver?.(event);
-    } catch {
-      // The UI is a projection of the canonical journal. A broken tab or
-      // embedding callback cannot change the certified test result.
-    }
-  }
-
-  async #beginHistory(runId: RunId, startedAt: number, budget: HostRunBudget): Promise<RunManifestTransaction> {
-    const start: RunStartProvenance = Object.freeze({
+  #beginHistory(runId: RunId, startedAt: number, budget: HostRunBudget): Promise<RunHistoryPersistence> {
+    return RunHistoryPersistence.begin({
       invocationId: this.invocationId,
       runId,
       startedAt,
-      engine: Object.freeze({
-        name: 'vitest' as const,
-        version: this.#engine.version,
-        certification: `termwright-vitest-${CERTIFIED_VITEST_VERSION}`,
-      }),
-      runtime: Object.freeze({ node: process.version, platform: process.platform, arch: process.arch }),
-      resources: Object.freeze({
-        profile: this.#resourceProfile.name,
-        scheduler: Object.freeze({ ...this.#resourceProfile.scheduler }),
-        capacities: Object.freeze({ ...this.#resourceProfile.capacities }),
-        perTerminal: Object.freeze({ ...this.#resourceProfile.perTerminal }),
-      }),
-      timeouts: Object.freeze({
-        totalRunMs: budget.totalMs,
-        finalizationReserveMs: budget.finalizationReserveMs,
-      }),
-      ci: Object.freeze(captureCiProvenance()),
-      git: await captureGitProvenance(this.#cwd),
-    });
-    return beginRunManifest(this.#runsDir, start, {
+      cwd: this.#cwd,
+      runsDir: this.#runsDir,
+      engineVersion: this.#engine.version,
+      resourceProfile: this.#resourceProfile,
+      totalRunMs: budget.totalMs,
+      finalizationReserveMs: budget.finalizationReserveMs,
       ...(this.#runManifestWriter === undefined ? {} : { writer: this.#runManifestWriter }),
     });
   }
 
-  #manifest(
+  #manifestInput(
     active: ActiveRun,
     attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
     status: TerminalRunState,
-    start: RunStartProvenance,
-  ): RunManifest {
+  ): Parameters<RunHistoryPersistence['prepare']>[0] {
     const specs = (active.selected ?? []).map((test) => Object.freeze({
       runnerTaskId: test.runnerTaskId,
       specId: test.specId,
@@ -1077,15 +970,12 @@ export class TermwrightTestHost {
           : Math.max(0, attempt.finished.monotonicTime - attempt.startedAt),
       }));
     }
-    return Object.freeze({
-      ...start,
-      v: RUN_MANIFEST_VERSION,
-      finishedAt: Date.now(),
+    return {
       status,
-      specs: Object.freeze(specs),
-      attempts: Object.freeze(completedAttempts),
-      events: Object.freeze([...active.recorded]),
-    });
+      specs,
+      attempts: completedAttempts,
+      events: active.persistence.recorded,
+    };
   }
 }
 
@@ -1285,198 +1175,6 @@ function isNoSpace(error: unknown): boolean {
   return isNoSpace((error as { cause?: unknown }).cause);
 }
 
-function captureCiProvenance(): Record<string, string> {
-  const result: Record<string, string> = Object.create(null) as Record<string, string>;
-  for (const key of CI_PROVENANCE_KEYS) {
-    const value = process.env[key];
-    if (value !== undefined && value !== '') result[key] = value.slice(0, 16_384);
-  }
-  return result;
-}
-
-async function captureGitProvenance(cwd: string): Promise<RunStartProvenance['git']> {
-  const commit = await gitValue(cwd, ['rev-parse', 'HEAD']);
-  if (commit === null) return null;
-  // Resolve metadata by the captured commit, never by a second moving HEAD.
-  const [details, branch] = await Promise.all([
-    gitValue(cwd, ['show', '-s', '--format=%s%x00%an', commit]),
-    gitValue(cwd, ['symbolic-ref', '--short', 'HEAD']),
-  ]);
-  if (details === null || branch === null) return null;
-  const separator = details.indexOf('\0');
-  if (separator <= 0 || separator === details.length - 1) return null;
-  const message = details.slice(0, separator);
-  const author = details.slice(separator + 1);
-  return Object.freeze({ commit, message, author, branch });
-}
-
-async function gitValue(cwd: string, arguments_: readonly string[]): Promise<string | null> {
-  try {
-    const { stdout } = await executeFile('git', [...arguments_], {
-      cwd, timeout: 2_000, windowsHide: true, maxBuffer: 64 * 1024,
-    });
-    const value = stdout.trim();
-    return value === '' ? null : value;
-  } catch {
-    return null;
-  }
-}
-
-async function createCertifiedVitestEngine(options: TermwrightTestHostOptions): Promise<{
-  readonly engine: TermwrightVitestEngine;
-  readonly filters: readonly string[];
-}> {
-  assertCertifiedVitestRuntime();
-  const parsed = parseCLI(['vitest', 'run', ...(options.vitestArgs ?? [])], { allowUnknownOptions: true });
-  const runner = createRequire(import.meta.url).resolve('@termwright/test/runner');
-  const bootstrapIds = new RunIdFactory();
-  const bootstrapContext: TermwrightRunnerContext = {
-    invocationId: bootstrapIds.create('invocation'),
-    runId: bootstrapIds.create('run'),
-    tasks: {},
-    broker: {
-      endpoint: 'termwright://bootstrap-not-executable',
-      token: 'bootstrap-not-executable-0000000000000000',
-      workerEpoch: 0,
-      workerIdPrefix: 'termwright-bootstrap',
-      handshakeTimeoutMs: 1,
-      resourceProfile: {},
-    },
-    journal: {
-      endpoint: 'termwright://bootstrap-not-executable',
-      token: 'bootstrap-not-executable-0000000000000000',
-      handshakeTimeoutMs: 1,
-      acknowledgementTimeoutMs: 1,
-      binding: 'host-assigned-worker',
-    },
-  };
-  const vitest = await createVitest('test', {
-    ...parsed.options,
-    root: options.cwd,
-    watch: false,
-    run: true,
-    pool: options.resourceProfile.scheduler.pool,
-    maxWorkers: options.resourceProfile.scheduler.maxWorkers,
-    fileParallelism: options.resourceProfile.scheduler.fileParallelism,
-    includeTaskLocation: true,
-    runner,
-    provide: {
-      ...(parsed.options.provide ?? {}),
-      [TERMWRIGHT_RUNNER_CONTEXT_KEY]: bootstrapContext,
-    },
-  }, uiVitestViteOverrides());
-  removeEmbeddedDefaultReporter(vitest);
-  // `standalone()`, not the deprecated `init()`. Both initialise reporters and
-  // coverage without running anything; only one of them still prints a
-  // deprecation notice into the host's own output plane, which Termwright owns
-  // and keeps structured.
-  await vitest.standalone();
-  return { engine: new ExactVitestEngine(vitest), filters: parsed.filter };
-}
-
-/**
- * Termwright owns its default human projection; Vitest's implicit default
- * reporter would create a second, unstructured stdout plane. Explicit custom
- * reporters remain composed in their original order.
- */
-function removeEmbeddedDefaultReporter(vitest: Vitest): void {
-  const exact = vitest as Vitest & { readonly reporters?: Reporter[] };
-  if (!Array.isArray(exact.reporters)) {
-    throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} reporter surface changed`);
-  }
-  for (let index = exact.reporters.length - 1; index >= 0; index -= 1) {
-    if (exact.reporters[index]?.constructor?.name === 'DefaultReporter') {
-      exact.reporters.splice(index, 1);
-    }
-  }
-}
-
-/**
- * Anchors path filters to the host's declared `cwd`.
- *
- * Vitest resolves a relative filter with `relative(project.dir, filter)`, which
- * Node anchors to `process.cwd()`. The host declares its own root instead, so
- * the same options would otherwise select different tests depending on the
- * directory the host process happens to run in — `pnpm --filter` runs a script
- * from the package directory, and the filters then matched nothing. Absolute
- * filters take Vitest's `isAbsolute` branch, which no working directory can
- * reinterpret. Filters that do not name an existing path stay untouched: those
- * are substring patterns, not paths.
- */
-function hostRelativeFilters(filters: readonly string[], cwd: string): readonly string[] {
-  return filters.map((filter) => {
-    if (filter === '' || isAbsolute(filter)) return filter;
-    const anchored = resolve(cwd, filter);
-    return existsSync(anchored) ? anchored : filter;
-  });
-}
-
-class ExactVitestEngine implements TermwrightVitestEngine {
-  readonly version: string;
-  readonly #vitest: Vitest;
-  readonly #consoleListeners = new Set<(log: UserConsoleLog) => void>();
-
-  constructor(vitest: Vitest) {
-    this.#vitest = vitest;
-    this.version = vitest.version;
-    assertCertifiedVitestRuntime(this.version);
-    const reporter: Reporter = {
-      onUserConsoleLog: (log) => {
-        for (const listener of this.#consoleListeners) listener(log);
-      },
-    };
-    const reporters = (vitest as Vitest & { readonly reporters?: Reporter[] }).reporters;
-    if (!Array.isArray(reporters)) throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} reporter surface changed`);
-    reporters.push(reporter);
-  }
-
-  setRunnerContext(context: TermwrightRunnerContext): void {
-    // ProvidedContext is declaration-merged by consumer projects and is
-    // therefore `never` inside the host package itself. The runtime API is the
-    // exact-certified string-keyed transport verified by host integration.
-    (this.#vitest.provide as (key: string, value: unknown) => void)(TERMWRIGHT_RUNNER_CONTEXT_KEY, context);
-  }
-
-  async collect(filters: readonly string[]): Promise<EngineCollection> {
-    const result = await this.#vitest.collect([...filters]);
-    const tests = result.testModules.flatMap((module) => [...module.children.allTests()]);
-    return { result, tests };
-  }
-
-  async run(nativeModuleIds: ReadonlySet<string>): Promise<TestRunResult> {
-    const specifications = await this.#vitest.globTestSpecifications([...nativeModuleIds]);
-    return await this.#vitest.runTestSpecifications(specifications, true);
-  }
-
-  async cancel(): Promise<void> {
-    await this.#vitest.cancelCurrentRun(
-      'termwright-host-cancel' as Parameters<Vitest['cancelCurrentRun']>[0],
-    );
-  }
-
-  onSourceChange(listener: (file: string) => void): () => void {
-    const watcher = this.#vitest.vite.watcher;
-    const changed = (file: string): void => listener(file);
-    watcher.on('change', changed);
-    watcher.on('add', changed);
-    watcher.on('unlink', changed);
-    return () => {
-      watcher.off('change', changed);
-      watcher.off('add', changed);
-      watcher.off('unlink', changed);
-    };
-  }
-
-  onUserConsoleLog(listener: (log: UserConsoleLog) => void): () => void {
-    this.#consoleListeners.add(listener);
-    return () => this.#consoleListeners.delete(listener);
-  }
-
-  async close(): Promise<void> {
-    await this.#vitest.close();
-  }
-}
-
 const MAX_DIAGNOSTIC_CONTENT_BYTES = 12 * 1024;
 
 function splitDiagnosticContent(content: string): readonly (readonly [number, string])[] {
@@ -1498,84 +1196,6 @@ function splitDiagnosticContent(content: string): readonly (readonly [number, st
   return chunks;
 }
 
-/** @internal Monotonic run budget, exported only for deterministic unit tests. */
-export class HostRunBudget {
-  readonly #startedAt: number;
-  readonly #deadlineAt: number;
-  readonly #executionDeadlineAt: number;
-
-  constructor(
-    readonly totalMs: number,
-    readonly finalizationReserveMs: number,
-    readonly runtime: TermwrightHostDeadlineRuntime = SYSTEM_HOST_DEADLINE_RUNTIME,
-  ) {
-    positiveFinite(totalMs, 'run timeout');
-    positiveFinite(finalizationReserveMs, 'host finalization reserve');
-    if (finalizationReserveMs >= totalMs) {
-      throw new TypeError('host finalization reserve must be smaller than the total run timeout');
-    }
-    this.#startedAt = runtime.now();
-    this.#deadlineAt = this.#startedAt + totalMs;
-    this.#executionDeadlineAt = this.#deadlineAt - finalizationReserveMs;
-  }
-
-  execution<T>(phase: string, operation: () => Promise<T>): Promise<T> {
-    return startWithinHostDeadline(operation, this.#executionDeadlineAt, phase, this.totalMs, this.runtime);
-  }
-
-  finalization<T>(phase: string, operation: () => Promise<T>): Promise<T> {
-    return startWithinHostDeadline(operation, this.#deadlineAt, phase, this.totalMs, this.runtime);
-  }
-
-  async startResource<T extends { close(): Promise<void> }>(
-    phase: string,
-    start: (signal: AbortSignal) => Promise<T>,
-  ): Promise<T> {
-    const controller = new AbortController();
-    let startup: Promise<T> | undefined;
-    try {
-      return await startWithinHostDeadline(
-        () => {
-          startup = start(controller.signal);
-          return startup;
-        },
-        this.#executionDeadlineAt,
-        phase,
-        this.totalMs,
-        this.runtime,
-        () => controller.abort(),
-      );
-    } catch (error) {
-      if (
-        !(error instanceof TermwrightHostTimeoutError) ||
-        !controller.signal.aborted ||
-        startup === undefined
-      ) throw error;
-      const pendingStartup = startup;
-      const cleanup = (async () => {
-        let resource: T;
-        try {
-          resource = await pendingStartup;
-        } catch (startupError) {
-          if (controller.signal.aborted && isAbortError(startupError)) return;
-          throw startupError;
-        }
-        await resource.close();
-      })();
-      // The bounded await below may reject before it invokes its operation if
-      // the event loop wakes after the total deadline. Cleanup must still stay
-      // attached to a late resource, while its failure is observed here.
-      void cleanup.catch(() => undefined);
-      try {
-        await this.finalization(`${phase} abort`, () => cleanup);
-      } catch (cleanupError) {
-        throw new TermwrightHostStartupCleanupError(error, cleanupError);
-      }
-      throw error;
-    }
-  }
-}
-
 function resolveHostTimeouts(input: Partial<TermwrightHostTimeouts> | undefined): TermwrightHostTimeouts {
   const resolved = Object.freeze({ ...DEFAULT_TERMWRIGHT_HOST_TIMEOUTS, ...input });
   positiveFinite(resolved.startupMs, 'host startup timeout');
@@ -1587,69 +1207,6 @@ function resolveHostTimeouts(input: Partial<TermwrightHostTimeouts> | undefined)
   return resolved;
 }
 
-async function withinHostDeadline<T>(
-  operation: Promise<T>,
-  deadlineAt: number,
-  phase: string,
-  totalMs: number,
-  runtime: TermwrightHostDeadlineRuntime,
-  onElapsed?: () => void,
-): Promise<T> {
-  const remaining = deadlineAt - runtime.now();
-  if (remaining <= 0) {
-    void operation.catch(() => undefined);
-    throw new TermwrightHostTimeoutError(phase, totalMs);
-  }
-  let cancelTimer: (() => void) | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<never>((_, reject) => {
-        cancelTimer = runtime.schedule(
-          remaining,
-          () => {
-            reject(new TermwrightHostTimeoutError(phase, totalMs));
-            onElapsed?.();
-          },
-        );
-      }),
-    ]);
-  } finally {
-    cancelTimer?.();
-  }
-}
-
-function startWithinHostDeadline<T>(
-  operation: () => Promise<T>,
-  deadlineAt: number,
-  phase: string,
-  totalMs: number,
-  runtime: TermwrightHostDeadlineRuntime,
-  onElapsed?: () => void,
-): Promise<T> {
-  if (runtime.now() >= deadlineAt) {
-    return Promise.reject(new TermwrightHostTimeoutError(phase, totalMs));
-  }
-  return withinHostDeadline(operation(), deadlineAt, phase, totalMs, runtime, onElapsed);
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
-}
-
 function positiveFinite(value: number, label: string): void {
   if (!Number.isFinite(value) || value <= 0) throw new TypeError(`${label} must be a positive finite number`);
-}
-
-function classifyVitestResult(result: TestRunResult): TerminalRunState {
-  if (result.unhandledErrors.length > 0) return 'infrastructure-failed';
-  const tests = result.testModules.flatMap((module) => [...module.children.allTests()]);
-  if (tests.length === 0) return 'skipped';
-  if (tests.every((testCase) => testCase.result().state === 'skipped')) return 'skipped';
-  if (tests.some((testCase) => testCase.result().state === 'failed')) return 'failed';
-  if (tests.some((testCase) => {
-    const result = testCase.result() as { readonly state: string; readonly retryCount?: number };
-    return result.state === 'passed' && (result.retryCount ?? 0) > 0;
-  })) return 'flaky';
-  return 'passed';
 }

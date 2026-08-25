@@ -5,7 +5,8 @@ export interface TermwrightResourceProfile {
   readonly scheduler: {
     readonly pool: 'forks';
     readonly maxWorkers: number;
-    readonly fileParallelism: true;
+    /** Whether a project's own Vitest config may enable file concurrency. */
+    readonly fileParallelism: boolean;
   };
   readonly capacities: ResourceCapacities;
   readonly perTerminal: ResourceVector;

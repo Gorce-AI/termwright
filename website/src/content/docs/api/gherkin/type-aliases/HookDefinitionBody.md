@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: HookDefinitionBody"
+title: "Type Alias: HookDefinitionBody\\<Fixtures\\>"
 editUrl: false
 ---
 
@@ -9,17 +9,23 @@ editUrl: false
 
 [@termwright/gherkin](../../) / HookDefinitionBody
 
-# Type Alias: HookDefinitionBody
+# Type Alias: HookDefinitionBody\<Fixtures\>
 
-> **HookDefinitionBody** = (`context`) => `unknown` \| `Promise`\<`unknown`\>
+> **HookDefinitionBody**\<`Fixtures`\> = (`context`) => `unknown` \| `Promise`\<`unknown`\>
 
-Defined in: [gherkin/src/definitions.ts:52](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L52)
+Defined in: [definitions.ts:52](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L52)
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ## Parameters
 
 ### context
 
-[`GherkinContext`](../../interfaces/gherkincontext/)
+[`GherkinContext`](../gherkincontext/)\<`Fixtures`\>
 
 ## Returns
 

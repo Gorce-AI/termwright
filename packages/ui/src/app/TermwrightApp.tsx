@@ -16,10 +16,14 @@ import { appReducer } from './domain/reducer.js';
 import { catalogCases, selectedCase } from './domain/selectors.js';
 import { usePreferences } from './preferences.js';
 import { Tooltip } from './components/Tooltip.js';
+import { parseAppUrl, shareableAppUrl, urlStateFromApp, type AppUrlState } from './url-state.js';
 
 export function TermwrightApp({ source, client }: { readonly source: DataSource; readonly client?: RunnerClient }) {
   const { preferences } = usePreferences();
   const [state, dispatch] = useReducer(appReducer, initialAppState);
+  const pendingUrlState = useRef<AppUrlState | null>(parseAppUrl(window.location.href));
+  const [navigationEpoch, setNavigationEpoch] = useState(0);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const initialViewer = useRef<ViewerState | null>(null);
   const activeTrace = useRef<{ readonly ref: string; readonly overview: NonNullable<ViewerState['trace']> } | null>(null);
   const replayEpoch = useRef(0);
@@ -57,7 +61,7 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
     };
   }, [client, source]);
 
-  const openReplay = useCallback(async (execution: ExecutionCase) => {
+  const openReplay = useCallback(async (execution: ExecutionCase, requestedTimeMs = 0) => {
     if (execution.traceRef === undefined) return;
     const epoch = ++replayEpoch.current;
     dispatch({ type: 'replay-loading', executionId: execution.executionId, traceRef: execution.traceRef });
@@ -73,10 +77,11 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
         overview = initial ?? null;
       }
       if (overview === null || overview === undefined) throw new Error('The recording is unavailable.');
+      const timeMs = Math.min(Math.max(requestedTimeMs, 0), overview.durationMs);
       const [frames, commands, traceState, logs] = await Promise.all([
         source.traceFrames(),
         source.traceCommands(),
-        source.traceState(0),
+        source.traceState(timeMs),
         source.traceLogs({ limit: 500 }),
       ]);
       if (epoch !== replayEpoch.current) return;
@@ -89,6 +94,7 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
         commands,
         traceState,
         logs,
+        timeMs,
       });
     } catch (cause) {
       if (epoch === replayEpoch.current) {
@@ -97,6 +103,83 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       }
     }
   }, [source]);
+
+  useEffect(() => {
+    const restore = () => {
+      pendingUrlState.current = parseAppUrl(window.location.href);
+      setNavigationEpoch((epoch) => epoch + 1);
+    };
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, []);
+
+  useEffect(() => {
+    const requested = pendingUrlState.current;
+    if (requested === null || state.boot !== 'ready') return;
+    if (state.route !== requested.view) {
+      dispatch({ type: 'route', route: requested.view });
+      return;
+    }
+    if (requested.view === 'runs') {
+      if (selectedRunId !== (requested.runId ?? null)) {
+        setSelectedRunId(requested.runId ?? null);
+        return;
+      }
+      pendingUrlState.current = null;
+      setNavigationEpoch((epoch) => epoch + 1);
+      return;
+    }
+    if (requested.view !== 'runner' || requested.executionId === undefined) {
+      pendingUrlState.current = null;
+      setNavigationEpoch((epoch) => epoch + 1);
+      return;
+    }
+    const execution = [...state.executions, ...state.catalog].find((candidate) => (
+      candidate.executionId === requested.executionId
+      && (requested.runId === undefined || candidate.runId === requested.runId)
+      && (requested.traceRef === undefined || candidate.traceRef === requested.traceRef)
+    ));
+    // Live executions arrive after /api/state through the hub backlog. Keep the
+    // intent pending until that authoritative identity exists rather than
+    // fabricating a selectable execution from attacker-controlled URL text.
+    if (execution === undefined) return;
+    if (state.selectedExecutionId !== execution.executionId) {
+      dispatch({ type: 'select-execution', executionId: execution.executionId });
+      return;
+    }
+    if (requested.traceRef !== undefined) {
+      if (state.evidence.kind === 'replay' && state.evidence.replay.traceRef === requested.traceRef) {
+        const timeMs = Math.min(requested.timeMs ?? 0, state.evidence.replay.overview.durationMs);
+        if (Math.round(state.evidence.replay.timeMs) !== Math.round(timeMs)) {
+          dispatch({ type: 'replay-time', timeMs });
+          return;
+        }
+      } else if (state.evidence.kind === 'replay-loading' && state.evidence.traceRef === requested.traceRef) {
+        return;
+      } else if (state.evidence.kind === 'replay-error' && state.evidence.traceRef === requested.traceRef) {
+        pendingUrlState.current = null;
+        setNavigationEpoch((epoch) => epoch + 1);
+        return;
+      } else {
+        void openReplay(execution, requested.timeMs ?? 0);
+        return;
+      }
+    }
+    pendingUrlState.current = null;
+    setNavigationEpoch((epoch) => epoch + 1);
+  }, [navigationEpoch, openReplay, selectedRunId, state]);
+
+  useEffect(() => {
+    if (state.boot !== 'ready' || pendingUrlState.current !== null) return;
+    const url = shareableAppUrl(window.location.href, urlStateFromApp(state, selectedRunId));
+    if (url.href !== window.location.href) window.history.replaceState(null, '', url);
+  }, [selectedRunId, state]);
+
+  const pushUrlState = (next: AppUrlState) => {
+    pendingUrlState.current = null;
+    const url = shareableAppUrl(window.location.href, next);
+    if (url.href !== window.location.href) window.history.pushState(null, '', url);
+  };
 
   const selected = selectedCase(state);
   const runBusy = state.pendingRunTargets !== null || state.run.status === 'running' || state.run.status === 'stopping';
@@ -107,9 +190,9 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
   }, [state.pendingRunTargets, state.run.status]);
   useEffect(() => {
     if (
-      !preferences.autoLiveReplay
-      ||
-      selected === null
+      pendingUrlState.current !== null
+      || !preferences.autoLiveReplay
+      || selected === null
       || selected.traceRef === undefined
       || (selected.status !== 'passed' && selected.status !== 'failed')
       || state.evidence.kind !== 'live'
@@ -275,7 +358,11 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       route={state.route}
       connected={state.connected}
       features={source.features}
-      onRoute={(route) => dispatch({ type: 'route', route })}
+      onRoute={(route) => {
+        pushUrlState({ view: route });
+        if (route === 'runs') setSelectedRunId(null);
+        dispatch({ type: 'route', route });
+      }}
     >
       {state.route === 'runner' ? (
         <RunnerPage
@@ -295,11 +382,27 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           onOpenReplay={(executionId) => {
             const execution = state.executions.find((test) => test.executionId === executionId)
               ?? state.catalog.find((test) => test.executionId === executionId);
-            if (execution !== undefined) void openReplay(execution);
+            if (execution !== undefined) {
+              pushUrlState({
+                view: 'runner',
+                ...(execution.runId === null ? {} : { runId: execution.runId }),
+                executionId: execution.executionId,
+                ...(execution.traceRef === undefined ? {} : { traceRef: execution.traceRef, timeMs: 0 }),
+              });
+              void openReplay(execution);
+            }
           }}
           onSelectExecution={(executionId) => {
             const execution = state.executions.find((test) => test.executionId === executionId)
               ?? state.catalog.find((test) => test.executionId === executionId);
+            if (execution !== undefined) pushUrlState({
+              view: 'runner',
+              ...(execution.runId === null ? {} : { runId: execution.runId }),
+              executionId: execution.executionId,
+              ...(execution.traceRef !== undefined && (execution.status === 'passed' || execution.status === 'failed')
+                ? { traceRef: execution.traceRef, timeMs: 0 }
+                : {}),
+            });
             dispatch({ type: 'select-execution', executionId });
             if (execution?.traceRef !== undefined && (execution.status === 'passed' || execution.status === 'failed')) {
               void openReplay(execution);
@@ -339,7 +442,14 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           } })}
         />
       ) : state.route === 'runs' ? (
-        <RunsPage source={source} />
+        <RunsPage
+          source={source}
+          selectedRunId={selectedRunId}
+          onSelectedRunId={(runId) => {
+            pushUrlState({ view: 'runs', ...(runId === null ? {} : { runId }) });
+            setSelectedRunId(runId);
+          }}
+        />
       ) : (
         <SettingsPage state={state} features={source.features} />
       )}

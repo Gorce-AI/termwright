@@ -12,8 +12,8 @@ export interface GherkinScenario {
   readonly tags: readonly string[];
 }
 
-/** Termwright's native fixtures plus Gherkin's per-scenario world and metadata. */
-export interface GherkinContext extends TermwrightFixtures {
+/** Termwright's native and project fixtures plus Gherkin's per-scenario state. */
+export type GherkinContext<Fixtures extends object = object> = TermwrightFixtures & Fixtures & {
   readonly expect: typeof import('vitest')['expect'];
   readonly world: GherkinWorld;
   readonly scenario: GherkinScenario;
@@ -21,7 +21,7 @@ export interface GherkinContext extends TermwrightFixtures {
   readonly defer: (cleanup: () => unknown | Promise<unknown>) => void;
   /** Registers a closeable/disposable resource and returns it unchanged. */
   readonly use: <T extends GherkinResource>(resource: T) => T;
-}
+};
 
 export interface GherkinResource {
   close?: () => unknown | Promise<unknown>;
@@ -34,33 +34,35 @@ export interface GherkinResource {
 export type GherkinStepArgument = string | readonly (readonly string[])[];
 
 /** Body of a Given/When/Then definition. Captures follow the context argument. */
-export type StepDefinitionBody = (
-  context: GherkinContext,
+export type StepDefinitionBody<Fixtures extends object = object> = (
+  context: GherkinContext<Fixtures>,
   ...captures: readonly unknown[]
 ) => unknown | Promise<unknown>;
 
 export type StepKeyword = 'Given' | 'When' | 'Then' | 'Step';
 
 /** Public, inert definition value exported by a paired glue module. */
-export interface StepDefinition {
+export interface StepDefinition<Fixtures extends object = object> {
   readonly type: 'step';
   readonly keyword: StepKeyword;
   readonly expression: string | RegExp;
-  readonly body: StepDefinitionBody;
+  readonly body: StepDefinitionBody<Fixtures>;
 }
 
-export type HookDefinitionBody = (context: GherkinContext) => unknown | Promise<unknown>;
+export type HookDefinitionBody<Fixtures extends object = object> = (
+  context: GherkinContext<Fixtures>
+) => unknown | Promise<unknown>;
 
 export interface HookDefinitionOptions {
   /** Cucumber tag expression selecting scenarios for this hook. */
   readonly tags?: string;
 }
 
-export interface HookDefinition {
+export interface HookDefinition<Fixtures extends object = object> {
   readonly type: 'hook';
   readonly phase: 'before' | 'after';
   readonly options: HookDefinitionOptions;
-  readonly body: HookDefinitionBody;
+  readonly body: HookDefinitionBody<Fixtures>;
 }
 
 /** Options accepted by {@link defineParameterType}. */
@@ -78,10 +80,17 @@ export interface ParameterTypeDefinition<T = unknown> {
   readonly options: ParameterTypeOptions<T>;
 }
 
-export type GherkinDefinition = StepDefinition | ParameterTypeDefinition | HookDefinition;
-export type GherkinDefinitions = readonly GherkinDefinition[];
+export type GherkinDefinition<Fixtures extends object = object> =
+  | StepDefinition<Fixtures>
+  | ParameterTypeDefinition
+  | HookDefinition<Fixtures>;
+export type GherkinDefinitions<Fixtures extends object = object> = readonly GherkinDefinition<Fixtures>[];
 
-function definition(keyword: StepKeyword, expression: string | RegExp, body: StepDefinitionBody): StepDefinition {
+function definition<Fixtures extends object>(
+  keyword: StepKeyword,
+  expression: string | RegExp,
+  body: StepDefinitionBody<Fixtures>,
+): StepDefinition<Fixtures> {
   if (typeof expression === 'string' && expression.length === 0) {
     throw new TypeError(`${keyword} expression must not be empty`);
   }
@@ -89,32 +98,47 @@ function definition(keyword: StepKeyword, expression: string | RegExp, body: Ste
 }
 
 /** Declares a Given definition without registering process-global state. */
-export function Given(expression: string | RegExp, body: StepDefinitionBody): StepDefinition {
+export function Given<Fixtures extends object = object>(
+  expression: string | RegExp,
+  body: StepDefinitionBody<Fixtures>,
+): StepDefinition<Fixtures> {
   return definition('Given', expression, body);
 }
 
 /** Declares a When definition without registering process-global state. */
-export function When(expression: string | RegExp, body: StepDefinitionBody): StepDefinition {
+export function When<Fixtures extends object = object>(
+  expression: string | RegExp,
+  body: StepDefinitionBody<Fixtures>,
+): StepDefinition<Fixtures> {
   return definition('When', expression, body);
 }
 
 /** Declares a Then definition without registering process-global state. */
-export function Then(expression: string | RegExp, body: StepDefinitionBody): StepDefinition {
+export function Then<Fixtures extends object = object>(
+  expression: string | RegExp,
+  body: StepDefinitionBody<Fixtures>,
+): StepDefinition<Fixtures> {
   return definition('Then', expression, body);
 }
 
 /** Declares a keyword-neutral definition. */
-export function Step(expression: string | RegExp, body: StepDefinitionBody): StepDefinition {
+export function Step<Fixtures extends object = object>(
+  expression: string | RegExp,
+  body: StepDefinitionBody<Fixtures>,
+): StepDefinition<Fixtures> {
   return definition('Step', expression, body);
 }
 
 /** Runs before each matching Scenario or Outline row selected by this glue scope. */
-export function Before(body: HookDefinitionBody): HookDefinition;
-export function Before(options: HookDefinitionOptions, body: HookDefinitionBody): HookDefinition;
-export function Before(
-  optionsOrBody: HookDefinitionOptions | HookDefinitionBody,
-  body?: HookDefinitionBody,
-): HookDefinition {
+export function Before<Fixtures extends object = object>(body: HookDefinitionBody<Fixtures>): HookDefinition<Fixtures>;
+export function Before<Fixtures extends object = object>(
+  options: HookDefinitionOptions,
+  body: HookDefinitionBody<Fixtures>,
+): HookDefinition<Fixtures>;
+export function Before<Fixtures extends object = object>(
+  optionsOrBody: HookDefinitionOptions | HookDefinitionBody<Fixtures>,
+  body?: HookDefinitionBody<Fixtures>,
+): HookDefinition<Fixtures> {
   const options = typeof optionsOrBody === 'function' ? {} : optionsOrBody;
   const resolvedBody = typeof optionsOrBody === 'function' ? optionsOrBody : body;
   if (resolvedBody === undefined) throw new TypeError('Before() needs a hook body');
@@ -122,12 +146,15 @@ export function Before(
 }
 
 /** Runs after each matching Scenario or Outline row, including failed scenarios. */
-export function After(body: HookDefinitionBody): HookDefinition;
-export function After(options: HookDefinitionOptions, body: HookDefinitionBody): HookDefinition;
-export function After(
-  optionsOrBody: HookDefinitionOptions | HookDefinitionBody,
-  body?: HookDefinitionBody,
-): HookDefinition {
+export function After<Fixtures extends object = object>(body: HookDefinitionBody<Fixtures>): HookDefinition<Fixtures>;
+export function After<Fixtures extends object = object>(
+  options: HookDefinitionOptions,
+  body: HookDefinitionBody<Fixtures>,
+): HookDefinition<Fixtures>;
+export function After<Fixtures extends object = object>(
+  optionsOrBody: HookDefinitionOptions | HookDefinitionBody<Fixtures>,
+  body?: HookDefinitionBody<Fixtures>,
+): HookDefinition<Fixtures> {
   const options = typeof optionsOrBody === 'function' ? {} : optionsOrBody;
   const resolvedBody = typeof optionsOrBody === 'function' ? optionsOrBody : body;
   if (resolvedBody === undefined) throw new TypeError('After() needs a hook body');
@@ -146,6 +173,8 @@ export function defineParameterType<T>(options: ParameterTypeOptions<T>): Parame
  * Definitions are data, not global registrations. This is what lets two feature
  * files load different nearest-scope definitions safely in the same Vitest worker.
  */
-export function defineSteps(...definitions: readonly GherkinDefinition[]): GherkinDefinitions {
+export function defineSteps<Fixtures extends object = object>(
+  ...definitions: readonly GherkinDefinition<Fixtures>[]
+): GherkinDefinitions<Fixtures> {
   return Object.freeze([...definitions]);
 }

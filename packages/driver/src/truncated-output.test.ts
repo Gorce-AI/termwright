@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ExitStatus } from './api.js';
 import type { PtyBackend, PtyProcess, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
-import { launchTerminal } from './session.js';
+import { launchTerminalWithBackend } from './session.js';
 
 /**
  * A stream can stop for two reasons and only one of them is an ending.
@@ -62,7 +62,7 @@ function backendFor(pty: PtyProcess): PtyBackend {
 
 describe('an output producer that stopped without ending', () => {
   it('says so, so a missing last line has a reason attached to it', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await launchTerminalWithBackend({
       command: ['app'],
       backend: backendFor(new StoppingPty(false)),
     });
@@ -77,7 +77,7 @@ describe('an output producer that stopped without ending', () => {
   });
 
   it('stays quiet when the source really ended', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await launchTerminalWithBackend({
       command: ['app'],
       backend: backendFor(new StoppingPty(true)),
     });

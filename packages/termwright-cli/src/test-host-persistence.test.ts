@@ -1,0 +1,124 @@
+import { describe, expect, it } from 'vitest';
+import { RunEventProducer, RunIdFactory } from '@termwright/protocol';
+import {
+  HostRunBudget,
+  RunEventPersistence,
+  captureCiProvenance,
+  createRunManifest,
+  type TermwrightHostDeadlineRuntime,
+} from './test-host-persistence.js';
+
+describe('test-host persistence seams', () => {
+  it('keeps canonical events when a best-effort observer throws and flushes them once', async () => {
+    const ids = new RunIdFactory();
+    const invocationId = ids.create('invocation');
+    const runId = ids.create('run');
+    const producer = new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 });
+    const flushed: unknown[] = [];
+    const persistence = new RunEventPersistence({
+      invocationId,
+      runId,
+      gapProducer: new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 }),
+      sink: (events) => { flushed.push(...events); },
+      observer: () => { throw new Error('broken projection'); },
+    });
+    const event = producer.emit({
+      eventClass: 'authoritative',
+      type: 'run.configuration',
+      identity: { invocationId, runId },
+      payload: { source: 'unit seam' },
+    });
+    expect(persistence.append(event).ok).toBe(true);
+    await persistence.flush();
+    expect(persistence.recorded).toEqual([event]);
+    expect(persistence.persisted).toEqual([event]);
+    expect(flushed).toEqual([event]);
+  });
+
+  it('retains an exact failed sink batch and preserves later event ordering on retry', async () => {
+    const ids = new RunIdFactory();
+    const invocationId = ids.create('invocation');
+    const runId = ids.create('run');
+    const producer = new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 });
+    const written: unknown[] = [];
+    let fail = true;
+    const persistence = new RunEventPersistence({
+      invocationId,
+      runId,
+      gapProducer: new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 }),
+      sink: (events) => {
+        if (fail) {
+          fail = false;
+          throw new Error('projection unavailable');
+        }
+        written.push(...events);
+      },
+    });
+    const first = producer.emit({
+      eventClass: 'authoritative',
+      type: 'run.configuration',
+      identity: { invocationId, runId },
+      payload: { source: 'first' },
+    });
+    const second = producer.emit({
+      eventClass: 'authoritative',
+      type: 'run.configuration',
+      identity: { invocationId, runId },
+      payload: { source: 'second' },
+    });
+    expect(persistence.append(first).ok).toBe(true);
+    await expect(persistence.flush()).rejects.toThrow('projection unavailable');
+    expect(persistence.persisted).toEqual([]);
+    expect(persistence.append(second).ok).toBe(true);
+    await persistence.flush();
+    expect(written).toEqual([first, second]);
+    expect(persistence.persisted).toEqual([first, second]);
+    expect(persistence.recorded).toEqual([first, second]);
+  });
+
+  it('builds a frozen manifest without a host or filesystem transaction', () => {
+    const ids = new RunIdFactory();
+    const start = {
+      invocationId: ids.create('invocation'),
+      runId: ids.create('run'),
+      startedAt: 10,
+      engine: { name: 'vitest' as const, version: '4.1.11', certification: 'unit' },
+      runtime: { node: 'v22', platform: 'test', arch: 'test' },
+      resources: {
+        profile: 'unit',
+        scheduler: { pool: 'forks', maxWorkers: 1, fileParallelism: false },
+        capacities: {},
+        perTerminal: {},
+      },
+      timeouts: { totalRunMs: 100, finalizationReserveMs: 10 },
+      ci: {},
+      git: null,
+    };
+    const manifest = createRunManifest(start, { status: 'passed', specs: [], attempts: [], events: [], finishedAt: 20 });
+    expect(manifest).toMatchObject({ v: 2, startedAt: 10, finishedAt: 20, status: 'passed' });
+    expect(Object.isFrozen(manifest)).toBe(true);
+  });
+
+  it('whitelists and bounds CI provenance', () => {
+    expect(captureCiProvenance({ GITHUB_RUN_ID: '123', SECRET_TOKEN: 'no', BUILD_ID: 'x'.repeat(20_000) }))
+      .toEqual({ GITHUB_RUN_ID: '123', BUILD_ID: 'x'.repeat(16_384) });
+  });
+
+  it('reserves finalization time without starting a host', async () => {
+    let now = 0;
+    const timers: Array<{ readonly at: number; readonly elapsed: () => void }> = [];
+    const runtime: TermwrightHostDeadlineRuntime = {
+      now: () => now,
+      schedule: (delay, elapsed) => {
+        const timer = { at: now + delay, elapsed };
+        timers.push(timer);
+        return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); };
+      },
+    };
+    const budget = new HostRunBudget(100, 25, runtime);
+    const execution = budget.execution('unit execution', () => new Promise<never>(() => undefined));
+    now = 75;
+    for (const timer of [...timers]) if (timer.at <= now) timer.elapsed();
+    await expect(execution).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT', phase: 'unit execution' });
+  });
+});

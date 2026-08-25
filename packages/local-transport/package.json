@@ -1,0 +1,22 @@
+{
+  "name": "@termwright/local-transport",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Bounded authenticated local IPC primitives shared by Termwright services",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/local-transport"
+  },
+  "type": "module",
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm --dir ../.. test -- -- --run packages/local-transport"
+  },
+  "dependencies": { "@termwright/protocol": "workspace:*" }
+}

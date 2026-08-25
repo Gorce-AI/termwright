@@ -22,5 +22,8 @@
   },
   "dependencies": {
     "@termwright/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@termwright/local-transport": "workspace:*"
   }
 }

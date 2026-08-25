@@ -57,12 +57,25 @@ The monorepo also publishes focused packages for the driver, protocol, traces,
 screenshots, logs, MCP, and conformance. Use them when building an integration
 or embedding one subsystem.
 
+`@termwright/driver` has two explicit stability tiers. Its root is the supported
+application-test contract (terminal sessions, locators, actions, observations
+and errors). `@termwright/driver/experimental` is only for adapter and harness
+authors who need PTY backends, encoders, selector parsers, process supervision
+or launch-resource injection. The umbrella package does not re-export that
+experimental tier. Its generated reference is published separately as the
+[experimental driver API](../../api/driver-experimental/).
+
 Some published packages are shared implementation dependencies: the desktop
 host, VT core, probe runtime, Go probe tooling, recognizers, and UI server.
 They must be accessible from npm because other published packages depend on
 them, but ordinary test suites should use `termwright` and the framework table
 above. A package being present on npm does not make it an additional setup
 choice.
+
+The private `@termwright/local-transport` workspace package is the internal
+Node-only IPC building block used by the resource broker and run-journal
+transport. Its implementation is bundled into those published consumers; it
+is neither an application-test API nor a separately installable package.
 
 `@termwright/conpty` is the internal Windows PTY backend. Its optional
 `@termwright/conpty-win32-x64` and `@termwright/conpty-win32-arm64` packages

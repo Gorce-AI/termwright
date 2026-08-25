@@ -49,7 +49,10 @@ async function serve(
 
 async function connect(handle: HttpServerHandle): Promise<Session> {
   const client = new Client({ name: 'termwright-conformance', version: '0.0.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}/mcp`));
+  const transport = new StreamableHTTPClientTransport(
+    new URL(`http://127.0.0.1:${handle.port}/mcp`),
+    { requestInit: { headers: authorization(handle) } },
+  );
   // The SDK's Transport type declares `sessionId: string | undefined`, which
   // `exactOptionalPropertyTypes` rejects at this call site only.
   await client.connect(transport as unknown as Parameters<Client['connect']>[0]);
@@ -57,6 +60,13 @@ async function connect(handle: HttpServerHandle): Promise<Session> {
   const sessionId = transport.sessionId;
   expect(sessionId, 'the server minted no session id').toBeDefined();
   return { client, sessionId: sessionId as string, transport };
+}
+
+function authorization(
+  handle: HttpServerHandle,
+  headers: Readonly<Record<string, string>> = {},
+): Record<string, string> {
+  return { authorization: `Bearer ${handle.authToken}`, ...headers };
 }
 
 interface ToolResult {
@@ -205,7 +215,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
 
     const response = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
       method: 'DELETE',
-      headers: { 'mcp-session-id': first.sessionId },
+      headers: authorization(handle, { 'mcp-session-id': first.sessionId }),
     });
     expect(response.status).toBe(204);
 
@@ -277,7 +287,10 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
 
     const refused = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      headers: authorization(handle, {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      }),
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
@@ -300,7 +313,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     // Freeing a slot makes room again: the ceiling is a limit, not a latch.
     await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
       method: 'DELETE',
-      headers: { 'mcp-session-id': first.sessionId },
+      headers: authorization(handle, { 'mcp-session-id': first.sessionId }),
     });
     await expect.poll(() => handle.registry.size).toBe(1);
     const third = await connect(handle);

@@ -16,10 +16,10 @@ import type {
   StepDefinition,
 } from './definitions.js';
 
-export interface ImportedGlue {
+export interface ImportedGlue<Fixtures extends object = object> {
   readonly path: string;
   readonly tier: number;
-  readonly definitions: GherkinDefinitions;
+  readonly definitions: GherkinDefinitions<Fixtures>;
 }
 
 export interface RuntimeStep {
@@ -34,32 +34,34 @@ export interface RuntimeStep {
   };
 }
 
-interface LocatedStepDefinition {
-  readonly definition: StepDefinition;
+interface LocatedStepDefinition<Fixtures extends object = object> {
+  readonly definition: StepDefinition<Fixtures>;
   readonly path: string;
   readonly tier: number;
   readonly expression: Expression;
 }
 
-interface StepMatch {
-  readonly located: LocatedStepDefinition;
+interface StepMatch<Fixtures extends object = object> {
+  readonly located: LocatedStepDefinition<Fixtures>;
   readonly arguments: readonly Argument[];
 }
 
-export interface GherkinRuntime {
-  before(context: GherkinContext): Promise<void>;
+export interface GherkinRuntime<Fixtures extends object = object> {
+  before(context: GherkinContext<Fixtures>): Promise<void>;
   /** Resolves a step without executing its body or parameter transformers. */
   validate(step: RuntimeStep): void;
-  run(step: RuntimeStep, context: GherkinContext): Promise<void>;
-  after(context: GherkinContext): Promise<void>;
+  run(step: RuntimeStep, context: GherkinContext<Fixtures>): Promise<void>;
+  after(context: GherkinContext<Fixtures>): Promise<void>;
 }
 
-interface CompiledHook {
-  readonly body: (context: GherkinContext) => unknown | Promise<unknown>;
+interface CompiledHook<Fixtures extends object = object> {
+  readonly body: (context: GherkinContext<Fixtures>) => unknown | Promise<unknown>;
   readonly tags?: TagExpression;
 }
 
-function compiledHook(definition: Extract<GherkinDefinitions[number], { type: 'hook' }>): CompiledHook {
+function compiledHook<Fixtures extends object>(
+  definition: Extract<GherkinDefinitions<Fixtures>[number], { type: 'hook' }>,
+): CompiledHook<Fixtures> {
   const expression = definition.options.tags;
   return {
     body: definition.body,
@@ -69,17 +71,17 @@ function compiledHook(definition: Extract<GherkinDefinitions[number], { type: 'h
   };
 }
 
-function applies(hook: CompiledHook, context: GherkinContext): boolean {
+function applies<Fixtures extends object>(hook: CompiledHook<Fixtures>, context: GherkinContext<Fixtures>): boolean {
   return hook.tags?.evaluate([...context.scenario.tags]) ?? true;
 }
 
-function validateDefinitions(glue: ImportedGlue): void {
+function validateDefinitions<Fixtures extends object>(glue: ImportedGlue<Fixtures>): void {
   if (!Array.isArray(glue.definitions)) {
     throw new TypeError(`Gherkin glue ${glue.path} must default-export defineSteps(...)`);
   }
 }
 
-function parameterRegistry(glue: readonly ImportedGlue[]): ParameterTypeRegistry {
+function parameterRegistry<Fixtures extends object>(glue: readonly ImportedGlue<Fixtures>[]): ParameterTypeRegistry {
   const registry = new ParameterTypeRegistry();
   const selected = new Map<string, { tier: number; path: string; definition: ParameterTypeDefinition }>();
 
@@ -113,10 +115,10 @@ function parameterRegistry(glue: readonly ImportedGlue[]): ParameterTypeRegistry
   return registry;
 }
 
-function compiledSteps(
-  glue: readonly ImportedGlue[],
+function compiledSteps<Fixtures extends object>(
+  glue: readonly ImportedGlue<Fixtures>[],
   registry: ParameterTypeRegistry,
-): readonly LocatedStepDefinition[] {
+): readonly LocatedStepDefinition<Fixtures>[] {
   return glue.flatMap((module) => module.definitions.flatMap((definition) => {
     if (definition.type !== 'step') return [];
     const expression = typeof definition.expression === 'string'
@@ -126,19 +128,19 @@ function compiledSteps(
   }));
 }
 
-function ambiguity(step: RuntimeStep, matches: readonly StepMatch[]): Error {
+function ambiguity<Fixtures extends object>(step: RuntimeStep, matches: readonly StepMatch<Fixtures>[]): Error {
   const candidates = matches
     .map(({ located }) => `${located.path}: ${String(located.definition.expression)}`)
     .join('\n  - ');
   return new Error(`Ambiguous Gherkin step ${JSON.stringify(step.text)}:\n  - ${candidates}`);
 }
 
-function matchingDefinitions(
-  definitions: readonly LocatedStepDefinition[],
+function matchingDefinitions<Fixtures extends object>(
+  definitions: readonly LocatedStepDefinition<Fixtures>[],
   step: RuntimeStep,
-): readonly StepMatch[] {
+): readonly StepMatch<Fixtures>[] {
   let activeTier: number | undefined;
-  const matches: StepMatch[] = [];
+  const matches: StepMatch<Fixtures>[] = [];
   for (const located of definitions) {
     if (activeTier !== undefined && located.tier > activeTier) break;
     const args = located.expression.match(step.text);
@@ -152,7 +154,9 @@ function matchingDefinitions(
 }
 
 /** Compiles already-paired glue into a feature-local step resolver. */
-export function createGherkinRuntime(imported: readonly ImportedGlue[]): GherkinRuntime {
+export function createGherkinRuntime<Fixtures extends object = object>(
+  imported: readonly ImportedGlue<Fixtures>[],
+): GherkinRuntime<Fixtures> {
   const glue = [...imported].sort((left, right) =>
     left.tier - right.tier || left.path.localeCompare(right.path));
   for (const module of glue) validateDefinitions(module);
@@ -163,13 +167,13 @@ export function createGherkinRuntime(imported: readonly ImportedGlue[]): Gherkin
     definition.type === 'hook' && definition.phase === 'after' ? [compiledHook(definition)] : []));
 
   return Object.freeze({
-    async before(context: GherkinContext): Promise<void> {
+    async before(context: GherkinContext<Fixtures>): Promise<void> {
       for (const hook of beforeHooks) if (applies(hook, context)) await hook.body(context);
     },
     validate(step: RuntimeStep): void {
       matchingDefinitions(definitions, step);
     },
-    async run(step: RuntimeStep, context: GherkinContext): Promise<void> {
+    async run(step: RuntimeStep, context: GherkinContext<Fixtures>): Promise<void> {
       const match = matchingDefinitions(definitions, step)[0]!;
       const captures = await Promise.all(
         match.arguments.map((argument) => argument.getValue(context.world)),
@@ -179,15 +183,15 @@ export function createGherkinRuntime(imported: readonly ImportedGlue[]): Gherkin
         : [...captures, step.argument];
       await match.located.definition.body(context, ...values);
     },
-    async after(context: GherkinContext): Promise<void> {
+    async after(context: GherkinContext<Fixtures>): Promise<void> {
       for (const hook of afterHooks) if (applies(hook, context)) await hook.body(context);
     },
   });
 }
 
-interface ManagedGherkinContext extends GherkinContext {
+type ManagedGherkinContext<Fixtures extends object = object> = GherkinContext<Fixtures> & {
   dispose(): Promise<void>;
-}
+};
 
 function resourceCleanup(resource: GherkinResource): (() => unknown | Promise<unknown>) {
   if (resource[Symbol.asyncDispose] !== undefined) return () => resource[Symbol.asyncDispose]!();
@@ -198,9 +202,9 @@ function resourceCleanup(resource: GherkinResource): (() => unknown | Promise<un
 }
 
 /** Adds scenario-scoped resource management without process-global hooks. */
-export function createGherkinContext(
-  base: Omit<GherkinContext, 'defer' | 'use'>,
-): ManagedGherkinContext {
+export function createGherkinContext<Fixtures extends object = object>(
+  base: Omit<GherkinContext<Fixtures>, 'defer' | 'use'>,
+): ManagedGherkinContext<Fixtures> {
   const cleanups: (() => unknown | Promise<unknown>)[] = [];
   return Object.assign(base, {
     defer(cleanup: () => unknown | Promise<unknown>): void {
@@ -223,13 +227,13 @@ export function createGherkinContext(
       if (errors.length === 1) throw errors[0];
       if (errors.length > 1) throw new AggregateError(errors, 'Multiple Gherkin scenario cleanups failed');
     },
-  });
+  }) as ManagedGherkinContext<Fixtures>;
 }
 
 /** Runs hooks, the scenario body, and LIFO resource cleanup as one test lifecycle. */
-export async function runGherkinScenario(
-  runtime: GherkinRuntime,
-  context: ManagedGherkinContext,
+export async function runGherkinScenario<Fixtures extends object = object>(
+  runtime: GherkinRuntime<Fixtures>,
+  context: ManagedGherkinContext<Fixtures>,
   body: () => Promise<void>,
 ): Promise<void> {
   let failure: unknown;
@@ -257,9 +261,9 @@ export async function runGherkinScenario(
 }
 
 /** Runs one physical Gherkin step through Termwright's native step fixture. */
-export async function runGherkinStep(
-  runtime: GherkinRuntime,
-  context: GherkinContext,
+export async function runGherkinStep<Fixtures extends object = object>(
+  runtime: GherkinRuntime<Fixtures>,
+  context: GherkinContext<Fixtures>,
   step: RuntimeStep,
 ): Promise<void> {
   await context.step(

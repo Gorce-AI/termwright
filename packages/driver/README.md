@@ -23,6 +23,35 @@ pnpm add -D @termwright/driver
 Node >= 22, ESM only. Prebuilt PTY binaries ship for macOS, Linux (glibc) and
 Windows; Alpine/musl is not supported (use `node:22-slim`).
 
+## API stability
+
+`@termwright/driver` is the supported application-test surface: terminal
+launch, locators, actions, observations, value policy and typed errors.
+Framework adapters and Termwright infrastructure may use the explicitly
+experimental subpath:
+
+```ts
+import {createNodePtyBackend, type PtyBackend} from '@termwright/driver/experimental';
+```
+
+The experimental tier contains PTY/backend selection, terminal encoders,
+selector parsing, process supervision, environment construction and resource
+provider injection. It may change before the stable release and is not
+re-exported from the root or from `termwright`; ordinary tests should not use it.
+Framework adapters that own a backend launch it through the same tier:
+
+```ts
+import {
+  createNodePtyBackend,
+  launchTerminalWithBackend,
+} from '@termwright/driver/experimental';
+
+const terminal = await launchTerminalWithBackend({
+  command: ['node', 'app.js'],
+  backend: createNodePtyBackend(),
+});
+```
+
 ## Usage
 
 ```ts

@@ -354,6 +354,12 @@ importers:
         specifier: ^19.2.8
         version: 19.2.8
 
+  packages/local-transport:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/logs:
     dependencies:
       '@termwright/protocol':
@@ -529,6 +535,10 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+    devDependencies:
+      '@termwright/local-transport':
+        specifier: workspace:*
+        version: link:../local-transport
 
   packages/run-history:
     dependencies:
@@ -541,6 +551,10 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+    devDependencies:
+      '@termwright/local-transport':
+        specifier: workspace:*
+        version: link:../local-transport
 
   packages/screenshot:
     dependencies:

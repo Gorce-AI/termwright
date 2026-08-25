@@ -182,6 +182,7 @@ jobs:
         run: >-
           pnpm test -- --resource-profile ci --json -- --run
           packages/protocol/src
+          packages/local-transport/src
           packages/conformance/src/suites/adversarial.test.ts
           packages/conformance/src/suites/mcp-sessions.test.ts
           packages/ui/src/hostile.test.ts
@@ -382,7 +383,7 @@ jobs:
         shell: bash
         run: |
           node --input-type=module -e "
-            const { resolveDefaultPtyBackend } = await import('./packages/driver/dist/index.js');
+            const { resolveDefaultPtyBackend } = await import('./packages/driver/dist/experimental.js');
             const { backend, degradedReason } = await resolveDefaultPtyBackend();
             console.log('selected backend:', backend.name);
             if (degradedReason !== undefined) { console.error(degradedReason); process.exit(1); }
@@ -1005,6 +1006,15 @@ jobs:
 
       - name: Compatibility registry matches probe declarations
         run: pnpm run test:compatibility
+
+      - name: Private workspace runtime boundaries are packed and installable
+        run: |
+          pnpm --filter @termwright/resource-broker... --filter @termwright/run-journal-transport... run build
+          pnpm check:packed-private-boundaries
+
+      - name: Every Version PR package already exists on npm
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release')
+        run: pnpm check:npm-release-readiness
 
       # A change to a published package without a changeset is a change that
       # ships with no changelog entry and no version bump. Release-only PRs are

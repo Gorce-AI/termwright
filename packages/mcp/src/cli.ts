@@ -26,22 +26,26 @@ const defaultIo: CliIo = {
   err: (text) => process.stderr.write(`${text}\n`),
 };
 
-interface ParsedArgs {
+export interface ParsedArgs {
   readonly command: 'serve' | 'agent-context' | 'usage' | 'skill' | 'help' | 'version';
   readonly json: boolean;
   readonly http: boolean;
   readonly port: number | undefined;
   readonly host: string | undefined;
+  readonly allowNonLoopback: boolean;
+  readonly showAuthToken: boolean;
   /** Destination directory for `skill`; without it the package goes to stdout. */
   readonly out: string | undefined;
 }
 
-function parseArgs(argv: readonly string[]): ParsedArgs {
+export function parseArgs(argv: readonly string[]): ParsedArgs {
   let command: ParsedArgs['command'] = 'serve';
   let json = false;
   let http = false;
   let port: number | undefined;
   let host: string | undefined;
+  let allowNonLoopback = false;
+  let showAuthToken = false;
   let out: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -66,6 +70,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         host = argv[index + 1];
         if (host === undefined) throw usageError('--host needs a value');
         index += 1;
+        break;
+      case '--allow-non-loopback':
+        allowNonLoopback = true;
+        break;
+      case '--show-auth-token':
+        showAuthToken = true;
         break;
       case '--out':
         out = argv[index + 1];
@@ -100,7 +110,20 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         );
     }
   }
-  return { command, json, http, port, host, out };
+  return { command, json, http, port, host, allowNonLoopback, showAuthToken, out };
+}
+
+/** Startup lines are pure so the secret-disclosure policy is regression tested without opening a server. */
+export function httpStartupMessages(
+  args: Pick<ParsedArgs, 'host' | 'showAuthToken'>,
+  handle: { readonly port: number; readonly authToken: string },
+): readonly string[] {
+  return [
+    `${SERVER_NAME} MCP listening on http://${args.host ?? '127.0.0.1'}:${handle.port}/mcp`,
+    args.showAuthToken
+      ? `${SERVER_NAME} MCP bearer token: ${handle.authToken}`
+      : `${SERVER_NAME} MCP bearer token hidden; restart with --show-auth-token to disclose it explicitly`,
+  ];
 }
 
 /**
@@ -143,9 +166,10 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
           const handle = await serveHttp({
             ...(args.port === undefined ? {} : { port: args.port }),
             ...(args.host === undefined ? {} : { host: args.host }),
+            ...(args.allowNonLoopback ? { allowNonLoopback: true } : {}),
           });
           // stderr, never stdout: stdout may be a protocol stream.
-          io.err(`${SERVER_NAME} MCP listening on http://${args.host ?? '127.0.0.1'}:${handle.port}/mcp`);
+          for (const line of httpStartupMessages(args, handle)) io.err(line);
           await new Promise<void>((resolve) => {
             handle.http.on('close', resolve);
           });

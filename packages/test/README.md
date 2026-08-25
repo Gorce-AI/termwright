@@ -114,10 +114,10 @@ The equivalent of Playwright's `test.use()`, on Vitest's own mechanism:
 import { describe } from 'vitest';
 import { test, expect } from '@termwright/test';
 
-test.scoped({ termwrightOptions: { columns: 120, trace: 'on' } });
+test.override({ termwrightOptions: { columns: 120, trace: 'on' } });
 
 describe('the wide layout', () => {
-  test.scoped({ termwrightOptions: { columns: 200 } });
+  test.override({ termwrightOptions: { columns: 200 } });
   // …tests here get 200 columns; the rest of the file gets 120.
 });
 ```
@@ -127,13 +127,13 @@ Scopeable: `command`, `columns`, `rows`, `env`, `timeouts`, `trace`,
 call:
 
 ```
-defineTermwrightConfig()  <  test.scoped({ termwrightOptions })  <  terminal.launch({ … })
+defineTermwrightConfig()  <  test.override({ termwrightOptions })  <  terminal.launch({ … })
 ```
 
-The merge is **key by key**, which matters more than it sounds: `test.scoped`
-replaces a fixture's whole value, so scoping only `trace` would drop the
+The merge is **key by key**, which matters more than it sounds: `test.override`
+replaces a fixture's whole value, so overriding only `trace` would drop the
 project's viewport and environment if the value were taken as-is. `env` and
-`timeouts` merge entry by entry too — scoping one variable or one timeout class
+`timeouts` merge entry by entry too — overriding one variable or one timeout class
 keeps the others. `command` is the exception: an argv is replaced wholly, never
 concatenated.
 

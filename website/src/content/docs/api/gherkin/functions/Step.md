@@ -11,11 +11,17 @@ editUrl: false
 
 # Function: Step()
 
-> **Step**(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)
+> **Step**\<`Fixtures`\>(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:107](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L107)
+Defined in: [definitions.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L125)
 
 Declares a keyword-neutral definition.
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ## Parameters
 
@@ -25,8 +31,8 @@ Declares a keyword-neutral definition.
 
 ### body
 
-[`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)
+[`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)\<`Fixtures`\>
 
 ## Returns
 
-[`StepDefinition`](../../interfaces/stepdefinition/)
+[`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>

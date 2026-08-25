@@ -10,13 +10,16 @@ in the repository.
 
 ## Release approval
 
-A normal merge to `main` does not publish a package. A maintainer starts a
-Release workflow, reviews the generated Version PR, and merges it after CI
-passes. Merging that specific PR is the release approval: the workflow then
-publishes crates.io, PyPI, npm and the GitHub Release from the reviewed commit.
+A normal merge to `main` does not publish a package. The trusted release
+coordinator detects pending changesets on the exact `main` commit and opens or
+updates a generated Version PR. It independently reproduces that PR from the
+trusted base, runs the complete certification DAG, and merges only the exact
+certified head. The coordinator then publishes crates.io, PyPI, npm and the
+GitHub Release from that merged commit. A failed or rerun workflow attempt is
+not accepted as release evidence.
 
 A version that exists was therefore proposed with explicit version and
-changelog changes, reviewed, and tested before publication.
+changelog changes, deterministically reproduced, and tested before publication.
 
 All three registries authenticate through OIDC trusted publishing — no
 long-lived registry tokens exist in the repository — and npm packages carry

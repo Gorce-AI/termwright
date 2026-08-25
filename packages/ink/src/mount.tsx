@@ -7,13 +7,13 @@ import type { ComponentType, ReactNode } from 'react';
 import { Box, measureElement, render, type Instance, type RenderOptions } from 'ink';
 import { wrapInkRender } from '@termwright/probe-ink/internal/testing';
 import {
-  launchTerminal,
   SessionClosedError,
   type AppLogSource,
   type EnvMode,
   type TerminalHarness,
   type TimeoutClasses,
 } from '@termwright/driver';
+import { launchTerminalWithBackend } from '@termwright/driver/experimental';
 import { createInProcessBackend } from './backend.js';
 import { ForwardingHarness } from './forwarding.js';
 import { MountErrorBoundary } from './error-boundary.js';
@@ -194,7 +194,7 @@ export async function mountInk(element: ReactNode, options: MountInkOptions = {}
     };
   });
 
-  const session = await launchTerminal({
+  const session = await launchTerminalWithBackend({
     command: [MOUNT_COMMAND],
     backend,
     columns,

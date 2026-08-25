@@ -11,7 +11,6 @@ import type {
   AppLogEvent,
   AppLogSource,
   CellSnapshot,
-  CrashInput,
   CrashReport,
   DiagnosticCode,
   EnvMode,
@@ -45,7 +44,6 @@ import type {
 } from "./api.js";
 import type {
   ActionIntent,
-  CapabilityNodeId,
   ExecutableActionPlan,
   ActionReceipt,
   ArtifactValuePolicy,
@@ -74,7 +72,6 @@ import {
   capabilityRemediation,
   recordActionPlan,
   recordDeviceOperation,
-  sessionCapabilitiesFromProducers,
   verifyMarkerPayload,
   createRunId,
 } from "@termwright/protocol";
@@ -106,6 +103,14 @@ import { assertBeforeActionInput } from "./internal/action-retry.js";
 import { Deadline } from "./internal/deadline.js";
 import { waitForQuiet } from "./internal/quiet.js";
 import {
+  SessionEvidenceJournal,
+  type SessionDiagnosticContext,
+} from "./internal/session-evidence.js";
+import { SessionActionLifecycle } from "./internal/session-actions.js";
+import { SessionProcessLifecycle } from "./internal/session-process-lifecycle.js";
+import { SessionInputEvidenceBarrier } from "./internal/session-input-plane.js";
+import { buildSessionContract } from "./internal/session-semantic-plane.js";
+import {
   ResourceCleanupError,
   ResourceScope,
 } from "./internal/resource-scope.js";
@@ -126,7 +131,6 @@ import { SemanticIndex, textInRect } from "./matching.js";
 import { RevisionPairing } from "./pairing.js";
 import { resolveDefaultPtyBackend } from "./backend-selection.js";
 import {
-  createNodePtyBackend,
   type PtyBackend,
   type PtyProcess,
 } from "./pty.js";
@@ -189,13 +193,6 @@ const IDLE_QUIET_MS = 100;
 /** How long a half-paired semantic revision is kept before it is dropped. */
 const PAIRING_TIMEOUT_MS = 1_000;
 
-/** Bounds on a crash report: enough to explain a death, never unbounded. */
-const CRASH_TAIL_LINES = 50;
-const CRASH_TAIL_BYTES = 16 * 1024;
-const CRASH_INPUTS = 20;
-const CRASH_DIAGNOSTICS = 20;
-const CRASH_INPUT_PREVIEW = 40;
-
 /**
  * Bounded last-output drain for a PTY backend without a public EOF contract.
  * This is deliberately generous for saturated CI; a drained VT resolves
@@ -217,9 +214,6 @@ const LOG_BURST = 500;
 /** Window the driver-side record limiter counts in. */
 const LOG_WINDOW_MS = 250;
 
-/** Bounded diagnostics log: a flooding adapter cannot grow it without bound. */
-const MAX_DIAGNOSTICS = 200;
-
 /**
  * Upper bound on how long `close()` waits for the child to hang up.
  *
@@ -232,17 +226,19 @@ const MAX_DIAGNOSTICS = 200;
  */
 export const CLOSE_GRACE_MS = 2_000;
 
-/** Options accepted by {@link launchTerminal}, plus the injectable backend. */
+/** Stable application-facing options accepted by {@link launchTerminal}. */
 export interface LaunchTerminalOptions extends LaunchOptions {
-  /** Defaults to `@lydell/node-pty`; swapped by component-testing harnesses. */
-  readonly backend?: PtyBackend;
   /**
    * Whether the child's mouse mode requests are observable. Defaults to the
-   * platform's answer (false under ConPTY). Overridable so the unobservable
-   * path can be exercised on a machine where modes do arrive — a behaviour
-   * only one OS reaches is a behaviour only one OS tests.
+   * platform's answer (false under ConPTY). Framework integrations may pin the
+   * value when their transport has stronger knowledge than the host platform.
    */
   readonly modesObservable?: boolean;
+}
+
+/** Low-level integration options exported only from `@termwright/driver/experimental`. */
+export interface LaunchTerminalWithBackendOptions extends LaunchTerminalOptions {
+  readonly backend: PtyBackend;
 }
 
 function resolveTimeouts(
@@ -282,6 +278,29 @@ function resolveTimeouts(
 export async function launchTerminal(
   options: LaunchTerminalOptions,
 ): Promise<TerminalHarness> {
+  const admission = await prepareTerminalLaunch(options);
+  let backend: PtyBackend;
+  try {
+    backend = (await resolveDefaultPtyBackend()).backend;
+  } catch (error) {
+    await rollbackLaunchAdmission(admission.lease, error);
+    throw error;
+  }
+  return launchAdmittedTerminal({ ...options, backend }, admission);
+}
+
+/** Launches through an explicitly owned PTY backend for framework integrations. */
+export async function launchTerminalWithBackend(
+  options: LaunchTerminalWithBackendOptions,
+): Promise<TerminalHarness> {
+  const admission = await prepareTerminalLaunch(options);
+  return launchAdmittedTerminal(options, admission);
+}
+
+async function prepareTerminalLaunch(options: LaunchTerminalOptions): Promise<{
+  readonly deadline: Deadline;
+  readonly lease: TerminalLaunchResourceLease | null;
+}> {
   if (options.command.length === 0) {
     throw new TypeError("launchTerminal requires a non-empty command");
   }
@@ -293,28 +312,40 @@ export async function launchTerminal(
   const launchDeadline = Deadline.after(launchTimeout);
   // The native host admits scarce resources before the semantic endpoint or
   // PTY exists. Standalone driver processes can install their own owner.
-  const launchLease = await acquireTerminalLaunchResourceLease();
-  // Resolved here rather than in the constructor because choosing it can mean
-  // loading a native module, and that is an await the constructor cannot
-  // perform. A caller that supplied its own backend is asked nothing.
-  const launched =
-    options.backend === undefined
-      ? { ...options, backend: (await resolveDefaultPtyBackend()).backend }
-      : options;
+  const lease = await acquireTerminalLaunchResourceLease();
+  return { deadline: launchDeadline, lease };
+}
+
+async function rollbackLaunchAdmission(
+  lease: TerminalLaunchResourceLease | null,
+  error: unknown,
+): Promise<void> {
+  if (lease === null) return;
+  try {
+    await lease.release();
+  } catch (releaseError) {
+    throw new AggregateError(
+      [error, releaseError],
+      "terminal validation and admission rollback failed",
+      { cause: error },
+    );
+  }
+}
+
+async function launchAdmittedTerminal(
+  options: LaunchTerminalWithBackendOptions,
+  admission: {
+    readonly deadline: Deadline;
+    readonly lease: TerminalLaunchResourceLease | null;
+  },
+): Promise<TerminalHarness> {
+  const launchDeadline = admission.deadline;
+  const launchLease = admission.lease;
   let session: TerminalSession;
   try {
-    session = new TerminalSession(launched, launchLease);
+    session = new TerminalSession(options, launchLease);
   } catch (error) {
-    if (launchLease === null) throw error;
-    try {
-      await launchLease.release();
-    } catch (releaseError) {
-      throw new AggregateError(
-        [error, releaseError],
-        "terminal validation and admission rollback failed",
-        { cause: error },
-      );
-    }
+    await rollbackLaunchAdmission(launchLease, error);
     throw error;
   }
   if (launchLease !== null) {
@@ -410,14 +441,6 @@ export async function launchTerminal(
     : instrument<TerminalHarness>(session, log, "harness");
 }
 
-/** What a diagnostic entry is about, beyond its message. */
-interface DiagnosticContext {
-  readonly revision?: number | undefined;
-  readonly wireCode?: SessionDiagnostic["wireCode"];
-  readonly count?: number | undefined;
-  readonly mode?: SessionDiagnostic["mode"];
-}
-
 interface ChangeWaiter {
   resolve(): void;
   timer: NodeJS.Timeout;
@@ -437,14 +460,16 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   readonly selection: SelectionApi;
   readonly exit: Promise<ExitStatus>;
 
-  readonly #options: LaunchTerminalOptions;
+  readonly #options: LaunchTerminalWithBackendOptions;
   readonly #emitter: SessionEventEmitter;
   readonly #vt: VtScreen;
   readonly #backend: PtyBackend;
   readonly #token = generateToken();
   readonly #pairing: RevisionPairing;
-  readonly #diagnosticsLog: SessionDiagnostic[] = [];
-  readonly #appLogHistory: AppLogEvent[] = [];
+  readonly #evidence: SessionEvidenceJournal;
+  readonly #actions: SessionActionLifecycle;
+  readonly #lifecycle = new SessionProcessLifecycle();
+  readonly #inputEvidence = new SessionInputEvidenceBarrier();
   readonly #changeWaiters = new Set<ChangeWaiter>();
   readonly #startedAt = performance.now();
   readonly #resources = new ResourceScope("terminal session");
@@ -461,19 +486,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #negotiationTimer: NodeJS.Timeout | null = null;
   #closed = false;
   #closePromise: Promise<void> | null = null;
-  #exitStatus: ExitStatus | null = null;
-  #ptyExitStatus: ExitStatus | null = null;
-  #resolveExit: ((status: ExitStatus) => void) | null = null;
   #lastOutputAt = performance.now();
   #violation: ProtocolViolationError | null = null;
   #providerFailure: TermwrightError | null = null;
-  /**
-   * Application-owned evidence is a statement about one committed revision.
-   * Any real input may change the production router/focus/paint state before
-   * the terminal text reveals it, so provider-backed planning must wait for a
-   * newer provider observation instead of reusing pre-input evidence.
-   */
-  #providerEvidenceInvalidAfterInputRevision: number | null = null;
   #ptyFailure: PtyBackendError | null = null;
   #providerInputModes: ProviderTerminalInputModes | null = null;
   #crash: CrashReport | null = null;
@@ -481,10 +496,6 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #settling: Promise<void> | null = null;
   /** Modes already reported as unverifiable; each is logged once per session. */
   readonly #unverifiableLogged = new Set<"mouse" | "focus">();
-  /** Inputs kept for a crash report; a bounded ring, oldest first. */
-  readonly #recentInputs: CrashInput[] = [];
-  /** True once the harness itself asked the child to go away. */
-  #teardownRequested = false;
   #debug: DebugLog | null = null;
   #logs: LogTailer | null = null;
   /** Wall clock and session clock as they stood at the handshake. */
@@ -499,15 +510,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     end: { row: number; column: number };
   } | null = null;
   #observationSequence = 0;
-  readonly #pendingActions = new Map<
-    string,
-    { api: string; selector?: string }
-  >();
   readonly #shellTracker = new ShellCommandTracker();
   #operationBudget: OperationBudget | undefined;
 
   constructor(
-    options: LaunchTerminalOptions,
+    options: LaunchTerminalWithBackendOptions,
     launchLease: TerminalLaunchResourceLease | null = null,
   ) {
     this.#options = options;
@@ -522,8 +529,20 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         `a session event listener threw: ${String(error)}`,
       ),
     );
+    this.#evidence = new SessionEvidenceJournal({
+      now: () => this.#now(),
+      diagnostic: (entry) => this.#emitter.emit("diagnostic", entry),
+      appLog: (entry) => this.#emitter.emit("app-log", entry),
+    });
+    this.#actions = new SessionActionLifecycle({
+      isOpen: () => !this.#closed,
+      now: () => this.#now(),
+      checkpoint: () => this.checkpoint(),
+      started: (event) => this.#emitter.emit("action-start", event),
+      finished: (event) => this.#emitter.emit("action", event),
+    });
     this.events = this.#emitter;
-    this.#backend = options.backend ?? createNodePtyBackend();
+    this.#backend = options.backend;
     this.#vt = new VtScreen({
       columns: options.columns ?? 100,
       rows: options.rows ?? 30,
@@ -545,9 +564,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         this.#diagnostic(code, detail, { revision }),
     });
     this.#resources.defer("revision pairing", () => this.#pairing.dispose());
-    this.exit = new Promise<ExitStatus>((resolve) => {
-      this.#resolveExit = resolve;
-    });
+    this.exit = this.#lifecycle.exit;
     this.scrollback = this.#createScrollbackApi();
     this.selection = this.#createSelectionApi();
     this.shell = Object.freeze<ShellApi>({
@@ -665,7 +682,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
             onDisconnect: () => {
               if (
                 this.#closed ||
-                this.#teardownRequested ||
+                this.#lifecycle.teardownRequested ||
                 this.#attachment === null
               )
                 return;
@@ -836,7 +853,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       // Cache the backend's one-shot evidence before the asynchronous VT drain.
       // close() may begin in that interval and must not subscribe too late.
       this.#processSupervisor?.observeExit(status);
-      this.#ptyExitStatus ??= Object.freeze({ ...status });
+      this.#lifecycle.observeBackendExit(status);
       void this.#finishExit(status);
     });
     const detachWriteError = this.#pty.onWriteError?.((error) => {
@@ -1363,7 +1380,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    * flag and never wait here.
    */
   async #awaitLiveInputModeEvidence(): Promise<void> {
-    if (this.#providerEvidenceInvalidAfterInputRevision === null) return;
+    if (!this.#inputEvidence.waitingForProviderEvidence) return;
     await this.waitForCommittedObservation();
   }
 
@@ -1571,7 +1588,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       this.#pty?.signal(sig);
       // Set only after the backend accepted the operation. An unsupported
       // Windows signal must not suppress a later genuine crash report.
-      this.#teardownRequested = true;
+      this.#lifecycle.requestTeardown();
       await Promise.resolve();
     });
   }
@@ -1747,12 +1764,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   async waitForExit(opts?: WaitOptions): Promise<ExitStatus> {
-    if (this.#exitStatus !== null) return this.#exitStatus;
+    if (this.#lifecycle.status !== null) return this.#lifecycle.status;
     const deadline = Deadline.after(
       this.operationTimeout(opts?.timeout ?? this.timeouts.exit, "waitForExit"),
     );
     for (;;) {
-      if (this.#exitStatus !== null) return this.#exitStatus;
+      if (this.#lifecycle.status !== null) return this.#lifecycle.status;
       if (deadline.expired()) {
         throw new TimeoutError(
           `the program was still running after ${opts?.timeout ?? this.timeouts.exit} ms`,
@@ -2167,7 +2184,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     if (this.#vt.hasPendingWrite) return "parser-in-flight";
     if (this.#pairing.hasOpenFrame) return "semantic-frame-open";
     if (this.#pairing.hasPendingRender) return "pairing-pending";
-    if (this.#providerEvidenceInvalidAfterInputRevision !== null) return "pairing-pending";
+    if (this.#inputEvidence.waitingForProviderEvidence) return "pairing-pending";
     return "settled";
   }
 
@@ -2219,9 +2236,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     kind: "key" | "mouse" | "paste" | "raw",
   ): Promise<void> {
     this.assertOpen();
-    if (this.#exitStatus !== null) {
+    if (this.#lifecycle.status !== null) {
       throw new ProcessExitedError(
-        `cannot send input: the program exited with code ${String(this.#exitStatus.code)}`,
+        `cannot send input: the program exited with code ${String(this.#lifecycle.status.code)}`,
         this.errorDiagnostics(),
       );
     }
@@ -2230,12 +2247,18 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     // until the application publishes a causally newer committed frame. This
     // includes raw write(), terminal-window focus reports and direct devices,
     // not only Locator-generated input recipes.
-    if ((this.#attachment?.providers.length ?? 0) > 0) {
-      this.#providerEvidenceInvalidAfterInputRevision = this.#pairing.revision;
-    }
+    this.#inputEvidence.noteInput(
+      (this.#attachment?.providers.length ?? 0) > 0,
+      this.#pairing.revision,
+    );
     this.#pty?.write(data);
     const timeMs = this.#now();
-    this.#rememberInput(data, kind, timeMs);
+    this.#evidence.rememberInput(
+      data,
+      kind,
+      timeMs,
+      this.artifactValuePolicy,
+    );
     this.#emitter.emit("input", { data, timeMs, kind });
     await Promise.resolve();
   }
@@ -2295,20 +2318,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   /** Starts an observable action lifecycle on this session's monotonic clock. */
   beginAction(api: string, about?: { selector?: string }): string {
-    const actionId = createRunId('action');
-    if (!this.#closed) {
-      this.#pendingActions.set(actionId, {
-        api,
-        ...(about?.selector === undefined ? {} : { selector: about.selector }),
-      });
-      this.#emitter.emit("action-start", {
-        actionId,
-        api,
-        ...(about?.selector === undefined ? {} : { selector: about.selector }),
-        timeMs: this.#now(),
-      });
-    }
-    return actionId;
+    return this.#actions.begin(api, about);
   }
 
   endAction(
@@ -2320,21 +2330,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       "actionId" | "api" | "ok" | "timeMs" | "observation"
     >,
   ): void {
-    if (this.#closed || !this.#pendingActions.delete(actionId)) return;
-    this.#emitter.emit("action", {
-      actionId,
-      api,
-      ...(about?.selector !== undefined ? { selector: about.selector } : {}),
-      ...(about?.ref !== undefined ? { ref: about.ref } : {}),
-      ok,
-      ...(about?.error !== undefined ? { error: about.error } : {}),
-      ...(about?.actionability !== undefined
-        ? { actionability: about.actionability }
-        : {}),
-      ...(about?.receipt !== undefined ? { receipt: about.receipt } : {}),
-      observation: this.checkpoint(),
-      timeMs: this.#now(),
-    });
+    this.#actions.end(actionId, api, ok, about);
   }
 
   /** Runs a harness-level action and reports it, whichever way it ends. */
@@ -2395,11 +2391,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   /** Public, bounded diagnostics log (oldest first). */
   diagnostics(): readonly SessionDiagnostic[] {
-    return Object.freeze([...this.#diagnosticsLog]);
+    return this.#evidence.diagnostics();
   }
 
   appLogs(): readonly AppLogEvent[] {
-    return Object.freeze([...this.#appLogHistory]);
+    return this.#evidence.appLogs();
   }
 
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics {
@@ -2427,18 +2423,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   async #close(): Promise<void> {
-    this.#teardownRequested = true;
+    this.#lifecycle.requestTeardown();
     // Publish one terminal outcome for every announced action before the
     // emitter is closed. A later promise settlement becomes a no-op because
     // the action has already been removed from this registry.
-    for (const [actionId, pending] of [...this.#pendingActions]) {
-      this.endAction(actionId, pending.api, false, {
-        ...(pending.selector === undefined
-          ? {}
-          : { selector: pending.selector }),
-        error: "session-closed",
-      });
-    }
+    this.#actions.failPending("session-closed");
     this.#closed = true;
     this.#shellTracker.close(
       new SessionClosedError("the shell session was closed", {
@@ -2500,9 +2489,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       await supervisor.shutdown({
         deadline: performance.now() + CLOSE_GRACE_MS,
         gracefulMs: Math.min(500, CLOSE_GRACE_MS),
-        ...(this.#ptyExitStatus === null
+        ...(this.#lifecycle.backendStatus === null
           ? {}
-          : { observedExit: this.#ptyExitStatus }),
+          : { observedExit: this.#lifecycle.backendStatus }),
       });
     } catch (error) {
       // A real PTY exit closes the producer, but #finishExit still has to parse
@@ -2574,21 +2563,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #diagnostic(
     code: DiagnosticCode,
     detail: string,
-    about?: DiagnosticContext,
+    about?: SessionDiagnosticContext,
   ): void {
-    const entry: SessionDiagnostic = {
-      code,
-      detail,
-      ...(about?.revision !== undefined ? { revision: about.revision } : {}),
-      ...(about?.wireCode !== undefined ? { wireCode: about.wireCode } : {}),
-      ...(about?.count !== undefined ? { count: about.count } : {}),
-      ...(about?.mode !== undefined ? { mode: about.mode } : {}),
-      timeMs: this.#now(),
-    };
-    this.#diagnosticsLog.push(Object.freeze(entry));
-    if (this.#diagnosticsLog.length > MAX_DIAGNOSTICS)
-      this.#diagnosticsLog.shift();
-    this.#emitter.emit("diagnostic", entry);
+    this.#evidence.diagnostic(code, detail, about);
   }
 
   #onAttach(attachment: SemanticAttachment): void {
@@ -2702,10 +2679,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   #publishAppLog(event: AppLogEvent): void {
-    const retained = Object.freeze(event);
-    this.#appLogHistory.push(retained);
-    if (this.#appLogHistory.length > 1_000) this.#appLogHistory.shift();
-    this.#emitter.emit("app-log", retained);
+    this.#evidence.appLog(event);
   }
 
   /** Rebases an adapter's epoch timestamp onto the session timeline. */
@@ -2772,12 +2746,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       return;
     }
     snapshot = composed.snapshot;
-    if (
-      this.#providerEvidenceInvalidAfterInputRevision !== null &&
-      snapshot.revision > this.#providerEvidenceInvalidAfterInputRevision
-    ) {
-      this.#providerEvidenceInvalidAfterInputRevision = null;
-    }
+    this.#inputEvidence.noteSemanticCommit(snapshot.revision);
     if (composed.inputModes !== undefined) {
       const observedModes = this.#vt.modes();
       const disagreement =
@@ -2948,173 +2917,14 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   #buildContract(): EffectiveSessionContract {
-    const attachment = this.#attachment;
-    const terminalEvidence: EvidenceProvenance = Object.freeze({
-      source: "terminal",
-      method: "native",
-      strength: "authoritative",
-      providerId: "termwright-vt",
-    });
-    const frameworkId =
-      attachment?.probe?.framework ?? attachment?.adapter.name ?? "generic";
-    const frameworkEvidence: EvidenceProvenance = Object.freeze({
-      source: "framework",
-      method:
-        attachment?.probe === null || attachment?.probe === undefined
-          ? "declared"
-          : "instrumented",
-      strength: "authoritative",
-      providerId: frameworkId,
-    });
-    const applicationEvidence = (
-      providerId: string,
-      method: "native" | "declared",
-    ): EvidenceProvenance =>
-      Object.freeze({
-        source: "application",
-        method,
-        strength: "authoritative",
-        providerId,
-      });
-    const supported = (evidence: EvidenceProvenance) =>
-      Object.freeze({ status: "supported" as const, evidence });
-    const unsupported = (
-      reason:
-        | "not-negotiated"
-        | "framework-unobservable"
-        | "terminal-unobservable"
-        | "provider-required",
-    ) => Object.freeze({ status: "unsupported" as const, reason });
-    const advertised = new Set(attachment?.capabilities ?? []);
-    const probe = new Set(attachment?.probe?.capabilities ?? []);
-    const producerNodes = new Set<CapabilityNodeId>();
-    for (const capability of advertised)
-      producerNodes.add(`adapter.${capability}`);
-    for (const capability of probe) producerNodes.add(`probe.${capability}`);
-    for (const provider of attachment?.providers ?? []) {
-      for (const capability of provider.capabilities)
-        producerNodes.add(`provider.${capability}`);
-    }
-    producerNodes.add("terminal.writable-pty");
-    if (this.#options.modesObservable ?? process.platform !== "win32") {
-      producerNodes.add("terminal.input-modes-observable");
-    }
-    const produced = sessionCapabilitiesFromProducers(producerNodes);
-    const evidenceFor = (
-      capability: SessionCapabilityId,
-    ): EvidenceProvenance => {
-      const sources = produced.get(capability) ?? [];
-      const providerSource = sources.find((source) =>
-        source.startsWith("provider."),
-      );
-      if (providerSource !== undefined) {
-        const providerCapability = providerSource.slice("provider.".length);
-        const provider = attachment?.providers.find((candidate) =>
-          candidate.capabilities.includes(providerCapability as never),
-        );
-        if (provider !== undefined)
-          return applicationEvidence(provider.id, provider.method);
-      }
-      return sources.some((source) => source.startsWith("terminal."))
-        ? terminalEvidence
-        : frameworkEvidence;
-    };
-    const unsupportedReason = (capability: SessionCapabilityId) =>
-      capability === "pointer-input" || capability === "focus-input"
-        ? ("terminal-unobservable" as const)
-        : capability === "pointer-geometry" ||
-            capability === "pointer-hit-testing" ||
-            capability === "focus" ||
-            capability === "action-strategies"
-          ? ("provider-required" as const)
-          : capability === "semantic-tree" || capability === "paired-revisions"
-            ? ("not-negotiated" as const)
-            : ("framework-unobservable" as const);
-    const observations = Object.fromEntries(
-      (
-        Object.keys({
-          "semantic-tree": 0,
-          "stable-identity": 0,
-          "intended-geometry": 0,
-          "clipped-geometry": 0,
-          "painted-region": 0,
-          "pointer-geometry": 0,
-          "pointer-hit-testing": 0,
-          focus: 0,
-          scroll: 0,
-          "render-order": 0,
-          "action-strategies": 0,
-          "keyboard-input": 0,
-          "pointer-input": 0,
-          "focus-input": 0,
-          "paired-revisions": 0,
-        }) as SessionCapabilityId[]
-      ).map((capability) => [
-        capability,
-        produced.has(capability)
-          ? supported(evidenceFor(capability))
-          : unsupported(unsupportedReason(capability)),
-      ]),
-    ) as Record<
-      SessionCapabilityId,
-      ReturnType<typeof supported> | ReturnType<typeof unsupported>
-    >;
-    const providers =
-      attachment === null
-        ? [
-            Object.freeze({
-              id: "termwright-vt",
-              kind: "terminal" as const,
-              version: "1",
-            }),
-          ]
-        : [
-            Object.freeze({
-              id: frameworkId,
-              kind: "framework" as const,
-              version:
-                attachment.probe?.frameworkVersion ??
-                attachment.adapter.version,
-            }),
-            ...attachment.providers.map((provider) =>
-              Object.freeze({
-                id: provider.id,
-                kind: "application" as const,
-                version: provider.version,
-                method: provider.method,
-                capabilities: Object.freeze([...provider.capabilities]),
-              }),
-            ),
-            Object.freeze({
-              id: "termwright-vt",
-              kind: "terminal" as const,
-              version: "1",
-            }),
-          ];
-    return Object.freeze({
-      contractId: `${this.sessionId}:0`,
+    return buildSessionContract({
       sessionId: this.sessionId,
-      epoch: 0,
-      protocol: "termwright/2" as const,
-      framework:
-        attachment === null
-          ? null
-          : Object.freeze({
-              name: frameworkId,
-              version:
-                attachment.probe?.frameworkVersion ??
-                attachment.adapter.version,
-              adapterVersion: attachment.adapter.version,
-              certificationId: `${frameworkId}@${attachment.probe?.frameworkVersion ?? attachment.adapter.version}/${attachment.adapter.version}`,
-            }),
-      providers: Object.freeze(providers),
-      capabilities: Object.freeze(observations),
-      terminal: Object.freeze({
-        profile: this.#vt.profile.id,
-        platform: process.platform,
-        mouseModesObservable:
-          this.#options.modesObservable ?? process.platform !== "win32",
-      }),
+      attachment: this.#attachment,
+      terminalProfile: this.#vt.profile.id,
+      platform: process.platform,
+      ...(this.#options.modesObservable === undefined
+        ? {}
+        : { modesObservable: this.#options.modesObservable }),
     });
   }
 
@@ -3124,7 +2934,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    * the last chunk it wrote — the very chunk carrying the stack trace.
    */
   async #finishExit(status: ExitStatus): Promise<void> {
-    if (this.#exitStatus !== null) return;
+    if (this.#lifecycle.status !== null) return;
     if (this.#pty?.lifecycle?.outputDrain === "eof") {
       // Wait for the producer, then the parser. The pty reports the exit as
       // soon as the process is gone, so the last chunk it wrote can still be
@@ -3162,72 +2972,41 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   #onExit(status: ExitStatus): void {
-    if (this.#exitStatus !== null) return;
-    this.#exitStatus = Object.freeze(status);
-    this.#shellTracker.close(
-      new ProcessExitedError(
-        `the shell process exited before the command completed (code ${String(status.code)})`,
-        this.errorDiagnostics(),
-      ),
-    );
-    if (this.#isCrash(status)) {
-      this.#crash = this.#buildCrashReport(status);
-      this.#emitter.emit("crash", this.#crash);
-    }
-    this.#emitter.emit("exit", { ...status, timeMs: this.#now() });
-    this.#resolveExit?.(this.#exitStatus);
-    this.#settle();
-    this.#notifyChange();
-  }
-
-  /** A death nobody asked for: a signal, or a non-zero exit code. */
-  #isCrash(status: ExitStatus): boolean {
-    if (this.#teardownRequested) return false;
-    if (status.signal !== null) return true;
-    return status.code !== null && status.code !== 0;
-  }
-
-  #rememberInput(
-    data: Uint8Array,
-    kind: CrashInput["kind"],
-    timeMs: number,
-  ): void {
-    const entry: CrashInput = {
-      timeMs,
-      kind,
-      bytes: data.length,
-      // A paste is the one input that routinely carries a secret; its size is
-      // all a crash report needs from it.
-      ...(kind === "mouse" || this.artifactValuePolicy === "raw"
-        ? { preview: previewBytes(data) }
-        : {}),
-    };
-    this.#recentInputs.push(Object.freeze(entry));
-    if (this.#recentInputs.length > CRASH_INPUTS) this.#recentInputs.shift();
+    this.#lifecycle.complete(status, (retained, unexpected) => {
+      this.#shellTracker.close(
+        new ProcessExitedError(
+          `the shell process exited before the command completed (code ${String(retained.code)})`,
+          this.errorDiagnostics(),
+        ),
+      );
+      if (unexpected) {
+        this.#crash = this.#buildCrashReport(retained);
+        this.#emitter.emit("crash", this.#crash);
+      }
+      this.#emitter.emit("exit", { ...retained, timeMs: this.#now() });
+      this.#settle();
+      this.#notifyChange();
+    });
   }
 
   #buildCrashReport(status: ExitStatus): CrashReport {
-    return Object.freeze({
+    return this.#evidence.crashReport({
       exit: status,
-      screenTail: crashTail(this.#vt.allLines()),
+      screenLines: this.#vt.allLines(),
       lastSemanticTree: this.#index?.snapshot ?? null,
-      recentInputs: Object.freeze([...this.#recentInputs]),
-      diagnosticsTail: Object.freeze(
-        this.#diagnosticsLog.slice(-CRASH_DIAGNOSTICS),
-      ),
-      timeMs: this.#now(),
     });
   }
 
   #assertAlive(operation: string): void {
     if (this.#ptyFailure !== null) throw this.#ptyFailure;
-    if (this.#exitStatus === null) return;
+    const status = this.#lifecycle.status;
+    if (status === null) return;
     const crash = this.#crash;
     throw new ProcessExitedError(
-      `${operation} cannot make progress: the program exited with code ${String(this.#exitStatus.code)}` +
-        (this.#exitStatus.signal === null
+      `${operation} cannot make progress: the program exited with code ${String(status.code)}` +
+        (status.signal === null
           ? ""
-          : ` (signal ${this.#exitStatus.signal})`),
+          : ` (signal ${status.signal})`),
       this.errorDiagnostics(
         crash === null
           ? {}
@@ -3537,33 +3316,6 @@ export function buildChildEnv(
 
 /** Lines of the crash excerpt embedded in a process-exited error. */
 const CRASH_EXCERPT_LINES = 20;
-
-/** Escaped, truncated rendering of an input payload. */
-function previewBytes(data: Uint8Array): string {
-  const text = new TextDecoder().decode(data.subarray(0, CRASH_INPUT_PREVIEW));
-  const escaped = JSON.stringify(text).slice(1, -1);
-  return data.length > CRASH_INPUT_PREVIEW ? `${escaped}…` : escaped;
-}
-
-/**
- * Trims a buffer down to the tail worth keeping: trailing blank lines dropped,
- * then bounded by line count and by bytes so a single enormous line cannot
- * blow the budget on its own.
- */
-function crashTail(lines: readonly string[]): readonly string[] {
-  let end = lines.length;
-  while (end > 0 && (lines[end - 1] ?? "").trim() === "") end -= 1;
-  const tail = lines.slice(Math.max(0, end - CRASH_TAIL_LINES), end);
-  let bytes = 0;
-  const kept: string[] = [];
-  for (let index = tail.length - 1; index >= 0; index -= 1) {
-    const line = tail[index] ?? "";
-    bytes += Buffer.byteLength(line, "utf8") + 1;
-    if (bytes > CRASH_TAIL_BYTES) break;
-    kept.push(line);
-  }
-  return Object.freeze(kept.reverse());
-}
 
 /** Groups a failure by its code, not by its prose. */
 function actionErrorCode(error: unknown): string {

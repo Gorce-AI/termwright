@@ -27,6 +27,6 @@ describe('pinned node-pty write boundary', () => {
     expect(writeError).toBeUndefined();
     expect(status.code).toBe(0);
     expect(output).toContain('accepted');
-    expect(proc.lifecycle?.outputDrain).toBe(process.platform === 'win32' ? 'bounded-fallback' : 'eof');
+    expect(proc.lifecycle?.outputDrain).toBe('bounded-fallback');
   });
 });

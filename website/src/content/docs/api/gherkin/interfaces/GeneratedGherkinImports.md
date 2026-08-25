@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: GeneratedGherkinImports
 
-Defined in: [gherkin/src/plugin.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L38)
+Defined in: [plugin.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L40)
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: [gherkin/src/plugin.ts:38](https://github.com/Gorce-AI/termwright/bl
 
 > `readonly` **runtime**: `string`
 
-Defined in: [gherkin/src/plugin.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L40)
+Defined in: [plugin.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L42)
 
 ***
 
@@ -27,4 +27,4 @@ Defined in: [gherkin/src/plugin.ts:40](https://github.com/Gorce-AI/termwright/bl
 
 > `readonly` **test**: `string`
 
-Defined in: [gherkin/src/plugin.ts:39](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L39)
+Defined in: [plugin.ts:41](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L41)

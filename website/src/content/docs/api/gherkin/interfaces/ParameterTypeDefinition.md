@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ParameterTypeDefinition\<T\>
 
-Defined in: [gherkin/src/definitions.ts:76](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L76)
+Defined in: [definitions.ts:78](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L78)
 
 An inert custom parameter type, resolved with the same nearest-scope rules.
 
@@ -27,7 +27,7 @@ An inert custom parameter type, resolved with the same nearest-scope rules.
 
 > `readonly` **options**: [`ParameterTypeOptions`](../parametertypeoptions/)\<`T`\>
 
-Defined in: [gherkin/src/definitions.ts:78](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L78)
+Defined in: [definitions.ts:80](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L80)
 
 ***
 
@@ -35,4 +35,4 @@ Defined in: [gherkin/src/definitions.ts:78](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **type**: `"parameter"`
 
-Defined in: [gherkin/src/definitions.ts:77](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L77)
+Defined in: [definitions.ts:79](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L79)

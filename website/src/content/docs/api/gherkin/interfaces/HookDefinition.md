@@ -1,5 +1,5 @@
 ---
-title: "Interface: HookDefinition"
+title: "Interface: HookDefinition\\<Fixtures\\>"
 editUrl: false
 ---
 
@@ -9,17 +9,23 @@ editUrl: false
 
 [@termwright/gherkin](../../) / HookDefinition
 
-# Interface: HookDefinition
+# Interface: HookDefinition\<Fixtures\>
 
-Defined in: [gherkin/src/definitions.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L59)
+Defined in: [definitions.ts:61](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L61)
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ## Properties
 
 ### body
 
-> `readonly` **body**: [`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)
+> `readonly` **body**: [`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L63)
+Defined in: [definitions.ts:65](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L65)
 
 ***
 
@@ -27,7 +33,7 @@ Defined in: [gherkin/src/definitions.ts:63](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **options**: [`HookDefinitionOptions`](../hookdefinitionoptions/)
 
-Defined in: [gherkin/src/definitions.ts:62](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L62)
+Defined in: [definitions.ts:64](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L64)
 
 ***
 
@@ -35,7 +41,7 @@ Defined in: [gherkin/src/definitions.ts:62](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **phase**: `"before"` \| `"after"`
 
-Defined in: [gherkin/src/definitions.ts:61](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L61)
+Defined in: [definitions.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L63)
 
 ***
 
@@ -43,4 +49,4 @@ Defined in: [gherkin/src/definitions.ts:61](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **type**: `"hook"`
 
-Defined in: [gherkin/src/definitions.ts:60](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L60)
+Defined in: [definitions.ts:62](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L62)

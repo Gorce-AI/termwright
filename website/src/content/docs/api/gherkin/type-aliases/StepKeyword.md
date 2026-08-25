@@ -13,4 +13,4 @@ editUrl: false
 
 > **StepKeyword** = `"Given"` \| `"When"` \| `"Then"` \| `"Step"`
 
-Defined in: [gherkin/src/definitions.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L42)
+Defined in: [definitions.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L42)

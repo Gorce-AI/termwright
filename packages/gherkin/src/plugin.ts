@@ -31,6 +31,8 @@ export interface GherkinPluginOptions {
   readonly includeFeatures?: boolean;
   /** Module specifiers emitted into transformed feature files. */
   readonly generatedImports?: GeneratedGherkinImports;
+  /** Custom `test.extend()` fixture names forwarded into every Gherkin context. */
+  readonly fixtureNames?: readonly string[];
   /** Cucumber tag expression selecting Scenario and Outline cases. */
   readonly tags?: string;
 }
@@ -102,7 +104,39 @@ export interface TransformFeatureInput {
   readonly uri: string;
   readonly glue: readonly PairedGlue[];
   readonly generatedImports?: GeneratedGherkinImports;
+  readonly fixtureNames?: readonly string[];
   readonly tags?: string;
+}
+
+const RESERVED_CONTEXT_NAMES = new Set([
+  'termwrightOptions', 'termwright', 'terminal', 'step',
+  'expect', 'world', 'scenario', 'defer', 'use',
+  'task', 'signal', 'skip', 'annotate', 'onTestFailed', 'onTestFinished',
+  // Module code is strict. These spellings match IdentifierName syntax but
+  // cannot be emitted as destructured binding identifiers.
+  'arguments', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',
+  'default', 'delete', 'do', 'else', 'enum', 'eval', 'export', 'extends',
+  'false', 'finally', 'for', 'function', 'if', 'implements', 'import', 'in',
+  'instanceof', 'interface', 'let', 'new', 'null', 'package', 'private',
+  'protected', 'public', 'return', 'static', 'super', 'switch', 'this',
+  'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield',
+]);
+
+function fixtureNames(input: readonly string[] | undefined): readonly string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const name of input ?? []) {
+    if (!/^[$A-Z_a-z][$\w]*$/u.test(name)) {
+      throw new TypeError(`Gherkin fixture name must be a JavaScript identifier: ${JSON.stringify(name)}`);
+    }
+    if (RESERVED_CONTEXT_NAMES.has(name) || name.startsWith('__')) {
+      throw new TypeError(`Gherkin fixture name is reserved: ${JSON.stringify(name)}`);
+    }
+    if (seen.has(name)) throw new TypeError(`Duplicate Gherkin fixture name: ${JSON.stringify(name)}`);
+    seen.add(name);
+    result.push(name);
+  }
+  return result;
 }
 
 export interface TransformFeatureResult {
@@ -345,6 +379,7 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
   };
 
   const generatedImports = input.generatedImports ?? DEFAULT_GENERATED_IMPORTS;
+  const customFixtures = fixtureNames(input.fixtureNames);
   emit(TRANSFORM_MARKER);
   emit(`import { describe, expect, test } from ${JSON.stringify(generatedImports.test)};`);
   emit(`import { createGherkinContext as __createContext, createGherkinRuntime as __createRuntime, runGherkinScenario as __runScenario, runGherkinStep as __runStep } from ${JSON.stringify(generatedImports.runtime)};`);
@@ -394,7 +429,8 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
         },
       },
     };
-    emit(`test(${JSON.stringify(testName)}, ${JSON.stringify(declarationMeta)}, async ({ termwrightOptions, termwright, terminal, step }) => {`, scenarioLine);
+    const fixtureBindings = ['termwrightOptions', 'termwright', 'terminal', 'step', ...customFixtures];
+    emit(`test(${JSON.stringify(testName)}, ${JSON.stringify(declarationMeta)}, async ({ ${fixtureBindings.join(', ')} }) => {`, scenarioLine);
     const metadata = {
       feature: feature.name,
       name: pickle.name,
@@ -402,7 +438,7 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
       line: scenarioLine,
       tags: pickle.tags.map((tag) => tag.name),
     };
-    emit(`const __context = __createContext({ termwrightOptions, termwright, terminal, step, expect, world: {}, scenario: ${JSON.stringify(metadata)} });`);
+    emit(`const __context = __createContext({ termwrightOptions, termwright, terminal, step, ${customFixtures.map((name) => `${name}, `).join('')}expect, world: {}, scenario: ${JSON.stringify(metadata)} });`);
     emit('await __runScenario(__runtime, __context, async () => {');
     for (const pickleStep of pickle.steps) {
       const astStep = pickleStep.astNodeIds.map((id) => index.steps.get(id)).find(Boolean);
@@ -477,6 +513,7 @@ export function gherkinPlugin(options: GherkinPluginOptions = {}): Plugin {
         uri: file,
         glue,
         ...(options.generatedImports === undefined ? {} : { generatedImports: options.generatedImports }),
+        ...(options.fixtureNames === undefined ? {} : { fixtureNames: options.fixtureNames }),
         // The command line composes with the project's filter rather than
         // replacing it, and it arrives by environment because the transform
         // runs inside the runner's workers rather than in the process that

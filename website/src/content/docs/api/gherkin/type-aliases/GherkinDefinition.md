@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: GherkinDefinition"
+title: "Type Alias: GherkinDefinition\\<Fixtures\\>"
 editUrl: false
 ---
 
@@ -9,8 +9,14 @@ editUrl: false
 
 [@termwright/gherkin](../../) / GherkinDefinition
 
-# Type Alias: GherkinDefinition
+# Type Alias: GherkinDefinition\<Fixtures\>
 
-> **GherkinDefinition** = [`StepDefinition`](../../interfaces/stepdefinition/) \| [`ParameterTypeDefinition`](../../interfaces/parametertypedefinition/) \| [`HookDefinition`](../../interfaces/hookdefinition/)
+> **GherkinDefinition**\<`Fixtures`\> = [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\> \| [`ParameterTypeDefinition`](../../interfaces/parametertypedefinition/) \| [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L81)
+Defined in: [definitions.ts:83](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L83)
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`

@@ -1,9 +1,17 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { createServer, connect, type Server, type Socket } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { createServer, connect, type Socket } from 'node:net';
 import { performance } from 'node:perf_hooks';
+import {
+  bindLocalEndpoint,
+  createLocalToken,
+  endWithLocalFrame as sendAndEnd,
+  LocalJsonDecoder,
+  LocalTransportError,
+  parseRequestEnvelope,
+  parseResponseEnvelope,
+  responseEnvelope,
+  sameLocalSecret,
+  writeLocalFrame,
+} from '@termwright/local-transport';
 import type { AttemptId, RunId } from '@termwright/protocol/run-events';
 import {
   ResourceBroker,
@@ -98,7 +106,7 @@ interface JsonObject {
 
 interface ServerConnection {
   readonly socket: Socket;
-  readonly decoder: FrameDecoder;
+  readonly decoder: LocalJsonDecoder;
   readonly seenRequests: Set<string>;
   readonly pendingAcquires: Map<string, { readonly controller: AbortController; cancelled: boolean }>;
   readonly acquireLeases: Map<string, string>;
@@ -132,15 +140,9 @@ export async function startResourceBrokerServer(
     options.maxRequestsPerConnection ?? DEFAULT_MAX_REQUESTS_PER_CONNECTION,
     'maxRequestsPerConnection',
   );
-  const token = options.token ?? options.randomToken?.() ?? randomBytes(32).toString('base64url');
-  if (token.length < 32 || token.length > 512) {
-    throw new ResourceBrokerTransportError('protocol-error', 'broker token must contain 32..512 characters');
-  }
-  const allocated = options.endpoint === undefined ? await allocateEndpoint() : { endpoint: options.endpoint };
-  if (options.signal?.aborted === true) {
-    await allocated.cleanup?.();
-    options.signal.throwIfAborted();
-  }
+  let token: string;
+  try { token = createLocalToken(options.token, options.randomToken); }
+  catch (error) { throw protocolError('broker token must contain 32..512 characters', error); }
   const sockets = new Set<ServerConnection>();
   const workers = new Map<string, ServerConnection>();
   let closing = false;
@@ -154,7 +156,7 @@ export async function startResourceBrokerServer(
     socket.setNoDelay(true);
     const connection: ServerConnection = {
       socket,
-      decoder: new FrameDecoder(maxFrameBytes, (message) => dispatch(connection, message)),
+      decoder: new LocalJsonDecoder(maxFrameBytes, (message) => dispatch(connection, message)),
       seenRequests: new Set(),
       pendingAcquires: new Map(),
       acquireLeases: new Map(),
@@ -182,10 +184,8 @@ export async function startResourceBrokerServer(
 
   function dispatch(connection: ServerConnection, value: unknown): void {
     try {
-      const message = object(value, 'message');
-      if (message.v !== PROTOCOL_VERSION) throw protocolError('unsupported broker protocol version');
-      const type = string(message.type, 'message.type');
-      const requestId = string(message.requestId, 'message.requestId', 256);
+      const message = parseRequestEnvelope(value, PROTOCOL_VERSION);
+      const { type, requestId } = message;
       if (connection.seenRequests.has(requestId)) throw protocolError(`duplicate requestId ${requestId}`);
       if (connection.seenRequests.size >= maxRequestsPerConnection) {
         throw protocolError(`connection exceeded ${maxRequestsPerConnection} requests`);
@@ -206,7 +206,7 @@ export async function startResourceBrokerServer(
 
   function handleHello(connection: ServerConnection, requestId: string, message: JsonObject): void {
     const presentedToken = string(message.token, 'hello.token', 512);
-    if (!sameSecret(token, presentedToken)) {
+    if (!sameLocalSecret(token, presentedToken)) {
       sendAndEnd(connection.socket, responseFailure(requestId, 'authentication-failed', 'broker token rejected'), maxFrameBytes);
       return;
     }
@@ -334,15 +334,15 @@ export async function startResourceBrokerServer(
     connection.acquireLeases.clear();
   }
 
-  try {
-    await listen(server, allocated.endpoint, options.signal);
-  } catch (error) {
-    await allocated.cleanup?.();
-    throw error;
-  }
+  const endpoint = await bindLocalEndpoint({
+    server,
+    name: 'broker',
+    ...(options.endpoint === undefined ? {} : { endpoint: options.endpoint }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
 
   return Object.freeze({
-    endpoint: allocated.endpoint,
+    endpoint: endpoint.endpoint,
     token,
     snapshot: () => options.broker.snapshot(),
     close(): Promise<void> {
@@ -352,11 +352,8 @@ export async function startResourceBrokerServer(
           connection.socket.destroy();
           closeConnection(connection);
         }
-        const cleanups = [closeServer(server)];
-        if (allocated.cleanup !== undefined) cleanups.push(allocated.cleanup());
-        const results = await Promise.allSettled(cleanups);
-        const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-        if (failures.length > 0) throw new AggregateError(failures, 'resource broker server cleanup failed');
+        try { await endpoint.close(); }
+        catch (error) { throw new AggregateError([error], 'resource broker server cleanup failed'); }
       })();
       return closePromise;
     },
@@ -381,11 +378,10 @@ export async function connectResourceBrokerWorker(
   let closed = false;
   let closePromise: Promise<void> | null = null;
 
-  const decoder = new FrameDecoder(maxFrameBytes, (value) => {
+  const decoder = new LocalJsonDecoder(maxFrameBytes, (value) => {
     try {
-      const message = object(value, 'response');
-      if (message.v !== PROTOCOL_VERSION || message.type !== 'response') throw protocolError('invalid broker response');
-      const requestId = string(message.requestId, 'response.requestId', 256);
+      const message = parseResponseEnvelope(value, PROTOCOL_VERSION);
+      const { requestId } = message;
       const request = pending.get(requestId);
       if (request === undefined) return;
       pending.delete(requestId);
@@ -393,7 +389,7 @@ export async function connectResourceBrokerWorker(
       if (message.ok === true) request.resolve(message.result);
       else request.reject(errorFromWire(message.error));
     } catch (error) {
-      failClient(error instanceof Error ? error : protocolError('invalid broker response'));
+      failClient(brokerTransportError(error, 'invalid broker response'));
     }
   });
 
@@ -401,7 +397,7 @@ export async function connectResourceBrokerWorker(
     try {
       decoder.push(chunk);
     } catch (error) {
-      failClient(error instanceof Error ? error : protocolError('invalid broker frame'));
+      failClient(brokerTransportError(error, 'invalid broker frame'));
     }
   });
   socket.once('error', (error) => failClient(new ResourceBrokerTransportError('connection-closed', error.message, { cause: error })));
@@ -472,18 +468,28 @@ export async function connectResourceBrokerWorker(
   }
 
   const connected = new Promise<void>((resolve, reject) => {
+    const remaining = options.handshakeDeadline - now();
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new ResourceBrokerTransportError('request-timeout', 'broker connect deadline expired'));
+    }, remaining);
+    timer.unref();
     const onConnect = (): void => { cleanup(); resolve(); };
     const onError = (error: Error): void => { cleanup(); reject(error); };
+    const onAbort = (): void => {
+      cleanup();
+      reject(new ResourceBrokerError('aborted', 'broker handshake was aborted'));
+    };
     const cleanup = (): void => {
+      clearTimeout(timer);
       socket.removeListener('connect', onConnect);
       socket.removeListener('error', onError);
+      options.signal?.removeEventListener('abort', onAbort);
     };
     socket.once('connect', onConnect);
     socket.once('error', onError);
+    options.signal?.addEventListener('abort', onAbort, { once: true });
   });
-  const handshakeAbort = new AbortController();
-  const forwardAbort = (): void => handshakeAbort.abort();
-  options.signal?.addEventListener('abort', forwardAbort, { once: true });
   try {
     await connected;
     await request('hello', {
@@ -491,12 +497,10 @@ export async function connectResourceBrokerWorker(
       runId: options.runId,
       workerId: options.workerId,
       workerEpoch: options.workerEpoch,
-    }, options.handshakeDeadline, handshakeAbort.signal);
+    }, options.handshakeDeadline, options.signal);
   } catch (error) {
     socket.destroy();
     throw error;
-  } finally {
-    options.signal?.removeEventListener('abort', forwardAbort);
   }
 
   const identity: WorkerIdentity = Object.freeze({
@@ -549,71 +553,21 @@ export async function connectResourceBrokerWorker(
   });
 }
 
-class FrameDecoder {
-  readonly #maxFrameBytes: number;
-  readonly #onMessage: (message: unknown) => void;
-  #buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
-
-  constructor(maxFrameBytes: number, onMessage: (message: unknown) => void) {
-    this.#maxFrameBytes = maxFrameBytes;
-    this.#onMessage = onMessage;
-  }
-
-  push(chunk: Buffer): void {
-    this.#buffer = this.#buffer.length === 0 ? chunk : Buffer.concat([this.#buffer, chunk]);
-    while (this.#buffer.length >= 4) {
-      const length = this.#buffer.readUInt32BE(0);
-      if (length === 0 || length > this.#maxFrameBytes) {
-        throw new ResourceBrokerTransportError('frame-too-large', `broker frame length ${length} is invalid`);
-      }
-      if (this.#buffer.length < length + 4) return;
-      const body = this.#buffer.subarray(4, length + 4);
-      this.#buffer = this.#buffer.subarray(length + 4);
-      let parsed: unknown;
-      try { parsed = JSON.parse(body.toString('utf8')); }
-      catch (error) { throw protocolError('broker frame is not valid JSON', error); }
-      this.#onMessage(parsed);
-    }
-    if (this.#buffer.length > this.#maxFrameBytes + 4) {
-      throw new ResourceBrokerTransportError('frame-too-large', 'broker partial frame exceeded its bound');
-    }
-  }
-}
-
 function writeFrame(socket: Socket, message: unknown, maxFrameBytes: number): void {
-  const body = Buffer.from(JSON.stringify(message), 'utf8');
-  if (body.length === 0 || body.length > maxFrameBytes) {
-    throw new ResourceBrokerTransportError('frame-too-large', `broker frame contains ${body.length} bytes`);
-  }
-  const frame = Buffer.allocUnsafe(body.length + 4);
-  frame.writeUInt32BE(body.length, 0);
-  body.copy(frame, 4);
-  socket.write(frame);
-}
-
-function sendAndEnd(socket: Socket, message: unknown, maxFrameBytes: number): void {
-  try {
-    const body = Buffer.from(JSON.stringify(message), 'utf8');
-    if (body.length === 0 || body.length > maxFrameBytes) { socket.destroy(); return; }
-    const frame = Buffer.allocUnsafe(body.length + 4);
-    frame.writeUInt32BE(body.length, 0);
-    body.copy(frame, 4);
-    socket.end(frame);
-  } catch {
-    socket.destroy();
-  }
+  try { writeLocalFrame(socket, message, maxFrameBytes); }
+  catch (error) { throw brokerTransportError(error, 'broker frame could not be written'); }
 }
 
 function success(requestId: string, result: unknown): JsonObject {
-  return { v: PROTOCOL_VERSION, type: 'response', requestId, ok: true, result };
+  return responseEnvelope(PROTOCOL_VERSION, requestId, true, result);
 }
 
 function failure(code: string, message: string): JsonObject {
-  return { v: PROTOCOL_VERSION, type: 'response', requestId: 'connection', ok: false, error: { code, message } };
+  return responseEnvelope(PROTOCOL_VERSION, 'connection', false, { code, message });
 }
 
 function responseFailure(requestId: string, code: string, message: string): JsonObject {
-  return { v: PROTOCOL_VERSION, type: 'response', requestId, ok: false, error: { code, message } };
+  return responseEnvelope(PROTOCOL_VERSION, requestId, false, { code, message });
 }
 
 function responseFromError(requestId: string, error: unknown): JsonObject {
@@ -624,6 +578,7 @@ function responseFromError(requestId: string, error: unknown): JsonObject {
 
 function wireFailure(error: unknown): JsonObject {
   const code = error instanceof ResourceBrokerTransportError ? error.code
+    : error instanceof LocalTransportError && error.code === 'frame-oversized' ? 'frame-too-large'
     : error instanceof ResourceBrokerError ? error.code : 'protocol-error';
   const message = error instanceof Error ? error.message : 'unknown broker failure';
   return failure(code, message);
@@ -731,42 +686,16 @@ function protocolError(message: string, cause?: unknown): ResourceBrokerTranspor
   return new ResourceBrokerTransportError('protocol-error', message, cause === undefined ? undefined : { cause });
 }
 
-function sameSecret(expected: string, actual: string): boolean {
-  const expectedBytes = Buffer.from(expected);
-  const actualBytes = Buffer.from(actual);
-  return expectedBytes.length === actualBytes.length && timingSafeEqual(expectedBytes, actualBytes);
-}
-
-async function allocateEndpoint(): Promise<{ endpoint: string; cleanup?: () => Promise<void> }> {
-  const suffix = randomBytes(12).toString('hex');
-  if (process.platform === 'win32') return { endpoint: `\\\\.\\pipe\\termwright-broker-${suffix}` };
-  const directory = await mkdtemp(join(tmpdir(), 'termwright-broker-'));
-  return { endpoint: join(directory, 'broker.sock'), cleanup: () => rm(directory, { recursive: true, force: true }) };
-}
-
-function listen(server: Server, endpoint: string, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onError = (error: Error): void => { cleanup(); reject(error); };
-    const onListening = (): void => { cleanup(); resolve(); };
-    const onClose = (): void => {
-      cleanup();
-      reject(signal?.reason ?? new Error('broker server closed before listening'));
-    };
-    const cleanup = (): void => {
-      server.removeListener('error', onError);
-      server.removeListener('listening', onListening);
-      server.removeListener('close', onClose);
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.once('close', onClose);
-    server.listen({ path: endpoint, signal });
-  });
-}
-
-function closeServer(server: Server): Promise<void> {
-  if (!server.listening) return Promise.resolve();
-  return new Promise((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)));
+function brokerTransportError(error: unknown, fallback: string): ResourceBrokerTransportError {
+  if (error instanceof ResourceBrokerTransportError) return error;
+  if (error instanceof LocalTransportError) {
+    return new ResourceBrokerTransportError(
+      error.code === 'frame-oversized' ? 'frame-too-large' : 'protocol-error',
+      error.message,
+      { cause: error },
+    );
+  }
+  return protocolError(fallback, error);
 }
 
 function monotonicEpochNow(): number {

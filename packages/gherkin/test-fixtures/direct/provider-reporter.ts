@@ -26,14 +26,16 @@ export default class ProviderReporter implements Reporter {
       if (provider?.id !== '@termwright/test' || provider.version !== 1) {
         throw new Error(`feature case ${test.name} is missing the @termwright/test provider marker`);
       }
-      if (meta.termwright?.kind !== 'gherkin-outline-example') {
+      const arithmetic = module.moduleId.split('?', 1)[0]?.endsWith('arithmetic.feature') === true;
+      const expectedKind = arithmetic ? 'gherkin-outline-example' : 'gherkin-scenario';
+      if (meta.termwright?.kind !== expectedKind) {
         throw new Error(`feature case ${test.name} is missing its provider-authored kind`);
       }
       const source = meta.termwright?.source;
       if (
         typeof source?.file !== 'string' ||
-        !source.file.endsWith('arithmetic.feature') ||
-        source.line !== 6 ||
+        !source.file.endsWith(arithmetic ? 'arithmetic.feature' : 'custom-fixtures.feature') ||
+        source.line !== (arithmetic ? 6 : 3) ||
         source.column !== 3
       ) {
         throw new Error(`feature case ${test.name} is missing its physical source`);

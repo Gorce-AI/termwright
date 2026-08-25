@@ -19,14 +19,17 @@ import { promisify } from "node:util";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { goTestCapability } from "../../../scripts/test-support/go-toolchain.mjs";
 import {
-  createNodePtyBackend,
-  inheritedSpawnEnv,
   launchTerminal,
   type SemanticLocator,
-  type PtyBackend,
-  type PtyProcess,
   type TerminalHarness,
 } from "@termwright/driver";
+import {
+  createNodePtyBackend,
+  inheritedSpawnEnv,
+  launchTerminalWithBackend,
+  type PtyBackend,
+  type PtyProcess,
+} from "@termwright/driver/experimental";
 import type { Rect } from "@termwright/protocol";
 import {
   applyPatchSet,
@@ -577,7 +580,7 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
       // final spawn boundary. Doing this in `env` would be ineffective because
       // launchTerminal authoritatively installs its endpoint afterwards.
       const capture = byteCapturingBackend();
-      const session = await launchTerminal({
+      const session = await launchTerminalWithBackend({
         command: [binary],
         columns: 80,
         // The fixture's fixed layout is exactly ten rows. Avoid importing

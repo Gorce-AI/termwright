@@ -48,6 +48,49 @@ fresh mutable `world` for the Scenario/Outline row, and physical Scenario
 metadata. Captures follow it. A DocString or DataTable, when present, is the
 last argument.
 
+### Project fixtures
+
+An explicit plugin can use a project-owned `test.extend()` API. Its module must
+export named `test`, `expect`, and `describe`; list the custom fixture names so
+the generated Vitest callback can request them statically:
+
+```ts
+// fixtures.ts
+import { describe, expect, test as base } from '@termwright/test';
+
+export { describe, expect };
+export interface ProjectFixtures { account: { name: string } }
+export const test = base.extend<ProjectFixtures>({
+  account: async ({}, use) => { await use({ name: 'Ada' }); },
+});
+```
+
+```ts
+import { fileURLToPath } from 'node:url';
+
+gherkinPlugin({
+  fixtureNames: ['account'],
+  generatedImports: {
+    test: fileURLToPath(new URL('./fixtures.ts', import.meta.url)),
+    runtime: '@termwright/gherkin/runtime',
+  },
+});
+```
+
+Use the same fixture interface on definitions. The generic is additive: native
+fixtures, `world`, `scenario`, `expect`, `defer`, and `use` remain available.
+
+```ts
+Given<ProjectFixtures>('an account', ({ account, world }) => {
+  world.name = account.name;
+});
+```
+
+Fixture names are explicit because Vitest discovers fixture dependencies from
+the callback's static destructuring. Project fixture teardown remains native
+Vitest teardown: it runs after Gherkin `After` hooks and scenario cleanup, and
+before the teardown of fixtures it depends on.
+
 `defineParameterType(...)` declares a custom Cucumber Expression parameter
 type without global registration. `Step(...)` declares a keyword-neutral step;
 `Given`, `When`, and `Then` provide readable authoring names but, like

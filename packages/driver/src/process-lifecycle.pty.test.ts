@@ -73,7 +73,7 @@ describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeo
 });
 
 describe('PTY output lifecycle', { timeout: 20_000 }, () => {
-  it('parses all output through the EOF boundary before publishing exit', async () => {
+  it('parses a saturated output stream through its causal terminal acknowledgement', async () => {
     const terminal = await open({
       command: [process.execPath, `${fixtures}/output-flood-exit.mjs`],
       envMode: 'inherit',
@@ -81,11 +81,8 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
       columns: 100,
       scrollbackLines: 20_000,
     });
-    // Weighed as it arrives. The producer reported a clean end on the run
-    // where the sentinel went missing, which rules out a torn-down source and
-    // leaves two possibilities that look identical from the screen: the bytes
-    // never reached the driver, or they reached it and were not parsed into
-    // the grid. A byte count separates them.
+    // Weighed as it arrives. The fixture stays alive through a DSR round trip,
+    // so its exit no longer races Linux POLLHUP with unread PTY output.
     let delivered = 0;
     let sentinelDelivered = false;
     terminal.events.on('output', ({ data }) => {
@@ -94,22 +91,18 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
     });
     await terminal.waitForExit();
     expect(
-      terminal.diagnostics().filter((entry) => entry.code === 'truncated-output'),
-    ).toEqual([]);
-    expect(
       terminal.screen().text(),
       `bytes delivered to the driver: ${delivered}, ` +
         `the sentinel among them: ${sentinelDelivered}`,
     ).toContain('FINAL OUTPUT SENTINEL');
-    // A property of the backend, not of the operating system. This read
-    // `platform === 'win32'` while Windows had only one implementation, and
-    // the native one ends on the pipe — so the degraded drain is exactly what
-    // it no longer needs, and the old form failed the moment that became true.
+    // A property of the backend, not of the operating system. node-pty cannot
+    // certify an EOF drain on Linux because libuv may discard a PTY tail on
+    // POLLHUP; native ConPTY owns an actual pipe-end boundary.
     const { backend } = await resolveDefaultPtyBackend();
     expect(
       terminal.diagnostics().some((entry) => entry.code === 'degraded-output-drain'),
       `backend in use: ${backend.name}`,
-    ).toBe(backend.name !== CONPTY_BACKEND_NAME && process.platform === 'win32');
+    ).toBe(backend.name !== CONPTY_BACKEND_NAME);
     await terminal.close();
   });
 

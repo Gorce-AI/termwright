@@ -8,6 +8,11 @@ export default defineConfig({
   plugins: [gherkinPlugin({
     featureRoot: 'packages/gherkin/test-fixtures/direct/features',
     stepDefinitions: ['[filepath].steps.{ts,tsx,mts}'],
+    fixtureNames: ['projectFixture'],
+    generatedImports: {
+      test: resolve(import.meta.dirname, 'fixtures.ts'),
+      runtime: '@termwright/gherkin/runtime',
+    },
   })],
   resolve: {
     alias: [

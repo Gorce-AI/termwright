@@ -137,6 +137,22 @@ Use `termwright doctor` to inspect the exact host timeout and resource profile
 that will be certified. These host values are Termwright-owned infrastructure
 configuration; arbitrary Vitest defaults cannot silently weaken them.
 
+### Resource profiles
+
+The profile fixes both Vitest's worker ceiling and the independent capacities
+enforced by Termwright's resource broker. `fileParallelism` is enabled for every
+profile; admission still cannot exceed any capacity in the table.
+
+<!-- BEGIN GENERATED RESOURCE PROFILES -->
+<!-- Generated from TERMWRIGHT_RESOURCE_PROFILES; do not edit this block by hand. -->
+| Profile | Workers | PTY sessions | External processes | Semantic endpoints | Trace writers | Per terminal |
+| --- | --- | --- | --- | --- | --- | --- |
+| `local` | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
+| `ci` | 2 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
+| `windows-ci` | 2 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
+| `stress` | 16 | 16 | 16 | 16 | 16 | `semanticEndpoint` × 1 |
+<!-- END GENERATED RESOURCE PROFILES -->
+
 The profile's PTY count is independent of Vitest's worker count. Every live
 terminal consumes one PTY, external-process, and semantic-endpoint unit at the
 driver allocation boundary; trace writers hold their own units until durable
@@ -161,6 +177,13 @@ capacity are now separate controls rather than package serialization. The
 broker never discounts resources merely because the leases share an AttemptId. A request
 that cannot fit remains in the visible FIFO queue and consumes the same attempt
 deadline instead of overcommitting the machine.
+
+`windows-ci` is an explicit, production scheduler contract, not a retry or a
+flakiness workaround. It currently has the same limits as `ci`: two test workers
+may run files in parallel while as many as four terminals can be admitted for a
+single atomic multi-terminal reservation. `stress` deliberately raises both
+ceilings to exercise high fan-out. Changing any value in the implementation
+requires regenerating this table; the generated-docs check fails on drift.
 
 ## Traces
 

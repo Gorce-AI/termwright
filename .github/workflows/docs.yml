@@ -5,25 +5,35 @@ on:
     branches: [main]
     paths:
       - 'website/**'
+      - 'packages/**'
+      - 'scripts/generate-*-docs.mjs'
+      - 'scripts/prepare-api-docs.mjs'
+      - 'scripts/check-package-metadata.mjs'
+      - 'typedoc*.json'
       - 'docs/DOCUMENTATION_GUIDE.md'
       - 'examples/getting-started/**'
-      - 'packages/ui/scripts/capture-docs-screenshots.mjs'
-      - 'packages/ui/src/app/docs-screenshots.e2e.ts'
       - 'package.json'
+      - 'pnpm-lock.yaml'
       - 'assets/brand/**'
-      - 'packages/ui/src/app/termwright-icon.svg'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'packages/**'
+      - 'scripts/generate-*-docs.mjs'
+      - 'scripts/prepare-api-docs.mjs'
+      - 'scripts/check-package-metadata.mjs'
+      - 'typedoc*.json'
+      - 'docs/DOCUMENTATION_GUIDE.md'
+      - 'examples/getting-started/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'assets/brand/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
-# One deployment at a time; never cancel a running one half-way.
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build:
@@ -49,6 +59,19 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check package metadata
+        run: pnpm check:package-metadata
+
+      - name: Check generated prose is current
+        run: pnpm check:generated-docs
+
+      - name: Check generated API reference is current
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm docs:api
+          git diff --exit-code -- website/src/content/docs/api
+
       # `base` in astro.config.mjs is '/termwright', matching
       # https://gorce-ai.github.io/termwright/.
       # TODO(custom domain): when a custom domain is configured, drop `base`
@@ -64,8 +87,17 @@ jobs:
           path: website/dist
 
   deploy:
+    if: ${{ github.event_name == 'push' }}
     needs: build
     runs-on: ubuntu-latest
+    # Build validation is safe to parallelize across pull requests. Only the
+    # mutable Pages deployment is globally serialized and never cancelled.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

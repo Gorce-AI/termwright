@@ -1,0 +1,42 @@
+# `@termwright/run-history`
+
+Transactional storage and strict reading for Termwright Native Host run
+manifests. The Runner and reporters consume these records; ordinary test suites
+use `termwright` and do not write manifests themselves.
+
+Host and reporter integrations can install the storage API with
+`pnpm add @termwright/run-history`.
+
+Each run starts in a private staging directory. Commit writes and fsyncs the
+validated manifest plus a SHA-256 commit marker, then atomically renames the
+directory into place and syncs its parent. A colliding RunId fails instead of
+overwriting history. The canonical journal, attempt index, result, runtime,
+resource profile, timeouts, and CI/Git provenance must agree before commit.
+
+```ts
+import {beginRunManifest, readRunHistory} from '@termwright/run-history';
+
+const transaction = await beginRunManifest('.termwright/runs', start);
+await transaction.commit(manifest);
+
+const records = await readRunHistory('.termwright/runs');
+for (const record of records) {
+  if (record.state === 'complete') console.log(record.manifest.status);
+  else if (record.state === 'unsupported-version') console.warn(record.state, record.version);
+  else console.warn(record.state, record.reason);
+}
+```
+
+Readers return explicit `complete`, `incomplete`, `corrupt`, or
+`unsupported-version` records. They never reinterpret a partial transaction or
+unknown format as a successful run. `readRunManifest()` addresses one typed
+RunId; `readRunHistory()` returns newest records first and accepts a result
+limit.
+
+`NODE_RUN_MANIFEST_WRITER` is the durable filesystem implementation. Supplying
+a custom `RunManifestWriter` is intended for alternative stores and fault
+tests; it must preserve exclusive creation, file and directory durability, and
+atomic rename semantics.
+
+Node.js 22 and 24 are supported. The on-disk format is internal release data;
+consume it through this package rather than reading its files directly.

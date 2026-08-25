@@ -9,7 +9,8 @@
  * `TerminalHarness`, with the same locators, actions and waits.
  */
 
-import type { ExitStatus, PtyBackend, PtyProcess, PtySignal, PtySpawnOptions } from '@termwright/driver';
+import type { ExitStatus } from '@termwright/driver';
+import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions } from '@termwright/driver/experimental';
 import { createHarnessStdin, createHarnessStdout, type HarnessStdin, type HarnessStdout } from './streams.js';
 
 /** The wires and the environment handed to an in-process application. */
@@ -67,6 +68,8 @@ const SIGNAL_STATUS: Readonly<Record<PtySignal, ExitStatus>> = Object.freeze({
  *
  * @example
  * ```ts
+ * import { launchTerminalWithBackend } from '@termwright/driver/experimental';
+ *
  * const backend = createInProcessBackend((io) => {
  *   const instrumented = wrapInkRender({render, Box, measureElement}, {env: io.env});
  *   const app = instrumented(<App />, {
@@ -75,7 +78,10 @@ const SIGNAL_STATUS: Readonly<Record<PtySignal, ExitStatus>> = Object.freeze({
  *   });
  *   return { stop: async () => app.unmount(), exited: app.waitUntilExit() };
  * });
- * const harness = await launchTerminal({ command: ['<in-process>'], backend });
+ * const harness = await launchTerminalWithBackend({
+ *   command: ['<in-process>'],
+ *   backend,
+ * });
  * ```
  */
 export function createInProcessBackend(start: InProcessStart): PtyBackend {

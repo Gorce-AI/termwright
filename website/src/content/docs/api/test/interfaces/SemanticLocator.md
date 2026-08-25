@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticLocator
 
-Defined in: driver/dist/index.d.ts:503
+Defined in: driver/dist/session-BmR0tpda.d.ts:502
 
 ## Extends
 
@@ -23,7 +23,7 @@ Defined in: driver/dist/index.d.ts:503
 
 > `readonly` **description**: `string`
 
-Defined in: driver/dist/index.d.ts:472
+Defined in: driver/dist/session-BmR0tpda.d.ts:471
 
 Human-readable form of the query, as it appears in error messages.
 
@@ -37,7 +37,7 @@ Human-readable form of the query, as it appears in error messages.
 
 > `readonly` **domain**: `"semantic"`
 
-Defined in: driver/dist/index.d.ts:470
+Defined in: driver/dist/session-BmR0tpda.d.ts:469
 
 #### Inherited from
 
@@ -49,7 +49,7 @@ Defined in: driver/dist/index.d.ts:470
 
 > **actionability**(`action`, `opts?`): `Promise`\<`ActionabilityExplanation`\>
 
-Defined in: driver/dist/index.d.ts:517
+Defined in: driver/dist/session-BmR0tpda.d.ts:516
 
 #### Parameters
 
@@ -71,7 +71,7 @@ Defined in: driver/dist/index.d.ts:517
 
 > **activate**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:524
+Defined in: driver/dist/session-BmR0tpda.d.ts:523
 
 #### Parameters
 
@@ -89,7 +89,7 @@ Defined in: driver/dist/index.d.ts:524
 
 > **and**(`other`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:476
+Defined in: driver/dist/session-BmR0tpda.d.ts:475
 
 #### Parameters
 
@@ -111,7 +111,7 @@ Defined in: driver/dist/index.d.ts:476
 
 > **cellSnapshot**(`opts?`): `Promise`\<`LocatorCellSnapshot`\>
 
-Defined in: driver/dist/index.d.ts:500
+Defined in: driver/dist/session-BmR0tpda.d.ts:499
 
 Atomic cells inside this locator's qualified rectangle.
 
@@ -135,7 +135,7 @@ Atomic cells inside this locator's qualified rectangle.
 
 > **check**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:525
+Defined in: driver/dist/session-BmR0tpda.d.ts:524
 
 #### Parameters
 
@@ -153,7 +153,7 @@ Defined in: driver/dist/index.d.ts:525
 
 > **checkpoint**(): `ObservationStamp`
 
-Defined in: driver/dist/index.d.ts:481
+Defined in: driver/dist/session-BmR0tpda.d.ts:480
 
 Current committed observation used to arm race-free custom waits.
 
@@ -171,7 +171,7 @@ Current committed observation used to arm race-free custom waits.
 
 > **click**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:486
+Defined in: driver/dist/session-BmR0tpda.d.ts:485
 
 #### Parameters
 
@@ -193,7 +193,7 @@ Defined in: driver/dist/index.d.ts:486
 
 > **count**(): `Promise`\<`number`\>
 
-Defined in: driver/dist/index.d.ts:479
+Defined in: driver/dist/session-BmR0tpda.d.ts:478
 
 #### Returns
 
@@ -209,7 +209,7 @@ Defined in: driver/dist/index.d.ts:479
 
 > **doubleClick**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:487
+Defined in: driver/dist/session-BmR0tpda.d.ts:486
 
 #### Parameters
 
@@ -231,7 +231,7 @@ Defined in: driver/dist/index.d.ts:487
 
 > **dragTo**(`target`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:489
+Defined in: driver/dist/session-BmR0tpda.d.ts:488
 
 #### Parameters
 
@@ -257,7 +257,7 @@ Defined in: driver/dist/index.d.ts:489
 
 > **evaluateCondition**(`condition`, `opts?`): `Promise`\<`ConditionResult`\>
 
-Defined in: driver/dist/index.d.ts:516
+Defined in: driver/dist/session-BmR0tpda.d.ts:515
 
 #### Parameters
 
@@ -279,7 +279,7 @@ Defined in: driver/dist/index.d.ts:516
 
 > **extendedState**(): `Promise`\<`SemanticExtendedObject` \| `null`\>
 
-Defined in: driver/dist/index.d.ts:533
+Defined in: driver/dist/session-BmR0tpda.d.ts:532
 
 #### Returns
 
@@ -291,7 +291,7 @@ Defined in: driver/dist/index.d.ts:533
 
 > **fill**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:522
+Defined in: driver/dist/session-BmR0tpda.d.ts:521
 
 #### Parameters
 
@@ -313,7 +313,7 @@ Defined in: driver/dist/index.d.ts:522
 
 > **filter**(`options`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:512
+Defined in: driver/dist/session-BmR0tpda.d.ts:511
 
 #### Parameters
 
@@ -331,7 +331,7 @@ Defined in: driver/dist/index.d.ts:512
 
 > **first**(): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:473
+Defined in: driver/dist/session-BmR0tpda.d.ts:472
 
 #### Returns
 
@@ -347,7 +347,7 @@ Defined in: driver/dist/index.d.ts:473
 
 > **focus**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:523
+Defined in: driver/dist/session-BmR0tpda.d.ts:522
 
 #### Parameters
 
@@ -365,7 +365,7 @@ Defined in: driver/dist/index.d.ts:523
 
 > **geometry**(): `Promise`\<`LocatorGeometry`\>
 
-Defined in: driver/dist/index.d.ts:492
+Defined in: driver/dist/session-BmR0tpda.d.ts:491
 
 Atomic, evidence-qualified geometry. Never invents a rectangle.
 
@@ -383,7 +383,7 @@ Atomic, evidence-qualified geometry. Never invents a rectangle.
 
 > **getByLabel**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:506
+Defined in: driver/dist/session-BmR0tpda.d.ts:505
 
 #### Parameters
 
@@ -407,7 +407,7 @@ Defined in: driver/dist/index.d.ts:506
 
 > **getByRole**(`role`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:505
+Defined in: driver/dist/session-BmR0tpda.d.ts:504
 
 #### Parameters
 
@@ -429,7 +429,7 @@ Defined in: driver/dist/index.d.ts:505
 
 > **getByTestId**(`testId`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:510
+Defined in: driver/dist/session-BmR0tpda.d.ts:509
 
 #### Parameters
 
@@ -447,7 +447,7 @@ Defined in: driver/dist/index.d.ts:510
 
 > **getByText**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:509
+Defined in: driver/dist/session-BmR0tpda.d.ts:508
 
 #### Parameters
 
@@ -469,7 +469,7 @@ Defined in: driver/dist/index.d.ts:509
 
 > **hitTest**(`opts?`): `Promise`\<`PointerHitTest`\>
 
-Defined in: driver/dist/index.d.ts:496
+Defined in: driver/dist/session-BmR0tpda.d.ts:495
 
 Whether pointer input at the chosen cell reaches this exact target.
 
@@ -503,7 +503,7 @@ Whether pointer input at the chosen cell reaches this exact target.
 
 > **hover**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:488
+Defined in: driver/dist/session-BmR0tpda.d.ts:487
 
 #### Parameters
 
@@ -525,7 +525,7 @@ Defined in: driver/dist/index.d.ts:488
 
 > **last**(): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:474
+Defined in: driver/dist/session-BmR0tpda.d.ts:473
 
 #### Returns
 
@@ -541,7 +541,7 @@ Defined in: driver/dist/index.d.ts:474
 
 > **locator**(`selector`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:511
+Defined in: driver/dist/session-BmR0tpda.d.ts:510
 
 #### Parameters
 
@@ -559,7 +559,7 @@ Defined in: driver/dist/index.d.ts:511
 
 > **nth**(`index`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:475
+Defined in: driver/dist/session-BmR0tpda.d.ts:474
 
 #### Parameters
 
@@ -581,7 +581,7 @@ Defined in: driver/dist/index.d.ts:475
 
 > **or**(`other`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:477
+Defined in: driver/dist/session-BmR0tpda.d.ts:476
 
 #### Parameters
 
@@ -603,7 +603,7 @@ Defined in: driver/dist/index.d.ts:477
 
 > **paintedRegion**(): `Promise`\<`Observation`\<`SemanticPaintedRegion`\>\>
 
-Defined in: driver/dist/index.d.ts:531
+Defined in: driver/dist/session-BmR0tpda.d.ts:530
 
 Exact cells painted by this semantic recipient, never inferred from layout.
 
@@ -617,7 +617,7 @@ Exact cells painted by this semantic recipient, never inferred from layout.
 
 > **press**(`keys`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:520
+Defined in: driver/dist/session-BmR0tpda.d.ts:519
 
 #### Parameters
 
@@ -639,7 +639,7 @@ Defined in: driver/dist/index.d.ts:520
 
 > **resolve**(`opts?`): `Promise`\<`ResolvedTarget`\<`"semantic"`\>\>
 
-Defined in: driver/dist/index.d.ts:478
+Defined in: driver/dist/session-BmR0tpda.d.ts:477
 
 #### Parameters
 
@@ -661,7 +661,7 @@ Defined in: driver/dist/index.d.ts:478
 
 > **semanticScroll**(): `Promise`\<`Observation`\<`SemanticScrollState`\>\>
 
-Defined in: driver/dist/index.d.ts:529
+Defined in: driver/dist/session-BmR0tpda.d.ts:528
 
 Production application viewport state, never emulator scrollback position.
 
@@ -675,7 +675,7 @@ Production application viewport state, never emulator scrollback position.
 
 > **semanticState**(): `Promise`\<`SemanticState` \| `null`\>
 
-Defined in: driver/dist/index.d.ts:532
+Defined in: driver/dist/session-BmR0tpda.d.ts:531
 
 #### Returns
 
@@ -687,7 +687,7 @@ Defined in: driver/dist/index.d.ts:532
 
 > **semanticValue**(): `Promise`\<`SemanticValueObservation`\>
 
-Defined in: driver/dist/index.d.ts:527
+Defined in: driver/dist/session-BmR0tpda.d.ts:526
 
 #### Returns
 
@@ -699,7 +699,7 @@ Defined in: driver/dist/index.d.ts:527
 
 > **textContent**(): `Promise`\<`string`\>
 
-Defined in: driver/dist/index.d.ts:501
+Defined in: driver/dist/session-BmR0tpda.d.ts:500
 
 #### Returns
 
@@ -715,7 +715,7 @@ Defined in: driver/dist/index.d.ts:501
 
 > **type**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:521
+Defined in: driver/dist/session-BmR0tpda.d.ts:520
 
 #### Parameters
 
@@ -737,7 +737,7 @@ Defined in: driver/dist/index.d.ts:521
 
 > **uncheck**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:526
+Defined in: driver/dist/session-BmR0tpda.d.ts:525
 
 #### Parameters
 
@@ -755,7 +755,7 @@ Defined in: driver/dist/index.d.ts:526
 
 > **visibility**(): `Promise`\<`LocatorVisibility`\>
 
-Defined in: driver/dist/index.d.ts:494
+Defined in: driver/dist/session-BmR0tpda.d.ts:493
 
 Attached/displayed/viewport facts without collapsing unknown to false.
 
@@ -773,7 +773,7 @@ Attached/displayed/viewport facts without collapsing unknown to false.
 
 > **waitFor**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:513
+Defined in: driver/dist/session-BmR0tpda.d.ts:512
 
 #### Parameters
 
@@ -791,7 +791,7 @@ Defined in: driver/dist/index.d.ts:513
 
 > **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/index.d.ts:483
+Defined in: driver/dist/session-BmR0tpda.d.ts:482
 
 Waits for a newer committed observation without a check/subscribe gap.
 
@@ -815,7 +815,7 @@ Waits for a newer committed observation without a check/subscribe gap.
 
 > **wheel**(`opts`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:490
+Defined in: driver/dist/session-BmR0tpda.d.ts:489
 
 #### Parameters
 
@@ -837,7 +837,7 @@ Defined in: driver/dist/index.d.ts:490
 
 > **within**(`parent`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:504
+Defined in: driver/dist/session-BmR0tpda.d.ts:503
 
 #### Parameters
 

@@ -368,8 +368,15 @@ jobs:
           node scripts/generate-semantic-completeness.mjs
           node scripts/generate-mission-completion.mjs
 
+      # Trusted publishing is configured per existing npm package. A new name
+      # cannot acquire that trust relationship through this unattended release,
+      # so fail before tags or any registry publication can begin.
+      - name: Every npm package has a registry bootstrap
+        run: pnpm check:npm-release-readiness
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm check:packed-private-boundaries
       - run: pnpm check:node-pty
       - run: pnpm -r --filter './packages/*' run typecheck
       - name: Run the certified Termwright host

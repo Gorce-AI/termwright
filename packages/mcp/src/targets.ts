@@ -5,7 +5,8 @@
  * arguments describe and hands everything else — strictness, waiting, staleness,
  * candidate diagnostics — to `@termwright/driver`.
  */
-import { parseRef, type AnyLocator, type LocatorRef, type TerminalHarness } from '@termwright/driver';
+import type { AnyLocator, LocatorRef, TerminalHarness } from '@termwright/driver';
+import { parseRef } from '@termwright/driver/experimental';
 import { usageError } from './errors.js';
 import { definedOnly } from './objects.js';
 import type { Loose } from './objects.js';

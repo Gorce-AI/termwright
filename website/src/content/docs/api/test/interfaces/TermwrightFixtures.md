@@ -50,7 +50,7 @@ Defined in: [test/src/fixtures.ts:157](https://github.com/Gorce-AI/termwright/bl
 Options for this file or suite, the equivalent of Playwright's `test.use()`:
 
 ```ts
-test.scoped({ termwrightOptions: { columns: 120, trace: 'on' } });
+test.override({ termwrightOptions: { columns: 120, trace: 'on' } });
 ```
 
 They sit between the project configuration and a `launch()` call, merged

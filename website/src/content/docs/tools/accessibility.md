@@ -8,8 +8,15 @@ communicated with text and icons as well as color.
 
 ## Navigate without a pointer
 
-- Arrow keys, Home, and End move through composite lists and trees.
-- Enter and Space activate the focused item.
+- In the Semantic Inspector and Specs catalogue, Up and Down move through the
+  visible tree rows, while Home and End move to the first and last visible row.
+- Right expands a collapsed branch, then moves to its first child. Left
+  collapses an expanded branch, then moves to its parent.
+- Each tree has exactly one item in the page tab order. Focus and selection
+  move together and remain on the same item when live data re-renders the tree.
+- Enter and Space activate the focused semantic node. In Specs they expand a
+  directory or file, or run a runnable case. `R` runs the focused Specs scope;
+  `O` opens source for a focused case.
 - Splitters can be resized from the keyboard.
 - Dialogs trap focus, close with Escape, and restore focus to their trigger.
 - Tabs and the semantic tree expose their selected and expanded state.
@@ -26,7 +33,8 @@ transitions and replay animation.
 
 ## Inspect semantic state
 
-The semantic inspector uses the `tree`, `treeitem`, and `group` patterns.
+The semantic inspector and Specs catalogue use the `tree`, `treeitem`, and
+`group` patterns and share the same navigation implementation.
 Selecting a node updates its readable property view without requiring pointer
 input. Protocol state is mapped to ARIA only when the corresponding attribute
 is valid.

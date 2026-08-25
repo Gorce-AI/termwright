@@ -3,7 +3,11 @@ import { useEffect, useState } from 'react';
 import type { DataSource } from '../../data-source.js';
 import type { RunManifest, RunSummaryEntry, RunTest } from '../../runs.js';
 
-export function RunsPage({ source }: { readonly source: DataSource }) {
+export function RunsPage({ source, selectedRunId, onSelectedRunId }: {
+  readonly source: DataSource;
+  readonly selectedRunId: string | null;
+  readonly onSelectedRunId: (runId: string | null) => void;
+}) {
   const [runs, setRuns] = useState<readonly RunSummaryEntry[]>([]);
   const [opened, setOpened] = useState<RunManifest | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -15,12 +19,25 @@ export function RunsPage({ source }: { readonly source: DataSource }) {
     return () => { active = false; };
   }, [source]);
 
-  const openRun = async (id: string) => {
-    try {
-      const detail = await source.run(id);
+  useEffect(() => {
+    let active = true;
+    setOpened(null);
+    setError(null);
+    if (selectedRunId === null) {
+      return () => { active = false; };
+    }
+    void source.run(selectedRunId).then((detail) => {
+      if (!active) return;
       if (detail.state === 'complete') setOpened(detail);
       else setError(healthDescription(detail));
-    } catch (cause) { setError(describe(cause)); }
+    }).catch((cause: unknown) => { if (active) setError(describe(cause)); });
+    return () => { active = false; };
+  }, [selectedRunId, source]);
+
+  const openRun = (id: string) => {
+    setError(null);
+    onSelectedRunId(id);
+    /* Loading is owned by the selectedRunId effect so popstate and clicks use one path. */
   };
 
   return (
@@ -33,7 +50,7 @@ export function RunsPage({ source }: { readonly source: DataSource }) {
         <div className="tw-run-cards">
           {runs.length === 0 ? <div className="tw-page-empty"><History aria-hidden="true" /><strong>No run history yet</strong></div> : runs.map((run) => (
             run.state === 'complete' ? (
-              <button type="button" className="tw-run-card" key={run.id} onClick={() => void openRun(run.id)}>
+              <button type="button" className="tw-run-card" key={run.id} onClick={() => openRun(run.id)}>
                 <span className="tw-run-card-icon" data-failed={run.summary.status !== 'passed'}><Clock3 aria-hidden="true" /></span>
                 <span>
                   <strong>{run.git?.message ?? run.id}</strong>
@@ -54,7 +71,7 @@ export function RunsPage({ source }: { readonly source: DataSource }) {
         </div>
       ) : (
         <div className="tw-run-detail">
-          <button type="button" className="tw-back-button" onClick={() => setOpened(null)}>← All runs</button>
+          <button type="button" className="tw-back-button" onClick={() => onSelectedRunId(null)}>← All runs</button>
           <h3>{opened.git?.message ?? opened.id}</h3>
           <time className="tw-run-detail-time" dateTime={new Date(opened.startedAt).toISOString()}>{formatStartedAt(opened.startedAt)}</time>
           <div className="tw-history-tests">

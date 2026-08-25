@@ -61,13 +61,44 @@ visible text:
 Streamable HTTP, for hosts that connect over a socket:
 
 ```sh
-termwright-mcp --http --port 7333    # endpoint: http://127.0.0.1:7333/mcp
+termwright-mcp --http --port 7333 --show-auth-token
+# Explicit opt-in prints the endpoint and its fresh per-launch bearer token.
+```
+
+Every MCP-bearing HTTP request, including initialize and `DELETE`, must send
+`Authorization: Bearer <token>`; an allowlisted CORS preflight is the only
+bearer-free request and cannot reach MCP routing. Library callers receive the
+token as `handle.authToken`; the SDK transport accepts it through
+`requestInit.headers`:
+
+```ts
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { serveHttp } from '@termwright/mcp';
+
+const handle = await serveHttp();
+const transport = new StreamableHTTPClientTransport(
+  new URL(`http://127.0.0.1:${handle.port}/mcp`),
+  { requestInit: { headers: { authorization: `Bearer ${handle.authToken}` } } },
+);
 ```
 
 Sessions are keyed by `Mcp-Session-Id` in this package's own `SessionRegistry`,
-not inside transport objects: each session owns its terminals, `DELETE` disposes
+not inside transport objects. A session id is routing metadata, never a
+credential: authentication happens before session lookup, refresh, initialize
+or request-body buffering. Each session owns its terminals, `DELETE` disposes
 them, and the ceiling (16 sessions, 16 terminals each) is enforced before a
 transport exists.
+
+The listener binds to loopback by default. A non-loopback `host` is refused
+unless `allowNonLoopback: true` is set (CLI: `--allow-non-loopback`). That opt-in
+does not add TLS: put a remotely reachable listener behind a private,
+authenticated TLS boundary because the bearer otherwise crosses the network in
+cleartext. Browser requests carrying `Origin` are rejected by default; an
+embedding may allow exact HTTP(S) origins with `allowedOrigins`. A bounded
+per-peer rate limiter protects authenticated work and accepted preflights
+without letting invalid credentials or preflight traffic consume a legitimate
+client's bucket; configure its window/request/client ceilings with `rateLimit`
+when the deployment has a known proxy or concurrency envelope.
 
 Streamable HTTP gives no disconnect signal, so a session also expires after
 `idleTtlMs` without a request (10 minutes by default, `0` to disable). Every

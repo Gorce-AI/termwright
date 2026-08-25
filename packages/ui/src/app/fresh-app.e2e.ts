@@ -180,6 +180,47 @@ describe('fresh React runner', () => {
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
+  it('uses one roving tab stop and the complete ARIA key map in the semantic tree', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    const startedAt = Date.now();
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:tree', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'test-start', id: 'tree-case', title: 'tree navigation', file: '/repo/tree.test.ts', startedAt, sessionId: 'tree-session' });
+    const session = new FakeSession('tree-session');
+    server.attach({ source: session });
+    const nodes = [
+      node({ id: 'root', role: 'dialog', name: 'Root' }),
+      node({ id: 'first', parentId: 'root', role: 'button', name: 'First child' }),
+      node({ id: 'last', parentId: 'root', role: 'button', name: 'Last child' }),
+    ];
+    session.semantic(snapshot(1, nodes, session.sessionId));
+    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    const tree = page.getByRole('tree', { name: 'Semantic tree' });
+    await expect.poll(() => tree.getByRole('treeitem').count()).toBe(3);
+    expect(await tree.locator('[role="treeitem"][tabindex="0"]').count()).toBe(1);
+    expect(await tree.locator('button:not([disabled]), [role="treeitem"]').evaluateAll((items) => items.filter((item) => (item as HTMLElement).tabIndex >= 0).length)).toBe(1);
+    await tree.getByRole('treeitem', { name: /Root/u }).focus();
+    await page.keyboard.press('ArrowDown');
+    expect(await tree.getByRole('treeitem', { name: /First child/u }).getAttribute('aria-selected')).toBe('true');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toContain('First child');
+    await page.keyboard.press('End');
+    expect(await tree.getByRole('treeitem', { name: /Last child/u }).getAttribute('aria-selected')).toBe('true');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toContain('Last child');
+    await page.keyboard.press('Home');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toContain('Root');
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => tree.getByRole('treeitem').count()).toBe(1);
+    await expect.poll(() => tree.getByRole('treeitem', { name: /Root/u }).getAttribute('aria-expanded')).toBe('false');
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => tree.getByRole('treeitem').count()).toBe(3);
+    session.semantic(snapshot(2, nodes, session.sessionId));
+    await expect.poll(() => tree.locator('[role="treeitem"][tabindex="0"]').count()).toBe(1);
+    expect(await tree.getByRole('treeitem', { name: /Root/u }).getAttribute('aria-selected')).toBe('true');
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('shows live Can click/hover/focus/type answers from the production planner', async () => {
     const server = await startUiServer();
     servers.push(server);
@@ -861,6 +902,41 @@ describe('fresh React runner', () => {
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
+  it('reuses roving tree navigation for the Specs catalogue and retains selection', async () => {
+    const projectRoot = process.cwd();
+    const descriptors = [
+      ownedDescriptor(join(projectRoot, 'specs/a.test.ts'), 'case A'),
+      ownedDescriptor(join(projectRoot, 'specs/a.test.ts'), 'case B'),
+    ];
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    server.hub.publish({ v: 1, type: 'tests-discovered', tests: descriptors });
+    await page.getByRole('button', { name: 'Specs', exact: true }).click();
+    const tree = page.getByRole('tree', { name: 'Test catalog hierarchy' });
+    const directory = tree.getByRole('treeitem', { name: 'Directory specs' });
+    await directory.focus();
+    expect(await tree.locator('[role="treeitem"][tabindex="0"]').count()).toBe(1);
+    expect(await tree.locator('button:not([disabled]), [role="treeitem"]').evaluateAll((items) => items.filter((item) => (item as HTMLElement).tabIndex >= 0).length)).toBe(1);
+    await page.keyboard.press('ArrowDown');
+    const file = tree.getByRole('treeitem', { name: 'File a.test.ts' });
+    expect(await file.getAttribute('aria-selected')).toBe('true');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('File a.test.ts');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => file.getAttribute('aria-expanded')).toBe('true');
+    expect(await directory.getAttribute('aria-expanded')).toBe('true');
+    await page.keyboard.press('ArrowRight');
+    expect(await tree.getByRole('treeitem', { name: /case A/u }).getAttribute('aria-selected')).toBe('true');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toContain('case A');
+    await page.keyboard.press('End');
+    expect(await tree.getByRole('treeitem', { name: /case B/u }).getAttribute('aria-selected')).toBe('true');
+    server.hub.publish({ v: 1, type: 'tests-discovered', tests: descriptors });
+    await expect.poll(() => tree.locator('[role="treeitem"][tabindex="0"]').count()).toBe(1);
+    expect(await tree.getByRole('treeitem', { name: /case B/u }).getAttribute('aria-selected')).toBe('true');
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('runs canonical file and nested directory scopes independent of search and preserves expansion', async () => {
     const requests: readonly string[][] = [];
     const mutableRequests = requests as string[][];
@@ -981,7 +1057,8 @@ describe('fresh React runner', () => {
     await page.getByRole('button', { name: 'Open opens its source source' }).click();
     await expect.poll(() => page.locator('.tw-toast').innerText()).toContain(`Copied ${sourceFile}`);
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(sourceFile);
-    expect(page.url()).toBe(server.url);
+    expect(new URL(page.url()).origin).toBe(new URL(server.url).origin);
+    expect(new URL(page.url()).searchParams.get('token')).toBeNull();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Settings' }).click();
     expect(await page.getByLabel('Source editor').inputValue()).toBe('none');
@@ -1004,6 +1081,9 @@ describe('fresh React runner', () => {
     expect(await page.locator('html').getAttribute('data-motion')).toBe('reduce');
 
     await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByLabel('Timeline density').waitFor();
+    expect(new URL(page.url()).searchParams.get('view')).toBe('settings');
+    await page.getByRole('button', { name: 'Runner' }).click();
     await page.locator('.tw-replay-controls').waitFor({ timeout: 15_000 });
     expect(await page.locator('.tw-shell').getAttribute('data-navigation-expanded')).toBe('true');
     expect(await page.locator('.tw-inspector').isVisible()).toBe(true);

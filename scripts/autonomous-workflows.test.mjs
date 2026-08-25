@@ -76,7 +76,7 @@ describe('autonomous workflow security', () => {
   });
 
   it('pins every external action in the autonomous and release workflows to a full commit SHA', async () => {
-    for (const name of ['ci.yml', 'reliability.yml', 'docs.yml', 'preview-release.yml', 'upstream-candidates.yml', 'autonomous-coordinator.yml', 'release.yml']) {
+    for (const name of ['ci.yml', 'reliability.yml', 'docs.yml', 'performance.yml', 'preview-release.yml', 'upstream-candidates.yml', 'autonomous-coordinator.yml', 'release.yml']) {
       const workflow = await readWorkflow(name);
       for (const line of workflow.split('\n').filter((value) => /^\s*(?:- )?uses:/u.test(value))) {
         expect(line, `${name}: ${line}`).toMatch(/@[0-9a-f]{40}(?:\s+#.*)?$/u);
@@ -113,9 +113,32 @@ describe('autonomous workflow security', () => {
 
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
+    const docs = await readWorkflow('docs.yml');
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    const experimentalDocs = JSON.parse(
+      await readFile(new URL('../typedoc.driver-experimental.json', import.meta.url), 'utf8'),
+    );
     expect(workflow).toContain('run: pnpm check:generated-docs');
     expect(manifest.scripts['check:generated-docs']).toContain('generate-mcp-docs.mjs');
     expect(manifest.scripts['check:generated-docs']).toContain('generate-runtime-requirements.mjs');
+    expect(manifest.scripts['check:generated-docs']).toContain('generate-resource-profile-docs.mjs');
+    expect(docs).toContain("- 'packages/**'");
+    expect(docs).toContain('pull_request:');
+    expect(docs).toContain('run: pnpm check:package-metadata');
+    expect(docs).toContain('run: pnpm check:generated-docs');
+    expect(docs).toContain('pnpm docs:api');
+    expect(docs).toContain('git diff --exit-code -- website/src/content/docs/api');
+    expect(docs).toContain("if: ${{ github.event_name == 'push' }}");
+    expect(experimentalDocs.name).toBe('@termwright/driver/experimental');
+  });
+
+  it('serializes only mutable Pages deploys, not pull-request documentation builds', async () => {
+    const docs = await readWorkflow('docs.yml');
+    const build = docs.slice(docs.indexOf('  build:'), docs.indexOf('  deploy:'));
+    const deploy = docs.slice(docs.indexOf('  deploy:'));
+    expect(build).not.toContain('concurrency:');
+    expect(deploy).toContain('concurrency:');
+    expect(deploy).toContain('group: pages');
+    expect(deploy).toContain('cancel-in-progress: false');
   });
 });

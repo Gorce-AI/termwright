@@ -1,9 +1,10 @@
 import type { EffectiveSessionContract, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type { UiActionability } from '../../events.js';
 import { Braces, Copy, FileText, MousePointerClick, PanelRightClose, Search, ShieldCheck, Waypoints } from 'lucide-react';
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
 import type { SessionRecord } from '../domain/model.js';
 import { usePreferences, type InspectorTab } from '../preferences.js';
+import { useTreeNavigation } from '../use-tree-navigation.js';
 import { Tooltip } from './Tooltip.js';
 
 type RecorderActions = {
@@ -123,6 +124,7 @@ function SemanticTree({ snapshot, selectedNodeId, onSelect, recorder, onPreviewN
   readonly onPreviewNode?: (node: SemanticNode | null, snapshot: SemanticSnapshot | null) => void;
   readonly onPinNode?: (node: SemanticNode, snapshot: SemanticSnapshot) => void;
 }) {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const children = new Map<string, SemanticNode[]>();
   for (const node of snapshot.nodes) {
@@ -130,33 +132,49 @@ function SemanticTree({ snapshot, selectedNodeId, onSelect, recorder, onPreviewN
     children.set(node.parentId, [...(children.get(node.parentId) ?? []), node]);
   }
   const roots = snapshot.rootIds.map((id) => byId.get(id)).filter((node): node is SemanticNode => node !== undefined);
-  return <ul className="tw-semantic-tree" role="tree" aria-label="Semantic tree">
-    {roots.map((node) => <SemanticTreeNode key={node.id} node={node} snapshot={snapshot} children={children} selectedNodeId={selectedNodeId} onSelect={onSelect} {...(recorder === undefined ? {} : { recorder })} {...(onPreviewNode === undefined ? {} : { onPreviewNode })} {...(onPinNode === undefined ? {} : { onPinNode })} />)}
+  const rows = useMemo(() => {
+    const visible: { readonly id: string; readonly parentId?: string; readonly hasChildren: boolean }[] = [];
+    const append = (node: SemanticNode) => {
+      const descendants = children.get(node.id) ?? [];
+      visible.push({ id: node.id, ...(node.parentId === undefined ? {} : { parentId: node.parentId }), hasChildren: descendants.length > 0 });
+      if (!collapsed.has(node.id)) descendants.forEach(append);
+    };
+    roots.forEach(append);
+    return visible;
+  }, [children, collapsed, roots]);
+  const navigation = useTreeNavigation({ rows, selectedId: selectedNodeId, collapsed, onSelect, onCollapsed: setCollapsed });
+  return <ul className="tw-semantic-tree" role="tree" aria-label="Semantic tree" onKeyDown={navigation.onKeyDown}>
+    {roots.map((node) => <SemanticTreeNode key={node.id} node={node} snapshot={snapshot} children={children} selectedNodeId={navigation.activeId} onSelect={onSelect} collapsed={collapsed} item={navigation.item} {...(recorder === undefined ? {} : { recorder })} {...(onPreviewNode === undefined ? {} : { onPreviewNode })} {...(onPinNode === undefined ? {} : { onPinNode })} />)}
   </ul>;
 }
 
-function SemanticTreeNode({ node, snapshot, children, selectedNodeId, onSelect, recorder, onPreviewNode, onPinNode }: {
+function SemanticTreeNode({ node, snapshot, children, selectedNodeId, onSelect, collapsed, item, recorder, onPreviewNode, onPinNode }: {
   readonly node: SemanticNode;
   readonly snapshot: SemanticSnapshot;
   readonly children: ReadonlyMap<string, readonly SemanticNode[]>;
   readonly selectedNodeId: string | null;
   readonly onSelect: (nodeId: string) => void;
+  readonly collapsed: ReadonlySet<string>;
+  readonly item: ReturnType<typeof useTreeNavigation>['item'];
   readonly recorder?: RecorderActions;
   readonly onPreviewNode?: (node: SemanticNode | null, snapshot: SemanticSnapshot | null) => void;
   readonly onPinNode?: (node: SemanticNode, snapshot: SemanticSnapshot) => void;
 }) {
   const descendants = children.get(node.id) ?? [];
+  const open = !collapsed.has(node.id);
+  const roving = item(node.id);
+  const groupId = useId();
   return <li role="none">
     <div className="tw-semantic-node-row">
-      <button type="button" role="treeitem" data-highlight-source="semantic" aria-selected={selectedNodeId === node.id} aria-expanded={descendants.length === 0 ? undefined : true}
+      <button ref={roving.ref} tabIndex={roving.tabIndex} type="button" role="treeitem" data-highlight-source="semantic" aria-selected={selectedNodeId === node.id} aria-expanded={descendants.length === 0 ? undefined : open} aria-owns={descendants.length > 0 && open ? groupId : undefined}
         onPointerEnter={() => onPreviewNode?.(node, snapshot)} onPointerLeave={() => onPreviewNode?.(null, null)}
-        onFocus={() => onPreviewNode?.(node, snapshot)} onBlur={() => onPreviewNode?.(null, null)}
+        onFocus={() => { roving.onFocus(); onPreviewNode?.(node, snapshot); }} onBlur={() => onPreviewNode?.(null, null)}
         onClick={() => { onSelect(node.id); onPinNode?.(node, snapshot); }}>
         <span>{node.role}</span><strong>{node.name || node.id}</strong>
       </button>
       {recorder === undefined ? null : <NodeRecorderActions node={node} recorder={recorder} />}
     </div>
-    {descendants.length === 0 ? null : <ul role="group">{descendants.map((child) => <SemanticTreeNode key={child.id} node={child} snapshot={snapshot} children={children} selectedNodeId={selectedNodeId} onSelect={onSelect} {...(recorder === undefined ? {} : { recorder })} {...(onPreviewNode === undefined ? {} : { onPreviewNode })} {...(onPinNode === undefined ? {} : { onPinNode })} />)}</ul>}
+    {descendants.length === 0 || !open ? null : <ul id={groupId} role="group">{descendants.map((child) => <SemanticTreeNode key={child.id} node={child} snapshot={snapshot} children={children} selectedNodeId={selectedNodeId} onSelect={onSelect} collapsed={collapsed} item={item} {...(recorder === undefined ? {} : { recorder })} {...(onPreviewNode === undefined ? {} : { onPreviewNode })} {...(onPinNode === undefined ? {} : { onPinNode })} />)}</ul>}
   </li>;
 }
 
@@ -204,8 +222,12 @@ function ActionabilityInspector({ state }: { readonly state: { readonly loading:
 }
 
 function NodeRecorderActions({ node, recorder, labelled = false }: { readonly node: SemanticNode; readonly recorder: RecorderActions; readonly labelled?: boolean }) {
-  const click = <button type="button" aria-label={`Record click on ${node.id}`} onClick={() => recorder.onClickNode(node.id)}><MousePointerClick aria-hidden="true" size={13} />{labelled ? 'Click' : null}</button>;
-  const visible = <button type="button" aria-label={`Assert ${node.id} is visible`} onClick={() => recorder.onAssertNode(node.id)}><ShieldCheck aria-hidden="true" size={13} />{labelled ? 'Visible' : null}</button>;
+  // Inline row actions mirror the labelled controls in Semantic detail. Keep
+  // the mirrors out of the tree's tab sequence so the tree has one roving tab
+  // stop; keyboard users retain the same actions in the selected-node panel.
+  const tabIndex = labelled ? undefined : -1;
+  const click = <button type="button" tabIndex={tabIndex} aria-label={`Record click on ${node.id}`} onClick={() => recorder.onClickNode(node.id)}><MousePointerClick aria-hidden="true" size={13} />{labelled ? 'Click' : null}</button>;
+  const visible = <button type="button" tabIndex={tabIndex} aria-label={`Assert ${node.id} is visible`} onClick={() => recorder.onAssertNode(node.id)}><ShieldCheck aria-hidden="true" size={13} />{labelled ? 'Visible' : null}</button>;
   return <span className="tw-record-node-actions">
     {labelled ? click : <Tooltip label={`Record click on ${node.name || node.id}`}>{click}</Tooltip>}
     {labelled ? visible : <Tooltip label={`Assert ${node.name || node.id} is visible`}>{visible}</Tooltip>}

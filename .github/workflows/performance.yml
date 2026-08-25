@@ -1,0 +1,101 @@
+name: Performance observations
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      cycles:
+        description: Complete lifecycle observations (2..100)
+        required: false
+        default: '10'
+
+concurrency:
+  group: performance-observations
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PNPM_VERSION: '9.4.0'
+  TERMWRIGHT_RETRIES: '0'
+  TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+  TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
+
+jobs:
+  observe:
+    name: performance observations (annotate only)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          # The recorded Charm baseline used this compiler; changing it starts
+          # a new runner class rather than silently moving the comparison.
+          go-version: '1.24.4'
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.2.15'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - run: mkdir -p performance-results
+      - name: Collect the semantic pipeline benchmark
+        run: >-
+          pnpm --filter @termwright/performance benchmark --iterations 1000 --warmup 100
+          --nodes 96 --output performance-results/semantic-pipeline.json
+      - name: Collect the Charm E2E benchmark
+        run: >-
+          pnpm --filter @termwright/performance benchmark:charm --iterations 3
+          --output performance-results/charm-immediate.json
+      - name: Collect the OpenTUI marker-route benchmark
+        run: >-
+          pnpm --filter @termwright/performance benchmark:opentui --repetitions 3
+          --window-ms 1000 --output performance-results/opentui-marker-route.json
+      - name: Collect lifecycle and resource observations
+        shell: bash
+        env:
+          REQUESTED_CYCLES: ${{ inputs.cycles }}
+        run: |
+          set -euo pipefail
+          cycles=${REQUESTED_CYCLES:-10}
+          case "$cycles" in (*[!0-9]*|'') echo "cycles must be a positive integer"; exit 2;; esac
+          if (( cycles < 2 || cycles > 100 )); then echo "cycles must be 2..100"; exit 2; fi
+          node scripts/collect-quality-performance.mjs \
+            --cycles "$cycles" \
+            --environment darwin-arm64-node24 \
+            --output performance-results/quality.json
+      - name: Compare with the recorded baseline
+        run: >-
+          node scripts/compare-performance-baseline.mjs
+          --baseline packages/performance/baselines/darwin-arm64-node24.json
+          --quality performance-results/quality.json
+          --semantic performance-results/semantic-pipeline.json
+          --charm performance-results/charm-immediate.json
+          --opentui performance-results/opentui-marker-route.json
+          --output performance-results/comparison.json
+      - name: Upload comparable observations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: performance-observations-darwin-arm64-node24
+          path: |
+            performance-results
+            .termwright/runs
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90

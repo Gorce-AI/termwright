@@ -165,6 +165,45 @@ describe('transformFeature', () => {
     expect(result.code).not.toContain("from '@termwright/");
   });
 
+  test('requests and forwards named custom fixtures from the generated test module', () => {
+    const result = transformFeature({
+      source: 'Feature: fixtures\n\n  Scenario: receives one\n    Given an app\n',
+      uri: '/tmp/fixtures.feature',
+      glue: [],
+      fixtureNames: ['app', 'account'],
+      generatedImports: {
+        test: './fixtures.js',
+        runtime: '@termwright/gherkin/runtime',
+      },
+    });
+
+    expect(result.code).toContain('from "./fixtures.js"');
+    expect(result.code).toContain(
+      'async ({ termwrightOptions, termwright, terminal, step, app, account }) =>',
+    );
+    expect(result.code).toContain(
+      '{ termwrightOptions, termwright, terminal, step, app, account, expect, world: {}, scenario:',
+    );
+  });
+
+  test.each([
+    { fixtureNames: ['not-valid!'], message: 'JavaScript identifier' },
+    { fixtureNames: ['world'], message: 'reserved' },
+    { fixtureNames: ['__private'], message: 'reserved' },
+    { fixtureNames: ['class'], message: 'reserved' },
+    { fixtureNames: ['await'], message: 'reserved' },
+    { fixtureNames: ['eval'], message: 'reserved' },
+    { fixtureNames: ['arguments'], message: 'reserved' },
+    { fixtureNames: ['app', 'app'], message: 'Duplicate' },
+  ])('rejects unsafe generated fixture bindings: $fixtureNames', ({ fixtureNames, message }) => {
+    expect(() => transformFeature({
+      source: 'Feature: fixtures\n\n  Scenario: invalid\n    Given a value\n',
+      uri: '/tmp/invalid-fixtures.feature',
+      glue: [],
+      fixtureNames,
+    })).toThrow(message);
+  });
+
   test('filters native cases with Cucumber tag expressions', () => {
     const result = transformFeature({
       source: `@component

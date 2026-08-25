@@ -1,0 +1,23 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "@termwright/driver/experimental",
+  "entryPoints": ["packages/driver/src/experimental.ts"],
+  "entryPointStrategy": "resolve",
+  "tsconfig": "packages/driver/tsconfig.json",
+  "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter"],
+  "out": "website/src/content/docs/api/driver-experimental",
+  "readme": "none",
+  "entryFileName": "index.md",
+  "cleanOutputDir": true,
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "skipErrorChecking": true,
+  "githubPages": false,
+  "gitRevision": "main",
+  "disableGit": true,
+  "sourceLinkTemplate": "https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/{path}#L{line}",
+  "router": "member",
+  "frontmatterGlobals": {"editUrl": false}
+}

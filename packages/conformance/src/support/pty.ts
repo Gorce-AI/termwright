@@ -11,7 +11,8 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchTerminal, createNodePtyBackend, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
+import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
+import { createNodePtyBackend } from '@termwright/driver/experimental';
 import { withProbe } from '@termwright/probe-ink';
 
 /**
