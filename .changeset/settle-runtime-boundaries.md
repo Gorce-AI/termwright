@@ -10,7 +10,9 @@ Keep shared probe build outputs immutable while the Native Host is running,
 with a pre-host content fingerprint that builds missing fresh-clone inputs,
 rebuilds stale inputs, and rejects source or artifact changes inside test
 workers. Settle deadline, process-exit and Ink render race branches during
-teardown, and promote Vitest
+teardown. A cancelled desktop control bind now remains owned until a late
+listener is closed, so startup rollback cannot leave an orphaned socket or
+named pipe. Promote Vitest
 async-handle leak evidence into a non-certifying infrastructure result.
 
 Compare exact reference and candidate revisions on one macOS runner in a fixed
