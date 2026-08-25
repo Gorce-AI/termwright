@@ -101,7 +101,7 @@ const compatibilityFiles = [
 ];
 
 const versionFiles = [
-  /^\.changeset\/[A-Za-z0-9._-]+\.md$/u,
+  /^\.changeset\/[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u,
   /^pnpm-lock\.yaml$/u,
   /^packages\/[^/]+\/(?:package\.json|CHANGELOG\.md)$/u,
   /^packages\/(?:termwright-cli\/src\/version|mcp\/src\/version|desktop-host\/src\/index|probe-ink\/src\/version|probe-opentui\/src\/version|probe-tview\/src\/launch|probe-charm\/src\/launch)\.ts$/u,
@@ -234,7 +234,7 @@ export function shouldDispatchRelease(runs, expectedTitle) {
 
 export function pendingChangesetFiles(entries) {
   return (entries ?? [])
-    .filter((entry) => typeof entry === 'string' && entry !== 'README.md' && /^[A-Za-z0-9._-]+\.md$/u.test(entry))
+    .filter((entry) => typeof entry === 'string' && entry !== 'README.md' && /^[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(entry))
     .sort();
 }
 

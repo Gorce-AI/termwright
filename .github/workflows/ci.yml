@@ -1028,34 +1028,19 @@ jobs:
         run: pnpm check:npm-release-readiness
 
       # A change to a published package without a changeset is a change that
-      # ships with no changelog entry and no version bump. Release-only PRs are
-      # exempt: `changeset version` consumes the files it was given.
-      - name: A PR touching packages/** needs a changeset
-        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'release')
-        shell: bash
+      # ships with no changelog entry and no version bump. The exact same-repo
+      # Version PR is exempt because `changeset version` consumes its inputs.
+      # Tests and documentation are classified from paths, without mutable PR
+      # labels whose opened-event payload can be stale.
+      - name: Publishable package changes need a changeset
+        if: >-
+          github.event_name == 'pull_request' &&
+          !(github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.head.ref == 'release-pr/main')
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          changed=$(git diff --name-only "$BASE" "$HEAD" -- 'packages/**' || true)
-          if [ -z "$changed" ]; then
-            echo "no packages/** changes — nothing to require"
-            exit 0
-          fi
-
-          added=$(git diff --name-only --diff-filter=A "$BASE" "$HEAD" -- '.changeset/*.md' \
-            | grep -v '.changeset/README.md' || true)
-          if [ -n "$added" ]; then
-            echo "changeset present:"
-            echo "$added"
-            exit 0
-          fi
-
-          echo "::error::this PR changes packages/** but adds no changeset. Run \`pnpm changeset\`, or add the 'release' label if the change genuinely ships nothing (docs, tests, comments)."
-          echo 'Changed files:'
-          echo "$changed"
-          exit 1
+        run: node scripts/check-pr-changeset.mjs
 
   rust-msrv:
     name: clients (rust MSRV 1.74)
