@@ -165,11 +165,14 @@ describe('refusals', () => {
   });
 });
 
-// Runs exactly when the Go arms do not, so a reduced run says so instead of
-// looking fully green. Borrowed from probe-opentui's Bun lane.
-it.skipIf(upstream !== null)('skips the Go arms because no go toolchain is reachable', () => {
-  expect(upstream).toBeNull();
-});
+// Register the notice only when the Go arms really cannot run. An inverse
+// skipIf registered a skipped case even in a complete Go-backed run, making a
+// fully exercised lane look reduced in Vitest and the native-host manifest.
+if (upstream === null) {
+  it.skip('skips the Go arms because no go toolchain is reachable', () => {
+    expect(upstream).toBeNull();
+  });
+}
 
 describe.skipIf(!hasGo)('a cold module cache', () => {
   it('fetches the upstream instead of failing on a missing directory', async () => {
