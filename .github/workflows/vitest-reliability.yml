@@ -36,6 +36,9 @@ jobs:
       - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
+      - name: Build the production PTY boundary
+        shell: bash
+        run: pnpm --filter @termwright/driver build
       - name: Run independent worker/PTY pressure matrix
         shell: bash
         run: node scripts/run-vitest-pty-matrix.mjs "$RUNNER_TEMP/vitest-pty-matrix.json"

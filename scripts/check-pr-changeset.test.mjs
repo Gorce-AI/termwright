@@ -1,12 +1,5 @@
-import { execFile as execFileCallback } from 'node:child_process';
-import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { changedFiles, changesetDecision, isConsumableChangesetPath, isPublishablePackagePath } from './check-pr-changeset.mjs';
-
-const execFile = promisify(execFileCallback);
 
 describe('pull-request changeset policy', () => {
   it.each([
@@ -51,26 +44,21 @@ describe('pull-request changeset policy', () => {
     expect(isConsumableChangesetPath('.changeset/.fake.md')).toBe(false);
   });
 
-  it('reports both sides when production code is renamed to a test-looking path', async () => {
-    const scratch = await mkdtemp(join(tmpdir(), 'tw-changeset-rename-'));
-    try {
-      await execFile('git', ['init', '--quiet'], { cwd: scratch });
-      await execFile('git', ['config', 'user.email', 'ci@example.invalid'], { cwd: scratch });
-      await execFile('git', ['config', 'user.name', 'CI'], { cwd: scratch });
-      const source = join(scratch, 'packages/example/src/api.ts');
-      await mkdir(join(scratch, 'packages/example/src'), { recursive: true });
-      await writeFile(source, 'export const api = true;\n');
-      await execFile('git', ['add', '.'], { cwd: scratch });
-      await execFile('git', ['commit', '--quiet', '-m', 'base'], { cwd: scratch });
-      await rename(source, join(scratch, 'packages/example/src/api.test.ts'));
-      await execFile('git', ['add', '-A'], { cwd: scratch });
-      await execFile('git', ['commit', '--quiet', '-m', 'rename'], { cwd: scratch });
+  it('disables rename detection and preserves both NUL-delimited sides', async () => {
+    const invocations = [];
+    const runGit = async (...invocation) => {
+      invocations.push(invocation);
+      return { stdout: 'packages/example/src/api.test.ts\0packages/example/src/api.ts\0' };
+    };
 
-      const paths = await changedFiles('HEAD^', 'HEAD', [], scratch);
-      expect(paths).toEqual(['packages/example/src/api.test.ts', 'packages/example/src/api.ts']);
-      expect(changesetDecision(paths, []).needsChangeset).toBe(true);
-    } finally {
-      await rm(scratch, { recursive: true, force: true });
-    }
+    const paths = await changedFiles('BASE', 'HEAD', ['--diff-filter=AMD'], '/repo', runGit);
+
+    expect(invocations).toEqual([[
+      'git',
+      ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=AMD', 'BASE', 'HEAD', '--'],
+      { cwd: '/repo' },
+    ]]);
+    expect(paths).toEqual(['packages/example/src/api.test.ts', 'packages/example/src/api.ts']);
+    expect(changesetDecision(paths, []).needsChangeset).toBe(true);
   });
 });
