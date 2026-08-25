@@ -42,6 +42,7 @@ export async function writeNativeRunFixture(
   };
   const specs = [];
   const attempts = [];
+  let attemptOffsetMs = 0;
   for (const [index, test] of options.tests.entries()) {
     const projectId = createRunId('project');
     const specId = createRunId('spec');
@@ -51,14 +52,18 @@ export async function writeNativeRunFixture(
     if (test.status === 'skipped') continue;
     const states = test.retries ?? [test.status];
     for (const [retry, status] of states.entries()) {
+      const durationMs = retry === states.length - 1 ? (test.durationMs ?? 0) : 1;
       attempts.push({
         attemptId: createRunId('attempt'), executionId: createRunId('execution'), runnerTaskId, projectId, specId,
         nativeTaskId, repeat: 0, retry, status,
-        durationMs: retry === states.length - 1 ? (test.durationMs ?? 0) : 1,
+        startedAfterRunMs: attemptOffsetMs,
+        finishedAfterRunMs: status === 'incomplete' ? null : attemptOffsetMs + durationMs,
+        durationMs: status === 'incomplete' ? null : durationMs,
       });
+      attemptOffsetMs += durationMs;
     }
   }
-  const duration = attempts.reduce((total, attempt) => total + (attempt.durationMs ?? 0), 0);
+  const duration = attemptOffsetMs;
   const skippedCount = options.tests.filter((test) => test.status === 'skipped').length;
   const status = options.status ?? (
     options.tests.some((test) => test.status === 'failed')
@@ -117,6 +122,7 @@ export async function writeNativeRunFixture(
   }));
   await (await beginRunManifest(runsDir, start)).commit({
     ...start, v: RUN_MANIFEST_VERSION, finishedAt: startedAt + duration,
+    durationMs: duration,
     status,
     specs, attempts, events,
   });

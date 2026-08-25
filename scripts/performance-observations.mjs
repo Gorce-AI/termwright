@@ -1,11 +1,18 @@
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import {
   validateObservationSet,
   validatePerformanceReport,
 } from '../packages/performance/dist/index.js';
 import { validatePerformanceEnvironment } from './performance-environment.mjs';
+
+const execute = promisify(execFile);
+const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const collectorUrl = new URL('./collect-quality-performance.mjs', import.meta.url);
 
 /** Combine the four independently retained raw reports into one comparable observation set. */
 export async function loadPerformanceObservations(options) {
@@ -20,6 +27,7 @@ export async function loadPerformanceObservations(options) {
   ));
   const quality = JSON.parse(raw.quality.toString('utf8'));
   validateObservationSet(quality);
+  await validateQualityProvenance(quality.provenance);
   validateQualityResourceSnapshot(quality.resourceSnapshot, descriptor);
   if (quality.environment !== descriptor.class) {
     throw new Error(`quality environment ${quality.environment} differs from descriptor ${descriptor.class}`);
@@ -62,6 +70,79 @@ export async function loadPerformanceObservations(options) {
       ])),
     },
   };
+}
+
+async function validateQualityProvenance(value) {
+  exactKeys(
+    value,
+    ['kind', 'schemaVersion', 'collectorSha256', 'gitCommit', 'ci', 'roles'],
+    'quality provenance',
+  );
+  if (value.kind !== 'termwright-quality-provenance' || value.schemaVersion !== 1) {
+    throw new Error('quality provenance kind or schema is unsupported');
+  }
+  const collectorSha256 = createHash('sha256').update(await readFile(collectorUrl)).digest('hex');
+  if (value.collectorSha256 !== collectorSha256) {
+    throw new Error('quality provenance collector SHA-256 differs from the executing collector');
+  }
+  const { stdout } = await execute('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: root });
+  const gitCommit = stdout.trim();
+  if (!/^[0-9a-f]{40}$/u.test(value.gitCommit) || value.gitCommit !== gitCommit) {
+    throw new Error('quality provenance Git commit differs from the current checkout');
+  }
+  validateQualityCi(value.ci, gitCommit);
+  exactKeys(value.roles, ['timing', 'resourceSoak', 'stress'], 'quality provenance roles');
+  const timing = validateQualityRole(value.roles.timing, 'timing');
+  const resourceSoak = validateQualityRole(value.roles.resourceSoak, 'resourceSoak');
+  const stress = validateQualityRole(value.roles.stress, 'stress');
+  if (timing.runs.length < 2 || timing.runs.length > 100
+    || resourceSoak.runs.length !== timing.runs.length || stress.runs.length !== 1) {
+    throw new Error('quality provenance roles do not contain the certified timing/resource run counts');
+  }
+  if (new Set([timing.invocationId, resourceSoak.invocationId, stress.invocationId]).size !== 3) {
+    throw new Error('quality provenance roles must use distinct host invocations');
+  }
+  const allRunIds = [...timing.runs, ...resourceSoak.runs, ...stress.runs].map((run) => run.runId);
+  if (new Set(allRunIds).size !== allRunIds.length) {
+    throw new Error('quality provenance assigns one run to more than one evidence role');
+  }
+}
+
+function validateQualityRole(value, role) {
+  exactKeys(value, ['invocationId', 'runs'], `quality ${role} provenance`);
+  if (!/^invocation:[0-9a-f-]+$/u.test(value.invocationId ?? '')
+    || !Array.isArray(value.runs) || value.runs.length === 0) {
+    throw new Error(`quality ${role} provenance has no valid invocation or runs`);
+  }
+  for (const run of value.runs) {
+    exactKeys(run, ['runId', 'manifestSha256'], `quality ${role} run provenance`);
+    if (!/^run:[0-9a-f-]+$/u.test(run.runId ?? '')
+      || !/^[0-9a-f]{64}$/u.test(run.manifestSha256 ?? '')) {
+      throw new Error(`quality ${role} run provenance is invalid`);
+    }
+  }
+  if (new Set(value.runs.map((run) => run.runId)).size !== value.runs.length) {
+    throw new Error(`quality ${role} provenance contains duplicate runs`);
+  }
+  return value;
+}
+
+function validateQualityCi(value, gitCommit) {
+  if (value === null) {
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      throw new Error('quality GitHub Actions provenance is missing from a CI observation');
+    }
+    return;
+  }
+  exactKeys(value, ['runId', 'runAttempt', 'sha'], 'quality GitHub Actions provenance');
+  if (!/^[1-9][0-9]*$/u.test(value.runId ?? '') || !/^[1-9][0-9]*$/u.test(value.runAttempt ?? '')
+    || value.sha !== gitCommit) {
+    throw new Error('recorded quality GitHub Actions provenance is invalid');
+  }
+  if (process.env.GITHUB_ACTIONS === 'true' && (value.runId !== process.env.GITHUB_RUN_ID
+    || value.runAttempt !== process.env.GITHUB_RUN_ATTEMPT || value.sha !== process.env.GITHUB_SHA)) {
+    throw new Error('quality GitHub Actions provenance is missing or differs from the current run');
+  }
 }
 
 function validateQualityResourceSnapshot(value, descriptor) {

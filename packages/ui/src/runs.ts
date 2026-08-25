@@ -154,7 +154,7 @@ function summarize(manifest: NativeRunManifest, tests: readonly RunTest[]): RunS
     incomplete: tests.filter((test) => test.status === 'incomplete').length,
     notRun: tests.filter((test) => test.status === 'not-run').length,
     flaky: tests.filter((test) => test.flaky).length,
-    durationMs: Math.max(0, manifest.finishedAt - manifest.startedAt),
+    durationMs: manifest.durationMs,
   };
 }
 

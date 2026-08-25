@@ -1,9 +1,16 @@
 import { spawn, execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validatePerformanceEnvironment } from './performance-environment.mjs';
+import { summarizeQualityTiming } from './quality-performance-timing.mjs';
+import {
+  readRunManifest,
+  RUN_HISTORY_COMMIT_VERSION,
+  runDirectoryName,
+} from '../packages/run-history/dist/index.js';
 import {
   createQualityCheckpoint,
   publishQualityTerminal,
@@ -32,47 +39,50 @@ validatePerformanceEnvironment(environmentDescriptor, {
 });
 const environment = environmentDescriptor.class;
 const runsDir = resolve(root, '.termwright', 'runs');
-const before = new Set(await directories(runsDir));
 
-const soak = await observe([
+const soakArgs = [
   'packages/termwright-cli/dist/bin.js', 'test', '--runs', String(args.cycles),
   '--resource-profile', 'ci', '--json', '--', '--config', 'quality/soak/vitest.config.ts',
   '--run', 'quality/soak/terminal-cycle.test.ts',
-]);
-const afterSoak = new Set(await directories(runsDir));
-const soakRuns = [...afterSoak].filter((name) => !before.has(name));
+];
+const timingRunIds = await observeTiming(soakArgs, args.cycles);
+const resourceSoak = await observeResources(soakArgs, undefined, args.cycles);
 const stressCheckpoint = await createQualityCheckpoint(16);
 let stress;
 try {
-  stress = await observe([
+  stress = await observeResources([
     'packages/termwright-cli/dist/bin.js', 'test', '--resource-profile', 'stress', '--json', '--',
     '--config', 'quality/stress/vitest.config.ts', '--run', 'quality/stress/terminal-concurrency.test.ts',
-  ], stressCheckpoint);
+  ], stressCheckpoint, 1);
 } finally {
   await rm(stressCheckpoint.directory, { recursive: true, force: true });
 }
-const afterStress = new Set(await directories(runsDir));
-const stressRuns = [...afterStress].filter((name) => !afterSoak.has(name));
 
-const soakManifests = await manifests(soakRuns);
-const stressManifests = await manifests(stressRuns);
-if (soakManifests.length !== args.cycles) {
-  throw new Error(`expected ${args.cycles} soak manifests, observed ${soakManifests.length}`);
+const timingRecords = await manifests(timingRunIds);
+const resourceSoakRecords = await manifests(resourceSoak.runIds);
+const stressRecords = await manifests(stress.runIds);
+const timingManifests = timingRecords.map((record) => record.manifest);
+const resourceSoakManifests = resourceSoakRecords.map((record) => record.manifest);
+const stressManifests = stressRecords.map((record) => record.manifest);
+if (timingManifests.length !== args.cycles || resourceSoakManifests.length !== args.cycles) {
+  throw new Error(
+    `expected ${args.cycles} timing and resource soak manifests, observed ${timingManifests.length} and ${resourceSoakManifests.length}`,
+  );
 }
 if (stressManifests.length !== 1) {
   throw new Error(`expected one stress manifest, observed ${stressManifests.length}`);
 }
-const orderedSoak = [...soakManifests].sort((left, right) => left.startedAt - right.startedAt);
-const first = orderedSoak[0];
-const firstAttemptAt = Math.min(...first.events
-  .filter((event) => event.type === 'attempt.started')
-  .map((event) => event.wallTime));
+const timing = summarizeQualityTiming(timingManifests);
+const provenance = await qualityProvenance({
+  timing: timingRecords,
+  resourceSoak: resourceSoakRecords,
+  stress: stressRecords,
+});
 
-const leakedProcesses = soak.leakedProcesses + stress.leakedProcesses;
-const leakedFileDescriptors = soak.leakedFileDescriptors + stress.leakedFileDescriptors;
 const observations = {
   generatedAt: new Date().toISOString(),
   environment,
+  provenance,
   resourceSnapshot: {
     kind: 'termwright-quality-resource-snapshot',
     schemaVersion: 1,
@@ -85,28 +95,39 @@ const observations = {
     },
   },
   metrics: {
-    startupMs: observation(firstAttemptAt - first.startedAt, 'milliseconds', 'quality/soak first run: manifest start to first attempt'),
-    perTestOverheadMs: observation(
-      average(orderedSoak.slice(1).map((manifest) =>
-        manifest.finishedAt - manifest.startedAt
-        - manifest.attempts.reduce((sum, attempt) => sum + attempt.durationMs, 0))),
+    firstRunPreAttemptMs: observation(timing.firstRunPreAttemptMs, 'milliseconds', 'quality/soak first run: host-monotonic run start to first attempt'),
+    postStartupRunOrchestrationMs: observation(
+      timing.postStartupRunOrchestrationMs,
       'milliseconds',
-      `quality/soak ${args.cycles - 1} post-startup runs: collection and finalization time outside the test attempt`,
+      `quality/soak ${args.cycles - 1} post-startup runs: host-monotonic collection, scheduling and finalization outside the test attempt`,
     ),
     peakMemoryFootprintBytes: observation(
-      Math.max(soak.peakMemoryFootprintBytes, stress.peakMemoryFootprintBytes),
+      Math.max(resourceSoak.peakMemoryFootprintBytes, stress.peakMemoryFootprintBytes),
       'bytes',
-      'maximum sampled aggregate physical footprint of the certified host process tree across soak and stress; stress includes a 16-session ready/sample/ack snapshot',
+      'maximum sampled aggregate physical footprint across the separately instrumented lifecycle soak and certified 16-session stress tree',
     ),
-    peakOpenFileDescriptors: observation(Math.max(soak.peakOpenFileDescriptors, stress.peakOpenFileDescriptors), 'count', 'maximum open descriptors in the certified host process tree across soak and stress'),
-    leakedFileDescriptors: observation(leakedFileDescriptors, 'count', 'descriptors owned by observed descendants still alive after certified host exit'),
-    leakedProcesses: observation(leakedProcesses, 'count', 'observed descendants still alive after certified host exit'),
+    peakOpenFileDescriptors: observation(Math.max(resourceSoak.peakOpenFileDescriptors, stress.peakOpenFileDescriptors), 'count', 'maximum open descriptors across the separately instrumented lifecycle soak and certified stress tree'),
+    leakedFileDescriptors: observation(resourceSoak.leakedFileDescriptors + stress.leakedFileDescriptors, 'count', 'descriptors owned by observed lifecycle or stress descendants still alive after certified host exit'),
+    leakedProcesses: observation(resourceSoak.leakedProcesses + stress.leakedProcesses, 'count', 'observed lifecycle or stress descendants still alive after certified host exit'),
   },
 };
 await writeFile(resolve(args.output), `${JSON.stringify(observations, null, 2)}\n`, 'utf8');
 process.stdout.write(`quality performance observations written to ${args.output}\n`);
 
-async function observe(nodeArgs, checkpoint) {
+async function observeTiming(nodeArgs, expectedRuns) {
+  try {
+    const { stdout } = await execute(process.execPath, nodeArgs, {
+      cwd: root,
+      env: { ...process.env, TERMWRIGHT_RETRIES: '0' },
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return hostReportRunIds(stdout, expectedRuns);
+  } catch (error) {
+    throw new Error('quality timing command failed', { cause: error });
+  }
+}
+
+async function observeResources(nodeArgs, checkpoint, expectedRuns) {
   const child = spawn(process.execPath, nodeArgs, {
     cwd: root,
     env: {
@@ -307,12 +328,32 @@ async function observe(nodeArgs, checkpoint) {
     .map(([pid]) => pid);
   const leakedFileDescriptors = await descriptorCount(survivors, table, false) ?? 0;
   return {
+    runIds: hostReportRunIds(stdout, expectedRuns),
     peakMemoryFootprintBytes,
     peakOpenFileDescriptors,
     leakedProcesses: survivors.length,
     leakedFileDescriptors,
     checkpointProcessCount,
   };
+}
+
+function hostReportRunIds(stdout, expectedRuns) {
+  const finalLine = stdout.trim().split(/\r?\n/u).at(-1);
+  let report;
+  try { report = JSON.parse(finalLine ?? ''); }
+  catch (error) { throw new Error('quality command did not end with its JSON host report', { cause: error }); }
+  if (report?.state !== 'passed' || report.requestedRuns !== expectedRuns
+    || report.completedRuns !== expectedRuns || report.skipPolicy !== 'matched'
+    || !Array.isArray(report.runs) || report.runs.length !== expectedRuns) {
+    throw new Error('quality command host report is incomplete or not passed on its first attempts');
+  }
+  const runIds = report.runs.map((run) => run?.runId);
+  if (runIds.some((runId) => typeof runId !== 'string' || !/^run:[0-9a-f-]+$/u.test(runId))
+    || new Set(runIds).size !== expectedRuns
+    || report.runs.some((run) => run?.state !== 'passed')) {
+    throw new Error('quality command host report contains invalid run evidence');
+  }
+  return runIds;
 }
 
 async function processTable(signal) {
@@ -457,17 +498,72 @@ async function awaitWithSignal(promise, signal) {
   });
 }
 
-async function directories(path) {
-  try { return (await readdir(path, { withFileTypes: true })).filter((entry) => entry.isDirectory() && entry.name.startsWith('run_')).map((entry) => entry.name); }
-  catch (error) { if (error?.code === 'ENOENT') return []; throw error; }
+async function manifests(runIds) {
+  return Promise.all(runIds.map(async (runId) => {
+    const record = await readRunManifest(runsDir, runId);
+    if (record.state !== 'complete' || record.runId !== runId || record.manifest.runId !== runId) {
+      throw new Error(`quality run ${runId} has no complete committed current manifest: ${record.state}`);
+    }
+    const directory = resolve(runsDir, runDirectoryName(runId));
+    const [raw, committed] = await Promise.all([
+      readFile(resolve(directory, 'manifest.json')),
+      readFile(resolve(directory, 'COMMITTED'), 'utf8'),
+    ]);
+    const manifestSha256 = sha256(raw);
+    if (committed.trim() !== `termwright-run-history-v${RUN_HISTORY_COMMIT_VERSION} sha256:${manifestSha256}`) {
+      throw new Error(`quality run ${runId} changed after its committed manifest was validated`);
+    }
+    return {
+      manifest: record.manifest,
+      evidence: {
+        runId,
+        manifestSha256,
+      },
+    };
+  }));
 }
 
-async function manifests(names) {
-  return Promise.all(names.map(async (name) => JSON.parse(await readFile(resolve(runsDir, name, 'manifest.json'), 'utf8'))));
+async function qualityProvenance(roles) {
+  const collector = await readFile(fileURLToPath(import.meta.url));
+  const { stdout } = await execute('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: root });
+  const gitCommit = stdout.trim();
+  if (!/^[0-9a-f]{40}$/u.test(gitCommit)) throw new Error('quality collector could not resolve one Git commit');
+  return {
+    kind: 'termwright-quality-provenance',
+    schemaVersion: 1,
+    collectorSha256: sha256(collector),
+    gitCommit,
+    ci: githubCiProvenance(process.env, gitCommit),
+    roles: Object.fromEntries(Object.entries(roles).map(([role, records]) => [role, roleEvidence(role, records)])),
+  };
 }
+
+function roleEvidence(role, records) {
+  const invocationIds = new Set(records.map((record) => record.manifest.invocationId));
+  if (records.length === 0 || invocationIds.size !== 1) {
+    throw new Error(`quality ${role} evidence does not belong to one host invocation`);
+  }
+  return {
+    invocationId: [...invocationIds][0],
+    runs: records.map((record) => record.evidence),
+  };
+}
+
+function githubCiProvenance(env, gitCommit) {
+  if (env.GITHUB_ACTIONS !== 'true') return null;
+  const runId = env.GITHUB_RUN_ID;
+  const runAttempt = env.GITHUB_RUN_ATTEMPT;
+  const sha = env.GITHUB_SHA;
+  if (!/^[1-9][0-9]*$/u.test(runId ?? '') || !/^[1-9][0-9]*$/u.test(runAttempt ?? '')
+    || !/^[0-9a-f]{40}$/u.test(sha ?? '') || sha !== gitCommit) {
+    throw new Error('GitHub Actions quality provenance is missing or differs from the measured Git commit');
+  }
+  return { runId, runAttempt, sha };
+}
+
+function sha256(value) { return createHash('sha256').update(value).digest('hex'); }
 
 function observation(value, unit, source) { return { value, unit, source }; }
-function average(values) { return values.reduce((sum, value) => sum + value, 0) / values.length; }
 
 function parseArgs(argv) {
   const options = { cycles: 10, output: 'performance-quality.json', environmentFile: undefined };

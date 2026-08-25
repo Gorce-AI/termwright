@@ -104,14 +104,28 @@ fails capture and produces no candidate baseline. The schema requires both
 cleanup metrics as exact zero-count invariants independently of the policy
 file, so removing a policy entry cannot disable the gate. Each candidate embeds
 the verified runner descriptor, including resolved toolchain versions, and the
-SHA-256 digest of every raw quality and benchmark input. Capture and observation
-also validate each report's schema, platform, architecture and runtime against
-that descriptor before using any metric.
+SHA-256 digest of every raw quality and benchmark input. The quality input also
+binds the timing, instrumented lifecycle-soak and stress roles to one exact host
+invocation and to the SHA-256 digest of every committed `manifest.json`. Its
+provenance records the collector digest and measured Git commit; on GitHub
+Actions it additionally requires the exact workflow run id, first-attempt number
+and `GITHUB_SHA`. Capture and observation recompute the collector digest and Git
+identity and reject missing, corrupt, unsupported or cross-run evidence before
+using any metric. They also validate each report's schema, platform,
+architecture and runtime against the runner descriptor.
 
-The quality observation defines startup as run-manifest creation to the first
-attempt. Per-test overhead is the mean post-startup run duration outside the
-recorded attempt: collection, scheduling and finalization, with the controlled
-test workload subtracted. On macOS the process-tree sampler records the maximum
+The quality observation records first-run pre-attempt time and the mean
+post-startup run orchestration time outside the recorded attempt: collection,
+scheduling and finalization, with the controlled test workload subtracted. Both
+the run duration and the attempt offset are measured by the host's monotonic
+clock; wall timestamps remain provenance only. Runs are ordered by the host's
+logical configuration-event sequence, not their wall timestamps. This timing
+phase runs without external process-table,
+memory or descriptor samplers, so the observation does not measure its own
+resource probes. Resource evidence is collected in a separate instrumented
+lifecycle soak, preserving detection of leaks accumulated across persistent-host
+cycles, and in the certified 16-session stress phase. On macOS that process-tree
+sampler records the maximum
 sampled process-tree `Summary Footprint` reported by `/usr/bin/footprint`,
 rather than summing per-process RSS or `phys_footprint` values that count shared
 pages more than once. Memory-footprint and descriptor observation run
@@ -137,8 +151,8 @@ compare. The workflow is intentionally scheduled/manual because it is an
 expensive, runner-class-qualified observation; when it runs, there is no
 annotate-only or green-with-warning state.
 
-The tolerances are data, not hidden workflow constants: startup allows 50%,
-post-startup orchestration and physical footprint 35%, peak descriptors 25%,
+The tolerances are data, not hidden workflow constants: first-run pre-attempt
+time allows 50%, post-startup orchestration and physical footprint 35%, peak descriptors 25%,
 the semantic p95 50%, and the framework ratios 35% (Charm) and 25% (OpenTUI),
 each with the small absolute allowance recorded beside it. Cleanup allows no
 leak at all.

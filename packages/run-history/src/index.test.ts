@@ -120,6 +120,28 @@ describe('native run history transaction', () => {
       .toBe('complete');
   });
 
+  it('requires current monotonic run and attempt timing evidence', () => {
+    const current = manifest(provenance());
+    const { durationMs: _duration, ...missingDuration } = current;
+    expect(parseManifest(JSON.stringify(missingDuration)).state).toBe('corrupt');
+    const attemptWithoutFinishOffset = current.attempts.map(({ finishedAfterRunMs: _finished, ...attempt }) => attempt);
+    expect(parseManifest(JSON.stringify({ ...current, attempts: attemptWithoutFinishOffset })).state).toBe('corrupt');
+    expect(parseManifest(JSON.stringify({ ...current, v: 2 })).state).toBe('unsupported-version');
+    expect(parseManifest(JSON.stringify({ ...current, durationMs: -1 })).state).toBe('corrupt');
+    expect(parseManifest(JSON.stringify({
+      ...current,
+      attempts: current.attempts.map((attempt) => ({ ...attempt, startedAfterRunMs: current.durationMs + 1 })),
+    })).state).toBe('corrupt');
+    expect(parseManifest(JSON.stringify({
+      ...current,
+      attempts: current.attempts.map((attempt) => ({ ...attempt, finishedAfterRunMs: 0 })),
+    })).state).toBe('corrupt');
+    expect(parseManifest(JSON.stringify({
+      ...current,
+      attempts: current.attempts.map((attempt) => ({ ...attempt, finishedAfterRunMs: current.durationMs + 1 })),
+    })).state).toBe('corrupt');
+  });
+
   it('rejects changed attempt hierarchy and events emitted after attempt completion', () => {
     const start = provenance();
     const passed = manifest(start);
@@ -246,10 +268,11 @@ function manifest(start: RunStartProvenance): RunManifest {
   } });
   const identity = { invocationId: start.invocationId, runId: start.runId, projectId, specId, runnerTaskId, executionId, attemptId };
   return {
-    ...start, v: RUN_MANIFEST_VERSION, finishedAt: start.startedAt + 5, status: 'passed',
+    ...start, v: RUN_MANIFEST_VERSION, finishedAt: start.startedAt + 5, durationMs: 5, status: 'passed',
     specs: [{ runnerTaskId, specId, projectId, nativeTaskId: 'native_0', file: 'example.test.ts', fullName: 'works' }],
     attempts: [{ attemptId, executionId, runnerTaskId,
-      projectId, specId, nativeTaskId: 'native_0', repeat: 0, retry: 0, status: 'passed', durationMs: 4 }],
+      projectId, specId, nativeTaskId: 'native_0', repeat: 0, retry: 0, status: 'passed',
+      startedAfterRunMs: 1, finishedAfterRunMs: 5, durationMs: 4 }],
     events: [producer.emit({
       eventClass: 'authoritative', type: 'attempt.started', identity,
       payload: { nativeTaskId: 'native_0', repeat: 0, retry: 0 },

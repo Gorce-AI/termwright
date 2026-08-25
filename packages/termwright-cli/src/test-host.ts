@@ -411,7 +411,7 @@ export class TermwrightTestHost {
           runId: active.runId,
           signal,
           append: (event) => {
-          observeAttemptEvent(event, expectedTasks, attempts);
+          observeAttemptEvent(event, expectedTasks, attempts, active.budget.elapsedMs());
           const appended = active.persistence.append(event);
           if (!appended.ok) {
             throw new Error(`run journal rejected worker event: ${appended.code}: ${appended.detail}`);
@@ -1088,6 +1088,8 @@ export class TermwrightTestHost {
         repeat: attempt.repeat,
         retry: attempt.retry,
         status: attempt.finished?.state ?? 'incomplete',
+        startedAfterRunMs: attempt.startedAfterRunMs,
+        finishedAfterRunMs: attempt.finished?.observedAfterRunMs ?? null,
         durationMs: attempt.finished === undefined
           ? null
           : Math.max(0, attempt.finished.monotonicTime - attempt.startedAt),
@@ -1098,6 +1100,7 @@ export class TermwrightTestHost {
       specs,
       attempts: completedAttempts,
       events: active.persistence.recorded,
+      durationMs: active.budget.elapsedMs(),
     };
   }
 }
@@ -1262,14 +1265,20 @@ interface ObservedAttempt {
   readonly nativeTaskId: string;
   readonly repeat: number;
   readonly retry: number;
+  readonly startedAfterRunMs: number;
   readonly startedAt: number;
-  finished?: { readonly state: NativeRunAttempt['status']; readonly monotonicTime: number };
+  finished?: {
+    readonly state: NativeRunAttempt['status'];
+    readonly monotonicTime: number;
+    readonly observedAfterRunMs: number;
+  };
 }
 
 function observeAttemptEvent(
   event: RunEvent,
   expectedTasks: ReadonlySet<RunnerTaskId>,
   attempts: Map<AttemptId, ObservedAttempt>,
+  observedAfterRunMs: number,
 ): void {
   if (event.type !== 'attempt.started' && event.type !== 'attempt.finished') return;
   const attemptId = event.identity.attemptId;
@@ -1288,6 +1297,7 @@ function observeAttemptEvent(
       nativeTaskId: payload.nativeTaskId,
       repeat: payload.repeat,
       retry: payload.retry,
+      startedAfterRunMs: observedAfterRunMs,
       startedAt: event.monotonicTime,
     });
     return;
@@ -1302,7 +1312,11 @@ function observeAttemptEvent(
   if (payload.nativeTaskId !== current.nativeTaskId || payload.repeat !== current.repeat || payload.retry !== current.retry) {
     throw new Error(`attempt ${attemptId} changed native identity or ordinal during execution`);
   }
-  current.finished = { state: payload.state, monotonicTime: event.monotonicTime };
+  current.finished = {
+    state: payload.state,
+    monotonicTime: event.monotonicTime,
+    observedAfterRunMs,
+  };
 }
 
 function attemptPayload(payload: unknown, terminal: false): { readonly nativeTaskId: string; readonly repeat: number; readonly retry: number };

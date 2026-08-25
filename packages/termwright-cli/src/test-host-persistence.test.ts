@@ -94,8 +94,10 @@ describe('test-host persistence seams', () => {
       ci: {},
       git: null,
     };
-    const manifest = createRunManifest(start, { status: 'passed', specs: [], attempts: [], events: [], finishedAt: 20 });
-    expect(manifest).toMatchObject({ v: 2, startedAt: 10, finishedAt: 20, status: 'passed' });
+    const manifest = createRunManifest(start, {
+      status: 'passed', specs: [], attempts: [], events: [], durationMs: 7, finishedAt: 20,
+    });
+    expect(manifest).toMatchObject({ v: 3, startedAt: 10, finishedAt: 20, durationMs: 7, status: 'passed' });
     expect(Object.isFrozen(manifest)).toBe(true);
   });
 
@@ -116,8 +118,10 @@ describe('test-host persistence seams', () => {
       },
     };
     const budget = new HostRunBudget(100, 25, runtime);
+    expect(budget.elapsedMs()).toBe(0);
     const execution = budget.execution('unit execution', () => new Promise<never>(() => undefined));
     now = 75;
+    expect(budget.elapsedMs()).toBe(75);
     for (const timer of [...timers]) if (timer.at <= now) timer.elapsed();
     await expect(execution).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT', phase: 'unit execution' });
   });
@@ -143,5 +147,16 @@ describe('test-host persistence seams', () => {
     const finalized = await budget.finalization('canonical run history', async () => 'committed');
     expect(finalized).toBe('committed');
     expect(timers).toEqual([]);
+  });
+
+  it('fails closed if an injected monotonic clock regresses', () => {
+    let now = 10;
+    const runtime: TermwrightHostDeadlineRuntime = {
+      now: () => now,
+      schedule: () => () => undefined,
+    };
+    const budget = new HostRunBudget(100, 25, runtime);
+    now = 9;
+    expect(() => budget.elapsedMs()).toThrow(/monotonic clock regressed/u);
   });
 });

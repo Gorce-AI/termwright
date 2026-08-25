@@ -563,7 +563,13 @@ describe('TermwrightTestHost', () => {
       engine: { name: 'vitest', version: CERTIFIED_VITEST_VERSION },
       runtime: { node: process.version, platform: process.platform, arch: process.arch },
     });
+    expect(record.manifest.durationMs).toBeGreaterThanOrEqual(0);
     expect(record.manifest.attempts[0]?.attemptId).toMatch(/^attempt:/u);
+    expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeGreaterThanOrEqual(0);
+    expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeLessThanOrEqual(record.manifest.durationMs);
+    expect(record.manifest.attempts[0]?.finishedAfterRunMs)
+      .toBeGreaterThanOrEqual(record.manifest.attempts[0]?.startedAfterRunMs ?? Number.POSITIVE_INFINITY);
+    expect(record.manifest.attempts[0]?.finishedAfterRunMs).toBeLessThanOrEqual(record.manifest.durationMs);
     expect(record.manifest.events.at(-1)).toMatchObject({ type: 'run.state', payload: { state: 'passed' } });
     await host.close();
   });

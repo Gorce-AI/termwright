@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ const execute = promisify(execFile);
 const roots = [];
 const script = new URL('./capture-performance-baseline.mjs', import.meta.url);
 const comparator = new URL('./compare-performance-baseline.mjs', import.meta.url);
+const collector = new URL('./collect-quality-performance.mjs', import.meta.url);
 const policy = new URL(
   '../packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json',
   import.meta.url,
@@ -27,7 +29,7 @@ describe('performance baseline capture command', () => {
     expect(baseline).toMatchObject({
       environment: 'darwin-arm64-node24-go1.25-bun1.2.15',
       metrics: {
-        startupMs: { value: 701, relativeTolerance: 0.5, absoluteTolerance: 250 },
+        firstRunPreAttemptMs: { value: 701, relativeTolerance: 0.5, absoluteTolerance: 250 },
         semanticHotPathP95Us: { value: 44 },
         charmOverheadRatio: { value: 1.2 },
         opentuiOverheadRatio: { value: 1.05 },
@@ -55,7 +57,7 @@ describe('performance baseline capture command', () => {
     const fixture = await reports(0);
     await execute(process.execPath, command(fixture));
     const quality = JSON.parse(await readFile(fixture.quality, 'utf8'));
-    quality.metrics.startupMs.value = 2_000;
+    quality.metrics.firstRunPreAttemptMs.value = 2_000;
     await writeFile(fixture.quality, JSON.stringify(quality));
     const comparison = `${fixture.output}.comparison.json`;
     await expect(execute(process.execPath, [
@@ -76,7 +78,7 @@ describe('performance baseline capture command', () => {
       schemaVersion: 2,
       gate: 'performance-regression-fail',
       comparisons: expect.arrayContaining([
-        expect.objectContaining({ metric: 'startupMs', status: 'failure' }),
+        expect.objectContaining({ metric: 'firstRunPreAttemptMs', status: 'failure' }),
       ]),
     });
   });
@@ -90,6 +92,24 @@ describe('performance baseline capture command', () => {
   it('rejects quality evidence that did not snapshot the complete stress tree', async () => {
     const fixture = await reports(0, { stressProcessCount: 17 });
     await expect(execute(process.execPath, command(fixture))).rejects.toThrow(/complete 16-session process tree/u);
+    await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects quality evidence produced by a different collector', async () => {
+    const fixture = await reports(0);
+    const quality = JSON.parse(await readFile(fixture.quality, 'utf8'));
+    quality.provenance.collectorSha256 = '0'.repeat(64);
+    await writeFile(fixture.quality, JSON.stringify(quality));
+    await expect(execute(process.execPath, command(fixture))).rejects.toThrow(/collector SHA-256 differs/u);
+    await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects duplicate run evidence across quality roles', async () => {
+    const fixture = await reports(0);
+    const quality = JSON.parse(await readFile(fixture.quality, 'utf8'));
+    quality.provenance.roles.stress.runs[0].runId = quality.provenance.roles.timing.runs[0].runId;
+    await writeFile(fixture.quality, JSON.stringify(quality));
+    await expect(execute(process.execPath, command(fixture))).rejects.toThrow(/more than one evidence role/u);
     await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
@@ -141,6 +161,7 @@ async function reports(leakedProcesses, options = {}) {
   roots.push(root);
   const paths = Object.fromEntries(['environment', 'quality', 'semantic', 'charm', 'opentui', 'output']
     .map((name) => [name, join(root, `${name}.json`)]));
+  const provenance = await qualityProvenance();
   await Promise.all([
     writeFile(paths.environment, JSON.stringify({
       kind: 'termwright-performance-environment',
@@ -156,6 +177,7 @@ async function reports(leakedProcesses, options = {}) {
     writeFile(paths.quality, JSON.stringify({
       generatedAt: '2026-08-25T03:00:00.000Z',
       environment: 'darwin-arm64-node24-go1.25-bun1.2.15',
+      provenance,
       resourceSnapshot: {
         kind: 'termwright-quality-resource-snapshot',
         schemaVersion: 1,
@@ -163,8 +185,8 @@ async function reports(leakedProcesses, options = {}) {
         stress: { expectedSessions: 16, processCount: options.stressProcessCount ?? 18 },
       },
       metrics: {
-        startupMs: metric(701, 'milliseconds'),
-        perTestOverheadMs: metric(402, 'milliseconds'),
+        firstRunPreAttemptMs: metric(701, 'milliseconds'),
+        postStartupRunOrchestrationMs: metric(402, 'milliseconds'),
         peakMemoryFootprintBytes: metric(400_000_000, 'bytes'),
         peakOpenFileDescriptors: metric(60, 'count'),
         leakedFileDescriptors: metric(0, 'count'),
@@ -195,6 +217,37 @@ async function reports(leakedProcesses, options = {}) {
     }, options.opentuiRuntime ?? 'bun 1.2.15; @opentui/core 0.5.3'))),
   ]);
   return paths;
+}
+
+async function qualityProvenance() {
+  const [{ stdout }, collectorBytes] = await Promise.all([
+    execute('git', ['rev-parse', '--verify', 'HEAD^{commit}']),
+    readFile(collector),
+  ]);
+  const gitCommit = stdout.trim();
+  const role = (invocation, runs) => ({
+    invocationId: `invocation:${invocation}`,
+    runs: Array.from({ length: runs }, (_, index) => ({
+      runId: `run:${invocation}-${String(index + 1).padStart(2, '0')}`,
+      manifestSha256: createHash('sha256').update(`${invocation}:${index}`).digest('hex'),
+    })),
+  });
+  return {
+    kind: 'termwright-quality-provenance',
+    schemaVersion: 1,
+    collectorSha256: createHash('sha256').update(collectorBytes).digest('hex'),
+    gitCommit,
+    ci: process.env.GITHUB_ACTIONS === 'true' ? {
+      runId: process.env.GITHUB_RUN_ID,
+      runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+      sha: process.env.GITHUB_SHA,
+    } : null,
+    roles: {
+      timing: role('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 2),
+      resourceSoak: role('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 2),
+      stress: role('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 1),
+    },
+  };
 }
 
 function metric(value, unit) {

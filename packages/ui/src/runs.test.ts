@@ -23,7 +23,7 @@ describe('native run history UI projection', () => {
     const [summary] = await readRunHistory(dir);
     expect(summary).toMatchObject({
       state: 'complete', id: start.runId, testCount: 1,
-      summary: { status: 'flaky', total: 1, passed: 1, failed: 0, flaky: 1 },
+      summary: { status: 'flaky', total: 1, passed: 1, failed: 0, flaky: 1, durationMs: 10 },
       engine: start.engine, runtime: start.runtime, resources: start.resources,
     });
     const detail = await readRunManifest(dir, start.runId);
@@ -99,9 +99,11 @@ function manifest(start: RunStartProvenance): NativeRunManifest {
   const runnerTaskId = createRunId('runner-task');
   const attempts = [
       { attemptId: createRunId('attempt'), executionId: createRunId('execution'), runnerTaskId, projectId, specId,
-        nativeTaskId: 'vitest-task', repeat: 0, retry: 0, status: 'failed', durationMs: 3 },
+        nativeTaskId: 'vitest-task', repeat: 0, retry: 0, status: 'failed',
+        startedAfterRunMs: 1, finishedAfterRunMs: 4, durationMs: 3 },
       { attemptId: createRunId('attempt'), executionId: createRunId('execution'), runnerTaskId, projectId, specId,
-        nativeTaskId: 'vitest-task', repeat: 0, retry: 1, status: 'passed', durationMs: 4 },
+        nativeTaskId: 'vitest-task', repeat: 0, retry: 1, status: 'passed',
+        startedAfterRunMs: 5, finishedAfterRunMs: 9, durationMs: 4 },
     ] as const;
   let monotonicTime = 1;
   const producer = new RunEventProducer({ producerId: createRunId('producer'), epoch: 0, monotonicNow: () => monotonicTime });
@@ -126,7 +128,7 @@ function manifest(start: RunStartProvenance): NativeRunManifest {
       identity: { invocationId: start.invocationId, runId: start.runId }, payload: { state: 'flaky' },
     }));
   return {
-    ...start, v: RUN_MANIFEST_VERSION, finishedAt: start.startedAt + 10, status: 'flaky',
+    ...start, v: RUN_MANIFEST_VERSION, finishedAt: start.startedAt + 10_000, durationMs: 10, status: 'flaky',
     specs: [{ runnerTaskId, projectId, specId, nativeTaskId: 'vitest-task', file: '/repo/example.test.ts', fullName: 'suite > works' }],
     attempts,
     events,
