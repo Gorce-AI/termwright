@@ -1,7 +1,7 @@
 {
   "kind": "termwright-performance-report",
-  "schemaVersion": 2,
-  "generatedAt": "2026-08-20T10:34:46.858Z",
+  "schemaVersion": 3,
+  "generatedAt": "2026-08-25T15:02:50.793Z",
   "environment": {
     "runtime": "node v24.1.0",
     "platform": "darwin",
@@ -29,8 +29,8 @@
         "bytesPerFrame": {
           "status": "measured",
           "unit": "bytes/frame",
-          "value": 20751.893,
-          "p95": 20752,
+          "value": 57387.893,
+          "p95": 57388,
           "note": "Length-prefixed snapshot frame, including the four-byte wire header."
         },
         "fullSnapshots": {
@@ -73,8 +73,8 @@
         "probeSerializationTime": {
           "status": "measured",
           "unit": "microseconds/frame",
-          "value": 61.753786000002464,
-          "p95": 66.00000000003092,
+          "value": 172.41459000000165,
+          "p95": 187.1250000000373,
           "note": "Production encodeFrame JSON serialization, UTF-8 encoding and length prefix."
         },
         "parentNormalizationTime": {
@@ -86,15 +86,15 @@
         "parentProtocolValidationTime": {
           "status": "measured",
           "unit": "microseconds/frame",
-          "value": 836.425332,
-          "p95": 998.0000000000473,
+          "value": 2096.893462999994,
+          "p95": 2848.165999999992,
           "note": "Production parent frame decode, immutable DTO projection, schema checks and semantic validation; this is validation, not semantic normalization."
         },
         "probeHotPathTime": {
           "status": "measured",
           "unit": "microseconds/frame",
-          "value": 120.52823800000174,
-          "p95": 131.87500000003638,
+          "value": 253.9946790000032,
+          "p95": 278.49999999995134,
           "note": "Recognizer normalization plus serialization on the current JavaScript probe path; excludes framework observation and socket I/O."
         },
         "applicationOverheadRatio": {

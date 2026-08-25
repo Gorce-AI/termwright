@@ -102,12 +102,11 @@ const REPORT_CONTRACTS = {
     runtime: (descriptor) => `node v${descriptor.toolchains.node.resolved}`,
   },
   charm: {
-    id: 'charm-v2-immediate-e2e',
+    id: 'charm-v2-burst-e2e',
     framework: 'charm',
     renderingMode: 'immediate',
     runtime: (descriptor) => {
-      const goArch = descriptor.runner.arch === 'x64' ? 'amd64' : descriptor.runner.arch;
-      return `node v${descriptor.toolchains.node.resolved}; go version go${descriptor.toolchains.go.resolved} ${descriptor.runner.platform}/${goArch}`;
+      return `node v${descriptor.toolchains.node.resolved}; go compiler go${descriptor.toolchains.go.resolved}`;
     },
   },
   opentui: {

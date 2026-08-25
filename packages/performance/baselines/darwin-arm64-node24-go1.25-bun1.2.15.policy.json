@@ -1,12 +1,7 @@
 {
   "kind": "termwright-performance-baseline-policy",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "environment": "darwin-arm64-node24-go1.25-bun1.2.15",
-  "history": {
-    "samples": 1,
-    "blockingAfterSamples": 12,
-    "decision": "annotate"
-  },
   "metrics": {
     "startupMs": {
       "unit": "milliseconds",

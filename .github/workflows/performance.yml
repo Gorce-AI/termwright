@@ -36,7 +36,7 @@ env:
 
 jobs:
   observe:
-    name: performance observations (annotate only)
+    name: performance regression gate
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -81,7 +81,7 @@ jobs:
           --nodes 96 --output "$GITHUB_WORKSPACE/performance-results/semantic-pipeline.json"
       - name: Collect the Charm E2E benchmark
         run: >-
-          pnpm --filter @termwright/performance benchmark:charm --iterations 3
+          pnpm --filter @termwright/performance benchmark:charm --iterations 8
           --output "$GITHUB_WORKSPACE/performance-results/charm-immediate.json"
       - name: Collect the OpenTUI marker-route benchmark
         run: >-

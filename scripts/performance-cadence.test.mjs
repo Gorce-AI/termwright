@@ -50,7 +50,7 @@ describe('performance observation cadence', () => {
 
   it('runs every existing benchmark plus the soak and stress observations', () => {
     expect(workflow).toContain('benchmark --iterations 1000');
-    expect(workflow).toContain('benchmark:charm --iterations 3');
+    expect(workflow).toContain('benchmark:charm --iterations 8');
     expect(workflow).toContain('benchmark:opentui --repetitions 3');
     expect(workflow).toContain('$GITHUB_WORKSPACE/performance-results/semantic-pipeline.json');
     expect(workflow).toContain('$GITHUB_WORKSPACE/performance-results/charm-immediate.json');
@@ -77,7 +77,7 @@ describe('performance observation cadence', () => {
       .toBeLessThan(stressFixture.indexOf('// The fixture owns all sessions.'));
   });
 
-  it('keeps retries and reruns disabled while the regression verdict annotates only', () => {
+  it('keeps retries and reruns disabled while every regression fails the gate', () => {
     expect(workflow).toContain("TERMWRIGHT_RETRIES: '0'");
     expect(workflow).toContain("TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'");
     expect(workflow).toContain('test "$GITHUB_RUN_ATTEMPT" = 1');
@@ -104,10 +104,12 @@ describe('performance observation cadence', () => {
     expect(collector).not.toMatch(/catch \{ return 0; \}/u);
   });
 
-  it('fails the observation workflow when an exact cleanup invariant is violated', () => {
+  it('fails the observation workflow when any reviewed threshold is violated', () => {
     expect(comparator).toContain("comparison.status === 'failure'");
     expect(comparator).toContain('formatGitHubError');
     expect(comparator).toContain('if (failureCount > 0) process.exitCode = 1');
+    expect(comparator).not.toContain('formatGitHubWarning');
+    expect(comparator).toContain("gate: 'performance-regression-fail'");
     expect(capture).toContain('capturePerformanceBaseline(policy, observations, provenance)');
   });
 });

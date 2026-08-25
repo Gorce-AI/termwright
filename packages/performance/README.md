@@ -21,7 +21,7 @@ corepack pnpm@9.4.0 --filter @termwright/performance benchmark \
   --output packages/performance/reports/semantic-pipeline.json
 
 corepack pnpm@9.4.0 --filter @termwright/performance benchmark:charm \
-  --iterations 3 --output packages/performance/reports/charm-immediate.json
+  --iterations 8 --output packages/performance/reports/charm-immediate.json
 
 corepack pnpm@9.4.0 --filter @termwright/performance benchmark:opentui \
   --repetitions 3 --window-ms 1000 \
@@ -30,12 +30,16 @@ corepack pnpm@9.4.0 --filter @termwright/performance benchmark:opentui \
 
 The Charm command builds the same zero-import Bubble Tea fixture twice, once
 normally and once through `prepareInstrumentedBuild`, then drives both binaries
-through PTYs with the same input. It alternates arm order, requires their final
-screen text to match, and reports the median instrumented/vanilla wall-time
-ratio together with actual adapter debug counters. Build time is excluded. It
-requires Go and a working PTY, so the fast schema/ceiling test remains the
-portable CI gate while the checked-in Charm report records the latest measured
-run.
+through PTYs with the same 256-key batch. An application-owned marker ends the
+measurement before quiet timers and exit scheduling. The harness warms each
+binary once, uses a fixed balanced ABBA/BAAB order, requires final screen text
+to match, requires the final application state to arrive in a committed
+semantic snapshot with zero publication drops, and reports the burst-throughput
+ratio of arm medians together with every raw duration pair, paired ratio and
+adapter debug counters. Build time and warmups are
+excluded. It requires Go and a working PTY, so the fast schema/ceiling test
+remains the portable CI gate while the checked-in Charm report records the
+latest measured run.
 
 The OpenTUI command wraps the package's real threaded renderer benchmark. It
 rotates native, feed-only and feed-plus-marker arms, requires the marker to
@@ -93,8 +97,8 @@ this workflow:
 4. Dispatch `mode=observe`; this is the first normal proof against the newly
    committed, toolchain-qualified baseline.
 
-Capture reads tolerances and the annotate-only history policy from the
-value-free `.policy.json`; every baseline value and source comes from that
+Capture reads reviewed tolerances from the value-free `.policy.json`; every
+baseline value and source comes from that
 dispatch's measurements. A non-zero process or descriptor cleanup observation
 fails capture and produces no candidate baseline. The schema requires both
 cleanup metrics as exact zero-count invariants independently of the policy
@@ -124,13 +128,14 @@ after the certified host exits; both have an exact zero baseline. The host
 itself also fails closed if its resource broker
 or run finalization barrier finds a leak.
 
-Timing and footprint regressions beyond their recorded tolerance emit native
-GitHub warning annotations and appear in the job summary. They deliberately do
-not change the job's exit status while the baseline is young. Process or file
-descriptor cleanup above its exact zero allowance is not performance noise: it
-emits an error and fails the scheduled/manual workflow. Invalid reports, failed
-suites, retries/reruns, missing measurements and a runner-class mismatch also
-fail because there is no trustworthy observation to compare.
+Every timing or footprint regression beyond its recorded tolerance emits a
+native GitHub error and fails the scheduled/manual workflow. Process or file
+descriptor cleanup above its exact zero allowance is handled by the same hard
+gate. Invalid reports, failed suites, retries/reruns, missing measurements and a
+runner-class mismatch also fail because there is no trustworthy observation to
+compare. The workflow is intentionally scheduled/manual because it is an
+expensive, runner-class-qualified observation; when it runs, there is no
+annotate-only or green-with-warning state.
 
 The tolerances are data, not hidden workflow constants: startup allows 50%,
 post-startup orchestration and physical footprint 35%, peak descriptors 25%,
@@ -138,8 +143,6 @@ the semantic p95 50%, and the framework ratios 35% (Charm) and 25% (OpenTUI),
 each with the small absolute allowance recorded beside it. Cleanup allows no
 leak at all.
 
-The performance comparison may become merge-blocking only after at least 12
-successful weekly samples from the same runner class have been retained and
-reviewed, and the thresholds have been recalibrated from that history rather
-than this single seed. Changing `history.decision` requires that review and a
-separate branch-protection change; the current schema accepts only `annotate`.
+Changing a tolerance requires a reviewed policy change and a fresh baseline
+capture. Old annotate-only policy fields are rejected rather than retained as
+backward compatibility.

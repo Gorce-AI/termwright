@@ -1,7 +1,7 @@
 export const PERFORMANCE_BASELINE_KIND = 'termwright-performance-baseline' as const;
-export const PERFORMANCE_BASELINE_VERSION = 2 as const;
+export const PERFORMANCE_BASELINE_VERSION = 3 as const;
 export const PERFORMANCE_BASELINE_POLICY_KIND = 'termwright-performance-baseline-policy' as const;
-export const PERFORMANCE_BASELINE_POLICY_VERSION = 1 as const;
+export const PERFORMANCE_BASELINE_POLICY_VERSION = 2 as const;
 
 export type BaselineUnit = 'milliseconds' | 'bytes' | 'count' | 'microseconds/frame' | 'ratio';
 const BASELINE_UNITS: readonly BaselineUnit[] = [
@@ -61,11 +61,6 @@ export interface PerformanceBaseline {
   readonly recordedAt: string;
   readonly environment: string;
   readonly provenance: PerformanceBaselineProvenance;
-  readonly history: {
-    readonly samples: number;
-    readonly blockingAfterSamples: number;
-    readonly decision: 'annotate';
-  };
   readonly metrics: Readonly<Record<string, BaselineMetric>>;
 }
 
@@ -81,13 +76,12 @@ export interface PerformanceBaselinePolicy {
   readonly kind: typeof PERFORMANCE_BASELINE_POLICY_KIND;
   readonly schemaVersion: typeof PERFORMANCE_BASELINE_POLICY_VERSION;
   readonly environment: string;
-  readonly history: PerformanceBaseline['history'];
   readonly metrics: Readonly<Record<string, BaselineMetricPolicy>>;
 }
 
 export interface BaselineComparison {
   readonly metric: string;
-  readonly status: 'ok' | 'warning' | 'failure';
+  readonly status: 'ok' | 'failure';
   readonly baseline: number;
   readonly current: number;
   readonly allowedMaximum: number;
@@ -95,19 +89,13 @@ export interface BaselineComparison {
   readonly message: string;
 }
 
-/** Render a native workflow annotation for a non-blocking regression. */
-export function formatGitHubWarning(comparison: BaselineComparison, file: string): string {
-  if (comparison.status !== 'warning') throw new Error('only warning comparisons can be annotated');
-  return formatGitHubAnnotation('warning', 'Performance regression', comparison, file);
-}
-
-/** Render a native workflow error for a violated exact cleanup invariant. */
+/** Render a native workflow error for any baseline regression. */
 export function formatGitHubError(comparison: BaselineComparison, file: string): string {
   if (comparison.status !== 'failure') throw new Error('only failed comparisons can be errors');
-  return formatGitHubAnnotation('error', 'Cleanup invariant failed', comparison, file);
+  return formatGitHubAnnotation('Performance baseline failed', comparison, file);
 }
 
-/** Compare one cadence observation without turning an early baseline into a merge gate. */
+/** Compare one cadence observation and fail every reviewed-threshold breach. */
 export function comparePerformanceBaseline(
   baseline: PerformanceBaseline,
   current: PerformanceObservationSet,
@@ -119,6 +107,7 @@ export function comparePerformanceBaseline(
       `performance environments differ: baseline=${baseline.environment}, current=${current.environment}`,
     );
   }
+  requireSameMetricSet(baseline.metrics, current.metrics, 'baseline', 'current observations');
 
   return Object.entries(baseline.metrics).map(([name, expected]) => {
     const observed = current.metrics[name];
@@ -133,11 +122,7 @@ export function comparePerformanceBaseline(
         expected.value * (1 + expected.relativeTolerance),
       );
     const exceeded = observed.value > allowedMaximum;
-    const status = !exceeded
-      ? 'ok' as const
-      : expected.direction === 'exact'
-        ? 'failure' as const
-        : 'warning' as const;
+    const status = exceeded ? 'failure' as const : 'ok' as const;
     return {
       metric: name,
       status,
@@ -170,6 +155,7 @@ export function capturePerformanceBaseline(
     );
   }
   validateProvenance(provenance, current.environment);
+  requireSameMetricSet(policy.metrics, current.metrics, 'baseline policy', 'current observations');
 
   const metrics = Object.fromEntries(Object.entries(policy.metrics).map(([name, expected]) => {
     const observed = current.metrics[name];
@@ -189,7 +175,6 @@ export function capturePerformanceBaseline(
     recordedAt: current.generatedAt,
     environment: current.environment,
     provenance,
-    history: policy.history,
     metrics,
   };
   validateBaseline(baseline);
@@ -198,24 +183,24 @@ export function capturePerformanceBaseline(
 
 export function validateBaseline(value: unknown): asserts value is PerformanceBaseline {
   if (!record(value)) throw new Error('baseline must be an object');
+  exactKeys(value, ['kind', 'schemaVersion', 'recordedAt', 'environment', 'provenance', 'metrics'], 'baseline');
   if (value.kind !== PERFORMANCE_BASELINE_KIND || value.schemaVersion !== PERFORMANCE_BASELINE_VERSION) {
     throw new Error('unsupported performance baseline kind or version');
   }
   date(value.recordedAt, 'baseline recordedAt');
   nonEmpty(value.environment, 'baseline environment');
   validateProvenance(value.provenance, value.environment);
-  validateHistory(value.history, 'baseline');
   validateMetrics(value.metrics, true, true);
   validateRequiredCleanupMetrics(value.metrics, true);
 }
 
 export function validateBaselinePolicy(value: unknown): asserts value is PerformanceBaselinePolicy {
   if (!record(value)) throw new Error('baseline policy must be an object');
+  exactKeys(value, ['kind', 'schemaVersion', 'environment', 'metrics'], 'baseline policy');
   if (value.kind !== PERFORMANCE_BASELINE_POLICY_KIND || value.schemaVersion !== PERFORMANCE_BASELINE_POLICY_VERSION) {
     throw new Error('unsupported performance baseline policy kind or version');
   }
   nonEmpty(value.environment, 'baseline policy environment');
-  validateHistory(value.history, 'baseline policy');
   validateMetrics(value.metrics, true, false);
   validateRequiredCleanupMetrics(value.metrics, false);
 }
@@ -305,13 +290,6 @@ function majorMinor(value: unknown): string | undefined {
   return typeof value === 'string' ? /^(\d+\.\d+)(?:\.|$)/u.exec(value)?.[1] : undefined;
 }
 
-function validateHistory(value: unknown, owner: string): void {
-  if (!record(value)) throw new Error(`${owner} history is missing`);
-  integer(value.samples, `${owner} history samples`, 1);
-  integer(value.blockingAfterSamples, `${owner} blockingAfterSamples`, 1);
-  if (value.decision !== 'annotate') throw new Error('performance baseline must remain annotate-only');
-}
-
 function validateMetrics(value: unknown, policy: boolean, values: boolean): void {
   if (!record(value) || Object.keys(value).length === 0) throw new Error('metrics must be a non-empty object');
   for (const [name, candidate] of Object.entries(value)) {
@@ -346,6 +324,20 @@ function validateMetrics(value: unknown, policy: boolean, values: boolean): void
   }
 }
 
+function requireSameMetricSet(
+  left: Readonly<Record<string, unknown>>,
+  right: Readonly<Record<string, unknown>>,
+  leftName: string,
+  rightName: string,
+): void {
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  if (leftKeys.length !== rightKeys.length
+    || leftKeys.some((key, index) => key !== rightKeys[index])) {
+    throw new Error(`${leftName} and ${rightName} must contain the same metric set`);
+  }
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -353,12 +345,6 @@ function record(value: unknown): value is Record<string, unknown> {
 function finite(value: unknown, name: string): asserts value is number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     throw new Error(`${name} must be a finite non-negative number`);
-  }
-}
-
-function integer(value: unknown, name: string, minimum: number): asserts value is number {
-  if (!Number.isSafeInteger(value) || (value as number) < minimum) {
-    throw new Error(`${name} must be an integer >= ${minimum}`);
   }
 }
 
@@ -379,11 +365,18 @@ function escapeAnnotation(value: string): string {
     .replaceAll(',', '%2C');
 }
 
+function exactKeys(value: Record<string, unknown>, expected: readonly string[], owner: string): void {
+  const actual = Object.keys(value).sort();
+  const required = [...expected].sort();
+  if (actual.length !== required.length || actual.some((key, index) => key !== required[index])) {
+    throw new Error(`${owner} must contain exactly: ${required.join(', ')}`);
+  }
+}
+
 function formatGitHubAnnotation(
-  level: 'warning' | 'error',
   title: string,
   comparison: BaselineComparison,
   file: string,
 ): string {
-  return `::${level} file=${escapeAnnotation(file)},title=${escapeAnnotation(title)}::${escapeAnnotation(comparison.message)}`;
+  return `::error file=${escapeAnnotation(file)},title=${escapeAnnotation(title)}::${escapeAnnotation(comparison.message)}`;
 }

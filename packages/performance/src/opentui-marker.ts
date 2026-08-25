@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import type { PerformanceReport, ScenarioReport } from './report.js';
+import {
+  PERFORMANCE_REPORT_VERSION,
+  type PerformanceReport,
+  type ScenarioReport,
+} from './report.js';
 
 const BENCHMARK = fileURLToPath(
   new URL('../../probe-opentui/bench/marker-route.ts', import.meta.url),
@@ -142,7 +146,7 @@ export async function runOpenTuiMarkerBenchmark(
 
     return {
       kind: 'termwright-performance-report',
-      schemaVersion: 2,
+      schemaVersion: PERFORMANCE_REPORT_VERSION,
       generatedAt: new Date().toISOString(),
       environment: {
         runtime: `bun ${(await run('bun', ['--version'])).stdout.trim()}; @opentui/core 0.5.3`,
