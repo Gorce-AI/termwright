@@ -150,6 +150,11 @@ options, closed sessions, and PTY write failures fail immediately. Once the
 first physical operation begins the action is never replayed, so a click or
 drag cannot be delivered twice.
 
+Live progress consumers can observe these waits through the
+`action-observation-wait` diagnostic. Its `actionId` matches the surrounding
+`action-start` and `action` events, and its `observationState` identifies the
+parser, semantic-frame, or render-pairing boundary still in flight.
+
 The deadline is checked after retry waits and again immediately before the
 first physical operation. An expired action therefore writes no late input.
 Actions still do not guess the final state of the application. Assert that

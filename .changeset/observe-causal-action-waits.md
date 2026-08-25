@@ -2,8 +2,7 @@
 "@termwright/driver": patch
 ---
 
-Serialize complete semantic render frames before publishing their side-channel
-commit and render marker, including on ConPTY. Locator retries now expose an
-`action-observation-wait` diagnostic with the correlated action ID and exact
-in-flight observation state, so causal action barriers are observable without
-timing-based test seams.
+Expose locator retry waits through a structured `action-observation-wait`
+diagnostic. Its `actionId` correlates the wait with the action lifecycle, while
+`observationState` identifies the exact in-flight parser, semantic-frame, or
+render-pairing boundary that must settle before input can be sent.
