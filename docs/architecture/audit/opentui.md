@@ -272,8 +272,9 @@ live objects without any module interception.
 The runtime entry mechanisms were verified empirically: `module.registerHooks`
 (Node 22.22.0+, absent on 22.9.0), `module.register` (whole `>=22` range) and
 Bun's `--preload` plus `Bun.plugin().onLoad` intercept the public package entry
-and return a shim around its real exports. Unlike Ink, OpenTUI does not transform
-the intercepted package source.
+and return a shim around its real exports. Unlike Ink's exact-source semantic
+transforms, OpenTUI now uses runtime observation for semantics and a small
+structural AST transform only for causal stdout-feed transport.
 
 One OpenTUI-specific consequence: **Bun is the likely runtime here**, since
 `bun:ffi` is the supported FFI backend while `node:ffi` needs Node 26.1+ or an
@@ -284,13 +285,15 @@ one to support, not the fallback.
 
 ## Runtime-observer refactor evidence (2026-08-25)
 
-The generated-source investigation above remains upstream audit evidence, not
-the production integration. The shipped probe now intercepts only the public
-package entry and `createCliRenderer()`. It wraps the live renderer/root/buffer
+The generated-source investigation above remains upstream audit evidence. The
+shipped probe intercepts the public package entry and `createCliRenderer()`. It
+wraps the live renderer/root/buffer
 lifecycle, samples the exact-version-certified `renderOffset` at the same
 `root.render()` boundary, commits geometry on `CliRenderEvents.FRAME`, and uses
-the renderer's native `hitTest()` for pointer ownership. It never discovers,
-hashes or transforms an OpenTUI chunk.
+the renderer's native `hitTest()` for pointer ownership. Semantic observation
+never transforms a chunk. A separate output-only AST transform retains the
+NativeSpanFeed because public hooks do not expose successful native byte
+delivery. It discovers no chunk name and uses no source or bundle digest.
 
 Before removing the source transform, the old exact observer and the runtime
 observer were run together against `@opentui/core@0.5.3` under real Bun. The
@@ -308,6 +311,7 @@ The production invariant is therefore:
 
 ```text
 exact allowlisted package version
+  -> structural stdout/feed capability match
   -> createCliRenderer wrapper
   -> capability-check renderer/root/renderList/renderOffset/hit APIs
   -> observe one synchronous root render pass

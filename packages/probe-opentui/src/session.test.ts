@@ -160,7 +160,7 @@ describe('the publication cycle', () => {
     const order: string[] = [];
     target.on('data', (chunk: Buffer) => order.push(chunk.toString('utf8')));
 
-    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream);
+    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream, 'test-token');
     const root = renderable('RootRenderable', 1);
     const renderer = fakeRenderer(root);
     const { publisher } = recorder((revision) => `MARK:${revision}`);
@@ -186,7 +186,7 @@ describe('the publication cycle', () => {
       seen += chunk.toString('utf8');
     });
 
-    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream);
+    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream, 'test-token');
     sink.write('[2J[Hhello');
     await drained(sink);
 
@@ -199,7 +199,7 @@ describe('the publication cycle', () => {
     const order: string[] = [];
     target.on('data', (chunk: Buffer) => order.push(chunk.toString('utf8')));
 
-    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream);
+    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream, 'test-token');
     const renderer = fakeRenderer(renderable('RootRenderable', 1));
     const { publisher } = recorder(() => undefined);
     startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sink, sessionId: 's1' });
@@ -233,7 +233,7 @@ describe('the publication cycle', () => {
         callback(writes === 1 ? undefined : new Error('async marker target failed'));
       },
     });
-    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream);
+    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream, 'test-token');
     const renderer = fakeRenderer(renderable('RootRenderable', 1));
     let resolveFailure: (error: Error) => void = () => undefined;
     const failed = new Promise<Error>((resolve) => { resolveFailure = resolve; });
@@ -259,7 +259,7 @@ describe('the publication cycle', () => {
 
   it('delivers a target failure latched before session startup and removes its listener', () => {
     const target = new PassThrough();
-    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream);
+    const sink = createMarkerSink(target as unknown as NodeJS.WriteStream, 'test-token');
     const failure = new Error('target failed before renderer creation');
     expect(() => target.emit('error', failure)).not.toThrow();
     const renderer = fakeRenderer(renderable('RootRenderable', 1));

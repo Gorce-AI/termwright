@@ -19,6 +19,8 @@ import { buildShimSource, shouldShim } from './shim.js';
 import { certifyOpenTuiEntry } from './certification.js';
 import { isInstrumented } from './runtime.js';
 import { bootstrap } from './bootstrap.js';
+import { instrumentOpenTuiOutput, OPENTUI_MODULE_PATTERN } from './output-instrumentation.js';
+import { ENV_TOKEN } from '@termwright/protocol';
 
 type LoadResult = { format?: string | null; source?: string | ArrayBufferView | undefined; shortCircuit?: boolean };
 type NextLoad = (url: string, context: unknown) => LoadResult;
@@ -31,7 +33,19 @@ function load(url: string, context: unknown, nextLoad: NextLoad): LoadResult {
       return { format: 'module', shortCircuit: true, source: buildShimSource(url, certification) };
     }
   }
-  return nextLoad(url, context);
+  const loaded = nextLoad(url, context);
+  return instrumentLoadedModule(url, loaded);
+}
+
+function instrumentLoadedModule(url: string, loaded: LoadResult): LoadResult {
+  if (!OPENTUI_MODULE_PATTERN.test(url.split('?')[0] ?? '')) return loaded;
+  const certification = certifyOpenTuiEntry(url);
+  if (certification === undefined || loaded.source === undefined) return loaded;
+  const source = typeof loaded.source === 'string'
+    ? loaded.source
+    : Buffer.from(loaded.source.buffer, loaded.source.byteOffset, loaded.source.byteLength).toString('utf8');
+  const transformed = instrumentOpenTuiOutput(source, certification.version, process.env[ENV_TOKEN] ?? '');
+  return transformed === undefined ? loaded : { ...loaded, source: transformed, shortCircuit: true };
 }
 
 /**
@@ -71,7 +85,7 @@ export async function loadHook(
       return { format: 'module', shortCircuit: true, source: buildShimSource(url, certification) };
     }
   }
-  return nextLoad(url, context);
+  return instrumentLoadedModule(url, await nextLoad(url, context));
 }
 
 export { loadHook as load };

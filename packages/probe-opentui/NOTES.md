@@ -99,6 +99,16 @@ the Ink adapter has. It costs ~4 % of frame rate at a synthetic 200 fps, which i
 far above any real TUI's frame rate, and nothing at all when no marker is being
 written.
 
+The runtime-observer refactor removed all generated-source instrumentation used
+to recover semantic geometry. It could not remove the feed path itself without
+weakening the commit guarantee: `FRAME`, `writeOut()` and post-process hooks do
+not report a swallowed native write/flush failure, and Linux disables threaded
+rendering while macOS uses it. The remaining transform is therefore confined to
+output transport. It parses the constructor AST, requires one exact semantic
+shape for stdout identity, feed creation/drain and stream ownership, and rejects
+zero or multiple matches. It has no certified chunk basename, exact source
+fragment, source SHA, or fuzzy fallback.
+
 ### A trap in the benchmark itself
 
 The first run measured a **static** tree and reported every marker "preceded by

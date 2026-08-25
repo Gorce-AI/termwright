@@ -2,10 +2,8 @@
  * The probe session: what happens between a renderer being created and a
  * snapshot reaching the driver.
  *
- * The order is the whole contract, and it is the same one the Ink adapter
- * proved: publish the tree, then commit the revision, then write the marker —
- * after the frame's bytes have gone out. Under OpenTUI "after the bytes" is
- * only knowable because the sink put them in JS first.
+ * The order is the whole contract: publish the tree, then commit the revision,
+ * then cross the renderer's native-output barrier and write the marker.
  *
  * Publication is injected rather than built here. The session does not know
  * whether it is talking to a socket or a test double, which is what lets the
@@ -184,9 +182,8 @@ export function startSession(options: SessionOptions): ProbeSession {
       return;
     }
 
-    // Last, and only here: the bytes for this frame have already been forwarded
-    // by the sink, so the marker lands after them. A failed marker write is a
-    // terminal adapter violation, never an exception in the application.
+    // Last, and only here: the native feed has delivered this frame into the
+    // sink's ordered queue, so the marker cannot overtake it.
     if (marker !== undefined) {
       try {
         if (sink === undefined) throw new Error('OpenTUI commit marker has no same-writer sink');
@@ -202,12 +199,9 @@ export function startSession(options: SessionOptions): ProbeSession {
   listenerAttached = true;
   if (sink !== undefined) {
     const release = sink.onFailure(failGuarantee);
-    // A sink can deliver a failure latched before session startup synchronously.
-    // Do not leave its just-added handler behind when failGuarantee halted us.
     if (stopped) release();
     else releaseSinkFailure = release;
   }
-
   return {
     get revision() {
       return revision;

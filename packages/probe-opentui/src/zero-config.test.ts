@@ -295,6 +295,72 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     expect(instrumented.stdout.replaceAll(markerPattern(), '')).toBe(vanilla.stdout);
   }, 90_000);
 
+  it('preserves the application-visible stdout identity', async () => {
+    const driver = await startFakeDriver();
+    open.push(driver);
+
+    const instrumented = await launchInstrumented({
+      driver,
+      steps: 1,
+      captureOracle: true,
+      fixtureEnv: { TW_STDOUT_IDENTITY_ORACLE: '1' },
+    });
+    const vanilla = await launch({
+      steps: 1,
+      captureOracle: true,
+      fixtureEnv: { TW_STDOUT_IDENTITY_ORACLE: '1' },
+    });
+
+    expect(JSON.parse(instrumented.oracle)).toEqual({ stdoutIsProcessStdout: true });
+    expect(instrumented.oracle).toBe(vanilla.oracle);
+  }, 90_000);
+
+  it('leaves an application-owned custom stdout on the vanilla path', async () => {
+    const driver = await startFakeDriver();
+    open.push(driver);
+    const fixtureEnv = { TW_CUSTOM_STDOUT: '1' };
+
+    const instrumented = await launchInstrumented({ driver, steps: 2, fixtureEnv });
+    const vanilla = await launch({ steps: 2, fixtureEnv });
+
+    expect(instrumented.stderr).toBe(vanilla.stderr);
+    expect(instrumented.stdout).toBe(vanilla.stdout);
+    expect(instrumented.stdout).not.toContain(MARKER_OSC_PREFIX);
+  }, 90_000);
+
+  it('preserves a stdout.write wrapper captured before renderer creation', async () => {
+    const driver = await startFakeDriver();
+    open.push(driver);
+    const fixtureEnv = { TW_WRAP_STDOUT_WRITE: '1' };
+
+    const instrumented = await launchInstrumented({
+      driver, steps: 2, fixtureEnv, captureOracle: true,
+    });
+    const vanilla = await launch({ steps: 2, fixtureEnv, captureOracle: true });
+    const parseOracle = (value: string): Array<Record<string, unknown>> => value
+      .trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+    const instrumentedOracle = parseOracle(instrumented.oracle);
+    const vanillaOracle = parseOracle(vanilla.oracle);
+
+    expect(instrumentedOracle[0]).toEqual({ rendererCapturedWrapper: true });
+    expect(instrumentedOracle[1]?.['wrapperRestoredAfterDestroy']).toBe(true);
+    expect(instrumentedOracle.map((record) => record['rendererCapturedWrapper'] ?? record['wrapperRestoredAfterDestroy']))
+      .toEqual(vanillaOracle.map((record) => record['rendererCapturedWrapper'] ?? record['wrapperRestoredAfterDestroy']));
+    expect(instrumented.stdout.replaceAll(markerPattern(), '')).toBe(vanilla.stdout);
+  }, 90_000);
+
+  it('preserves vanilla bytes through remote auto-detection', async () => {
+    const driver = await startFakeDriver();
+    open.push(driver);
+    const fixtureEnv = { SSH_CONNECTION: '192.0.2.1 50000 192.0.2.2 22' };
+
+    const instrumented = await launchInstrumented({ driver, steps: 2, fixtureEnv });
+    const vanilla = await launch({ steps: 2, fixtureEnv });
+
+    expect(instrumented.stderr).toBe(vanilla.stderr);
+    expect(instrumented.stdout.replaceAll(markerPattern(), '')).toBe(vanilla.stdout);
+  }, 90_000);
+
   it('publishes qualified v2 geometry and the native exact hit grid', async () => {
     const driver = await startFakeDriver();
     open.push(driver);
@@ -473,4 +539,20 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     expect(matchedOrigins.length).toBeGreaterThanOrEqual(4);
     expect(new Set(matchedOrigins).size).toBe(matchedOrigins.length);
   }, 60_000);
+
+  it('keeps split-footer terminal bytes identical apart from commit markers', async () => {
+    const driver = await startFakeDriver();
+    open.push(driver);
+    const fixtureEnv = { TW_RUNTIME_SPLIT_FOOTER: '1' };
+
+    const instrumented = await launchInstrumented({
+      driver,
+      appPath: runtimeConformanceApp,
+      fixtureEnv,
+    });
+    const vanilla = await launch({ appPath: runtimeConformanceApp, fixtureEnv });
+
+    expect(instrumented.stderr).toBe(vanilla.stderr);
+    expect(instrumented.stdout.replaceAll(markerPattern(), '')).toBe(vanilla.stdout);
+  }, 90_000);
 });

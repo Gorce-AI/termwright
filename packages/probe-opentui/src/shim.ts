@@ -100,20 +100,25 @@ export * from ${original};
 const __termwright_certification = Object.freeze(${certified});
 
 const __termwright_wrapped = async function createCliRenderer(config) {
-  // OpenTUI's public config is optional. Normalize only inside the intercepted
-  // path so the probe can install its same-writer sink for createCliRenderer().
   let effective = config ?? {};
   try {
-    // The probe gets to amend the config before the renderer exists. This is
-    // the only moment a custom stdout can be installed, and a custom stdout is
-    // what routes frame bytes back into JS — the measured marker route.
     effective = globalThis.__termwright_onConfig?.(effective) ?? effective;
   } catch {
     effective = config ?? {};
   }
-  const renderer = await __termwright_original.createCliRenderer(effective);
+  let renderer;
   try {
-    globalThis.__termwright_onRenderer?.(renderer, __termwright_certification);
+    renderer = await __termwright_original.createCliRenderer(effective);
+  } catch (error) {
+    try {
+      globalThis.__termwright_onRendererFailure?.(effective);
+    } catch {
+      // Probe cleanup must not replace the application's construction error.
+    }
+    throw error;
+  }
+  try {
+    globalThis.__termwright_onRenderer?.(renderer, __termwright_certification, effective);
   } catch {
     // The probe is never allowed to break the application it observes.
   }

@@ -13,6 +13,12 @@ export const RENDERER_HOOK = '__termwright_onRenderer';
 /** Name of the global the shim calls to amend the config before creation. */
 export const CONFIG_HOOK = '__termwright_onConfig';
 
+/** Name of the global notified when renderer construction rejects. */
+export const RENDERER_FAILURE_HOOK = '__termwright_onRendererFailure';
+
+/** Name of the process-local ownership predicate used by the structural transform. */
+export const OUTPUT_SINK_HOOK = '__termwright_isOpenTuiOutputSink';
+
 /** Minimal shape the probe needs; the real type lives in `@opentui/core`. */
 export type ObservedRenderer = object;
 
@@ -23,16 +29,7 @@ export interface ObservedRuntimeCertification {
   readonly sourceRevision?: string;
 }
 
-/**
- * Register the callback that may amend a renderer config before it is built.
- *
- * Returning a new config replaces the application's; returning nothing leaves
- * it alone. This is the only point at which a custom stdout can be installed,
- * and without one the frame bytes never reach JS at all — they are written by
- * a Zig thread (see NOTES).
- *
- * @returns a disposer that removes the hook again.
- */
+/** Register the callback that may amend renderer config before construction. */
 export function onRendererConfig(
   handler: (config: Record<string, unknown>) => Record<string, unknown> | undefined,
 ): () => void {
@@ -51,12 +48,38 @@ export function onRendererConfig(
  * @returns a disposer that removes the hook again.
  */
 export function onRendererCreated(
-  handler: (renderer: ObservedRenderer, certification: ObservedRuntimeCertification) => void,
+  handler: (
+    renderer: ObservedRenderer,
+    certification: ObservedRuntimeCertification,
+    effectiveConfig: Record<string, unknown>,
+  ) => void,
 ): () => void {
   const scope = globalThis as Record<string, unknown>;
   const previous = scope[RENDERER_HOOK];
   scope[RENDERER_HOOK] = handler;
   return () => {
     if (scope[RENDERER_HOOK] === handler) scope[RENDERER_HOOK] = previous;
+  };
+}
+
+/** Register cleanup for per-construction resources when OpenTUI rejects. */
+export function onRendererCreationFailed(
+  handler: (effectiveConfig: Record<string, unknown>) => void,
+): () => void {
+  const scope = globalThis as Record<string, unknown>;
+  const previous = scope[RENDERER_FAILURE_HOOK];
+  scope[RENDERER_FAILURE_HOOK] = handler;
+  return () => {
+    if (scope[RENDERER_FAILURE_HOOK] === handler) scope[RENDERER_FAILURE_HOOK] = previous;
+  };
+}
+
+/** Register identity-based ownership certification for injected stdout sinks. */
+export function onOutputSinkCheck(handler: (value: unknown) => boolean): () => void {
+  const scope = globalThis as Record<string, unknown>;
+  const previous = scope[OUTPUT_SINK_HOOK];
+  scope[OUTPUT_SINK_HOOK] = handler;
+  return () => {
+    if (scope[OUTPUT_SINK_HOOK] === handler) scope[OUTPUT_SINK_HOOK] = previous;
   };
 }

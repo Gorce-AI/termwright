@@ -19,7 +19,7 @@ describe('autonomous workflow security', () => {
     const certifier = await readFile(new URL('./certify-framework-candidate.mjs', import.meta.url), 'utf8');
     expect(workflow).not.toMatch(/contents:\s*write|pull-requests:\s*write|issues:\s*write/u);
     expect(workflow).not.toContain('git push');
-    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(2);
+    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(3);
     expect(workflow).toContain('--candidate "$CANDIDATE_ID"');
     expect(workflow).not.toContain('continue-on-error');
     const certificationStep = workflow.slice(
@@ -30,6 +30,11 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('      - name: Candidate summary\n        if: always()');
     expect(workflow).toMatch(/uses: actions\/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6\n        if: always\(\)/u);
     expect(workflow).not.toContain("--candidate '${{ matrix.id }}'");
+    expect(workflow).toContain('runner: "macos-latest"');
+    expect(workflow).toContain('runs-on: ${{ matrix.runner }}');
+    expect(workflow).toContain('name: framework-candidate-result-${{ matrix.slot }}-${{ matrix.platform }}');
+    expect(workflow).toContain('name: framework-verdict-aggregate');
+    expect(workflow).toContain('aggregate-framework-candidate-verdicts.mjs');
     expect(certifier).toContain("'--ignore-scripts'");
   });
 

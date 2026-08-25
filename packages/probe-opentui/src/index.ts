@@ -10,7 +10,16 @@
 
 export { withProbe, PROBE_ENTRIES } from './launch.js';
 export type { ProbeCommand } from './launch.js';
-export { onRendererCreated, onRendererConfig, RENDERER_HOOK, CONFIG_HOOK } from './attach.js';
+export {
+  onRendererCreated,
+  onRendererCreationFailed,
+  onRendererConfig,
+  onOutputSinkCheck,
+  RENDERER_HOOK,
+  RENDERER_FAILURE_HOOK,
+  OUTPUT_SINK_HOOK,
+  CONFIG_HOOK,
+} from './attach.js';
 export type { ObservedRenderer, ObservedRuntimeCertification } from './attach.js';
 export type { RuntimeCertification } from './certification.js';
 export { detectRuntime, isInstrumented } from './runtime.js';

@@ -13,10 +13,12 @@
 
 import {
   onRendererConfig,
+  onRendererCreationFailed,
   onRendererCreated,
+  onOutputSinkCheck,
   type ObservedRuntimeCertification,
 } from './attach.js';
-import { createMarkerSink, type MarkerSink } from './sink.js';
+import { certifyLocalMarkerFeed, createMarkerSink, isMarkerSink } from './sink.js';
 import { probeInfo, startSession, type ObservableRenderer, type ProbeSession } from './session.js';
 import { connectProbe, type ProbeChannel } from '@termwright/probe-runtime';
 import { isInstrumented, type EnvSource } from './runtime.js';
@@ -24,6 +26,7 @@ import type { AdapterCapability } from '@termwright/protocol';
 import { DEFAULT_LIMITS, ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { PACKAGE_VERSION } from './version.js';
 import { installRuntimeObserver, type RuntimeObserver } from './runtime-observer.js';
+import { outputInstrumentationVersion } from './output-instrumentation.js';
 
 const ADAPTER_NAME = '@termwright/probe-opentui';
 const ADAPTER_VERSION = PACKAGE_VERSION;
@@ -76,7 +79,7 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
   if (!isInstrumented(env)) return { ...state, stop: () => undefined };
 
   const target = options.stdout ?? process.stdout;
-  let sink: MarkerSink | undefined;
+  const token = env[ENV_TOKEN] as string;
   let connecting: Promise<void> | undefined;
   let stopped = false;
   let guaranteeFailed = false;
@@ -86,13 +89,25 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
   let certification: ObservedRuntimeCertification | undefined;
   let releaseConfig = (): void => undefined;
   let releaseRenderer = (): void => undefined;
+  let releaseRendererFailure = (): void => undefined;
   let releaseDestroy = (): void => undefined;
+  const pendingSinks = new Set<ReturnType<typeof createMarkerSink>>();
+  const ownedSinks = new WeakSet<ReturnType<typeof createMarkerSink>>();
+  let releaseSinkCheck = (): void => undefined;
+
+  const releaseTerminalHooksIfIdle = (): void => {
+    if (pendingSinks.size !== 0 || (!stopped && !guaranteeFailed)) return;
+    releaseRenderer();
+    releaseRenderer = () => undefined;
+    releaseRendererFailure();
+    releaseRendererFailure = () => undefined;
+    releaseSinkCheck();
+    releaseSinkCheck = () => undefined;
+  };
 
   const releaseRuntime = (): void => {
     releaseConfig();
     releaseConfig = () => undefined;
-    releaseRenderer();
-    releaseRenderer = () => undefined;
     releaseDestroy();
     releaseDestroy = () => undefined;
     runtimeObserver?.dispose();
@@ -100,6 +115,7 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
     state.session?.stop();
     state.session = null;
     observedRenderer = undefined;
+    releaseTerminalHooksIfIdle();
   };
 
   const abort = (error: Error): void => {
@@ -150,26 +166,79 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
 
   // The one chance to install a custom stdout. Without it OpenTUI writes frames
   // from a Zig thread and no byte reaches JS, so a marker has nothing to follow.
+  releaseSinkCheck = onOutputSinkCheck((value) => isMarkerSink(value, token) && ownedSinks.has(value));
+
   releaseConfig = onRendererConfig((config) => {
-    if (config['stdout'] !== undefined) return undefined;
-    sink = createMarkerSink(target);
+    if (outputInstrumentationVersion(token) === undefined) {
+      return undefined;
+    }
+    if (config['stdout'] !== undefined) {
+      return undefined;
+    }
+    if (config['bufferedOutput'] === 'memory') {
+      return undefined;
+    }
+    const sink = createMarkerSink(target, token);
+    ownedSinks.add(sink);
+    pendingSinks.add(sink);
     return { ...config, stdout: sink };
   });
 
-  releaseRenderer = onRendererCreated((renderer, certified) => {
-    if (stopped || guaranteeFailed) return;
+  releaseRendererFailure = onRendererCreationFailed((effectiveConfig) => {
+    const configuredStdout = effectiveConfig['stdout'];
+    if (isMarkerSink(configuredStdout, token) && ownedSinks.has(configuredStdout)) {
+      pendingSinks.delete(configuredStdout);
+      configuredStdout.releaseAfterUse();
+    }
+    releaseTerminalHooksIfIdle();
+  });
+
+  releaseRenderer = onRendererCreated((renderer, certified, effectiveConfig) => {
+    const configuredStdout = effectiveConfig['stdout'];
+    const configuredSink = isMarkerSink(configuredStdout, token) && ownedSinks.has(configuredStdout)
+      ? configuredStdout
+      : undefined;
+    if (configuredSink !== undefined) pendingSinks.delete(configuredSink);
+    if (configuredSink !== undefined) {
+      const owner = renderer as {
+        on?: (event: string, handler: () => void) => void;
+        once?: (event: string, handler: () => void) => void;
+      };
+      // OpenTUI emits destroy before its final native-feed drains and close.
+      // Deferring to the next microtask lets finalizeDestroy finish without
+      // writing into an already-ended sink; no elapsed-time assumption exists.
+      const releaseSink = (): void => queueMicrotask(() => configuredSink.releaseAfterUse());
+      if (typeof owner.once === 'function') owner.once('destroy', releaseSink);
+      else owner.on?.('destroy', releaseSink);
+    }
+    if (stopped || guaranteeFailed) {
+      releaseTerminalHooksIfIdle();
+      return;
+    }
     if (observedRenderer !== undefined) {
       abort(new Error('multiple OpenTUI renderers are not certified in one process'));
       return;
     }
     observedRenderer = renderer as ObservableRenderer;
     certification = certified;
-    if (sink === undefined) {
-      abort(new Error('OpenTUI renderer has a custom stdout; same-writer render markers cannot be certified'));
+    if (outputInstrumentationVersion(token) !== certified.version) {
+      abort(new Error('OpenTUI local stdout feed instrumentation does not match the certified runtime'));
       connectCertified();
       return;
     }
+    if (configuredSink === undefined) {
+      const detail = effectiveConfig['bufferedOutput'] === 'memory'
+        ? 'OpenTUI memory-buffered output has no causal terminal commit channel'
+        : configuredStdout !== undefined
+          ? 'OpenTUI renderer has an application-owned stdout; same-writer render markers cannot be certified'
+          : 'OpenTUI renderer has no certified marker sink';
+      abort(new Error(detail));
+      connectCertified();
+      return;
+    }
+    const sink = configuredSink;
     try {
+      certifyLocalMarkerFeed(renderer, sink, token);
       runtimeObserver = installRuntimeObserver(observedRenderer, (error) => {
         abort(error);
       });
@@ -185,7 +254,7 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
       releaseDestroy = () => {
         try { lifecycleRenderer.off('destroy', destroyListener); } catch { /* teardown must not break the application */ }
       };
-      state.session = startSession({
+      const session = startSession({
         renderer: observedRenderer,
         publisher: {
           publish: (snapshot, metrics) => state.channel?.publish(snapshot, metrics),
@@ -197,6 +266,8 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
         authoritativeProvider: runtimeObserver.provider,
         onGuaranteeViolation: abort,
       });
+      if (guaranteeFailed) session.stop();
+      else state.session = session;
     } catch (error) {
       abort(error instanceof Error ? error : new Error(String(error)));
       connectCertified();
