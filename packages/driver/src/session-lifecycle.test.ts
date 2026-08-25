@@ -13,7 +13,6 @@ class ControlledPty implements PtyProcess {
   disposeCount = 0;
   readonly resizeCalls: Array<{ columns: number; rows: number }> = [];
   readonly signalCalls: PtySignal[] = [];
-  readonly attachStarted: Promise<void>;
   terminateCount = 0;
   readonly #failExitRegistration: boolean;
   readonly #failDispose: boolean;
@@ -22,9 +21,9 @@ class ControlledPty implements PtyProcess {
   readonly #status: ExitStatus;
   readonly #neverAttach: boolean;
   readonly #treeState: 'gone' | 'unsupported' | 'throw';
+  readonly #onAttach: (() => void) | undefined;
   readonly #exitListeners = new Set<(status: ExitStatus) => void>();
   readonly #writeErrorListeners = new Set<(error: Error) => void>();
-  readonly #markAttachStarted: () => void;
 
   constructor(options: {
     readonly failExitRegistration?: boolean;
@@ -35,10 +34,8 @@ class ControlledPty implements PtyProcess {
     readonly neverAttach?: boolean;
     readonly lifecycle?: PtyProcess['lifecycle'];
     readonly treeState?: 'gone' | 'unsupported' | 'throw';
+    readonly onAttach?: () => void;
   } = {}) {
-    let markAttachStarted!: () => void;
-    this.attachStarted = new Promise<void>((resolve) => { markAttachStarted = resolve; });
-    this.#markAttachStarted = markAttachStarted;
     this.#failExitRegistration = options.failExitRegistration ?? false;
     this.#failDispose = options.failDispose ?? false;
     this.#emitExitOnDispose = options.emitExitOnDispose ?? true;
@@ -47,6 +44,7 @@ class ControlledPty implements PtyProcess {
     this.#neverAttach = options.neverAttach ?? false;
     this.lifecycle = options.lifecycle ?? { tree: 'posix-process-group', outputDrain: 'eof' };
     this.#treeState = options.treeState ?? 'gone';
+    this.#onAttach = options.onAttach;
   }
 
   write(_data: Uint8Array): void {}
@@ -78,7 +76,7 @@ class ControlledPty implements PtyProcess {
   }
   attachCancelCount = 0;
   async attach(signal: AbortSignal): Promise<void> {
-    this.#markAttachStarted();
+    this.#onAttach?.();
     if (!this.#neverAttach) return;
     await new Promise<void>((_resolve, reject) => {
       const onAbort = (): void => {
@@ -291,9 +289,12 @@ describe('terminal session resource lifecycle', () => {
     }));
     try {
       const endpoint: { value: string | undefined } = { value: undefined };
+      let markAttachStarted!: () => void;
+      const attachStarted = new Promise<void>((resolve) => { markAttachStarted = resolve; });
       const pty = new ControlledPty({
         neverAttach: true,
         lifecycle: { tree: 'delegated', outputDrain: 'eof' },
+        onAttach: markAttachStarted,
       });
       let markSpawned!: () => void;
       const spawned = new Promise<void>((resolve) => { markSpawned = resolve; });
@@ -308,7 +309,7 @@ describe('terminal session resource lifecycle', () => {
       );
 
       await spawned;
-      await pty.attachStarted;
+      await attachStarted;
       expect(endpoint.value).toBeDefined();
       await vi.advanceTimersByTimeAsync(40);
       expect(pty.attachCancelCount).toBe(1);
