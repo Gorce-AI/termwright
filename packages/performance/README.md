@@ -81,7 +81,7 @@ The `Paired performance gate` workflow runs every Monday and on manual dispatch
 on one `macos-15` arm64 runner. It installs Node 24, Go 1.25 and Bun 1.2.15 once,
 then installs and builds two isolated exact-SHA checkouts: the reference and the
 candidate at `github.sha`. The reviewed reference seed is
-`19e5df81758e229b42825d6ccbe46997770c6fbf`; a manual dispatch may replace it
+`bea638edc4589b3d4b15c4f87ed397de878ae40d`; a manual dispatch may replace it
 only with another exact 40-character commit SHA.
 
 Both subjects first complete a discarded R,C,C,R calibration block, then are

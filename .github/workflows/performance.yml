@@ -8,7 +8,7 @@ on:
       reference_sha:
         description: Exact reference commit to measure against the candidate
         required: false
-        default: 19e5df81758e229b42825d6ccbe46997770c6fbf
+        default: bea638edc4589b3d4b15c4f87ed397de878ae40d
       cycles:
         description: Complete lifecycle observations per subject and round (2..100)
         required: false
@@ -36,7 +36,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     env:
-      REFERENCE_SHA: ${{ inputs.reference_sha || '19e5df81758e229b42825d6ccbe46997770c6fbf' }}
+      REFERENCE_SHA: ${{ inputs.reference_sha || 'bea638edc4589b3d4b15c4f87ed397de878ae40d' }}
       CANDIDATE_SHA: ${{ github.sha }}
       REQUESTED_CYCLES: ${{ inputs.cycles || '10' }}
     steps:
@@ -47,7 +47,7 @@ jobs:
       - name: Check out the exact reference commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ inputs.reference_sha || '19e5df81758e229b42825d6ccbe46997770c6fbf' }}
+          ref: ${{ inputs.reference_sha || 'bea638edc4589b3d4b15c4f87ed397de878ae40d' }}
           path: reference
           persist-credentials: false
 
@@ -115,7 +115,7 @@ jobs:
       - name: Install and build the reference checkout
         working-directory: reference
         env:
-          GITHUB_SHA: ${{ inputs.reference_sha || '19e5df81758e229b42825d6ccbe46997770c6fbf' }}
+          GITHUB_SHA: ${{ inputs.reference_sha || 'bea638edc4589b3d4b15c4f87ed397de878ae40d' }}
         run: |
           pnpm install --frozen-lockfile
           pnpm build

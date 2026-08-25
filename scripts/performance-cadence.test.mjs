@@ -39,11 +39,11 @@ describe('performance observation cadence', () => {
   });
 
   it('measures exact isolated subjects twice in paired R,C,C,R order', () => {
-    const reference = '19e5df81758e229b42825d6ccbe46997770c6fbf';
+    const reference = 'bea638edc4589b3d4b15c4f87ed397de878ae40d';
     expect(workflow).toContain(`default: ${reference}`);
     expect(workflow).toContain('path: reference');
     expect(workflow).toContain('path: candidate');
-    expect(workflow).toContain("REFERENCE_SHA: ${{ inputs.reference_sha || '19e5df81758e229b42825d6ccbe46997770c6fbf' }}");
+    expect(workflow).toContain("REFERENCE_SHA: ${{ inputs.reference_sha || 'bea638edc4589b3d4b15c4f87ed397de878ae40d' }}");
     expect(workflow).toContain('CANDIDATE_SHA: ${{ github.sha }}');
     expect(workflow).toContain('test "$(git -C reference rev-parse HEAD)" = "$REFERENCE_SHA"');
     expect(workflow).toContain('test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"');
