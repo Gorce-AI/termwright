@@ -200,6 +200,7 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
     v: 1,
     type: 'run-end',
     summary: {
+      verdict: status,
       total: 1,
       passed: status === 'passed' ? 1 : 0,
       failed: status === 'failed' ? 1 : 0,

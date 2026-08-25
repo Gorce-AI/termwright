@@ -252,6 +252,7 @@
     "cancelling",
     "finalizing",
     "passed",
+    "passed-with-skips",
     "failed",
     "skipped",
     "cancelled",
@@ -262,6 +263,7 @@
   ],
   "terminalRunStates": [
     "passed",
+    "passed-with-skips",
     "failed",
     "skipped",
     "cancelled",
@@ -304,6 +306,7 @@
     ],
     "finalizing": [
       "passed",
+      "passed-with-skips",
       "failed",
       "skipped",
       "cancelled",
@@ -313,6 +316,7 @@
       "flaky"
     ],
     "passed": [],
+    "passed-with-skips": [],
     "failed": [],
     "skipped": [],
     "cancelled": [],

@@ -41,7 +41,7 @@ jobs:
         env:
           CI: 'true'
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: failure() || cancelled()
         with:
           name: termwright-runs
           path: .termwright/runs/
@@ -66,6 +66,12 @@ classifies the run as `flaky` and exits non-zero; a later pass never erases the
 reliability defect. GitHub Actions has no native yellow success state, so this
 is intentionally a red check with an amber/flaky classification in Termwright's
 report and UI.
+
+A mixed pass/skip result is amber `passed-with-skips`. It may exit zero only
+when every skip is covered by the exact reviewed applicability policy; a
+missing, ambiguous, or stale required declaration is red. An all-skipped or
+empty lane is always red. This keeps legitimate platform applicability visible
+without letting a missing toolchain or silently skipped suite look green.
 
 For a determinism lane, repeat full lifecycle cycles inside one host rather
 than wrapping the command in a shell loop:
@@ -94,10 +100,10 @@ needed.
 - Set a terminal profile and palette when color or width is asserted.
 - Declare input files through the fixture instead of relying on a repository
   working directory.
-- Upload `.termwright/runs/` with `if: always()` so complete and explicitly
-  incomplete infrastructure artifacts remain distinguishable. GitHub's
-  artifact action ignores dot-directories unless `include-hidden-files: true`
-  is set.
+- Upload `.termwright/runs/` when the job fails or is cancelled so retained
+  failure and incomplete-infrastructure evidence is available without creating
+  an artifact for every green matrix row. GitHub's artifact action ignores
+  dot-directories unless `include-hidden-files: true` is set.
 
 See [Configuration](../../reference/configuration/) for profiles and
 [Traces and reports](../../tools/traces-reports/) for artifact formats.

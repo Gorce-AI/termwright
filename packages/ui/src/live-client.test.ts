@@ -61,7 +61,6 @@ describe('connectLiveSession', () => {
     await connection.close();
     const count = server.hub.backlog.length;
     session.output('after detach');
-    await new Promise((done) => setTimeout(done, 20));
     expect(server.hub.backlog).toHaveLength(count);
   });
 

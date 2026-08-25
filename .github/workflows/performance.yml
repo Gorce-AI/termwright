@@ -57,15 +57,15 @@ jobs:
       - name: Collect the semantic pipeline benchmark
         run: >-
           pnpm --filter @termwright/performance benchmark --iterations 1000 --warmup 100
-          --nodes 96 --output performance-results/semantic-pipeline.json
+          --nodes 96 --output "$GITHUB_WORKSPACE/performance-results/semantic-pipeline.json"
       - name: Collect the Charm E2E benchmark
         run: >-
           pnpm --filter @termwright/performance benchmark:charm --iterations 3
-          --output performance-results/charm-immediate.json
+          --output "$GITHUB_WORKSPACE/performance-results/charm-immediate.json"
       - name: Collect the OpenTUI marker-route benchmark
         run: >-
           pnpm --filter @termwright/performance benchmark:opentui --repetitions 3
-          --window-ms 1000 --output performance-results/opentui-marker-route.json
+          --window-ms 1000 --output "$GITHUB_WORKSPACE/performance-results/opentui-marker-route.json"
       - name: Collect lifecycle and resource observations
         shell: bash
         env:

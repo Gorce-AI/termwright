@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  # Keep the pnpm store inside the workspace so actions/setup-node can cache it.
+  # One package-manager pin feeds every JavaScript lane through the shared setup action.
   PNPM_VERSION: '9.4.0'
   # A fail-then-pass run is evidence of a defect, never release certification.
   TERMWRIGHT_RETRIES: '0'
@@ -56,14 +56,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - run: pnpm test:coverage
       - name: Upload the coverage report
         if: always()
@@ -73,10 +66,17 @@ jobs:
           path: coverage
           if-no-files-found: warn
           retention-days: 7
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   # Supported Node and POSIX runtime surface. Windows has its own native row.
   build:
     name: build ${{ matrix.os }} / node ${{ matrix.node }}
+    env:
+      TERMWRIGHT_REQUIRE_BUN: '1'
     timeout-minutes: 45
     runs-on: ${{ matrix.os }}
     strategy:
@@ -96,20 +96,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
-          cache: pnpm
+      # The full catalogue includes OpenTUI's real bun:ffi process contract.
+      # Pin Bun here too; relying on an incidental runner-image binary would
+      # turn a supported-runtime row into an environment-dependent skip.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.2.15'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.25'
           cache: false
-
-      - run: pnpm install --frozen-lockfile
 
       - name: Install test (the native pty binding resolves on this platform)
         shell: bash
@@ -149,6 +148,11 @@ jobs:
       # documentation path on every supported Node/OS build row.
       - name: Run the Getting Started example
         run: pnpm test -- --resource-profile ci --json -- --run examples/getting-started
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-node-${{ matrix.node }}
 
   hostile:
     name: hostile input (128 MiB heap)
@@ -161,15 +165,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - run: pnpm -r --filter './packages/*' run build
 
       # Hostile suites still run through the certified host. NODE_OPTIONS is
@@ -186,6 +182,11 @@ jobs:
           packages/conformance/src/suites/adversarial.test.ts
           packages/conformance/src/suites/mcp-sessions.test.ts
           packages/ui/src/hostile.test.ts
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   # Windows native artifact DAG: architecture producers are independent and
   # runnable x64 consumers never wait for the ARM64 release artifact.
@@ -206,15 +207,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
 
       # Node-API, so one binary serves every supported Node line. Building it
       # twice per architecture would only prove the compiler runs twice.
@@ -253,14 +246,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - name: Cross-compile
         working-directory: packages/conpty
         run: pnpm exec node-gyp rebuild --arch=arm64
@@ -297,14 +283,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -327,9 +308,16 @@ jobs:
       - name: Certify the real ConPTY contract
         env: { TERMWRIGHT_RETRIES: '0' }
         run: pnpm test -- --resource-profile windows-ci --json -- --run packages/conpty/src
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-node-${{ matrix.node }}
 
   windows-driver-native:
     name: build windows-latest / node ${{ matrix.node }}
+    env:
+      TERMWRIGHT_REQUIRE_BUN: '1'
     # The Windows build row. It is separate from the matrix because it has to
     # wait for the addon: Windows has one backend now, so a row that started
     # before the prebuild existed would have nothing to run on.
@@ -352,19 +340,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
-          cache: pnpm
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.2.15'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.25'
           cache: false
 
-      - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -432,6 +418,11 @@ jobs:
       # documentation path on this row as well.
       - name: Run the Getting Started example
         run: pnpm test -- --resource-profile ci --json -- --run examples/getting-started
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-node-${{ matrix.node }}
 
   # Reliability barriers. Each exercises a distinct production failure mode;
   # none is retried or treated as a branch-protection substitute.
@@ -445,11 +436,7 @@ jobs:
         run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with: { version: "${{ env.PNPM_VERSION }}" }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with: { node-version: '22', cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - run: pnpm -r --filter './packages/*' run build
       - name: Repeat concurrency-sensitive slices in one persistent host
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -464,6 +451,11 @@ jobs:
           packages/probe-ink/src/render-boundary.test.ts
           packages/ink/src/fixture-rerender.test.ts
           packages/termwright-cli/src/test-host.integration.test.ts
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   concurrency-stress:
     name: concurrency stress (16 owned terminals)
@@ -475,11 +467,7 @@ jobs:
         run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with: { version: "${{ env.PNPM_VERSION }}" }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with: { node-version: '22', cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - run: pnpm -r --filter './packages/*' run build
       - name: Saturate the explicit PTY/process/endpoint budget
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -487,6 +475,11 @@ jobs:
           pnpm test -- --resource-profile stress --json --
           --config quality/stress/vitest.config.ts --run
           quality/stress/terminal-concurrency.test.ts
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   resource-leak:
     name: resource leak barrier (25 lifecycle cycles)
@@ -498,11 +491,7 @@ jobs:
         run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with: { version: "${{ env.PNPM_VERSION }}" }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with: { node-version: '22', cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - run: pnpm -r --filter './packages/*' run build
       - name: Every cycle must finish with zero broker leases and owned processes
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -510,6 +499,11 @@ jobs:
           pnpm test -- --runs 25 --resource-profile ci --json --
           --config quality/soak/vitest.config.ts --run
           quality/soak/terminal-cycle.test.ts
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   fault-and-jitter:
     name: fault injection and slow causal boundaries
@@ -521,11 +515,7 @@ jobs:
         run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with: { version: "${{ env.PNPM_VERSION }}" }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with: { node-version: '22', cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - run: pnpm -r --filter './packages/*' run build
       - name: Acquisition, persistence, handshake and cleanup fault matrix
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -538,6 +528,11 @@ jobs:
           packages/run-journal-transport/src/index.test.ts
           packages/termwright-cli/src/test-host.test.ts
           packages/conformance/src/suites/adversarial.test.ts
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   randomized-race:
     name: randomized race (recorded seed)
@@ -549,11 +544,7 @@ jobs:
         run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with: { version: "${{ env.PNPM_VERSION }}" }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with: { node-version: '22', cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - run: pnpm -r --filter './packages/*' run build
       - name: Shuffle concurrency-sensitive tests with a reproducible seed
         shell: bash
@@ -567,6 +558,11 @@ jobs:
             --sequence.shuffle --sequence.seed="$seed" --run \
             packages/resource-broker/src packages/run-journal-transport/src \
             packages/driver/src/semantic.test.ts packages/driver/src/session-lifecycle.test.ts
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   windows-native-stress:
     name: Windows native lifecycle stress / Node ${{ matrix.node }}
@@ -583,11 +579,9 @@ jobs:
         run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with: { version: "${{ env.PNPM_VERSION }}" }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with: { node-version: "${{ matrix.node }}", cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
+        with:
+          node-version: ${{ matrix.node }}
       - run: pnpm -r --filter './packages/*' run build
 
       # Windows has one pseudo-terminal backend and it is a native addon, so
@@ -611,6 +605,11 @@ jobs:
           pnpm test -- --resource-profile stress --json -- \
             --config quality/stress/vitest.config.ts --run \
             quality/stress/terminal-concurrency.test.ts
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-node-${{ matrix.node }}
 
   # Cross-platform behavioral certification. POSIX deliberately has no edge
   # to the Windows artifact producer.
@@ -631,13 +630,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
+      - uses: ./.github/actions/setup-js-workspace
 
       # The adapter-contract rows for Textual and tview drive real apps as
       # subprocesses. Without these toolchains those rows skip, and a skipped
@@ -650,7 +643,6 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: clients/go/go.sum
 
-      - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
       - name: Install the Python client (Textual adapter row)
@@ -683,6 +675,12 @@ jobs:
             cat conformance-matrix.txt 2>/dev/null || echo "(the matrix produced no output)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-${{ matrix.os }}
+          runs-path: .termwright/conformance-runs
 
   # Product and framework-adapter surfaces.
   ui-browser:
@@ -696,15 +694,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
 
       # `vite build` produces dist/app, which the server serves. Without it the
       # browser would load nothing and every assertion would fail on an empty
@@ -737,11 +727,15 @@ jobs:
           path: |
             packages/ui/test-results
             packages/ui/playwright-report
-            .termwright/runs
           if-no-files-found: ignore
           include-hidden-files: true
           overwrite: true
           retention-days: 7
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   conformance-windows:
     needs: conpty-native-build-x64
@@ -755,13 +749,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
+      - uses: ./.github/actions/setup-js-workspace
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
@@ -769,7 +757,6 @@ jobs:
         with:
           go-version: '1.25'
           cache-dependency-path: clients/go/go.sum
-      - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -802,16 +789,22 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: conformance-windows-latest
-          path: |
-            conformance-matrix.txt
-            .termwright/runs
+          path: conformance-matrix.txt
           if-no-files-found: ignore
           include-hidden-files: true
           overwrite: true
           retention-days: 7
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
+          runs-path: .termwright/conformance-runs
 
   opentui:
     name: opentui adapter contract (Bun)
+    env:
+      TERMWRIGHT_REQUIRE_BUN: '1'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -821,13 +814,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
+      - uses: ./.github/actions/setup-js-workspace
 
       # OpenTUI loads its native Zig library through bun:ffi, so this suite
       # cannot run under Node at all. Without Bun on PATH it skips itself, and
@@ -836,23 +823,24 @@ jobs:
         with:
           bun-version: '1.2.15'
 
-      - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
-      - run: bun --version
 
-      # Without the flag a missing precondition (no Bun, no dist/) skips the
-      # suite, and vitest exits 0 on a skip — this job would go green without
-      # running the tests it exists for. The flag turns that into a failure
-      # naming the reason. Skipping stays the default on a developer machine.
-      - run: pnpm --filter @termwright/opentui run test:conformance
-        env:
-          TERMWRIGHT_REQUIRE_CONFORMANCE: '1'
-
-      # The injection suite runs each case twice, under Bun and under Node. On a
-      # runner without Bun the Bun arms drop out (and the suite says so with an
-      # explicit test), so this lane is the only place they execute at all.
-      - run: pnpm --filter @termwright/probe-opentui run test
+      # setup-bun and this explicit probe fail before Vitest can accept the
+      # developer-facing "Bun unavailable" skip declarations. The package test
+      # then exercises both the real zero-config process and the Bun injection
+      # arms; it is the executable contract this dedicated lane exists for.
+      - name: Certify the Bun-backed OpenTUI probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun --version
+          pnpm --filter @termwright/probe-opentui run test
       - run: pnpm --filter @termwright/probe-ink run test
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   # Public clients, release surface, examples and documentation.
   clients:
@@ -977,13 +965,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
+      - uses: ./.github/actions/setup-js-workspace
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.24'
@@ -995,8 +977,6 @@ jobs:
       # disagree about the wire format.
       - name: Protocol lockstep
         run: node scripts/sync-protocol-version.mjs --check
-
-      - run: pnpm install --frozen-lockfile
 
       - name: ESLint 9 source gate
         run: pnpm lint
@@ -1041,6 +1021,11 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: node scripts/check-pr-changeset.mjs
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   rust-msrv:
     name: clients (rust MSRV 1.74)
@@ -1146,14 +1131,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - run: pnpm --filter @termwright/protocol run build
 
       # The generator re-runs every expectation through the reference
@@ -1164,6 +1142,8 @@ jobs:
 
   examples:
     name: examples (dogfooding)
+    env:
+      TERMWRIGHT_REQUIRE_BUN: '1'
     timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
@@ -1173,13 +1153,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
+      - uses: ./.github/actions/setup-js-workspace
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
@@ -1194,7 +1168,6 @@ jobs:
           bun-version: '1.2.15'
       - uses: dtolnay/rust-toolchain@2eae45db285e407f22119950686d47e1101e071b # 1.88
 
-      - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
       - run: pnpm -r --filter './examples/*' run build
 
@@ -1217,11 +1190,15 @@ jobs:
           name: example-termwright-reports
           path: |
             examples/*/termwright-report
-            .termwright/runs
           if-no-files-found: ignore
           include-hidden-files: true
           overwrite: true
           retention-days: 7
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   website:
     name: website builds
@@ -1234,16 +1211,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js-workspace
       - name: Generated documentation matches its sources
         run: pnpm check:generated-docs
+      - name: Generated API reference matches its sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm docs:api
+          git diff --exit-code -- website/src/content/docs/api
       - run: pnpm --filter @termwright/website run check
       - run: pnpm --filter @termwright/website run build
       - run: pnpm --filter @termwright/website run check:links

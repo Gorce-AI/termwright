@@ -23,9 +23,14 @@ export function withProbe(runtime: ProbeRuntime, argv: readonly string[]): Probe
     command: [
       interpreter,
       flag,
-      pathToFileURL(PROBE_ENTRIES[runtime]).href,
+      runtimePreloadSpecifier(runtime, PROBE_ENTRIES[runtime]),
       ...rest,
     ],
     runtime,
   };
+}
+
+/** Node needs a file URL on Windows; Bun's Windows preload resolver needs a native path. */
+export function runtimePreloadSpecifier(runtime: ProbeRuntime, entry: string): string {
+  return runtime === 'bun' ? entry : pathToFileURL(entry).href;
 }

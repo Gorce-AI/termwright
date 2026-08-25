@@ -98,24 +98,6 @@
       ]
     },
     {
-      "id": "TW-DEV-UNIX-LISTEN-FAULT-FIXTURE",
-      "capability": "semantic-endpoint rollback fault injection",
-      "predicate": "win32",
-      "category": "test-fixture-gap",
-      "reason": "The current deterministic listen-failure injection uses a POSIX filesystem socket collision; Windows named-pipe hostile close/handshake tests cover production ownership but not this exact acquisition stage.",
-      "evidence": "packages/driver/src/semantic.test.ts",
-      "issueOrAdr": "PART W fault injection",
-      "removalCondition": "Add an equivalent deterministic named-pipe listen failure injector on Windows.",
-      "owner": "termwright-core",
-      "revalidate": "before Windows fault-injection certification",
-      "tests": [
-        [
-          "packages/driver/src/semantic.test.ts",
-          "rolls back its private directory when listen fails"
-        ]
-      ]
-    },
-    {
       "id": "TW-DEV-POSIX-PROCESS-GROUP-PROOF",
       "capability": "POSIX process-group lifecycle",
       "predicate": "win32",
@@ -131,6 +113,10 @@
           "packages/driver/src/process-lifecycle.pty.test.ts",
           "POSIX process lifecycle"
         ]
+      ],
+      "skipPolicyTests": [
+        ["packages/driver/src/process-lifecycle.pty.test.ts", "reaps an owned process group when its root exits naturally first"],
+        ["packages/driver/src/process-lifecycle.pty.test.ts", "escalates and removes a child plus grandchild that ignore graceful shutdown"]
       ]
     },
     {
@@ -149,6 +135,11 @@
           "packages/driver/src/process-lifecycle.pty.test.ts",
           "Windows process lifecycle"
         ]
+      ],
+      "skipPolicyTests": [
+        ["packages/driver/src/process-lifecycle.pty.test.ts", "does not publish natural exit while a console descendant remains alive"],
+        ["packages/driver/src/process-lifecycle.pty.test.ts", "uses the ConPTY hard-kill mechanism for the complete console tree"],
+        ["packages/driver/src/process-lifecycle.pty.test.ts", "rejects TERM instead of silently converting it to a hard kill"]
       ]
     },
     {

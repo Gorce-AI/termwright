@@ -13,6 +13,14 @@ directory into place and syncs its parent. A colliding RunId fails instead of
 overwriting history. The canonical journal, attempt index, result, runtime,
 resource profile, timeouts, and CI/Git provenance must agree before commit.
 
+Manifest status preserves `passed-with-skips` as a separate terminal verdict.
+Readers must not collapse it into `passed`: the Native Host evaluates the
+exact skip policy separately when deciding the command's certification result.
+The manifest verdict alone never proves that policy matched. Its canonical
+journal retains the applicable declarations, identity-bound skipped tests,
+policy issues, and aggregate policy result so an evidence reader can audit the
+decision without relying on attempt counters.
+
 ```ts
 import {beginRunManifest, readRunHistory} from '@termwright/run-history';
 

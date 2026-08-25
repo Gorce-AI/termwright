@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { connect, type Socket } from 'node:net';
+import { connect, createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFrameDecoder, encodeFrame } from '@termwright/protocol';
 import {
   RunEventProducer,
@@ -52,6 +52,78 @@ describe('run journal worker transport', () => {
       ['attempt.started', 0], ['attempt.finished', 1],
     ]);
     await client.close();
+  });
+
+  it('does not resolve client close before the socket is fully closed', async () => {
+    const endpoint = testEndpoint('journal-client-close');
+    let peer: Socket | undefined;
+    let markPeerEnded!: () => void;
+    const peerEnded = new Promise<void>((resolve) => { markPeerEnded = resolve; });
+    const server = createServer({ allowHalfOpen: true }, (socket) => {
+      peer = socket;
+      socket.once('end', markPeerEnded);
+      const decoder = createFrameDecoder(384 * 1024);
+      socket.on('data', (chunk) => {
+        for (const value of decoder.push(chunk)) {
+          const request = value as { readonly requestId: string };
+          socket.write(encodeFrame({
+            v: 1,
+            type: 'response',
+            requestId: request.requestId,
+            ok: true,
+            result: { producerId: createRunId('producer'), producerEpoch: 1 },
+          }, 384 * 1024));
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(endpoint, resolve);
+    });
+
+    try {
+      const runId = createRunId('run');
+      const client = await connectRunJournalWorker({ endpoint, token: 'x'.repeat(32), runId,
+        workerId: 'close-barrier', workerEpoch: 1, handshakeDeadline: deadline() });
+      let closeResolved = false;
+      const close = client.close().then(() => { closeResolved = true; });
+
+      await peerEnded;
+      await Promise.resolve();
+      expect(closeResolved).toBe(false);
+
+      peer?.end();
+      await close;
+      expect(closeResolved).toBe(true);
+    } finally {
+      peer?.destroy();
+      await new Promise<void>((resolve, reject) => server.close((error) => {
+        if (error === undefined) resolve();
+        else reject(error);
+      }));
+    }
+  });
+
+  it('clears the request deadline when frame encoding fails synchronously', async () => {
+    const runId = createRunId('run');
+    const server = await startRunJournalServer({ runId, append: () => undefined });
+    servers.push(server);
+    const client = await connectRunJournalWorker({ endpoint: server.endpoint, token: server.token, runId,
+      workerId: 'synchronous-write-failure', workerEpoch: 1, handshakeDeadline: deadline() });
+    const producer = new RunEventProducer({ producerId: client.binding.producerId, epoch: client.binding.producerEpoch });
+    const valid = producer.emit({ eventClass: 'diagnostic', type: 'run.warning', identity: {
+      invocationId: createRunId('invocation'), runId,
+    }, payload: { detail: 'bounded' } });
+    const event = { ...valid, payload: { detail: 'x'.repeat(384 * 1024) } } as RunEvent;
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await expect(client.append(event, deadline())).rejects.toMatchObject({ code: 'protocol-error' });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      await client.close();
+    }
   });
 
   it('rejects stale worker incarnations and wrong producer bindings', async () => {

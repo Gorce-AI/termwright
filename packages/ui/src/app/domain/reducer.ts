@@ -197,6 +197,7 @@ function bootReady(state: AppState, viewer: ViewerState): AppState {
       status: 'finished',
       startedAt: viewer.trace.startedAt,
       summary: {
+        verdict: traceExecution?.status === 'failed' ? 'failed' : 'passed',
         total: 1,
         passed: traceExecution?.status === 'passed' ? 1 : 0,
         failed: traceExecution?.status === 'failed' ? 1 : 0,

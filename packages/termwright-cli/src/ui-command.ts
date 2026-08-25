@@ -1,6 +1,6 @@
 /** `termwright ui` backed by the same persistent native host as `termwright test`. */
 
-import type { RunEvent, RunId, RunnerTaskId } from '@termwright/protocol';
+import type { RunEvent, RunId, RunnerTaskId, TerminalRunState } from '@termwright/protocol';
 import { join } from 'node:path';
 import type { DiscoveredTest, UiRunHandle, UiServer, UiServerOptions } from '@termwright/ui';
 import { TERMWRIGHT_RESOURCE_PROFILES, TermwrightTestHost, type NativeTestCase, type RunHandle } from './test-host.js';
@@ -11,6 +11,7 @@ export interface NativeHostRun {
   readonly cwd: string;
   readonly tags?: string;
   readonly resourceProfile: TermwrightResourceProfileName;
+  readonly workerEnv?: Readonly<Record<string, string>>;
   /** Worker-only projection endpoint, installed through Vitest's explicit env. */
   readonly uiProducerUrl?: string;
 }
@@ -31,7 +32,10 @@ export async function startNativeHost(run: NativeHostRun): Promise<NativeHostHan
     cwd: run.cwd,
     runsDir: join(run.cwd, '.termwright', 'runs'),
     vitestArgs: run.args,
-    ...(run.uiProducerUrl === undefined ? {} : { workerEnv: { TERMWRIGHT_UI_URL: run.uiProducerUrl } }),
+    workerEnv: {
+      ...(run.workerEnv ?? {}),
+      ...(run.uiProducerUrl === undefined ? {} : { TERMWRIGHT_UI_URL: run.uiProducerUrl }),
+    },
     resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[run.resourceProfile],
     eventObserver: (event) => {
       const taskId = event.identity.runnerTaskId;
@@ -110,6 +114,7 @@ export interface UiRequest {
   readonly rest: readonly string[];
   readonly cwd: string;
   readonly resourceProfile: TermwrightResourceProfileName;
+  readonly workerEnv?: Readonly<Record<string, string>>;
 }
 
 export interface UiResult {
@@ -168,6 +173,7 @@ export async function runUi(
           args: request.rest,
           cwd: request.cwd,
           resourceProfile: request.resourceProfile,
+          ...(request.workerEnv === undefined ? {} : { workerEnv: request.workerEnv }),
           uiProducerUrl: server.producerUrl,
           ...(request.tags === undefined ? {} : { tags: request.tags }),
         });
@@ -210,6 +216,7 @@ interface ProjectedAttempt {
 class NativeRunProjection {
   readonly #hub: UiServer['hub'];
   readonly #attempts = new Map<string, ProjectedAttempt>();
+  readonly #declarativeSkips = new Set<string>();
 
   constructor(hub: UiServer['hub']) {
     this.#hub = hub;
@@ -223,6 +230,7 @@ class NativeRunProjection {
       if (runId === undefined || typeof state !== 'string') return;
       if (state === 'requested') {
         this.#attempts.clear();
+        this.#declarativeSkips.clear();
         this.#hub.publish({
           v: 1,
           type: 'run-start',
@@ -234,20 +242,31 @@ class NativeRunProjection {
         const latest = new Map<string, ProjectedAttempt>();
         for (const attempt of this.#attempts.values()) latest.set(attempt.runnerTaskId, attempt);
         const values = [...latest.values()];
+        const skippedTasks = new Set([
+          ...this.#declarativeSkips,
+          ...values.filter((attempt) => attempt.status === 'skipped').map((attempt) => attempt.runnerTaskId),
+        ]);
+        const observedTasks = new Set([...latest.keys(), ...skippedTasks]);
         this.#hub.publish({
           v: 1,
           type: 'run-end',
           summary: {
-            total: values.length,
+            verdict: state,
+            total: observedTasks.size,
             passed: values.filter((attempt) => attempt.status === 'passed').length,
             failed: values.filter((attempt) => attempt.status === 'failed').length,
-            skipped: values.filter((attempt) => attempt.status === 'skipped').length,
+            skipped: skippedTasks.size,
             flaky: values.filter((attempt) => attempt.status === 'passed' && attempt.retry > 0).length,
             durationMs: Math.max(0, ...values.map((attempt) =>
               attempt.status === undefined ? 0 : event.monotonicTime - attempt.monotonicTime)),
           },
         });
       }
+      return;
+    }
+    if (event.type === 'test.skipped') {
+      const runnerTaskId = event.identity.runnerTaskId;
+      if (runnerTaskId !== undefined) this.#declarativeSkips.add(runnerTaskId);
       return;
     }
     if (event.type === 'run.infrastructure-failed') {
@@ -312,8 +331,8 @@ function nonNegative(value: unknown): number {
   return Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : 0;
 }
 
-function isTerminalProjectionState(value: string): boolean {
-  return value === 'passed' || value === 'failed' || value === 'flaky' ||
+function isTerminalProjectionState(value: string): value is TerminalRunState {
+  return value === 'passed' || value === 'passed-with-skips' || value === 'failed' || value === 'flaky' ||
     value === 'cancelled' || value === 'skipped' || value === 'infrastructure-failed' ||
     value === 'crashed' || value === 'incomplete';
 }

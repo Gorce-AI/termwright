@@ -110,9 +110,9 @@ describe('RunnerClient input acknowledgements', () => {
     await connect(client);
     const delivery = client.sendInput('reconnected-session', 'x');
     await until(() => writeStarted);
-    // Give the old socket's asynchronous close event time to arrive while the
-    // new request is pending. It must not own or reject the new connection.
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    // The server-side client count is the causal acknowledgement that the old
+    // socket's close handler ran while the replacement request stayed pending.
+    await until(() => server.hub.clientCount === 1);
     releaseWrite();
     await expect(delivery).resolves.toBeUndefined();
     detach();

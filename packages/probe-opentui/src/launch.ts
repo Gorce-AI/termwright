@@ -41,16 +41,15 @@ export interface ProbeCommand {
  * `--require`: the probe is ESM, and `--import` is what runs it before the
  * application's first module.
  *
- * The entry is passed as a `file://` URL for **both** runtimes. Node requires
- * it — an absolute Windows path handed to `--import` fails with
- * `ERR_UNSUPPORTED_ESM_URL_SCHEME`, because `D:` reads as a scheme — and Bun
- * was measured to accept either form. One form that works everywhere beats two
- * where the rarer one rots unnoticed.
+ * Node receives a `file://` URL because an absolute Windows path handed to
+ * `--import` is parsed as an unsupported `D:` URL scheme. Bun receives the
+ * native absolute path: its Windows `--preload` resolver does not resolve a
+ * file URL even though Bun accepts that form on POSIX.
  *
  * @example
  * ```ts
  * const {command} = withProbe('bun', ['bun', 'app.ts']);
- * // ['bun', '--preload', 'file:///…/bun-preload.js', 'app.ts']
+ * // ['bun', '--preload', '/…/bun-preload.js', 'app.ts']
  * ```
  */
 export function withProbe(runtime: ProbeRuntime, argv: readonly string[]): ProbeCommand {
@@ -59,6 +58,11 @@ export function withProbe(runtime: ProbeRuntime, argv: readonly string[]): Probe
   }
   const [interpreter, ...rest] = argv as [string, ...string[]];
   const flag = runtime === 'bun' ? '--preload' : '--import';
-  const entry = pathToFileURL(PROBE_ENTRIES[runtime]).href;
+  const entry = runtimePreloadSpecifier(runtime, PROBE_ENTRIES[runtime]);
   return { command: [interpreter, flag, entry, ...rest], runtime };
+}
+
+/** Return the module-entry form accepted by the selected runtime on every OS. */
+export function runtimePreloadSpecifier(runtime: ProbeRuntime, entry: string): string {
+  return runtime === 'bun' ? entry : pathToFileURL(entry).href;
 }

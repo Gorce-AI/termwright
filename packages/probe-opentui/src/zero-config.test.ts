@@ -13,7 +13,7 @@
 
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -21,6 +21,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { ENV_ENDPOINT, ENV_TOKEN, PROTOCOL_ID, verifyMarkerPayload, MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { bunAvailable } from './testing/bun-available.js';
+import { runtimePreloadSpecifier } from './launch.js';
 
 const run = promisify(execFile);
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,7 +50,7 @@ function launch(options: {
   readonly steps?: number;
   readonly appPath?: string;
 }): Promise<Run> {
-  const entry = pathToFileURL(join(packageRoot, 'dist', 'bun-preload.js')).href;
+  const entry = runtimePreloadSpecifier('bun', join(packageRoot, 'dist', 'bun-preload.js'));
   const targetApp = options.appPath ?? app;
   const argv = options.driver === undefined ? [targetApp] : ['--preload', entry, targetApp];
 
@@ -79,6 +80,19 @@ function launch(options: {
     child.on('error', reject);
     child.on('close', (code) => resolve({ stdout, stderr, code }));
   });
+}
+
+async function launchInstrumented(
+  options: Parameters<typeof launch>[0] & { readonly driver: FakeDriver },
+): Promise<Run> {
+  const result = await launch(options);
+  if (result.code !== 0) {
+    throw new Error(
+      `instrumented Bun application exited with ${String(result.code)} before probe evidence: ` +
+      (result.stderr.trim() || '<empty stderr>'),
+    );
+  }
+  return result;
 }
 
 function markerPattern(): RegExp {
@@ -111,7 +125,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const driver = await startFakeDriver();
     open.push(driver);
 
-    const result = await launch({ driver, steps: 2 });
+    const result = await launchInstrumented({ driver, steps: 2 });
     expect(result.stderr).toBe('');
 
     const hello = await driver.waitForHandshake();
@@ -155,7 +169,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const driver = await startFakeDriver();
     open.push(driver);
 
-    await launch({ driver, appPath: annotatedApp });
+    await launchInstrumented({ driver, appPath: annotatedApp });
     const hello = await driver.waitForHandshake();
     const [snapshot] = await driver.waitForSnapshots(1);
     const label = snapshot?.nodes.find((node) => node.testId === 'deploy-label');
@@ -188,7 +202,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const driver = await startFakeDriver();
     open.push(driver);
 
-    await launch({ driver, steps: 3 });
+    await launchInstrumented({ driver, steps: 3 });
     const snapshots = await driver.waitForSnapshots(2);
 
     const values = snapshots
@@ -205,7 +219,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const driver = await startFakeDriver();
     open.push(driver);
 
-    await launch({ driver, steps: 3 });
+    await launchInstrumented({ driver, steps: 3 });
     const snapshots = await driver.waitForSnapshots(2);
 
     const selectedPositions = snapshots
@@ -224,7 +238,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const driver = await startFakeDriver();
     open.push(driver);
 
-    const result = await launch({ driver, steps: 2 });
+    const result = await launchInstrumented({ driver, steps: 2 });
     const snapshots = await driver.waitForSnapshots(1);
 
     const revisions = [...result.stdout.matchAll(markerPattern())]
@@ -241,7 +255,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const driver = await startFakeDriver();
     open.push(driver);
 
-    const instrumented = await launch({ driver, steps: 2 });
+    const instrumented = await launchInstrumented({ driver, steps: 2 });
     const vanilla = await launch({ steps: 2 });
 
     expect(instrumented.code).toBe(0);
@@ -254,7 +268,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
   it('publishes qualified v2 geometry and the native exact hit grid', async () => {
     const driver = await startFakeDriver();
     open.push(driver);
-    await launch({ driver, steps: 2 });
+    await launchInstrumented({ driver, steps: 2 });
     const hello = await driver.waitForHandshake();
     expect(hello.protocol).toBe(PROTOCOL_ID);
     expect(hello.capabilities).toContain('pointer-hit-grid');
@@ -273,7 +287,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
   it('records nested clips, overlap ownership, hidden nodes, render hooks and resize from real OpenTUI', async () => {
     const driver = await startFakeDriver();
     open.push(driver);
-    await launch({ driver, appPath: geometryApp });
+    await launchInstrumented({ driver, appPath: geometryApp });
     const snapshots = await driver.waitForSnapshots(2);
     const snapshot = snapshots.find((candidate) => candidate.nodes.some((node) => node.name === 'nested clipped target'))!;
     const clipped = snapshot.nodes.find((node) => node.name === 'nested clipped target')!;
@@ -302,10 +316,4 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     }
     expect(new Set(snapshots.map((candidate) => `${candidate.columns}x${candidate.rows}`)).size).toBeGreaterThan(1);
   }, 60_000);
-});
-
-describe.skipIf(bunAvailable())('coverage note', () => {
-  it('skips the zero-config suite because no bun binary is reachable', () => {
-    expect(bunAvailable()).toBe(false);
-  });
 });

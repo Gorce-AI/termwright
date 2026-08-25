@@ -1,5 +1,13 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { assertCandidateSemanticSession, candidateToolchainBlock, canonicalOpenTuiBuilds, verifyCandidateEvidence } from './certify-framework-candidate.mjs';
+
+const exec = promisify(execFile);
 
 describe('framework candidate evidence binding', () => {
   it('canonicalizes OpenTUI build pairs independently of filesystem order', () => {
@@ -30,6 +38,34 @@ describe('framework candidate evidence binding', () => {
       id: 'bubbletea-v2@v2.1.0',
       source: { requiredGoVersion: '1.26.0', toolchainSupported: false },
     }, '1.25')).toBe('bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25');
+  });
+
+  it('returns a failing process status after retaining a typed red verdict', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-red-candidate-'));
+    const registry = join(directory, 'registry.json');
+    const verdict = join(directory, 'verdict.json');
+    await writeFile(registry, JSON.stringify({ candidates: [{
+      id: 'bubbletea-v2@v2.1.0',
+      candidateDigest: `sha256:${'a'.repeat(64)}`,
+      source: { requiredGoVersion: '1.26.0', toolchainSupported: false },
+    }] }));
+    try {
+      await expect(exec(process.execPath, [
+        fileURLToPath(new URL('./certify-framework-candidate.mjs', import.meta.url)),
+        '--registry', registry,
+        '--candidate', 'bubbletea-v2@v2.1.0',
+        '--output', verdict,
+      ], {
+        env: { ...process.env, GITHUB_SHA: 'candidate-sha', TERMWRIGHT_UPSTREAM_GO_VERSION: '1.25' },
+      })).rejects.toMatchObject({ code: 1 });
+      expect(JSON.parse(await readFile(verdict, 'utf8'))).toMatchObject({
+        candidateId: 'bubbletea-v2@v2.1.0',
+        state: 'red',
+        detail: 'bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25',
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('accepts an exact Go source binding', () => {

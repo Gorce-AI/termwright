@@ -8,11 +8,11 @@ works; the long version is [`CONTRACTS.md`](CONTRACTS.md), which is normative.
 ```sh
 pnpm install
 pnpm check:fast
-pnpm check:full
+pnpm check:local
 ```
 
 `pnpm install` prepares the workspace; `check:fast` is the review loop and
-`check:full` is the complete local check. Cross-platform, native Windows and
+`check:local` is the complete local check. Cross-platform, native Windows and
 language-client certification remains the responsibility of the CI workflow.
 Node 22 or 24 and pnpm 9 are required. Most integration suites need a real pseudo-terminal and
 skip themselves where none can be opened; `TERMWRIGHT_SKIP_PTY=1` skips them
@@ -68,7 +68,7 @@ a package boundary are `TermwrightError` subclasses. All I/O is bounded by
 A package change is done when:
 
 1. `pnpm check:fast` and the relevant package tests are green, followed by
-   `pnpm check:full` before handoff;
+   `pnpm check:local` before handoff;
 2. the public surface is documented and exported through `src/index.ts` only;
 3. unit tests cover the contract obligations, including the error paths;
 4. no TODO or stub is left in an exported code path (internal TODOs belong in

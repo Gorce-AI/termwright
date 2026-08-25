@@ -111,10 +111,19 @@ describe('greenfield application reducer identities', () => {
     state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'runtime-a', runnerTaskId: selected, title: 'suite > A', file: '/repo/a.test.ts', startedAt: 10 } });
     expect(state.pendingRunTargets).toBeNull();
     expect(state.run.requestedTargets).toEqual([selected]);
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } } });
+    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-end', summary: { verdict: 'passed', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } } });
     expect(state.run.requestedTargets).toEqual([selected]);
     state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 20 } });
     expect(state.run.requestedTargets).toBeNull();
+  });
+
+  it('preserves the yellow verdict independently of attempt counters', () => {
+    const state = appReducer(initialAppState, { type: 'message', message: {
+      v: 1,
+      type: 'run-end',
+      summary: { verdict: 'passed-with-skips', total: 2, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 1 },
+    } });
+    expect(state.run.summary?.verdict).toBe('passed-with-skips');
   });
 
   it('fails closed for an unmatched action even when history is selected', () => {

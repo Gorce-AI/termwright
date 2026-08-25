@@ -51,13 +51,13 @@ export function RunsPage({ source, selectedRunId, onSelectedRunId }: {
           {runs.length === 0 ? <div className="tw-page-empty"><History aria-hidden="true" /><strong>No run history yet</strong></div> : runs.map((run) => (
             run.state === 'complete' ? (
               <button type="button" className="tw-run-card" key={run.id} onClick={() => openRun(run.id)}>
-                <span className="tw-run-card-icon" data-failed={run.summary.status !== 'passed'}><Clock3 aria-hidden="true" /></span>
+                <span className="tw-run-card-icon" data-health={run.summary.status}><Clock3 aria-hidden="true" /></span>
                 <span>
                   <strong>{run.git?.message ?? run.id}</strong>
                   <small><time dateTime={new Date(run.startedAt).toISOString()}>{formatStartedAt(run.startedAt)}</time><span>{run.testCount} cases · {format(run.summary.durationMs)}</span></small>
                 </span>
                 {run.git === null ? null : <span className="tw-commit"><GitCommitHorizontal aria-hidden="true" size={13} /> {run.git.commit.slice(0, 7)}</span>}
-                <span className="tw-history-counts"><b>{run.summary.passed} passed</b><b>{run.summary.failed} failed</b></span>
+                <span className="tw-history-counts"><b>{run.summary.passed} passed</b><b>{run.summary.failed} failed</b><b>{run.summary.skipped} skipped</b></span>
                 <ArrowRight aria-hidden="true" />
               </button>
             ) : (

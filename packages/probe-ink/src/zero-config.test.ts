@@ -15,6 +15,7 @@ import {
 } from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { PACKAGE_VERSION } from './version.js';
+import { bunTestCapability } from '../../../scripts/test-support/bun-runtime.mjs';
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(packageRoot, 'src', 'testing', 'vanilla-app.mjs');
@@ -36,7 +37,9 @@ type BuiltWithProbe = (
 let builtWithProbe: BuiltWithProbe | undefined;
 
 function bunAvailable(): boolean {
-  return spawnSync('bun', ['--version'], { stdio: 'ignore' }).status === 0;
+  return bunTestCapability(
+    () => spawnSync('bun', ['--version'], { stdio: 'ignore', timeout: 30_000 }).status === 0,
+  );
 }
 
 function launch(options: {
@@ -80,6 +83,17 @@ function launch(options: {
     child.on('error', reject);
     child.on('close', (code) => resolve({ stdout, stderr, code }));
   });
+}
+
+async function launchInstrumented(options: Omit<Parameters<typeof launch>[0], 'mode'>): Promise<Run> {
+  const result = await launch({ ...options, mode: 'instrumented' });
+  if (result.code !== 0) {
+    throw new Error(
+      `instrumented ${options.runtime} application exited with ${String(result.code)} before probe evidence: ` +
+      (result.stderr.trim() || '<empty stderr>'),
+    );
+  }
+  return result;
 }
 
 function markerPattern(): RegExp {
@@ -129,7 +143,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
-      await launch({ runtime, mode: 'instrumented', driver });
+      await launchInstrumented({ runtime, driver });
       const hello = await driver.waitForHandshake();
       const [snapshot] = await driver.waitForSnapshots(1);
       expect(hello.protocol).toBe(PROTOCOL_ID);
@@ -149,7 +163,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
-      await launch({ runtime, mode: 'instrumented', driver, appPath: annotatedApp });
+      await launchInstrumented({ runtime, driver, appPath: annotatedApp });
       const hello = await driver.waitForHandshake();
       const [snapshot] = await driver.waitForSnapshots(1);
       const deploy = snapshot?.nodes.find((node) => node.testId === 'deploy-production');
@@ -178,7 +192,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
-      const result = await launch({ runtime, mode: 'instrumented', driver, steps: 2 });
+      const result = await launchInstrumented({ runtime, driver, steps: 2 });
       expect(result.code).toBe(0);
 
       const hello = await driver.waitForHandshake();
@@ -212,7 +226,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
-      await launch({ runtime, mode: 'instrumented', driver, steps: 3 });
+      await launchInstrumented({ runtime, driver, steps: 3 });
       const snapshots = await driver.waitForSnapshots(2);
       const values = snapshots.flatMap((snapshot) => snapshot.nodes
         .filter((node) => node.role === 'text' && node.name.startsWith('Count '))
@@ -227,7 +241,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
-      const result = await launch({ runtime, mode: 'instrumented', driver });
+      const result = await launchInstrumented({ runtime, driver });
       const snapshots = await driver.waitForSnapshots(1);
       const markers = [...result.stdout.matchAll(markerPattern())]
         .map((match) => verifyMarkerPayload(
@@ -274,7 +288,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
-      const instrumented = await launch({ runtime, mode: 'instrumented', driver });
+      const instrumented = await launchInstrumented({ runtime, driver });
       const vanilla = await launch({ runtime, mode: 'vanilla' });
       expect(instrumented.code).toBe(0);
       expect(stableStderr(instrumented.stderr)).toBe(stableStderr(vanilla.stderr));

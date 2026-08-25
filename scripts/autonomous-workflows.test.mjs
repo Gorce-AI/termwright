@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 
 const readWorkflow = (name) => readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8');
 
-function artifactStep(workflow, artifactName) {
-  const marker = `          name: ${artifactName}\n`;
-  const markerIndex = workflow.indexOf(marker);
-  expect(markerIndex, `artifact ${artifactName} must exist`).toBeGreaterThan(-1);
-  const start = workflow.lastIndexOf('\n      - ', markerIndex);
-  const end = workflow.indexOf('\n\n', markerIndex);
-  return workflow.slice(start, end === -1 ? workflow.length : end);
+function jobBlock(workflow, jobName) {
+  const marker = `  ${jobName}:\n`;
+  const start = workflow.indexOf(marker);
+  expect(start, `job ${jobName} must exist`).toBeGreaterThan(-1);
+  const nextJob = workflow.slice(start + marker.length).search(/^  [a-z0-9-]+:\n/mu);
+  return nextJob === -1
+    ? workflow.slice(start)
+    : workflow.slice(start, start + marker.length + nextJob);
 }
 
 describe('autonomous workflow security', () => {
@@ -20,7 +21,14 @@ describe('autonomous workflow security', () => {
     expect(workflow).not.toContain('git push');
     expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(2);
     expect(workflow).toContain('--candidate "$CANDIDATE_ID"');
-    expect(workflow).toContain('continue-on-error: true');
+    expect(workflow).not.toContain('continue-on-error');
+    const certificationStep = workflow.slice(
+      workflow.indexOf('      - name: Certify exact source, deterministic patching and conformance'),
+      workflow.indexOf('      - name: Candidate summary'),
+    );
+    expect(certificationStep).not.toContain('if:');
+    expect(workflow).toContain('      - name: Candidate summary\n        if: always()');
+    expect(workflow).toMatch(/uses: actions\/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6\n        if: always\(\)/u);
     expect(workflow).not.toContain("--candidate '${{ matrix.id }}'");
     expect(certifier).toContain("'--ignore-scripts'");
   });
@@ -44,14 +52,27 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('/assignees/$ISSUE_OWNER');
     expect(workflow).toContain('gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all');
     expect(workflow).not.toContain('gh issue list --state all --search');
+    expect(workflow).toContain('.user.login == "github-actions[bot]"');
+    expect(workflow).toContain("jq -r '.green[]' \"$PUBLISH_PLAN\"");
+    expect(workflow).toContain('gh issue close "$number" --comment "Certified by $SOURCE_RUN_URL."');
     expect(workflow).toContain('dispatch-pending-changesets');
     expect(workflow).toContain('refresh-heartbeat');
     expect(workflow).toContain('automation/workflow-heartbeat');
     expect(workflow).toContain('Heartbeat PR differs from the deterministic source-run-bound transformation');
     expect(workflow).toContain('notify-upstream-failure:');
-    expect(workflow).toContain("github.event.workflow_run.conclusion != 'success'");
+    const notify = jobBlock(workflow, 'notify-upstream-failure');
+    expect(notify).toContain('needs: reconcile');
+    expect(notify).toContain("needs.reconcile.result != 'success'");
+    expect(notify).not.toContain("github.event.workflow_run.conclusion != 'success'");
+    expect(notify).toContain('.user.login == "github-actions[bot]"');
     expect(workflow).toContain('[compatibility] daily certification workflow failed');
-    expect(workflow).toContain('failed before trusted artifact reconciliation');
+    expect(workflow).toContain('could not complete trusted artifact reconciliation');
+    const reconcile = jobBlock(workflow, 'reconcile');
+    expect(reconcile).not.toContain("github.event.workflow_run.conclusion == 'success'");
+    expect(reconcile).toContain('Typed candidate artifacts reconciled from $SOURCE_RUN_URL.');
+    const publish = reconcile.slice(reconcile.indexOf('      - name: Commit only the compatibility allowlist'));
+    expect(publish).toContain('Source certification run: $SOURCE_RUN_ID');
+    expect(publish).not.toContain('Source certification run: $RUN_ID');
     expect(coordinator).toContain('probe-ink|probe-opentui');
     expect(coordinator).toContain('release dispatch intentionally suppressed');
     expect(workflow).toContain('"https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"');
@@ -79,8 +100,98 @@ describe('autonomous workflow security', () => {
     for (const name of ['ci.yml', 'reliability.yml', 'docs.yml', 'performance.yml', 'preview-release.yml', 'upstream-candidates.yml', 'autonomous-coordinator.yml', 'release.yml']) {
       const workflow = await readWorkflow(name);
       for (const line of workflow.split('\n').filter((value) => /^\s*(?:- )?uses:/u.test(value))) {
+        if (/uses:\s+\.\//u.test(line)) continue;
         expect(line, `${name}: ${line}`).toMatch(/@[0-9a-f]{40}(?:\s+#.*)?$/u);
       }
+    }
+  });
+
+  it('keeps JavaScript setup deduplicated without hiding checkout or the frozen install', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const setup = await readFile(
+      new URL('../.github/actions/setup-js-workspace/action.yml', import.meta.url),
+      'utf8',
+    );
+    const setupJobs = workflow
+      .split(/(?=^ {2}[a-z0-9-]+:\n)/mu)
+      .filter((job) => job.includes('uses: ./.github/actions/setup-js-workspace'));
+
+    expect(setupJobs.length).toBeGreaterThan(10);
+    for (const job of setupJobs) {
+      expect(job.indexOf('uses: actions/checkout@')).toBeGreaterThan(-1);
+      expect(job.indexOf('uses: actions/checkout@')).toBeLessThan(
+        job.indexOf('uses: ./.github/actions/setup-js-workspace'),
+      );
+      expect(job).not.toContain('pnpm install --frozen-lockfile');
+      expect(job).not.toContain('pnpm/action-setup@');
+      expect(job).not.toContain('actions/setup-node@');
+    }
+
+    expect(setup).toContain('pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6');
+    expect(setup).toContain('actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7');
+    expect(setup).toContain('version: ${{ env.PNPM_VERSION }}');
+    expect(setup).toContain('node-version: ${{ inputs.node-version }}');
+    expect(setup).toContain('run: pnpm install --frozen-lockfile');
+    expect(workflow).not.toContain('pnpm/action-setup@');
+    expect(workflow).not.toContain('pnpm install --frozen-lockfile');
+  });
+
+  it('pins Bun in every supported-runtime build row that executes the full catalogue', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    for (const job of ['build', 'windows-driver-native']) {
+      const block = jobBlock(workflow, job);
+      expect(block).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
+      expect(block).toContain("bun-version: '1.2.15'");
+      expect(block.indexOf('oven-sh/setup-bun@')).toBeLessThan(
+        block.indexOf('name: Run the certified Termwright host'),
+      );
+      expect(block).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+    }
+  });
+
+  it('keeps the dedicated OpenTUI lane executable and fail-closed before optional skip policy applies', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const block = jobBlock(workflow, 'opentui');
+    const bunProbe = block.indexOf('bun --version');
+    const packageTest = block.indexOf('pnpm --filter @termwright/probe-opentui run test');
+
+    expect(bunProbe).toBeGreaterThan(-1);
+    expect(packageTest).toBeGreaterThan(bunProbe);
+    expect(block).not.toContain('run test:conformance');
+    expect(block).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+  });
+
+  it('requires Bun in every certifying workflow job that intentionally installs it', async () => {
+    const ci = await readWorkflow('ci.yml');
+    const release = await readWorkflow('release.yml');
+    for (const job of ['build', 'windows-driver-native', 'opentui', 'examples']) {
+      const block = jobBlock(ci, job);
+      expect(block).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
+      expect(block).toContain("bun-version: '1.2.15'");
+      expect(block).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+    }
+    const verify = jobBlock(release, 'verify');
+    expect(verify).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
+    expect(verify).toContain("bun-version: '1.2.15'");
+    expect(verify).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+  });
+
+  it('uses only reviewed Node 24 artifact actions in release automation', async () => {
+    const workflows = [
+      await readWorkflow('release.yml'),
+      await readWorkflow('upstream-candidates.yml'),
+      await readFile(new URL('../.github/actions/upload-termwright-runs/action.yml', import.meta.url), 'utf8'),
+    ];
+    const node24Pins = new Set([
+      'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7',
+      'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6',
+      'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8',
+    ]);
+
+    for (const workflow of workflows) {
+      const artifactActions = workflow.match(/actions\/(?:upload|download)-artifact@[^\n]+/gu) ?? [];
+      expect(artifactActions.length).toBeGreaterThan(0);
+      for (const action of artifactActions) expect(node24Pins.has(action), action).toBe(true);
     }
   });
 
@@ -122,30 +233,74 @@ describe('autonomous workflow security', () => {
   it('retains hidden Termwright run evidence from failed main and nightly jobs', async () => {
     const ci = await readWorkflow('ci.yml');
     const reliability = await readWorkflow('reliability.yml');
-    const artifacts = [
-      artifactStep(ci, 'ui-browser-artifacts'),
-      artifactStep(ci, 'example-termwright-reports'),
-      artifactStep(reliability, 'nightly-termwright-runs-${{ matrix.os }}-node-${{ matrix.node }}'),
-      artifactStep(reliability, 'nightly-termwright-runs-windows-latest-node-${{ matrix.node }}'),
+    const uploader = await readFile(
+      new URL('../.github/actions/upload-termwright-runs/action.yml', import.meta.url),
+      'utf8',
+    );
+    const conformance = await readFile(
+      new URL('../packages/conformance/scripts/conformance.mjs', import.meta.url),
+      'utf8',
+    );
+    const runProducingJobs = [
+      'deterministic-core-coverage',
+      'build',
+      'hostile',
+      'conpty-native',
+      'windows-driver-native',
+      'determinism',
+      'concurrency-stress',
+      'resource-leak',
+      'fault-and-jitter',
+      'randomized-race',
+      'windows-native-stress',
+      'conformance-posix',
+      'ui-browser',
+      'conformance-windows',
+      'opentui',
+      'release-hygiene',
+      'examples',
     ];
 
-    for (const artifact of artifacts) {
-      expect(artifact).toContain('if: ${{ failure() || cancelled() }}');
-      expect(artifact).toContain('uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7');
-      expect(artifact).toContain('.termwright/runs');
-      expect(artifact).toContain('include-hidden-files: true');
-      expect(artifact).toContain('overwrite: true');
+    expect(uploader).toContain('uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7');
+    expect(uploader).toContain('default: .termwright/runs');
+    expect(uploader).toContain('path: ${{ inputs.runs-path }}');
+    expect(uploader).toContain('if-no-files-found: warn');
+    expect(uploader).not.toContain('if-no-files-found: ignore');
+    expect(uploader).toContain('include-hidden-files: true');
+    expect(uploader).toContain('overwrite: true');
+    for (const job of runProducingJobs) {
+      const block = jobBlock(ci, job);
+      expect(block, job).toContain('if: ${{ failure() || cancelled() }}');
+      expect(block, job).toContain('uses: ./.github/actions/upload-termwright-runs');
+      expect(block, job).toContain('artifact-name: termwright-runs-${{ github.job }}-');
+    }
+
+    expect(conformance).toContain("runsDir: join(REPOSITORY_ROOT, '.termwright', 'conformance-runs')");
+    for (const job of ['conformance-posix', 'conformance-windows']) {
+      expect(jobBlock(ci, job), job).toContain('runs-path: .termwright/conformance-runs');
+    }
+
+    for (const job of ['nightly-soak-posix', 'nightly-soak-windows']) {
+      const block = jobBlock(reliability, job);
+      expect(block, job).toContain('if: ${{ failure() || cancelled() }}');
+      expect(block, job).toContain('uses: ./.github/actions/upload-termwright-runs');
+      expect(block, job).toContain('artifact-name: nightly-termwright-runs-');
     }
   });
 
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
+    const website = jobBlock(workflow, 'website');
+    const certification = jobBlock(workflow, 'certification');
     const docs = await readWorkflow('docs.yml');
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     const experimentalDocs = JSON.parse(
       await readFile(new URL('../typedoc.driver-experimental.json', import.meta.url), 'utf8'),
     );
-    expect(workflow).toContain('run: pnpm check:generated-docs');
+    expect(website).toContain('run: pnpm check:generated-docs');
+    expect(website).toContain('pnpm docs:api');
+    expect(website).toContain('git diff --exit-code -- website/src/content/docs/api');
+    expect(certification).toContain('      - website');
     expect(manifest.scripts['check:generated-docs']).toContain('generate-mcp-docs.mjs');
     expect(manifest.scripts['check:generated-docs']).toContain('generate-runtime-requirements.mjs');
     expect(manifest.scripts['check:generated-docs']).toContain('generate-resource-profile-docs.mjs');

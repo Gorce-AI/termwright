@@ -48,6 +48,7 @@ export async function writeNativeRunFixture(
     const runnerTaskId = createRunId('runner-task');
     const nativeTaskId = `fixture-${index}`;
     specs.push({ runnerTaskId, projectId, specId, nativeTaskId, file: test.file, fullName: test.title });
+    if (test.status === 'skipped') continue;
     const states = test.retries ?? [test.status];
     for (const [retry, status] of states.entries()) {
       attempts.push({
@@ -58,7 +59,16 @@ export async function writeNativeRunFixture(
     }
   }
   const duration = attempts.reduce((total, attempt) => total + (attempt.durationMs ?? 0), 0);
-  const status = options.status ?? (options.tests.some((test) => test.status === 'failed') ? 'failed' : 'passed');
+  const skippedCount = options.tests.filter((test) => test.status === 'skipped').length;
+  const status = options.status ?? (
+    options.tests.some((test) => test.status === 'failed')
+      ? 'failed'
+      : skippedCount === options.tests.length
+        ? 'skipped'
+        : skippedCount > 0
+          ? 'passed-with-skips'
+          : 'passed'
+  );
   let monotonicTime = 1;
   const producer = new RunEventProducer({
     producerId: createRunId('producer'), epoch: 0, monotonicNow: () => monotonicTime,
@@ -76,6 +86,31 @@ export async function writeNativeRunFixture(
     }
     monotonicTime += 1;
   }
+  for (const [index, test] of options.tests.entries()) {
+    if (test.status !== 'skipped') continue;
+    const spec = specs[index]!;
+    const identity = {
+      invocationId: start.invocationId,
+      runId: start.runId,
+      projectId: spec.projectId,
+      specId: spec.specId,
+      runnerTaskId: spec.runnerTaskId,
+    };
+    events.push(producer.emit({
+      eventClass: 'authoritative', type: 'run.skip-declaration',
+      identity: { invocationId: start.invocationId, runId: start.runId },
+      payload: { id: `fixture-skip-${index}`, file: spec.file, fullName: spec.fullName, required: true },
+    }));
+    events.push(producer.emit({
+      eventClass: 'authoritative', type: 'test.skipped', identity,
+      payload: { nativeTaskId: spec.nativeTaskId, file: spec.file, fullName: spec.fullName },
+    }));
+  }
+  events.push(producer.emit({
+    eventClass: 'authoritative', type: 'run.skip-policy',
+    identity: { invocationId: start.invocationId, runId: start.runId },
+    payload: { status: 'matched', declarations: skippedCount, observed: skippedCount, issues: 0 },
+  }));
   events.push(producer.emit({
     eventClass: 'authoritative', type: 'run.state',
     identity: { invocationId: start.invocationId, runId: start.runId }, payload: { state: status },

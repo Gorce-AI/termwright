@@ -177,6 +177,19 @@ the same command.
 the taxonomy in [`/CONTRACTS.md`](../../CONTRACTS.md) §MCP. `--json` makes
 output machine-readable, and failures carry a `kind`.
 
+A run containing both passed and skipped native cases ends as
+`passed-with-skips`, not `passed`. Human output names every skipped case and
+the UI renders the verdict in amber. Such a run exits successfully only when
+every skip matches exactly one applicable declaration supplied to the host or
+the repository's `quality/applicability-skips.json` and
+`quality/platform-deviations.json` registries; an undeclared,
+ambiguous, or unexpectedly absent required skip exits 1. A run in which every
+selected case is skipped remains `skipped` and never certifies. Human output
+names each skip; `termwright test --json` includes the aggregate `skipPolicy`
+plus per-run `skips` and detailed policy issues. Project-specific declarations
+can live in `quality/applicability-skips.json`. `termwright watch --json`
+emits the same skip identities and detailed policy result for every cycle.
+
 ## Requirements
 
 Node >= 22, ESM only. The native host embeds and certifies exactly Vitest 4.1.11

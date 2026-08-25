@@ -64,6 +64,13 @@ type CommandReply = {
   readonly detail?: string;
 };
 
+/** Internal fault-injection seam for endpoint startup lifecycle tests. */
+interface ControlChannelListenDependencies {
+  readonly platform?: NodeJS.Platform;
+  readonly createServer?: () => Server;
+  readonly listen?: (server: Server, endpoint: string) => Promise<void>;
+}
+
 /**
  * The harness end of the control channel.
  *
@@ -100,13 +107,13 @@ export class ControlChannel {
   }
 
   /** Creates the endpoint and starts listening. */
-  static async listen(): Promise<ControlChannel> {
-    const server = createServer();
+  static async listen(dependencies: ControlChannelListenDependencies = {}): Promise<ControlChannel> {
+    const server = (dependencies.createServer ?? createServer)();
     const token = randomBytes(32).toString('base64url');
     let endpoint: string;
     let directory: string | null = null;
 
-    if (process.platform === 'win32') {
+    if ((dependencies.platform ?? process.platform) === 'win32') {
       endpoint = `\\\\.\\pipe\\termwright-control-${randomBytes(16).toString('hex')}`;
     } else {
       directory = await mkdtemp(join(tmpdir(), 'termwright-control-'));
@@ -114,25 +121,27 @@ export class ControlChannel {
     }
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(endpoint, () => {
-          server.removeListener('error', reject);
-          resolve();
-        });
-      });
+      await (dependencies.listen ?? listenServer)(server, endpoint);
     } catch (error) {
-      server.close();
+      const cleanupFailures: unknown[] = [];
+      try {
+        await closeServer(server);
+      } catch (cleanupError) {
+        cleanupFailures.push(cleanupError);
+      }
       if (directory !== null) {
         try {
           await rm(directory, { recursive: true, force: true });
         } catch (cleanupError) {
-          throw new AggregateError(
-            [error, cleanupError],
-            'control endpoint listen and rollback both failed',
-            { cause: error },
-          );
+          cleanupFailures.push(cleanupError);
         }
+      }
+      if (cleanupFailures.length > 0) {
+        throw new AggregateError(
+          [error, ...cleanupFailures],
+          'control endpoint listen and rollback both failed',
+          { cause: error },
+        );
       }
       throw error;
     }
@@ -416,4 +425,21 @@ export class ControlChannel {
       suggestion: 'the fixture exited, or it was not launched by launchInkFixture',
     });
   }
+}
+
+async function listenServer(server: Server, endpoint: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(endpoint, () => {
+      server.removeListener('error', reject);
+      resolve();
+    });
+  });
+}
+
+async function closeServer(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => server.close((error) => {
+    if (error === undefined || (error as NodeJS.ErrnoException).code === 'ERR_SERVER_NOT_RUNNING') resolve();
+    else reject(error);
+  }));
 }

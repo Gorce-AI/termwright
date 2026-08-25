@@ -12,13 +12,13 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { buildShimSource, originalUrl, shouldShim, toModuleUrl, ORIGINAL_MARKER } from './shim.js';
 import { bunAvailable } from './testing/bun-available.js';
-import { withProbe } from './launch.js';
+import { runtimePreloadSpecifier, withProbe } from './launch.js';
 import { isInstrumented } from './runtime.js';
 
 const run = promisify(execFile);
@@ -107,20 +107,20 @@ describe('command building', () => {
     const { command } = withProbe('bun', ['bun', 'app.ts']);
     expect(command[0]).toBe('bun');
     expect(command[1]).toBe('--preload');
+    expect(command[2]).not.toMatch(/^file:\/\//u);
     expect(command.at(-1)).toBe('app.ts');
   });
 
   it('uses --import for Node, because the probe is ESM', () => {
     const { command } = withProbe('node', ['node', 'app.mjs']);
     expect(command[1]).toBe('--import');
+    expect(command[2]).toMatch(/^file:\/\//u);
   });
 
-  it.each(['bun', 'node'] as const)('passes the entry to %s as a file URL', (runtime) => {
-    // A bare absolute path is fine until Windows, where `D:` reads as a URL
-    // scheme and Node refuses it outright. Bun accepts either form, so one
-    // form is used for both rather than a platform branch nobody exercises.
-    const { command } = withProbe(runtime, [runtime, 'app']);
-    expect(command[2]).toMatch(/^file:\/\//u);
+  it('uses the runtime-specific preload form for a Windows drive path', () => {
+    const windowsEntry = String.raw`D:\repo\probe\preload.js`;
+    expect(runtimePreloadSpecifier('bun', windowsEntry)).toBe(windowsEntry);
+    expect(runtimePreloadSpecifier('node', windowsEntry)).toMatch(/^file:\/\//u);
   });
 
   it('refuses an empty command instead of producing a broken one', () => {
@@ -161,9 +161,10 @@ describe('a real application, in a real process', () => {
     // the running module, which is correct once the package is installed and
     // wrong under vitest, which runs `src`. The production resolution is
     // asserted separately below.
-    const entry = pathToFileURL(
+    const entry = runtimePreloadSpecifier(
+      runtime,
       join(packageRoot, 'dist', runtime === 'bun' ? 'bun-preload.js' : 'node-hook.js'),
-    ).href;
+    );
     const flag = runtime === 'bun' ? '--preload' : '--import';
     const command = options.instrumented ? [interpreter, flag, entry, ...base.slice(1)] : base;
 
@@ -184,12 +185,6 @@ describe('a real application, in a real process', () => {
   }
 
   const runtimes = (bunAvailable() ? ['bun', 'node'] : ['node']) as readonly ('bun' | 'node')[];
-
-  it.skipIf(bunAvailable())('skips the Bun arms because no bun binary is reachable', () => {
-    // Present so a run without Bun says so out loud instead of quietly
-    // covering half of what the suite claims to cover.
-    expect(bunAvailable()).toBe(false);
-  });
 
   it.each(runtimes)(
     'wraps createCliRenderer under %s without the app importing anything',

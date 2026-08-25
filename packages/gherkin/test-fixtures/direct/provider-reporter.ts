@@ -35,7 +35,7 @@ export default class ProviderReporter implements Reporter {
       if (
         typeof source?.file !== 'string' ||
         !source.file.endsWith(arithmetic ? 'arithmetic.feature' : 'custom-fixtures.feature') ||
-        source.line !== (arithmetic ? 6 : 3) ||
+        source.line !== (arithmetic ? 6 : 4) ||
         source.column !== 3
       ) {
         throw new Error(`feature case ${test.name} is missing its physical source`);

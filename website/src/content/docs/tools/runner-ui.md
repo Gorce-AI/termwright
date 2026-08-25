@@ -30,9 +30,11 @@ test, or the complete visible catalog. Expanding a group does not run it.
 Termwright preserves the selected scope in Runner: tests outside it are not
 shown as members of that run.
 
-The status counters beside the execution list show passed, failed, running,
-and waiting tests. During a run, overlapping Run controls are disabled and Stop
-becomes available.
+The status counters beside the execution list show passed, failed, skipped,
+running, and waiting tests. A mixed pass/skip run is amber
+`passed-with-skips`, not an ordinary green pass, and Runner explains that the
+skip policy remains part of certification. During a run, overlapping Run
+controls are disabled and Stop becomes available.
 
 ## Follow an active run
 
@@ -108,9 +110,10 @@ paint order.
 [![Run history with dated test runs, status summaries, and replay actions.](/termwright/images/runner/run-history.png)](/termwright/images/runner/run-history.png)
 
 Runs lists retained reports with their date and time. Open a report to inspect
-its tests, attempts, flaky result, earlier failure reasons, duration, and trace
-availability. Historical replays are contextual to each window or tab; opening
-a newer run does not replace an already pinned replay elsewhere.
+its tests, attempts, canonical verdict, passed/failed/skipped counts, flaky
+result, earlier failure reasons, duration, and trace availability. Historical
+replays are contextual to each window or tab; opening a newer run does not
+replace an already pinned replay elsewhere.
 
 Only a staged, validated and atomically committed run directory is certified
 complete. Runner also lists incomplete, corrupt, and unsupported-version

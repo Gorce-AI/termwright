@@ -15,7 +15,14 @@ const DEFAULT_STEP_DEFINITIONS = [
   'step_definitions/**/*.{ts,tsx,mts}',
 ] as const;
 
-export interface GherkinPluginOptions {
+/** Fixture names supplied by the Gherkin bridge or the native Termwright/Vitest context. */
+export type GherkinReservedFixtureName =
+  | 'termwrightOptions' | 'termwright' | 'terminal' | 'step'
+  | 'expect' | 'world' | 'scenario' | 'defer' | 'use'
+  | 'task' | 'signal' | 'skip' | 'annotate' | 'onTestFailed' | 'onTestFinished';
+
+/** Options for a Gherkin transform using an optional project fixture surface. */
+export interface GherkinPluginOptions<Fixtures extends object = Record<string, unknown>> {
   /** Directory against which feature paths and pairing templates are resolved. Defaults to Vite's root. */
   readonly featureRoot?: string;
   /** Cypress-compatible `[filepath]` / `[filepart]` glue patterns. */
@@ -32,7 +39,7 @@ export interface GherkinPluginOptions {
   /** Module specifiers emitted into transformed feature files. */
   readonly generatedImports?: GeneratedGherkinImports;
   /** Custom `test.extend()` fixture names forwarded into every Gherkin context. */
-  readonly fixtureNames?: readonly string[];
+  readonly fixtureNames?: readonly Exclude<Extract<keyof Fixtures, string>, GherkinReservedFixtureName>[];
   /** Cucumber tag expression selecting Scenario and Outline cases. */
   readonly tags?: string;
 }
@@ -473,7 +480,9 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
 }
 
 /** Public Vite/Vitest plugin. It transforms `.feature` modules before other loaders. */
-export function gherkinPlugin(options: GherkinPluginOptions = {}): Plugin {
+export function gherkinPlugin<Fixtures extends object = Record<string, unknown>>(
+  options: GherkinPluginOptions<Fixtures> = {},
+): Plugin {
   let config: ResolvedConfig;
   const featureGlue = new Map<string, readonly PairedGlue[]>();
   const pairingInput = (file: string): PairingInput => {

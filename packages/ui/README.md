@@ -230,7 +230,9 @@ resource semantics. Directories nest, search filters titles and paths, and a
 row that has not run yet says so. Directories and files
 start collapsed; result updates never unfold or refold a branch the user chose.
 Every directory and file shows the same compact passed, failed, running and
-not-run breakdown. Run all and Stop live in the same toolbar.
+not-run breakdown. Run summaries retain skipped counts and the canonical
+verdict; `passed-with-skips` and fully `skipped` are amber rather than green.
+Run all and Stop live in the same toolbar.
 
 The **Runner** view uses one execution rail on the left. Its fixed toolbar stays
 above the current run's cases, and the selected case expands its **Test body**,

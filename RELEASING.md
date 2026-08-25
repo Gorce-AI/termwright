@@ -1,15 +1,21 @@
 # Releasing Termwright
 
-Termwright uses an autonomous, SHA-bound Release PR. A trusted coordinator
-prepares it after a compatibility merge, reproduces its complete Git tree from
-the trusted base, and merges and publishes only after the exact required CI
-suite succeeds.
+Termwright uses an autonomous, SHA-bound Version PR. A trusted coordinator
+prepares it after candidate reconciliation finds pending changesets. That can
+follow a merged compatibility PR or a no-change reconciliation against the
+current `main` SHA. The coordinator reproduces the complete Version PR tree
+from the trusted base, then merges and publishes only after the exact required
+CI suite succeeds.
 
 ## Release a version
 
 1. Observe the daily **Framework compatibility candidates** run.
-2. Follow its generated compatibility PR and exact dispatched CI run.
-3. Follow the generated `chore(release): version packages (main)` PR and its
+2. If reconciliation changes compatibility data, follow its generated
+   compatibility PR and exact dispatched CI run. If reconciliation produces no
+   compatibility tree change, confirm the no-change reconciliation completed
+   successfully.
+3. When pending changesets exist, follow the generated
+   `chore(release): version packages (main)` PR and its
    exact dispatched CI run.
 4. Confirm that **Release publish** names the Version PR number and exact
    current default-branch SHA.

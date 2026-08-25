@@ -88,7 +88,7 @@ async function captureCatalogueAndExecution(): Promise<void> {
   server.hub.publish({ v: 1, type: 'step', testId: 'approval-live', title: 'fixture', phase: 'end', stepId: 'when', t: 84, status: 'failed', gherkin: when });
   server.hub.publish({ v: 1, type: 'test-end', id: 'approval-live', status: 'failed', durationMs: 84, flaky: false, lostLogRecords: 0, attempt: 2, error: 'Expected status to contain "approved"', priorFailures: [{ attempt: 1, errors: ['Timed out waiting for the status'] }] });
   server.hub.publish({ v: 1, type: 'test-end', id: 'waiting', status: 'passed', durationMs: 86, flaky: false, lostLogRecords: 0 });
-  server.hub.publish({ v: 1, type: 'run-end', summary: { total: 3, passed: 2, failed: 1, skipped: 0, flaky: 0, durationMs: 86 } });
+  server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'failed', total: 3, passed: 2, failed: 1, skipped: 0, flaky: 0, durationMs: 86 } });
   await expect.poll(() => page.locator('.tw-case[data-status="failed"]').count()).toBe(1);
   await page.getByText('1 earlier attempt failed', { exact: true }).click();
   await screenshot(page, 'failure-inspection.png');

@@ -19,6 +19,9 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain('benchmark --iterations 1000');
     expect(workflow).toContain('benchmark:charm --iterations 3');
     expect(workflow).toContain('benchmark:opentui --repetitions 3');
+    expect(workflow).toContain('$GITHUB_WORKSPACE/performance-results/semantic-pipeline.json');
+    expect(workflow).toContain('$GITHUB_WORKSPACE/performance-results/charm-immediate.json');
+    expect(workflow).toContain('$GITHUB_WORKSPACE/performance-results/opentui-marker-route.json');
     expect(workflow).toContain('collect-quality-performance.mjs');
     expect(collector).toContain('quality/soak/vitest.config.ts');
     expect(collector).toContain('quality/stress/vitest.config.ts');

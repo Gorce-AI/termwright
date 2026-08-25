@@ -160,7 +160,7 @@ It also states `targetCertificationState: "not-assessed"`,
 stage names are evidence about the bounded v1 profile, not claims that the full
 target state machine below has passed.
 
-`.github/workflows/upstream-candidates.yml` runs this profile on a weekly
+`.github/workflows/upstream-candidates.yml` runs this profile on a daily
 schedule or `workflow_dispatch`, with Go, Rust, Node and pnpm installed, and
 uploads the available JSON evidence as a 30-day artifact. It initializes an
 explicitly failed report immediately after checkout, before toolchain setup or
@@ -481,9 +481,10 @@ The repository already has substantial pieces of the behavioral gate:
   `test_probe_golden.py` assert real-process publication and terminal parity;
   Ink and OpenTUI session tests pin marker-after-drain ordering.
 - The `CI` workflow has cross-platform package tests, a `conformance` job, an
-  OpenTUI/Bun job, language-client jobs and separate Rust MSRV lanes. Required
-  flags prevent the dedicated OpenTUI and Ratatui lanes from looking green
-  solely because their prerequisites were missing.
+  OpenTUI/Bun job, language-client jobs and separate Rust MSRV lanes. The
+  OpenTUI lane probes its pinned Bun binary before executing the real probe
+  package tests, while the Ratatui lane's required flag prevents either lane
+  from looking green solely because its prerequisites were missing.
 - The bounded candidate certifier now joins source identities, manifest
   inputs/outputs, compatibility declarations, two clean applications and the
   existing suites into one deterministic unsigned artifact for the committed

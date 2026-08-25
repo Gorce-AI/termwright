@@ -11,16 +11,16 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 44,
-    "deadline-or-scheduler-regression-test": 70,
+    "deadline-or-scheduler-regression-test": 63,
     "deterministic-adversarial-fixture-schedule": 35,
-    "display-or-persisted-wall-time-not-correctness-order": 91,
+    "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 203,
-    "explicit-test-selection-reviewed-with-platform-registry": 99,
+    "explicit-external-or-ui-source-polling": 204,
+    "explicit-test-selection-reviewed-with-platform-registry": 96,
     "managed-or-diagnostic-background-task": 68,
-    "production-process-isolation-review": 28,
+    "production-process-isolation-review": 27,
     "test-observer-or-intentional-background-task": 14,
-    "test-process-isolation-review": 43
+    "test-process-isolation-review": 44
   },
   "findings": [
     {
@@ -1195,12 +1195,6 @@
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === 'win32')('rolls back its private directory when listen fails', async () => {"
-    },
-    {
-      "path": "packages/driver/src/semantic.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "client.send({ type: 'log', record: { ts: Date.now(), level: 'shouting', message: 'x', seq: 1 } });"
@@ -1939,18 +1933,6 @@
     },
     {
       "path": "packages/logs/src/bridges.test.ts",
-      "kind": "delay-helper",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await delay(20);"
-    },
-    {
-      "path": "packages/logs/src/bridges.test.ts",
-      "kind": "delay-helper",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await delay(20);"
-    },
-    {
-      "path": "packages/logs/src/bridges.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const before = Date.now();"
@@ -2310,10 +2292,10 @@
       "excerpt": "setTimeout(() => {"
     },
     {
-      "path": "packages/probe-opentui/src/injection.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(bunAvailable())('skips the Bun arms because no bun binary is reachable', () => {"
+      "path": "packages/probe-opentui/src/instrumentation.test.ts",
+      "kind": "process-global-mutation",
+      "classification": "test-process-isolation-review",
+      "excerpt": "process.env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'] = `sha256:${'d'.repeat(64)}`;"
     },
     {
       "path": "packages/probe-opentui/src/instrumentation.test.ts",
@@ -2326,12 +2308,6 @@
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "setTimeout(() => {"
-    },
-    {
-      "path": "packages/probe-opentui/src/testing/bun-available.ts",
-      "kind": "process-global-mutation",
-      "classification": "production-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_BUN'] === '1') {"
     },
     {
       "path": "packages/probe-opentui/src/testing/fake-driver.ts",
@@ -2368,12 +2344,6 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the launcher', () => {"
-    },
-    {
-      "path": "packages/probe-opentui/src/zero-config.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(bunAvailable())('coverage note', () => {"
     },
     {
       "path": "packages/probe-runtime/src/index.test.ts",
@@ -3069,12 +3039,6 @@
       "path": "packages/ui/src/app/browser-client.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 25));"
-    },
-    {
-      "path": "packages/ui/src/app/browser-client.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 5));"
     },
     {
@@ -3531,6 +3495,12 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-run-skip-warning').textContent()).toContain('not plain-green certification');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-semantic-node-row').count()).toBeGreaterThan(0);"
     },
     {
@@ -3786,6 +3756,12 @@
       "excerpt": "const startedAt = Date.now();"
     },
     {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "server.hub.publish({ v: 1, type: 'run-start', runId: 'run:yellow', mode: 'live', startedAt: Date.now() });"
+    },
+    {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
@@ -3985,12 +3961,6 @@
     },
     {
       "path": "packages/ui/src/live-client.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((done) => setTimeout(done, 20));"
-    },
-    {
-      "path": "packages/ui/src/live-client.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const deadline = Date.now() + 5_000;"
@@ -4065,25 +4035,7 @@
       "path": "packages/ui/src/server.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((done) => setTimeout(done, 20));"
-    },
-    {
-      "path": "packages/ui/src/server.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 10));"
-    },
-    {
-      "path": "packages/ui/src/server.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 100));"
-    },
-    {
-      "path": "packages/ui/src/server.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 30));"
     },
     {
       "path": "packages/ui/src/server.test.ts",

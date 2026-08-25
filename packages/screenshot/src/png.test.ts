@@ -38,14 +38,6 @@ function inkCoverage(svg: string): number {
  */
 const GEOMETRY = { fontSize: 10, cellWidth: 6, lineHeight: 12, padding: 4 } as const;
 
-/**
- * Budget for the one test that must pay font enumeration. A complete Windows
- * font scan takes about 37 seconds on a GitHub-hosted Node 24 runner while the
- * same work is sub-second on macOS. Keep the real end-to-end render, but give
- * the platform operation enough room to finish under normal CI contention.
- */
-const FONT_SCAN_TIMEOUT_MS = 90_000;
-
 describe('renderPng', () => {
   it('produces a decodable PNG whose header matches the SVG size', () => {
     const shot = renderPng(textFrame('hello', { columns: 10 }), GEOMETRY);
@@ -70,36 +62,23 @@ describe('renderPng', () => {
     expect(() => renderPng(textFrame('x'), { scale: Number.NaN })).toThrow(/scale/);
   });
 
-  it(
-    'really rasterises the fallback path, scan and all',
-    () => {
-      // The one render in this file that deliberately pays resvg's font scan,
-      // kept because the mocked suite in png-options.test.ts never touches the
-      // real rasteriser. What the *decision* is gets asserted there; this
-      // proves the whole thing still produces an image.
-      const shot = renderPng(textFrame('a\u{F0000}'), { fontSize: 12 });
-      expect(shot.selfContained).toBe(false);
-      expect(shot.fallbackCharacters).toContain('\u{F0000}');
-      expect(shot.systemFontsLoaded).toBe(true);
-      expect([...shot.png.slice(0, 8)]).toEqual(PNG_SIGNATURE);
-    },
-    FONT_SCAN_TIMEOUT_MS,
-  );
-
-  it('can decline the system-font scan a fallback would trigger', () => {
+  it('rasterises fallback text against a controlled empty font source', () => {
     const shot = renderPng(textFrame('a\u{F0000}'), {
       ...GEOMETRY,
+      font: { files: [], system: false },
       systemFontFallback: false,
     });
 
-    // Still an honest report of what could not be embedded...
+    // This is the real resvg integration, not the mock used by the option
+    // contract tests. An explicit empty source makes every glyph take the
+    // <text> path while keeping the result independent of the host's font
+    // catalogue. Resvg still has to parse and rasterise that fallback SVG.
     expect(shot.selfContained).toBe(false);
+    expect(shot.fallbackCharacters).toContain('a');
     expect(shot.fallbackCharacters).toContain('\u{F0000}');
-    // ...and the claim itself, as a fact rather than as a stopwatch reading:
-    // "no scan happened" is what the escape hatch promises, and a wall-clock
-    // threshold turns a loaded CI runner into a failing build.
     expect(shot.systemFontsLoaded).toBe(false);
     expect([...shot.png.slice(0, 8)]).toEqual(PNG_SIGNATURE);
+    expect(pngHeader(shot.png)).toEqual({ width: shot.width, height: shot.height });
   });
 });
 

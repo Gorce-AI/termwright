@@ -250,6 +250,10 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
   let sequence = 0;
   let closed = false;
   let serial = Promise.resolve();
+  let closePromise: Promise<void> | undefined;
+  const socketClosed = new Promise<void>((resolve) => {
+    socket.once('close', resolve);
+  });
   const decoder = new LocalJsonDecoder(MAX_FRAME_BYTES, (value) => {
     try {
       const message = parseResponseEnvelope(value, VERSION);
@@ -295,7 +299,11 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
       }
       pending.set(requestId, pendingRequest);
       try { write(socket, { v: VERSION, type, requestId, ...fields }); }
-      catch (error) { pending.delete(requestId); reject(error); }
+      catch (error) {
+        pending.delete(requestId);
+        if (pendingRequest.timer !== undefined) clearTimeout(pendingRequest.timer);
+        reject(error);
+      }
     });
   };
 
@@ -336,11 +344,16 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
         await serial;
         await request('flush', {}, deadline);
       },
-      async close(): Promise<void> {
-        if (closed) return;
-        await serial;
-        closed = true;
-        socket.end();
+      close(): Promise<void> {
+        closePromise ??= (async () => {
+          await serial;
+          if (!closed) {
+            closed = true;
+            socket.end();
+          }
+          await socketClosed;
+        })();
+        return closePromise;
       },
     });
   } catch (error) {

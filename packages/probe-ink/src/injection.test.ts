@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
-import { withProbe } from './launch.js';
+import { runtimePreloadSpecifier, withProbe } from './launch.js';
 import { isInstrumented } from './runtime.js';
 import {
   buildShimSource,
@@ -34,13 +34,20 @@ describe('Ink shim', () => {
 });
 
 describe('launcher and dormant rule', () => {
-  it.each(['node', 'bun'] as const)('uses a file URL for %s', (runtime) => {
+  it.each(['node', 'bun'] as const)('uses the runtime-specific preload form for %s', (runtime) => {
     const { command } = withProbe(runtime, [runtime, 'app.mjs']);
     const flag = runtime === 'node' ? '--import' : '--preload';
     const index = command.indexOf(flag);
     expect(index).toBeGreaterThan(0);
-    expect(command[index + 1]).toMatch(/^file:\/\//u);
+    if (runtime === 'node') expect(command[index + 1]).toMatch(/^file:\/\//u);
+    else expect(command[index + 1]).not.toMatch(/^file:\/\//u);
     expect(command.at(-1)).toBe('app.mjs');
+  });
+
+  it('keeps a Windows drive path native for Bun but URL-safe for Node', () => {
+    const windowsEntry = String.raw`D:\repo\probe\preload.js`;
+    expect(runtimePreloadSpecifier('bun', windowsEntry)).toBe(windowsEntry);
+    expect(runtimePreloadSpecifier('node', windowsEntry)).toMatch(/^file:\/\//u);
   });
 
   it('rejects an empty application command', () => {

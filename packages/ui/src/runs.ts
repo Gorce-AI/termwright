@@ -99,6 +99,9 @@ function projectDetail(record: RunHistoryRecord): RunDetail {
 }
 
 function projectComplete(manifest: NativeRunManifest): RunManifest {
+  const skippedTasks = new Set(manifest.events
+    .filter((event) => event.type === 'test.skipped' && event.identity.runnerTaskId !== undefined)
+    .map((event) => event.identity.runnerTaskId!));
   const attemptsByTask = new Map<string, NativeRunAttempt[]>();
   for (const attempt of manifest.attempts) {
     const attempts = attemptsByTask.get(attempt.runnerTaskId) ?? [];
@@ -120,7 +123,7 @@ function projectComplete(manifest: NativeRunManifest): RunManifest {
       specId: spec.specId,
       title: spec.fullName,
       file: spec.file,
-      status: final?.status ?? 'not-run',
+      status: final?.status ?? (skippedTasks.has(spec.runnerTaskId) ? 'skipped' : 'not-run'),
       durationMs: sumDuration(nativeAttempts),
       flaky: final?.status === 'passed' && nativeAttempts.some((attempt) => attempt.status === 'failed'),
       attempts,

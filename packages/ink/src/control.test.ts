@@ -3,13 +3,24 @@
  * else in the suite shares the namespace.
  */
 
-import { connect } from 'node:net';
+import { connect, createServer } from 'node:net';
 import { once } from 'node:events';
 import { access } from 'node:fs/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ControlChannel } from './control.js';
 
 const open: ControlChannel[] = [];
+
+function connectFailure(endpoint: string): Promise<Error> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(endpoint);
+    socket.once('connect', () => {
+      socket.destroy();
+      reject(new Error(`rolled-back endpoint still accepts connections: ${endpoint}`));
+    });
+    socket.once('error', (error) => resolve(error));
+  });
+}
 
 afterEach(async () => {
   for (const channel of open.splice(0)) await channel.close();
@@ -31,6 +42,33 @@ async function attachFixture(channel: ControlChannel): Promise<ReturnType<typeof
 }
 
 describe('ControlChannel', () => {
+  it('rolls back a Windows named-pipe listener when endpoint startup fails', async () => {
+    const server = createServer();
+    const close = vi.spyOn(server, 'close');
+    let endpoint = '';
+
+    await expect(ControlChannel.listen({
+      platform: 'win32',
+      createServer: () => server,
+      listen: async (listener, candidateEndpoint) => {
+        endpoint = candidateEndpoint;
+        await new Promise<void>((resolve, reject) => {
+          listener.once('error', reject);
+          listener.listen(candidateEndpoint, () => {
+            listener.removeListener('error', reject);
+            resolve();
+          });
+        });
+        throw new Error('injected named-pipe listen failure');
+      },
+    })).rejects.toThrow('injected named-pipe listen failure');
+
+    expect(endpoint).toMatch(/^\\\\\.\\pipe\\termwright-control-/u);
+    expect(close).toHaveBeenCalledOnce();
+    expect(server.listening).toBe(false);
+    await expect(connectFailure(endpoint)).resolves.toBeDefined();
+  });
+
   it('creates its endpoint and removes it again on close', async () => {
     const channel = await ControlChannel.listen();
     const endpoint = channel.endpoint;

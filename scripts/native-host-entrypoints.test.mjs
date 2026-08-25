@@ -197,6 +197,27 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(`${manifest.scripts.test}\n${manifest.scripts['test:watch']}`).not.toMatch(/(?:^|\s)vitest(?:\s|$)/u);
   });
 
+  it('keeps Bun availability in one fail-closed capability policy without inverse tests', async () => {
+    const policy = await readFile(new URL('./test-support/bun-runtime.mjs', import.meta.url), 'utf8');
+    expect(policy).toContain("env['TERMWRIGHT_SKIP_BUN'] === '1'");
+    expect(policy).toContain("env['TERMWRIGHT_REQUIRE_BUN'] === '1'");
+
+    for (const file of [
+      'packages/probe-ink/src/zero-config.test.ts',
+      'packages/probe-opentui/src/testing/bun-available.ts',
+    ]) {
+      const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+      expect(source, file).toContain('test-support/bun-runtime.mjs');
+      expect(source, file).toContain('bunTestCapability(');
+    }
+
+    const opentuiTests = await Promise.all([
+      readFile(new URL('../packages/probe-opentui/src/injection.test.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../packages/probe-opentui/src/zero-config.test.ts', import.meta.url), 'utf8'),
+    ]);
+    expect(opentuiTests.join('\n')).not.toMatch(/skips the Bun arms|coverage note|no bun binary is reachable/u);
+  });
+
   it('keeps every package test script on the root native host', async () => {
     const entries = await readdir(new URL('../packages/', import.meta.url), { withFileTypes: true });
     for (const entry of entries) {

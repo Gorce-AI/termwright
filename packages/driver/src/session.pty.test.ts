@@ -1955,6 +1955,7 @@ describe.skipIf(!ptyAvailable())(
       });
       await terminal.getByTestId("approve").resolve();
 
+      const beforePendingFocus = terminal.checkpoint();
       await terminal.write("F");
       await terminal.waitForText("[Reject]");
       let startedActionId: string | undefined;
@@ -1980,27 +1981,55 @@ describe.skipIf(!ptyAvailable())(
         });
       });
       let activationSettled = false;
-      const activation = terminal
+      // Own both settlements immediately. If an assertion below fails, fixture
+      // teardown closes the session and the pending action rejects; a `.finally`
+      // branch would mirror that rejection into a promise the failed test no
+      // longer awaits, turning the useful assertion failure into an unhandled
+      // rejection. This outcome promise always resolves while preserving the
+      // action error for the normal assertion path below.
+      const activationOutcome = terminal
         .getByTestId("reject")
         .activate()
-        .finally(() => {
+        .then((receipt) => {
           activationSettled = true;
+          return { ok: true as const, receipt };
+        }, (error: unknown) => {
+          activationSettled = true;
+          return { ok: false as const, error };
         });
 
       const waitDiagnostic = await waiting;
       offStarted();
       expect(activationSettled).toBe(false);
       expect(waitDiagnostic.actionId).toBe(startedActionId);
-      expect(terminal.checkpoint()).toMatchObject({
-        semanticRevision: 1,
-        pairedScreenRevision: 1,
-      });
+      const whileFocusFrameOpen = terminal.checkpoint();
+      // Screen revisions are transport observations: one logical initial
+      // frame can span multiple PTY chunks before its marker, so its exact
+      // paired revision is not fixed at 1. The causal contract is stronger:
+      // the published pair is unchanged, while the visible Reject frame has
+      // advanced the screen beyond that still-published pair.
+      expect(beforePendingFocus.semanticRevision).toBe(1);
+      expect(beforePendingFocus.pairedScreenRevision).not.toBeNull();
+      expect(whileFocusFrameOpen.semanticRevision).toBe(
+        beforePendingFocus.semanticRevision,
+      );
+      expect(whileFocusFrameOpen.pairedScreenRevision).toBe(
+        beforePendingFocus.pairedScreenRevision,
+      );
+      if (whileFocusFrameOpen.pairedScreenRevision === null) {
+        throw new Error("the initial semantic revision lost its paired screen");
+      }
+      expect(whileFocusFrameOpen.screenRevision).toBeGreaterThan(
+        whileFocusFrameOpen.pairedScreenRevision,
+      );
       expect(terminal.screen().text()).toContain("[Reject]");
 
       // C is a test-only causal release. The fixture exits non-zero if the
       // action recipe emits any input before this point.
       await terminal.write("C");
-      const receipt = await activation;
+      const activation = await activationOutcome;
+      if (!activation.ok) throw activation.error;
+      const { receipt } = activation;
       expect(await completed).toBe(waitDiagnostic.actionId);
 
       expect(receipt.plan.strategy).toBe("authoritative-activate");

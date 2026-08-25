@@ -73,7 +73,8 @@ describe('certified OpenTUI instrumentation', () => {
     try {
       expect(instrumentOpenTuiChunk(join(coreDirectory, files[0]!), sources[0]!)).toContain('frameworkVersion: "0.5.3-candidate"');
       process.env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'] = `sha256:${'d'.repeat(64)}`;
-      expect(instrumentOpenTuiChunk(join(coreDirectory, files[0]!), sources[0]!)).not.toContain('0.5.3-candidate');
+      const mismatched = instrumentOpenTuiChunk(join(coreDirectory, files[0]!), sources[0]!);
+      expect(mismatched?.includes('frameworkVersion: "0.5.3-candidate"')).not.toBe(true);
     } finally {
       process.env = old;
     }
@@ -106,6 +107,8 @@ describe('certified OpenTUI instrumentation', () => {
       const selected = await instrumentableBuilds(directory, '0.5.4-candidate');
       expect(selected.map((entry) => entry.file)).toEqual(candidateFiles);
       expect(instrumentOpenTuiChunk(selected[0]!.path, `${selected[0]!.source}\n// changed`)).toBeUndefined();
+      process.env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'] = `sha256:${'d'.repeat(64)}`;
+      expect(instrumentOpenTuiChunk(selected[0]!.path, selected[0]!.source)).toBeUndefined();
     } finally {
       process.env = old;
       await rm(scratch, { recursive: true, force: true });

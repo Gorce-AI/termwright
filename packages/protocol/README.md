@@ -40,6 +40,12 @@ Each semantic revision is published as a complete snapshot.
 | `validate` | Full snapshot validation |
 | `accesskit` | Pure conversion to AccessKit-compatible data |
 | `errors` | Typed protocol violations |
+| `run-state` | Closed run lifecycle, terminal verdicts, and transition validation |
+
+`passed-with-skips` is a terminal run verdict distinct from both plain
+`passed` and fully `skipped`. It preserves partial-skip evidence for hosts and
+UIs; whether that verdict certifies is decided by the host's exact skip policy,
+not by the protocol state alone.
 
 ## Decode adapter traffic
 

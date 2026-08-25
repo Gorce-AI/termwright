@@ -121,4 +121,27 @@ describe('test-host persistence seams', () => {
     for (const timer of [...timers]) if (timer.at <= now) timer.elapsed();
     await expect(execution).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT', phase: 'unit execution' });
   });
+
+  it('keeps the production finalization reserve available after execution expires', async () => {
+    let now = 0;
+    const timers: Array<{ readonly at: number; readonly elapsed: () => void }> = [];
+    const runtime: TermwrightHostDeadlineRuntime = {
+      now: () => now,
+      schedule: (delay, elapsed) => {
+        const timer = { at: now + delay, elapsed };
+        timers.push(timer);
+        return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); };
+      },
+    };
+    const budget = new HostRunBudget(10 * 60_000, 30_000, runtime);
+    const execution = budget.execution('native tests', () => new Promise<never>(() => undefined));
+
+    now = 9 * 60_000 + 30_000;
+    for (const timer of [...timers]) if (timer.at <= now) timer.elapsed();
+    await expect(execution).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT', phase: 'native tests' });
+
+    const finalized = await budget.finalization('canonical run history', async () => 'committed');
+    expect(finalized).toBe('committed');
+    expect(timers).toEqual([]);
+  });
 });

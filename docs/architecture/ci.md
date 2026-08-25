@@ -5,6 +5,18 @@ workflow reruns, disables test retries and snapshot updates, and records hidden
 Termwright evidence where appropriate. A fail-then-pass diagnostic run remains
 flaky and non-zero; GitHub does not provide a certifying yellow state.
 
+`pnpm check:local` is the portable developer aggregate, not an alias for this
+cross-platform DAG. It runs the checks available on the current machine,
+including generated API-reference drift. Native Windows, OS/Node matrices and
+the dedicated reliability lanes remain required CI evidence.
+
+Native Host runs distinguish plain `passed`, amber `passed-with-skips`, and
+fully `skipped`. A partial skip certifies only when observed identities match
+the reviewed applicability/platform registries exactly; an all-skipped run or
+policy mismatch remains red. Failed or cancelled run-producing jobs invoke the
+shared hidden-file-aware uploader and retain `.termwright/runs` for seven days.
+Successful matrix rows do not create empty evidence artifacts.
+
 ## Current DAG
 
 Jobs are grouped conceptually even while they remain in one workflow:
@@ -20,6 +32,12 @@ The x64 and ARM64 ConPTY producers are independent. Only x64 Windows jobs need
 the x64 producer; POSIX conformance has no Windows-artifact dependency. The
 scheduled reliability workflow follows the same rule and downloads the x64
 addon before its Windows soak. Bun and every GitHub action are pinned.
+The supported-runtime build matrix, examples lane, release verifier and the
+dedicated OpenTUI lane install Bun 1.2.15 and set
+`TERMWRIGHT_REQUIRE_BUN=1`. The shared test-capability policy turns a missing or
+deliberately disabled Bun runtime into a hard failure in those jobs. Local runs
+may omit Bun; the genuinely Bun-only OpenTUI cases are then reported as exact
+applicability skips, without manufacturing an inverse "Bun unavailable" test.
 
 Job display names are an external contract: branch protection and the trusted
 release coordinator consume them. Changes to the matrix must update the shared

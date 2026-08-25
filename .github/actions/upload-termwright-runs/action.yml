@@ -1,0 +1,25 @@
+name: Upload Termwright failure evidence
+description: Retain hidden certified-host run journals when a CI job fails or is cancelled.
+
+inputs:
+  artifact-name:
+    description: Unique artifact name for the calling job or matrix row.
+    required: true
+  runs-path:
+    description: Repository-relative directory containing the run journals produced by this job.
+    required: false
+    default: .termwright/runs
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.runs-path }}
+        # Setup failures can legitimately precede creation of a run directory,
+        # but absence must remain visible rather than looking like retained evidence.
+        if-no-files-found: warn
+        include-hidden-files: true
+        overwrite: true
+        retention-days: 7

@@ -117,6 +117,11 @@ function manifest(start: RunStartProvenance): NativeRunManifest {
     return [started, finished];
   });
   events.push(producer.emit({
+    eventClass: 'authoritative', type: 'run.skip-policy',
+    identity: { invocationId: start.invocationId, runId: start.runId },
+    payload: { status: 'matched', declarations: 0, observed: 0, issues: 0 },
+  }));
+  events.push(producer.emit({
       eventClass: 'authoritative', type: 'run.state',
       identity: { invocationId: start.invocationId, runId: start.runId }, payload: { state: 'flaky' },
     }));

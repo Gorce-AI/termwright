@@ -233,6 +233,35 @@ describe('mcp delegation', () => {
 });
 
 describe('the native test command', () => {
+  it('projects only Bun policy controls into test workers', async () => {
+    const h = harness();
+    Object.assign(h.deps.processContext.env, {
+      TERMWRIGHT_REQUIRE_BUN: '1',
+      TERMWRIGHT_SKIP_BUN: '0',
+      SECRET_FROM_CLI_PROCESS: 'must-not-leak',
+    });
+    const value = completion('passed', 1);
+    const options: unknown[] = [];
+    Object.assign(h.deps, {
+      openTestHost: async (received: unknown) => {
+        options.push(received);
+        return {
+          requestRun: () => ({ invocationId: value.invocationId, runId: value.runId, completed: Promise.resolve(value) }),
+          watch: vi.fn(),
+          close: async () => undefined,
+        };
+      },
+    });
+
+    expect(await runCli(['test'], h.deps)).toBe(EXIT_CODES.ok);
+    expect(options).toHaveLength(1);
+    expect(options[0]).toMatchObject({
+      workerEnv: { TERMWRIGHT_REQUIRE_BUN: '1', TERMWRIGHT_SKIP_BUN: '0' },
+    });
+    expect((options[0] as { workerEnv: Record<string, string> }).workerEnv)
+      .not.toHaveProperty('SECRET_FROM_CLI_PROCESS');
+  });
+
   it('repeats complete cycles in one host and fails on the worst run', async () => {
     const h = harness();
     const close = vi.fn(async () => undefined);
@@ -294,6 +323,106 @@ describe('the native test command', () => {
     expect(await runCli(['test', '--json'], h.deps)).toBe(EXIT_CODES.assertion);
     expect(JSON.parse(h.out[0] ?? '{}')).toMatchObject({ state: 'skipped', completedRuns: 1 });
   });
+
+  it('prints a yellow mixed-skip verdict and certifies only an exact declaration match', async () => {
+    const allowed = {
+      ...completion('passed-with-skips', 1),
+      skips: [{
+        runnerTaskId: 'runner-task:00000000-0000-4000-8000-000000000001' as never,
+        nativeTaskId: 'native-skip',
+        file: '/repo/platform.test.ts',
+        fullName: 'platform case',
+      }],
+      skipPolicy: { status: 'matched' as const, declarations: 1, issues: [] },
+    };
+    const h = harness();
+    Object.assign(h.deps, {
+      openTestHost: async () => ({
+        requestRun: () => ({ invocationId: allowed.invocationId, runId: allowed.runId, completed: Promise.resolve(allowed) }),
+        watch: vi.fn(),
+        close: async () => undefined,
+      }),
+    });
+    expect(await runCli(['test', '--json'], h.deps)).toBe(EXIT_CODES.ok);
+    expect(JSON.parse(h.out[0] ?? '{}')).toMatchObject({
+      state: 'passed-with-skips',
+      skipPolicy: 'matched',
+    });
+
+    const rejected = {
+      ...allowed,
+      skipPolicy: { status: 'mismatch' as const, declarations: 0, issues: ['undeclared skip'] },
+    };
+    const red = harness();
+    Object.assign(red.deps, {
+      openTestHost: async () => ({
+        requestRun: () => ({ invocationId: rejected.invocationId, runId: rejected.runId, completed: Promise.resolve(rejected) }),
+        watch: vi.fn(),
+        close: async () => undefined,
+      }),
+    });
+    expect(await runCli(['test', '--json'], red.deps)).toBe(EXIT_CODES.assertion);
+  });
+});
+
+describe('the native watch command', () => {
+  it('projects only Bun policy controls into watch workers', async () => {
+    const h = harness();
+    Object.assign(h.deps.processContext.env, {
+      TERMWRIGHT_REQUIRE_BUN: '1',
+      SECRET_FROM_CLI_PROCESS: 'must-not-leak',
+    });
+    const value = completion('passed', 1);
+    const options: unknown[] = [];
+    Object.assign(h.deps, {
+      openTestHost: async (received: unknown) => {
+        options.push(received);
+        return {
+          requestRun: vi.fn(),
+          watch: () => ({
+            initial: { invocationId: value.invocationId, runId: value.runId, completed: Promise.resolve(value) },
+            close: async () => undefined,
+          }),
+          close: async () => undefined,
+        };
+      },
+    });
+
+    expect(await runCli(['watch'], h.deps)).toBe(EXIT_CODES.ok);
+    expect(options[0]).toMatchObject({ workerEnv: { TERMWRIGHT_REQUIRE_BUN: '1' } });
+    expect((options[0] as { workerEnv: Record<string, string> }).workerEnv)
+      .not.toHaveProperty('SECRET_FROM_CLI_PROCESS');
+  });
+
+  it('does not certify an all-skipped initial cycle', async () => {
+    const h = harness();
+    const value = {
+      ...completion('skipped', 1),
+      skips: [{
+        runnerTaskId: 'runner-task:00000000-0000-4000-8000-000000000001' as never,
+        nativeTaskId: 'native-skip', file: '/repo/skipped.test.ts', fullName: 'skipped case',
+      }],
+      skipPolicy: { status: 'mismatch' as const, declarations: 0, issues: ['undeclared skip'] },
+    };
+    const close = vi.fn(async () => undefined);
+    Object.assign(h.deps, {
+      openTestHost: async () => ({
+        requestRun: vi.fn(),
+        watch: () => ({
+          initial: { invocationId: value.invocationId, runId: value.runId, completed: Promise.resolve(value) },
+          close,
+        }),
+        close,
+      }),
+    });
+
+    expect(await runCli(['watch', '--json'], h.deps)).toBe(EXIT_CODES.assertion);
+    expect(JSON.parse(h.out[0] ?? '{}')).toMatchObject({
+      state: 'skipped', watching: true,
+      skips: [{ nativeTaskId: 'native-skip' }],
+      skipPolicy: { status: 'mismatch', issues: ['undeclared skip'] },
+    });
+  });
 });
 
 function completion(state: RunCompletion['state'], ordinal: number): RunCompletion {
@@ -304,17 +433,27 @@ function completion(state: RunCompletion['state'], ordinal: number): RunCompleti
     catalog: undefined,
     events: [],
     failures: [],
+    skips: [],
+    skipPolicy: { status: 'matched', declarations: 0, issues: [] },
   };
 }
 
 describe('the ui command', () => {
   it('starts the native host and UI server, and prints the URL', async () => {
     const h = harness();
+    Object.assign(h.deps.processContext.env, {
+      TERMWRIGHT_REQUIRE_BUN: '1',
+      SECRET_FROM_CLI_PROCESS: 'must-not-leak',
+    });
     expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.ok);
 
     expect(h.out.join('\n')).toContain('http://127.0.0.1:5000/?token=abc');
     expect(h.runs).toHaveLength(1);
-    expect(h.runs[0]).toMatchObject({ args: [], cwd: '/workspace', resourceProfile: 'local' });
+    expect(h.runs[0]).toMatchObject({
+      args: [], cwd: '/workspace', resourceProfile: 'local',
+      workerEnv: { TERMWRIGHT_REQUIRE_BUN: '1' },
+    });
+    expect(h.runs[0]?.workerEnv).not.toHaveProperty('SECRET_FROM_CLI_PROCESS');
     expect(h.closed()).toBe(1);
   });
 

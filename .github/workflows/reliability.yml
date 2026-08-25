@@ -96,14 +96,9 @@ jobs:
 
       - name: Upload Termwright failure evidence
         if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: ./.github/actions/upload-termwright-runs
         with:
-          name: nightly-termwright-runs-${{ matrix.os }}-node-${{ matrix.node }}
-          path: .termwright/runs
-          if-no-files-found: ignore
-          include-hidden-files: true
-          overwrite: true
-          retention-days: 7
+          artifact-name: nightly-termwright-runs-${{ matrix.os }}-node-${{ matrix.node }}
 
   nightly-soak-windows:
     name: nightly terminal lifecycle soak
@@ -151,11 +146,6 @@ jobs:
             --config quality/soak/vitest.config.ts --run quality/soak/terminal-cycle.test.ts
       - name: Upload Termwright failure evidence
         if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: ./.github/actions/upload-termwright-runs
         with:
-          name: nightly-termwright-runs-windows-latest-node-${{ matrix.node }}
-          path: .termwright/runs
-          if-no-files-found: ignore
-          include-hidden-files: true
-          overwrite: true
-          retention-days: 7
+          artifact-name: nightly-termwright-runs-windows-latest-node-${{ matrix.node }}

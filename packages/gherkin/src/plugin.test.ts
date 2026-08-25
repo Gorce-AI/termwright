@@ -17,6 +17,20 @@ const pairingRoot = resolve(here, '__fixtures__/pairing/features');
 const pairingFeature = resolve(pairingRoot, 'orders/create.feature');
 const relativeFixturePath = (path: string): string => relative(pairingRoot, path).split(sep).join('/');
 
+interface ConsumerFixtures {
+  readonly account: { readonly name: string };
+}
+
+// Consumer type regression: the unparameterized API remains ergonomic, while
+// an explicit fixture surface makes misspelled generated bindings a compile
+// error instead of an unknown-fixture failure in a transformed worker.
+gherkinPlugin({ fixtureNames: ['projectFixture'] });
+gherkinPlugin<ConsumerFixtures>({ fixtureNames: ['account'] });
+// @ts-expect-error `accout` is not a key of ConsumerFixtures.
+gherkinPlugin<ConsumerFixtures>({ fixtureNames: ['accout'] });
+// @ts-expect-error native/context fixtures are supplied by the generated bridge.
+gherkinPlugin<ConsumerFixtures & { readonly terminal: string }>({ fixtureNames: ['terminal'] });
+
 describe('resolvePairing', () => {
   test('expands filepath then filepart nearest-to-root then global', async () => {
     const result = await resolvePairing({

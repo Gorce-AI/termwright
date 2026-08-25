@@ -24,7 +24,7 @@ import {
   assertCertifiedVitestRuntime,
 } from '@termwright/test/vitest-engine';
 import type { UserConsoleLog } from 'vitest';
-import type { TestCase } from 'vitest/node';
+import type { TestCase, TestRunResult } from 'vitest/node';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
 import { preflightTestHost, type TermwrightHostPreflightOptions } from './preflight.js';
 import {
@@ -42,6 +42,7 @@ import {
   TermwrightHostTimeoutError,
   withinHostDeadline,
 } from './test-host-persistence.js';
+import { loadRepositorySkipDeclarations } from './skip-policy.js';
 
 export { HostRunBudget, TermwrightHostStartupCleanupError, TermwrightHostTimeoutError } from './test-host-persistence.js';
 export type { TermwrightHostDeadlineRuntime } from './test-host-persistence.js';
@@ -67,6 +68,32 @@ export interface NativeTestCase {
 export interface NativeTestCatalog {
   readonly runId: RunId;
   readonly tests: readonly NativeTestCase[];
+}
+
+/** One native case Vitest selected but deliberately did not execute. */
+export interface NativeTestSkip {
+  readonly runnerTaskId: RunnerTaskId;
+  readonly nativeTaskId: string;
+  readonly file: string;
+  readonly fullName: string;
+}
+
+/** Exact repository policy entry allowed to explain a skipped native case. */
+export interface NativeTestSkipDeclaration {
+  readonly id: string;
+  readonly file: string;
+  /** Optional exact top-level suite, excluding only its dynamic `(skipped: …)` suffix. */
+  readonly suite?: string;
+  /** Full native name, or the exact leaf title used by the platform registry. */
+  readonly fullName: string;
+  /** A required rule must be observed whenever its case is selected. */
+  readonly required: boolean;
+}
+
+export interface NativeTestSkipPolicyResult {
+  readonly status: 'matched' | 'mismatch';
+  readonly declarations: number;
+  readonly issues: readonly string[];
 }
 
 export interface RunRequest {
@@ -97,6 +124,8 @@ export interface RunCompletion {
   readonly catalog: NativeTestCatalog | undefined;
   readonly events: readonly RunEvent[];
   readonly failures: readonly NativeTestFailure[];
+  readonly skips: readonly NativeTestSkip[];
+  readonly skipPolicy: NativeTestSkipPolicyResult;
   readonly error?: unknown;
 }
 
@@ -133,6 +162,8 @@ export interface TermwrightTestHostOptions {
   readonly timeouts?: Partial<TermwrightHostTimeouts>;
   /** Cheap, caller-declared prerequisites checked before the engine starts. */
   readonly preflight?: TermwrightHostPreflightOptions;
+  /** Exact applicable skip declarations; an observed undeclared skip is non-certifying. */
+  readonly skipDeclarations?: readonly NativeTestSkipDeclaration[];
 }
 
 export interface WatchHandle {
@@ -174,6 +205,7 @@ export class TermwrightTestHost {
   readonly #runsDir: string;
   readonly #runManifestWriter: RunManifestWriter | undefined;
   readonly #timeouts: TermwrightHostTimeouts;
+  readonly #skipDeclarations: readonly NativeTestSkipDeclaration[];
   readonly #projects = new Map<string, ProjectId>();
   readonly #tasks = new Map<string, {
     readonly signature: string;
@@ -199,6 +231,7 @@ export class TermwrightTestHost {
     this.#runsDir = options.runsDir;
     this.#runManifestWriter = options.runManifestWriter;
     this.#timeouts = resolveHostTimeouts(options.timeouts);
+    this.#skipDeclarations = Object.freeze([...(options.skipDeclarations ?? [])]);
     this.#ids = ids;
     this.invocationId = ids.create('invocation');
     this.#producer = new RunEventProducer({
@@ -217,6 +250,8 @@ export class TermwrightTestHost {
   static async open(options: TermwrightTestHostOptions): Promise<TermwrightTestHost> {
     assertFirstWorkflowAttempt(process.env);
     await preflightTestHost(options);
+    const skipDeclarations = options.skipDeclarations ??
+      await loadRepositorySkipDeclarations(options.cwd);
     const timeouts = resolveHostTimeouts(options.timeouts);
     const creation = createCertifiedVitestEngine(options);
     let created;
@@ -237,6 +272,7 @@ export class TermwrightTestHost {
     }
     return new TermwrightTestHost(created.engine, {
       ...options,
+      skipDeclarations,
       filters: hostRelativeFilters([...(options.filters ?? []), ...created.filters], options.cwd),
     });
   }
@@ -352,6 +388,8 @@ export class TermwrightTestHost {
     let terminal: TerminalRunState = 'infrastructure-failed';
     let failure: unknown;
     const testFailures: NativeTestFailure[] = [];
+    let skips: readonly NativeTestSkip[] = Object.freeze([]);
+    let skipPolicy: NativeTestSkipPolicyResult = Object.freeze({ status: 'matched', declarations: 0, issues: Object.freeze([]) });
     let brokerServer: ResourceBrokerServer | undefined;
     let journalServer: RunJournalServer | undefined;
     const expectedTasks = new Set<RunnerTaskId>();
@@ -425,8 +463,9 @@ export class TermwrightTestHost {
         journal: journalContext,
       });
       const collection = await active.budget.execution('Vitest collection', () => this.#engine.collect(this.#filters));
-      if (collection.result.unhandledErrors.length > 0) {
-        throw new AggregateError(collection.result.unhandledErrors, 'Vitest collection failed');
+      const collectionErrors = collectVitestCollectionErrors(collection.result);
+      if (collectionErrors.length > 0) {
+        throw new AggregateError(collectionErrors, 'Vitest collection failed');
       }
       if (collection.tests.length === 0 && this.#filters.length > 0) {
         // A filter that selects nothing is a caller error, not an empty run.
@@ -517,7 +556,9 @@ export class TermwrightTestHost {
           }
           if (resourceFailure !== undefined) throw resourceFailure;
           this.#transition(active, active.cancellationRequested ? 'cancelling' : 'finalizing');
-          terminal = active.cancellationRequested ? 'cancelled' : classifyVitestResult(result);
+          terminal = active.cancellationRequested
+            ? 'cancelled'
+            : classifyVitestResult(result, new Set(selectedByNativeId.keys()));
           // An unhandled error is the one classification that carries its own
           // evidence. Without lifting it into `failure` the run reports
           // infrastructure-failed with nothing to read: the reason exists, and
@@ -622,6 +663,34 @@ export class TermwrightTestHost {
       terminal = 'infrastructure-failed';
     }
 
+    skips = Object.freeze(
+      [...skippedTasks].map((runnerTaskId): NativeTestSkip => {
+        const test = active.catalog?.tests.find((candidate) => candidate.runnerTaskId === runnerTaskId);
+        if (test === undefined) throw new Error(`skipped task ${runnerTaskId} disappeared from the native catalog`);
+        return Object.freeze({
+          runnerTaskId,
+          nativeTaskId: test.nativeTaskId,
+          file: test.file,
+          fullName: test.fullName,
+        });
+      }),
+    );
+    skipPolicy = assessSkipPolicy(
+      request.execute === false ? [] : active.selected ?? [],
+      skips,
+      this.#skipDeclarations,
+      request.runnerTaskIds === undefined && request.execute !== false &&
+        this.#filters.length === 0 && this.#engine.catalogueScope === 'full'
+        ? 'full'
+        : 'targeted',
+    );
+    try {
+      this.#recordSkipEvidence(active, skips, skipPolicy);
+    } catch (error) {
+      failure = failure === undefined ? error : new AggregateError([failure, error], 'run skip evidence failed');
+      terminal = 'incomplete';
+    }
+
     if (
       failure !== undefined &&
       (
@@ -705,6 +774,8 @@ export class TermwrightTestHost {
       catalog: active.catalog,
       events: Object.freeze([...active.persistence.recorded]),
       failures: Object.freeze([...testFailures]),
+      skips,
+      skipPolicy,
       ...(failure === undefined ? {} : { error: failure }),
     });
   }
@@ -787,6 +858,58 @@ export class TermwrightTestHost {
     });
     const appended = active.persistence.append(event);
     if (!appended.ok) throw new Error(`run journal rejected state event: ${appended.code}: ${appended.detail}`);
+  }
+
+  #recordSkipEvidence(
+    active: ActiveRun,
+    skips: readonly NativeTestSkip[],
+    policy: NativeTestSkipPolicyResult,
+  ): void {
+    for (const declaration of this.#skipDeclarations) {
+      this.#appendAuthoritative(active, 'run.skip-declaration', {
+        id: declaration.id,
+        file: declaration.file,
+        ...(declaration.suite === undefined ? {} : { suite: declaration.suite }),
+        fullName: declaration.fullName,
+        required: declaration.required,
+      });
+    }
+    for (const skip of skips) {
+      const test = active.catalog?.tests.find((candidate) => candidate.runnerTaskId === skip.runnerTaskId);
+      if (test === undefined) throw new Error(`skipped task ${skip.runnerTaskId} disappeared from the native catalog`);
+      this.#appendAuthoritative(active, 'test.skipped', {
+        nativeTaskId: skip.nativeTaskId,
+        file: skip.file,
+        fullName: skip.fullName,
+      }, {
+        projectId: test.projectId,
+        specId: test.specId,
+        runnerTaskId: test.runnerTaskId,
+      });
+    }
+    for (const issue of policy.issues) this.#appendAuthoritative(active, 'run.skip-policy-issue', { detail: issue });
+    this.#appendAuthoritative(active, 'run.skip-policy', {
+      status: policy.status,
+      declarations: policy.declarations,
+      observed: skips.length,
+      issues: policy.issues.length,
+    });
+  }
+
+  #appendAuthoritative(
+    active: ActiveRun,
+    type: string,
+    payload: RunEvent['payload'],
+    identity: Readonly<Partial<RunEvent['identity']>> = {},
+  ): void {
+    const event = this.#producer.emit({
+      eventClass: 'authoritative',
+      type,
+      identity: { invocationId: this.invocationId, runId: active.runId, ...identity },
+      payload,
+    });
+    const appended = active.persistence.append(event);
+    if (!appended.ok) throw new Error(`run journal rejected ${type}: ${appended.code}: ${appended.detail}`);
   }
 
   #recordTestFailure(active: ActiveRun, test: NativeTestCase, errors: readonly string[]): void {
@@ -979,6 +1102,59 @@ export class TermwrightTestHost {
   }
 }
 
+export function assessSkipPolicy(
+  selected: readonly NativeTestCase[],
+  skipped: readonly NativeTestSkip[],
+  declarations: readonly NativeTestSkipDeclaration[],
+  selection: 'full' | 'targeted',
+): NativeTestSkipPolicyResult {
+  const issues: string[] = [];
+  const matches = (test: Pick<NativeTestCase, 'file' | 'fullName'>, declaration: NativeTestSkipDeclaration): boolean => {
+    const file = test.file.replaceAll('\\', '/');
+    const declaredFile = declaration.file.replaceAll('\\', '/');
+    const fileMatches = file === declaredFile || file.endsWith(`/${declaredFile}`);
+    const leafName = test.fullName.split(' > ').at(-1);
+    const nameMatches = test.fullName === declaration.fullName || leafName === declaration.fullName;
+    const topLevelSuite = test.fullName.split(' > ')[0]?.replace(/ \(skipped: .*\)$/u, '');
+    const suiteMatches = declaration.suite === undefined || topLevelSuite === declaration.suite;
+    return fileMatches && suiteMatches && nameMatches;
+  };
+  for (const skip of skipped) {
+    const found = declarations.filter((declaration) => matches(skip, declaration));
+    if (found.length !== 1) {
+      issues.push(
+        found.length === 0
+          ? `undeclared skip: ${skip.file} > ${skip.fullName}`
+          : `ambiguous skip declaration: ${skip.file} > ${skip.fullName}`,
+      );
+      continue;
+    }
+  }
+  for (const declaration of declarations) {
+    const selectedMatches = selected.filter((test) => matches(test, declaration));
+    if (selectedMatches.length > 1) {
+      issues.push(`skip declaration matches ${selectedMatches.length} selected cases instead of one exact case: ${declaration.id}`);
+      continue;
+    }
+    if (declaration.required && selection === 'full' && selectedMatches.length === 0) {
+      issues.push(`stale required skip declaration has no exact case in the full catalogue: ${declaration.id}`);
+      continue;
+    }
+    if (declaration.required && selectedMatches.length === 1) {
+      const missing = selectedMatches.filter((test) => !skipped.some((skip) =>
+        skip.runnerTaskId === test.runnerTaskId && matches(skip, declaration)));
+      if (missing.length > 0) {
+        issues.push(`required skip was not observed for ${missing.length} selected case(s): ${declaration.id}`);
+      }
+    }
+  }
+  return Object.freeze({
+    status: issues.length === 0 ? 'matched' : 'mismatch',
+    declarations: declarations.length,
+    issues: Object.freeze(issues),
+  });
+}
+
 /** Refuse to turn a failed GitHub certification run into a later green attempt. */
 export function assertFirstWorkflowAttempt(env: Readonly<Record<string, string | undefined>>): void {
   const required = env['TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT'];
@@ -1004,6 +1180,32 @@ export function describeFailure(error: unknown): string {
   }
   if (error instanceof Error) return withCause(error, error.message);
   return inspect(error, { depth: 16, breakLength: Infinity });
+}
+
+/**
+ * A failed module import is attached to the module, not to the run's global
+ * `unhandledErrors`. Checking both surfaces prevents a partially collected
+ * directory from certifying only the modules that happened to import.
+ */
+function collectVitestCollectionErrors(result: TestRunResult): Error[] {
+  const failures = result.unhandledErrors.map((error) => error instanceof Error
+    ? error
+    : new Error(describeFailure(error)));
+  for (const module of result.testModules) {
+    const moduleErrors = module.errors();
+    for (const error of moduleErrors) {
+      failures.push(new Error(
+        `Vitest collection module ${module.moduleId} failed: ${describeFailure(error)}`,
+        { cause: error },
+      ));
+    }
+    if (module.state() === 'failed' && moduleErrors.length === 0) {
+      failures.push(new Error(
+        `Vitest collection module ${module.moduleId} failed without structured error evidence`,
+      ));
+    }
+  }
+  return failures;
 }
 
 /**

@@ -89,7 +89,7 @@ Cross-package contracts are maintained in [`CONTRACTS.md`](CONTRACTS.md).
 ```sh
 pnpm install
 pnpm check:fast
-pnpm check:full
+pnpm check:local
 ```
 
 Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before changing the repository. Docs

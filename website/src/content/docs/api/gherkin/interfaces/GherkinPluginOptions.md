@@ -1,5 +1,5 @@
 ---
-title: "Interface: GherkinPluginOptions"
+title: "Interface: GherkinPluginOptions\\<Fixtures\\>"
 editUrl: false
 ---
 
@@ -9,9 +9,17 @@ editUrl: false
 
 [@termwright/gherkin](../../) / GherkinPluginOptions
 
-# Interface: GherkinPluginOptions
+# Interface: GherkinPluginOptions\<Fixtures\>
 
-Defined in: [plugin.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L18)
+Defined in: [plugin.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L25)
+
+Options for a Gherkin transform using an optional project fixture surface.
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `Record`\<`string`, `unknown`\>
 
 ## Properties
 
@@ -19,7 +27,7 @@ Defined in: [plugin.ts:18](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 > `readonly` `optional` **featureRoot?**: `string`
 
-Defined in: [plugin.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L20)
+Defined in: [plugin.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L27)
 
 Directory against which feature paths and pairing templates are resolved. Defaults to Vite's root.
 
@@ -27,9 +35,9 @@ Directory against which feature paths and pairing templates are resolved. Defaul
 
 ### fixtureNames?
 
-> `readonly` `optional` **fixtureNames?**: readonly `string`[]
+> `readonly` `optional` **fixtureNames?**: readonly `Exclude`\<`Extract`\<keyof `Fixtures`, `string`\>, [`GherkinReservedFixtureName`](../../type-aliases/gherkinreservedfixturename/)\>[]
 
-Defined in: [plugin.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L35)
+Defined in: [plugin.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L42)
 
 Custom `test.extend()` fixture names forwarded into every Gherkin context.
 
@@ -39,7 +47,7 @@ Custom `test.extend()` fixture names forwarded into every Gherkin context.
 
 > `readonly` `optional` **generatedImports?**: [`GeneratedGherkinImports`](../generatedgherkinimports/)
 
-Defined in: [plugin.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L33)
+Defined in: [plugin.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L40)
 
 Module specifiers emitted into transformed feature files.
 
@@ -49,7 +57,7 @@ Module specifiers emitted into transformed feature files.
 
 > `readonly` `optional` **includeFeatures?**: `boolean`
 
-Defined in: [plugin.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L31)
+Defined in: [plugin.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L38)
 
 Add physical `.feature` files to Vitest discovery. Used by managed hosts
 such as `termwright ui`.
@@ -64,7 +72,7 @@ every feature below the project root.
 
 > `readonly` `optional` **stepDefinitions?**: readonly `string`[]
 
-Defined in: [plugin.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L22)
+Defined in: [plugin.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L29)
 
 Cypress-compatible `[filepath]` / `[filepart]` glue patterns.
 
@@ -74,6 +82,6 @@ Cypress-compatible `[filepath]` / `[filepart]` glue patterns.
 
 > `readonly` `optional` **tags?**: `string`
 
-Defined in: [plugin.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L37)
+Defined in: [plugin.ts:44](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L44)
 
 Cucumber tag expression selecting Scenario and Outline cases.

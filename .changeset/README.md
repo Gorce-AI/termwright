@@ -11,9 +11,16 @@ Pick the packages you touched, pick the bump, and write the entry for someone
 reading the changelog — what changed and what they have to do about it, not
 which files you edited.
 
-CI enforces this: a pull request touching `packages/**` without a changeset
-fails the `release-hygiene` check. Add the `release` label if the change
-genuinely ships nothing.
+CI classifies paths under `packages/**`, not package privacy or pull-request
+labels. Modules named `test.*`, `spec.*`, `*.test.*`, or `*.spec.*`; files
+inside `test`, `tests`, `__tests__`, or `__snapshots__` directory segments;
+snapshots; Vitest and coverage configuration; and package README/CHANGELOG
+files need no changeset. Every other package path must add one. For a private
+workspace implementation input, package privacy alone is not an exemption; if
+the change ships through a published consumer, name that consumer in the
+changeset. Mutable pull-request labels do not bypass this gate. The exact
+generated Version PR is the sole workflow exemption because it consumes the
+pending changesets.
 
 ## How a release happens
 
@@ -45,11 +52,12 @@ whole coordinated bump rather than one release per package.
 
 ## The npm packages move together
 
-`config.json` puts every `@termwright/*` package and the `termwright` umbrella
-in one `fixed` group: they share a version and are released together. That is
-deliberate — the driver, framework probes, annotation SDKs, preset and MCP
-server are one product. Keeping one version makes compatibility easier to
-understand and support.
+`config.json` puts every published `@termwright/*` package and the `termwright`
+umbrella in one `fixed` group: they share a version and are released together.
+Private workspace packages are not part of the release group. The fixed group
+is deliberate — the driver, framework probes, annotation SDKs, preset and MCP
+server are one product. Keeping one public version makes compatibility easier
+to understand and support.
 
 The language clients publish to different registries. The PyPI package, all
 three Rust crates and the Go module share the **protocol** version rather than
@@ -66,9 +74,9 @@ release tags, or writing to npm. Do not create a registry canary instead.
 
 ## Published baseline
 
-The coordinated `0.2.0` release is the current baseline. Every user-visible
-change after it needs a changeset. If a user could notice a change in a public
-package, include one.
+The latest coordinated registry release is the baseline. Every user-visible
+change after that release needs a changeset. If a user could notice a change in
+a public package, include one.
 
 ## Not published
 
