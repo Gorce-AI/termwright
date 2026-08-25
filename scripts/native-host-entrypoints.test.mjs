@@ -189,6 +189,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const goPolicy = await readFile(new URL('./test-support/go-toolchain.mjs', import.meta.url), 'utf8');
     expect(goPolicy).toContain("env['TERMWRIGHT_SKIP_GO'] === '1'");
     expect(goPolicy).toContain("env['TERMWRIGHT_REQUIRE_GO'] === '1'");
+    const goPatchTests = await readFile(new URL('../packages/probe-go/src/patches.test.ts', import.meta.url), 'utf8');
+    expect(goPatchTests, 'a complete Go run must not register an inverse sentinel skip')
+      .not.toContain('it.skipIf(upstream !== null)');
 
     const workflows = (await readdir(new URL('../.github/workflows/', import.meta.url)))
       .filter((file) => /\.ya?ml$/u.test(file));

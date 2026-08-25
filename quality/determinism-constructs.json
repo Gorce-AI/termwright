@@ -2182,7 +2182,7 @@
       "path": "packages/probe-go/src/patches.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(upstream !== null)('skips the Go arms because no go toolchain is reachable', () => {"
+      "excerpt": "it.skip('skips the Go arms because no go toolchain is reachable', () => {"
     },
     {
       "path": "packages/probe-go/src/workspace.test.ts",
