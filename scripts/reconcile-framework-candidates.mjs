@@ -80,7 +80,9 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
           '',
           `Certification run: ${context.runUrl}`,
           '',
-          'The compatibility registry is unchanged. Prepare an exact checksummed patch, then rerun the workflow. A PR is created only after all gates pass without a missing conformance area.',
+          candidate.source?.toolchainSupported === false
+            ? `The compatibility registry is unchanged. Review and explicitly repin the trusted Go toolchain to >= ${candidate.source.requiredGoVersion}; automatic toolchain downloads remain disabled.`
+            : 'The compatibility registry is unchanged. Prepare an exact checksummed patch, then rerun the workflow. A PR is created only after all gates pass without a missing conformance area.',
         ].join('\n'),
       });
     }

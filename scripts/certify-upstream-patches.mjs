@@ -364,6 +364,7 @@ async function goModule(root, candidate) {
       GONOSUMDB: '',
       GOPRIVATE: '',
       GOSUMDB: 'sum.golang.org',
+      GOTOOLCHAIN: 'local',
       GOWORK: 'off',
     };
     const downloaded = await run(

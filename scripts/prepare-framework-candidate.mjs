@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { canonicalJson, compareVersions, parseVersion } from './discover-framework-candidates.mjs';
+import { canonicalJson, compareVersions, parseVersion, trustedGoEnvironment } from './discover-framework-candidates.mjs';
 import { safeExtractTarGz } from './safe-tar.mjs';
 
 const exec = promisify(execFile);
@@ -125,7 +125,7 @@ export async function materializeCandidateSource(candidate) {
   const sourceRoot = join(directory, 'source');
   await mkdir(sourceRoot);
   if (candidate.registry === 'go') {
-    const result = JSON.parse((await exec('go', ['mod', 'download', '-json', `${candidate.package}@${candidate.version}`], { env: { ...process.env, GOFLAGS: '', GOWORK: 'off', GOPROXY: 'https://proxy.golang.org', GOSUMDB: 'sum.golang.org' } })).stdout);
+    const result = JSON.parse((await exec('go', ['mod', 'download', '-json', `${candidate.package}@${candidate.version}`], { env: trustedGoEnvironment({ GOFLAGS: '', GOWORK: 'off', GOPROXY: 'https://proxy.golang.org', GOSUMDB: 'sum.golang.org' }) })).stdout);
     await cp(result.Dir, sourceRoot, { recursive: true });
   } else if (candidate.registry === 'crates.io') {
     const response = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(candidate.package)}/${encodeURIComponent(candidate.version)}/download`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });

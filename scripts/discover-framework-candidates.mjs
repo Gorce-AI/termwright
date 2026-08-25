@@ -54,6 +54,9 @@ function validateSource(entry, stream) {
     if (typeof entry.source?.sum !== 'string' || !entry.source.sum.startsWith('h1:')) throw new Error(`${stream.id}@${entry.version}: missing Go module sum`);
     if (typeof entry.source?.goModSum !== 'string' || !entry.source.goModSum.startsWith('h1:')) throw new Error(`${stream.id}@${entry.version}: missing Go module go.mod sum`);
     if (typeof entry.source?.zipSha256 !== 'string' || !SHA256.test(entry.source.zipSha256)) throw new Error(`${stream.id}@${entry.version}: missing zip sha256`);
+    const unsupported = entry.source?.toolchainSupported === false;
+    const required = typeof entry.source?.requiredGoVersion === 'string' && /^\d+(?:\.\d+){1,2}$/u.test(entry.source.requiredGoVersion);
+    if (unsupported !== required) throw new Error(`${stream.id}@${entry.version}: incomplete unsupported Go toolchain evidence`);
   } else if (stream.registry === 'npm') {
     if (typeof entry.source?.integrity !== 'string' || !entry.source.integrity.startsWith('sha512-')) throw new Error(`${stream.id}@${entry.version}: missing npm integrity`);
     if (typeof entry.source?.shasum !== 'string' || !SHA1.test(entry.source.shasum)) throw new Error(`${stream.id}@${entry.version}: missing npm shasum`);
@@ -186,28 +189,61 @@ async function goCatalog(stream) {
   return entries;
 }
 
+export function parseGoDownloadResult(moduleVersion, stdout) {
+  const downloaded = JSON.parse(stdout);
+  if (typeof downloaded.Error === 'string' && downloaded.Error.length > 0) {
+    const unsupported = /requires go >= ([0-9]+(?:\.[0-9]+){1,2}) \(running go [^;]+; GOTOOLCHAIN=local\)$/u.exec(downloaded.Error);
+    if (unsupported !== null && typeof downloaded.Sum === 'string' && typeof downloaded.GoModSum === 'string' && typeof downloaded.Zip === 'string') {
+      return { ...downloaded, RequiredGoVersion: unsupported[1] };
+    }
+    throw new Error(`${moduleVersion}: ${downloaded.Error}`);
+  }
+  return downloaded;
+}
+
+export function recoverGoDownloadFailure(moduleVersion, error) {
+  if (typeof error?.stdout !== 'string' || error.stdout.length === 0) throw error;
+  const downloaded = parseGoDownloadResult(moduleVersion, error.stdout);
+  if (downloaded.RequiredGoVersion === undefined) throw error;
+  return downloaded;
+}
+
+export function trustedGoEnvironment(overrides = {}, baseEnvironment = process.env) {
+  return { ...baseEnvironment, ...overrides, GOTOOLCHAIN: 'local' };
+}
+
 async function resolveSource(stream, version, source, recordedSource) {
   if (stream.registry === 'npm') return resolveNpmSource(stream, source, { reuseSource: recordedSource });
   if (stream.registry === 'pypi') return resolvePypiSource(stream, source);
   if (stream.registry !== 'go') return source;
-  const downloaded = JSON.parse((await exec('go', ['mod', 'download', '-json', `${stream.package}@${version}`], {
-    cwd: root,
-    env: {
-      ...process.env,
-      GOFLAGS: '',
-      GONOSUMDB: '',
-      GOPRIVATE: '',
-      GOPROXY: 'https://proxy.golang.org',
-      GOSUMDB: 'sum.golang.org',
-      GOWORK: 'off',
-    },
-  })).stdout);
+  const moduleVersion = `${stream.package}@${version}`;
+  let downloaded;
+  try {
+    const { stdout } = await exec('go', ['mod', 'download', '-json', moduleVersion], {
+      cwd: root,
+      env: trustedGoEnvironment({
+        GOFLAGS: '',
+        GONOSUMDB: '',
+        GOPRIVATE: '',
+        GOPROXY: 'https://proxy.golang.org',
+        GOSUMDB: 'sum.golang.org',
+        GOWORK: 'off',
+      }),
+    });
+    downloaded = parseGoDownloadResult(moduleVersion, stdout);
+  } catch (error) {
+    downloaded = recoverGoDownloadFailure(moduleVersion, error);
+  }
   const zip = await readFile(downloaded.Zip);
   return {
     ...source,
     sum: downloaded.Sum,
     goModSum: downloaded.GoModSum,
     zipSha256: createHash('sha256').update(zip).digest('hex'),
+    ...(downloaded.RequiredGoVersion === undefined ? {} : {
+      requiredGoVersion: downloaded.RequiredGoVersion,
+      toolchainSupported: false,
+    }),
   };
 }
 

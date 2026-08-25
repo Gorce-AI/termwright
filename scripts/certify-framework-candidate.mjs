@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { canonicalJson, compareVersions, downloadVerifiedNpmTarball, resolveNpmSource } from './discover-framework-candidates.mjs';
+import { canonicalJson, compareVersions, downloadVerifiedNpmTarball, resolveNpmSource, trustedGoEnvironment } from './discover-framework-candidates.mjs';
 import { materializeCandidateSource, preparePatchBundle, proposeCompatibilityUpdate, recordExecutableVariant } from './prepare-framework-candidate.mjs';
 import { safeExtractTarGz } from './safe-tar.mjs';
 
@@ -139,11 +139,17 @@ export function verifyCandidateEvidence(candidate, report, behavioralCertificati
   ) throw new Error(`${candidate.id}: certified crates.io source does not match the discovered checksum`);
 }
 
+export function candidateToolchainBlock(candidate, approvedGoVersion) {
+  if (candidate.source?.toolchainSupported !== false) return null;
+  if (typeof candidate.source.requiredGoVersion !== 'string') throw new Error(`${candidate.id}: unsupported toolchain evidence has no required Go version`);
+  return `${candidate.id}: requires Go >= ${candidate.source.requiredGoVersion}; trusted certification is pinned to Go ${approvedGoVersion}`;
+}
+
 export async function certifyGoCandidateBehavior(candidate) {
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-go-behavior-'));
   const app = join(scratch, 'app');
   await mkdir(app);
-  const env = { ...process.env, GOWORK: 'off', GOFLAGS: '', TERMWRIGHT_CACHE_DIR: join(scratch, 'cache') };
+  const env = trustedGoEnvironment({ GOWORK: 'off', GOFLAGS: '', TERMWRIGHT_CACHE_DIR: join(scratch, 'cache') });
   let launcherPackage;
   let source;
   if (candidate.frameworkId === 'tview') {
@@ -267,6 +273,11 @@ async function main(argv) {
   const revision = process.env.GITHUB_SHA ?? 'local-unpinned';
   await writeVerdict(output, candidate, 'red', 'Certification did not complete; inspect the job log.', revision);
   if (initializeOnly) return;
+  const toolchainBlock = candidateToolchainBlock(candidate, process.env.TERMWRIGHT_UPSTREAM_GO_VERSION ?? 'unknown');
+  if (toolchainBlock !== null) {
+    await writeVerdict(output, candidate, 'red', toolchainBlock, revision);
+    throw new Error(toolchainBlock);
+  }
   if (candidate.mode === 'hook') {
     try {
       if (candidate.registry === 'npm') {
