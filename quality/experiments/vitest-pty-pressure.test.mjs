@@ -2,8 +2,8 @@ import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } f
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { threadId } from 'node:worker_threads';
-import nodePty from '@lydell/node-pty';
 import { expect, test } from 'vitest';
+import { createNodePtyBackend } from '../driver-backend.mjs';
 import { createPtyLeasePool } from './pty-lease.mjs';
 
 const cases = Number(process.env.TERMWRIGHT_MATRIX_CASES ?? 8);
@@ -39,26 +39,25 @@ test.concurrent.for(Array.from({ length: cases }, (_, index) => index))('PTY pre
   const started = performance.now();
   const readyOutput = `pty-ready-${index}`;
   const doneOutput = `pty-done-${index}`;
-  // READY is level-triggered so observers cannot miss it. It must precede
-  // parent input because node-pty defers Windows writes and kills until its
-  // first ConPTY output. This models a real interactive terminal handshake
-  // without relying on a scheduling delay.
+  // The matrix exercises Termwright's production PTY boundary, not node-pty's
+  // public write() shortcut. On ConPTY that boundary owns readiness,
+  // backpressure and asynchronous write failures. A one-shot READY -> input ->
+  // DONE exchange therefore certifies delivery without a sleep or retry.
   const child = [
     `const ready = ${JSON.stringify(readyOutput)};`,
-    'const advertise = () => process.stdout.write(ready);',
-    'const advertisement = setInterval(advertise, 25);',
+    'process.stdin.setRawMode?.(true);',
     "process.stdin.once('data', () => {",
-    '  clearInterval(advertisement);',
     '  process.stdin.pause();',
     `  process.stdout.write(${JSON.stringify(doneOutput)}, () => process.exit(0));`,
     '});',
     'process.stdin.resume();',
-    'advertise();',
+    'process.stdout.write(ready);',
   ].join('\n');
   let pty;
   try {
-    pty = nodePty.spawn(process.execPath, ['-e', child], {
-      cols: 40,
+    pty = createNodePtyBackend().spawn({
+      command: [process.execPath, '-e', child],
+      columns: 40,
       rows: 4,
       env: process.env,
     });
@@ -72,22 +71,27 @@ test.concurrent.for(Array.from({ length: cases }, (_, index) => index))('PTY pre
   let exited = false;
   let releaseSent = false;
   let rejectOutput;
+  let writeFailure;
   const outputReady = new Promise((resolve, reject) => {
     rejectOutput = reject;
     dataSubscription = pty.onData((chunk) => {
-      output += chunk;
+      output += Buffer.from(chunk).toString('utf8');
       if (!releaseSent && output.includes(readyOutput)) {
         releaseSent = true;
-        pty.write('release\r');
+        pty.write(Buffer.from('release'));
       }
       if (output.includes(doneOutput)) resolve();
     });
+  });
+  const writeErrorSubscription = pty.onWriteError?.((error) => {
+    writeFailure = error;
+    rejectOutput(error);
   });
   const exitReady = new Promise((resolve) => {
     exitSubscription = pty.onExit((status) => {
       exited = true;
       if (!output.includes(doneOutput)) {
-        rejectOutput(new Error(`PTY ${index} exited before DONE (${status.exitCode}): ${JSON.stringify(output.slice(-512))}`));
+        rejectOutput(new Error(`PTY ${index} exited before DONE (${String(status.code)}): ${JSON.stringify(output.slice(-512))}`));
       }
       resolve(status);
     });
@@ -97,13 +101,15 @@ test.concurrent.for(Array.from({ length: cases }, (_, index) => index))('PTY pre
   cleanup = () => {
     if (cleanupPromise !== undefined) return cleanupPromise;
     if (!exited) {
-      try { pty.kill(); } catch { /* process already reaped */ }
+      pty.dispose();
     }
     cleanupPromise = (async () => {
       try {
         await exitReady;
-        dataSubscription?.dispose();
-        exitSubscription?.dispose();
+        pty.dispose();
+        dataSubscription?.();
+        exitSubscription?.();
+        writeErrorSubscription?.();
         if (startedRecorded) {
           activePtys -= 1;
           record({
@@ -124,7 +130,8 @@ test.concurrent.for(Array.from({ length: cases }, (_, index) => index))('PTY pre
     startedRecorded = true;
     record({ phase: 'start', index, activePtys, pid: process.pid, ppid: process.ppid, memory: process.memoryUsage() });
     const [status] = await Promise.all([exitReady, outputReady]);
-    expect(status.exitCode).toBe(0);
+    expect(writeFailure).toBeUndefined();
+    expect(status.code).toBe(0);
     expect(releaseSent).toBe(true);
     expect(output).toContain(doneOutput);
   } finally {

@@ -411,7 +411,18 @@ jobs:
           node scripts/check-installed-driver.mjs "$install_dir"
 
       - name: Run the certified Termwright host
-        run: pnpm test -- --resource-profile windows-ci --json
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A single Windows invocation spent ~160 s collecting the complete
+          # 2,996-case catalogue before any test could run, leaving effectively
+          # no margin for normal filesystem variance inside the host's fixed
+          # total-run safety boundary. The named core project and its exact
+          # complement are disjoint and exhaustive; unlike Vitest file shards,
+          # project selection does not report the other half as skipped. Each
+          # group produces its own fail-closed Termwright manifest.
+          pnpm test -- --resource-profile windows-ci --json -- --project=core
+          pnpm test -- --resource-profile windows-ci --json -- --project='!core'
 
       # The Getting Started source is a real workspace package. This catches
       # stale imports, launch assumptions and expected output in the primary

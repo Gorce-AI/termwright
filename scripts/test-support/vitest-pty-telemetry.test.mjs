@@ -101,9 +101,13 @@ describe('Vitest PTY telemetry certification', () => {
     expect(harness).not.toContain("'npm', [...");
     expect(workflow).toContain("TERMWRIGHT_MATRIX_CERTIFY: '1'");
     expect(workflow).toContain('uses: ./.github/actions/setup-js-workspace');
+    expect(workflow).toContain('pnpm --filter @termwright/driver build');
+    expect(harness).toContain("packages', 'driver', 'dist', 'experimental.js'");
     expect(pressure).toContain('context.onTestFinished');
-    expect(pressure).toContain('const advertisement = setInterval(advertise, 25)');
-    expect(pressure.indexOf('output.includes(readyOutput)')).toBeLessThan(pressure.indexOf("pty.write('release\\r')"));
+    expect(pressure).toContain("import { createNodePtyBackend } from '../driver-backend.mjs'");
+    expect(pressure).not.toContain("from '@lydell/node-pty'");
+    expect(pressure).not.toContain('setInterval(advertise');
+    expect(pressure.indexOf('output.includes(readyOutput)')).toBeLessThan(pressure.indexOf("pty.write(Buffer.from('release'))"));
 
     for (const diagnostic of [
       'channel closed',

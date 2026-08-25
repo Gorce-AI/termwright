@@ -30,10 +30,10 @@ export function isConsumableChangesetPath(path) {
   return /^\.changeset\/(?!README\.md$)[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(path);
 }
 
-export async function changedFiles(base, head, args, cwd) {
+export async function changedFiles(base, head, args, cwd, runGit = execFile) {
   // Report both sides of a rename. Otherwise moving production code to a
   // test-looking destination could hide the deleted publishable path.
-  const { stdout } = await execFile('git', ['diff', '--name-only', '-z', '--no-renames', ...args, base, head, '--'], { cwd });
+  const { stdout } = await runGit('git', ['diff', '--name-only', '-z', '--no-renames', ...args, base, head, '--'], { cwd });
   return stdout.split('\0').filter(Boolean);
 }
 

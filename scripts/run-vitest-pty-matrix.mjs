@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { vitestInvocation } from './test-support/node-cli-invocation.mjs';
 import { hasClosedChannelDiagnostic, isVitestPtyCellFailure } from './test-support/vitest-pty-diagnostics.mjs';
@@ -22,7 +22,7 @@ const pools = list('TERMWRIGHT_MATRIX_POOLS', ['forks', 'threads']);
 const workerCounts = list('TERMWRIGHT_MATRIX_WORKERS', ['1', '2', '4']).map(Number);
 const ptyConcurrency = list('TERMWRIGHT_MATRIX_PTYS', ['1', '2', '4', '8']).map(Number);
 const fileParallelism = booleanList('TERMWRIGHT_MATRIX_FILE_PARALLELISM', ['true', 'false']);
-// The pressure fixture imports the POSIX PTY backend that is pinned by the
+// The pressure fixture imports the pinned node-pty boundary owned by the
 // driver workspace package. Nesting under that package makes normal Node
 // resolution use pnpm's frozen-lockfile link without a second install.
 const workRoot = join(root, 'packages', 'driver', '.termwright', 'vitest-matrix');
@@ -34,6 +34,8 @@ try {
   for (const version of versions) {
     const project = join(work, `vitest-${version}`);
     await cp(join(root, 'quality', 'experiments'), join(project, 'tests'), { recursive: true });
+    const driverBackend = pathToFileURL(join(root, 'packages', 'driver', 'dist', 'experimental.js')).href;
+    await writeFile(join(project, 'driver-backend.mjs'), `export { createNodePtyBackend } from ${JSON.stringify(driverBackend)};\n`);
     await writeFile(join(project, 'package.json'), `${JSON.stringify({ private: true, type: 'module' }, null, 2)}\n`);
     // Prevent Vitest from walking up into Termwright's product runner config:
     // this harness intentionally exercises the stock embedded engine directly.

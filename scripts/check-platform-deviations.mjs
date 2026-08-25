@@ -1,47 +1,136 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const registryPath = 'quality/platform-deviations.json';
-const registry = JSON.parse(await readFile(registryPath, 'utf8'));
-if (registry.version !== 1 || !Array.isArray(registry.deviations)) throw new Error('invalid platform deviation registry');
+const applicabilityPath = 'quality/applicability-skips.json';
 
-const files = [];
-for (const root of ['packages', 'clients', 'compatibility', 'examples']) await collectSources(root, files);
-const observed = new Map();
-const pattern = /(?:it|test|describe)\.skipIf\((process\.platform\s*(?:===|!==)\s*["'][^"']+["'])\)\(\s*["']([^"']+)["']/gu;
-for (const file of files) {
-  const source = await readFile(file, 'utf8');
-  for (const match of source.matchAll(pattern)) observed.set(`${file}::${match[2]}`, match[1]);
-}
-
-const registered = new Map();
-const ids = new Set();
-for (const deviation of registry.deviations) {
-  for (const field of ['id', 'capability', 'predicate', 'category', 'reason', 'evidence', 'issueOrAdr', 'removalCondition', 'owner', 'revalidate']) {
-    if (typeof deviation[field] !== 'string' || deviation[field].length === 0) throw new Error(`${deviation.id ?? '<unknown>'}: missing ${field}`);
-  }
-  if (ids.has(deviation.id)) throw new Error(`duplicate deviation id ${deviation.id}`);
-  ids.add(deviation.id);
-  if (!Array.isArray(deviation.tests) || deviation.tests.length === 0) throw new Error(`${deviation.id}: no tests`);
-  for (const test of deviation.tests) {
-    if (!Array.isArray(test) || test.length !== 2 || !test.every((entry) => typeof entry === 'string' && entry.length > 0)) {
-      throw new Error(`${deviation.id}: invalid test reference`);
+export function validateExactSkipReferences(registry, applicability, sources) {
+  const references = [];
+  for (const deviation of registry.deviations) {
+    for (const test of deviation.skipPolicyTests ?? []) {
+      references.push({ owner: deviation.id, file: test[0], title: test[1] });
     }
-    const key = `${test[0]}::${test[1]}`;
-    if (registered.has(key)) throw new Error(`${key} is registered by both ${registered.get(key)} and ${deviation.id}`);
-    registered.set(key, deviation.id);
+  }
+  for (const rule of applicability?.rules ?? []) {
+    if (rule.required === true) references.push({ owner: rule.id, file: rule.file, title: rule.fullName });
+  }
+  const leavesByFile = new Map([...sources].map(([file, source]) => [file, literalLeafTitles(source)]));
+  const errors = [];
+  for (const { owner, file, title } of references) {
+    const exactMatches = leavesByFile.get(file)?.filter((leaf) => leaf === title).length ?? 0;
+    if (exactMatches === 1) continue;
+    if (exactMatches > 1) {
+      errors.push(`${owner}: ${file}::${title} matches ${exactMatches} literal leaf tests`);
+      continue;
+    }
+    const otherFiles = [...leavesByFile]
+      .filter(([candidate, leaves]) => candidate !== file && leaves.includes(title))
+      .map(([candidate]) => candidate);
+    errors.push(otherFiles.length === 0
+      ? `${owner}: ${file}::${title} does not match a literal leaf test`
+      : `${owner}: ${file}::${title} exists only in ${otherFiles.join(', ')}`);
+  }
+  if (errors.length > 0) throw new Error(`invalid exact skip-policy references:\n${errors.map((error) => `  ${error}`).join('\n')}`);
+}
+
+export function literalLeafTitles(source) {
+  const titles = [];
+  const sourceFile = ts.createSourceFile('candidate.ts', source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  visit(sourceFile);
+  return titles;
+
+  function visit(node) {
+    if (ts.isCallExpression(node) && isLeafCallee(node.expression)) {
+      const title = node.arguments[0];
+      if (title !== undefined && (ts.isStringLiteral(title) || ts.isNoSubstitutionTemplateLiteral(title))) {
+        titles.push(title.text);
+      }
+    }
+    ts.forEachChild(node, visit);
   }
 }
 
-const missing = [...observed.keys()].filter((key) => !registered.has(key));
-const stale = [...registered.keys()].filter((key) => !observed.has(key));
-if (missing.length > 0 || stale.length > 0) {
-  const parts = [];
-  if (missing.length > 0) parts.push(`unregistered platform skips:\n${missing.map((key) => `  ${key}`).join('\n')}`);
-  if (stale.length > 0) parts.push(`stale deviation entries:\n${stale.map((key) => `  ${key}`).join('\n')}`);
-  throw new Error(parts.join('\n'));
+function isLeafCallee(expression) {
+  if (isTestReference(expression)) return true;
+  return ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) &&
+    ['each', 'for', 'runIf', 'skipIf'].includes(expression.expression.name.text) &&
+    isTestReference(expression.expression.expression);
 }
-console.log(`platform deviations: ${ids.size} reasons, ${observed.size} explicit skips, zero drift`);
+
+function isTestReference(expression) {
+  if (ts.isIdentifier(expression)) return expression.text === 'it' || expression.text === 'test';
+  return ts.isPropertyAccessExpression(expression) &&
+    ['concurrent', 'fails', 'only', 'skip', 'todo'].includes(expression.name.text) &&
+    isTestReference(expression.expression);
+}
+
+async function main() {
+  const registry = JSON.parse(await readFile(registryPath, 'utf8'));
+  if (registry.version !== 1 || !Array.isArray(registry.deviations)) throw new Error('invalid platform deviation registry');
+
+  const files = [];
+  for (const root of ['packages', 'clients', 'compatibility', 'examples']) await collectSources(root, files);
+  const sources = new Map();
+  const observed = new Map();
+  const pattern = /(?:it|test|describe)\.skipIf\((process\.platform\s*(?:===|!==)\s*["'][^"']+["'])\)\(\s*["']([^"']+)["']/gu;
+  for (const file of files) {
+    const source = await readFile(file, 'utf8');
+    const portableFile = file.replaceAll('\\', '/');
+    sources.set(portableFile, source);
+    for (const match of source.matchAll(pattern)) observed.set(`${portableFile}::${match[2]}`, match[1]);
+  }
+
+  const registered = new Map();
+  const ids = new Set();
+  for (const deviation of registry.deviations) {
+    for (const field of ['id', 'capability', 'predicate', 'category', 'reason', 'evidence', 'issueOrAdr', 'removalCondition', 'owner', 'revalidate']) {
+      if (typeof deviation[field] !== 'string' || deviation[field].length === 0) throw new Error(`${deviation.id ?? '<unknown>'}: missing ${field}`);
+    }
+    if (ids.has(deviation.id)) throw new Error(`duplicate deviation id ${deviation.id}`);
+    ids.add(deviation.id);
+    if (!Array.isArray(deviation.tests) || deviation.tests.length === 0) throw new Error(`${deviation.id}: no tests`);
+    for (const test of deviation.tests) {
+      if (!Array.isArray(test) || test.length !== 2 || !test.every((entry) => typeof entry === 'string' && entry.length > 0)) {
+        throw new Error(`${deviation.id}: invalid test reference`);
+      }
+      const key = `${test[0]}::${test[1]}`;
+      if (registered.has(key)) throw new Error(`${key} is registered by both ${registered.get(key)} and ${deviation.id}`);
+      registered.set(key, deviation.id);
+    }
+    if (deviation.skipPolicyTests != null && (!Array.isArray(deviation.skipPolicyTests) ||
+      !deviation.skipPolicyTests.every((test) => Array.isArray(test) && test.length === 2 &&
+        test.every((entry) => typeof entry === 'string' && entry.length > 0)))) {
+      throw new Error(`${deviation.id}: invalid exact skip-policy references`);
+    }
+  }
+
+  const applicability = await optionalJson(applicabilityPath);
+  if (applicability !== undefined && (applicability.version !== 1 || !Array.isArray(applicability.rules))) {
+    throw new Error('invalid applicability skip registry');
+  }
+  validateExactSkipReferences(registry, applicability, sources);
+
+  const missing = [...observed.keys()].filter((key) => !registered.has(key));
+  const stale = [...registered.keys()].filter((key) => !observed.has(key));
+  if (missing.length > 0 || stale.length > 0) {
+    const parts = [];
+    if (missing.length > 0) parts.push(`unregistered platform skips:\n${missing.map((key) => `  ${key}`).join('\n')}`);
+    if (stale.length > 0) parts.push(`stale deviation entries:\n${stale.map((key) => `  ${key}`).join('\n')}`);
+    throw new Error(parts.join('\n'));
+  }
+  console.log(`platform deviations: ${ids.size} reasons, ${observed.size} explicit skips, zero drift`);
+}
+
+async function optionalJson(path) {
+  try {
+    return JSON.parse(await readFile(path, 'utf8'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
 
 async function collectSources(path, output) {
   for (const entry of await readdir(path, { withFileTypes: true })) {
@@ -51,3 +140,5 @@ async function collectSources(path, output) {
     else if (/\.(?:ts|tsx|js|mjs)$/u.test(entry.name)) output.push(child);
   }
 }
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

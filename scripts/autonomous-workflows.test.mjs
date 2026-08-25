@@ -149,6 +149,19 @@ describe('autonomous workflow security', () => {
     }
   });
 
+  it('partitions the Windows catalogue into an exact project and its complement', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const block = jobBlock(workflow, 'windows-driver-native');
+    const invocations = block.match(/^          pnpm test -- --resource-profile windows-ci --json -- --project=.*$/gmu) ?? [];
+
+    expect(invocations).toEqual([
+      '          pnpm test -- --resource-profile windows-ci --json -- --project=core',
+      "          pnpm test -- --resource-profile windows-ci --json -- --project='!core'",
+    ]);
+    expect(block).not.toContain('--shard');
+    expect(block).not.toContain('--retry');
+  });
+
   it('keeps the dedicated OpenTUI lane executable and fail-closed before optional skip policy applies', async () => {
     const workflow = await readWorkflow('ci.yml');
     const block = jobBlock(workflow, 'opentui');
