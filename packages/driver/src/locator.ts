@@ -123,6 +123,11 @@ export interface LocatorContext {
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
   waitForChange(deadline: number): Promise<void>;
   armChange?(deadline: number): { wait(): Promise<void>; cancel(): void };
+  /** Reports the exact causal boundary an action is waiting to cross. */
+  actionObservationWait?(
+    actionId: string,
+    state: 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending',
+  ): void;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
   executeDeviceOperations(operations: readonly ExecutableDeviceOperation[], expected: ObservationStamp, deadline?: number): Promise<readonly ExecutableDeviceOperation[]>;
   /** Publishes the start of an action and returns its session-local id. */
@@ -880,7 +885,7 @@ export class LocatorImpl {
         retry.assertBeforeInput(this.#ctx.errorDiagnostics({ candidates: [source, destination] }));
         return await this.#executePlan(plan, retry);
       } catch (error) {
-        await retry.retry(error, this.#ctx);
+        await retry.retry(error, this.#ctx, actionId);
       }
     }
   }
@@ -908,7 +913,7 @@ export class LocatorImpl {
         retry.assertBeforeInput(this.#ctx.errorDiagnostics({ candidates: [target] }));
         return await this.#executePlan(plan, retry);
       } catch (error) {
-        await retry.retry(error, this.#ctx);
+        await retry.retry(error, this.#ctx, actionId);
       }
     }
   }
@@ -1050,7 +1055,7 @@ export class LocatorImpl {
         retry.assertBeforeInput(this.#ctx.errorDiagnostics({ candidates: [target] }));
         return Object.freeze({ receipt: await this.#executePlan(plan, retry), target, retry });
       } catch (error) {
-        await retry.retry(error, this.#ctx);
+        await retry.retry(error, this.#ctx, actionId);
       }
     }
   }
@@ -1116,7 +1121,7 @@ export class LocatorImpl {
         // locator resolution and evidence collection, so wait for the next
         // paired observation and resolve the locator again instead of using
         // stale coordinates or surfacing a race to the test author.
-        await retry.retry(error, this.#ctx);
+        await retry.retry(error, this.#ctx, actionId);
       }
     }
   }

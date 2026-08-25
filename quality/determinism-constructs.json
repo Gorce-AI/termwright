@@ -12,7 +12,7 @@
   "summary": {
     "bounded-deadline-or-managed-background-task": 44,
     "deadline-or-scheduler-regression-test": 70,
-    "deterministic-adversarial-fixture-schedule": 36,
+    "deterministic-adversarial-fixture-schedule": 35,
     "display-or-persisted-wall-time-not-correctness-order": 91,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 203,
@@ -1798,12 +1798,6 @@
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "if (helloDelay > 0) setTimeout(sendHello, helloDelay);"
-    },
-    {
-      "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "kind": "timer",
-      "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "setTimeout(() => {"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",

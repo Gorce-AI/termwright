@@ -8,6 +8,10 @@ export interface ActionRetryContext {
   actionObservationState?(): 'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
   /** Wall-clock deadline retained at the session boundary; the budget itself is monotonic. */
   waitForChange(deadline: number): Promise<void>;
+  actionObservationWait?(
+    actionId: string,
+    state: "parser-in-flight" | "semantic-frame-open" | "pairing-pending",
+  ): void;
 }
 
 export type MonotonicClock = () => number;
@@ -70,7 +74,11 @@ export class ActionRetryController {
     assertBeforeActionInput(this.deadline, diagnostics, this.#clock);
   }
 
-  async retry(error: unknown, ctx: ActionRetryContext): Promise<void> {
+  async retry(
+    error: unknown,
+    ctx: ActionRetryContext,
+    actionId?: string,
+  ): Promise<void> {
     if (!recoverable(error) || this.expired()) throw error;
 
     // A stale plan proves a newer observation already exists. Re-plan once
@@ -81,6 +89,9 @@ export class ActionRetryController {
     if (relevantObservationChanged(error, failedAt, ctx.checkpoint())) return;
     const observationState = ctx.actionObservationState?.();
     const pendingObservation = observationState !== undefined && observationState !== 'settled';
+    if (pendingObservation && actionId !== undefined) {
+      ctx.actionObservationWait?.(actionId, observationState);
+    }
 
     for (;;) {
       await ctx.waitForChange(this.deadline);

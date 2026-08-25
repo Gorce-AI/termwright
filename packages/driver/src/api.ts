@@ -901,6 +901,8 @@ export type DiagnosticCode =
   | "endpoint-error"
   /** A custom PTY cannot prove output EOF, so final parsing used a bounded fallback. */
   | "degraded-output-drain"
+  /** A locator action is waiting for an in-flight observation to become coherent. */
+  | "action-observation-wait"
   /**
    * The output producer was torn down before its source ended, so bytes the
    * program wrote may never have reached the screen. Distinct from a bounded
@@ -1060,6 +1062,13 @@ export interface SessionDiagnostic {
   readonly detail: string;
   /** The semantic revision the entry is about, when it is about one. */
   readonly revision?: number;
+  /** Correlates an action-observation wait with its action lifecycle. */
+  readonly actionId?: string;
+  /** The in-flight boundary an action is waiting to cross. */
+  readonly observationState?:
+    | "parser-in-flight"
+    | "semantic-frame-open"
+    | "pairing-pending";
   /**
    * How many items the entry accounts for, when it stands for several — the
    * number that would otherwise be readable only by parsing {@link detail}.

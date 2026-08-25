@@ -2188,6 +2188,17 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return "settled";
   }
 
+  actionObservationWait(
+    actionId: string,
+    state: "parser-in-flight" | "semantic-frame-open" | "pairing-pending",
+  ): void {
+    this.#diagnostic(
+      "action-observation-wait",
+      `action ${actionId} is waiting for ${state}`,
+      { actionId, observationState: state },
+    );
+  }
+
   waitForChange(deadline: number): Promise<void> {
     return this.armChange(deadline).wait();
   }

@@ -61,4 +61,27 @@ describe("SessionEvidenceJournal", () => {
     expect(snapshot).toHaveLength(1);
     expect(found.value.diagnostics()).toHaveLength(2);
   });
+
+  it("preserves structured action observation wait correlation", () => {
+    const found = journal();
+    found.value.diagnostic(
+      "action-observation-wait",
+      "action action:one is waiting for semantic-frame-open",
+      {
+        actionId: "action:one",
+        observationState: "semantic-frame-open",
+      },
+    );
+
+    expect(found.value.diagnostics()).toEqual([
+      {
+        code: "action-observation-wait",
+        detail: "action action:one is waiting for semantic-frame-open",
+        actionId: "action:one",
+        observationState: "semantic-frame-open",
+        timeMs: 10,
+      },
+    ]);
+    expect(found.diagnostics).toEqual(found.value.diagnostics());
+  });
 });
