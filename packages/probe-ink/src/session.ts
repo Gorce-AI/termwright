@@ -1,23 +1,12 @@
 /** Certified Ink render capture to revision-paired semantic snapshots. */
 
-import type { ProbeFrame, ProbeInfo, ProtocolLimits, SemanticSnapshot } from '@termwright/protocol';
+import type { ProbeFrame, ProtocolLimits, SemanticSnapshot } from '@termwright/protocol';
 import { recognize } from '@termwright/recognizers';
 import type { ProbeChannel } from '@termwright/probe-runtime';
 import { observeInkTree, type InkDomElement } from './observe.js';
 import type { InkFrameCapture } from './frame-capture.js';
 import type { InkTerminalTracker, TerminalPosition } from './terminal-tracker.js';
-import { instrumentationSentinel, INK_VERSION } from './instrumentation.js';
-import { PACKAGE_VERSION } from './version.js';
-
-export function probeInfo(frameworkVersion = instrumentationSentinel()?.frameworkVersion ?? INK_VERSION): ProbeInfo {
-  return {
-    framework: 'ink',
-    frameworkVersion,
-    probeVersion: PACKAGE_VERSION,
-    identityKind: 'stable',
-    capabilities: ['stable-identity', 'intended-rect', 'visible-rect', 'annotations'],
-  };
-}
+export { probeInfo } from './probe-info.js';
 
 export interface InkSessionOptions {
   readonly channel: ProbeChannel;

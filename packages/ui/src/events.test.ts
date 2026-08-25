@@ -132,7 +132,7 @@ describe('server messages', () => {
           { attempt: 2, errors: ['prompt missing'] },
         ],
       },
-      { v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 1, durationMs: 900 } },
+      { v: 1, type: 'run-end', summary: { verdict: 'failed', total: 1, passed: 0, failed: 1, skipped: 0, flaky: 1, durationMs: 900 } },
       { v: 1, type: 'run-cancelled', stoppedAt: 1_700_000_001_000 },
       { v: 1, type: 'run-cancel-failed', error: 'process did not exit' },
       { v: 1, type: 'diagnostic-gap', source: 'ui-hub', droppedMessages: 3, droppedBytes: 512 },
@@ -144,6 +144,14 @@ describe('server messages', () => {
 
   it('rejects an unknown type rather than ignoring it', () => {
     expect(() => parseServerMessage('{"v":1,"type":"reload"}')).toThrow(UiProtocolError);
+  });
+
+  it('rejects a run-end summary without an explicit terminal verdict', () => {
+    expect(() => parseServerMessage(JSON.stringify({
+      v: 1,
+      type: 'run-end',
+      summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 1 },
+    }))).toThrow(/summary\.verdict/u);
   });
 
   it('rejects a future protocol version', () => {
@@ -295,11 +303,11 @@ describe('server messages', () => {
       ),
     ).toThrow(/lostLogRecords must be a finite number/);
     expect(() =>
-      parseServerMessage('{"v":1,"type":"run-end","summary":{"total":1,"passed":1,"failed":0,"skipped":0}}'),
+      parseServerMessage('{"v":1,"type":"run-end","summary":{"verdict":"passed","total":1,"passed":1,"failed":0,"skipped":0}}'),
     ).toThrow(/summary.flaky must be a finite number/);
     expect(() =>
       parseServerMessage(
-        '{"v":1,"type":"run-end","summary":{"total":1,"passed":1,"failed":0,"skipped":0,"flaky":0}}',
+        '{"v":1,"type":"run-end","summary":{"verdict":"passed","total":1,"passed":1,"failed":0,"skipped":0,"flaky":0}}',
       ),
     ).toThrow(/summary.durationMs must be a finite number/);
   });

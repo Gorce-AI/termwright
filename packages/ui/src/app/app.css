@@ -432,7 +432,10 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .tw-run-card { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto auto; align-items: center; gap: 13px; min-height: 75px; padding: 11px 15px; border: 1px solid var(--tw-stroke); border-radius: 15px; background: linear-gradient(135deg, rgba(22,31,51,.95), rgba(12,18,31,.95)); cursor: pointer; text-align: left; }
 .tw-run-card:hover { border-color: rgba(88,230,176,.48); transform: translateY(-1px); }
 .tw-run-card-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 11px; color: var(--tw-mint); background: var(--tw-mint-soft); }
+.tw-run-card-icon[data-health="failed"], .tw-run-card-icon[data-health="flaky"], .tw-run-card-icon[data-health="infrastructure-failed"], .tw-run-card-icon[data-health="crashed"], .tw-run-card-icon[data-health="incomplete"] { color: var(--tw-coral); background: var(--tw-coral-soft); }
+.tw-run-card-icon[data-health="passed-with-skips"], .tw-run-card-icon[data-health="skipped"] { color: var(--tw-amber); background: color-mix(in srgb, var(--tw-amber) 12%, transparent); }
 .tw-run-card-icon[data-failed="true"] { color: var(--tw-coral); background: var(--tw-coral-soft); }
+.tw-run-skip-warning { margin: 0 28px 12px; border: 1px solid color-mix(in srgb, var(--tw-amber) 45%, transparent); border-radius: 10px; padding: 9px 12px; color: var(--tw-amber); background: color-mix(in srgb, var(--tw-amber) 8%, transparent); font-size: 12px; }
 .tw-run-card > span:nth-child(2) { display: grid; gap: 4px; }
 .tw-run-card small, .tw-commit { color: var(--tw-muted); font-size: 9px; }
 .tw-run-card small { display: flex; flex-wrap: wrap; gap: 3px 8px; }

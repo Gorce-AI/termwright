@@ -64,10 +64,17 @@ describe('subpath entry points', () => {
 
   it('preserves an explicit extended-test module for generated Gherkin fixtures', async () => {
     const { gherkinPlugin } = await import('./gherkin.js');
-    const plugin = gherkinPlugin({
+    interface ProjectFixtures {
+      readonly app: { readonly name: string };
+    }
+    const plugin = gherkinPlugin<ProjectFixtures>({
       fixtureNames: ['app'],
       generatedImports: { test: './fixtures.js', runtime: 'termwright/gherkin/runtime' },
     });
+    if (false) {
+      // @ts-expect-error the umbrella wrapper must preserve project fixture keys.
+      gherkinPlugin<ProjectFixtures>({ fixtureNames: ['ap'] });
+    }
     const resolveConfig = typeof plugin.configResolved === 'function'
       ? plugin.configResolved
       : plugin.configResolved?.handler;

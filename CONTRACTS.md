@@ -177,7 +177,10 @@ WebSocket, JSON messages `{ v: 1, type, ... }`:
   ordinal; `priorFailures` is its ordered `{attempt, errors[]}` history.
   `lostLogRecords` is REQUIRED — 0 is representable, and "nothing
   was lost" and "nobody counted" are different facts),
-  `run-end {summary: {total, passed, failed, skipped, flaky, durationMs}}`,
+  `run-end {summary: {verdict, total, passed, failed, skipped, flaky,
+  durationMs}}` (`verdict` is the canonical terminal run state, including
+  `passed-with-skips`; counters cannot replace it because a declarative skip
+  may create no Attempt),
   `run-cancelled {stoppedAt}` (emitted after the stopped test process exits;
   unfinished rows become cancelled, never silently skipped),
   `run-cancel-failed {error}` (the process could not be stopped; the run stays
@@ -238,6 +241,20 @@ commit. Readers distinguish `complete`, `incomplete`, `corrupt` and
 `unsupported-version`; there is no timestamp identity or legacy manifest
 fallback. Opening a retained trace still goes through the same `openArchive`
 validation path as `--trace`.
+
+`passed-with-skips` is a terminal state distinct from `passed`. Certification
+accepts it only when every observed skip matches the applicable exact skip
+policy; local reports and UI retain the yellow state. An all-skipped run is
+`skipped` and is never certification evidence.
+
+Before the terminal `run.state`, the canonical journal records the complete
+decision input: one `run.skip-declaration` per applicable rule, one
+identity-bound `test.skipped` per observed case, bounded
+`run.skip-policy-issue` diagnostics, and exactly one aggregate
+`run.skip-policy`. A skipped declaration may have no Attempt, so consumers must
+not try to reconstruct this evidence from attempt counters. Run-history
+validation cross-checks these events against the native spec catalogue and the
+aggregate verdict.
 
 ## §MCP — tool surface (all tools validate with zod, return structuredContent)
 

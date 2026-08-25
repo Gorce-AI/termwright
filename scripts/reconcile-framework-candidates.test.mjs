@@ -87,6 +87,35 @@ describe('framework candidate reconciliation', () => {
     expect(() => reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [{ candidateId: candidate.id, candidateDigest: `sha256:${'d'.repeat(64)}`, state: 'green' }])).toThrow(/stale verdict/u);
   });
 
+  it('requires a complete revision-bound typed artifact set in trusted reconciliation', () => {
+    const context = {
+      runUrl: 'https://github.com/owner/repo/actions/runs/3',
+      owner: 'owner',
+      sourceRevision: 'a'.repeat(40),
+      strictArtifacts: true,
+    };
+    expect(() => reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [], context))
+      .toThrow(/artifact set is incomplete/u);
+    expect(() => reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [{
+      schemaVersion: 1,
+      kind: 'termwright-framework-candidate-verdict',
+      candidateId: candidate.id,
+      candidateDigest: candidate.candidateDigest,
+      sourceRevision: 'b'.repeat(40),
+      state: 'red',
+      detail: 'failed',
+    }], context)).toThrow(/invalid or stale typed verdict/u);
+    expect(() => reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [{
+      schemaVersion: 1,
+      kind: 'termwright-framework-candidate-verdict',
+      candidateId: candidate.id,
+      candidateDigest: candidate.candidateDigest,
+      sourceRevision: 'a'.repeat(40),
+      state: 'red',
+      detail: 'failed',
+    }], context)).not.toThrow();
+  });
+
   it('rejects a generated bundle from a stale revision', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-reconcile-'));
     await mkdir(join(directory, 'patch'));

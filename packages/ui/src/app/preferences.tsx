@@ -32,7 +32,6 @@ interface PreferencesContextValue {
 }
 
 const STORAGE_KEY = 'termwright:preferences:v1';
-const LEGACY_SCHEMA_KEY = 'termwright:preferences';
 const COOKIE_KEY = 'termwright_preferences_v1';
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -74,14 +73,8 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
 
   useEffect(() => {
     const serialized = JSON.stringify(preferences);
-    const committed = safeStorageSet(STORAGE_KEY, serialized);
+    safeStorageSet(STORAGE_KEY, serialized);
     safeCookieSet(COOKIE_KEY, serialized);
-    if (committed) {
-      safeStorageRemove('termwright:navigation-expanded');
-      safeStorageRemove('termwright:rail-share');
-      safeStorageRemove('termwright:inspector-share');
-      if (legacySchemaCanRemove()) safeStorageRemove(LEGACY_SCHEMA_KEY);
-    }
   }, [preferences]);
   useEffect(() => {
     const receive = (event: StorageEvent) => {
@@ -129,7 +122,7 @@ export function normalizePreferences(value: unknown): Preferences {
 }
 
 function loadPreferences(): Preferences {
-  const stored = safeStorageGet(STORAGE_KEY) ?? safeCookieGet(COOKIE_KEY) ?? safeStorageGet(LEGACY_SCHEMA_KEY);
+  const stored = safeStorageGet(STORAGE_KEY) ?? safeCookieGet(COOKIE_KEY);
   if (stored !== null) {
     try {
       return normalizePreferences(JSON.parse(stored));
@@ -137,11 +130,7 @@ function loadPreferences(): Preferences {
       return DEFAULT_PREFERENCES;
     }
   }
-  return normalizePreferences({
-    navigationExpanded: safeStorageGet('termwright:navigation-expanded') === 'true',
-    railShare: safeStorageGet('termwright:rail-share'),
-    inspectorShare: safeStorageGet('termwright:inspector-share'),
-  });
+  return DEFAULT_PREFERENCES;
 }
 
 function safeStorageGet(key: string): string | null {
@@ -150,19 +139,6 @@ function safeStorageGet(key: string): string | null {
 
 function safeStorageSet(key: string, value: string): boolean {
   try { localStorage.setItem(key, value); return true; } catch { return false; }
-}
-
-function safeStorageRemove(key: string): void {
-  try { localStorage.removeItem(key); } catch { /* Browser storage is optional. */ }
-}
-
-function legacySchemaCanRemove(): boolean {
-  const value = safeStorageGet(LEGACY_SCHEMA_KEY);
-  if (value === null) return true;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return !isRecord(parsed) || parsed['version'] === undefined || parsed['version'] === 1;
-  } catch { return true; }
 }
 
 function safeCookieGet(key: string): string | null {

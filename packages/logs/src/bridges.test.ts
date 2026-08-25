@@ -5,7 +5,6 @@
  * these prove it agrees with what the library actually emits, which is the
  * thing that breaks on a major version bump.
  */
-import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_LIMITS, validateLogRecord, type LogRecord } from '@termwright/protocol';
 import { resetLogSequence, subscribeToLogs } from './channel.js';
@@ -15,6 +14,20 @@ import { termwrightReporter } from './consola.js';
 import { TermwrightLogRecordProcessor, severityToLevel } from './otel.js';
 
 const cleanup: Array<() => void> = [];
+
+interface FlushableLogger {
+  once(event: 'finish', listener: () => void): unknown;
+  once(event: 'error', listener: (error: Error) => void): unknown;
+  end(): void;
+}
+
+async function flush(logger: FlushableLogger): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    logger.once('finish', resolve);
+    logger.once('error', reject);
+    logger.end();
+  });
+}
 
 function collect(): LogRecord[] {
   const records: LogRecord[] = [];
@@ -122,7 +135,7 @@ describe('winston bridge', () => {
     logger.warn('cache miss');
     logger.silly('very verbose');
 
-    await delay(20);
+    await flush(logger);
 
     expect(records.length).toBeGreaterThanOrEqual(3);
     const started = records.find((r) => r.message === 'server started');
@@ -138,11 +151,13 @@ describe('winston bridge', () => {
     const winston = (await import('winston')).default;
     const records = collect();
 
-    winston
-      .createLogger({ level: 'info', transports: [createWinstonTransport()] })
-      .info('login', { password: 'hunter2' });
+    const logger = winston.createLogger({
+      level: 'info',
+      transports: [createWinstonTransport()],
+    });
+    logger.info('login', { password: 'hunter2' });
 
-    await delay(20);
+    await flush(logger);
     expect(records[0]!.attrs?.['password']).toBe('[redacted]');
   });
 

@@ -11,17 +11,23 @@ editUrl: false
 
 # Function: gherkinPlugin()
 
-> **gherkinPlugin**(`options?`): `Plugin`
+> **gherkinPlugin**\<`Fixtures`\>(`options?`): `Plugin`
 
-Defined in: [plugin.ts:476](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L476)
+Defined in: [plugin.ts:483](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L483)
 
 Public Vite/Vitest plugin. It transforms `.feature` modules before other loaders.
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `Record`\<`string`, `unknown`\>
 
 ## Parameters
 
 ### options?
 
-[`GherkinPluginOptions`](../../interfaces/gherkinpluginoptions/) = `{}`
+[`GherkinPluginOptions`](../../interfaces/gherkinpluginoptions/)\<`Fixtures`\> = `{}`
 
 ## Returns
 

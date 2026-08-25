@@ -52,6 +52,23 @@ async function checkedPage(): Promise<Page> {
   return page;
 }
 
+it('renders a canonical partial-skip verdict as yellow without relying on skipped attempt events', async () => {
+  const server = await startUiServer();
+  servers.push(server);
+  const page = await checkedPage();
+  await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+  server.hub.publish({ v: 1, type: 'run-start', runId: 'run:yellow', mode: 'live', startedAt: Date.now() });
+  server.hub.publish({
+    v: 1,
+    type: 'run-end',
+    summary: { verdict: 'passed-with-skips', total: 2, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 1 },
+  });
+
+  await expect.poll(() => page.locator('.tw-run-skip-warning').textContent()).toContain('not plain-green certification');
+  expect(await page.locator('.tw-run-skip-warning').evaluate((element) => getComputedStyle(element).color))
+    .not.toBe('rgb(88, 230, 176)');
+});
+
 describe('fresh React runner', () => {
   it('distinguishes initialization failure from a valid empty project', async () => {
     const failedServer = await startUiServer();
@@ -98,7 +115,7 @@ describe('fresh React runner', () => {
       server.hub.publish({ v: 1, type: 'test-start', id, title, file: `/repo/${id}.test.ts`, startedAt });
       server.hub.publish({ v: 1, type: 'test-end', id, status, durationMs: 20, flaky: false, lostLogRecords: 0, traceRef });
     }
-    server.hub.publish({ v: 1, type: 'run-end', summary: { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, durationMs: 20 } });
+    server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'failed', total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, durationMs: 20 } });
     await expect.poll(() => first.locator('.tw-case-button').count()).toBe(2);
     await expect.poll(() => second.locator('.tw-case-button').count()).toBe(2);
     await first.locator('.tw-case-button').filter({ hasText: 'normal historical flow' }).click();
@@ -449,7 +466,7 @@ describe('fresh React runner', () => {
     server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'finished-b', title: 'suite > finished B', file: '/tmp/finished-b.test.ts', startedAt });
     server.hub.publish({ v: 1, type: 'test-end', id: 'finished-b', status: 'passed', durationMs: 20, flaky: false, lostLogRecords: 0, traceRef: secondTrace });
-    server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 20 } });
+    server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'passed', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 20 } });
 
     const second = page.locator('.tw-case-button').filter({ hasText: 'finished B' });
     await second.click();
@@ -492,7 +509,7 @@ describe('fresh React runner', () => {
     expect(await page.getByRole('button', { name: /Rerun no actions/ }).count()).toBe(0);
     expect(await page.getByRole('button', { name: 'Record test' }).count()).toBe(0);
     server.hub.publish({ v: 1, type: 'test-end', id: 'no-actions', status: 'passed', durationMs: 5, flaky: false, lostLogRecords: 0 });
-    server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 5 } });
+    server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'passed', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 5 } });
     await expect.poll(() => page.getByText('No driver actions were recorded for this case.', { exact: false }).count()).toBe(1);
     expect(await page.getByRole('button', { name: /Rerun .*no actions/ }).count()).toBe(0);
     expect(await page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(0);
@@ -501,7 +518,7 @@ describe('fresh React runner', () => {
     server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: missingStartedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'missing', title: 'suite > missing trace', file: '/tmp/missing.test.ts', startedAt: missingStartedAt });
     server.hub.publish({ v: 1, type: 'test-end', id: 'missing', status: 'failed', durationMs: 4, flaky: false, lostLogRecords: 0, traceRef: '/tmp/does-not-exist.twtrace', error: 'test failed' });
-    server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0, durationMs: 4 } });
+    server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'failed', total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0, durationMs: 4 } });
     const missing = page.locator('.tw-case-button').filter({ hasText: 'missing trace' });
     await missing.waitFor();
     if (await missing.getAttribute('aria-expanded') !== 'true') await missing.click();
@@ -685,7 +702,7 @@ describe('fresh React runner', () => {
         }, 500);
         setTimeout(() => {
           server.hub.publish({ v: 1, type: 'test-end', id: 'rerun-runtime', status: 'passed', durationMs: 100, flaky: false, lostLogRecords: 0, traceRef: trace });
-          server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 100 } });
+          server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'passed', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 100 } });
         }, 1_200);
         return { runId: createRunId('run'), completed: Promise.resolve() };
       },
@@ -769,7 +786,7 @@ describe('fresh React runner', () => {
 
     server.hub.publish({ v: 1, type: 'action', actionId: 'a1', kind: 'action', api: 'press', t: 20, ok: true, testId: 'status-live' });
     server.hub.publish({ v: 1, type: 'test-end', id: 'status-live', status: 'passed', durationMs: 30, flaky: false, lostLogRecords: 0 });
-    server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 30 } });
+    server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'passed', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 30 } });
     const passedCase = page.locator('.tw-case[data-status="passed"]');
     await passedCase.waitFor();
     expect(await passedCase.locator('.tw-status[data-status="passed"] .lucide-check').count()).toBe(1);
@@ -794,7 +811,7 @@ describe('fresh React runner', () => {
     server.hub.publish({ v: 1, type: 'step', testId: actionlessId, title: 'provider wrapper', phase: 'start', stepId: 'tw-step-1', t: 1, gherkin: authored });
     server.hub.publish({ v: 1, type: 'step', testId: actionlessId, title: 'provider wrapper', phase: 'end', stepId: 'tw-step-1', t: 2, status: 'passed', gherkin: authored });
     server.hub.publish({ v: 1, type: 'test-end', id: actionlessId, status: 'passed', durationMs: 3, flaky: false, lostLogRecords: 0 });
-    server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 3 } });
+    server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'passed', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 3 } });
 
     const actionless = page.locator('.tw-case-button').filter({ hasText: 'records an actionless business rule' });
     await actionless.click();
@@ -892,7 +909,7 @@ describe('fresh React runner', () => {
       lostLogRecords: 0, attempt: 3, error: 'final provider failure',
       priorFailures: [{ attempt: 1, errors: ['first provider failure'] }, { attempt: 2, errors: ['second provider failure'] }],
     });
-    server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0, durationMs: 220 } });
+    server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'failed', total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0, durationMs: 220 } });
     await expect.poll(() => page.getByText('attempt 3', { exact: true }).count()).toBe(1);
     await page.getByText('2 earlier attempts failed', { exact: true }).click();
     expect(await page.getByText('first provider failure', { exact: true }).count()).toBe(1);
@@ -964,7 +981,7 @@ describe('fresh React runner', () => {
         }
       }
       const total = mutableRequests.length === 2 ? 2 : 1;
-      server.hub.publish({ v: 1, type: 'run-end', summary: { total, passed: total, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } });
+      server.hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'passed', total, passed: total, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } });
       return { runId: createRunId('run'), completed: Promise.resolve() };
     } });
     servers.push(server);
@@ -1119,6 +1136,28 @@ describe('fresh React runner', () => {
     });
     expect(bottomReachable).toBe(true);
     await page.screenshot({ path: '/tmp/termwright-fresh-settings-390-bottom.png', fullPage: false });
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('does not load preferences from pre-release storage keys', async () => {
+    const server = await startUiServer({ trace: await buildFixtureTrace() });
+    servers.push(server);
+    const page = await checkedPage();
+    await page.addInitScript(() => {
+      localStorage.setItem('termwright:preferences', JSON.stringify({
+        version: 1,
+        navigationExpanded: true,
+        timelineDensity: 'comfortable',
+      }));
+      localStorage.setItem('termwright:navigation-expanded', 'true');
+      localStorage.setItem('termwright:rail-share', '.4');
+      localStorage.setItem('termwright:inspector-share', '.3');
+    });
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Settings' }).click();
+
+    expect(await page.locator('.tw-shell').getAttribute('data-navigation-expanded')).toBe('false');
+    expect(await page.getByLabel('Timeline density').inputValue()).toBe('compact');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 

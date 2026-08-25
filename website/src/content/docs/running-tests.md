@@ -29,6 +29,40 @@ certification through an infrastructure failure. An empty or entirely skipped
 run is recorded as `skipped`, but `termwright test` exits non-zero because it is
 not evidence of a passing suite.
 
+A mixed pass/skip run is recorded as `passed-with-skips` and shown in amber,
+never as an ordinary green pass. It exits zero only when every skipped native
+case matches exactly one repository-owned declaration and every selected
+required declaration was observed. An undeclared, ambiguous, or unexpectedly
+unskipped required case exits non-zero. Repository-wide platform declarations
+live in `quality/platform-deviations.json`; a project may declare other exact
+applicability rules in `quality/applicability-skips.json`:
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "windows-only-terminal-case",
+      "file": "tests/windows.test.ts",
+      "fullName": "uses native ConPTY",
+      "platforms": ["linux", "darwin"],
+      "required": true
+    }
+  ]
+}
+```
+
+`file` plus `fullName` names one exact native leaf case. A suite title does not
+cover its descendants; declare each intentionally skipped case separately. If
+the same leaf occurs more than once in a file, add `suite` with its exact
+top-level suite name. Termwright ignores only the generated trailing
+`(skipped: …)` reason when comparing that scope; it never treats the scope as a
+prefix or subtree wildcard.
+`required: true` means the case must be observed as skipped whenever it is
+selected on an applicable platform. Omit it for an allowed skip that need not
+occur on every run. Skips remain visible in human output and in the `runs[].skips`
+and `runs[].skipPolicy` fields of `--json` output.
+
 During local development, keep the same host alive across source changes:
 
 ```sh

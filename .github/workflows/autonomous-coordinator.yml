@@ -17,9 +17,11 @@ permissions: {}
 jobs:
   notify-upstream-failure:
     name: notify compatibility workflow failure
+    needs: reconcile
     if: >-
+      always() &&
       github.event.workflow_run.name == 'Framework compatibility candidates' &&
-      github.event.workflow_run.conclusion != 'success'
+      needs.reconcile.result != 'success'
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -36,7 +38,7 @@ jobs:
       - name: Reject workflow reruns
         shell: bash
         run: test "$GITHUB_RUN_ATTEMPT" = 1
-      - name: Open an idempotent dead-man issue before artifact reconciliation
+      - name: Open an idempotent dead-man issue for unverified reconciliation
         shell: bash
         run: |
           set -euo pipefail
@@ -48,11 +50,11 @@ jobs:
             --description 'Automated upstream compatibility candidate' --force
           title='[compatibility] daily certification workflow failed'
           body_file="$(mktemp)"
-          printf 'The daily compatibility workflow failed before trusted artifact reconciliation.\n\nConclusion: %s\nSource SHA: %s\nRun: %s\n\nNo compatibility or release change was applied.\n' \
+          printf 'The daily compatibility run could not complete trusted artifact reconciliation.\n\nSource conclusion: %s\nSource SHA: %s\nRun: %s\n\nNo compatibility or release change was applied.\n' \
             "$SOURCE_CONCLUSION" "$SOURCE_SHA" "$SOURCE_RUN_URL" > "$body_file"
           # shellcheck disable=SC2016
           number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all&labels=upstream-compatibility&per_page=100" \
-            | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .title == $title) | .number' | sed -n '1p')"
+            | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .user.login == "github-actions[bot]" and .title == $title) | .number' | sed -n '1p')"
           if [ -n "$number" ]; then
             gh issue reopen "$number" || true
             gh issue edit "$number" --body-file "$body_file" --add-assignee "$ISSUE_OWNER"
@@ -64,8 +66,7 @@ jobs:
   reconcile:
     name: reconcile trusted compatibility artifacts
     if: >-
-      github.event.workflow_run.name == 'Framework compatibility candidates' &&
-      github.event.workflow_run.conclusion == 'success'
+      github.event.workflow_run.name == 'Framework compatibility candidates'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -142,7 +143,7 @@ jobs:
             --ledger compatibility/certified-upstreams.json \
             --plan "$PUBLISH_PLAN"
 
-      - name: Open or update owned failure issues with the source run URL
+      - name: Reconcile owned candidate issues with the source run
         shell: bash
         run: |
           set -euo pipefail
@@ -155,7 +156,7 @@ jobs:
             jq -r '.body' <<<"$issue" > "$body_file"
             grep -Fq "$SOURCE_RUN_URL" "$body_file"
             number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all&labels=upstream-compatibility&per_page=100" \
-              | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .title == $title) | .number' | sed -n '1p')"
+              | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .user.login == "github-actions[bot]" and .title == $title) | .number' | sed -n '1p')"
             if [ -n "$number" ]; then
               gh issue reopen "$number" || true
               gh issue edit "$number" --body-file "$body_file" --add-assignee "$ISSUE_OWNER"
@@ -164,6 +165,20 @@ jobs:
                 --assignee "$ISSUE_OWNER" --body-file "$body_file"
             fi
           done
+          jq -r '.green[]' "$PUBLISH_PLAN" | while IFS= read -r candidate; do
+            title="[compatibility] $candidate"
+            number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=open&labels=upstream-compatibility&per_page=100" \
+              | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .user.login == "github-actions[bot]" and .title == $title) | .number' | sed -n '1p')"
+            if [ -n "$number" ]; then
+              gh issue close "$number" --comment "Certified by $SOURCE_RUN_URL."
+            fi
+          done
+          deadman='[compatibility] daily certification workflow failed'
+          deadman_number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=open&labels=upstream-compatibility&per_page=100" \
+            | jq -r --arg title "$deadman" '.[] | select((.pull_request | not) and .user.login == "github-actions[bot]" and .title == $title) | .number' | sed -n '1p')"
+          if [ -n "$deadman_number" ]; then
+            gh issue close "$deadman_number" --comment "Typed candidate artifacts reconciled from $SOURCE_RUN_URL."
+          fi
 
       - name: Commit only the compatibility allowlist and dispatch exact CI
         shell: bash
@@ -208,13 +223,13 @@ jobs:
             gh pr edit "$BRANCH" --title "$title" \
               --body "$summary
 
-          Source certification run: $RUN_ID"
+          Source certification run: $SOURCE_RUN_ID"
           else
             gh pr create --head "$BRANCH" --base '${{ github.event.repository.default_branch }}' \
               --title "$title" \
               --body "$summary
 
-          Source certification run: $RUN_ID"
+          Source certification run: $SOURCE_RUN_ID"
           fi
           existing=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&head_sha=$head_sha" --jq '.total_count')
           if [ "$existing" = 0 ]; then gh workflow run ci.yml --ref "$BRANCH"; fi

@@ -283,7 +283,7 @@ jobs:
           cp packages/conpty/build/Release/termwright_conpty.node \
              "packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node"
           node scripts/check-prebuild.mjs "${{ matrix.arch }}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-conpty-${{ matrix.arch }}
           path: packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node
@@ -292,6 +292,8 @@ jobs:
 
   verify:
     name: verify and pack release
+    env:
+      TERMWRIGHT_REQUIRE_BUN: '1'
     needs: [detect, prebuilds]
     if: needs.detect.outputs.release == 'true'
     runs-on: ubuntu-latest
@@ -314,6 +316,9 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.2.15'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.25'
@@ -385,11 +390,11 @@ jobs:
       # The prebuilds are compiled on Windows and published from here, so they
       # have to arrive before anything is packed. A missing one would otherwise
       # publish an empty package that installs cleanly and supplies no addon.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-conpty-x64
           path: packages/conpty-win32-x64
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-conpty-arm64
           path: packages/conpty-win32-arm64
@@ -567,7 +572,7 @@ jobs:
           ref: ${{ needs.detect.outputs.commit }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-artifacts-${{ needs.detect.outputs.commit }}
           path: release
@@ -635,7 +640,7 @@ jobs:
           ref: ${{ needs.detect.outputs.commit }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-artifacts-${{ needs.detect.outputs.commit }}
           path: release
@@ -711,7 +716,7 @@ jobs:
 
       - run: npm install --global npm@11.5.1
 
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: release-artifacts-${{ needs.detect.outputs.commit }}
           path: release

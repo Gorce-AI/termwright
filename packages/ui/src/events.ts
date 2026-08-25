@@ -58,6 +58,8 @@ export interface UiGherkinStep {
 
 /** Counters closing a run. */
 export interface UiRunSummary {
+  /** Canonical terminal verdict; counters alone cannot represent declarative skips. */
+  readonly verdict: 'passed' | 'passed-with-skips' | 'failed' | 'flaky' | 'skipped' | 'cancelled' | 'crashed' | 'infrastructure-failed' | 'incomplete';
   readonly total: number;
   readonly passed: number;
   readonly failed: number;
@@ -741,6 +743,9 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         throw new UiProtocolError('run-end: summary must be an object');
       }
       const record = summary as Record<string, unknown>;
+      if (!['passed', 'passed-with-skips', 'failed', 'flaky', 'skipped', 'cancelled', 'crashed', 'infrastructure-failed', 'incomplete'].includes(String(record['verdict']))) {
+        throw new UiProtocolError('run-end: summary.verdict must be a terminal run verdict');
+      }
       for (const key of ['total', 'passed', 'failed', 'skipped', 'flaky', 'durationMs']) {
         const count = record[key];
         if (typeof count !== 'number' || !Number.isFinite(count)) {

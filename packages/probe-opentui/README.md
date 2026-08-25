@@ -30,7 +30,13 @@ const {command} = withProbe('bun', ['bun', 'app.ts']);
 await launchTerminal({command, env: {TERMWRIGHT_ENDPOINT: endpoint, TERMWRIGHT_TOKEN: token}});
 ```
 
-Under Node the flag is `--import` instead, because the probe is ESM.
+Under Node the flag is `--import` instead, because the probe is ESM. Node gets
+a `file://` preload URL; Bun gets a native absolute path so the same command
+works with Bun's Windows resolver.
+
+The test suite treats Bun as optional on a developer machine. Certifying
+environments set `TERMWRIGHT_REQUIRE_BUN=1`, which makes an unavailable runtime
+or `TERMWRIGHT_SKIP_BUN=1` a hard failure instead of reduced coverage.
 
 ## Dormant without instrumentation
 

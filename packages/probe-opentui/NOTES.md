@@ -25,9 +25,9 @@ obviously right.
 **A path handed to `node --import` must be a `file://` URL.** On Windows an
 absolute path fails with `ERR_UNSUPPORTED_ESM_URL_SCHEME: Received protocol
 'd:'` — a drive letter parses as a scheme, which is a confusing way for it to
-fail. `withProbe` therefore emits `pathToFileURL(entry).href`. Bun was measured
-to accept either form, so both runtimes get the URL: one form that works
-everywhere beats two where the rarer one rots.
+fail. Bun's Windows `--preload` resolver has the inverse constraint: it does
+not load the `file:///D:/…` form even though Bun accepts a file URL on POSIX.
+`withProbe` therefore emits a URL for Node and the native absolute path for Bun.
 
 **Inside the shim the opposite holds.** The obvious next step — convert the
 re-import specifier to a URL too, for the same Windows reason — silently breaks
@@ -42,17 +42,20 @@ over.** Node's hooks give a URL, Bun's `onLoad` gives a native path, and each
 runtime demonstrably consumes what it produced. `toModuleUrl` exists for the
 launcher flag alone.
 
-Unverified: Bun on Windows, where the shim would embed a `D:\…` path. No CI lane
-runs Bun on Windows today, and the form is self-consistent (Bun produced it), but
-nobody has watched it work.
+The supported-runtime Windows matrix installs pinned Bun and executes both the
+OpenTUI and Ink process arms, so the native-path preload and shim re-import are
+certified together.
 
 ## Which CI lane has Bun
 
-Bun lives in one lane, not in the build jobs, so the process tests probe for it
-(`src/testing/bun-available.ts`, the same shape as conformance's `ptyAvailable`)
-and drop the Bun arms when it is missing. A test named "skips the Bun arms
-because no bun binary is reachable" runs in that case, so a reduced run says so
-instead of looking fully green. `TERMWRIGHT_SKIP_BUN=1` forces it.
+Bun lives in the dedicated OpenTUI lane, every supported-runtime build row, the
+examples lane and the release verifier. Those certifying jobs set
+`TERMWRIGHT_REQUIRE_BUN=1`; the shared capability probe therefore fails during
+test collection if `bun --version` cannot execute. Developer runs may omit Bun
+or set `TERMWRIGHT_SKIP_BUN=1`, in which case the genuinely Bun-only zero-config
+cases remain exact applicability skips and the Node injection arms still run.
+There is deliberately no inverse passing/skipped test for runtime absence:
+availability is a prerequisite decision, not product behaviour.
 
 ## Which marker route survives `useThread=true` — measured, not reasoned
 

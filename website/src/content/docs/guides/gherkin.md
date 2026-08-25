@@ -130,8 +130,10 @@ teardown lifecycle.
 
 ```ts title="vitest.config.ts"
 import {fileURLToPath} from 'node:url';
+import {gherkinPlugin} from 'termwright/gherkin';
+import type {ProjectFixtures} from './tests/fixtures';
 
-gherkinPlugin({
+gherkinPlugin<ProjectFixtures>({
   fixtureNames: ['account'],
   generatedImports: {
     test: fileURLToPath(new URL('./tests/fixtures.ts', import.meta.url)),

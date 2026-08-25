@@ -144,6 +144,7 @@ export interface SemanticChannelOptions {
 
 /** Fault-injection seam used by transport lifecycle tests. */
 export interface SemanticChannelListenDependencies {
+  readonly platform?: NodeJS.Platform;
   readonly createServer?: () => Server;
   readonly makeDirectory?: (prefix: string) => Promise<string>;
   readonly listen?: (server: Server, endpoint: string) => Promise<void>;
@@ -229,7 +230,7 @@ export class SemanticChannel {
     let endpoint: string;
     let directory: string | null = null;
     try {
-      if (process.platform === 'win32') {
+      if ((dependencies.platform ?? process.platform) === 'win32') {
         endpoint = `\\\\.\\pipe\\termwright-${randomBytes(16).toString('hex')}`;
       } else {
         directory = await (dependencies.makeDirectory ?? mkdtemp)(join(tmpdir(), 'termwright-'));

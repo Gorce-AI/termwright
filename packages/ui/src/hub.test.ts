@@ -182,7 +182,7 @@ describe('UiHub', () => {
     const hub = new UiHub({ maxMessages: 3, maxBacklogBytes: 256 });
     hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
     expect(hub.runBusy).toBe(true);
-    hub.publish({ v: 1, type: 'run-end', summary: { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } });
+    hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'skipped', total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } });
     for (let index = 0; index < 10; index += 1) hub.publish(output(`flood-${index}`));
     expect(hub.runBusy).toBe(false);
   });

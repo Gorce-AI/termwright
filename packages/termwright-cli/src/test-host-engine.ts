@@ -23,6 +23,8 @@ export interface EngineCollection {
 /** Narrow contract around the exact engine APIs certified by Termwright. */
 export interface TermwrightVitestEngine {
   readonly version: string;
+  /** Whether Vitest collected the repository default catalogue or an explicit subset. */
+  readonly catalogueScope: 'full' | 'targeted';
   setRunnerContext(context: TermwrightRunnerContext): void;
   collect(filters: readonly string[]): Promise<EngineCollection>;
   run(nativeModuleIds: ReadonlySet<string>): Promise<TestRunResult>;
@@ -106,7 +108,29 @@ export async function createCertifiedVitestEngine(options: CertifiedVitestEngine
   }, uiVitestViteOverrides());
   removeEmbeddedDefaultReporter(vitest);
   await vitest.standalone();
-  return { engine: new ExactVitestEngine(vitest), filters: parsed.filter };
+  return {
+    engine: new ExactVitestEngine(
+      vitest,
+      vitestCatalogueScope(parsed.filter, parsed.options as Readonly<Record<string, unknown>>),
+    ),
+    filters: parsed.filter,
+  };
+}
+
+const VITEST_CATALOGUE_SELECTORS = Object.freeze([
+  'changed', 'config', 'dir', 'exclude', 'include', 'project', 'related', 'shard',
+  'tags', 'tagsFilter', 'testNamePattern',
+] as const);
+
+/** Classifies only selection-affecting CLI input; execution/reporting flags preserve the full catalogue. */
+export function vitestCatalogueScope(
+  filters: readonly string[],
+  options: Readonly<Record<string, unknown>>,
+): 'full' | 'targeted' {
+  if (filters.length > 0) return 'targeted';
+  return VITEST_CATALOGUE_SELECTORS.some((key) => options[key] !== undefined && options[key] !== false)
+    ? 'targeted'
+    : 'full';
 }
 
 /** Removes only Vitest's implicit human reporter; explicit reporters retain order. */
@@ -126,9 +150,31 @@ export function hostRelativeFilters(filters: readonly string[], cwd: string): re
   });
 }
 
-export function classifyVitestResult(result: TestRunResult): TerminalRunState {
+export function classifyVitestResult(
+  result: TestRunResult,
+  selectedNativeTaskIds: ReadonlySet<string>,
+): TerminalRunState {
   if (result.unhandledErrors.length > 0) return 'infrastructure-failed';
-  const tests = result.testModules.flatMap((module) => [...module.children.allTests()]);
+  // Vitest keeps prior TestModule objects in its persistent state and may
+  // return them again from a later runTestSpecifications() call. A host cycle
+  // is authoritative only for the native tasks selected for that cycle.
+  const selectedCounts = new Map<string, number>();
+  const tests = result.testModules
+    .flatMap((module) => [...module.children.allTests()])
+    .filter((testCase) => {
+      if (!selectedNativeTaskIds.has(testCase.id)) return false;
+      selectedCounts.set(testCase.id, (selectedCounts.get(testCase.id) ?? 0) + 1);
+      return true;
+    });
+  const missing = [...selectedNativeTaskIds].filter((id) => !selectedCounts.has(id));
+  const duplicates = [...selectedCounts].filter(([, count]) => count !== 1).map(([id]) => id);
+  if (missing.length > 0 || duplicates.length > 0) {
+    throw new Error(
+      `Vitest result does not exactly cover the selected native tasks: ` +
+      `${missing.length} missing${missing.length === 0 ? '' : ` (${missing.join(', ')})`}, ` +
+      `${duplicates.length} duplicated${duplicates.length === 0 ? '' : ` (${duplicates.join(', ')})`}`,
+    );
+  }
   if (tests.length === 0) return 'skipped';
   if (tests.every((testCase) => testCase.result().state === 'skipped')) return 'skipped';
   if (tests.some((testCase) => testCase.result().state === 'failed')) return 'failed';
@@ -136,18 +182,21 @@ export function classifyVitestResult(result: TestRunResult): TerminalRunState {
     const native = testCase.result() as { readonly state: string; readonly retryCount?: number };
     return native.state === 'passed' && (native.retryCount ?? 0) > 0;
   })) return 'flaky';
+  if (tests.some((testCase) => testCase.result().state === 'skipped')) return 'passed-with-skips';
   return 'passed';
 }
 
 /** @internal Concrete adapter pinned to the certified Vitest runtime surface. */
 export class ExactVitestEngine implements TermwrightVitestEngine {
   readonly version: string;
+  readonly catalogueScope: 'full' | 'targeted';
   readonly #vitest: Vitest;
   readonly #consoleListeners = new Set<(log: UserConsoleLog) => void>();
 
-  constructor(vitest: Vitest) {
+  constructor(vitest: Vitest, catalogueScope: 'full' | 'targeted' = 'full') {
     this.#vitest = vitest;
     this.version = vitest.version;
+    this.catalogueScope = catalogueScope;
     assertCertifiedVitestRuntime(this.version);
     const reporter: Reporter = { onUserConsoleLog: (log) => {
       for (const listener of this.#consoleListeners) listener(log);
@@ -162,13 +211,70 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
   }
 
   async collect(filters: readonly string[]): Promise<EngineCollection> {
-    const result = await this.#vitest.collect([...filters]);
+    const result = await this.#runAndDrainWorkers(() => this.#vitest.collect([...filters]));
     return { result, tests: result.testModules.flatMap((module) => [...module.children.allTests()]) };
   }
 
   async run(nativeModuleIds: ReadonlySet<string>): Promise<TestRunResult> {
     const specifications = await this.#vitest.globTestSpecifications([...nativeModuleIds]);
-    return await this.#vitest.runTestSpecifications(specifications, true);
+    return await this.#runAndDrainWorkers(() => this.#vitest.runTestSpecifications(specifications, true));
+  }
+
+  /**
+   * Vitest resolves collect/run when every worker has reported its file result,
+   * but its default pool deliberately terminates those workers in the
+   * background. Termwright's worker teardown closes the journal and broker
+   * transports, so the host must drain the pool before it can close either
+   * server or start the next phase with a fresh runner context.
+   *
+   * `pool` is an exact-certified Vitest 4.1.11 runtime surface even though its
+   * declaration is private. Resetting it mirrors Vitest.close() and lets a
+   * later collection/run create a fresh default pool without closing Vite.
+   */
+  async #runAndDrainWorkers(operation: () => Promise<TestRunResult>): Promise<TestRunResult> {
+    let result!: TestRunResult;
+    let operationFailed = false;
+    let operationError: unknown;
+    try {
+      result = await operation();
+    } catch (error) {
+      operationFailed = true;
+      operationError = error;
+    }
+
+    const runtime = this.#vitest as unknown as {
+      pool?: { close(): Promise<void> } | undefined;
+    };
+    const pool = runtime.pool;
+    let teardownFailed = false;
+    let teardownError: unknown;
+    if (pool !== undefined) {
+      try { await pool.close(); }
+      catch (error) { teardownFailed = true; teardownError = error; }
+      finally { runtime.pool = undefined; }
+    }
+    if (operationFailed) {
+      if (teardownFailed) {
+        throw new AggregateError(
+          [operationError, teardownError],
+          'Vitest operation and worker-pool teardown both failed',
+          { cause: operationError },
+        );
+      }
+      throw operationError;
+    }
+    if (teardownFailed) throw teardownError;
+
+    // Worker-context cleanup can publish a teardown error while pool.close()
+    // drains runner.stop(). The native result took its error snapshot before
+    // that barrier, so refresh it after the barrier instead of certifying a
+    // teardown failure as green.
+    const unhandledErrors = this.#vitest.state.getUnhandledErrors();
+    if (unhandledErrors.length === result.unhandledErrors.length &&
+        unhandledErrors.every((error, index) => error === result.unhandledErrors[index])) {
+      return result;
+    }
+    return { ...result, unhandledErrors };
   }
 
   async cancel(): Promise<void> {

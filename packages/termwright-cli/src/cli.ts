@@ -173,12 +173,23 @@ function applyTagFilter(tags: string | undefined): void {
   process.env[GHERKIN_TAGS_ENV] = tags;
 }
 
+/** Only policy controls intentionally supported inside native test workers. */
+function bunWorkerEnv(env: Readonly<Record<string, string | undefined>>): Readonly<Record<string, string>> {
+  const workerEnv: Record<string, string> = {};
+  for (const key of ['TERMWRIGHT_REQUIRE_BUN', 'TERMWRIGHT_SKIP_BUN'] as const) {
+    const value = env[key];
+    if (value !== undefined) workerEnv[key] = value;
+  }
+  return workerEnv;
+}
+
 async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
   applyTagFilter(args.tags);
   const host = await (deps.openTestHost ?? TermwrightTestHost.open)({
     cwd: deps.cwd,
     runsDir: join(deps.cwd, '.termwright', 'runs'),
     vitestArgs: args.rest,
+    workerEnv: bunWorkerEnv(deps.processContext.env),
     resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[args.resourceProfile],
   });
   const completions: RunCompletion[] = [];
@@ -198,18 +209,22 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
     (worst, completion) => worseRunState(worst, completion.state),
     'passed',
   );
+  const skipPolicyMatched = completions.every((completion) => completion.skipPolicy.status === 'matched');
   if (json) {
     deps.io.out(JSON.stringify({
       invocationId: completions[0]?.invocationId,
       state,
       requestedRuns: args.runs,
       completedRuns: completions.length,
+      skipPolicy: skipPolicyMatched ? 'matched' : 'mismatch',
       resourceProfile: args.resourceProfile,
       runs: completions.map((completion) => ({
         runId: completion.runId,
         state: completion.state,
         tests: completion.catalog?.tests.length ?? 0,
         failures: completion.failures,
+        skips: completion.skips,
+        skipPolicy: completion.skipPolicy,
         ...(completion.error === undefined ? {} : { infrastructureError: describeFailure(completion.error) }),
       })),
     }));
@@ -219,6 +234,8 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
         deps.io.err(`FAIL ${failure.file} > ${failure.fullName}`);
         for (const error of failure.errors) deps.io.err(error);
       }
+      for (const skip of completion.skips) deps.io.err(`SKIP ${skip.file} > ${skip.fullName}`);
+      for (const issue of completion.skipPolicy.issues) deps.io.err(`SKIP POLICY ${issue}`);
       if (completion.error !== undefined) deps.io.err(`INFRASTRUCTURE ${describeFailure(completion.error)}`);
       deps.io.out(
         `termwright ${completion.state} — run ${completion.runId} ` +
@@ -229,8 +246,10 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
   // A skipped/empty run is useful structured state for discovery and UI, but
   // it is not certification evidence. Returning zero here lets a stale path,
   // missing toolchain, or platform-wide skip turn a CI lane falsely green.
-  if (state === 'passed') return EXIT_CODES.ok;
-  if (state === 'failed' || state === 'flaky' || state === 'skipped') return EXIT_CODES.assertion;
+  if (state === 'passed' && skipPolicyMatched) return EXIT_CODES.ok;
+  if (state === 'passed-with-skips' && skipPolicyMatched) return EXIT_CODES.ok;
+  if (state === 'failed' || state === 'flaky' || state === 'skipped' ||
+      state === 'passed-with-skips' || !skipPolicyMatched) return EXIT_CODES.assertion;
   return EXIT_CODES.internal;
 }
 
@@ -244,36 +263,59 @@ async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): P
     cwd: deps.cwd,
     runsDir: join(deps.cwd, '.termwright', 'runs'),
     vitestArgs: args.rest,
+    workerEnv: bunWorkerEnv(deps.processContext.env),
     resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[args.resourceProfile],
   });
   let worst: RunCompletion['state'] = 'passed';
+  let skipPolicyMatched = true;
   const watching = host.watch({}, (completion) => {
     worst = worseRunState(worst, completion.state);
+    skipPolicyMatched &&= completion.skipPolicy.status === 'matched';
     if (completion.runId === watching.initial.runId) return;
-    deps.io.out(json
-      ? JSON.stringify({ invocationId: completion.invocationId, runId: completion.runId, state: completion.state, watching: true })
-      : `termwright watch — ${completion.runId}: ${completion.state}`);
+    reportWatchCompletion(completion, deps, json, false);
   });
   try {
     const initial = await watching.initial.completed;
-    deps.io.out(json
-      ? JSON.stringify({ invocationId: initial.invocationId, runId: initial.runId, state: initial.state, watching: true })
-      : `termwright watch ${initial.invocationId} — initial ${initial.runId}: ${initial.state}`);
+    reportWatchCompletion(initial, deps, json, true);
     worst = worseRunState(worst, initial.state);
+    skipPolicyMatched &&= initial.skipPolicy.status === 'matched';
     if (initial.state === 'infrastructure-failed' || initial.state === 'incomplete') return EXIT_CODES.internal;
     await deps.ui.waitForInterrupt();
-    if (worst === 'infrastructure-failed' || worst === 'incomplete' || worst === 'crashed') return EXIT_CODES.internal;
-    return worst === 'failed' || worst === 'flaky' ? EXIT_CODES.assertion : EXIT_CODES.ok;
+    if (worst === 'infrastructure-failed' || worst === 'incomplete' || worst === 'crashed' || worst === 'cancelled') {
+      return EXIT_CODES.internal;
+    }
+    return worst === 'failed' || worst === 'flaky' || worst === 'skipped' || !skipPolicyMatched
+      ? EXIT_CODES.assertion
+      : EXIT_CODES.ok;
   } finally {
     await watching.close();
     await host.close();
   }
 }
 
+function reportWatchCompletion(completion: RunCompletion, deps: CliDeps, json: boolean, initial: boolean): void {
+  if (json) {
+    deps.io.out(JSON.stringify({
+      invocationId: completion.invocationId,
+      runId: completion.runId,
+      state: completion.state,
+      watching: true,
+      skips: completion.skips,
+      skipPolicy: completion.skipPolicy,
+    }));
+    return;
+  }
+  for (const skip of completion.skips) deps.io.err(`SKIP ${skip.file} > ${skip.fullName}`);
+  for (const issue of completion.skipPolicy.issues) deps.io.err(`SKIP POLICY ${issue}`);
+  deps.io.out(initial
+    ? `termwright watch ${completion.invocationId} — initial ${completion.runId}: ${completion.state}`
+    : `termwright watch — ${completion.runId}: ${completion.state}`);
+}
+
 function worseRunState(left: RunCompletion['state'], right: RunCompletion['state']): RunCompletion['state'] {
   const severity: Record<RunCompletion['state'], number> = {
-    passed: 0, skipped: 1, cancelled: 2, flaky: 3, failed: 4,
-    crashed: 5, incomplete: 6, 'infrastructure-failed': 7,
+    passed: 0, 'passed-with-skips': 1, skipped: 2, cancelled: 3, flaky: 4, failed: 5,
+    crashed: 6, incomplete: 7, 'infrastructure-failed': 8,
   };
   return severity[right] > severity[left] ? right : left;
 }
@@ -505,6 +547,7 @@ async function launch(
     // In record mode `rest` is the recorded command, not runner arguments.
     rest: args.record ? [] : args.rest,
     resourceProfile: args.resourceProfile,
+    workerEnv: bunWorkerEnv(deps.processContext.env),
     cwd: deps.cwd,
   };
   if (args.trace === undefined) return runUi(request, deps.ui, announce);

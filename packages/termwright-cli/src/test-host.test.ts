@@ -13,13 +13,14 @@ import { connectResourceBrokerWorker } from '@termwright/resource-broker/transpo
 import { NODE_RUN_MANIFEST_WRITER, readRunManifest } from '@termwright/run-history';
 import type { TermwrightRunnerContext } from '@termwright/test/runner';
 import type { UserConsoleLog } from 'vitest';
-import type { TestCase, TestRunResult } from 'vitest/node';
+import type { TestCase, TestModule, TestRunResult } from 'vitest/node';
 import {
   TermwrightTestHost,
   HostRunBudget,
   TERMWRIGHT_RESOURCE_PROFILES,
   TermwrightHostStartupCleanupError,
   TermwrightHostTimeoutError,
+  assessSkipPolicy,
   assertFirstWorkflowAttempt,
   describeFailure,
   type TermwrightHostDeadlineRuntime,
@@ -43,10 +44,12 @@ describe('workflow attempt certification', () => {
 
 class FakeEngine implements TermwrightVitestEngine {
   readonly version = CERTIFIED_VITEST_VERSION;
+  catalogueScope: 'full' | 'targeted' = 'full';
   contexts: TermwrightRunnerContext[] = [];
   cancellations = 0;
   closes = 0;
   collectionErrors: unknown[] = [];
+  collectionModules: TestModule[] | undefined;
   tests: TestCase[] = [];
   runResult: TestRunResult = result([]);
   blockRun: Promise<void> | undefined;
@@ -63,7 +66,10 @@ class FakeEngine implements TermwrightVitestEngine {
   }
 
   async collect(): Promise<{ result: TestRunResult; tests: readonly TestCase[] }> {
-    return { result: result(this.tests, this.collectionErrors), tests: this.tests };
+    return {
+      result: result(this.tests, this.collectionErrors, this.collectionModules),
+      tests: this.tests,
+    };
   }
 
   async run(): Promise<TestRunResult> {
@@ -236,7 +242,7 @@ describe('TermwrightTestHost', () => {
         runtime: { node: process.version, platform: process.platform, arch: process.arch },
         resourceProfile: {
           name: 'local',
-          scheduler: { pool: 'forks', maxWorkers: 4, fileParallelism: true },
+          scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },
           capacities: { ptySession: 4, externalProcess: 4, semanticEndpoint: 4, traceWriter: 4 },
           perTerminal: { semanticEndpoint: 1 },
         },
@@ -299,6 +305,21 @@ describe('TermwrightTestHost', () => {
     await host.close();
   });
 
+  it('reports missing current-cycle Vitest results as an evidenced infrastructure failure', async () => {
+    const engine = new FakeEngine();
+    engine.tests = [testCase('native-current', 'current test')];
+    engine.runResult = result([testCase('native-previous', 'previous test')]);
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+
+    const completion = await host.requestRun().completed;
+
+    expect(completion.state).toBe('infrastructure-failed');
+    expect(completion.failures).toEqual([]);
+    expect(completion.events.find((event) => event.type === 'run.infrastructure-failed')?.payload)
+      .toMatchObject({ detail: expect.stringContaining('1 missing (native-current)') });
+    await host.close();
+  });
+
   it('does not report an all-skipped native run as passed', async () => {
     const engine = new FakeEngine();
     const skipped = testCase('native-skipped', 'not applicable', 'skipped');
@@ -307,6 +328,206 @@ describe('TermwrightTestHost', () => {
     const host = TermwrightTestHost.fromEngine(engine, hostOptions());
     expect((await host.requestRun().completed).state).toBe('skipped');
     await host.close();
+  });
+
+  it('reports a mixed pass/skip as yellow and assesses exact declarations', async () => {
+    const engine = new FakeEngine();
+    const passed = testCase('native-passed', 'works');
+    const skipped = testCase('native-optional', 'platform-only', 'skipped');
+    engine.tests = [passed, skipped];
+    engine.runResult = result([passed, skipped]);
+    const host = TermwrightTestHost.fromEngine(engine, {
+      ...hostOptions(),
+      skipDeclarations: [{
+        id: 'declared-platform-case',
+        file: skipped.module.moduleId,
+        fullName: skipped.fullName,
+        required: true,
+      }],
+    });
+    const completion = await host.requestRun().completed;
+    expect(completion.state).toBe('passed-with-skips');
+    expect(completion.skips).toMatchObject([{
+      nativeTaskId: 'native-optional',
+      fullName: 'platform-only',
+    }]);
+    expect(completion.skipPolicy).toEqual({ status: 'matched', declarations: 1, issues: [] });
+    expect(completion.events.at(-1)).toMatchObject({
+      type: 'run.state',
+      payload: { state: 'passed-with-skips' },
+    });
+    expect(completion.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'run.skip-declaration', payload: expect.objectContaining({ id: 'declared-platform-case' }) }),
+      expect.objectContaining({ type: 'test.skipped', identity: expect.objectContaining({ runnerTaskId: completion.skips[0]?.runnerTaskId }) }),
+      expect.objectContaining({ type: 'run.skip-policy', payload: { status: 'matched', declarations: 1, observed: 1, issues: 0 } }),
+    ]));
+    await host.close();
+  });
+
+  it('keeps an undeclared partial skip non-certifying', async () => {
+    const engine = new FakeEngine();
+    const passed = testCase('native-passed', 'works');
+    const skipped = testCase('native-optional', 'silently disappeared', 'skipped');
+    engine.tests = [passed, skipped];
+    engine.runResult = result([passed, skipped]);
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const completion = await host.requestRun().completed;
+    expect(completion.state).toBe('passed-with-skips');
+    expect(completion.skipPolicy).toMatchObject({
+      status: 'mismatch',
+      issues: [expect.stringContaining('undeclared skip')],
+    });
+    await host.close();
+  });
+
+  it('checks stale required targets only when the host catalogue is unfiltered', async () => {
+    const declaration = {
+      id: 'stale-required-case',
+      file: '/repo/removed.test.ts',
+      fullName: 'removed case',
+      required: true,
+    } as const;
+    const fullEngine = new FakeEngine();
+    fullEngine.tests = [testCase('native-passed', 'works')];
+    fullEngine.runResult = result(fullEngine.tests);
+    const fullHost = TermwrightTestHost.fromEngine(fullEngine, {
+      ...hostOptions(), skipDeclarations: [declaration],
+    });
+    expect((await fullHost.requestRun().completed).skipPolicy).toMatchObject({
+      status: 'mismatch', issues: [expect.stringContaining('stale required')],
+    });
+    await fullHost.close();
+
+    const targetedEngine = new FakeEngine();
+    targetedEngine.tests = [testCase('native-passed', 'works')];
+    targetedEngine.runResult = result(targetedEngine.tests);
+    const targetedHost = TermwrightTestHost.fromEngine(targetedEngine, {
+      ...hostOptions(), filters: ['packages/example.test.ts'], skipDeclarations: [declaration],
+    });
+    expect((await targetedHost.requestRun().completed).skipPolicy).toEqual({
+      status: 'matched', declarations: 1, issues: [],
+    });
+    await targetedHost.close();
+  });
+
+  it('treats an explicitly configured Vitest catalogue as targeted without weakening exact skip matching', async () => {
+    const engine = new FakeEngine();
+    engine.catalogueScope = 'targeted';
+    const skipped = testCase('native-docs-screenshot', 'captures documentation screenshots', 'skipped');
+    engine.tests = [skipped];
+    engine.runResult = result([skipped]);
+    const host = TermwrightTestHost.fromEngine(engine, {
+      ...hostOptions(),
+      skipDeclarations: [{
+        id: 'ui-doc-screenshot-capture-mode',
+        file: skipped.module.moduleId,
+        fullName: skipped.fullName,
+        required: false,
+      }, {
+        id: 'uncollected-required-conpty-case',
+        file: '/repo/packages/conformance/src/suites/driver-generic.test.ts',
+        fullName: 'fails closed when ConPTY hides terminal input modes',
+        required: true,
+      }],
+    });
+    expect((await host.requestRun().completed).skipPolicy).toEqual({
+      status: 'matched', declarations: 2, issues: [],
+    });
+    await host.close();
+  });
+
+  it('requires one exact leaf declaration instead of allowing a suite prefix to cover descendants', () => {
+    const selected = [
+      testCase('native-one', 'Windows process lifecycle > keeps descendants alive'),
+      testCase('native-two', 'Windows process lifecycle > kills the complete tree'),
+    ];
+    const skips = selected.map((test) => ({
+      runnerTaskId: 'runner-task:00000000-0000-4000-8000-000000000001' as RunnerTaskId,
+      nativeTaskId: test.id,
+      file: test.module.moduleId,
+      fullName: test.fullName,
+    }));
+    const nativeSelected = selected.map((test, index) => ({
+      runnerTaskId: skips[index]!.runnerTaskId,
+      nativeTaskId: test.id,
+      projectId: 'project:00000000-0000-4000-8000-000000000001' as never,
+      specId: 'spec:00000000-0000-4000-8000-000000000001' as never,
+      project: 'test',
+      file: test.module.moduleId,
+      fullName: test.fullName,
+      metadata: {},
+    }));
+    expect(assessSkipPolicy(nativeSelected, skips, [{
+      id: 'windows-process-lifecycle',
+      file: selected[0]!.module.moduleId,
+      fullName: 'Windows process lifecycle',
+      required: true,
+    }], 'full')).toMatchObject({
+      status: 'mismatch',
+      issues: expect.arrayContaining([
+        expect.stringContaining('undeclared skip'),
+        expect.stringContaining('stale required'),
+      ]),
+    });
+  });
+
+  it('uses an exact normalized top-level suite without hiding duplicate leaves inside that scope', () => {
+    const file = '/repo/language-adapters.test.ts';
+    const cases = [
+      testCase('textual-leaf', 'adapter conformance: termwright (Textual) (skipped: python unavailable) > contract > shared leaf'),
+      testCase('tview-leaf', 'adapter conformance: termwright (tview) (skipped: go unavailable) > contract > shared leaf'),
+    ];
+    const selected = cases.map((test, index) => ({
+      runnerTaskId: `runner-task:00000000-0000-4000-8000-00000000000${index + 1}` as RunnerTaskId,
+      nativeTaskId: test.id,
+      projectId: 'project:00000000-0000-4000-8000-000000000001' as never,
+      specId: `spec:00000000-0000-4000-8000-00000000000${index + 1}` as never,
+      project: 'test', file, fullName: test.fullName, metadata: {},
+    }));
+    const skipped = selected.map((test) => ({
+      runnerTaskId: test.runnerTaskId, nativeTaskId: test.nativeTaskId, file, fullName: test.fullName,
+    }));
+    const declarations = [
+      { id: 'textual-leaf', file, suite: 'adapter conformance: termwright (Textual)', fullName: 'shared leaf', required: false },
+      { id: 'tview-leaf', file, suite: 'adapter conformance: termwright (tview)', fullName: 'shared leaf', required: false },
+    ] as const;
+    expect(assessSkipPolicy(selected, skipped, declarations, 'full')).toEqual({
+      status: 'matched', declarations: 2, issues: [],
+    });
+
+    const duplicate = {
+      ...selected[0]!,
+      runnerTaskId: 'runner-task:00000000-0000-4000-8000-000000000003' as RunnerTaskId,
+      nativeTaskId: 'textual-future-leaf',
+      specId: 'spec:00000000-0000-4000-8000-000000000003' as never,
+      fullName: 'adapter conformance: termwright (Textual) > future group > shared leaf',
+    };
+    expect(assessSkipPolicy(
+      [...selected, duplicate],
+      [...skipped, { runnerTaskId: duplicate.runnerTaskId, nativeTaskId: duplicate.nativeTaskId, file, fullName: duplicate.fullName }],
+      declarations,
+      'full',
+    )).toMatchObject({
+      status: 'mismatch',
+      issues: expect.arrayContaining([expect.stringContaining('matches 2 selected cases instead of one exact case: textual-leaf')]),
+    });
+  });
+
+  it('fails a stale required declaration closed for a full run but ignores it outside a targeted selection', () => {
+    const declaration = {
+      id: 'renamed-platform-case',
+      file: '/repo/platform.test.ts',
+      fullName: 'old exact case name',
+      required: true,
+    } as const;
+    expect(assessSkipPolicy([], [], [declaration], 'full')).toEqual({
+      status: 'mismatch',
+      declarations: 1,
+      issues: [expect.stringContaining('stale required')],
+    });
+    expect(assessSkipPolicy([], [], [declaration], 'targeted')).toEqual({
+      status: 'matched', declarations: 1, issues: [],
+    });
   });
 
   it('preserves Vitest transport errors without coercing null-prototype objects', async () => {
@@ -379,6 +600,44 @@ describe('TermwrightTestHost', () => {
     expect(sinkRecord.manifest.status).toBe('incomplete');
     expect(sinkRecord.manifest.events.some((event) => event.type === 'run.persistence-failed')).toBe(true);
     await sinkHost.close();
+  });
+
+  it('fails closed when one module imports and another module fails during collection', async () => {
+    const engine = new FakeEngine();
+    const collected = testCase('native-collected', 'collected test');
+    engine.catalogueScope = 'targeted';
+    engine.tests = [collected];
+    engine.collectionModules = [
+      testModule('/workspace/mixed/good.test.ts', [collected], 'queued'),
+      testModule('/workspace/mixed/import-failed.test.ts', [], 'failed', [
+        { name: 'Error', message: 'dependency exploded during import' },
+      ]),
+    ];
+    let started = false;
+    engine.runStarted = () => { started = true; };
+    const host = TermwrightTestHost.fromEngine(engine, { ...hostOptions(), filters: ['mixed'] });
+
+    const completion = await host.requestRun().completed;
+
+    expect(completion.state).toBe('infrastructure-failed');
+    expect(started).toBe(false);
+    expect(describeFailure(completion.error)).toContain('/workspace/mixed/import-failed.test.ts');
+    expect(describeFailure(completion.error)).toContain('dependency exploded during import');
+    await host.close();
+  });
+
+  it('fails closed when Vitest reports a failed collection module without error evidence', async () => {
+    const engine = new FakeEngine();
+    engine.collectionModules = [testModule('/workspace/opaque-failure.test.ts', [], 'failed')];
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+
+    const completion = await host.requestRun().completed;
+
+    expect(completion.state).toBe('infrastructure-failed');
+    expect(describeFailure(completion.error)).toContain(
+      'Vitest collection module /workspace/opaque-failure.test.ts failed without structured error evidence',
+    );
+    await host.close();
   });
 
   it('leaves staging history and returns incomplete when manifest finalization hits ENOSPC', async () => {
@@ -699,13 +958,31 @@ function testCase(
   return test as unknown as TestCase;
 }
 
-function result(tests: readonly TestCase[], unhandledErrors: readonly unknown[] = []): TestRunResult {
+function result(
+  tests: readonly TestCase[],
+  unhandledErrors: readonly unknown[] = [],
+  testModules: readonly TestModule[] | undefined = undefined,
+): TestRunResult {
   return {
     unhandledErrors: [...unhandledErrors],
-    testModules: tests.length === 0
+    testModules: testModules === undefined ? (tests.length === 0
       ? []
-      : [{ children: { allTests: function* () { yield* tests; } } } as never],
+      : [testModule('/workspace/example.test.ts', tests, 'queued')]) : [...testModules],
   };
+}
+
+function testModule(
+  moduleId: string,
+  tests: readonly TestCase[],
+  state: 'queued' | 'failed',
+  errors: readonly unknown[] = [],
+): TestModule {
+  return {
+    moduleId,
+    children: { allTests: function* () { yield* tests; } },
+    errors: () => [...errors],
+    state: () => state,
+  } as unknown as TestModule;
 }
 
 async function until(predicate: () => boolean): Promise<void> {

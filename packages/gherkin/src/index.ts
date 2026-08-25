@@ -40,4 +40,5 @@ export {
   gherkinPlugin,
   type GeneratedGherkinImports,
   type GherkinPluginOptions,
+  type GherkinReservedFixtureName,
 } from './plugin.js';

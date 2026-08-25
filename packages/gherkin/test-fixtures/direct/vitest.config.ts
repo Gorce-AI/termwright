@@ -1,11 +1,12 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 import { gherkinPlugin } from '../../src/index.js';
+import type { ProjectFixtures } from './fixtures.js';
 import ProviderReporter from './provider-reporter.js';
 
 export default defineConfig({
   root: resolve(import.meta.dirname, '../../../..'),
-  plugins: [gherkinPlugin({
+  plugins: [gherkinPlugin<ProjectFixtures>({
     featureRoot: 'packages/gherkin/test-fixtures/direct/features',
     stepDefinitions: ['[filepath].steps.{ts,tsx,mts}'],
     fixtureNames: ['projectFixture'],

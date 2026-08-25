@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { PACKAGE_VERSION } from './version.js';
-import { probeInfo } from './session.js';
+import { probeInfo } from './probe-info.js';
 
 describe('published version', () => {
   it('does not drift from the package manifest during a Changesets release', async () => {

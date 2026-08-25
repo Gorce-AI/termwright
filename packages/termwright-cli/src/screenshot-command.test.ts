@@ -1,14 +1,23 @@
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTraceWriter } from '@termwright/trace';
 import type { SessionEventMap, SessionEventRecord, SessionEvents } from '@termwright/driver';
+import type { PngOptions, ScreenFrame, ScreenshotPng } from '@termwright/screenshot';
 import { captureScreenshot, checkRequest } from './screenshot-command.js';
 
 type Listener = (payload: never) => void;
 
-const FONT_SCAN_TIMEOUT_MS = 90_000;
+const renderPngMock = vi.hoisted(() =>
+  vi.fn<(frame: ScreenFrame, options?: PngOptions) => ScreenshotPng>(),
+);
+
+vi.mock('@termwright/screenshot', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@termwright/screenshot')>();
+  renderPngMock.mockImplementation(actual.renderPng);
+  return { ...actual, renderPng: renderPngMock };
+});
 
 /** The smallest thing the trace writer will record: output, a step, an exit. */
 class Recorded {
@@ -163,24 +172,35 @@ describe('capturing a moment of a recording', () => {
     expect(result.chosen).toBe('the last step');
   });
 
-  // Enumerating the machine's fonts is the work under test, and a Windows CI
-  // runner has thousands of them: this is the one case here that legitimately
-  // outlasts the default 5 s. The budget is generous because it is only ever
-  // paid on a slow machine, matching the lower-level screenshot package's
-  // measured Windows Node 24 budget.
-  it('reports a character the embedded fonts do not cover', { timeout: FONT_SCAN_TIMEOUT_MS }, async () => {
-    // U+F0000 is in a private-use plane, so no real font claims it: this is the
-    // one way to reach the fallback branch on any machine. impl-trace measured
-    // that coverage is a property of the *installed* fonts rather than of the
-    // text — CJK and emoji are covered on a developer's macOS and not in a bare
-    // CI container — so the branch this pins is the one CI will actually take.
-    const out = join(await mkdtemp(join(tmpdir(), 'tw-pua-')), 'pua.png');
-    const result = await captureScreenshot({ trace: await buildTrace('gap \u{F0000} here'), out });
+  it('reports the renderer fallback without repeating its system-font scan', async () => {
+    const fallback = '\u{F0000}';
+    let receivedFallbackFrame = false;
+    renderPngMock.mockImplementationOnce((frame, options) => {
+      receivedFallbackFrame = Array.from({ length: frame.rows }, (_, row) =>
+        Array.from({ length: frame.columns }, (_, column) => frame.cell(row, column).char),
+      )
+        .flat()
+        .includes(fallback);
+      expect(options).toEqual({ scale: 1 });
+      return {
+        png: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+        width: 320,
+        height: 128,
+        selfContained: false,
+        fallbackCharacters: [fallback],
+        systemFontsLoaded: true,
+      };
+    });
 
-    expect(result.fallbackCharacters).not.toEqual([]);
-    // The image is now a product of this machine's fonts, which is what the
-    // command has to say out loud: the same archive renders differently
-    // elsewhere. The scan that finds those fonts is what makes it slow.
+    // Font discovery and coverage belong to @termwright/screenshot and are
+    // integration-tested there. This command owns reconstruction and honest
+    // propagation of the renderer's result, so its test uses that boundary
+    // instead of making every CLI run enumerate a host-dependent font set.
+    const out = join(await mkdtemp(join(tmpdir(), 'tw-pua-')), 'pua.png');
+    const result = await captureScreenshot({ trace: await buildTrace(`gap ${fallback} here`), out });
+
+    expect(receivedFallbackFrame).toBe(true);
+    expect(result.fallbackCharacters).toEqual([fallback]);
     expect(result.systemFontsLoaded).toBe(true);
   });
 

@@ -67,8 +67,10 @@ export const test = base.extend<ProjectFixtures>({
 
 ```ts
 import { fileURLToPath } from 'node:url';
+import { gherkinPlugin } from '@termwright/gherkin';
+import type { ProjectFixtures } from './fixtures.js';
 
-gherkinPlugin({
+gherkinPlugin<ProjectFixtures>({
   fixtureNames: ['account'],
   generatedImports: {
     test: fileURLToPath(new URL('./fixtures.ts', import.meta.url)),

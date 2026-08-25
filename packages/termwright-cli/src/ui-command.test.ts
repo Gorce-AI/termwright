@@ -127,7 +127,51 @@ describe('native UI host', () => {
       { type: 'run-start', runId: ids.runId },
       { type: 'test-start', id: ids.attemptId, runnerTaskId: host.taskId, executionId: ids.executionId },
       { type: 'test-end', id: ids.attemptId, status: 'passed' },
-      { type: 'run-end', summary: { total: 1, passed: 1 } },
+      { type: 'run-end', summary: { verdict: 'passed', total: 1, passed: 1 } },
+    ]);
+  });
+
+  it('projects a partial-skip verdict even when a declaratively skipped test has no attempt', async () => {
+    const host = nativeHost();
+    const hub = new UiHub();
+    const producer = new RunEventProducer({ producerId: createRunId('producer'), epoch: 0, wallNow: () => 1_000 });
+    const identity = { invocationId: createRunId('invocation'), runId: createRunId('run') };
+    const skippedTaskId = createRunId('runner-task');
+    const projectId = createRunId('project');
+    const passedSpecId = createRunId('spec');
+    const skippedSpecId = createRunId('spec');
+    const attemptId = createRunId('attempt');
+    const executionId = createRunId('execution');
+    const runtime: UiRuntime = {
+      startHost: async () => host,
+      startUi: async () => ({
+        url: 'http://127.0.0.1:1/?token=x', producerUrl: 'http://127.0.0.1:1/?token=p',
+        port: 1, token: 'x', producerToken: 'p', mode: 'live', hub,
+        recorder: undefined, trace: undefined, attach: () => () => undefined,
+        close: async () => undefined,
+      }),
+      waitForInterrupt: () => new Promise<void>(() => undefined),
+    };
+    await runUi({
+      trace: undefined, record: undefined, outFile: undefined, port: undefined,
+      host: undefined, tags: undefined, watch: true, rest: [], cwd: '/repo', resourceProfile: 'local',
+    }, runtime, () => {
+      host.emit(producer.emit({ eventClass: 'authoritative', type: 'run.state', identity, payload: { state: 'requested' } }));
+      const attemptIdentity = { ...identity, projectId, specId: passedSpecId, runnerTaskId: host.taskId, attemptId, executionId };
+      host.emit(producer.emit({ eventClass: 'authoritative', type: 'attempt.started', identity: attemptIdentity, payload: { nativeTaskId: 'native-pass', retry: 0, repeat: 0 } }));
+      host.emit(producer.emit({ eventClass: 'authoritative', type: 'attempt.finished', identity: attemptIdentity, payload: { nativeTaskId: 'native-pass', retry: 0, repeat: 0, state: 'passed' } }));
+      host.emit(producer.emit({ eventClass: 'authoritative', type: 'test.skipped', identity: { ...identity, projectId, specId: skippedSpecId, runnerTaskId: skippedTaskId }, payload: { nativeTaskId: 'native-skip', file: '/repo/skipped.test.ts', fullName: 'platform case' } }));
+      // Repeated observation of the same task identity must not inflate counters.
+      host.emit(producer.emit({ eventClass: 'authoritative', type: 'test.skipped', identity: { ...identity, projectId, specId: skippedSpecId, runnerTaskId: skippedTaskId }, payload: { nativeTaskId: 'native-skip', file: '/repo/skipped.test.ts', fullName: 'platform case' } }));
+      host.emit(producer.emit({ eventClass: 'authoritative', type: 'run.state', identity, payload: { state: 'passed-with-skips' } }));
+      return { closed: Promise.resolve(), close: async () => undefined };
+    });
+
+    expect(hub.backlog).toMatchObject([
+      { type: 'run-start', runId: identity.runId },
+      { type: 'test-start', id: attemptId, runnerTaskId: host.taskId, executionId },
+      { type: 'test-end', id: attemptId, status: 'passed' },
+      { type: 'run-end', summary: { verdict: 'passed-with-skips', total: 2, passed: 1, skipped: 1 } },
     ]);
   });
 });

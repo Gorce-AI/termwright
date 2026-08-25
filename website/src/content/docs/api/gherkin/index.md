@@ -32,6 +32,7 @@ ordinary `.test.ts` files are discovered.
 - [GherkinContext](type-aliases/gherkincontext/)
 - [GherkinDefinition](type-aliases/gherkindefinition/)
 - [GherkinDefinitions](type-aliases/gherkindefinitions/)
+- [GherkinReservedFixtureName](type-aliases/gherkinreservedfixturename/)
 - [GherkinStepArgument](type-aliases/gherkinstepargument/)
 - [GherkinWorld](type-aliases/gherkinworld/)
 - [HookDefinitionBody](type-aliases/hookdefinitionbody/)

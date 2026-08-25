@@ -43,6 +43,7 @@ import {
   CERTIFIED_VITEST_VERSION,
   TERMWRIGHT_RUNNER_CONTEXT_KEY,
 } from './vitest-engine.js';
+import { closeWorkerTransports, flushAndCloseWorkerJournal } from './internal/worker-journal.js';
 
 export {
   assertCertifiedVitestRuntime,
@@ -188,8 +189,10 @@ export class TermwrightTestRunner extends VitestTestRunner {
       throw new Error('Termwright certified execution requires ordered hooks; sequence.hooks="parallel" is unsupported');
     }
     this.onCleanupWorkerContext(async () => {
-      await closeJournal(this.#hostContext);
-      await closeBroker(this.#hostContext);
+      await closeWorkerTransports(
+        () => closeJournal(this.#hostContext),
+        () => closeBroker(this.#hostContext),
+      );
     });
   }
 
@@ -546,8 +549,10 @@ async function closeJournal(context: TermwrightRunnerContext): Promise<void> {
   journalConnections.delete(key);
   const journal = await connection.catch(() => undefined);
   if (journal === undefined) return;
-  await journal.client.flush(performance.timeOrigin + performance.now() + 5_000);
-  await journal.client.close();
+  await flushAndCloseWorkerJournal(
+    journal.client,
+    performance.timeOrigin + performance.now() + 5_000,
+  );
 }
 
 function attemptIdentity(context: AttemptContext) {

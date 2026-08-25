@@ -46,7 +46,17 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
     if (candidate === undefined || candidate.candidateDigest !== verdict.candidateDigest) throw new Error(`untrusted or stale verdict for ${verdict.candidateId}`);
     if (byCandidate.has(verdict.candidateId)) throw new Error(`duplicate verdict for ${verdict.candidateId}`);
     if (!['green', 'red'].includes(verdict.state)) throw new Error(`invalid verdict state for ${verdict.candidateId}`);
+    if (context.strictArtifacts === true && (
+      verdict.schemaVersion !== 1 || verdict.kind !== 'termwright-framework-candidate-verdict' ||
+      typeof context.sourceRevision !== 'string' || !/^[0-9a-f]{40}$/u.test(context.sourceRevision) ||
+      verdict.sourceRevision !== context.sourceRevision || typeof verdict.detail !== 'string' ||
+      verdict.detail.length === 0 || verdict.detail.length > 12_000
+    )) throw new Error(`invalid or stale typed verdict for ${verdict.candidateId}`);
     byCandidate.set(verdict.candidateId, verdict);
+  }
+  if (context.strictArtifacts === true && byCandidate.size !== candidates.size) {
+    const missing = [...candidates.keys()].filter((id) => !byCandidate.has(id));
+    throw new Error(`candidate verdict artifact set is incomplete: ${missing.join(', ')}`);
   }
   const next = structuredClone(ledger);
   next.streams ??= {};
@@ -186,10 +196,15 @@ async function main(argv) {
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
   const verdicts = await Promise.all((await verdictFiles(verdictDirectory)).map(async (path) => JSON.parse(await readFile(path, 'utf8'))));
-  const result = reconcile(registry, ledger, verdicts, { runUrl: process.env.SOURCE_RUN_URL, owner: process.env.ISSUE_OWNER });
+  const expectedRevision = process.env.GITHUB_SHA ?? 'local-unpinned';
+  const result = reconcile(registry, ledger, verdicts, {
+    runUrl: process.env.SOURCE_RUN_URL,
+    owner: process.env.ISSUE_OWNER,
+    sourceRevision: expectedRevision,
+    strictArtifacts: true,
+  });
   let compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
   const updates = await generatedUpdateDirectories(verdictDirectory);
-  const expectedRevision = process.env.GITHUB_SHA ?? 'local-unpinned';
   for (const candidate of registry.candidates) {
     const verdict = verdicts.find((entry) => entry.candidateId === candidate.id);
     if (verdict?.state !== 'green') continue;

@@ -532,6 +532,10 @@ describe("live mode", () => {
 
   it("announces cancellation only after the stopped process exits", async () => {
     let release: (() => void) | undefined;
+    let acknowledgeStop: (() => void) | undefined;
+    const stopStarted = new Promise<void>((resolve) => {
+      acknowledgeStop = resolve;
+    });
     const stopped = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -541,7 +545,10 @@ describe("live mode", () => {
         new Promise<void>((resolve) => {
           releaseRun = resolve;
         }),
-      onStop: () => stopped,
+      onStop: () => {
+        acknowledgeStop?.();
+        return stopped;
+      },
     });
     const viewer = await Viewer.connect(server);
     const runResponse = await api(server, "/api/run", {
@@ -568,7 +575,7 @@ describe("live mode", () => {
       method: "POST",
       body: JSON.stringify({ runId }),
     });
-    await new Promise((done) => setTimeout(done, 20));
+    await stopStarted;
     expect(
       viewer.received.some((message) => message.type === "run-cancelled"),
     ).toBe(false);
@@ -840,9 +847,12 @@ describe("live mode", () => {
       "the newer listing",
     );
     finishFirst?.(stale);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Closing waits for every tracked discovery after stopping the watcher.
+    // That is the causal drain proving the stale result was processed and
+    // discarded, rather than merely not observed during an arbitrary delay.
+    await server.close();
     expect(
-      viewer.received.some(
+      server.hub.backlog.some(
         (message) =>
           message.type === "tests-discovered" &&
           message.tests[0]?.title === "stale",
@@ -927,6 +937,30 @@ describe("run history", () => {
       state: "complete",
       tests: [{ title: "logs in" }],
     });
+  });
+
+  it("serves canonical declarative skips as a yellow run", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "tw-server-skip-runs-"));
+    const runId = await writeNativeRunFixture(runsDir, {
+      tests: [
+        { title: "works", file: "/repo/a.test.ts", status: "passed" },
+        { title: "platform case", file: "/repo/a.test.ts", status: "skipped" },
+      ],
+    });
+    const server = await start({ runsDir });
+
+    const detail = (await (
+      await api(server, `/api/run?id=${encodeURIComponent(runId)}`)
+    ).json()) as {
+      summary: { status: string; total: number; passed: number; skipped: number };
+      tests: { title: string; status: string; attempts: unknown[] }[];
+    };
+    expect(detail.summary).toMatchObject({
+      status: "passed-with-skips", total: 2, passed: 1, skipped: 1,
+    });
+    expect(detail.tests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: "platform case", status: "skipped", attempts: [] }),
+    ]));
   });
 
   it("reports no history rather than failing when nothing was recorded", async () => {
@@ -1275,7 +1309,22 @@ describe("starting a run from the panel", () => {
         testIds: ["tests/socket.test.ts"],
       }),
     );
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    legacy.send({
+      v: 1,
+      type: "input",
+      sessionId: "missing-barrier-session",
+      dataB64: "",
+      requestId: "legacy-frame-barrier",
+    });
+    await legacy.until(
+      (messages) =>
+        messages.some(
+          (message) =>
+            message.type === "control-result" &&
+            message.requestId === "legacy-frame-barrier",
+        ),
+      "the post-legacy frame barrier",
+    );
     expect(asked).toEqual([["tests/first.test.ts"]]);
     legacy.close();
 
@@ -1441,6 +1490,7 @@ describe("starting a run from the panel", () => {
       v: 1,
       type: "run-end",
       summary: {
+        verdict: "passed",
         total: 0,
         passed: 0,
         failed: 0,
@@ -1476,6 +1526,7 @@ describe("starting a run from the panel", () => {
       v: 1,
       type: "run-end",
       summary: {
+        verdict: "passed",
         total: 0,
         passed: 0,
         failed: 0,

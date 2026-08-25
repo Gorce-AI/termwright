@@ -5,7 +5,7 @@
  */
 import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
-import { connect, type Socket } from 'node:net';
+import { connect, createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +33,17 @@ interface Harness {
 }
 
 const open: { channel: SemanticChannel; sockets: Socket[] }[] = [];
+
+function connectFailure(endpoint: string): Promise<Error> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(endpoint);
+    socket.once('connect', () => {
+      socket.destroy();
+      reject(new Error(`rolled-back endpoint still accepts connections: ${endpoint}`));
+    });
+    socket.once('error', (error) => resolve(error));
+  });
+}
 
 afterEach(async () => {
   // Restore the clock unconditionally. A test that installs fake timers and
@@ -243,9 +254,37 @@ describe('the probe lifecycle', () => {
 });
 
 describe('SemanticChannel', () => {
-  it.skipIf(process.platform === 'win32')('rolls back its private directory when listen fails', async () => {
+  it('rolls back its Windows named-pipe listener when listen fails', async () => {
+    const server = createServer();
+    const close = vi.spyOn(server, 'close');
+    let endpoint = '';
+
+    await expect(createChannel(true, undefined, {
+      platform: 'win32',
+      createServer: () => server,
+      listen: async (listener, candidateEndpoint) => {
+        endpoint = candidateEndpoint;
+        await new Promise<void>((resolve, reject) => {
+          listener.once('error', reject);
+          listener.listen(candidateEndpoint, () => {
+            listener.removeListener('error', reject);
+            resolve();
+          });
+        });
+        throw new Error('injected named-pipe listen failure');
+      },
+    })).rejects.toThrow('injected named-pipe listen failure');
+
+    expect(endpoint).toMatch(/^\\\\\.\\pipe\\termwright-/u);
+    expect(close).toHaveBeenCalledOnce();
+    expect(server.listening).toBe(false);
+    await expect(connectFailure(endpoint)).resolves.toBeDefined();
+  });
+
+  it('rolls back its private directory when listen fails', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-listen-fault-'));
     await expect(createChannel(true, undefined, {
+      platform: 'darwin',
       makeDirectory: async () => directory,
       listen: async () => {
         throw new Error('injected listen failure');

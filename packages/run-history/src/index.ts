@@ -19,7 +19,7 @@ export const RUN_MANIFEST_VERSION = 2 as const;
 export const RUN_HISTORY_COMMIT_VERSION = 1 as const;
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 
-export type NativeRunStatus = 'passed' | 'failed' | 'flaky' | 'skipped' | 'cancelled' | 'crashed' | 'infrastructure-failed' | 'incomplete';
+export type NativeRunStatus = 'passed' | 'passed-with-skips' | 'failed' | 'flaky' | 'skipped' | 'cancelled' | 'crashed' | 'infrastructure-failed' | 'incomplete';
 export interface RunStartProvenance {
   readonly invocationId: InvocationId;
   readonly runId: RunId;
@@ -253,7 +253,7 @@ function validateManifest(value: RunManifest): void {
   validateStart(value);
   if (value.v !== RUN_MANIFEST_VERSION) throw new TypeError('unsupported manifest version');
   finite(value.finishedAt, 'finishedAt');
-  if (!['passed','failed','flaky','skipped','cancelled','crashed','infrastructure-failed','incomplete'].includes(value.status)) throw new TypeError('invalid run status');
+  if (!['passed','passed-with-skips','failed','flaky','skipped','cancelled','crashed','infrastructure-failed','incomplete'].includes(value.status)) throw new TypeError('invalid run status');
   if (!Array.isArray(value.specs) || !Array.isArray(value.attempts) || !Array.isArray(value.events)) {
     throw new TypeError('specs/attempts/events must be arrays');
   }
@@ -287,26 +287,73 @@ function validateManifest(value: RunManifest): void {
   }
   const stream = new RunEventStreamValidator();
   const journalAttempts = new Map<string, { readonly start: RunEvent; finish?: RunEvent }>();
-  const attemptFinishedAt = new Map<string, number>();
+  const attemptHierarchies = new Map<string, Pick<RunEvent['identity'], 'executionId' | 'runnerTaskId' | 'projectId' | 'specId'>>();
+  const finishedAttempts = new Set<string>();
   const sessions = new Map<string, { readonly attemptId: string; readonly start: number; finish?: number }>();
   const steps = new Map<string, { readonly attemptId: string; readonly start: number; finish?: number }>();
   const actions = new Map<string, { readonly attemptId: string; readonly sessionId: string; finish?: number }>();
   let terminalIndex = -1;
   let terminalState: string | undefined;
   let persistenceFailureIndex = -1;
+  let skipDeclarations = 0;
+  let skippedTests = 0;
+  let skipPolicyIssues = 0;
+  let skipPolicy: Readonly<Record<string, unknown>> | undefined;
   for (const [index, event] of value.events.entries()) {
     const accepted = stream.accept(event);
     if (!accepted.ok) throw new TypeError(`invalid run journal ordering: ${accepted.code}: ${accepted.detail}`);
+    const attemptId = event.identity.attemptId;
+    if (attemptId !== undefined) {
+      if (finishedAttempts.has(attemptId)) {
+        throw new TypeError(`attempt ${attemptId} emitted ${event.type} after attempt.finished`);
+      }
+      const hierarchy = attemptHierarchies.get(attemptId);
+      if (hierarchy === undefined) {
+        attemptHierarchies.set(attemptId, {
+          executionId: event.identity.executionId,
+          runnerTaskId: event.identity.runnerTaskId,
+          projectId: event.identity.projectId,
+          specId: event.identity.specId,
+        });
+      } else if (event.identity.executionId !== hierarchy.executionId ||
+          event.identity.runnerTaskId !== hierarchy.runnerTaskId ||
+          event.identity.projectId !== hierarchy.projectId || event.identity.specId !== hierarchy.specId) {
+        throw new TypeError(`attempt ${attemptId} event hierarchy changed`);
+      }
+    }
     if (event.type === 'run.state' && object(event.payload)) {
       const state = event.payload['state'];
-      if (typeof state === 'string' && ['passed','failed','flaky','skipped','cancelled','crashed','infrastructure-failed','incomplete'].includes(state)) {
+      if (typeof state === 'string' && ['passed','passed-with-skips','failed','flaky','skipped','cancelled','crashed','infrastructure-failed','incomplete'].includes(state)) {
         terminalIndex = index;
         terminalState = state;
       }
     }
     if (event.type === 'run.persistence-failed') persistenceFailureIndex = index;
+    if (event.type === 'run.skip-declaration') {
+      const payload = object(event.payload) ? event.payload : {};
+      if (!text(payload['id']) || !text(payload['file']) || !text(payload['fullName']) ||
+          (payload['suite'] !== undefined && !text(payload['suite'])) || typeof payload['required'] !== 'boolean') {
+        throw new TypeError('run.skip-declaration has invalid exact policy evidence');
+      }
+      skipDeclarations += 1;
+    } else if (event.type === 'test.skipped') {
+      const task = event.identity.runnerTaskId;
+      const spec = task === undefined ? undefined : specs.get(task);
+      const payload = object(event.payload) ? event.payload : {};
+      if (spec === undefined || event.identity.projectId !== spec.projectId || event.identity.specId !== spec.specId ||
+          payload['nativeTaskId'] !== spec.nativeTaskId || payload['file'] !== spec.file || payload['fullName'] !== spec.fullName) {
+        throw new TypeError('test.skipped identity differs from its native spec');
+      }
+      skippedTests += 1;
+    } else if (event.type === 'run.skip-policy-issue') {
+      const payload = object(event.payload) ? event.payload : {};
+      if (!text(payload['detail'])) throw new TypeError('run.skip-policy-issue lacks bounded detail');
+      skipPolicyIssues += 1;
+    } else if (event.type === 'run.skip-policy') {
+      if (skipPolicy !== undefined || !object(event.payload)) throw new TypeError('run.skip-policy must occur exactly once');
+      skipPolicy = event.payload;
+    }
     if (event.type === 'attempt.started' || event.type === 'attempt.finished') {
-      const attemptId = event.identity.attemptId;
       if (attemptId === undefined) throw new TypeError(`${event.type} lacks AttemptId`);
       const observed = journalAttempts.get(attemptId);
       if (event.type === 'attempt.started') {
@@ -317,10 +364,9 @@ function validateManifest(value: RunManifest): void {
           throw new TypeError(`attempt ${attemptId} finishes without one unique start`);
         }
         observed.finish = event;
-        attemptFinishedAt.set(attemptId, index);
+        finishedAttempts.add(attemptId);
       }
     }
-    const attemptId = event.identity.attemptId;
     if (event.type === 'session.started') {
       const sessionId = event.identity.sessionId;
       if (attemptId === undefined || sessionId === undefined || sessions.has(sessionId)) {
@@ -374,20 +420,6 @@ function validateManifest(value: RunManifest): void {
   }
   if (journalAttempts.size !== value.attempts.length) throw new TypeError('attempt index differs from canonical journal');
   for (const attempt of value.attempts) validateAttemptAgainstJournal(attempt, journalAttempts.get(attempt.attemptId));
-  for (const [attemptId, observed] of journalAttempts) {
-    const finish = attemptFinishedAt.get(attemptId);
-    if (finish === undefined) continue;
-    const later = value.events.slice(finish + 1).find((event) => event.identity.attemptId === attemptId);
-    if (later !== undefined) throw new TypeError(`attempt ${attemptId} emitted ${later.type} after attempt.finished`);
-    const start = observed.start.identity;
-    for (const event of value.events) {
-      if (event.identity.attemptId !== attemptId) continue;
-      if (event.identity.executionId !== start.executionId || event.identity.runnerTaskId !== start.runnerTaskId ||
-          event.identity.projectId !== start.projectId || event.identity.specId !== start.specId) {
-        throw new TypeError(`attempt ${attemptId} event hierarchy changed`);
-      }
-    }
-  }
   for (const [sessionId, session] of sessions) {
     if (session.finish === undefined) throw new TypeError(`session ${sessionId} has no session.finished`);
   }
@@ -398,6 +430,15 @@ function validateManifest(value: RunManifest): void {
     if (action.finish === undefined) throw new TypeError(`action ${actionId} has no action.finished receipt`);
   }
   if (terminalState === undefined) throw new TypeError('canonical run journal has no terminal run.state');
+  if (skipPolicy === undefined || skipPolicy['status'] !== (skipPolicyIssues === 0 ? 'matched' : 'mismatch') ||
+      skipPolicy['declarations'] !== skipDeclarations || skipPolicy['observed'] !== skippedTests ||
+      skipPolicy['issues'] !== skipPolicyIssues) {
+    throw new TypeError('run lacks complete canonical skip-policy evidence');
+  }
+  if ((value.status === 'passed-with-skips' && skippedTests === 0) ||
+      (value.status === 'passed' && skippedTests > 0)) {
+    throw new TypeError('run verdict differs from its observed skip evidence');
+  }
   if (value.status === 'incomplete') {
     if (terminalState !== 'incomplete' && persistenceFailureIndex <= terminalIndex) {
       throw new TypeError('incomplete run lacks a post-terminal persistence failure');

@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: framework-candidate-registry
           path: upstream-candidates
@@ -139,10 +139,9 @@ jobs:
         run: cargo fetch --locked --manifest-path clients/rust-ratatui/Cargo.toml
 
       - name: Certify exact source, deterministic patching and conformance
-        # Red is a typed candidate outcome consumed by the trusted reconciler,
-        # not an infrastructure failure. The verdict is initialized before any
-        # setup and uploaded below even when certification throws.
-        continue-on-error: true
+        # A red typed verdict is retained below, but the job stays red. Product
+        # incompatibility and certifier defects must never produce a successful
+        # workflow conclusion.
         env:
           CANDIDATE_ID: ${{ matrix.id }}
           CANDIDATE_SLOT: ${{ matrix.slot }}

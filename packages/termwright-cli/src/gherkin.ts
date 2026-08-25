@@ -20,8 +20,10 @@ export * from '@termwright/gherkin';
  * Strict package managers therefore need only the documented `termwright`
  * dependency at the project root.
  */
-export function gherkinPlugin(options: GherkinPluginOptions = {}) {
-  return packageGherkinPlugin({
+export function gherkinPlugin<Fixtures extends object = Record<string, unknown>>(
+  options: GherkinPluginOptions<Fixtures> = {},
+) {
+  return packageGherkinPlugin<Fixtures>({
     ...options,
     generatedImports: {
       test: options.generatedImports?.test ?? 'termwright/test',

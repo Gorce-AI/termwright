@@ -29,7 +29,9 @@ await launchTerminal({
 
 For Bun, pass `withProbe('bun', ['bun', 'app.tsx'])`; the launcher places
 `--preload` before the application entry, where Bun requires it. Node uses
-`--import`. The returned preload path is a `file://` URL, including on Windows.
+`--import`. Node receives a `file://` preload URL, including on Windows; Bun
+receives a native absolute path because its Windows preload resolver does not
+load `file://` entries.
 
 Early Node 22 releases do not have `module.registerHooks`; the preload detects
 that case and uses `module.register`. It does not change Node's warning policy.

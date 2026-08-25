@@ -147,7 +147,7 @@ profile; admission still cannot exceed any capacity in the table.
 <!-- Generated from TERMWRIGHT_RESOURCE_PROFILES; do not edit this block by hand. -->
 | Profile | Workers | PTY sessions | External processes | Semantic endpoints | Trace writers | Per terminal |
 | --- | --- | --- | --- | --- | --- | --- |
-| `local` | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
+| `local` | 2 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
 | `ci` | 2 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
 | `windows-ci` | 2 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
 | `stress` | 16 | 16 | 16 | 16 | 16 | `semanticEndpoint` × 1 |

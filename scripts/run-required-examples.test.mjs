@@ -69,9 +69,14 @@ describe('required public examples', () => {
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     expect(manifest.scripts.build).toContain('--filter=./packages/* --fail-if-no-match');
     expect(manifest.scripts.typecheck).toContain('--filter=./packages/* --fail-if-no-match');
-    expect(manifest.scripts['check:full']).toContain('--filter=./examples/* --fail-if-no-match');
-    expect(manifest.scripts['check:full']).toContain('pnpm test:examples');
-    expect(`${manifest.scripts.build}\n${manifest.scripts.typecheck}\n${manifest.scripts['check:full']}`).not.toContain("--filter './");
+    expect(manifest.scripts['check:full']).toBeUndefined();
+    expect(manifest.scripts['check:local']).toContain('--filter=./examples/* --fail-if-no-match');
+    expect(manifest.scripts['check:local']).toContain('pnpm test:examples');
+    expect(manifest.scripts['check:local'].indexOf('--filter=./examples/* --fail-if-no-match run build'))
+      .toBeLessThan(manifest.scripts['check:local'].indexOf('pnpm test -- --resource-profile local'));
+    expect(manifest.scripts['check:local']).toContain('pnpm docs:api');
+    expect(manifest.scripts['check:local']).toContain('git diff --exit-code -- website/src/content/docs/api');
+    expect(`${manifest.scripts.build}\n${manifest.scripts.typecheck}\n${manifest.scripts['check:local']}`).not.toContain("--filter './");
   });
 
   it('stays aligned with the public example list certified by CI', async () => {

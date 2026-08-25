@@ -7,6 +7,7 @@ export const RUN_STATES = Object.freeze([
   'cancelling',
   'finalizing',
   'passed',
+  'passed-with-skips',
   'failed',
   'skipped',
   'cancelled',
@@ -20,6 +21,7 @@ export type RunState = (typeof RUN_STATES)[number];
 
 export const TERMINAL_RUN_STATES = Object.freeze([
   'passed',
+  'passed-with-skips',
   'failed',
   'skipped',
   'cancelled',
@@ -42,6 +44,7 @@ export const RUN_STATE_TRANSITIONS = Object.freeze({
   cancelling: ['finalizing', 'cancelled', 'infrastructure-failed', 'incomplete'],
   finalizing: TERMINAL_RUN_STATES,
   passed: [],
+  'passed-with-skips': [],
   failed: [],
   skipped: [],
   cancelled: [],

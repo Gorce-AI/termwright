@@ -34,9 +34,29 @@ the worst cycle; infrastructure loss stops subsequent cycles. `skipped`, an
 empty catalogue, and a filtered-zero run remain visible states but exit 1
 because they do not certify a passing suite.
 
+`passed-with-skips` is a distinct amber result. It exits 0 only when the exact
+skip policy matches; undeclared or ambiguous skips and missing required skips
+exit 1. With `--json`, the top-level `skipPolicy` is `matched` or `mismatch`,
+and each run includes its skipped test identities plus detailed policy issues.
+See [Running tests](../../running-tests/#run-the-full-suite) for the declaration
+format.
+
 Profiles are explicit: `local`, `ci`, `windows-ci`, or `stress`. Arguments after
 `--` belong to the embedded engine. Retries are diagnostic and any
 fail-then-pass cycle is `flaky`/nonzero.
+
+## `termwright watch`
+
+```text
+termwright watch [--resource-profile <name>] [-- <vitest args>]
+```
+
+Keeps the same Native Host alive, runs an initial cycle, and coalesces source
+changes into subsequent cycles. The process returns the worst observed result
+when interrupted. An all-skipped cycle, skip-policy mismatch, failure, or flaky
+cycle remains non-zero; infrastructure loss, cancellation, and crashes use the
+internal-failure exit code. JSON output includes `skips` and the detailed
+`skipPolicy` for every reported cycle.
 
 ## `termwright ui`
 

@@ -217,6 +217,14 @@ export function RunnerPage({ state, dispatch, onRun, onStop, onInput, onOpenRepl
           Runner diagnostics incomplete: {state.run.diagnosticGaps} projected messages were dropped. The canonical run history remains authoritative.
         </div>
       )}
+      {state.run.status !== 'finished' || state.run.summary === null ||
+       (state.run.summary.verdict !== 'passed-with-skips' && state.run.summary.verdict !== 'skipped') ? null : (
+        <div className="tw-run-skip-warning" role="status">
+          {state.run.summary.verdict === 'skipped'
+            ? 'All selected cases were skipped; this run is not certification evidence.'
+            : `Run passed with skipped cases${state.run.summary.skipped === 0 ? '' : ` (${state.run.summary.skipped})`}; it is not plain-green certification.`}
+        </div>
+      )}
       <CompactTabs current={state.compactWorkspace} onSelect={(workspace) => {
         if (workspace === 'inspect') updatePreferences({ inspectorCollapsed: false });
         if (workspace === 'steps') updatePreferences({ timelineCollapsed: false });
