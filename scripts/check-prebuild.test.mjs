@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { cp, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
@@ -72,10 +75,19 @@ describe('native PTY prebuild architecture guard', () => {
   });
 
   it('keeps an absent development prebuild optional only with --allow-missing', async () => {
-    const script = new URL('./check-prebuild.mjs', import.meta.url);
-    await expect(execute(process.execPath, [fileURLToPath(script), 'darwin', 'arm64', '--allow-missing'])).resolves.toMatchObject({
-      stdout: expect.stringContaining('is absent (not built in this tree)'),
-    });
-    await expect(execute(process.execPath, [fileURLToPath(script), 'darwin', 'arm64'])).rejects.toMatchObject({ code: 1 });
+    const root = await mkdtemp(join(tmpdir(), 'termwright-check-prebuild-'));
+    const script = join(root, 'scripts', 'check-prebuild.mjs');
+    try {
+      await mkdir(join(root, 'scripts'), { recursive: true });
+      await mkdir(join(root, 'packages', 'pty-darwin-arm64'), { recursive: true });
+      await cp(fileURLToPath(new URL('./check-prebuild.mjs', import.meta.url)), script);
+      const executableScript = await realpath(script);
+      await expect(execute(process.execPath, [executableScript, 'darwin', 'arm64', '--allow-missing'])).resolves.toMatchObject({
+        stdout: expect.stringContaining('is absent (not built in this tree)'),
+      });
+      await expect(execute(process.execPath, [executableScript, 'darwin', 'arm64'])).rejects.toMatchObject({ code: 1 });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

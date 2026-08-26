@@ -28,14 +28,14 @@ export const CI_JOB_CONTRACT = Object.freeze({
   'package-metadata': ciJob('package metadata', ['package metadata']),
   'deterministic-core-coverage': ciJob('deterministic core coverage', ['deterministic core coverage']),
   build: ciJob('build ${{ matrix.os }} / node ${{ matrix.node }}', [
-    'build ubuntu-latest / node 22',
-    'build ubuntu-latest / node 24',
+    'build ubuntu-22.04 / node 22',
+    'build ubuntu-22.04 / node 24',
     'build macos-latest / node 22',
     'build macos-latest / node 24',
-  ], { os: ['ubuntu-latest', 'macos-latest'], node: ['22', '24'] }),
+  ], { os: ['ubuntu-22.04', 'macos-latest'], node: ['22', '24'] }),
   hostile: ciJob('hostile input (128 MiB heap)', ['hostile input (128 MiB heap)']),
   'pty-native-build-x64': ciJob('build the Windows PTY addon (x64)', ['build the Windows PTY addon (x64)']),
-  'pty-native-build-arm64': ciJob('build the Windows PTY addon (arm64)', ['build the Windows PTY addon (arm64)']),
+  'pty-native-build-arm64': ciJob('build and run the Windows PTY addon (arm64)', ['build and run the Windows PTY addon (arm64)']),
   'pty-native': ciJob('native PTY backend (Windows / Node ${{ matrix.node }})', [
     'native PTY backend (Windows / Node 22)',
     'native PTY backend (Windows / Node 24)',
