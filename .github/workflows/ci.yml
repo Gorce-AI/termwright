@@ -462,6 +462,7 @@ jobs:
           packages/driver/src/session-lifecycle.test.ts
           packages/probe-ink/src/session.test.ts
           packages/probe-ink/src/render-boundary.test.ts
+          packages/probe-ink/src/render-boundary-ink.test.ts
           packages/ink/src/fixture-rerender.test.ts
           packages/termwright-cli/src/test-host.integration.test.ts
       - name: Upload Termwright failure evidence
