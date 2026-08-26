@@ -53,7 +53,7 @@ if (verdictFlag >= 0 && verdictPath === undefined) {
 }
 
 writeFileSync(
-  join(installDirectory, 'termwright-console-marker.mjs'),
+  join(installDirectory, 'termwright console marker.mjs'),
   readFileSync(consoleMarkerScriptPath),
 );
 
@@ -237,11 +237,16 @@ if (process.platform === 'win32') {
     });
     const markerOutput = [];
     markerSession.onData((data) => markerOutput.push(Buffer.from(data)));
-    await markerSession.outputEnded;
+    const markerExited = new Promise((resolve) => markerSession.onExit(resolve));
+    const [markerStatus] = await Promise.all([markerExited, markerSession.outputEnded]);
     const markerBytes = Buffer.concat(markerOutput).toString('utf8');
-    const markerValid = markerBytes.includes(markerText) && markerBytes.includes('MODE_RESTORED') && markerSession.sawRealEof;
+    const markerValid = markerStatus.code === 0 && markerBytes.includes(markerText) &&
+      markerBytes.includes('MODE_RESTORED') && markerSession.sawRealEof;
     markerSession.dispose();
-    if (!markerValid) throw new Error(name + ' did not restore disabled Windows console mode around OSC 8487');
+    if (!markerValid) {
+      throw new Error(name + ' did not restore disabled Windows console mode around OSC 8487: ' +
+        JSON.stringify({ status: markerStatus, output: markerBytes }));
+    }
   };
   await certifyModeSafeMarker('Node', process.execPath);
   if (process.env.TERMWRIGHT_REQUIRE_BUN === '1') await certifyModeSafeMarker('Bun', 'bun');
@@ -471,7 +476,7 @@ const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
     TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath,
     TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE: inactiveBufferFixturePath,
     TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE: consoleMarkerFixturePath,
-    TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(installDirectory, 'termwright-console-marker.mjs'),
+    TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(installDirectory, 'termwright console marker.mjs'),
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
