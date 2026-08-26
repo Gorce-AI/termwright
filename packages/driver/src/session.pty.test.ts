@@ -2044,13 +2044,11 @@ describe.skipIf(!ptyAvailable())(
       });
       await terminal.waitForText("MARKED 1");
 
-      // Waited by hand rather than with expect.poll: a failing poll throws on its
-      // own, before any assertion carrying the driver's account of what it saw —
-      // and on a platform where this fails, that account is the whole point.
-      const deadline = Date.now() + 3_000;
-      while (terminal.semanticTree() === null && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
+      // The receipt only proves that the application wrote its marker. Wait on
+      // the driver's revision event so this resolves causally when the parser
+      // consumes the marker and pairing publishes the observation. The wait's
+      // typed timeout carries the same driver diagnostics on failure.
+      await terminal.waitForCommittedObservation({ timeout: 3_000 });
 
       const account = terminal
         .diagnostics()

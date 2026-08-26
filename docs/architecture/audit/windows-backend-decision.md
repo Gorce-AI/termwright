@@ -212,6 +212,32 @@ real EOF are tested on x64, ARM64, and x64 Node under ARM64 emulation. The old
 quiet window remains only where explicitly requested as a heuristic; it is not
 evidence for authoritative semantic publication.
 
+### Upstream legacy-API translation risks
+
+The passthrough rewrite still translates legacy Console API calls into VT.
+Microsoft tracks known fidelity defects in
+[microsoft/terminal#17643](https://github.com/microsoft/terminal/issues/17643),
+including edge cases around SGR 53, graphemes during active-buffer changes, and
+alternate-buffer scrollback. These do not invalidate the ordered-byte barrier:
+they can change how a legacy operation is represented, but do not reorder a
+framework's already-issued bytes around its following marker. Termwright's
+certification therefore tests both contracts separately: marker ordering is a
+release gate, while legacy translation cases stay an explicit upstream risk to
+revalidate whenever the pinned ConPTY version changes. VT-native applications
+do not depend on those legacy translations.
+
+The authoritative marker also follows a strict same-handle invariant. Each
+probe writes rendered bytes and the following marker synchronously through the
+framework-owned output handle, under its render/publish lock or ordered writer.
+Termwright deliberately does not reopen `CONOUT$` for the marker: if application
+code switched the framework handle to an inactive legacy screen buffer, writing
+the marker to another active buffer would publish semantics for a render the
+user cannot see. Instead the marker stays with the render, pairing remains
+incomplete, and the operation fails closed. VT alternate-screen switching is
+in-band and fully supported; arbitrary concurrent `CreateConsoleScreenBuffer`
+or `SetConsoleActiveScreenBuffer` calls outside the framework-owned render path
+are not part of the zero-config contract.
+
 ## Remaining platform boundary
 
 Certification currently runs on GitHub's `windows-latest` image and does not

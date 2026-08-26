@@ -254,7 +254,7 @@ func (p *termwrightProbeState) enqueueHandshakeRedraw() {
 //
 //  1. **No marker.** A marker names a revision; writing one for a tree that
 //     never arrived makes the driver wait for it and then report
-//     revision-expired — a diagnosis pointing at the adapter's timing rather
+//     revision-pairing-watchdog — a diagnosis pointing at the adapter's timing rather
 //     than at the driver that stopped reading.
 //  2. **Keep rendering.** The application is mid-frame under its own lock;
 //     instrumentation failing is not the application failing.

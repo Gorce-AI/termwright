@@ -326,12 +326,18 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     // it has already received, so the wait covers delivery, the drain and the
     // window — and has room left for the quiet period a further change to that
     // barrier would add.
-    await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-expired');
+    await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
     // The unpaired half names itself, so a half-published revision cannot be
     // mistaken for one that was never sent.
-    expect(entriesFor(terminal, 'revision-expired').map((entry) => entry.revision)).toContain(5);
+    expect(entriesFor(terminal, 'revision-pairing-watchdog').map((entry) => entry.revision)).toContain(5);
+    // The watchdog releases heuristic quiet only. Semantic observations stay
+    // fail-closed because the retained newer marker proves that tree revision
+    // 1 may no longer describe the visible screen.
+    await expect(terminal.waitForCommittedObservation({ timeout: 100 })).rejects.toMatchObject({
+      name: 'TimeoutError',
+    });
     await expectSurvives(terminal);
   });
 
@@ -340,10 +346,10 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await fire(terminal);
     // The unpaired half expires; the driver keeps the last complete revision.
     // Same budget, same reason as the marker case above.
-    await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-expired');
+    await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
-    expect(entriesFor(terminal, 'revision-expired').map((entry) => entry.revision)).toContain(4);
+    expect(entriesFor(terminal, 'revision-pairing-watchdog').map((entry) => entry.revision)).toContain(4);
 
     // `revision-commit` is advisory: the peer announced revision 4 and the
     // driver recorded the announcement, but only a marker commits a render.

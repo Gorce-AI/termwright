@@ -110,12 +110,12 @@ describe.skipIf(process.platform === "win32")("the Termwright-owned POSIX PTY", 
   it("writes exact bytes through the owned master", async () => {
     const session = collect(node([
       "process.stdin.setRawMode(true);",
-      "process.stdin.resume();",
-      "process.stdout.write('READY');",
       "process.stdin.once('data', data => {",
       "process.stdout.write('HEX=' + Buffer.from(data).toString('hex'));",
       "process.exit(0);",
       "});",
+      "process.stdin.resume();",
+      "process.stdout.write('READY');",
     ].join("")));
     await waitForText(session.handle, session.chunks, "READY");
     session.handle.write(Uint8Array.from([0, 0xff, 0x1b, 0x5b, 0x4d]));
@@ -125,13 +125,11 @@ describe.skipIf(process.platform === "win32")("the Termwright-owned POSIX PTY", 
     session.handle.dispose();
   });
 
-  it("does not lose a wake while many small writes race the writer", async () => {
+  nativePressureIt("does not lose a wake while many small writes race the writer", async () => {
     const bytes = Buffer.from(Array.from({ length: 4096 }, (_, index) => index % 251));
     const session = collect(node([
       "process.stdin.setRawMode(true);",
-      "process.stdin.resume();",
       "const chunks = []; let received = 0;",
-      "process.stdout.write('READY');",
       "process.stdin.on('data', chunk => {",
       "chunks.push(chunk); received += chunk.length;",
       `if (received === ${bytes.length}) {`,
@@ -139,6 +137,8 @@ describe.skipIf(process.platform === "win32")("the Termwright-owned POSIX PTY", 
       "process.exit(0);",
       "}",
       "});",
+      "process.stdin.resume();",
+      "process.stdout.write('READY');",
     ].join("")));
     try {
       await waitForText(session.handle, session.chunks, "READY");

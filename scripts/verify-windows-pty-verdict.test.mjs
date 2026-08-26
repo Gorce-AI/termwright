@@ -22,7 +22,7 @@ async function fixture() {
   await writeFile(join(root, 'termwright_pty.node'), addon);
   await writeFile(join(root, 'vendor', 'conpty-manifest.json'), manifest);
   const verdict = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     platform: 'win32',
     architecture: 'x64',
     addonSha256: sha256(addon),
@@ -53,6 +53,11 @@ async function fixture() {
       markerSplit: true,
       markerModeNode: true,
       markerModeBun: true,
+      hiddenCursorSequencePassthrough: true,
+      unicodePassthrough: true,
+      sgrStyleTruecolorSequencePassthrough: true,
+      adjacentMarkerPassthrough: true,
+      forgedMarkerPassthrough: true,
     },
   };
   await writeFile(
@@ -63,6 +68,18 @@ async function fixture() {
 }
 
 describe('Windows PTY causal verdict', () => {
+  it('rejects the previous schema before the extended visual and semantic facts existed', async () => {
+    const { root, verdict } = await fixture();
+    verdict.schemaVersion = 2;
+    await writeFile(
+      join(root, 'certification-verdict.json'),
+      `${JSON.stringify(verdict)}\n`,
+    );
+    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
+      /does not bind/u,
+    );
+  });
+
   it('binds all causal claims to the exact addon and vendored manifest', async () => {
     const { root, verdict } = await fixture();
     await expect(verifyWindowsPtyVerdict(root)).resolves.toEqual(verdict);
@@ -91,20 +108,22 @@ describe('Windows PTY causal verdict', () => {
     'markerSplit',
     'markerModeNode',
     'markerModeBun',
-  ])(
-    'rejects a verdict without the %s causal fact',
-    async (fact) => {
-      const { root, verdict } = await fixture();
-      verdict.causal[fact] = false;
-      await writeFile(
-        join(root, 'certification-verdict.json'),
-        `${JSON.stringify(verdict)}\n`,
-      );
-      await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
-        /does not bind/u,
-      );
-    },
-  );
+    'hiddenCursorSequencePassthrough',
+    'unicodePassthrough',
+    'sgrStyleTruecolorSequencePassthrough',
+    'adjacentMarkerPassthrough',
+    'forgedMarkerPassthrough',
+  ])('rejects a verdict without the %s causal fact', async (fact) => {
+    const { root, verdict } = await fixture();
+    verdict.causal[fact] = false;
+    await writeFile(
+      join(root, 'certification-verdict.json'),
+      `${JSON.stringify(verdict)}\n`,
+    );
+    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
+      /does not bind/u,
+    );
+  });
 
   it('rejects a verdict certified with a non-production marker OSC', async () => {
     const { root, verdict } = await fixture();

@@ -8,9 +8,11 @@
  * `waitForQuiet` needs to know.
  *
  * Everything here is bounded: at most {@link PairingOptions.maxPending} halves
- * are held, each half expires after {@link PairingOptions.pairingTimeoutMs},
- * and publishing revision N drops every incomplete revision below N with a
- * diagnostic rather than silently forgetting it.
+ * are held, a watchdog reports a half that remains unmatched after
+ * {@link PairingOptions.pairingTimeoutMs}, and publishing revision N drops
+ * every incomplete revision below N with a diagnostic. The watchdog never
+ * changes pairing state: operation/session deadlines own failure, and a late
+ * authoritative half must still be able to complete its revision.
  */
 import type { SemanticSnapshot } from '@termwright/protocol';
 import type { DiagnosticCode } from './api.js';
@@ -25,10 +27,11 @@ export interface PairedRevision {
 /** Construction options for {@link RevisionPairing}. */
 export interface PairingOptions {
   readonly maxPending: number;
+  /** Diagnostic watchdog interval; it never expires or removes a half. */
   readonly pairingTimeoutMs: number;
   /**
    * Resolves once the emulator has parsed everything received up to the moment
-   * of the call. A half's expiry clock starts then, never before.
+   * of the call. A half's diagnostic watchdog starts then, never before.
    *
    * The two halves reach the driver by unequal roads: a tree arrives on a
    * socket and needs no parsing, while its marker is bytes in the output
@@ -37,40 +40,41 @@ export interface PairingOptions {
    * the transport added nothing — so a timeout without this barrier reports
    * "the other half never came" when the truth is "we had not read it yet".
    *
-   * Defaults to "already caught up", which restores the plain timeout.
+   * Defaults to "already caught up", which starts the watchdog immediately.
    */
   caughtUp?(): Promise<void>;
   /** Publishes a fully paired revision. */
   onPublish(paired: PairedRevision): void;
-  /** Reports dropped, superseded or expired halves. */
+  /** Reports dropped, superseded or long-pending halves. */
   onDiagnostic(code: DiagnosticCode, detail: string, revision: number): void;
 }
 
 interface PendingSnapshot {
   readonly snapshot: SemanticSnapshot;
-  readonly expiry: DeferredExpiry;
+  readonly watchdog: DeferredWatchdog;
 }
 
 interface PendingMarker {
   readonly screenRevision: number;
-  readonly expiry: DeferredExpiry;
+  readonly watchdog: DeferredWatchdog;
 }
 
 /**
- * A timeout that does not start until a barrier resolves. Cancelling before
+ * A watchdog that does not start until a barrier resolves. Cancelling before
  * the barrier settles is honoured, so a half that pairs while the emulator is
  * still catching up never arms a timer at all.
  */
-class DeferredExpiry {
+class DeferredWatchdog {
   #timer: NodeJS.Timeout | null = null;
   #cancelled = false;
+  #elapsed = false;
 
-  constructor(barrier: Promise<void>, delayMs: number, onExpire: () => void) {
+  constructor(barrier: Promise<void>, delayMs: number, onElapsed: () => void) {
     void barrier.then(
-      () => this.#arm(delayMs, onExpire),
-      // A barrier that rejects must not strand the half forever: fall back to
-      // arming immediately, which is the behaviour without a barrier at all.
-      () => this.#arm(delayMs, onExpire),
+      () => this.#arm(delayMs, onElapsed),
+      // A barrier failure must not suppress diagnostics: fall back to arming
+      // immediately, which is the behaviour without a barrier at all.
+      () => this.#arm(delayMs, onElapsed),
     );
   }
 
@@ -79,9 +83,18 @@ class DeferredExpiry {
     if (this.#timer !== null) clearTimeout(this.#timer);
   }
 
-  #arm(delayMs: number, onExpire: () => void): void {
+  /** True once the diagnostic window elapsed without this watchdog being cancelled. */
+  get elapsed(): boolean {
+    return this.#elapsed;
+  }
+
+  #arm(delayMs: number, onElapsed: () => void): void {
     if (this.#cancelled) return;
-    this.#timer = setTimeout(onExpire, delayMs);
+    this.#timer = setTimeout(() => {
+      if (this.#cancelled) return;
+      this.#elapsed = true;
+      onElapsed();
+    }, delayMs);
     this.#timer.unref?.();
   }
 }
@@ -126,6 +139,23 @@ export class RevisionPairing {
     return this.#snapshots.size > 0 || this.#markers.size > 0;
   }
 
+  /**
+   * True while an unmatched half is still inside its diagnostic window.
+   *
+   * An elapsed half remains in {@link hasPendingRender} and can still pair
+   * authoritatively if its counterpart arrives late. It is no longer active
+   * work that can keep unrelated actions or `waitForQuiet` blocked forever.
+   */
+  get hasBlockingRender(): boolean {
+    for (const pending of this.#snapshots.values()) {
+      if (!pending.watchdog.elapsed) return true;
+    }
+    for (const marker of this.#markers.values()) {
+      if (!marker.watchdog.elapsed) return true;
+    }
+    return false;
+  }
+
   /** True while a probe has a frame open. */
   get hasOpenFrame(): boolean {
     return this.#openFrames.size > 0;
@@ -136,13 +166,13 @@ export class RevisionPairing {
    *
    * This is the fact the quiet-stream rule was approximating: "output is still
    * arriving" was only ever a guess at "the application is still drawing".
-   * While a frame is open no half may expire, because the evidence for it is
-   * still being produced.
+   * While a frame is open the missing-half watchdog must not fire, because the
+   * evidence for it is still being produced.
    *
    * Opening a frame abandons any lower one still open. A probe that dies
    * mid-render, or abandons a frame it decided not to finish, must not be able
-   * to hold expiry open forever — and the next frame beginning is proof the
-   * previous one is not coming.
+   * to suppress the watchdog forever — and the next frame beginning is proof
+   * the previous frame is no longer active.
    */
   frameOpened(revision: number): void {
     if (this.#disposed) return;
@@ -175,14 +205,14 @@ export class RevisionPairing {
     }
     const marker = this.#markers.get(snapshot.revision);
     if (marker !== undefined) {
-      marker.expiry.cancel();
+      marker.watchdog.cancel();
       this.#markers.delete(snapshot.revision);
       this.#publish({ snapshot, screenRevision: marker.screenRevision });
       return;
     }
     this.#retain(this.#snapshots, snapshot.revision, 'tree', {
       snapshot,
-      expiry: this.#expire(snapshot.revision, 'tree'),
+      watchdog: this.#watch(snapshot.revision, 'tree'),
     });
   }
 
@@ -207,14 +237,14 @@ export class RevisionPairing {
     }
     const pending = this.#snapshots.get(revision);
     if (pending !== undefined) {
-      pending.expiry.cancel();
+      pending.watchdog.cancel();
       this.#snapshots.delete(revision);
       this.#publish({ snapshot: pending.snapshot, screenRevision });
       return;
     }
     this.#retain(this.#markers, revision, 'marker', {
       screenRevision,
-      expiry: this.#expire(revision, 'marker'),
+      watchdog: this.#watch(revision, 'marker'),
     });
   }
 
@@ -222,8 +252,8 @@ export class RevisionPairing {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    for (const pending of this.#snapshots.values()) pending.expiry.cancel();
-    for (const marker of this.#markers.values()) marker.expiry.cancel();
+    for (const pending of this.#snapshots.values()) pending.watchdog.cancel();
+    for (const marker of this.#markers.values()) marker.watchdog.cancel();
     this.#snapshots.clear();
     this.#markers.clear();
     this.#openFrames.clear();
@@ -240,7 +270,7 @@ export class RevisionPairing {
   #dropBelow(revision: number): void {
     for (const [pendingRevision, pending] of this.#snapshots) {
       if (pendingRevision >= revision) continue;
-      pending.expiry.cancel();
+      pending.watchdog.cancel();
       this.#snapshots.delete(pendingRevision);
       this.#options.onDiagnostic(
         'revision-superseded',
@@ -250,7 +280,7 @@ export class RevisionPairing {
     }
     for (const [pendingRevision, marker] of this.#markers) {
       if (pendingRevision >= revision) continue;
-      marker.expiry.cancel();
+      marker.watchdog.cancel();
       this.#markers.delete(pendingRevision);
       this.#options.onDiagnostic(
         'revision-superseded',
@@ -260,13 +290,16 @@ export class RevisionPairing {
     }
   }
 
-  #retain<T>(store: Map<number, T>, revision: number, half: string, entry: T): void {
+  #retain<T extends { watchdog: DeferredWatchdog }>(store: Map<number, T>, revision: number, half: string, entry: T): void {
+    // Repeated delivery replaces the evidence for this half. Its old watchdog
+    // must not later report the replacement as stale.
+    store.get(revision)?.watchdog.cancel();
     store.set(revision, entry);
     while (store.size > this.#options.maxPending) {
       const oldest = store.keys().next();
       if (oldest.done === true) break;
       const evicted = store.get(oldest.value);
-      if (evicted !== undefined) (evicted as { expiry: DeferredExpiry }).expiry.cancel();
+      evicted?.watchdog.cancel();
       store.delete(oldest.value);
       this.#options.onDiagnostic(
         'revision-dropped',
@@ -288,18 +321,19 @@ export class RevisionPairing {
     }
   }
 
-  #expire(revision: number, half: 'tree' | 'marker'): DeferredExpiry {
-    // The clock starts once the evidence cannot still be arriving: the
+  #watch(revision: number, half: 'tree' | 'marker'): DeferredWatchdog {
+    // The watchdog starts once the evidence cannot still be arriving: the
     // emulator has caught up with the bytes it received, and no frame is open.
-    // A timeout then means the other half never came, rather than that the
-    // driver was still reading, or the application still drawing.
+    // Elapsing reports a causally missing counterpart but deliberately retains
+    // the authoritative half. Caller-owned operation/session deadlines decide
+    // when waiting must fail; this timer never mutates the pairing contract.
     const barrier = Promise.resolve(this.#options.caughtUp?.()).then(() => this.#framesIdle());
-    return new DeferredExpiry(barrier, this.#options.pairingTimeoutMs, () => {
+    return new DeferredWatchdog(barrier, this.#options.pairingTimeoutMs, () => {
       const store = half === 'tree' ? this.#snapshots : this.#markers;
-      if (!store.delete(revision)) return;
+      if (!store.has(revision)) return;
       this.#options.onDiagnostic(
-        'revision-expired',
-        `revision ${revision} dropped: its ${half === 'tree' ? 'render marker' : 'tree'} did not arrive within ${this.#options.pairingTimeoutMs} ms`,
+        'revision-pairing-watchdog',
+        `revision ${revision} still pending: its ${half === 'tree' ? 'render marker' : 'tree'} did not arrive within the ${this.#options.pairingTimeoutMs} ms diagnostic window; the authoritative half was retained`,
         revision,
       );
     });

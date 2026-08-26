@@ -1,5 +1,12 @@
 # Contract changes
 
+- 2026-08-27: `pairingTimeoutMs` is a diagnostic watchdog, not publication
+  authority. Its diagnostic is now `revision-pairing-watchdog`; the unmatched
+  authoritative half stays retained and may still pair when its counterpart
+  arrives. It stops blocking heuristic `waitForQuiet`, but semantic operations
+  remain fail-closed until pairing, supersession, bounded eviction or session
+  disposal. No alias for the pre-stable `revision-expired` code is retained.
+
 - 2026-08-26: the pinned passthrough ConPTY exposes child mouse DECSET directly.
   Its host-owned startup/reset focus and Win32-input SET sequences are removed
   by a split-safe output normalizer before the driver, while original child

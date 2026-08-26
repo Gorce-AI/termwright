@@ -66,7 +66,7 @@ and there is nothing to share with the probes that have a seam.
   the client's `WriteTimeout`.
 - **A failed publish writes no marker.** A marker names a revision; emitting
   one for a tree that never arrived makes the driver wait and then report
-  `revision-expired`, which points the blame at the adapter's timing rather
+  `revision-pairing-watchdog`, which points the blame at the adapter's timing rather
   than at the driver that stopped reading.
 - **The role mapping mirrors the hand-written adapter's.** Two instrumentations
   of the same application must describe it the same way, or every conformance

@@ -25,7 +25,7 @@ export async function verifyWindowsPtyVerdict(
   const manifestPath = join(packageDirectory, 'vendor', 'conpty-manifest.json');
 
   if (
-    verdict.schemaVersion !== 2 ||
+    verdict.schemaVersion !== 3 ||
     verdict.platform !== 'win32' ||
     !['x64', 'arm64'].includes(verdict.architecture) ||
     verdict.addonSha256 !==
@@ -53,7 +53,12 @@ export async function verifyWindowsPtyVerdict(
     verdict.causal?.resize !== true ||
     verdict.causal?.markerSplit !== true ||
     verdict.causal?.markerModeNode !== true ||
-    verdict.causal?.markerModeBun !== true
+    verdict.causal?.markerModeBun !== true ||
+    verdict.causal?.hiddenCursorSequencePassthrough !== true ||
+    verdict.causal?.unicodePassthrough !== true ||
+    verdict.causal?.sgrStyleTruecolorSequencePassthrough !== true ||
+    verdict.causal?.adjacentMarkerPassthrough !== true ||
+    verdict.causal?.forgedMarkerPassthrough !== true
   ) {
     throw new Error(
       `Windows PTY certification verdict does not bind the complete causal contract: ${packageDirectory}`,

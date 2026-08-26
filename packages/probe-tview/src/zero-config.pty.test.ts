@@ -55,6 +55,22 @@ async function intendedRect(locator: SemanticLocator): Promise<Rect | null> {
   return observation.status === "known" ? observation.value : null;
 }
 
+/** Race-free semantic wait driven only by committed observation changes. */
+async function waitForSemanticState(
+  app: TerminalHarness,
+  predicate: () => Promise<boolean>,
+): Promise<void> {
+  const deadline = performance.now() + 5_000;
+  for (;;) {
+    const checkpoint = app.checkpoint();
+    if (await predicate()) return;
+    await app.waitForCheckpointChange({
+      after: checkpoint,
+      timeout: Math.max(0, deadline - performance.now()),
+    });
+  }
+}
+
 async function goAvailable(): Promise<boolean> {
   return goTestCapability(
     async () => {
@@ -619,50 +635,56 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     ) => app.getByRole(role, { name }).semanticState();
 
     // focus: it starts on the list and Tab moves it to the button.
-    await expect
-      .poll(async () => (await state("list", "Files"))?.focused)
-      .toBe(true);
+    expect((await state("list", "Files"))?.focused).toBe(true);
     await app.press("Tab");
-    await expect
-      .poll(async () => (await state("button", "Save"))?.focused)
-      .toBe(true);
-    await expect
-      .poll(async () => (await state("list", "Files"))?.focused)
-      .not.toBe(true);
+    await waitForSemanticState(
+      app,
+      async () => (await state("button", "Save"))?.focused === true,
+    );
+    expect((await state("button", "Save"))?.focused).toBe(true);
+    expect((await state("list", "Files"))?.focused).not.toBe(true);
 
     // selection: moving through the list changes which item is selected, and
     // the tree names it rather than leaving a highlight to be read off cells.
     await app.press("Tab Tab");
-    await expect
-      .poll(async () => (await state("listitem", "readme.md"))?.selected)
-      .toBe(true);
+    await waitForSemanticState(
+      app,
+      async () => (await state("listitem", "readme.md"))?.selected === true,
+    );
+    expect((await state("listitem", "readme.md"))?.selected).toBe(true);
     await app.press("ArrowDown");
-    await expect
-      .poll(async () => (await state("listitem", "main.go"))?.selected)
-      .toBe(true);
-    await expect
-      .poll(async () => (await state("listitem", "readme.md"))?.selected)
-      .not.toBe(true);
+    await waitForSemanticState(
+      app,
+      async () => (await state("listitem", "main.go"))?.selected === true,
+    );
+    expect((await state("listitem", "main.go"))?.selected).toBe(true);
+    expect((await state("listitem", "readme.md"))?.selected).not.toBe(true);
 
     // value: typing into the field on the settings page.
     await app.press("s");
-    await expect
-      .poll(() => app.getByRole("textbox", { name: "Name" }).count())
-      .toBe(1);
+    await waitForSemanticState(
+      app,
+      async () => (await app.getByRole("textbox", { name: "Name" }).count()) === 1,
+    );
+    expect(await app.getByRole("textbox", { name: "Name" }).count()).toBe(1);
     await app.type("release");
-    await expect
-      .poll(() => app.getByRole("textbox", { name: "Name" }).textContent())
-      .toContain("release");
+    await waitForSemanticState(
+      app,
+      async () =>
+        (await app.getByRole("textbox", { name: "Name" }).textContent()).includes(
+          "release",
+        ),
+    );
 
     // resize: a real SIGWINCH, and geometry that follows it.
     const before = await intendedRect(app.getByRole("list", { name: "Files" }));
     await app.resize({ columns: 50, rows: 18 });
-    await expect
-      .poll(
-        async () =>
-          (await intendedRect(app.getByRole("list", { name: "Files" })))?.width,
-      )
-      .toBe(50);
+    await waitForSemanticState(
+      app,
+      async () =>
+        (await intendedRect(app.getByRole("list", { name: "Files" })))?.width ===
+        50,
+    );
     expect(before?.width).toBe(80);
   }, 600_000);
 
