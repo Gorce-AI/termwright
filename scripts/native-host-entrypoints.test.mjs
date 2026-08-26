@@ -110,10 +110,14 @@ describe('the native host is the only Termwright test entrypoint', () => {
     }
     expectExactNeed(ciJobs['pty-native-arm64'], 'pty-native-build-arm64');
     expectArtifactStep(ciJobs['pty-native-arm64'], 'download-artifact', 'pty-addon-arm64', 'packages/pty-win32-arm64');
-    for (const jobId of ['pty-native', 'pty-native-arm64', 'pty-native-x64-on-arm64']) {
+    for (const jobId of ['pty-native', 'pty-native-arm64']) {
       expect(ciJobs[jobId]).toContain("bun-version: '1.4.0'");
       expect(ciJobs[jobId]).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
     }
+    expect(ciJobs['pty-native-x64-on-arm64']).toContain(
+      'bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-windows-x64-baseline.zip',
+    );
+    expect(ciJobs['pty-native-x64-on-arm64']).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
     for (const jobId of ['pty-native-arm64', 'pty-native-x64-on-arm64', 'windows-driver-native']) {
       expect(ciJobs[jobId]).toContain('scripts/verify-windows-pty-verdict.mjs');
     }
