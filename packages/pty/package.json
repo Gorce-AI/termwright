@@ -23,7 +23,7 @@
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
-    "build:native": "node-gyp rebuild",
+    "build:native": "node-gyp rebuild && node ../../scripts/stage-vendored-conpty.mjs",
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. test -- -- --run packages/pty"
   },

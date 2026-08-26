@@ -39,20 +39,6 @@ bool CreateCancellableInputPipe(Handle* conpty_reader, Handle* host_writer,
   return true;
 }
 
-/// `ReleasePseudoConsole`, when the running Windows exports it.
-///
-/// Feature detection rather than a version comparison: the symbol is the fact
-/// that matters, and a build number is only a proxy for it that goes wrong on
-/// every backport and every future edition.
-using ReleasePseudoConsoleFn = HRESULT(WINAPI*)(HPCON);
-
-ReleasePseudoConsoleFn LoadReleasePseudoConsole() {
-  HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-  if (kernel32 == nullptr) return nullptr;
-  return reinterpret_cast<ReleasePseudoConsoleFn>(
-      reinterpret_cast<void*>(GetProcAddress(kernel32, "ReleasePseudoConsole")));
-}
-
 }  // namespace
 
 Session::~Session() { Dispose(); }
@@ -62,6 +48,12 @@ bool Session::Start(const SpawnOptions& options, EventSink sink, void* context, 
     std::lock_guard<std::mutex> lock(sink_mutex_);
     sink_ = sink;
     sink_context_ = context;
+  }
+
+  conpty_api_ = &GetConPtyApi();
+  if (!conpty_api_->available()) {
+    *error = "the strict vendored ConPTY API is unavailable";
+    return false;
   }
 
   // Both pipes are created here. The two ends the pseudoconsole takes are
@@ -77,7 +69,8 @@ bool Session::Start(const SpawnOptions& options, EventSink sink, void* context, 
   }
 
   COORD size{options.columns, options.rows};
-  HRESULT created = CreatePseudoConsole(size, conpty_input_read.get(), conpty_output_write.get(), 0,
+  HRESULT created = conpty_api_->Create(size, conpty_input_read.get(),
+                                        conpty_output_write.get(), 0,
                                         &pseudoconsole_);
   if (FAILED(created)) {
     *error = "CreatePseudoConsole failed with HRESULT " + std::to_string(static_cast<long>(created));
@@ -206,15 +199,6 @@ bool Session::Start(const SpawnOptions& options, EventSink sink, void* context, 
   writer_ = std::thread([this] { WriterLoop(); });
   exit_watcher_ = std::thread([this] { WaitForRootExit(); });
 
-  // Detected and reported, never called. Three placements of the release were
-  // tried — at startup, at root exit, and at first output — and each tore the
-  // pseudoconsole down under a child that was still attached to it. Reading
-  // the two reference implementations settled why: node-pty releases only when
-  // it loads the standalone ConPTY DLL, and WezTerm never releases at all. The
-  // capability is still worth knowing, because which path a machine offers is
-  // evidence the certification matrix records.
-  static ReleasePseudoConsoleFn detected = LoadReleasePseudoConsole();
-  release_supported_ = detected != nullptr;
   return true;
 }
 
@@ -489,7 +473,7 @@ void Session::CloseOwnedPseudoConsole() {
   if (pseudoconsole_ == nullptr) return;
   HPCON closing = pseudoconsole_;
   pseudoconsole_ = nullptr;
-  ClosePseudoConsole(closing);
+  conpty_api_->Close(closing);
 }
 
 void Session::Emit(SessionEvent event) {
@@ -547,7 +531,7 @@ bool Session::Resize(SHORT columns, SHORT rows) {
   std::lock_guard<std::mutex> lock(pseudoconsole_mutex_);
   if (pseudoconsole_ == nullptr) return false;
   COORD size{columns, rows};
-  return SUCCEEDED(ResizePseudoConsole(pseudoconsole_, size));
+  return conpty_api_ != nullptr && SUCCEEDED(conpty_api_->Resize(pseudoconsole_, size));
 }
 
 bool Session::TerminateTree(std::string* error) {

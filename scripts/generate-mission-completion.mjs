@@ -141,7 +141,6 @@ const partial = new Map();
 
 const obsolete = new Map([
   [51, 'Product policy intentionally removed plain-Vitest compatibility. Termwright native-host execution is the only product mode; Vitest remains the embedded engine, not a parallel user-facing runner.'],
-  [112, 'The universal generic ConPTY input-mode claim was removed. ConPTY does not expose the child\'s DEC pointer/focus negotiation, and process-local stdout interception cannot cover direct descriptor/native writes or descendants. The supported contract is capability-based: opaque children fail closed, while an explicitly registered provider backed by the application\'s production mode state may publish authoritative revision-bound evidence.'],
 ]);
 
 const exactEvidence = new Map([

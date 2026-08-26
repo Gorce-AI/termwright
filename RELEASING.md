@@ -115,6 +115,27 @@ For a pull request, add the `pr preview` label. `preview-release.yml` publishes
 installable packages through pkg-pr-new without consuming a version or touching
 npm. This is the preferred replacement for registry canaries.
 
+Preview and release workflows build all six native PTY packages before they
+publish anything. A Windows preview is therefore the same complete package
+shape as a release: addon, pinned `conpty.dll`, both required host
+architectures for the x64 package, license, manifest, and SPDX record.
+
+## Updating the Windows ConPTY runtime
+
+The Windows runtime is an explicit supply-chain pin, not an install-time
+download. Update `packages/pty/conpty-assets.json`, regenerate both package
+bundles with `scripts/prepare-conpty-assets.mjs`, and review every changed hash,
+license, and SBOM field. The package checker rejects extra, missing,
+wrong-architecture, or digest-mismatched files.
+
+Do not merge a runtime update until the exact bundle passes the Windows x64,
+native ARM64, and x64-on-ARM64 jobs for Node 22 and 24, including Node and Bun
+application writes, legacy Console API ordering, resize, alternate-screen,
+pressure, and real EOF. These are behavioral certification gates for the
+marker-authoritative contract; a valid Microsoft signature or matching file
+hash alone is not sufficient. Missing or invalid assets must remain a startup
+error—never restore the inbox conhost as a fallback.
+
 ## Trusted publishing setup
 
 Registry publisher configuration is a one-time repository setup, not part of a

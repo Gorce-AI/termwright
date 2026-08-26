@@ -40,6 +40,14 @@ export const CI_JOB_CONTRACT = Object.freeze({
     'native PTY backend (Windows / Node 22)',
     'native PTY backend (Windows / Node 24)',
   ], { node: ['22', '24'] }),
+  'pty-native-arm64': ciJob('native PTY backend (Windows ARM64 / Node ${{ matrix.node }})', [
+    'native PTY backend (Windows ARM64 / Node 22)',
+    'native PTY backend (Windows ARM64 / Node 24)',
+  ], { node: ['22', '24'] }),
+  'pty-native-x64-on-arm64': ciJob('native PTY backend (Windows ARM64 / x64 Node ${{ matrix.node }})', [
+    'native PTY backend (Windows ARM64 / x64 Node 22)',
+    'native PTY backend (Windows ARM64 / x64 Node 24)',
+  ], { node: ['22', '24'] }),
   'windows-driver-native': ciJob('build windows-latest / node ${{ matrix.node }}', [
     'build windows-latest / node 22',
     'build windows-latest / node 24',

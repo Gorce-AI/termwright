@@ -32,7 +32,7 @@ export function frameworkContract(
         ? { status: 'supported', evidence: evidence('framework', 'instrumented', 'authoritative', name) }
         : { status: 'unsupported', reason: 'framework-unobservable' },
     ])) as EffectiveSessionContract['capabilities'],
-    terminal: { profile, platform: process.platform, mouseModesObservable: process.platform !== 'win32' },
+    terminal: { profile, platform: process.platform, mouseModesObservable: true },
   } satisfies EffectiveSessionContract);
 }
 

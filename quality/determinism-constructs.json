@@ -11,12 +11,12 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 40,
-    "deadline-or-scheduler-regression-test": 62,
+    "deadline-or-scheduler-regression-test": 61,
     "deterministic-adversarial-fixture-schedule": 34,
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 203,
-    "explicit-test-selection-reviewed-with-platform-registry": 94,
+    "explicit-external-or-ui-source-polling": 200,
+    "explicit-test-selection-reviewed-with-platform-registry": 79,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
     "production-process-isolation-review": 35,
@@ -380,12 +380,6 @@
     },
     {
       "path": "packages/conformance/src/suites/driver-generic.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === 'win32')('sends mouse reports only after the child asks for them', async () => {"
-    },
-    {
-      "path": "packages/conformance/src/suites/driver-generic.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const started = Date.now();"
@@ -407,18 +401,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => terminal.screen().modes.bracketedPaste).toBe(true);"
-    },
-    {
-      "path": "packages/conformance/src/suites/interaction.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => terminal.screen().modes.focusReporting).toBe('off');"
-    },
-    {
-      "path": "packages/conformance/src/suites/interaction.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => terminal.screen().modes.mouseTracking).toBe('none');"
     },
     {
       "path": "packages/conformance/src/suites/interaction.test.ts",
@@ -449,24 +431,6 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {"
-    },
-    {
-      "path": "packages/conformance/src/suites/interaction.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === 'win32')('clicks, double-clicks and misses', async () => {"
-    },
-    {
-      "path": "packages/conformance/src/suites/interaction.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === 'win32')('drags and lets the application own the selection', async () => {"
-    },
-    {
-      "path": "packages/conformance/src/suites/interaction.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === 'win32')('follows mouse mode on and off', async () => {"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
@@ -1174,12 +1138,6 @@
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => terminal.semanticTree()?.revision ?? 0, {"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => terminal.semanticTree()?.revision ?? 0)"
     },
     {
@@ -1328,72 +1286,6 @@
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "'process.stdout.write(\"ready\\\\n\"); setInterval(() => {}, 1_000)',"
@@ -1415,12 +1307,6 @@
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 450));"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 50));"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
@@ -1847,12 +1733,6 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout: 30_000 }, () => {"
-    },
-    {
-      "path": "packages/mcp/src/server.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === 'win32')('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {"
     },
     {
       "path": "packages/mcp/src/server.test.ts",
@@ -2447,6 +2327,12 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!windows)(\"ConPTY backend\", { timeout: 30_000 }, () => {"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "it.skipIf(!bun)(\"preserves causal VT marker order for Bun applications\", async () => {"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",

@@ -426,7 +426,7 @@ describe('TermwrightTestHost', () => {
       }, {
         id: 'uncollected-required-conpty-case',
         file: '/repo/packages/conformance/src/suites/driver-generic.test.ts',
-        fullName: 'fails closed when ConPTY hides terminal input modes',
+        fullName: 'fails closed when an embedding hides terminal input modes',
         required: true,
       }],
     });

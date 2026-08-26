@@ -242,10 +242,8 @@ describe('VtScreen', () => {
   });
 
   it('reports unknown mouse modes where the platform hides them', () => {
-    // ConPTY consumes the child's mouse DECSET, so 'none' would be a claim the
-    // driver cannot make — and it is that claim that makes pointer actions
-    // refuse. Driven by the option rather than the platform so the Windows
-    // behaviour is covered on every machine that runs the suite.
+    // An embedding declared modes unobservable, so 'none' would be a claim the
+    // driver cannot make. Certified PTY backends observe DECSET by default.
     vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, modesObservable: false });
 
     expect(vt.modes().mouseTracking).toBe('unknown');
@@ -297,8 +295,8 @@ describe('VtScreen', () => {
   });
 
   it('reports focus reporting as unknown where the reading belongs to the host', async () => {
-    // ConPTY reports it enabled whether or not the child asked, so a definite
-    // value there would describe the terminal and be read as the program.
+    // An embedding declared this reading unobservable, so a definite value
+    // would describe its host rather than the program.
     vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, modesObservable: false });
     expect(vt.modes().focusReporting).toBe('unknown');
 

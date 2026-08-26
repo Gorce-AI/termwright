@@ -115,9 +115,9 @@
     "command": "TERMWRIGHT_MATRIX_WORKERS=2 TERMWRIGHT_MATRIX_PTYS=4 TERMWRIGHT_MATRIX_FILE_PARALLELISM=true,false node scripts/run-vitest-pty-matrix.mjs <output>"
   },
   "summary": {
-    "alreadyFixed": 126,
+    "alreadyFixed": 127,
     "partiallyFixed": 0,
-    "obsoleteBecauseArchitectureChanged": 2,
+    "obsoleteBecauseArchitectureChanged": 1,
     "stillOpen": 0,
     "remainingExternalEvidence": 0,
     "remainingImplementation": 0,
@@ -1241,15 +1241,14 @@
     {
       "section": 112,
       "title": "ConPTY query and mode proof",
-      "status": "obsolete because architecture changed",
+      "status": "already-fixed",
       "evidence": [
         "packages/driver/src/api.ts",
         "packages/conformance/src/suites/driver-generic.test.ts",
         "packages/probe-ink/src/provider.pty.test.ts",
         "packages/probe-ink/src/terminal-tracker.test.ts",
         "quality/platform-deviations.json"
-      ],
-      "architectureDecision": "The universal generic ConPTY input-mode claim was removed. ConPTY does not expose the child's DEC pointer/focus negotiation, and process-local stdout interception cannot cover direct descriptor/native writes or descendants. The supported contract is capability-based: opaque children fail closed, while an explicitly registered provider backed by the application's production mode state may publish authoritative revision-bound evidence."
+      ]
     },
     {
       "section": 113,

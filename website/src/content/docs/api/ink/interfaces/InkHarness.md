@@ -26,7 +26,7 @@ things only an in-process mount can offer.
 
 > `readonly` **events**: `SessionEvents`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:179
+Defined in: driver/dist/session-BJCkoLyr.d.ts:179
 
 #### Inherited from
 
@@ -38,7 +38,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:179
 
 > `readonly` **exit**: `Promise`\<`ExitStatus`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:200
+Defined in: driver/dist/session-BJCkoLyr.d.ts:200
 
 #### Inherited from
 
@@ -50,7 +50,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:200
 
 > `readonly` **keyboard**: `Keyboard`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:102
+Defined in: driver/dist/session-BJCkoLyr.d.ts:102
 
 One physical keyboard implementation. Convenience methods delegate here.
 
@@ -64,7 +64,7 @@ One physical keyboard implementation. Convenience methods delegate here.
 
 > `readonly` **mouse**: `Mouse`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:104
+Defined in: driver/dist/session-BJCkoLyr.d.ts:104
 
 One physical mouse implementation. Locator actions delegate here after planning.
 
@@ -78,7 +78,7 @@ One physical mouse implementation. Locator actions delegate here after planning.
 
 > `readonly` **scrollback**: `ScrollbackApi`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:177
+Defined in: driver/dist/session-BJCkoLyr.d.ts:177
 
 #### Inherited from
 
@@ -90,7 +90,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:177
 
 > `readonly` **selection**: `SelectionApi`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:178
+Defined in: driver/dist/session-BJCkoLyr.d.ts:178
 
 #### Inherited from
 
@@ -102,7 +102,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:178
 
 > `readonly` **sessionId**: `string`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:96
+Defined in: driver/dist/session-BJCkoLyr.d.ts:96
 
 #### Inherited from
 
@@ -114,7 +114,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:96
 
 > `readonly` **shell**: `ShellApi`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:100
+Defined in: driver/dist/session-BJCkoLyr.d.ts:100
 
 Shell command boundaries and prompt state when the child emits OSC 133.
 
@@ -128,7 +128,7 @@ Shell command boundaries and prompt state when the child emits OSC 133.
 
 > `readonly` **terminalProfile**: `string`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:98
+Defined in: driver/dist/session-BJCkoLyr.d.ts:98
 
 Immutable terminal profile used to decode the very first PTY byte.
 
@@ -142,7 +142,7 @@ Immutable terminal profile used to decode the very first PTY byte.
 
 > `readonly` **terminalState**: `TerminalState`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:108
+Defined in: driver/dist/session-BJCkoLyr.d.ts:108
 
 Emulator facts captured together at the current screen revision.
 
@@ -156,7 +156,7 @@ Emulator facts captured together at the current screen revision.
 
 > `readonly` **window**: `TerminalWindow`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:106
+Defined in: driver/dist/session-BJCkoLyr.d.ts:106
 
 Terminal-window focus reports, distinct from semantic element focus.
 
@@ -170,7 +170,7 @@ Terminal-window focus reports, distinct from semantic element focus.
 
 > **appLogs**(): readonly `AppLogEvent`[]
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:191
+Defined in: driver/dist/session-BJCkoLyr.d.ts:191
 
 Bounded, oldest-first application-log history, including entries emitted
 while `launchTerminal()` was still starting. Consumers should subscribe to
@@ -190,7 +190,7 @@ readonly `AppLogEvent`[]
 
 > `optional` **bindOperationBudget**(`budget`): `void`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:110
+Defined in: driver/dist/session-BJCkoLyr.d.ts:110
 
 Binds one attempt-wide budget before any user operation starts.
 
@@ -214,7 +214,7 @@ Binds one attempt-wide budget before any user operation starts.
 
 > **cell**(`pos`): `CellSnapshot`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:131
+Defined in: driver/dist/session-BJCkoLyr.d.ts:131
 
 #### Parameters
 
@@ -242,7 +242,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:131
 
 > **checkpoint**(): `ObservationStamp`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:114
+Defined in: driver/dist/session-BJCkoLyr.d.ts:114
 
 Atomic identity of the currently committed terminal/semantic observation.
 
@@ -260,7 +260,7 @@ Atomic identity of the currently committed terminal/semantic observation.
 
 > **close**(): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:199
+Defined in: driver/dist/session-BJCkoLyr.d.ts:199
 
 Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
@@ -278,7 +278,7 @@ Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
 > **contract**(): `EffectiveSessionContract` \| `null`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:112
+Defined in: driver/dist/session-BJCkoLyr.d.ts:112
 
 Frozen negotiated contract, or null until negotiation has completed.
 
@@ -296,7 +296,7 @@ Frozen negotiated contract, or null until negotiation has completed.
 
 > **crashReport**(): `CrashReport` \| `null`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:197
+Defined in: driver/dist/session-BJCkoLyr.d.ts:197
 
 What the session knew when the program died unexpectedly, or `null` — for a
 live session, a clean exit, or one the harness asked for via `close()` or
@@ -316,7 +316,7 @@ live session, a clean exit, or one the harness asked for via `close()` or
 
 > **diagnostics**(): readonly `SessionDiagnostic`[]
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:185
+Defined in: driver/dist/session-BJCkoLyr.d.ts:185
 
 Bounded, oldest-first log of what the session decided behind the scenes:
 dropped or superseded revisions, unverified markers, adapter negotiation,
@@ -336,7 +336,7 @@ readonly `SessionDiagnostic`[]
 
 > **getByLabel**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:136
+Defined in: driver/dist/session-BJCkoLyr.d.ts:136
 
 #### Parameters
 
@@ -364,7 +364,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:136
 
 > **getByRole**(`role`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:135
+Defined in: driver/dist/session-BJCkoLyr.d.ts:135
 
 #### Parameters
 
@@ -390,7 +390,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:135
 
 > **getByScreenText**(`text`, `opts?`): `ScreenLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:142
+Defined in: driver/dist/session-BJCkoLyr.d.ts:142
 
 Physical terminal-grid text, optionally narrowed by occurrence or style.
 
@@ -418,7 +418,7 @@ Physical terminal-grid text, optionally narrowed by occurrence or style.
 
 > **getByTestId**(`testId`): `SemanticLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:143
+Defined in: driver/dist/session-BJCkoLyr.d.ts:143
 
 #### Parameters
 
@@ -440,7 +440,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:143
 
 > **getByText**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:140
+Defined in: driver/dist/session-BJCkoLyr.d.ts:140
 
 Semantic text only. Never falls back to the terminal grid.
 
@@ -468,7 +468,7 @@ Semantic text only. Never falls back to the terminal grid.
 
 > **locator**(`selector`): `SemanticLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:145
+Defined in: driver/dist/session-BJCkoLyr.d.ts:145
 
 Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'.
 
@@ -494,7 +494,7 @@ Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'.
 
 > **locatorForRef**(`ref`): `SemanticLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:152
+Defined in: driver/dist/session-BJCkoLyr.d.ts:152
 
 Rebuilds a locator from a ref returned by a resolved target.
 (`'semantic:n8@42'` for a semantic node, `'screen:r,c,w,h@7'` for a grid match).
@@ -519,7 +519,7 @@ superseded raises `stale-snapshot`.
 
 > **locatorForRef**(`ref`): `ScreenLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:153
+Defined in: driver/dist/session-BJCkoLyr.d.ts:153
 
 ##### Parameters
 
@@ -539,7 +539,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:153
 
 > **locatorForRef**(`ref`): `SemanticLocator` \| `ScreenLocator`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:154
+Defined in: driver/dist/session-BJCkoLyr.d.ts:154
 
 ##### Parameters
 
@@ -561,7 +561,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:154
 
 > **paste**(`text`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:157
+Defined in: driver/dist/session-BJCkoLyr.d.ts:157
 
 #### Parameters
 
@@ -583,7 +583,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:157
 
 > **press**(`keys`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:155
+Defined in: driver/dist/session-BJCkoLyr.d.ts:155
 
 #### Parameters
 
@@ -650,7 +650,7 @@ reset, so a rerender can recover from a crash.
 
 > **resize**(`size`): `Promise`\<`ResizeReceipt`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:159
+Defined in: driver/dist/session-BJCkoLyr.d.ts:159
 
 #### Parameters
 
@@ -678,7 +678,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:159
 
 > **screen**(): `ScreenSnapshot`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:129
+Defined in: driver/dist/session-BJCkoLyr.d.ts:129
 
 #### Returns
 
@@ -694,7 +694,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:129
 
 > **semanticTree**(): `SemanticSnapshot` \| `null`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:130
+Defined in: driver/dist/session-BJCkoLyr.d.ts:130
 
 #### Returns
 
@@ -710,7 +710,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:130
 
 > **settled**(`opts?`): `Promise`\<`EffectiveSessionContract`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:128
+Defined in: driver/dist/session-BJCkoLyr.d.ts:128
 
 Waits for the one frozen Effective Session Contract and, for a semantic
 session, for the first paired tree. There is no provisional capability API.
@@ -735,7 +735,7 @@ session, for the first paired tree. There is no provisional capability API.
 
 > **signal**(`sig`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:163
+Defined in: driver/dist/session-BJCkoLyr.d.ts:163
 
 #### Parameters
 
@@ -757,7 +757,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:163
 
 > **title**(): `string`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:175
+Defined in: driver/dist/session-BJCkoLyr.d.ts:175
 
 #### Returns
 
@@ -773,7 +773,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:175
 
 > **type**(`text`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:156
+Defined in: driver/dist/session-BJCkoLyr.d.ts:156
 
 #### Parameters
 
@@ -795,7 +795,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:156
 
 > **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:116
+Defined in: driver/dist/session-BJCkoLyr.d.ts:116
 
 Wait until a committed observation newer than `after` is available.
 
@@ -819,7 +819,7 @@ Wait until a committed observation newer than `after` is available.
 
 > **waitForCommittedObservation**(`opts?`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:123
+Defined in: driver/dist/session-BJCkoLyr.d.ts:123
 
 Waits until parser work and semantic frame pairing caused by prior input
 have committed. This is not a quiet/global-idle heuristic.
@@ -844,7 +844,7 @@ have committed. This is not a quiet/global-idle heuristic.
 
 > **waitForExit**(`opts?`): `Promise`\<`ExitStatus`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:174
+Defined in: driver/dist/session-BJCkoLyr.d.ts:174
 
 #### Parameters
 
@@ -866,7 +866,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:174
 
 > **waitForQuiet**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:169
+Defined in: driver/dist/session-BJCkoLyr.d.ts:169
 
 Heuristic only: waits for a stated interval with no screen or semantic change.
 
@@ -890,7 +890,7 @@ Heuristic only: waits for a stated interval with no screen or semantic change.
 
 > **waitForRender**(`opts`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:165
+Defined in: driver/dist/session-BJCkoLyr.d.ts:165
 
 #### Parameters
 
@@ -912,7 +912,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:165
 
 > **waitForShellPrompt**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:173
+Defined in: driver/dist/session-BJCkoLyr.d.ts:173
 
 Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
@@ -936,7 +936,7 @@ Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
 > **waitForText**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:164
+Defined in: driver/dist/session-BJCkoLyr.d.ts:164
 
 #### Parameters
 
@@ -962,7 +962,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:164
 
 > **waitForTitle**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:176
+Defined in: driver/dist/session-BJCkoLyr.d.ts:176
 
 #### Parameters
 
@@ -988,7 +988,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:176
 
 > **write**(`bytes`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:158
+Defined in: driver/dist/session-BJCkoLyr.d.ts:158
 
 #### Parameters
 

@@ -193,7 +193,7 @@ describe('trusted autonomous coordinator', () => {
       expect(job.requiredChecks).toEqual(expandedCheckNames(job));
     }
     expect(new Set(CI_JOBS).size).toBe(CI_JOBS.length);
-    expect(CI_JOBS).toHaveLength(37);
+    expect(CI_JOBS).toHaveLength(41);
   });
 
   it('rejects a CI workflow that became green only after a rerun', () => {

@@ -228,6 +228,10 @@ export class AdapterProbe {
       env,
       columns: size.columns,
       rows: size.rows,
+      // This probe is itself the terminal emulator. Do not inherit a harness
+      // shell's `TERM=dumb`: the child is connected to our xterm-compatible
+      // parser regardless of which terminal launched Vitest.
+      term: 'xterm-256color',
     });
 
     const probe = new AdapterProbe(

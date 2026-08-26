@@ -96,7 +96,7 @@
     {
       "target": 16,
       "status": "already-fixed",
-      "evidence": "The public contract explicitly keeps an opaque ConPTY child fail-closed because neither ConPTY nor a JavaScript stdout wrapper can observe every descriptor/native/descendant write. An explicitly registered, revision-bound provider backed by the application's production input-mode state can prove mouse/focus modes. Non-skipped Ink E2E covers real pointer and focus bytes through the PTY/ConPTY-compatible path, provider/VT disagreement and provider loss; a negative bypass test proves why the generic claim is intentionally unavailable."
+      "evidence": "The pinned passthrough ConPTY exposes generic child mouse/focus DECSET to the same VT observer used on POSIX, so Windows runs the positive pointer/focus conformance suite. Explicitly unobservable embeddings remain fail-closed and may use revision-bound production input-mode evidence."
     },
     {
       "target": 17,

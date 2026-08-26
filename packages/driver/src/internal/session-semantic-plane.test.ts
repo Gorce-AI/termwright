@@ -22,6 +22,25 @@ describe("buildSessionContract", () => {
     expect(Object.isFrozen(contract)).toBe(true);
   });
 
+  it("treats the certified Windows passthrough stream as mode-observable", () => {
+    const contract = buildSessionContract({
+      sessionId: "session:windows",
+      attachment: null,
+      terminalProfile: "xterm-256color",
+      platform: "win32",
+    });
+
+    expect(contract.terminal.mouseModesObservable).toBe(true);
+    expect(contract.capabilities["pointer-input"]).toMatchObject({
+      status: "supported",
+      evidence: { source: "terminal", method: "native" },
+    });
+    expect(contract.capabilities["focus-input"]).toMatchObject({
+      status: "supported",
+      evidence: { source: "terminal", method: "native" },
+    });
+  });
+
   it("attributes provider-backed capabilities to application evidence", () => {
     const attachment = {
       adapter: { name: "ink", version: "5" },

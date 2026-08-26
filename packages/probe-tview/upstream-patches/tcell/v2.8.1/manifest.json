@@ -1,14 +1,14 @@
 {
   "framework": "github.com/gdamore/tcell/v2",
   "frameworkVersion": "v2.8.1",
-  "patchSetVersion": 2,
-  "note": "Add-only Windows capability on NewConsoleScreen's returned baseScreen: fail closed without virtual-terminal mode, otherwise write the semantic marker synchronously through cScreen's exact console handle after tview's Show returns.",
+  "patchSetVersion": 3,
+  "note": "Add-only Windows capability on NewConsoleScreen's returned baseScreen: fail closed without virtual-terminal support, atomically ensure VT+processed output on cScreen's exact console handle, then write the semantic marker synchronously after tview's Show returns.",
   "patched": [],
   "added": [
     {
       "path": "termwright_marker_windows.go",
       "source": "add/termwright_marker_windows.go",
-      "sha256": "sha256:3cfbc86be88808f77547266285d6067fa54a7dac4581a174e74f7a7c4ef86bfb"
+      "sha256": "sha256:4aa8a693eab3a2c9a93bef1a549107e54b3d429bc22546d0c5095611338cfea4"
     },
     {
       "path": "termwright_marker_windows_test.go",

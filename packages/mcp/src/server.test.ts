@@ -101,7 +101,7 @@ afterEach(async () => {
 });
 
 describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout: 30_000 }, () => {
-  it.skipIf(process.platform === 'win32')('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {
+  it('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {
     const { call } = await connectSession();
     const terminal = await launchSemantic(call);
 
@@ -194,39 +194,6 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     const closed = await call('terminal.close', { terminal });
     expect(closed.isError, closed.text).toBe(false);
     expect(closed.data['ok']).toBe(true);
-  });
-
-  it.runIf(process.platform === 'win32')('reports unavailable pointer actionability through MCP without emitting input', async () => {
-    const { call } = await connectSession();
-    const terminal = await launchSemantic(call);
-    await call('terminal.wait_for', { terminal, wait: 'text', text: 'Permission required' });
-
-    const before = await call('terminal.snapshot', { terminal });
-    const reject = (before.data['refs'] as { ref: string; name: string }[])
-      .find((entry) => entry.name === 'Reject');
-    expect(reject).toBeDefined();
-
-    const explanation = await call('terminal.actionability', {
-      terminal,
-      ref: reject?.ref,
-      action: 'click',
-    });
-    expect(explanation.isError, explanation.text).toBe(false);
-    expect(explanation.data).toMatchObject({
-      actionable: false,
-      reason: { code: 'capability-unavailable' },
-      requirements: expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'pointer-input', verdict: 'inconclusive', observation: 'unsupported',
-        }),
-      ]),
-    });
-
-    const clicked = await call('terminal.click', { terminal, ref: reject?.ref });
-    expect(clicked.isError).toBe(true);
-    expect(clicked.error?.kind).toBe('capability-unavailable');
-    const after = await call('terminal.snapshot', { terminal });
-    expect(after.data['revision']).toBe(before.data['revision']);
   });
 
   it('targets by role and by testId, and reports candidates when a locator is ambiguous', async () => {

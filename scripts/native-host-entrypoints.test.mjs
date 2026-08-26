@@ -53,6 +53,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const rootConfig = (await import('../vitest.config.ts')).default;
     const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
     const release = await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+    const preview = await readFile(new URL('../.github/workflows/preview-release.yml', import.meta.url), 'utf8');
     const reliability = await readFile(new URL('../.github/workflows/reliability.yml', import.meta.url), 'utf8');
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     expect(rootConfig.test.retry).toBe(0);
@@ -92,12 +93,13 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(`${ci}\n${release}\n${reliability}\n${JSON.stringify(manifest.scripts)}`).not.toMatch(/--retry(?:=|\s)/u);
 
     const ciJobs = Object.fromEntries(workflowJobBlocks(ci).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
-    expectArtifactStep(ciJobs['pty-native-build-x64'], 'upload-artifact', 'pty-addon-x64', 'packages/pty-win32-x64/termwright_pty.node');
-    expectArtifactStep(ciJobs['pty-native-build-arm64'], 'upload-artifact', 'pty-addon-arm64', 'packages/pty-win32-arm64/termwright_pty.node');
+    expectArtifactStep(ciJobs['pty-native-build-x64'], 'upload-artifact', 'pty-addon-x64', 'packages/pty-win32-x64');
+    expectArtifactStep(ciJobs['pty-native-build-arm64'], 'upload-artifact', 'pty-addon-arm64', 'packages/pty-win32-arm64');
     expect(ciJobs['pty-native-build-x64']).toContain('node scripts/check-prebuild.mjs win32 x64');
     expect(ciJobs['pty-native-build-arm64']).toContain('node scripts/check-prebuild.mjs win32 arm64');
     const x64Consumers = {
       'pty-native': 'packages/pty/build/Release',
+      'pty-native-x64-on-arm64': 'packages/pty-win32-x64',
       'windows-driver-native': 'packages/pty-win32-x64',
       'windows-native-stress': 'packages/pty-win32-x64',
       'conformance-windows': 'packages/pty-win32-x64',
@@ -105,6 +107,15 @@ describe('the native host is the only Termwright test entrypoint', () => {
     for (const [jobId, path] of Object.entries(x64Consumers)) {
       expectExactNeed(ciJobs[jobId], 'pty-native-build-x64');
       expectArtifactStep(ciJobs[jobId], 'download-artifact', 'pty-addon-x64', path);
+    }
+    expectExactNeed(ciJobs['pty-native-arm64'], 'pty-native-build-arm64');
+    expectArtifactStep(ciJobs['pty-native-arm64'], 'download-artifact', 'pty-addon-arm64', 'packages/pty-win32-arm64');
+    for (const jobId of ['pty-native', 'pty-native-arm64', 'pty-native-x64-on-arm64']) {
+      expect(ciJobs[jobId]).toContain("bun-version: '1.4.0'");
+      expect(ciJobs[jobId]).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+    }
+    for (const jobId of ['pty-native-arm64', 'pty-native-x64-on-arm64', 'windows-driver-native']) {
+      expect(ciJobs[jobId]).toContain('scripts/verify-windows-pty-verdict.mjs');
     }
     expect(ciJobs['conformance-posix'].match(/^    needs:.*$/gmu)).toBeNull();
     expect(ciJobs['conformance-posix']).toContain('os: [ubuntu-latest, macos-latest]');
@@ -137,7 +148,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const windowsSoak = reliabilityJobs['nightly-soak-windows'];
     expect(windowsSoak.indexOf('actions/download-artifact@')).toBeLessThan(windowsSoak.indexOf('- run: pnpm build'));
     expect(vitestReliability).toContain('node scripts/run-vitest-pty-matrix.mjs');
-    expectArtifactStep(reliabilityJobs['pty-native-build-x64'], 'upload-artifact', 'nightly-pty-addon-x64', 'packages/pty-win32-x64/termwright_pty.node');
+    expectArtifactStep(reliabilityJobs['pty-native-build-x64'], 'upload-artifact', 'nightly-pty-addon-x64', 'packages/pty-win32-x64');
     expectArtifactStep(reliabilityJobs['nightly-soak-windows'], 'download-artifact', 'nightly-pty-addon-x64', 'packages/pty-win32-x64');
     expect(reliabilityJobs['pty-native-build-x64']).toContain('node scripts/check-prebuild.mjs win32 x64');
     expect(reliabilityJobs['nightly-soak-windows']).toContain('node scripts/check-prebuild.mjs win32 x64');
@@ -146,6 +157,13 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const releaseJobs = Object.fromEntries(workflowJobBlocks(release).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
     expect(releaseJobs.prebuilds).toContain('node scripts/check-prebuild.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"');
     expect(releaseJobs.prebuilds).toContain('node scripts/check-installed-pty.mjs "$install_dir"');
+    expect(releaseJobs.prebuilds).toContain("bun-version: '1.4.0'");
+    expect(releaseJobs.prebuilds).toContain('scripts/verify-windows-pty-verdict.mjs');
+    expect(releaseJobs.verify).toContain('scripts/verify-windows-pty-verdict.mjs');
+    const previewJobs = Object.fromEntries(workflowJobBlocks(preview).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
+    expect(previewJobs.prebuilds).toContain("bun-version: '1.4.0'");
+    expect(previewJobs.prebuilds).toContain('scripts/check-installed-pty.mjs "$install_dir" --verdict "$verdict"');
+    expect(previewJobs.preview).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(releaseJobs.prebuilds).toContain('runner: ubuntu-22.04 }');
     expect(releaseJobs.prebuilds).toContain('runner: ubuntu-22.04-arm }');
     expect(releaseJobs.prebuilds).toContain("macos_target: '13.5'");
@@ -235,6 +253,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
     for (const file of [
       'packages/probe-ink/src/zero-config.test.ts',
       'packages/probe-opentui/src/testing/bun-available.ts',
+      'packages/pty/src/windows-native.win.test.ts',
     ]) {
       const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
       expect(source, file).toContain('test-support/bun-runtime.mjs');

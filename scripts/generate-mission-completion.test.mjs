@@ -6,9 +6,9 @@ describe('mission completion report', () => {
     const report = buildMissionCompletionReport();
 
     expect(report.summary).toEqual({
-      alreadyFixed: 126,
+      alreadyFixed: 127,
       partiallyFixed: 0,
-      obsoleteBecauseArchitectureChanged: 2,
+      obsoleteBecauseArchitectureChanged: 1,
       stillOpen: 0,
       remainingExternalEvidence: 0,
       remainingImplementation: 0,

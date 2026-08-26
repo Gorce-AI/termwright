@@ -25,7 +25,7 @@ What a test may override when launching a program.
 
 > `readonly` `optional` **artifactValuePolicy?**: `"none"` \| `"redacted"` \| `"raw"`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:82
+Defined in: driver/dist/session-BJCkoLyr.d.ts:82
 
 Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in.
 
@@ -39,7 +39,7 @@ Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit op
 
 > `readonly` `optional` **columns?**: `number`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:67
+Defined in: driver/dist/session-BJCkoLyr.d.ts:67
 
 #### Inherited from
 
@@ -61,7 +61,7 @@ Defaults to `config.command`.
 
 > `readonly` `optional` **cwd?**: `string`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:43
+Defined in: driver/dist/session-BJCkoLyr.d.ts:43
 
 #### Inherited from
 
@@ -73,7 +73,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:43
 
 > `readonly` `optional` **debug?**: `boolean`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:51
+Defined in: driver/dist/session-BJCkoLyr.d.ts:51
 
 Streams a live log of API calls, waits, revisions and diagnostics to
 stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
@@ -88,7 +88,7 @@ stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:44
+Defined in: driver/dist/session-BJCkoLyr.d.ts:44
 
 #### Inherited from
 
@@ -100,7 +100,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:44
 
 > `readonly` `optional` **envMode?**: `EnvMode`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:46
+Defined in: driver/dist/session-BJCkoLyr.d.ts:46
 
 Defaults to `'replace'`: a test process's secrets are not the child's.
 
@@ -133,7 +133,7 @@ await terminal.launch({
 
 > `readonly` `optional` **logs?**: readonly `AppLogSource`[]
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:57
+Defined in: driver/dist/session-BJCkoLyr.d.ts:57
 
 Log files to follow for the lifetime of the session. A file that does not
 exist yet is waited for; one that already exists is followed from its
@@ -149,7 +149,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **recording?**: `RecordingOptions`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:80
+Defined in: driver/dist/session-BJCkoLyr.d.ts:80
 
 #### Inherited from
 
@@ -161,7 +161,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:80
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"focus"` \| `"pointer-input"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:93
+Defined in: driver/dist/session-BJCkoLyr.d.ts:93
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`
@@ -177,7 +177,7 @@ before returning a harness when any requirement is missing.
 
 > `readonly` `optional` **rows?**: `number`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:68
+Defined in: driver/dist/session-BJCkoLyr.d.ts:68
 
 #### Inherited from
 
@@ -189,7 +189,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:68
 
 > `readonly` `optional` **scrollbackLines?**: `number`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:77
+Defined in: driver/dist/session-BJCkoLyr.d.ts:77
 
 #### Inherited from
 
@@ -201,7 +201,7 @@ Defined in: driver/dist/session-BGai4ClG.d.ts:77
 
 > `readonly` `optional` **semanticNegotiationMs?**: `number`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:76
+Defined in: driver/dist/session-BJCkoLyr.d.ts:76
 
 Maximum time to discover an optional semantic adapter. Defaults to 2,000
 ms for generic auto-detection. A peer accepted within that window keeps
@@ -219,7 +219,7 @@ the larger of 2,000 ms and the session `ready` timeout.
 
 > `readonly` `optional` **shellIntegration?**: `"external"` \| `"termwright-posix"` \| `"termwright-powershell"`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:87
+Defined in: driver/dist/session-BJCkoLyr.d.ts:87
 
 Termwright-managed modes instrument an interactive shell with exact
 command markers. Test authors should normally use `terminal.openShell()`.
@@ -245,7 +245,7 @@ change only what it is about. `files` are written over it.
 
 > `readonly` `optional` **terminalProfile?**: `string`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:66
+Defined in: driver/dist/session-BJCkoLyr.d.ts:66
 
 Terminal profile: which width tables and which of the switches terminals
 disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
@@ -264,7 +264,7 @@ pane can count characters exactly as the live session did.
 
 > `readonly` `optional` **timeouts?**: `TimeoutClasses`
 
-Defined in: driver/dist/session-BGai4ClG.d.ts:78
+Defined in: driver/dist/session-BJCkoLyr.d.ts:78
 
 #### Inherited from
 

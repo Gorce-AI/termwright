@@ -19,8 +19,76 @@ permissions:
   contents: read
 
 jobs:
+  prebuilds:
+    if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    name: preview PTY prebuild (${{ matrix.platform }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: win32, arch: x64, runner: windows-2022 }
+          - { platform: win32, arch: arm64, runner: windows-11-arm }
+          - { platform: linux, arch: x64, runner: ubuntu-22.04 }
+          - { platform: linux, arch: arm64, runner: ubuntu-22.04-arm }
+          - { platform: darwin, arch: x64, runner: macos-15-intel, macos_target: '13.5' }
+          - { platform: darwin, arch: arm64, runner: macos-15, macos_target: '13.5' }
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: '9.4.0'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: matrix.platform == 'win32'
+        with:
+          bun-version: '1.4.0'
+      - run: pnpm install --frozen-lockfile
+      - name: Compile and verify
+        working-directory: packages/pty
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}
+        run: |
+          pnpm exec node-gyp rebuild --arch=${{ matrix.arch }}
+          if [[ "${{ matrix.platform }}" == "win32" ]]; then
+            node ../../scripts/stage-vendored-conpty.mjs --architecture "${{ matrix.arch }}" --destination build/Release/vendor
+          fi
+          cp build/Release/termwright_pty.node "../pty-${{ matrix.platform }}-${{ matrix.arch }}/termwright_pty.node"
+          node ../../scripts/check-prebuild.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"
+      - name: Exercise the exact preview Windows bundle
+        if: matrix.platform == 'win32'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-preview-pty-packs"
+          install_dir="$RUNNER_TEMP/termwright-preview-pty-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm --dir "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}" pack --pack-destination "$pack_dir"
+          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
+          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
+          verdict="packages/pty-${{ matrix.platform }}-${{ matrix.arch }}/certification-verdict.json"
+          TERMWRIGHT_REQUIRE_BUN=1 node scripts/check-installed-pty.mjs "$install_dir" --verdict "$verdict"
+          node scripts/verify-windows-pty-verdict.mjs "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: preview-pty-${{ matrix.platform }}-${{ matrix.arch }}
+          path: packages/pty-${{ matrix.platform }}-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
   preview:
     if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    needs: prebuilds
     runs-on: ubuntu-latest
     steps:
       - name: Reject workflow reruns
@@ -40,6 +108,25 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: preview-pty-*
+          path: preview-prebuilds
+      - name: Install the exact preview prebuild bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-arm64 win32-x64; do
+            if [[ "$target" == win32-* ]]; then
+              node scripts/verify-windows-pty-verdict.mjs "preview-prebuilds/preview-pty-$target"
+            fi
+            cp "preview-prebuilds/preview-pty-$target/termwright_pty.node" "packages/pty-$target/termwright_pty.node"
+            if [[ "$target" == win32-* ]]; then
+              rm -rf "packages/pty-$target/vendor"
+              cp -R "preview-prebuilds/preview-pty-$target/vendor" "packages/pty-$target/vendor"
+            fi
+          done
+          node scripts/check-prebuild.mjs --all
       - run: pnpm build
 
       # pkg-pr-new serves each package straight from the build, so a reviewer

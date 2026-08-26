@@ -5,7 +5,8 @@ the Termwright-owned `@termwright/pty` N-API backend. Darwin, Linux, and Windows
 arm64/x64 addons share one conditional loader and six prebuild packages. A
 missing or unloadable addon fails closed; no supported platform falls back to
 node-pty. CI certifies real host behavior and the release matrix validates all
-six native artifacts.
+six native artifacts. Windows additionally ships a pinned standalone ConPTY;
+it never falls back to the Windows inbox conhost.
 
 The investigation below is retained as historical decision evidence. Its
 intermediate failures and hypotheses do not describe the current backend.
@@ -184,6 +185,31 @@ Reconsider the backend only with new evidence that another implementation
 preserves the same EOF, ownership, packaging and fail-closed contracts. A
 smaller implementation is useful only if it does not restore timer-based drain
 or weaken tree cleanup.
+
+## Ordered semantic frames: vendored passthrough ConPTY
+
+The legacy inbox conhost invalidated an in-band frame barrier. It rendered text
+through an asynchronous VtEngine frame while passing an unknown OSC marker by
+a different path, so a marker written after text could appear first in the
+output pipe. `CONOUT$` did not repair the contract: its screen-buffer state and
+the emitted VT stream had no shared acknowledgement.
+
+Termwright now pins `Microsoft.Windows.Console.ConPTY` 1.24.260710001. That
+runtime's ConPTY path passes client VT into one ordered output stream without
+the legacy renderer. The addon finds its own module directory, rejects a
+sibling `OpenConsole.exe`, validates the exact DLL and all required native-host
+hashes, loads the DLL by absolute path, verifies the final mapped path, and
+retains one immutable Create/Resize/Close table for every `HPCON`. Missing,
+partial, modified, wrong-export, or wrong-layout bundles fail while the addon
+loads, before application code starts.
+
+This is deliberately a scoped claim: a framework must still flush its own
+output before writing its authenticated marker. The certified guarantee is
+that ConPTY does not reorder those already-issued writes. Node, Bun, legacy
+`WriteConsoleW`, rapid A→B→A frames, alternate screen, pressure, resize, and
+real EOF are tested on x64, ARM64, and x64 Node under ARM64 emulation. The old
+quiet window remains only where explicitly requested as a heuristic; it is not
+evidence for authoritative semantic publication.
 
 ## Remaining platform boundary
 

@@ -222,9 +222,9 @@ export const CLOSE_GRACE_MS = 2_000;
 /** Stable application-facing options accepted by {@link launchTerminal}. */
 export interface LaunchTerminalOptions extends LaunchOptions {
   /**
-   * Whether the child's mouse mode requests are observable. Defaults to the
-   * platform's answer (false under ConPTY). Framework integrations may pin the
-   * value when their transport has stronger knowledge than the host platform.
+   * Whether the child's input-mode requests are observable. Defaults to true
+   * for every certified backend, including pinned passthrough ConPTY. Set false
+   * only for an embedding or synthetic backend that cannot expose DECSET.
    */
   readonly modesObservable?: boolean;
 }

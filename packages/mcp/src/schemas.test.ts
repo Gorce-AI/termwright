@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { modesSchema } from './schemas.js';
 
 /**
- * The mode enums are the one place where a platform difference reaches the
- * schema: on Windows the emulator cannot observe the mouse mode and the driver
- * reports `'unknown'`. macOS and Linux never produce that value, so without a
- * direct test the Windows path is exercised nowhere.
+ * The mode enums retain `'unknown'` for explicit unobservable embeddings.
+ * Certified PTY backends, including Windows, normally publish observed values.
  */
 describe('terminal modes', () => {
   const base = {
@@ -18,7 +16,7 @@ describe('terminal modes', () => {
     synchronizedOutput: false,
   };
 
-  it('accepts an unobservable mouse mode, as ConPTY reports it', () => {
+  it('accepts an unobservable mouse mode from an explicit embedding contract', () => {
     const parsed = modesSchema.safeParse({
       ...base,
       mouseTracking: 'unknown',

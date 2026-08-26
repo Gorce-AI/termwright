@@ -36,9 +36,8 @@ const conditionStates = process.env['TERMWRIGHT_FIXTURE_CONDITIONS'] === '1';
 const duplicateSemanticKey = process.env['TERMWRIGHT_FIXTURE_DUPLICATE_KEY'] === '1';
 const hoverTracking = process.env['TERMWRIGHT_FIXTURE_HOVER'] === '1';
 // Declares the DEC modes this fixture enables below, the way an instrumented
-// application does. ConPTY consumes those sequences before the driver can see
-// them, so on Windows this evidence is the only authoritative source for what
-// the application is actually decoding.
+// application does. An embedding may hide those sequences from the driver, so
+// this evidence can become authoritative for what the application decodes.
 const providerInputModes = process.env['TERMWRIGHT_FIXTURE_INPUT_MODES'] === '1';
 let loaderVisible = process.env['TERMWRIGHT_FIXTURE_LOADER'] === '1';
 // Deliberately malicious provider wire frame. Unlike application SDKs (which

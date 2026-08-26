@@ -435,9 +435,9 @@ export interface TerminalModes {
    *
    * `'none'` means observed off — the child enabled nothing. `'unknown'` means
    * neither the transport nor an explicit production-state provider can prove
-   * it. ConPTY is an emulator, so it
-   * consumes the child's `CSI ? 1000/1002/1006 h` instead of forwarding it, and
-   * the driver never learns what was asked for. The distinction is load-bearing
+   * it. Certified PTY backends, including pinned passthrough ConPTY, preserve
+   * these mode requests; `'unknown'` remains available for embeddings that do
+   * not. The distinction is load-bearing
    * for pointer actions: `'none'` is authoritatively off, while `'unknown'`
    * means Termwright cannot select a protocol without guessing. An explicitly
    * registered production-state provider may supply same-revision evidence;
@@ -459,12 +459,9 @@ export interface TerminalModes {
   /**
    * Whether the child asked for focus in/out reports, or `'unknown'`.
    *
-   * `'unknown'` means the transport's reading says nothing about
-   * the child — which covers both ways the value gets falsified: a request the
-   * terminal swallowed, and a state the terminal added on its own. ConPTY does
-   * the second: it reports focus reporting as enabled for a child that never
-   * asked, so a driver that believes it sends `CSI I` to a program that will
-   * print it. Only an explicit production-state provider may supply the
+   * `'unknown'` means the transport's reading says nothing about the child.
+   * Certified PTY backends preserve focus DECSET; embeddings that cannot do so
+   * must declare the mode unobservable. Only an explicit production-state provider may supply the
    * revision-bound fact; generic children/shadows may not. Observable VT must agree.
    */
   readonly focusReporting: "on" | "off" | "unknown";

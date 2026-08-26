@@ -22,6 +22,8 @@
 #include <thread>
 #include <vector>
 
+#include "windows-conpty-api.h"
+
 namespace termwright {
 
 /// A HANDLE with exactly one owner, closed once.
@@ -115,8 +117,6 @@ class Session {
   bool Start(const SpawnOptions& options, EventSink sink, void* context, std::string* error);
 
   DWORD pid() const { return pid_; }
-  bool release_supported() const { return release_supported_; }
-
   bool Write(const uint8_t* data, size_t length, std::string* error);
   bool Resize(SHORT columns, SHORT rows);
   /// Terminates the whole owned tree. Output keeps flowing until real EOF.
@@ -147,7 +147,7 @@ class Session {
   Handle shutdown_event_;
 
   DWORD pid_ = 0;
-  bool release_supported_ = false;
+  const ConPtyApi* conpty_api_ = nullptr;
 
   std::atomic<State> state_{State::kCreated};
   std::atomic<bool> writer_stop_{false};

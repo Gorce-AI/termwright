@@ -82,6 +82,10 @@ Windows. Its six optional `@termwright/pty-{platform}-{architecture}` packages
 carry the prebuilt native addons selected by the package manager. They are not
 user-facing adapters. Every supported platform deliberately has no fallback
 PTY: a missing or unloadable matching prebuild is an actionable startup error.
+Windows prebuilds also carry a pinned, hash-validated Microsoft ConPTY runtime.
+It is loaded only from the package directory and never falls back to the inbox
+conhost, whose rendered output path cannot provide Termwright's causal semantic
+frame barrier.
 
 Do not import internal `src/` or `dist/` paths. Only package `exports` entries
 are public.

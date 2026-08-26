@@ -31,10 +31,10 @@ emulates every feature of Kitty, iTerm2, or another terminal application.
 
 ## Platform observations
 
-Termwright reports a mode as `unknown` when the PTY host prevents it from
-proving what the child requested. This occurs for some mouse and focus modes on
-Windows ConPTY. It does not convert an unknown mode into a positive or negative
-fact.
+Certified PTY backends, including pinned passthrough ConPTY, expose mouse and
+focus mode changes to Termwright. `unknown` is reserved for an embedding that
+explicitly cannot prove what the child requested; it is never converted into a
+positive or negative fact.
 
 Run `termwright doctor` on the target host and keep OS coverage in the CI
 matrix. The repository's PTY conformance suite exercises escape transport on
