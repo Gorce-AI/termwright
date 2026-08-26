@@ -63,8 +63,11 @@ class PosixSession {
   std::atomic<int> master_{-1};
   int reader_wake_[2] = {-1, -1};
   int writer_wake_[2] = {-1, -1};
+  int lifecycle_wake_[2] = {-1, -1};
   std::atomic<bool> disposed_{false};
   std::atomic<bool> source_ended_{false};
+  std::atomic<bool> tree_gone_{false};
+  std::atomic<bool> tree_probe_closed_{false};
 
   std::thread reader_;
   std::thread writer_;
@@ -76,6 +79,8 @@ class PosixSession {
   uint64_t write_generation_ = 0;
   bool writer_failed_ = false;
   std::string writer_error_;
+
+  mutable std::mutex lifecycle_mutex_;
 
   std::mutex sink_mutex_;
   EventSink sink_ = nullptr;

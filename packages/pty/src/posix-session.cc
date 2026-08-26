@@ -1,6 +1,8 @@
 #include "posix-session.h"
 
 #include <cerrno>
+#include <cstdio>
+#include <cstdlib>
 #include <csignal>
 #include <cstring>
 #include <limits.h>
@@ -12,7 +14,15 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#if defined(__linux__)
+#include <dirent.h>
+#include <sys/syscall.h>
+#endif
+
 #if defined(__APPLE__)
+#include <libproc.h>
+#include <sys/event.h>
+#include <sys/sysctl.h>
 #include <util.h>
 #else
 #include <pty.h>
@@ -22,6 +32,349 @@ namespace termwright {
 namespace {
 
 constexpr size_t kMaximumQueuedWriteBytes = 8 * 1024 * 1024;
+
+#if defined(__APPLE__)
+bool CaptureLiveDarwinProcessGroup(pid_t group, std::vector<pid_t>* pids,
+                                   int* error) {
+  int query[] = {CTL_KERN, KERN_PROC, KERN_PROC_PGRP, group};
+  for (;;) {
+    size_t bytes = 0;
+    if (sysctl(query, 4, nullptr, &bytes, nullptr, 0) == -1) {
+      *error = errno;
+      return false;
+    }
+    std::vector<kinfo_proc> records(bytes / sizeof(kinfo_proc) + 16);
+    bytes = records.size() * sizeof(kinfo_proc);
+    if (sysctl(query, 4, records.data(), &bytes, nullptr, 0) == -1) {
+      if (errno == ENOMEM) continue;
+      *error = errno;
+      return false;
+    }
+    records.resize(bytes / sizeof(kinfo_proc));
+    for (const kinfo_proc& record : records) {
+      const pid_t candidate = record.kp_proc.p_pid;
+      if (candidate <= 0 || candidate == group ||
+          record.kp_proc.p_stat == SZOMB) {
+        continue;
+      }
+      pids->push_back(candidate);
+    }
+    return true;
+  }
+}
+
+bool DrainDarwinProcessGroup(pid_t group, int wake_descriptor, int* error) {
+  for (;;) {
+    if (kill(-group, SIGKILL) == -1) {
+      const int code = errno;
+      if (code == ESRCH) return true;
+      if (code != EPERM) {
+        *error = code;
+        return false;
+      }
+    }
+
+    std::vector<pid_t> pids;
+    if (!CaptureLiveDarwinProcessGroup(group, &pids, error)) return false;
+    if (pids.empty()) return true;
+
+    const int queue = kqueue();
+    if (queue == -1) {
+      *error = errno;
+      return false;
+    }
+    struct kevent wake_change;
+    EV_SET(&wake_change, static_cast<uintptr_t>(wake_descriptor), EVFILT_READ,
+           EV_ADD | EV_ENABLE, 0, 0, nullptr);
+    if (kevent(queue, &wake_change, 1, nullptr, 0, nullptr) == -1) {
+      *error = errno;
+      close(queue);
+      return false;
+    }
+
+    size_t observed = 0;
+    bool all_exiting = true;
+    for (pid_t candidate : pids) {
+      struct kevent process_change;
+      EV_SET(&process_change, static_cast<uintptr_t>(candidate), EVFILT_PROC,
+             EV_ADD | EV_ENABLE | EV_ONESHOT, NOTE_EXIT, 0, nullptr);
+      if (kevent(queue, &process_change, 1, nullptr, 0, nullptr) == -1) {
+        if (errno == ESRCH) continue;
+        *error = errno;
+        close(queue);
+        return false;
+      }
+
+      // EV_ADD pins the proc object before this membership check. A PID reused
+      // between sysctl and registration therefore cannot make us wait on a
+      // foreign process.
+      proc_bsdinfo info{};
+      errno = 0;
+      const int info_bytes = proc_pidinfo(candidate, PROC_PIDTBSDINFO, 0,
+                                          &info, sizeof(info));
+      if (info_bytes == static_cast<int>(sizeof(info)) &&
+          info.pbi_pid == static_cast<uint32_t>(candidate) &&
+          info.pbi_pgid == static_cast<uint32_t>(group)) {
+        observed += 1;
+        all_exiting = all_exiting &&
+                      (info.pbi_status == SZOMB ||
+                       (info.pbi_flags & PROC_FLAG_INEXIT) != 0);
+        continue;
+      }
+      if (info_bytes <= 0 && errno != 0 && errno != ESRCH) {
+        *error = errno;
+        close(queue);
+        return false;
+      }
+      if (info_bytes > 0 && info_bytes != static_cast<int>(sizeof(info))) {
+        *error = EIO;
+        close(queue);
+        return false;
+      }
+      struct kevent remove_change;
+      EV_SET(&remove_change, static_cast<uintptr_t>(candidate), EVFILT_PROC,
+             EV_DELETE, 0, 0, nullptr);
+      if (kevent(queue, &remove_change, 1, nullptr, 0, nullptr) == -1 &&
+          errno != ENOENT && errno != ESRCH) {
+        *error = errno;
+        close(queue);
+        return false;
+      }
+    }
+    if (observed == 0) {
+      close(queue);
+      continue;
+    }
+
+    // Close the fork-after-first-signal window only after every observed proc
+    // identity is pinned. A captured parent cannot fork indefinitely after
+    // this signal; its NOTE_EXIT causally advances us to the next rescan.
+    if (kill(-group, SIGKILL) == -1) {
+      const int code = errno;
+      if (code == ESRCH) {
+        close(queue);
+        continue;
+      }
+      if (code != EPERM || !all_exiting) {
+        close(queue);
+        *error = code;
+        return false;
+      }
+    }
+
+    struct kevent event;
+    int ready;
+    do {
+      ready = kevent(queue, nullptr, 0, &event, 1, nullptr);
+    } while (ready == -1 && errno == EINTR);
+    if (ready == -1) {
+      *error = errno;
+      close(queue);
+      return false;
+    }
+    close(queue);
+    if ((event.flags & EV_ERROR) != 0) {
+      *error = event.data == 0 ? EIO : static_cast<int>(event.data);
+      return false;
+    }
+    if (event.filter == EVFILT_READ &&
+        event.ident == static_cast<uintptr_t>(wake_descriptor)) {
+      *error = ECANCELED;
+      return false;
+    }
+    if (event.filter != EVFILT_PROC || (event.fflags & NOTE_EXIT) == 0) {
+      *error = EIO;
+      return false;
+    }
+    // Re-signal and rescan. Kernel exit events, not elapsed quiet, advance
+    // this fixed point and close the fork-during-kill race.
+  }
+}
+#endif
+
+#if defined(__linux__)
+bool CaptureLiveLinuxProcessGroup(pid_t group, std::vector<int>* pidfds, int* error) {
+  DIR* processes = opendir("/proc");
+  if (processes == nullptr) {
+    *error = errno;
+    return false;
+  }
+
+  for (;;) {
+    errno = 0;
+    dirent* entry = readdir(processes);
+    if (entry == nullptr) {
+      if (errno == 0) break;
+      *error = errno;
+      for (int descriptor : *pidfds) close(descriptor);
+      pidfds->clear();
+      closedir(processes);
+      return false;
+    }
+    char* end = nullptr;
+    const long candidate = std::strtol(entry->d_name, &end, 10);
+    if (candidate <= 0 || end == entry->d_name || *end != '\0') continue;
+
+#if defined(SYS_pidfd_open)
+    const int descriptor = static_cast<int>(syscall(SYS_pidfd_open, candidate, 0));
+#else
+    const int descriptor = -1;
+    errno = ENOSYS;
+#endif
+    if (descriptor < 0) {
+      if (errno == ESRCH) continue;
+      *error = errno;
+      for (int opened : *pidfds) close(opened);
+      pidfds->clear();
+      closedir(processes);
+      return false;
+    }
+
+    const std::string path = "/proc/" + std::to_string(candidate) + "/stat";
+    FILE* stat = std::fopen(path.c_str(), "r");
+    if (stat == nullptr) {
+      const int code = errno;
+      close(descriptor);
+      if (code == ENOENT) continue;
+      *error = code;
+      for (int descriptor : *pidfds) close(descriptor);
+      pidfds->clear();
+      closedir(processes);
+      return false;
+    }
+    char record[4096];
+    errno = 0;
+    const bool read = std::fgets(record, sizeof(record), stat) != nullptr;
+    const int read_error = errno;
+    std::fclose(stat);
+    if (!read) {
+      close(descriptor);
+      *error = read_error == 0 ? EIO : read_error;
+      for (int descriptor : *pidfds) close(descriptor);
+      pidfds->clear();
+      closedir(processes);
+      return false;
+    }
+
+    // comm is parenthesized but may itself contain ')', so fields after it
+    // begin at the final closing parenthesis: state, parent pid, process group.
+    const char* closing = std::strrchr(record, ')');
+    char state = '\0';
+    int parent = 0;
+    int process_group = 0;
+    if (closing == nullptr ||
+        std::sscanf(closing + 2, "%c %d %d", &state, &parent, &process_group) != 3) {
+      close(descriptor);
+      *error = EPROTO;
+      for (int descriptor : *pidfds) close(descriptor);
+      pidfds->clear();
+      closedir(processes);
+      return false;
+    }
+    (void)parent;
+    if (process_group != group) {
+      close(descriptor);
+      continue;
+    }
+    if (state == 'Z' || state == 'X' || state == 'x') {
+      pollfd completion = {descriptor, static_cast<short>(POLLIN | POLLHUP), 0};
+      int ready;
+      do {
+        ready = poll(&completion, 1, 0);
+      } while (ready == -1 && errno == EINTR);
+      if (ready == -1 ||
+          (ready > 0 && (completion.revents & (POLLERR | POLLNVAL)) != 0)) {
+        *error = ready == -1 ? errno : EIO;
+        close(descriptor);
+        for (int opened : *pidfds) close(opened);
+        pidfds->clear();
+        closedir(processes);
+        return false;
+      }
+      if (ready > 0 && (completion.revents & (POLLIN | POLLHUP)) != 0) {
+        close(descriptor);
+        continue;
+      }
+    }
+    // A dead thread-group leader can coexist with live worker threads. Its
+    // pidfd remains unreadable until the last thread exits, so retain it even
+    // when /proc reports Z/X unless readiness proved group-wide completion.
+    pidfds->push_back(descriptor);
+  }
+  if (closedir(processes) != 0) {
+    *error = errno;
+    for (int descriptor : *pidfds) close(descriptor);
+    pidfds->clear();
+    return false;
+  }
+  return true;
+}
+
+bool DrainLinuxProcessGroup(pid_t group, int wake_descriptor, int* error) {
+  for (;;) {
+    if (kill(-group, SIGKILL) == -1 && errno != ESRCH) {
+      *error = errno;
+      return false;
+    }
+    std::vector<int> pidfds;
+    if (!CaptureLiveLinuxProcessGroup(group, &pidfds, error)) return false;
+    if (pidfds.empty()) return true;
+
+    if (kill(-group, SIGKILL) == -1) {
+      const int code = errno;
+      for (int descriptor : pidfds) close(descriptor);
+      if (code == ESRCH) continue;
+      *error = code;
+      return false;
+    }
+
+    std::vector<pollfd> observations;
+    observations.reserve(pidfds.size() + 1);
+    for (int descriptor : pidfds) observations.push_back({descriptor, POLLIN, 0});
+    const size_t process_count = observations.size();
+    observations.push_back({wake_descriptor, POLLIN, 0});
+    size_t remaining = process_count;
+    while (remaining > 0) {
+      int ready;
+      do {
+        ready = poll(observations.data(), observations.size(), -1);
+      } while (ready == -1 && errno == EINTR);
+      if (ready == -1) {
+        *error = errno;
+        for (size_t index = 0; index < process_count; index += 1) {
+          if (observations[index].fd >= 0) close(observations[index].fd);
+        }
+        return false;
+      }
+      if (observations[process_count].revents != 0) {
+        *error = ECANCELED;
+        for (size_t index = 0; index < process_count; index += 1) {
+          if (observations[index].fd >= 0) close(observations[index].fd);
+        }
+        return false;
+      }
+      for (size_t index = 0; index < process_count; index += 1) {
+        pollfd& observation = observations[index];
+        if (observation.fd < 0 || observation.revents == 0) continue;
+        if ((observation.revents & (POLLERR | POLLNVAL)) != 0 ||
+            (observation.revents & (POLLIN | POLLHUP)) == 0) {
+          *error = EIO;
+          for (size_t pending = 0; pending < process_count; pending += 1) {
+            if (observations[pending].fd >= 0) close(observations[pending].fd);
+          }
+          return false;
+        }
+        close(observation.fd);
+        observation.fd = -1;
+        remaining -= 1;
+      }
+    }
+    // A member could have forked between the group signal and the first
+    // snapshot. Keep the unreaped root as the PGID owner and rescan until no
+    // executable task remains; pidfd readiness, not elapsed quiet, is proof.
+  }
+}
+#endif
 
 std::string ErrnoMessage(const char* operation, int code) {
   return std::string(operation) + " failed: " + std::strerror(code) +
@@ -149,6 +502,7 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
   if (!CreateCloseOnExecPipe(exec_status, error) ||
       !CreateCloseOnExecPipe(reader_wake_, error) ||
       !CreateCloseOnExecPipe(writer_wake_, error) ||
+      !CreateCloseOnExecPipe(lifecycle_wake_, error) ||
       !SetNonblocking(writer_wake_[0], error) ||
       !SetNonblocking(writer_wake_[1], error)) {
     CloseDescriptor(&exec_status[0]);
@@ -157,6 +511,8 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
     CloseDescriptor(&reader_wake_[1]);
     CloseDescriptor(&writer_wake_[0]);
     CloseDescriptor(&writer_wake_[1]);
+    CloseDescriptor(&lifecycle_wake_[0]);
+    CloseDescriptor(&lifecycle_wake_[1]);
     return false;
   }
 
@@ -177,6 +533,8 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
     CloseDescriptor(&reader_wake_[1]);
     CloseDescriptor(&writer_wake_[0]);
     CloseDescriptor(&writer_wake_[1]);
+    CloseDescriptor(&lifecycle_wake_[0]);
+    CloseDescriptor(&lifecycle_wake_[1]);
     *error = ErrnoMessage("forkpty", code);
     return false;
   }
@@ -187,6 +545,8 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
     close(reader_wake_[1]);
     close(writer_wake_[0]);
     close(writer_wake_[1]);
+    close(lifecycle_wake_[0]);
+    close(lifecycle_wake_[1]);
     if (!options.cwd.empty() && chdir(options.cwd.c_str()) != 0) {
       const int code = errno;
       (void)write(exec_status[1], &code, sizeof(code));
@@ -215,6 +575,8 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
     CloseDescriptor(&reader_wake_[1]);
     CloseDescriptor(&writer_wake_[0]);
     CloseDescriptor(&writer_wake_[1]);
+    CloseDescriptor(&lifecycle_wake_[0]);
+    CloseDescriptor(&lifecycle_wake_[1]);
     *error = ErrnoMessage("execve", exec_error);
     return false;
   }
@@ -229,6 +591,8 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
     CloseDescriptor(&reader_wake_[1]);
     CloseDescriptor(&writer_wake_[0]);
     CloseDescriptor(&writer_wake_[1]);
+    CloseDescriptor(&lifecycle_wake_[0]);
+    CloseDescriptor(&lifecycle_wake_[1]);
     *error = ErrnoMessage("read(exec status)", code);
     return false;
   }
@@ -246,6 +610,8 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
     CloseDescriptor(&reader_wake_[1]);
     CloseDescriptor(&writer_wake_[0]);
     CloseDescriptor(&writer_wake_[1]);
+    CloseDescriptor(&lifecycle_wake_[0]);
+    CloseDescriptor(&lifecycle_wake_[1]);
     *error = ErrnoMessage("configure PTY master", code);
     return false;
   }
@@ -438,31 +804,63 @@ void PosixSession::WaitForRootExit() {
     observed = waitid(P_PID, static_cast<id_t>(pid_), &observation, WEXITED | WNOWAIT);
   } while (observed == -1 && errno == EINTR);
   if (observed == -1) {
-    EmitError("waitid(WNOWAIT)", errno);
+    const int wait_error = errno;
+    {
+      std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+      tree_probe_closed_.store(true);
+    }
+    EmitError("waitid(WNOWAIT)", wait_error);
     return;
   }
 
   // The root is known to have exited but remains unreaped here, so its PID
   // and process-group id cannot be reused. Kill remaining group members at
   // this boundary, then reap the root.
-  if (kill(-pid_, SIGKILL) == -1 && errno != ESRCH) {
+  const int killed = kill(-pid_, SIGKILL);
+  const int kill_error = killed == -1 ? errno : 0;
+  if (killed == -1 && kill_error != ESRCH) {
 #if defined(__APPLE__)
-    // Darwin reports EPERM when the process group contains only its unreaped
-    // zombie leader. Any live descendant created by this child has the same
-    // credentials, so killpg succeeds if there is a signalable member. At
-    // this exact WNOWAIT boundary EPERM therefore means there was no live
-    // descendant to terminate; it is not an ownership failure.
-    if (errno != EPERM) EmitError("kill(process group)", errno);
+    // Darwin may report EPERM when only the unreaped zombie leader remains.
+    // The causal drain below distinguishes that case from an unsignalable
+    // live member with a process-group snapshot before caching tree absence.
+    if (kill_error != EPERM) EmitError("kill(process group)", kill_error);
 #else
-    EmitError("kill(process group)", errno);
+    EmitError("kill(process group)", kill_error);
 #endif
   }
 
+#if defined(__linux__)
+  if (killed == 0 || kill_error == ESRCH) {
+    int drain_error = 0;
+    if (DrainLinuxProcessGroup(pid_, lifecycle_wake_[0], &drain_error)) {
+      tree_gone_.store(true);
+    } else if (drain_error != ECANCELED || !disposed_.load()) {
+      EmitError("drain(PTY process group)", drain_error);
+    }
+  }
+#elif defined(__APPLE__)
+  if (killed == 0 || kill_error == EPERM || kill_error == ESRCH) {
+    int drain_error = 0;
+    if (DrainDarwinProcessGroup(pid_, lifecycle_wake_[0], &drain_error)) {
+      tree_gone_.store(true);
+    } else if (drain_error != ECANCELED || !disposed_.load()) {
+      EmitError("drain(PTY process group)", drain_error);
+    }
+  }
+#endif
+
   int status = 0;
   pid_t waited;
-  do {
-    waited = waitpid(pid_, &status, 0);
-  } while (waited == -1 && errno == EINTR);
+  {
+    // Serialize the last owned numeric-PGID operation with public signal and
+    // dispose calls. Once this flag is visible, waitpid may release the PID,
+    // but no caller can act on its number again.
+    std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+    tree_probe_closed_.store(true);
+    do {
+      waited = waitpid(pid_, &status, 0);
+    } while (waited == -1 && errno == EINTR);
+  }
   if (waited == -1) {
     EmitError("waitpid", errno);
     return;
@@ -517,7 +915,9 @@ bool PosixSession::Resize(unsigned short columns, unsigned short rows) {
 }
 
 int PosixSession::Signal(int signal) {
+  std::lock_guard<std::mutex> lock(lifecycle_mutex_);
   if (pid_ <= 0 || disposed_.load()) return EBADF;
+  if (tree_probe_closed_.load()) return tree_gone_.load() ? 0 : EIO;
   if (kill(-pid_, signal) == 0) return 0;
   const int code = errno;
   // A process group that is already gone satisfies the lifecycle request.
@@ -528,7 +928,10 @@ int PosixSession::Signal(int signal) {
 }
 
 int PosixSession::TreeState() const {
+  std::lock_guard<std::mutex> lock(lifecycle_mutex_);
   if (pid_ <= 0) return -1;
+  if (tree_gone_.load()) return 0;
+  if (tree_probe_closed_.load()) return -1;
   if (kill(-pid_, 0) == 0) return 1;
   if (errno == ESRCH) return 0;
   if (errno == EPERM) return 1;
@@ -582,14 +985,24 @@ void PosixSession::Emit(PosixSessionEvent event) {
 void PosixSession::Dispose() {
   if (disposed_.exchange(true)) return;
 
-  if (pid_ > 0) {
-    if (kill(-pid_, SIGHUP) == -1 && errno != ESRCH) {
-      EmitError("hang up process group", errno);
-    }
-    if (kill(-pid_, SIGKILL) == -1 && errno != ESRCH) {
-      EmitError("terminate process group", errno);
+  // Wake a Linux pidfd or Darwin kqueue drain before waiting for its ownership
+  // transition.
+  Wake(lifecycle_wake_[1]);
+  int hangup_error = 0;
+  int terminate_error = 0;
+  {
+    std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+    if (pid_ > 0 && !tree_probe_closed_.load()) {
+      if (kill(-pid_, SIGHUP) == -1 && errno != ESRCH) {
+        hangup_error = errno;
+      }
+      if (kill(-pid_, SIGKILL) == -1 && errno != ESRCH) {
+        terminate_error = errno;
+      }
     }
   }
+  if (hangup_error != 0) EmitError("hang up process group", hangup_error);
+  if (terminate_error != 0) EmitError("terminate process group", terminate_error);
   Wake(reader_wake_[1]);
   Wake(writer_wake_[1]);
   {
@@ -611,6 +1024,8 @@ void PosixSession::Dispose() {
   CloseDescriptor(&reader_wake_[1]);
   CloseDescriptor(&writer_wake_[0]);
   CloseDescriptor(&writer_wake_[1]);
+  CloseDescriptor(&lifecycle_wake_[0]);
+  CloseDescriptor(&lifecycle_wake_[1]);
 
   std::lock_guard<std::mutex> lock(sink_mutex_);
   sink_ = nullptr;
