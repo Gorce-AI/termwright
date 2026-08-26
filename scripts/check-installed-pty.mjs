@@ -263,6 +263,10 @@ if (process.platform === 'win32') {
   console.log('[pty-cert] causal-resize');
   const resizing = collect([
     'process.stdin.setRawMode?.(true);',
+    'process.stdout.once("resize", () => {',
+    '  const [columns, rows] = process.stdout.getWindowSize();',
+    '  process.stdout.write("RESIZED:" + columns + "x" + rows);',
+    '});',
     'process.stdin.once("data", () => {',
     '  const [columns, rows] = process.stdout.getWindowSize();',
     '  process.stdout.write("SIZE:" + columns + "x" + rows);',
@@ -273,6 +277,7 @@ if (process.platform === 'win32') {
   ].join(''));
   await waitForText(resizing, 'RESIZE-READY');
   if (!resizing.session.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
+  await waitForText(resizing, 'RESIZED:120x40');
   resizing.session.write(Buffer.from('R'));
   await resizing.session.outputEnded;
   const resizeValid = resizing.text().includes('SIZE:120x40') && resizing.session.sawRealEof;
@@ -294,12 +299,21 @@ if (process.platform === 'win32') {
 }
 function waitForText({ session, text }, marker) {
   if (text().includes(marker)) return Promise.resolve();
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    let settled = false;
     const release = session.onData(() => {
-      if (!text().includes(marker)) return;
+      if (settled || !text().includes(marker)) return;
+      settled = true;
       release();
       resolve();
     });
+    session.outputEnded.then(() => {
+      if (settled) return;
+      settled = true;
+      release();
+      if (text().includes(marker)) resolve();
+      else reject(new Error('session ended before causal marker ' + JSON.stringify(marker)));
+    }, reject);
   });
 }
 
