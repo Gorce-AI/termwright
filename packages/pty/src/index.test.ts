@@ -255,31 +255,40 @@ describe("the Termwright-owned native PTY flow control", () => {
   });
 
   it("delivers the final tail after a pressure burst through the bounded native-to-JS channel", async () => {
-    const bytes = 16 * 1024 * 1024;
+    const frameCount = 4096;
+    const framePayloadBytes = 4096;
     const session = collect(node([
       "const fs = require('node:fs');",
-      `const block = Buffer.alloc(${bytes}, 0x70);`,
-      "let offset = 0;",
-      "while (offset < block.length) offset += fs.writeSync(1, block, offset);",
+      `const payload = Buffer.alloc(${framePayloadBytes}, 0x71);`,
+      `for (let index = 0; index < ${frameCount}; index += 1) {`,
+      "fs.writeSync(1, Buffer.from('\\x1b]8486;TW_PRESSURE;' + index.toString(16).padStart(8, '0') + ';'));",
+      "fs.writeSync(1, payload);",
+      "fs.writeSync(1, Buffer.from('\\x07'));",
+      "}",
       "fs.writeSync(1, Buffer.from('PRESSURE_SENTINEL'));",
     ].join("")));
     await Promise.all([session.exit, session.handle.outputEnded]);
     const output = Buffer.concat(session.chunks);
+    const prefix = Buffer.from("\x1b]8486;TW_PRESSURE;");
     const sentinel = Buffer.from("PRESSURE_SENTINEL");
-    if (process.platform === "win32") {
-      // ConPTY is a terminal renderer, not a transparent byte pipe: wrapping
-      // a long row adds VT cursor traffic. Count the payload byte itself and
-      // require the ordered tail instead of mistaking valid VT for corruption.
-      expect(output.reduce((count, byte) => count + (byte === 0x70 ? 1 : 0), 0)).toBe(bytes);
-      const sentinelIndex = output.indexOf(sentinel);
-      expect(sentinelIndex).toBeGreaterThanOrEqual(0);
-      expect(sentinelIndex).toBe(output.lastIndexOf(sentinel));
-      expect(output.lastIndexOf(0x70)).toBeLessThan(sentinelIndex);
-    } else {
-      expect(output.length).toBe(bytes + sentinel.length);
-      expect(output.subarray(0, bytes).every((byte) => byte === 0x70)).toBe(true);
-      expect(output.subarray(bytes).equals(sentinel)).toBe(true);
+    let cursor = 0;
+    for (let index = 0; index < frameCount; index += 1) {
+      const start = output.indexOf(prefix, cursor);
+      expect(start).toBeGreaterThanOrEqual(cursor);
+      const end = output.indexOf(0x07, start + prefix.length);
+      expect(end).toBeGreaterThan(start);
+      const body = output.subarray(start + prefix.length, end);
+      expect(body.subarray(0, 9).toString("ascii")).toBe(
+        `${index.toString(16).padStart(8, "0")};`,
+      );
+      expect(body.length).toBe(9 + framePayloadBytes);
+      expect(body.subarray(9).every((byte) => byte === 0x71)).toBe(true);
+      cursor = end + 1;
     }
+    expect(output.indexOf(prefix, cursor)).toBe(-1);
+    const sentinelIndex = output.indexOf(sentinel, cursor);
+    expect(sentinelIndex).toBeGreaterThanOrEqual(cursor);
+    expect(sentinelIndex).toBe(output.lastIndexOf(sentinel));
     expect(session.handle.sawRealEof).toBe(true);
     session.handle.dispose();
   });

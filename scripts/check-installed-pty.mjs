@@ -131,30 +131,46 @@ if (!draining.text().includes('INPUT_DRAINED') || !draining.session.sawRealEof) 
 }
 draining.session.dispose();
 
-// Saturate the bounded native-to-JavaScript path and prove the final byte is
-// delivered before EOF. This guards the prebuild's thread/channel behavior.
-const pressureBytes = 16 * 1024 * 1024;
+// Drive a burst several times larger than the bounded native-to-JavaScript
+// queue's maximum represented byte volume and prove every framed application
+// payload plus the final tail is delivered before EOF. Queue occupancy is an
+// implementation detail; this certifies the observable lossless contract.
+const pressureFrameCount = 4096;
+const pressureFrameBytes = 4096;
 console.log('[pty-cert] output-pressure');
 const pressure = collect([
   'const fs = require("node:fs");',
-  'const block = Buffer.alloc(' + pressureBytes + ', 0x70);',
-  'let offset = 0;',
-  'while (offset < block.length) offset += fs.writeSync(1, block, offset);',
+  'const payload = Buffer.alloc(' + pressureFrameBytes + ', 0x71);',
+  'for (let index = 0; index < ' + pressureFrameCount + '; index += 1) {',
+  'fs.writeSync(1, Buffer.from("\\x1b]8486;TW_PRESSURE;" + index.toString(16).padStart(8, "0") + ";"));',
+  'fs.writeSync(1, payload);',
+  'fs.writeSync(1, Buffer.from("\\x07"));',
+  '}',
   'fs.writeSync(1, Buffer.from("PRESSURE_SENTINEL"));',
 ].join(''));
 await pressure.session.outputEnded;
 const pressureOutput = Buffer.concat(pressure.output);
+const pressurePrefix = Buffer.from('\x1b]8486;TW_PRESSURE;');
 const pressureSentinel = Buffer.from('PRESSURE_SENTINEL');
-const sentinelIndex = pressureOutput.indexOf(pressureSentinel);
-const windowsPressureValid = process.platform === 'win32' &&
-  pressureOutput.reduce((count, byte) => count + (byte === 0x70 ? 1 : 0), 0) === pressureBytes &&
-  sentinelIndex >= 0 && sentinelIndex === pressureOutput.lastIndexOf(pressureSentinel) &&
-  pressureOutput.lastIndexOf(0x70) < sentinelIndex;
-const posixPressureValid = process.platform !== 'win32' &&
-  pressureOutput.length === pressureBytes + pressureSentinel.length &&
-  pressureOutput.subarray(0, pressureBytes).every((byte) => byte === 0x70) &&
-  pressureOutput.subarray(pressureBytes).equals(pressureSentinel);
-if ((!windowsPressureValid && !posixPressureValid) || !pressure.session.sawRealEof) {
+let pressureCursor = 0;
+let pressureValid = true;
+for (let index = 0; index < pressureFrameCount; index += 1) {
+  const start = pressureOutput.indexOf(pressurePrefix, pressureCursor);
+  const end = start < 0 ? -1 : pressureOutput.indexOf(0x07, start + pressurePrefix.length);
+  const body = end < 0 ? Buffer.alloc(0) : pressureOutput.subarray(start + pressurePrefix.length, end);
+  const header = index.toString(16).padStart(8, '0') + ';';
+  if (start < pressureCursor || end <= start || body.length !== 9 + pressureFrameBytes ||
+      body.subarray(0, 9).toString('ascii') !== header ||
+      !body.subarray(9).every((byte) => byte === 0x71)) {
+    pressureValid = false;
+    break;
+  }
+  pressureCursor = end + 1;
+}
+const sentinelIndex = pressureOutput.indexOf(pressureSentinel, pressureCursor);
+pressureValid &&= pressureOutput.indexOf(pressurePrefix, pressureCursor) === -1 &&
+  sentinelIndex >= pressureCursor && sentinelIndex === pressureOutput.lastIndexOf(pressureSentinel);
+if (!pressureValid || !pressure.session.sawRealEof) {
   console.error('the installed addon lost its final output under channel pressure');
   process.exit(8);
 }
