@@ -12,13 +12,14 @@
  */
 
 import { createRequire } from "node:module";
+import { NativeWriteDrainEpoch } from "./write-drain-epoch.js";
 
 /** Ordered messages the native session emits. Data always precedes the end. */
 type NativeEvent =
   | { readonly type: "data"; readonly data: Buffer }
   | { readonly type: "exit"; readonly exitCode: number }
   | { readonly type: "eof"; readonly code: number }
-  | { readonly type: "drain" }
+  | { readonly type: "drain"; readonly generation: bigint }
   | { readonly type: "notice"; readonly message: string }
   | { readonly type: "error"; readonly message: string; readonly code: number };
 
@@ -47,11 +48,9 @@ interface NativeBindingConstructor {
 
 interface LoadedWindowsBinding {
   readonly ConPtySession: NativeBindingConstructor;
-  readonly captureConsoleSnapshotPoc: () => unknown;
 }
 
 let cachedBinding: LoadedWindowsBinding | undefined;
-let cachedBindingPath: string | undefined;
 
 /**
  * Where the addon is looked for, in order.
@@ -82,7 +81,6 @@ export function loadWindowsBinding(): LoadedWindowsBinding {
     try {
       const resolved = require.resolve(candidate);
       cachedBinding = require(resolved) as LoadedWindowsBinding;
-      cachedBindingPath = resolved;
       return cachedBinding;
     } catch (error) {
       // Kept per candidate. "No addon" is the same sentence whether the
@@ -97,15 +95,6 @@ export function loadWindowsBinding(): LoadedWindowsBinding {
   throw new Error(
     `no termwright ConPTY addon could be loaded for win32-${process.arch}. Tried:\n  ${attempts.join("\n  ")}`,
   );
-}
-
-/** Absolute addon path for child-side, Windows-only native experiments. */
-export function loadedWindowsBindingPath(): string {
-  loadWindowsBinding();
-  if (cachedBindingPath === undefined) {
-    throw new Error("the loaded Windows binding has no resolved path");
-  }
-  return cachedBindingPath;
 }
 
 let unavailableReason: string | undefined;
@@ -266,6 +255,7 @@ export function spawnWindowsPty(
   let ended = false;
   let endReason: number | undefined;
   let disposed = false;
+  const writeEpoch = new NativeWriteDrainEpoch();
   const notices: string[] = [];
   const NOTICE_LIMIT = 64;
 
@@ -297,6 +287,7 @@ export function spawnWindowsPty(
           resolveEnded?.();
           return;
         case "drain":
+          if (!writeEpoch.isCurrent(event.generation)) return;
           for (const listener of [...drainListeners]) listener();
           return;
         case "notice":
@@ -337,7 +328,8 @@ export function spawnWindowsPty(
     outputEnded,
     write(data: Uint8Array): void {
       if (disposed) throw new Error("ConPTY input is closed");
-      session.write(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
+      const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      writeEpoch.admit(bytes, (admitted) => session.write(admitted));
     },
     resize(columns: number, rows: number): boolean {
       return disposed ? false : session.resize(columns, rows);

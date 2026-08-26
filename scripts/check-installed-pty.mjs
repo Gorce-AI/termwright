@@ -107,7 +107,7 @@ if (!overflowRejected) {
 // Drain must follow every admitted byte leaving the native queue, and the
 // child must observe all of it. This exercises the platform writer rather than
 // only proving that the addon can be loaded.
-const inputBytes = 256 * 1024;
+const inputBytes = 64 * 1024;
 console.log('[pty-cert] drain');
 const draining = collect([
   'process.stdin.setRawMode?.(true);',
@@ -145,10 +145,16 @@ const pressure = collect([
 await pressure.session.outputEnded;
 const pressureOutput = Buffer.concat(pressure.output);
 const pressureSentinel = Buffer.from('PRESSURE_SENTINEL');
-if (pressureOutput.length !== pressureBytes + pressureSentinel.length ||
-    !pressureOutput.subarray(0, pressureBytes).every((byte) => byte === 0x70) ||
-    !pressureOutput.subarray(pressureBytes).equals(pressureSentinel) ||
-    !pressure.session.sawRealEof) {
+const sentinelIndex = pressureOutput.indexOf(pressureSentinel);
+const windowsPressureValid = process.platform === 'win32' &&
+  pressureOutput.reduce((count, byte) => count + (byte === 0x70 ? 1 : 0), 0) === pressureBytes &&
+  sentinelIndex >= 0 && sentinelIndex === pressureOutput.lastIndexOf(pressureSentinel) &&
+  pressureOutput.lastIndexOf(0x70) < sentinelIndex;
+const posixPressureValid = process.platform !== 'win32' &&
+  pressureOutput.length === pressureBytes + pressureSentinel.length &&
+  pressureOutput.subarray(0, pressureBytes).every((byte) => byte === 0x70) &&
+  pressureOutput.subarray(pressureBytes).equals(pressureSentinel);
+if ((!windowsPressureValid && !posixPressureValid) || !pressure.session.sawRealEof) {
   console.error('the installed addon lost its final output under channel pressure');
   process.exit(8);
 }

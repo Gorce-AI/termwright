@@ -1,5 +1,6 @@
-# actionlint 1.7.7 predates GitHub's hosted Intel alias. Declaring the label
-# here extends its static catalogue; this is still a GitHub-hosted runner.
+# actionlint 1.7.7 predates these GitHub-hosted labels. Declaring them here
+# extends its static catalogue; neither label represents a self-hosted runner.
 self-hosted-runner:
   labels:
     - macos-15-intel
+    - windows-11-arm

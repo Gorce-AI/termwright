@@ -183,6 +183,8 @@
         ["packages/pty/src/index.test.ts", "fails before forking when a bare executable is absent from PATH"],
         ["packages/pty/src/index.test.ts", "delivers a megabyte tail and its sentinel before authoritative EOF"],
         ["packages/pty/src/index.test.ts", "writes exact bytes through the owned master"],
+        ["packages/pty/src/index.test.ts", "does not lose a wake while many small writes race the writer"],
+        ["packages/pty/src/index.test.ts", "keeps a backpressured write healthy when later input wakes its poll"],
         ["packages/pty/src/index.test.ts", "changes the kernel PTY size without a scheduling delay"],
         ["packages/pty/src/index.test.ts", "reports a delivered signal and drains the terminal to EOF"],
         ["packages/pty/src/index.test.ts", "cancels a silent live session through owned wake descriptors"],

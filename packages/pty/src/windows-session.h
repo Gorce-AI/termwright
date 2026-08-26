@@ -15,6 +15,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <string>
@@ -74,6 +75,7 @@ struct SessionEvent {
   DWORD exit_code = 0;        // kExit
   std::string message;        // kError
   DWORD last_error = 0;       // kError
+  uint64_t write_generation = 0;  // kDrain
 };
 
 struct SpawnOptions {
@@ -162,6 +164,7 @@ class Session {
   std::condition_variable write_signal_;
   std::deque<std::vector<uint8_t>> write_queue_;
   size_t queued_write_bytes_ = 0;
+  uint64_t write_generation_ = 0;
   bool writer_failed_ = false;
   std::string writer_error_;
 

@@ -742,6 +742,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
 
       # `vite build` produces dist/app, which the server serves. Without it the
       # browser would load nothing and every assertion would fail on an empty

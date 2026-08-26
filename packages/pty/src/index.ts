@@ -12,12 +12,13 @@ import {
   windowsPtyAvailable,
   windowsPtyUnavailableReason,
 } from "./windows.js";
+import { NativeWriteDrainEpoch } from "./write-drain-epoch.js";
 
 type NativeEvent =
   | { readonly type: "data"; readonly data: Buffer }
   | { readonly type: "exit"; readonly exitCode: number; readonly signal: number }
   | { readonly type: "eof"; readonly code: number }
-  | { readonly type: "drain" }
+  | { readonly type: "drain"; readonly generation: bigint }
   | { readonly type: "error"; readonly message: string; readonly code: number };
 
 interface NativeSession {
@@ -205,6 +206,7 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
   let ended = false;
   let endReason: number | undefined;
   let disposed = false;
+  const writeEpoch = new NativeWriteDrainEpoch();
 
   const session = new (loadPtyBinding().PosixPtySession)(
     {
@@ -232,6 +234,7 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
           resolveEnded?.();
           return;
         case "drain":
+          if (!writeEpoch.isCurrent(event.generation)) return;
           for (const listener of [...drainListeners]) listener();
           return;
         case "error":
@@ -249,7 +252,8 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
     outputEnded,
     write(data): void {
       if (disposed) throw new Error("PTY input is closed");
-      session.write(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
+      const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      writeEpoch.admit(bytes, (admitted) => session.write(admitted));
     },
     resize(columns, rows): boolean {
       if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1 ||

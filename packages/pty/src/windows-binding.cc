@@ -16,8 +16,6 @@
 
 namespace {
 
-constexpr size_t kMaximumSnapshotCells = 1024 * 1024;
-
 constexpr size_t kMaximumPendingEvents = 64;
 
 std::wstring ToWide(const std::string& utf8) {
@@ -26,117 +24,6 @@ std::wstring ToWide(const std::string& utf8) {
   std::wstring wide(static_cast<size_t>(length), L'\0');
   MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), wide.data(), length);
   return wide;
-}
-
-std::string Win32Failure(const char* operation, DWORD code) {
-  return std::string(operation) + " failed with Win32 error " + std::to_string(code);
-}
-
-/// Experimental, child-side ConHost observation seam.
-///
-/// This deliberately reads the active console screen buffer rather than the
-/// pseudoconsole's outbound VT pipe. It is a bounded proof-of-concept for a
-/// causal acknowledgement after an application has completed a stdout write;
-/// no driver or probe consumes it yet. `CONOUT$` is opened separately because
-/// a standard-output handle can be write-only while ReadConsoleOutputW needs
-/// GENERIC_READ.
-Napi::Value CaptureConsoleSnapshotPoc(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  const HANDLE standard_output = GetStdHandle(STD_OUTPUT_HANDLE);
-  DWORD standard_mode = 0;
-  const bool standard_output_is_console =
-      standard_output != nullptr && standard_output != INVALID_HANDLE_VALUE &&
-      GetConsoleMode(standard_output, &standard_mode) != FALSE;
-  HANDLE output = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-  if (output == INVALID_HANDLE_VALUE) {
-    Napi::Error::New(env, Win32Failure("CreateFileW(CONOUT$)", GetLastError()))
-        .ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
-
-  CONSOLE_SCREEN_BUFFER_INFOEX extended{};
-  extended.cbSize = sizeof(extended);
-  if (!GetConsoleScreenBufferInfoEx(output, &extended)) {
-    const DWORD code = GetLastError();
-    CloseHandle(output);
-    Napi::Error::New(env, Win32Failure("GetConsoleScreenBufferInfoEx", code))
-        .ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
-
-  CONSOLE_CURSOR_INFO cursor{};
-  if (!GetConsoleCursorInfo(output, &cursor)) {
-    const DWORD code = GetLastError();
-    CloseHandle(output);
-    Napi::Error::New(env, Win32Failure("GetConsoleCursorInfo", code))
-        .ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
-
-  const SHORT width = static_cast<SHORT>(extended.srWindow.Right - extended.srWindow.Left + 1);
-  const SHORT height = static_cast<SHORT>(extended.srWindow.Bottom - extended.srWindow.Top + 1);
-  if (width <= 0 || height <= 0 ||
-      static_cast<size_t>(width) > kMaximumSnapshotCells / static_cast<size_t>(height)) {
-    CloseHandle(output);
-    Napi::Error::New(env, "console viewport exceeds the 1 Mi-cell snapshot bound")
-        .ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
-
-  std::vector<CHAR_INFO> cells(static_cast<size_t>(width) * static_cast<size_t>(height));
-  COORD buffer_size{width, height};
-  COORD buffer_origin{0, 0};
-  SMALL_RECT region = extended.srWindow;
-  if (!ReadConsoleOutputW(output, cells.data(), buffer_size, buffer_origin, &region)) {
-    const DWORD code = GetLastError();
-    CloseHandle(output);
-    Napi::Error::New(env, Win32Failure("ReadConsoleOutputW", code))
-        .ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
-  CloseHandle(output);
-
-  Napi::Object result = Napi::Object::New(env);
-  result.Set("standardOutputIsConsole", Napi::Boolean::New(env, standard_output_is_console));
-  result.Set("standardOutputFileType",
-             Napi::Number::New(env, standard_output == nullptr || standard_output == INVALID_HANDLE_VALUE
-                                        ? FILE_TYPE_UNKNOWN
-                                        : GetFileType(standard_output)));
-  result.Set("standardOutputMode", Napi::Number::New(env, standard_mode));
-  result.Set("width", Napi::Number::New(env, width));
-  result.Set("height", Napi::Number::New(env, height));
-  result.Set("bufferWidth", Napi::Number::New(env, extended.dwSize.X));
-  result.Set("bufferHeight", Napi::Number::New(env, extended.dwSize.Y));
-  result.Set("windowLeft", Napi::Number::New(env, extended.srWindow.Left));
-  result.Set("windowTop", Napi::Number::New(env, extended.srWindow.Top));
-  result.Set("cursorX", Napi::Number::New(env, extended.dwCursorPosition.X));
-  result.Set("cursorY", Napi::Number::New(env, extended.dwCursorPosition.Y));
-  result.Set("cursorVisible", Napi::Boolean::New(env, cursor.bVisible != FALSE));
-  result.Set("cursorSize", Napi::Number::New(env, cursor.dwSize));
-  result.Set("attributes", Napi::Number::New(env, extended.wAttributes));
-  result.Set("popupAttributes", Napi::Number::New(env, extended.wPopupAttributes));
-
-  Napi::Array palette = Napi::Array::New(env, 16);
-  for (uint32_t index = 0; index < 16; index += 1) {
-    palette.Set(index, Napi::Number::New(env, extended.ColorTable[index]));
-  }
-  result.Set("colorTable", palette);
-
-  // Preserve UTF-16 code units and the complete legacy attribute word. A JS
-  // string would normalize lone surrogates and hide the leading/trailing-cell
-  // flags needed to reason about wide glyphs. Consumers can canonicalize only
-  // after adjacent cells are available.
-  Napi::Uint16Array code_units = Napi::Uint16Array::New(env, cells.size());
-  Napi::Uint16Array cell_attributes = Napi::Uint16Array::New(env, cells.size());
-  for (size_t index = 0; index < cells.size(); index += 1) {
-    code_units[index] = static_cast<uint16_t>(cells[index].Char.UnicodeChar);
-    cell_attributes[index] = static_cast<uint16_t>(cells[index].Attributes);
-  }
-  result.Set("codeUnits", code_units);
-  result.Set("cellAttributes", cell_attributes);
-  return result;
 }
 
 /// Builds the double-NUL terminated block CreateProcessW expects.
@@ -256,6 +143,7 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
             }
             case termwright::EventKind::kDrain: {
               message.Set("type", Napi::String::New(env, "drain"));
+              message.Set("generation", Napi::BigInt::New(env, owned->write_generation));
               break;
             }
             case termwright::EventKind::kNotice: {
@@ -346,7 +234,6 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   ConPtySession::Init(env, exports);
-  exports.Set("captureConsoleSnapshotPoc", Napi::Function::New(env, CaptureConsoleSnapshotPoc));
   return exports;
 }
 

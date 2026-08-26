@@ -111,6 +111,7 @@ class PosixPtySession : public Napi::ObjectWrap<PosixPtySession> {
               break;
             case termwright::PosixEventKind::kDrain:
               message.Set("type", "drain");
+              message.Set("generation", Napi::BigInt::New(env, owned->write_generation));
               break;
             case termwright::PosixEventKind::kError:
               message.Set("type", "error");
