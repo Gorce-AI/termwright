@@ -7,7 +7,7 @@ import type { AdapterCapability } from '@termwright/protocol';
 import { ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { connectProbe, type ProbeChannel } from '@termwright/probe-runtime';
 import type { InkDomElement, MeasureElement } from './observe.js';
-import { createInkSession, probeInfo, type InkProbeSession } from './session.js';
+import { createInkMarkerWriter, createInkSession, probeInfo, type InkProbeSession } from './session.js';
 import { isInstrumented } from './runtime.js';
 import type { EnvSource } from './runtime.js';
 import { PACKAGE_VERSION } from './version.js';
@@ -220,6 +220,7 @@ function instrumentedRender(
         resolveCapture: (root) => capturedInkFrame(root),
         waitForRenderFlush: () => instance.waitUntilRenderFlush(),
         stdout,
+        writeMarker: createInkMarkerWriter(stdout, { certifiedHarness }),
         tracker,
         onGuaranteeViolation: () => {
           state.session?.stop();
