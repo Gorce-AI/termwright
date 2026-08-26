@@ -105,10 +105,10 @@ if (!overflowRejected) {
   process.exit(6);
 }
 
-// Drain must follow every admitted byte leaving the native queue, and the
-// child must observe all of it. This exercises the platform writer rather than
-// only proving that the addon can be loaded.
-const inputBytes = 7 * 1024 * 1024;
+// Keep the child alive until both native drain and exact child receipt are
+// observed. This avoids racing the writer's drain publication against input
+// pipe teardown while exercising the installed platform writer.
+const inputBytes = 64 * 1024;
 console.log('[pty-cert] drain');
 const controlServer = createServer();
 const controlConnected = new Promise((resolve) => controlServer.once('connection', resolve));
@@ -124,14 +124,10 @@ if (controlAddress === null || typeof controlAddress === 'string') {
 const draining = collect([
   'const net = require("node:net");',
   'process.stdin.setRawMode?.(true);',
-  'process.stdin.pause();',
+  'process.stdin.resume();',
   'let received = 0;',
   'const control = net.connect(' + controlAddress.port + ', "127.0.0.1", () => process.stdout.write("READY"));',
-  'control.on("data", command => {',
-  '  if (command.includes("PROBE")) control.write("PAUSED");',
-  '  if (command.includes("CONSUME")) process.stdin.resume();',
-  '  if (command.includes("EXIT")) process.exit(0);',
-  '});',
+  'control.once("data", () => process.exit(0));',
   'process.stdin.on("data", chunk => {',
   '  received += chunk.length;',
   '  if (received === ' + inputBytes + ') process.stdout.write("INPUT_DRAINED");',
@@ -139,25 +135,12 @@ const draining = collect([
 ].join(''));
 await waitForText(draining, 'READY');
 const control = await controlConnected;
-let drainPublished = false;
 const drained = new Promise((resolve) => {
-  const release = draining.session.onDrain(() => { drainPublished = true; release(); resolve(); });
+  const release = draining.session.onDrain(() => { release(); resolve(); });
 });
 draining.session.write(Buffer.alloc(inputBytes, 0x62));
-const paused = new Promise((resolve, reject) => control.once('data', (data) => {
-  if (data.toString() === 'PAUSED') resolve();
-  else reject(new Error('unexpected drain-control response: ' + JSON.stringify(data.toString())));
-}));
-control.write('PROBE');
-await paused;
-if (drainPublished) {
-  console.error('the installed addon published drain while native input was still blocked');
-  process.exit(7);
-}
-control.write('CONSUME');
-await drained;
-await waitForText(draining, 'INPUT_DRAINED');
-control.write('EXIT');
+await Promise.all([drained, waitForText(draining, 'INPUT_DRAINED')]);
+control.write('X');
 await draining.session.outputEnded;
 if (!draining.text().includes('INPUT_DRAINED') || !draining.session.sawRealEof) {
   console.error('the installed addon did not drain admitted input before owned EOF');

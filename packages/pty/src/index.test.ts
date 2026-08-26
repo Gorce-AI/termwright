@@ -178,15 +178,35 @@ describe.skipIf(process.platform === "win32")("the Termwright-owned POSIX PTY", 
         "});",
       ].join("")));
       await waitForText(session.handle, session.chunks, "READY");
+      let drained = false;
+      const drain = new Promise<void>((resolve, reject) => {
+        const releases: Array<() => void> = [];
+        const settle = (outcome: () => void): void => {
+          for (const release of releases.splice(0)) release();
+          outcome();
+        };
+        releases.push(session!.handle.onDrain(() => {
+          drained = true;
+          settle(resolve);
+        }));
+        releases.push(session!.handle.onError((error) => settle(() => reject(error))));
+        releases.push(session!.handle.onExit((status) => settle(() => reject(new Error(
+          `PTY exited before input drain: ${JSON.stringify(status)}`,
+        )))));
+      });
       session.handle.write(Buffer.alloc(firstBytes, 0x61));
       // `readable` proves that the PTY delivered some input. The paused Node
       // stream cannot absorb the remaining megabyte, so the native write is now
       // backpressured without relying on elapsed silence.
       await waitForText(session.handle, session.chunks, "INPUT_BUFFERED");
+      // Output and drain share the addon's ordered event channel. Observing
+      // this child-produced marker proves that an admission-time drain would
+      // already have run in JavaScript, while the PTY is demonstrably blocked.
+      expect(drained).toBe(false);
       session.handle.write(Buffer.alloc(laterBytes, 0x62));
       control = await controlConnected;
       control.write("release");
-      await Promise.all([session.exit, session.handle.outputEnded]);
+      await Promise.all([drain, session.exit, session.handle.outputEnded]);
       expect(session.text()).toContain("INPUT_ORDERED");
       expect(session.handle.sawRealEof).toBe(true);
     } finally {
@@ -215,8 +235,8 @@ describe("the Termwright-owned native PTY flow control", () => {
     session.handle.dispose();
   });
 
-  it("publishes drain only after every admitted input byte is written", async () => {
-    const bytes = 7 * 1024 * 1024;
+  it("keeps the child alive while admitted input and its drain complete", async () => {
+    const bytes = 64 * 1024;
     const server = createServer();
     const controlConnected = new Promise<import("node:net").Socket>((resolve) => {
       server.once("connection", resolve);
@@ -234,21 +254,16 @@ describe("the Termwright-owned native PTY flow control", () => {
       session = collect(node([
         "const net = require('node:net');",
         "process.stdin.setRawMode(true);",
-        "process.stdin.pause();",
+        "process.stdin.resume();",
         "let received = 0;",
         `const control = net.connect(${address.port}, '127.0.0.1', () => process.stdout.write('READY'));`,
-        "control.on('data', command => {",
-        "if (command.includes('PROBE')) control.write('PAUSED');",
-        "if (command.includes('CONSUME')) process.stdin.resume();",
-        "if (command.includes('EXIT')) process.exit(0);",
-        "});",
+        "control.once('data', () => process.exit(0));",
         "process.stdin.on('data', chunk => {",
         "received += chunk.length;",
         `if (received === ${bytes}) process.stdout.write('INPUT_DRAINED');`,
         "});",
       ].join("")));
       await waitForText(session.handle, session.chunks, "READY");
-      let drained = false;
       const drain = new Promise<void>((resolve, reject) => {
         const releases: Array<() => void> = [];
         const settle = (outcome: () => void): void => {
@@ -256,7 +271,6 @@ describe("the Termwright-owned native PTY flow control", () => {
           outcome();
         };
         releases.push(session!.handle.onDrain(() => {
-          drained = true;
           settle(resolve);
         }));
         releases.push(session!.handle.onError((error) => settle(() => reject(error))));
@@ -265,20 +279,9 @@ describe("the Termwright-owned native PTY flow control", () => {
         )))));
       });
       session.handle.write(Buffer.alloc(bytes, 0x62));
+      await Promise.all([drain, waitForText(session.handle, session.chunks, "INPUT_DRAINED")]);
       control = await controlConnected;
-      const paused = new Promise<void>((resolve, reject) => {
-        control!.once("data", (data) => data.toString() === "PAUSED"
-          ? resolve()
-          : reject(new Error(`unexpected drain-control response: ${JSON.stringify(data.toString())}`)));
-        control!.once("error", reject);
-      });
-      control.write("PROBE");
-      await paused;
-      expect(drained).toBe(false);
-      control.write("CONSUME");
-      await drain;
-      await waitForText(session.handle, session.chunks, "INPUT_DRAINED");
-      control.write("EXIT");
+      control.write("X");
       await Promise.all([session.exit, session.handle.outputEnded]);
     } finally {
       session?.handle.dispose();
