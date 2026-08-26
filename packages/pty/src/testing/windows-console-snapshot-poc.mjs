@@ -1,7 +1,9 @@
-const fs = require("node:fs");
-const net = require("node:net");
+import { writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import * as net from "node:net";
 
-const addon = require(process.env.TW_SNAPSHOT_ADDON);
+const loadNative = createRequire(import.meta.url);
+const addon = loadNative(process.env.TW_SNAPSHOT_ADDON);
 const journal = process.env.TW_SNAPSHOT_JOURNAL;
 const observations = [];
 
@@ -64,7 +66,7 @@ async function run(socket) {
   process.stdin.once("data", async () => {
     try {
       checkpoint("resized");
-      fs.writeFileSync(journal, JSON.stringify(observations), "utf8");
+      writeFileSync(journal, JSON.stringify(observations), "utf8");
       await write("\r\nSNAPSHOTS_READY\r\n");
       process.stdin.pause();
       socket.end();

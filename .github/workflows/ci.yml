@@ -88,7 +88,10 @@ jobs:
         # row that runs before the addon is compiled would have nothing to run
         # on now that there is no fallback. The Windows rows live in
         # windows-driver-native, which waits for the prebuild.
-        os: [ubuntu-latest, macos-latest]
+        # Native Linux packages are certified against the Ubuntu 22.04 C++ ABI
+        # floor. Compiling consumer smoke binaries on a newer image would make
+        # the smoke itself unshippable despite never being published.
+        os: [ubuntu-22.04, macos-latest]
         node: ['22', '24']
     steps:
       - name: Reject workflow reruns
