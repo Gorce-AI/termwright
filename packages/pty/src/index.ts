@@ -7,6 +7,7 @@
  * has ended.
  */
 import { createRequire } from "node:module";
+import { getSystemErrorName } from "node:util";
 import {
   spawnWindowsPty,
   windowsPtyAvailable,
@@ -25,7 +26,8 @@ interface NativeSession {
   readonly pid: number;
   write(data: Buffer): void;
   resize(columns: number, rows: number): boolean;
-  signal(signal: number): boolean;
+  /** Zero on delivery/already-gone; otherwise the positive POSIX errno. */
+  signal(signal: number): number;
   treeState(): number;
   dispose(): void;
 }
@@ -261,7 +263,13 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
       return !disposed && session.resize(columns, rows);
     },
     signal(signal): boolean {
-      return !disposed && session.signal(signalNumbers[signal]);
+      if (disposed) return false;
+      const code = session.signal(signalNumbers[signal]);
+      if (code === 0) return true;
+      throw Object.assign(
+        new Error(`kill(PTY process group) failed with errno ${code}`),
+        { code: getSystemErrorName(-code), errno: code },
+      );
     },
     treeState(): "alive" | "gone" | "unsupported" {
       const state = disposed ? -1 : session.treeState();

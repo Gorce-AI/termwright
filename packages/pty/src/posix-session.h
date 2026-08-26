@@ -46,7 +46,7 @@ class PosixSession {
   pid_t pid() const { return pid_; }
   bool Write(const uint8_t* data, size_t length, std::string* error);
   bool Resize(unsigned short columns, unsigned short rows);
-  bool Signal(int signal);
+  int Signal(int signal);
   int TreeState() const;
   void Dispose();
 

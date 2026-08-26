@@ -157,7 +157,7 @@ class PosixPtySession : public Napi::ObjectWrap<PosixPtySession> {
           .ThrowAsJavaScriptException();
       return env.Undefined();
     }
-    return Napi::Boolean::New(env, session_->Signal(info[0].As<Napi::Number>().Int32Value()));
+    return Napi::Number::New(env, session_->Signal(info[0].As<Napi::Number>().Int32Value()));
   }
 
   Napi::Value TreeState(const Napi::CallbackInfo& info) {
