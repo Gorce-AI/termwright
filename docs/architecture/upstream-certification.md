@@ -199,23 +199,28 @@ It also states `targetCertificationState: "not-assessed"`,
 stage names are evidence about the bounded v1 profile, not claims that the full
 target state machine below has passed.
 
-`.github/workflows/upstream-candidates.yml` runs this profile on a daily
-schedule or `workflow_dispatch`, with Go, Rust, Node and pnpm installed, and
-uploads the available JSON evidence as a 30-day artifact. It initializes an
-explicitly failed report immediately after checkout, before toolchain setup or
-the workspace build. A successful certification atomically replaces it and
-adds provenance; a certification error replaces it with a sanitized failure
-report that contains no machine-local absolute paths. Therefore failures after
-the initialization step leave at least `candidate-report.json`, and ordinary
-step failures continue to the `always()` upload. Checkout failure, runner loss,
-job timeout or cancellation can still prevent initialization or upload; no
-workflow can promise an artifact after those infrastructure failures. Failed
-certifications never emit provenance. Its permissions are read-only. It does
-not discover a new upstream release, modify a patch, open a PR, sign an
-attestation, tag a commit or publish a package. Unit coverage for
-manifest/declaration drift, path traversal, added file tampering,
-nondeterministic runs and portable failure evidence lives in
-`scripts/certify-upstream-patches.test.mjs`.
+`.github/workflows/upstream-candidates.yml` is the trusted daily candidate
+pipeline, not a wrapper around this local profile. Discovery computes a bounded
+oldest-first matrix from registry catalogs and the default-branch certification
+ledger; manual dispatch may further select one exact stream. Each matrix job
+initializes a revision-, digest- and host-platform-bound red verdict before
+toolchain setup, then performs the integration-specific exact-source or runtime
+behavioral certification. OpenTUI requires Linux and macOS results; tview/tcell
+requires Linux and native Windows/ConPTY results. The trusted aggregate accepts
+only the complete required platform set with exact artifact shape and matching
+executable resolution, and generates a checksummed update only for conjunctive
+green candidates.
+
+Raw platform artifacts are deliberately outside the namespace consumed by the
+reconciler. Only the aggregate verdict and trusted generated bundle are exposed
+to `autonomous-coordinator.yml`, which reproduces reconciliation from the
+default-branch SHA, opens or updates the bounded compatibility PR, verifies its
+exact tree and first-attempt CI, and only then may merge it. Red candidates
+update a digest-keyed issue/assessment; pre-verdict infrastructure failures use
+the dead-man issue path. Candidate jobs remain read-only and cannot themselves
+push, open a PR, tag or publish. Checkout failure, runner loss, timeout or
+cancellation may still prevent a raw artifact, which therefore becomes an
+explicit aggregate/coordinator failure rather than an invented verdict.
 
 After building the workspace packages, the local entry point is:
 
