@@ -427,7 +427,11 @@ jobs:
           node-architecture: x64
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: '1.4.0'
+          # Match this lane's emulated x64 Node process. Native ARM64 Bun is
+          # certified independently by pty-native-arm64; using it here would
+          # ask a different architecture to load the intentionally x64-only
+          # clean install.
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-windows-x64-baseline.zip
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: pty-addon-x64
