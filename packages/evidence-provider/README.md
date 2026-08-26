@@ -155,9 +155,11 @@ revision. Conflicting authoritative painters produce `evidence-conflict`;
 Termwright never chooses the provider registered last.
 
 Terminal input modes are evidence about the application's production parser,
-not a request to enable guessed terminal behavior. This provider is useful
-when a transport such as ConPTY consumes or hides DEC mode sequences from the
-host. Termwright still sends mouse and focus bytes through the real PTY:
+not a request to enable guessed terminal behavior. This provider is useful for
+an embedding that explicitly consumes or hides DEC mode sequences. Certified
+PTY backends, including Termwright's pinned passthrough ConPTY, expose those
+sequences directly. Termwright still sends mouse and focus bytes through the
+real PTY:
 
 ```ts
 import { registerTerminalInputModeEvidenceProvider } from "@termwright/evidence-provider";

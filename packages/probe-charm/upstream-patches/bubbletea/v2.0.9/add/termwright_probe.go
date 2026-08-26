@@ -141,7 +141,7 @@ func (p *termwrightProbeState) publish(writer io.Writer, frame *termwrightStaged
 }
 
 func (p *termwrightProbeState) writeMarker(writer io.Writer, marker string) bool {
-	written, writeErr := io.WriteString(writer, marker)
+	written, writeErr := termwrightWriteMarker(writer, marker)
 	if writeErr != nil || written != len(marker) {
 		p.failOutput("Bubble Tea renderer output did not accept the complete revision marker")
 		return false

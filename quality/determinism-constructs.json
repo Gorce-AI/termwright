@@ -16,7 +16,7 @@
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 199,
-    "explicit-test-selection-reviewed-with-platform-registry": 79,
+    "explicit-test-selection-reviewed-with-platform-registry": 80,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
     "production-process-isolation-review": 35,
@@ -2321,6 +2321,12 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(!bun)("
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "it.skipIf(!bun)(\"writes the same mode-safe console marker under Bun\", async () => {"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",

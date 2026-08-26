@@ -28,7 +28,7 @@ function Raw([IntPtr]$handle, [string]$text) {
   if (-not [TermwrightInactiveBufferProbe]::WriteFile($handle, $bytes, $bytes.Length, [ref]$written, [IntPtr]::Zero) -or $written -ne $bytes.Length) { exit 22 }
 }
 
-Raw $original "ACTIVE-BEFORE$([char]27)]8486;TW_BUFFER;BEFORE$([char]7)"
+Raw $original "ACTIVE-BEFORE$([char]27)]8487;TW_BUFFER;BEFORE$([char]7)"
 $inactive = [TermwrightInactiveBufferProbe]::CreateConsoleScreenBuffer(
   [TermwrightInactiveBufferProbe]::GENERIC_READ -bor [TermwrightInactiveBufferProbe]::GENERIC_WRITE,
   [TermwrightInactiveBufferProbe]::FILE_SHARE_READ -bor [TermwrightInactiveBufferProbe]::FILE_SHARE_WRITE,
@@ -41,8 +41,8 @@ if (-not [TermwrightInactiveBufferProbe]::GetConsoleMode($inactive, [ref]$inacti
 if (-not [TermwrightInactiveBufferProbe]::SetConsoleMode($inactive, $inactiveMode -bor 5)) { exit 25 }
 $written = 0
 if (-not [TermwrightInactiveBufferProbe]::WriteConsoleW($inactive, "INACTIVE-BUFFER", 15, [ref]$written, [IntPtr]::Zero) -or $written -ne 15) { exit 26 }
-Raw $inactive "$([char]27)]8486;TW_BUFFER;INACTIVE$([char]7)"
+Raw $inactive "$([char]27)]8487;TW_BUFFER;INACTIVE$([char]7)"
 if (-not [TermwrightInactiveBufferProbe]::SetConsoleActiveScreenBuffer($inactive)) { exit 27 }
-Raw $inactive "$([char]27)]8486;TW_BUFFER;AFTER$([char]7)"
+Raw $inactive "$([char]27)]8487;TW_BUFFER;AFTER$([char]7)"
 if (-not [TermwrightInactiveBufferProbe]::SetConsoleActiveScreenBuffer($original)) { exit 28 }
 [TermwrightInactiveBufferProbe]::CloseHandle($inactive) | Out-Null

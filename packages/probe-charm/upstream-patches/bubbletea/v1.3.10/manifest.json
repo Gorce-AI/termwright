@@ -1,8 +1,8 @@
 {
   "framework": "github.com/charmbracelet/bubbletea",
   "frameworkVersion": "v1.3.10",
-  "patchSetVersion": 17,
-  "note": "Three model-aware capture anchors stage observations; standardRenderer.flush commits them only after a complete same-writer terminal write and closes the semantic channel on output failure.",
+  "patchSetVersion": 18,
+  "note": "Three model-aware capture anchors stage observations; standardRenderer.flush commits them only after a complete same-writer terminal write, with Windows markers restoring VT output mode on the renderer's exact console handle, and closes the semantic channel on output failure.",
   "patched": [
     {
       "path": "standard_renderer.go",
@@ -27,7 +27,17 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:4eecead8206fbca1780902d66e8d52607b177f7f119ec35864445fbd01a52732"
+      "sha256": "sha256:ceb7d5329358793e075a13c8b778f3ed188a4c0cb427fcb1a48469f3038743e3"
+    },
+    {
+      "path": "termwright_marker_other.go",
+      "source": "add/termwright_marker_other.go",
+      "sha256": "sha256:992ba5788859eff82685252e78b75dc49ef0d46216bf751677d6ea5382bc1727"
+    },
+    {
+      "path": "termwright_marker_windows.go",
+      "source": "add/termwright_marker_windows.go",
+      "sha256": "sha256:76e2823da63be625e61b5686425932ab2abdb4805b768ed39eb07da631ec60a7"
     },
     {
       "path": "termwright_probe_test.go",

@@ -49,6 +49,7 @@ interface NativeBindingConstructor {
 interface LoadedWindowsBinding {
   readonly ConPtySession: NativeBindingConstructor;
   conPtyRuntimeInfo(): WindowsConPtyRuntimeInfo;
+  writeWindowsConsoleMarker(fd: number, marker: string): void;
 }
 
 /** Provenance and behavioral contract of the loaded Windows pseudoconsole. */
@@ -225,6 +226,26 @@ export function windowsPtyAvailable(): boolean {
 /** Why the addon could not be loaded, as the loader reported it. */
 export function windowsPtyUnavailableReason(): string | undefined {
   return unavailableReason;
+}
+
+/**
+ * Writes an in-band marker to a real Windows console without inheriting a
+ * framework's possibly-disabled VT output mode.
+ *
+ * The native primitive restores the exact original console mode before it
+ * returns or throws. A successful return means WriteConsoleW accepted every
+ * UTF-16 code unit synchronously.
+ */
+export function writeWindowsConsoleMarker(fd: number, marker: string): void {
+  if (!Number.isInteger(fd) || fd < 0) {
+    throw new RangeError(
+      "Windows console marker fd must be a non-negative integer",
+    );
+  }
+  if (typeof marker !== "string" || marker.length === 0) {
+    throw new TypeError("Windows console marker must be a non-empty string");
+  }
+  loadWindowsBinding().writeWindowsConsoleMarker(fd, marker);
 }
 
 /**

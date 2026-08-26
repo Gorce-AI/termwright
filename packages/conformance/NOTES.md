@@ -71,13 +71,14 @@ Round 2 (driver 0e1b0fe, contract note 2d09049):
 Round 6 (driver f17b251, e404026, cf1229d):
 
 11. **`focusReporting` reported the host's state as if it were the child's** —
-    raised here after the Windows run, and worth recording with the premise
-    corrected, because the one this package supplied was wrong. The report said
-    ConPTY eats the child's `1004` and the field stays `false`, by analogy with
-    the mouse. The driver disproved that with a measurement (run 31939398845,
-    `session.pty.test.ts:743`): on Windows the field read `true` for a child that
-    never asked — the fixture sends only `?1000h` and `?1006h`. The host turns
-    focus reporting on by itself, so the reading says nothing about the child in
+    historical inbox-ConPTY finding, raised here after the Windows run and
+    worth recording with the premise corrected, because the one this package
+    supplied was wrong. The report said
+    the inbox ConPTY ate the child's `1004` and the field stayed `false`, by
+    analogy with the mouse. The driver disproved that with a measurement
+    (run 31939398845, `session.pty.test.ts:743`): on Windows the field read
+    `true` for a child that never asked — the fixture sends only `?1000h` and
+    `?1006h`. The host turns focus reporting on by itself, so the reading says nothing about the child in
     either direction, and the damage runs the *other* way from the reported one:
     the driver was delivering `CSI I`/`CSI O` to programs that never wanted them.
     Fixed in f17b251 with the shape the analogy did get right — `'on' | 'off' |
@@ -87,7 +88,9 @@ Round 6 (driver f17b251, e404026, cf1229d):
     analogy is a hypothesis, and "same shape as the mouse" was reported as
     though it were an observation. The suites now follow the corrected shape for
     both modes — assert the refusal only where the mode is visible, assert the
-    recorded `mode-unverifiable` entry where it is not.
+    recorded `mode-unverifiable` entry where it is not. The pinned passthrough
+    ConPTY supersedes this limitation: its host-owned focus SET is normalized
+    away and its child DECSET is observable.
 12. **Pairing gave up while the evidence was still arriving** — two delays with
     one diagnostic, separated by measurement rather than argument. **A**: the
     bytes are already here, queued in the emulator's parser (692 ms on macOS
@@ -253,9 +256,11 @@ has to delete an assertion that explains itself.
   with `File not found:` for a name a `spawnSync` probe had just accepted.
   Asking the interpreter for `sys.executable` turns whichever name works into a
   path a pty can spawn.
-- **Branch on the observed mouse mode, never on `process.platform`.** ConPTY
-  consumes the child's mouse DECSET, so the mode reads `'unknown'` on Windows
-  while the child is in fact tracking and decoding SGR reports. Any assertion
+- **Branch on the observed mouse mode, never on `process.platform`.** The
+  former frame-based inbox ConPTY consumed the child's mouse DECSET, so the
+  mode read `'unknown'` while the child tracked and decoded SGR reports. The
+  pinned passthrough runtime forwards DECSET and Windows now follows the same
+  observable branch as POSIX. Any assertion
   that a click is *refused* is a claim about the child ("it enabled nothing"),
   and only a platform that shows the mode can make it. The suites take the
   branch from `terminal.screen().modes.mouseTracking`, so a platform that
@@ -298,18 +303,18 @@ has to delete an assertion that explains itself.
   likely to be a build than a bug.
 - **A tri-state mode is not a boolean, and truthiness will not say so.**
   `focusReporting` gained `'unknown'` once the driver stopped reporting the
-  host's focus mode as the child's. The helper here still returned it as a
-  `boolean`, so `'off'` — the reading while the DECSET is still in flight —
-  came back truthy and the suite took the "the terminal saw it" branch on a
-  child the terminal had not seen yet. It failed only under load, which is the
+  legacy inbox host's focus mode as the child's. The helper here still returned
+  it as a `boolean`, so `'off'` — the reading while the DECSET is still in
+  flight — came back truthy and the suite took the "the terminal saw it" branch
+  on a child the terminal had not seen yet. It failed only under load, which is the
   worst way to learn it: the machine, not the platform, decided the branch.
   Helpers now wait for a settled answer (`'on'` or `'unknown'`) and return the
   three states, and `pnpm typecheck` catches the next such rename, which is how
   this one was actually found. The follow-up bite: the *pre*-condition of those
   tests — "focus is refused before the child asks" — is a claim about the child
-  too, and ConPTY has `1004` on for a child that never sent it, so that
-  assertion also had to move behind the observed mode. Wherever a refusal is
-  asserted, ask first whether the terminal can see the fact being refused on.
+  too, and the old inbox ConPTY had `1004` on for a child that never sent it, so
+  that assertion also had to move behind the observed mode. Wherever a refusal
+  is asserted, ask first whether the terminal can see the fact being refused on.
 - **A socket and a pty are two transports, and only one of them is fast.**
   Frames reach the driver long before the pty has re-encoded a byte, so a test
   can wait for a line of output and then read state only a frame carries — and
@@ -397,8 +402,9 @@ has to delete an assertion that explains itself.
 
 ## Not covered yet
 
-- Windows/ConPTY: nothing here has been run on Windows. The suites skip cleanly
-  where no PTY opens, which is not the same as passing.
+- A non-Termwright embedding that hides DECSET still needs its own conformance
+  coverage and explicit mode-evidence provider. The repository's pinned
+  passthrough ConPTY is covered by the native Windows lanes instead.
 - Log *bridges*: `@termwright/logs` ships pino, consola and OTel adapters;
   conformance exercises the wire contract (`seq`, budgets, ceilings, records
   staying off-screen) but not the bridges themselves, which have their own

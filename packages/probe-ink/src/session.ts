@@ -1,6 +1,7 @@
 /** Certified Ink render capture to revision-paired semantic snapshots. */
 
 import type { ProbeFrame, ProtocolLimits, SemanticSnapshot } from '@termwright/protocol';
+import { writeWindowsConsoleMarker } from '@termwright/pty';
 import { recognize } from '@termwright/recognizers';
 import type { ProbeChannel } from '@termwright/probe-runtime';
 import { observeInkTree, type InkDomElement } from './observe.js';
@@ -114,7 +115,7 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
     // its marker: a newer Ink render could otherwise write in between them.
     // Writable ordering now establishes FRAME -> MARKER; awaiting the marker's
     // callback makes `flush()` an actual publication boundary for teardown.
-    await writeAndFlush(options.stdout, marker);
+    await writeMarkerAndFlush(options.stdout, marker);
     resolvePublications(frozen.number, revision);
     return revision;
   };
@@ -237,7 +238,19 @@ function nextMacrotask(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-function writeAndFlush(stream: NodeJS.WriteStream, data: string): Promise<void> {
+function writeMarkerAndFlush(stream: NodeJS.WriteStream, data: string): Promise<void> {
+  if (process.platform === 'win32' && stream.isTTY === true) {
+    const fd = (stream as NodeJS.WriteStream & { readonly fd?: unknown }).fd;
+    if (typeof fd !== 'number' || !Number.isInteger(fd) || fd < 0) {
+      return Promise.reject(new Error('Ink stdout has no certifiable Windows console handle'));
+    }
+    try {
+      writeWindowsConsoleMarker(fd, data);
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
   return new Promise((resolve, reject) => {
     if (stream.writableEnded || stream.destroyed) {
       reject(new Error('Ink stdout closed before the semantic render marker could be written'));

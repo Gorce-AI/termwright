@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { getSystemErrorName } from "node:util";
 import {
   spawnWindowsPty,
+  writeWindowsConsoleMarker as writeNativeWindowsConsoleMarker,
   windowsConPtyRuntimeInfo,
   windowsPtyAvailable,
   windowsPtyUnavailableReason,
@@ -19,7 +20,11 @@ import { NativeWriteDrainEpoch } from "./write-drain-epoch.js";
 
 type NativeEvent =
   | { readonly type: "data"; readonly data: Buffer }
-  | { readonly type: "exit"; readonly exitCode: number; readonly signal: number }
+  | {
+      readonly type: "exit";
+      readonly exitCode: number;
+      readonly signal: number;
+    }
   | { readonly type: "eof"; readonly code: number }
   | { readonly type: "drain"; readonly generation: bigint }
   | { readonly type: "error"; readonly message: string; readonly code: number };
@@ -65,13 +70,17 @@ export function loadPtyBinding(): { readonly PosixPtySession: NativeBinding } {
     throw new Error("the POSIX @termwright/pty binding cannot load on Windows");
   }
   if (process.platform !== "darwin" && process.platform !== "linux") {
-    throw new Error(`@termwright/pty does not support ${process.platform}-${process.arch}`);
+    throw new Error(
+      `@termwright/pty does not support ${process.platform}-${process.arch}`,
+    );
   }
   const require = createRequire(import.meta.url);
   const attempts: string[] = [];
   for (const candidate of candidatePaths()) {
     try {
-      cachedBinding = require(candidate) as { readonly PosixPtySession: NativeBinding };
+      cachedBinding = require(candidate) as {
+        readonly PosixPtySession: NativeBinding;
+      };
       return cachedBinding;
     } catch (error) {
       attempts.push(
@@ -99,7 +108,9 @@ export function ptyAvailable(): boolean {
 }
 
 export function ptyUnavailableReason(): string | undefined {
-  return process.platform === "win32" ? windowsPtyUnavailableReason() : unavailableReason;
+  return process.platform === "win32"
+    ? windowsPtyUnavailableReason()
+    : unavailableReason;
 }
 
 export interface PtySpawnOptions {
@@ -124,6 +135,18 @@ export function conPtyRuntimeInfo(): WindowsConPtyRuntimeInfo {
     throw new Error("ConPTY runtime information is only available on Windows");
   }
   return windowsConPtyRuntimeInfo();
+}
+
+/**
+ * Writes a marker through WriteConsoleW while temporarily enforcing the two
+ * output-mode bits required for VT control sequences. Windows probes use this
+ * instead of duplicating mode mutation and restoration logic.
+ */
+export function writeWindowsConsoleMarker(fd: number, marker: string): void {
+  if (process.platform !== "win32") {
+    throw new Error("Windows console markers are only available on Windows");
+  }
+  writeNativeWindowsConsoleMarker(fd, marker);
 }
 
 export interface PtyHandle {
@@ -160,21 +183,39 @@ const signalNames: Readonly<Record<number, string>> = Object.freeze({
 });
 
 function validateOptions(options: PtySpawnOptions): void {
-  if (options.command.length === 0 || options.command.some((part) =>
-    typeof part !== "string" || part.includes("\0")
-  )) {
-    throw new TypeError("command must be a non-empty array of NUL-free strings");
+  if (
+    options.command.length === 0 ||
+    options.command.some(
+      (part) => typeof part !== "string" || part.includes("\0"),
+    )
+  ) {
+    throw new TypeError(
+      "command must be a non-empty array of NUL-free strings",
+    );
   }
-  if (options.cwd !== undefined && (typeof options.cwd !== "string" || options.cwd.includes("\0"))) {
+  if (
+    options.cwd !== undefined &&
+    (typeof options.cwd !== "string" || options.cwd.includes("\0"))
+  ) {
     throw new TypeError("cwd must be a NUL-free string");
   }
   for (const [key, value] of Object.entries(options.env)) {
-    if (key.length === 0 || key.includes("=") || key.includes("\0") ||
-        typeof value !== "string" || value.includes("\0")) {
-      throw new TypeError("environment keys and values must be valid execve strings");
+    if (
+      key.length === 0 ||
+      key.includes("=") ||
+      key.includes("\0") ||
+      typeof value !== "string" ||
+      value.includes("\0")
+    ) {
+      throw new TypeError(
+        "environment keys and values must be valid execve strings",
+      );
     }
   }
-  for (const [field, value] of [["columns", options.columns], ["rows", options.rows]] as const) {
+  for (const [field, value] of [
+    ["columns", options.columns],
+    ["rows", options.rows],
+  ] as const) {
     if (!Number.isInteger(value) || value < 1 || value > 32_767) {
       throw new RangeError(`${field} must be an integer from 1 through 32767`);
     }
@@ -186,12 +227,22 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
   if (process.platform === "win32") {
     const session = spawnWindowsPty(options);
     return {
-      get pid(): number { return session.pid; },
-      get sawRealEof(): boolean { return session.sawRealEof; },
-      get endReason(): number | undefined { return session.endReason; },
+      get pid(): number {
+        return session.pid;
+      },
+      get sawRealEof(): boolean {
+        return session.sawRealEof;
+      },
+      get endReason(): number | undefined {
+        return session.endReason;
+      },
       outputEnded: session.outputEnded,
-      write(data): void { session.write(data); },
-      resize(columns, rows): boolean { return session.resize(columns, rows); },
+      write(data): void {
+        session.write(data);
+      },
+      resize(columns, rows): boolean {
+        return session.resize(columns, rows);
+      },
       signal(signal): boolean {
         if (signal !== "KILL") return false;
         session.terminateTree();
@@ -201,11 +252,21 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
         const members = session.activeProcesses();
         return members < 0 ? "unsupported" : members === 0 ? "gone" : "alive";
       },
-      onData(listener): () => void { return session.onData(listener); },
-      onExit(listener): () => void { return session.onExit(listener); },
-      onError(listener): () => void { return session.onError(listener); },
-      onDrain(listener): () => void { return session.onDrain(listener); },
-      dispose(): void { session.dispose(); },
+      onData(listener): () => void {
+        return session.onData(listener);
+      },
+      onExit(listener): () => void {
+        return session.onExit(listener);
+      },
+      onError(listener): () => void {
+        return session.onError(listener);
+      },
+      onDrain(listener): () => void {
+        return session.onDrain(listener);
+      },
+      dispose(): void {
+        session.dispose();
+      },
     };
   }
   const dataListeners = new Set<(data: Uint8Array) => void>();
@@ -215,7 +276,9 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
   let exitStatus: PtyExit | undefined;
   let fatalError: Error | undefined;
   let resolveEnded: (() => void) | undefined;
-  const outputEnded = new Promise<void>((resolve) => { resolveEnded = resolve; });
+  const outputEnded = new Promise<void>((resolve) => {
+    resolveEnded = resolve;
+  });
   let ended = false;
   let endReason: number | undefined;
   let disposed = false;
@@ -235,9 +298,13 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
           for (const listener of [...dataListeners]) listener(event.data);
           return;
         case "exit": {
-          exitStatus = event.signal === 0
-            ? { code: event.exitCode, signal: null }
-            : { code: null, signal: signalNames[event.signal] ?? `SIG${event.signal}` };
+          exitStatus =
+            event.signal === 0
+              ? { code: event.exitCode, signal: null }
+              : {
+                  code: null,
+                  signal: signalNames[event.signal] ?? `SIG${event.signal}`,
+                };
           for (const listener of [...exitListeners]) listener(exitStatus);
           return;
         }
@@ -251,7 +318,9 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
           for (const listener of [...drainListeners]) listener();
           return;
         case "error":
-          fatalError ??= Object.assign(new Error(event.message), { errno: event.code });
+          fatalError ??= Object.assign(new Error(event.message), {
+            errno: event.code,
+          });
           for (const listener of [...errorListeners]) listener(fatalError);
           return;
       }
@@ -259,9 +328,15 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
   );
 
   return {
-    get pid(): number { return session.pid; },
-    get sawRealEof(): boolean { return ended; },
-    get endReason(): number | undefined { return endReason; },
+    get pid(): number {
+      return session.pid;
+    },
+    get sawRealEof(): boolean {
+      return ended;
+    },
+    get endReason(): number | undefined {
+      return endReason;
+    },
     outputEnded,
     write(data): void {
       if (disposed) throw new Error("PTY input is closed");
@@ -269,8 +344,15 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
       writeEpoch.admit(bytes, (admitted) => session.write(admitted));
     },
     resize(columns, rows): boolean {
-      if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1 ||
-          columns > 32_767 || rows > 32_767) return false;
+      if (
+        !Number.isInteger(columns) ||
+        !Number.isInteger(rows) ||
+        columns < 1 ||
+        rows < 1 ||
+        columns > 32_767 ||
+        rows > 32_767
+      )
+        return false;
       return !disposed && session.resize(columns, rows);
     },
     signal(signal): boolean {
@@ -293,17 +375,19 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
     onExit(listener): () => void {
       exitListeners.add(listener);
       const observed = exitStatus;
-      if (observed !== undefined) queueMicrotask(() => {
-        if (exitListeners.has(listener)) listener(observed);
-      });
+      if (observed !== undefined)
+        queueMicrotask(() => {
+          if (exitListeners.has(listener)) listener(observed);
+        });
       return () => exitListeners.delete(listener);
     },
     onError(listener): () => void {
       errorListeners.add(listener);
       const observed = fatalError;
-      if (observed !== undefined) queueMicrotask(() => {
-        if (errorListeners.has(listener)) listener(observed);
-      });
+      if (observed !== undefined)
+        queueMicrotask(() => {
+          if (errorListeners.has(listener)) listener(observed);
+        });
       return () => errorListeners.delete(listener);
     },
     onDrain(listener): () => void {

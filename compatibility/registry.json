@@ -1241,12 +1241,12 @@
           {
             "name": "charm.land/bubbletea/v2",
             "version": "v2.0.8",
-            "patchSetVersion": 17
+            "patchSetVersion": 18
           },
           {
             "name": "charm.land/bubbletea/v2",
             "version": "v2.0.9",
-            "patchSetVersion": 17
+            "patchSetVersion": 18
           },
           {
             "name": "github.com/charmbracelet/bubbles",
@@ -1256,7 +1256,7 @@
           {
             "name": "github.com/charmbracelet/bubbletea",
             "version": "v1.3.10",
-            "patchSetVersion": 17
+            "patchSetVersion": 18
           }
         ],
         "variants": [

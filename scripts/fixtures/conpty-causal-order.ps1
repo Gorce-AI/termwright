@@ -21,10 +21,10 @@ function Raw([string]$text) {
 }
 for ($index = 0; $index -lt 256; $index++) {
   $id = $index.ToString('x4')
-  Raw ("A$id$([char]27)]8486;TW_LEGACY;A;$id$([char]7)")
+  Raw ("A$id$([char]27)]8487;TW_LEGACY;A;$id$([char]7)")
   $written = 0
   if (-not [TermwrightConsoleProbe]::WriteConsoleW($output, "B$id", 5, [ref]$written, [IntPtr]::Zero) -or $written -ne 5) { exit 13 }
-  Raw ("$([char]27)]8486;TW_LEGACY;B;$id$([char]7)")
-  Raw ("A$id$([char]27)]8486;TW_LEGACY;C;$id$([char]7)")
+  Raw ("$([char]27)]8487;TW_LEGACY;B;$id$([char]7)")
+  Raw ("A$id$([char]27)]8487;TW_LEGACY;C;$id$([char]7)")
 }
 [TermwrightConsoleProbe]::SetConsoleMode($output, $mode) | Out-Null

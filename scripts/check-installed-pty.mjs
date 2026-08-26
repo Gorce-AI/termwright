@@ -29,9 +29,22 @@ import { fileURLToPath } from 'node:url';
 const installDirectory = argv[2];
 const verdictFlag = argv.indexOf('--verdict');
 const verdictPath = verdictFlag < 0 ? undefined : argv[verdictFlag + 1];
-const causalFixturePath = fileURLToPath(new URL('./fixtures/conpty-causal-order.ps1', import.meta.url));
+const causalFixturePath = fileURLToPath(
+  new URL('./fixtures/conpty-causal-order.ps1', import.meta.url),
+);
+const inactiveBufferFixturePath = fileURLToPath(
+  new URL('./fixtures/conpty-inactive-buffer-order.ps1', import.meta.url),
+);
+const consoleMarkerFixturePath = fileURLToPath(
+  new URL('./fixtures/conpty-console-marker.ps1', import.meta.url),
+);
+const consoleMarkerScriptPath = fileURLToPath(
+  new URL('./fixtures/conpty-console-marker.mjs', import.meta.url),
+);
 if (installDirectory === undefined) {
-  console.error('usage: check-installed-pty.mjs <install-dir> [--verdict <path>]');
+  console.error(
+    'usage: check-installed-pty.mjs <install-dir> [--verdict <path>]',
+  );
   exit(1);
 }
 if (verdictFlag >= 0 && verdictPath === undefined) {
@@ -39,9 +52,15 @@ if (verdictFlag >= 0 && verdictPath === undefined) {
   exit(1);
 }
 
+writeFileSync(
+  join(installDirectory, 'termwright-console-marker.mjs'),
+  readFileSync(consoleMarkerScriptPath),
+);
+
 const probe = `
 	const { createServer } = await import('node:net');
 	const { spawnSync } = await import('node:child_process');
+	const { createHash } = await import('node:crypto');
 	const pty = await import('@termwright/pty');
 if (!pty.ptyAvailable()) {
   console.error('resolved no addon: ' + (pty.ptyUnavailableReason?.() ?? 'no reason reported'));
@@ -115,27 +134,27 @@ if (process.platform === 'win32') {
     'const { writeSync } = require("node:fs");',
     'for (let index = 0; index < ' + causalCycles + '; index += 1) {',
     '  const id = index.toString(16).padStart(4, "0");',
-    '  writeSync(1, Buffer.from("A" + id + "\\x1b]8486;TW_CAUSAL;A;" + id + "\\x07"));',
-    '  writeSync(1, Buffer.from("B" + id + "\\x1b]8486;TW_CAUSAL;B;" + id + "\\x07"));',
-    '  writeSync(1, Buffer.from("A" + id + "\\x1b]8486;TW_CAUSAL;C;" + id + "\\x07"));',
+    '  writeSync(1, Buffer.from("A" + id + "\\x1b]8487;TW_CAUSAL;A;" + id + "\\x07"));',
+    '  writeSync(1, Buffer.from("B" + id + "\\x1b]8487;TW_CAUSAL;B;" + id + "\\x07"));',
+    '  writeSync(1, Buffer.from("A" + id + "\\x1b]8487;TW_CAUSAL;C;" + id + "\\x07"));',
     '}',
-    'writeSync(1, Buffer.from("\\x1b[?1049hALT\\x1b]8486;TW_CAUSAL;ALT\\x07\\x1b[?1049lPRIMARY\\x1b]8486;TW_CAUSAL;FINAL\\x07"));',
+    'writeSync(1, Buffer.from("\\x1b[?1049hALT\\x1b]8487;TW_CAUSAL;ALT\\x07\\x1b[?1049lPRIMARY\\x1b]8487;TW_CAUSAL;FINAL\\x07"));',
   ].join('');
   const certifyVtOrder = async (name, executable) => {
     const causal = collect(causalSource, executable);
     await causal.session.outputEnded;
     const bytes = causal.text();
-    let cursor = bytes.indexOf('A0000\x1b]8486;TW_CAUSAL;A;0000\x07');
+    let cursor = bytes.indexOf('A0000\x1b]8487;TW_CAUSAL;A;0000\x07');
     let valid = cursor >= 0 && !/[AB][0-9a-f]{4}/u.test(bytes.slice(0, cursor));
     for (let index = 0; index < causalCycles && valid; index += 1) {
       const id = index.toString(16).padStart(4, '0');
       for (const [text, phase] of [['A', 'A'], ['B', 'B'], ['A', 'C']]) {
-        const expected = text + id + '\x1b]8486;TW_CAUSAL;' + phase + ';' + id + '\x07';
+        const expected = text + id + '\x1b]8487;TW_CAUSAL;' + phase + ';' + id + '\x07';
         if (bytes.indexOf(expected, cursor) !== cursor) { valid = false; break; }
         cursor += expected.length;
       }
     }
-    const tail = '\x1b[?1049hALT\x1b]8486;TW_CAUSAL;ALT\x07\x1b[?1049lPRIMARY\x1b]8486;TW_CAUSAL;FINAL\x07';
+    const tail = '\x1b[?1049hALT\x1b]8487;TW_CAUSAL;ALT\x07\x1b[?1049lPRIMARY\x1b]8487;TW_CAUSAL;FINAL\x07';
     valid &&= bytes.indexOf(tail, cursor) === cursor && causal.session.sawRealEof;
     causal.session.dispose();
     if (!valid) throw new Error(name + ' application writes lost causal VT/alternate-screen order');
@@ -163,27 +182,117 @@ if (process.platform === 'win32') {
   const legacy = { session: legacySession, text: () => Buffer.concat(legacyOutput).toString('utf8') };
   await legacy.session.outputEnded;
   const legacyBytes = legacy.text();
-  let legacyCursor = legacyBytes.indexOf('A0000\x1b]8486;TW_LEGACY;A;0000\x07');
+  let legacyCursor = legacyBytes.indexOf('A0000\x1b]8487;TW_LEGACY;A;0000\x07');
   let legacyValid = legacyCursor >= 0;
   for (let index = 0; index < 256 && legacyValid; index += 1) {
     const id = index.toString(16).padStart(4, '0');
-    const first = 'A' + id + '\x1b]8486;TW_LEGACY;A;' + id + '\x07';
+    const first = 'A' + id + '\x1b]8487;TW_LEGACY;A;' + id + '\x07';
     legacyValid &&= legacyBytes.indexOf(first, legacyCursor) === legacyCursor;
     legacyCursor += first.length;
     const textIndex = legacyBytes.indexOf('B' + id, legacyCursor);
-    const markerText = '\x1b]8486;TW_LEGACY;B;' + id + '\x07';
+    const markerText = '\x1b]8487;TW_LEGACY;B;' + id + '\x07';
     const markerIndex = legacyBytes.indexOf(markerText, legacyCursor);
     legacyValid &&= textIndex >= legacyCursor && markerIndex > textIndex;
     legacyCursor = markerIndex + markerText.length;
-    const final = 'A' + id + '\x1b]8486;TW_LEGACY;C;' + id + '\x07';
+    const final = 'A' + id + '\x1b]8487;TW_LEGACY;C;' + id + '\x07';
     legacyValid &&= legacyBytes.indexOf(final, legacyCursor) === legacyCursor;
     legacyCursor += final.length;
   }
   legacyValid &&= legacy.session.sawRealEof;
   legacy.session.dispose();
   if (!legacyValid) throw new Error('legacy Console API output was overtaken by its following VT marker');
+
+  console.log('[pty-cert] inactive-buffer-order');
+  const inactiveSession = pty.spawnPty({
+    command: ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', process.env.TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE],
+    env: environment,
+    columns: 100,
+    rows: 30,
+  });
+  const inactiveOutput = [];
+  inactiveSession.onData((data) => inactiveOutput.push(Buffer.from(data)));
+  await inactiveSession.outputEnded;
+  const inactiveBytes = Buffer.concat(inactiveOutput).toString('utf8');
+  const beforeBuffer = inactiveBytes.indexOf('ACTIVE-BEFORE\x1b]8487;TW_BUFFER;BEFORE\x07');
+  const activatedBuffer = inactiveBytes.indexOf('INACTIVE-BUFFER', beforeBuffer + 1);
+  const afterBuffer = inactiveBytes.indexOf('\x1b]8487;TW_BUFFER;AFTER\x07', activatedBuffer + 1);
+  const inactiveValid = beforeBuffer >= 0 && activatedBuffer > beforeBuffer && afterBuffer > activatedBuffer &&
+    !inactiveBytes.includes('\x1b]8487;TW_BUFFER;INACTIVE\x07') && inactiveSession.sawRealEof;
+  inactiveSession.dispose();
+  if (!inactiveValid) throw new Error('inactive console buffer activation did not preserve its causal marker boundary');
+
+  const certifyModeSafeMarker = async (name, executable) => {
+    console.log('[pty-cert] mode-safe-marker-' + name.toLowerCase());
+    const markerText = '\x1b]8487;TW_MODE_SAFE;' + name.toUpperCase() + '\x07';
+    const markerSession = pty.spawnPty({
+      command: ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', process.env.TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE],
+      env: {
+        ...environment,
+        TW_MARKER_NODE: executable,
+        TW_MARKER_SCRIPT: process.env.TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT,
+        TW_MARKER_TEXT: markerText,
+      },
+      columns: 80,
+      rows: 24,
+    });
+    const markerOutput = [];
+    markerSession.onData((data) => markerOutput.push(Buffer.from(data)));
+    await markerSession.outputEnded;
+    const markerBytes = Buffer.concat(markerOutput).toString('utf8');
+    const markerValid = markerBytes.includes(markerText) && markerBytes.includes('MODE_RESTORED') && markerSession.sawRealEof;
+    markerSession.dispose();
+    if (!markerValid) throw new Error(name + ' did not restore disabled Windows console mode around OSC 8487');
+  };
+  await certifyModeSafeMarker('Node', process.execPath);
+  if (process.env.TERMWRIGHT_REQUIRE_BUN === '1') await certifyModeSafeMarker('Bun', 'bun');
+
+  console.log('[pty-cert] application-modes');
+  const focusOn = '\x1b[?1004h';
+  const focusOff = '\x1b[?1004l';
+  const win32On = '\x1b[?9001h';
+  const win32Off = '\x1b[?9001l';
+  const applicationModes = 'BEGIN' + focusOff + focusOn + win32Off + win32On + '\x1bc' + focusOn + win32On + 'END';
+  const modes = collect('require("node:fs").writeSync(1, Buffer.from(' + JSON.stringify(applicationModes) + '))');
+  await modes.session.outputEnded;
+  const modeBytes = modes.text();
+  const modesValid = modeBytes.includes(applicationModes) &&
+    !modeBytes.includes('\x1b[c' + focusOn + win32On) && modes.session.sawRealEof;
+  modes.session.dispose();
+  if (!modesValid) throw new Error('ConPTY changed application DEC modes or injected host control-plane modes');
+
+  console.log('[pty-cert] causal-resize');
+  const resizing = collect([
+    'process.stdin.setRawMode?.(true);',
+    'process.stdin.once("data", () => {',
+    '  const [columns, rows] = process.stdout.getWindowSize();',
+    '  process.stdout.write("SIZE:" + columns + "x" + rows);',
+    '  process.exit(0);',
+    '});',
+    'process.stdin.resume();',
+    'process.stdout.write("RESIZE-READY");',
+  ].join(''));
+  await waitForText(resizing, 'RESIZE-READY');
+  if (!resizing.session.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
+  resizing.session.write(Buffer.from('R'));
+  await resizing.session.outputEnded;
+  const resizeValid = resizing.text().includes('SIZE:120x40') && resizing.session.sawRealEof;
+  resizing.session.dispose();
+  if (!resizeValid) throw new Error('resize did not become visible before the following child input');
+
+  console.log('[pty-cert] split-production-marker');
+  const splitMarker = collect([
+    'const { writeSync } = require("node:fs");',
+    'writeSync(1, Buffer.from("SPLIT-BEFORE\\x1b]"));',
+    'writeSync(1, Buffer.from("8487;TW_SPLIT;"));',
+    'writeSync(1, Buffer.from("MARKER\\x07SPLIT-AFTER"));',
+  ].join(''));
+  await splitMarker.session.outputEnded;
+  const splitExpected = 'SPLIT-BEFORE\x1b]8487;TW_SPLIT;MARKER\x07SPLIT-AFTER';
+  const splitValid = splitMarker.text().includes(splitExpected) && splitMarker.session.sawRealEof;
+  splitMarker.session.dispose();
+  if (!splitValid) throw new Error('production OSC 8487 marker split across application writes lost ordering');
 }
-const waitForText = ({ session, text }, marker) => {
+function waitForText({ session, text }, marker) {
   if (text().includes(marker)) return Promise.resolve();
   return new Promise((resolve) => {
     const release = session.onData(() => {
@@ -192,7 +301,7 @@ const waitForText = ({ session, text }, marker) => {
       resolve();
     });
   });
-};
+}
 
 // Certify the bounded input queue in the packed consumer install, on this
 // artifact's actual OS/architecture. The child deliberately never consumes
@@ -291,7 +400,7 @@ const pressure = collect([
   'const fs = require("node:fs");',
   'const payload = Buffer.alloc(' + pressureFrameBytes + ', 0x71);',
   'for (let index = 0; index < ' + pressureFrameCount + '; index += 1) {',
-  'fs.writeSync(1, Buffer.from("\\x1b]8486;TW_PRESSURE;" + index.toString(16).padStart(8, "0") + ";"));',
+  'fs.writeSync(1, Buffer.from("\\x1b]8487;TW_PRESSURE;" + index.toString(16).padStart(8, "0") + ";"));',
   'fs.writeSync(1, payload);',
   'fs.writeSync(1, Buffer.from("\\x07"));',
   '}',
@@ -299,7 +408,7 @@ const pressure = collect([
 ].join(''));
 await pressure.session.outputEnded;
 const pressureOutput = Buffer.concat(pressure.output);
-const pressurePrefix = Buffer.from('\x1b]8486;TW_PRESSURE;');
+const pressurePrefix = Buffer.from('\x1b]8487;TW_PRESSURE;');
 const pressureSentinel = Buffer.from('PRESSURE_SENTINEL');
 let pressureCursor = pressureOutput.indexOf(pressurePrefix);
 let pressureValid = true;
@@ -333,14 +442,22 @@ console.log('ran native PTY lifecycle and flow-control certification');
 const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
   cwd: installDirectory,
   encoding: 'utf8',
-  env: { ...process.env, TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath },
+  env: {
+    ...process.env,
+    TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath,
+    TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE: inactiveBufferFixturePath,
+    TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE: consoleMarkerFixturePath,
+    TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(installDirectory, 'termwright-console-marker.mjs'),
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 
 if (result.stdout) process.stdout.write(result.stdout);
 if (result.stderr) process.stderr.write(result.stderr);
 if (result.status !== 0) {
-  console.error(`the installed @termwright/pty failed on ${platform}-${arch} (exit ${result.status})`);
+  console.error(
+    `the installed @termwright/pty failed on ${platform}-${arch} (exit ${result.status})`,
+  );
   exit(1);
 }
 if (verdictPath !== undefined) {
@@ -348,19 +465,49 @@ if (verdictPath !== undefined) {
     console.error('--verdict is only supported for a Windows ConPTY bundle');
     exit(1);
   }
-  const installedRequire = createRequire(join(installDirectory, 'termwright-pty-certifier.cjs'));
-  const addonPath = installedRequire.resolve(`@termwright/pty-win32-${arch}/termwright_pty.node`);
-  const manifestPath = join(dirname(addonPath), 'vendor', 'conpty-manifest.json');
-  const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
+  const installedRequire = createRequire(
+    join(installDirectory, 'termwright-pty-certifier.cjs'),
+  );
+  const addonPath = installedRequire.resolve(
+    `@termwright/pty-win32-${arch}/termwright_pty.node`,
+  );
+  const manifestPath = join(
+    dirname(addonPath),
+    'vendor',
+    'conpty-manifest.json',
+  );
+  const sha256 = (path) =>
+    createHash('sha256').update(readFileSync(path)).digest('hex');
   const runtime = installedRequire(addonPath).conPtyRuntimeInfo();
-  writeFileSync(verdictPath, `${JSON.stringify({
-    schemaVersion: 1,
-    platform,
-    architecture: arch,
-    addonSha256: sha256(addonPath),
-    conptyManifestSha256: sha256(manifestPath),
-    runtime,
-    causal: { node: true, bun: process.env.TERMWRIGHT_REQUIRE_BUN === '1', legacy: true, alternateScreen: true },
-  }, null, 2)}\n`);
+  writeFileSync(
+    verdictPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 2,
+        platform,
+        architecture: arch,
+        addonSha256: sha256(addonPath),
+        conptyManifestSha256: sha256(manifestPath),
+        runtime,
+        causal: {
+          markerOsc: 8487,
+          node: true,
+          bun: process.env.TERMWRIGHT_REQUIRE_BUN === '1',
+          legacy: true,
+          alternateScreen: true,
+          inactiveBuffer: true,
+          applicationModes: true,
+          resize: true,
+          markerSplit: true,
+          markerModeNode: true,
+          markerModeBun: process.env.TERMWRIGHT_REQUIRE_BUN === '1',
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
-console.log(`the installed @termwright/pty runs a real pseudoterminal on ${platform}-${arch}`);
+console.log(
+  `the installed @termwright/pty runs a real pseudoterminal on ${platform}-${arch}`,
+);

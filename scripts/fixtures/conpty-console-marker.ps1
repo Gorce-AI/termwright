@@ -1,0 +1,26 @@
+$source = @"
+using System;
+using System.Runtime.InteropServices;
+public static class TermwrightConsoleMarkerProbe {
+  [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr GetStdHandle(int id);
+  [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetConsoleMode(IntPtr h, out uint mode);
+  [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleMode(IntPtr h, uint mode);
+}
+"@
+Add-Type -TypeDefinition $source
+
+$output = [TermwrightConsoleMarkerProbe]::GetStdHandle(-11)
+$original = 0
+if (-not [TermwrightConsoleMarkerProbe]::GetConsoleMode($output, [ref]$original)) { exit 40 }
+$withoutRequiredModes = [uint32]($original -band 0xFFFFFFFA)
+if (-not [TermwrightConsoleMarkerProbe]::SetConsoleMode($output, $withoutRequiredModes)) { exit 41 }
+try {
+  & $env:TW_MARKER_NODE $env:TW_MARKER_SCRIPT
+  if ($LASTEXITCODE -ne 0) { exit 42 }
+  $restored = 0
+  if (-not [TermwrightConsoleMarkerProbe]::GetConsoleMode($output, [ref]$restored)) { exit 43 }
+  if ($restored -ne $withoutRequiredModes) { exit 44 }
+  [Console]::Out.Write("MODE_RESTORED")
+} finally {
+  [TermwrightConsoleMarkerProbe]::SetConsoleMode($output, $original) | Out-Null
+}

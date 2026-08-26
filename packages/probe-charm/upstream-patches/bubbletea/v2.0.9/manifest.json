@@ -1,8 +1,8 @@
 {
   "framework": "charm.land/bubbletea/v2",
   "frameworkVersion": "v2.0.9",
-  "patchSetVersion": 17,
-  "note": "Program.render stages the model-aware observation; cursedRenderer.flush commits it only after both screen flush and complete same-writer output succeed, and closes the semantic channel on either failure.",
+  "patchSetVersion": 18,
+  "note": "Program.render stages the model-aware observation; cursedRenderer.flush commits it only after both screen flush and complete same-writer output succeed, with Windows markers restoring VT output mode on the renderer's exact console handle, and closes the semantic channel on either failure.",
   "patched": [
     {
       "path": "tea.go",
@@ -27,7 +27,17 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:4f3be71d275256e1dbbe27cf7022945f391c091a3e299a7731193d9ef6b5f6b6"
+      "sha256": "sha256:b671851072afb4696884e52a15045ef8081f09ca82952d4b049e7b46dfe1dc12"
+    },
+    {
+      "path": "termwright_marker_other.go",
+      "source": "add/termwright_marker_other.go",
+      "sha256": "sha256:992ba5788859eff82685252e78b75dc49ef0d46216bf751677d6ea5382bc1727"
+    },
+    {
+      "path": "termwright_marker_windows.go",
+      "source": "add/termwright_marker_windows.go",
+      "sha256": "sha256:64debe629f02b923fc387cc568a5813e86e63a937e839c6ee679bc2f9659f142"
     },
     {
       "path": "termwright_probe_test.go",

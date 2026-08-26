@@ -44,6 +44,17 @@ describe("ConPTY control-plane output normalization", () => {
     );
   });
 
+  it("recognizes the startup handshake after a pseudo-window report", () => {
+    everySplit(
+      `\x1b[1t${DA1}${FOCUS_ON}${WIN32_ON}app`,
+      `\x1b[1t${DA1}app`,
+    );
+    everySplit(
+      `\x1b[2t${DSRCPR}${DA1}${FOCUS_ON}${WIN32_ON}app`,
+      `\x1b[2t${DSRCPR}${DA1}app`,
+    );
+  });
+
   it("removes only the focus mode reinjected after a child reset", () => {
     everySplit(`a${FOCUS_OFF}${FOCUS_ON}b`, `a${FOCUS_OFF}b`);
   });

@@ -5,6 +5,7 @@
  */
 
 import { Writable } from 'node:stream';
+import { writeWindowsConsoleMarker } from '@termwright/pty';
 
 export const MARKER_SINK_SYMBOL = Symbol.for('termwright.opentui.marker-sink.v1');
 export const MARKER_SINK_TARGET_SYMBOL = Symbol.for('termwright.opentui.marker-sink-target.v1');
@@ -98,6 +99,7 @@ export function createMarkerSink(target: NodeJS.WriteStream, token: string): Mar
   ) => boolean;
   let forwarded = 0;
   let markerBytes = 0;
+  const pendingMarkers: string[] = [];
   const failureHandlers = new Set<(error: Error) => void>();
   let firstFailure: Error | undefined;
   const notifyFailure = (error: Error): void => {
@@ -110,7 +112,24 @@ export function createMarkerSink(target: NodeJS.WriteStream, token: string): Mar
   const releaseTargetFailure = observeTargetFailures(target, notifyFailure);
 
   const sink = new Writable({
+    decodeStrings: false,
     write(chunk: Buffer | string, encoding, callback) {
+      const isMarker = typeof chunk === 'string' && pendingMarkers[0] === chunk;
+      if (isMarker) pendingMarkers.shift();
+      if (process.platform === 'win32' && isMarker && target.isTTY === true) {
+        forwarded += Buffer.byteLength(chunk, encoding as BufferEncoding);
+        try {
+          const fd = (target as NodeJS.WriteStream & { readonly fd?: unknown }).fd;
+          if (typeof fd !== 'number' || !Number.isInteger(fd) || fd < 0) {
+            throw new Error('OpenTUI stdout has no certifiable Windows console handle');
+          }
+          writeWindowsConsoleMarker(fd, chunk);
+          callback();
+        } catch (error) {
+          callback(error instanceof Error ? error : new Error(String(error)));
+        }
+        return;
+      }
       if (Buffer.isBuffer(chunk)) {
         forwarded += chunk.length;
         targetWrite(chunk, undefined, callback);
@@ -157,6 +176,7 @@ export function createMarkerSink(target: NodeJS.WriteStream, token: string): Mar
   };
   sink.writeMarker = (marker: string): void => {
     markerBytes += Buffer.byteLength(marker, 'utf8');
+    pendingMarkers.push(marker);
     sink.write(marker);
   };
   return sink;
