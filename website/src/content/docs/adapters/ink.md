@@ -92,7 +92,8 @@ component when a role or accessible name is part of the behavior under test.
 
 ## Supported behavior
 
-Ink 7.1.1 is certified exactly. Stable host identity, display state, rendered
+The Ink versions listed in the compatibility registry are certified exactly.
+Stable host identity, display state, rendered
 text, retained ARIA state, intended geometry, and visible clipping are
 automatic. The checksummed hooks correlate Yoga layout and nested overflow with
 Static/live origins, emitted output, and the committed normal or alternate VT

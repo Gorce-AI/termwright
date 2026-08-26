@@ -72,10 +72,10 @@ normal `tea.MouseClickMsg` branch changes its status.
 
 ## Supported behavior
 
-Bubble Tea 1.3.10 and 2.0.8 with Go 1.24+ are verified. Roles, names, values,
-selection, and observable component state are available. Password values are
-withheld. Layout geometry is unavailable automatically. Exact pointer regions
-and hit testing are application-integrated through a production router; without
-one, use keyboard input.
+Bubble Tea 1.3.10 and 2.0.8 with Go 1.24+, and Bubble Tea 2.0.9 with Go 1.25+,
+are verified. Roles, names, values, selection, and observable component state
+are available. Password values are withheld. Layout geometry is unavailable
+automatically. Exact pointer regions and hit testing are application-integrated
+through a production router; without one, use keyboard input.
 
 See [Framework compatibility](../../reference/compatibility/) for current coverage.

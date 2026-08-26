@@ -1,6 +1,6 @@
 # @termwright/probe-ink
 
-Zero-config semantics for an Ink 7.1.1 application that imports nothing from
+Zero-config semantics for an exact-certified Ink application that imports nothing from
 termwright. The application keeps its normal `import {render} from 'ink'` and
 normal `render(<App />)` call; the launcher adds one preload flag.
 
@@ -10,7 +10,8 @@ normal `render(<App />)` call; the launcher adds one preload flag.
 npm install --save-dev @termwright/probe-ink
 ```
 
-Peers: Ink 7.1.1, React >= 19.2. Node >= 22, or Bun. The Ink version is exact:
+Peers: an exact Ink version listed in the compatibility registry, React >= 19.2,
+Node >= 22, or Bun. The Ink version is exact:
 the preload verifies both instrumented upstream modules by SHA-256 before it
 negotiates semantic capabilities.
 

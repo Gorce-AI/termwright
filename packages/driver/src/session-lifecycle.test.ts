@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs';
 import { connect } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
-import { ENV_ENDPOINT } from '@termwright/protocol';
+import { DEFAULT_LIMITS, encodeFrame, ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import type { ExitStatus } from './api.js';
 import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
 import { installTerminalLaunchResourceProvider } from './launch-resources.js';
+import { SemanticChannel } from './semantic.js';
 import { CLOSE_GRACE_MS, launchTerminalWithBackend } from './session.js';
 
 class ControlledPty implements PtyProcess {
@@ -116,13 +117,15 @@ class ControlledPty implements PtyProcess {
 
 function backendFor(
   pty: ControlledPty,
-  endpoint: { value: string | undefined },
+  endpoint: { value: string | undefined; token?: string },
   onSpawn?: () => void,
 ): PtyBackend {
   return {
     name: 'controlled',
     spawn(options: PtySpawnOptions): PtyProcess {
       endpoint.value = options.env[ENV_ENDPOINT];
+      const token = options.env[ENV_TOKEN];
+      if (token !== undefined) endpoint.token = token;
       onSpawn?.();
       return pty;
     },
@@ -145,6 +148,68 @@ async function expectEndpointClosed(endpoint: string): Promise<void> {
 }
 
 describe('terminal session resource lifecycle', () => {
+  it('keeps an admitted handshake pending after discovery closes', async () => {
+    vi.useFakeTimers();
+    const originalListen = SemanticChannel.listen.bind(SemanticChannel);
+    let markHandshakeAdmitted!: () => void;
+    const handshakeAdmitted = new Promise<void>((resolve) => { markHandshakeAdmitted = resolve; });
+    const listenSpy = vi.spyOn(SemanticChannel, 'listen').mockImplementation((options, dependencies) =>
+      originalListen({
+        ...options,
+        hooks: {
+          ...options.hooks,
+          onNegotiationStateChange: (state) => {
+            options.hooks.onNegotiationStateChange?.(state);
+            if (state.admissionOpen && state.pendingHandshakes === 1) markHandshakeAdmitted();
+          },
+        },
+      }, dependencies));
+    let terminal: Awaited<ReturnType<typeof launchTerminalWithBackend>> | undefined;
+    let socket: ReturnType<typeof connect> | undefined;
+    try {
+      const endpoint: { value: string | undefined; token?: string } = { value: undefined };
+      const pty = new ControlledPty();
+      terminal = await launchTerminalWithBackend({
+        command: ['controlled-app'], backend: backendFor(pty, endpoint), semanticNegotiationMs: 50,
+      });
+
+      // Its independent hello deadline starts midway through discovery and
+      // therefore remains open when discovery itself closes. Wait for the
+      // server-side admission event: a client-side pipe connection can become
+      // observable first, especially under ConPTY runners.
+      await vi.advanceTimersByTimeAsync(25);
+      socket = connect(endpoint.value!);
+      await new Promise<void>((resolve, reject) => {
+        socket!.once('connect', resolve);
+        socket!.once('error', reject);
+      });
+      await handshakeAdmitted;
+      await vi.advanceTimersByTimeAsync(25);
+      expect(terminal.contract()).toBeNull();
+
+      socket.write(encodeFrame({
+        type: 'hello', protocol: 'termwright/2', token: endpoint.token,
+        adapter: { name: 'controlled-adapter', version: '1.0.0' },
+        capabilities: ['tree', 'render-revisions'],
+      }, DEFAULT_LIMITS.maxFrameBytes));
+      await new Promise<void>((resolve, reject) => {
+        socket!.once('data', () => resolve());
+        socket!.once('error', reject);
+      });
+
+      expect(terminal.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+      expect(terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout')).toBe(false);
+    } finally {
+      socket?.destroy();
+      vi.useRealTimers();
+      try {
+        await terminal?.close();
+      } finally {
+        listenSpy.mockRestore();
+      }
+    }
+  });
+
   it('makes PowerShell publish readiness from its launch command without bootstrap input', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({

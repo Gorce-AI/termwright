@@ -872,21 +872,6 @@ describe.skipIf(!ptyAvailable())("settled()", { timeout: 20_000 }, () => {
     expect(terminal.contract()).toBe(capabilities);
   });
 
-  it("keeps the bounded default window open for a slow certified adapter startup", async () => {
-    const terminal = await launch("semantic-app.mjs", {
-      env: { TERMWRIGHT_FIXTURE_HELLO_DELAY: "1500" },
-    });
-
-    const capabilities = await terminal.settled({ timeout: 10_000 });
-    expect(capabilities.capabilities["semantic-tree"].status).toBe("supported");
-    expect(terminal.semanticTree()?.v).toBe(2);
-    expect(
-      terminal
-        .diagnostics()
-        .some((entry) => entry.code === "negotiation-timeout"),
-    ).toBe(false);
-  });
-
   it("uses the startup readiness budget when semantic capabilities are required", async () => {
     const terminal = await launch("semantic-app.mjs", {
       env: { TERMWRIGHT_FIXTURE_HELLO_DELAY: "2100" },

@@ -56,6 +56,11 @@ const patchChecksums = [
 		manifest: 'packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json',
 		manifestSource: 'add/termwright_probe.go',
 	},
+	{
+		source: 'packages/probe-charm/upstream-patches/bubbletea/v2.0.9/add/termwright_probe.go',
+		manifest: 'packages/probe-charm/upstream-patches/bubbletea/v2.0.9/manifest.json',
+		manifestSource: 'add/termwright_probe.go',
+	},
 ];
 
 /**
@@ -121,6 +126,12 @@ const targets = [
 	},
 	{
 		file: 'packages/probe-charm/upstream-patches/bubbletea/v2.0.8/add/termwright_probe.go',
+		pattern: /(?<=probeVersion     = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'packages/probe-charm/upstream-patches/bubbletea/v2.0.9/add/termwright_probe.go',
 		pattern: /(?<=probeVersion     = ")([^"]+)(?=")/,
 		render: (version) => version,
 		whole: true,

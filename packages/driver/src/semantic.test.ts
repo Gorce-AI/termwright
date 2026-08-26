@@ -30,6 +30,8 @@ interface Harness {
   diagnosticWireCodes: string[];
   violations: ProtocolViolationError[];
   wireCodes: string[];
+  negotiationStates: Array<{ admissionOpen: boolean; pendingHandshakes: number }>;
+  waitForNegotiationState(state: { admissionOpen: boolean; pendingHandshakes: number }): Promise<void>;
 }
 
 const open: { channel: SemanticChannel; sockets: Socket[] }[] = [];
@@ -72,6 +74,11 @@ async function createChannel(
   const diagnosticWireCodes: string[] = [];
   const violations: ProtocolViolationError[] = [];
   const wireCodes: string[] = [];
+  const negotiationStates: Array<{ admissionOpen: boolean; pendingHandshakes: number }> = [];
+  const negotiationWaiters: Array<{
+    state: { admissionOpen: boolean; pendingHandshakes: number };
+    resolve(): void;
+  }> = [];
   const channel = await SemanticChannel.listen({
     sessionId: SESSION_ID,
     token: TOKEN,
@@ -94,6 +101,15 @@ async function createChannel(
         violations.push(error);
         wireCodes.push(wireCode);
       },
+      onNegotiationStateChange: (state) => {
+        negotiationStates.push({ ...state });
+        for (let index = negotiationWaiters.length - 1; index >= 0; index -= 1) {
+          const waiter = negotiationWaiters[index]!;
+          if (waiter.state.admissionOpen !== state.admissionOpen || waiter.state.pendingHandshakes !== state.pendingHandshakes) continue;
+          negotiationWaiters.splice(index, 1);
+          waiter.resolve();
+        }
+      },
     },
   }, dependencies);
   open.push({ channel, sockets: [] });
@@ -107,6 +123,12 @@ async function createChannel(
     diagnosticWireCodes,
     violations,
     wireCodes,
+    negotiationStates,
+    waitForNegotiationState(state): Promise<void> {
+      const current = negotiationStates.at(-1);
+      if (current?.admissionOpen === state.admissionOpen && current.pendingHandshakes === state.pendingHandshakes) return Promise.resolve();
+      return new Promise<void>((resolve) => negotiationWaiters.push({ state, resolve }));
+    },
   };
 }
 
@@ -254,6 +276,83 @@ describe('the probe lifecycle', () => {
 });
 
 describe('SemanticChannel', () => {
+  it('keeps a pre-deadline peer eligible while discovery is closed', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+
+    await harness.waitForNegotiationState({ admissionOpen: true, pendingHandshakes: 1 });
+    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: true, pendingHandshakes: 1 });
+    harness.channel.closeAdmission();
+    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 1 });
+
+    client.send(hello());
+    await expect(client.next()).resolves.toMatchObject({ type: 'hello-ack' });
+    expect(harness.attachments).toHaveLength(1);
+    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 0 });
+  });
+
+  it('refuses peers first seen after discovery closes', async () => {
+    const harness = await createChannel();
+    harness.channel.closeAdmission();
+    const client = await connectClient(harness.channel);
+
+    await expect(client.next()).resolves.toMatchObject({
+      type: 'error', code: 'internal', message: 'semantic adapter discovery has closed',
+    });
+    await client.closed;
+    expect(harness.attachments).toHaveLength(0);
+    expect(harness.negotiationStates).toEqual([{ admissionOpen: false, pendingHandshakes: 0 }]);
+  });
+
+  it('ends a closed discovery when its admitted peer exhausts the hello deadline', async () => {
+    const harness = await createChannel(true, 50);
+    vi.useFakeTimers();
+    const client = await connectClient(harness.channel);
+    await harness.waitForNegotiationState({ admissionOpen: true, pendingHandshakes: 1 });
+    harness.channel.closeAdmission();
+
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(client.next()).resolves.toMatchObject({
+      type: 'error', code: 'internal', message: 'semantic hello deadline exceeded',
+    });
+    await client.closed;
+    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 0 });
+  });
+
+  it('bounds every pre-deadline peer and never reopens admission after one wins', async () => {
+    const harness = await createChannel();
+    const first = await connectClient(harness.channel);
+    await harness.waitForNegotiationState({ admissionOpen: true, pendingHandshakes: 1 });
+    const second = await connectClient(harness.channel);
+    await harness.waitForNegotiationState({ admissionOpen: true, pendingHandshakes: 2 });
+    harness.channel.closeAdmission();
+    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 2 });
+
+    first.send(hello({ adapter: { name: 'winner', version: '1.0.0' } }));
+    await expect(first.next()).resolves.toMatchObject({ type: 'hello-ack' });
+    second.send(hello({ adapter: { name: 'loser', version: '1.0.0' } }));
+    await expect(second.next()).resolves.toMatchObject({ type: 'error', code: 'internal' });
+    await second.closed;
+    expect(harness.attachments).toHaveLength(1);
+    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 0 });
+  });
+
+  it('bounds active sockets before excess peers can allocate timers or graceful-flush state', async () => {
+    const harness = await createChannel();
+    const admitted: Client[] = [];
+    for (let pendingHandshakes = 1; pendingHandshakes <= 4; pendingHandshakes += 1) {
+      admitted.push(await connectClient(harness.channel));
+      await harness.waitForNegotiationState({ admissionOpen: true, pendingHandshakes });
+    }
+    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: true, pendingHandshakes: 4 });
+
+    const excess = await connectClient(harness.channel);
+    await excess.closed;
+    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: true, pendingHandshakes: 4 });
+    expect(admitted).toHaveLength(4);
+    expect(harness.diagnostics).toContain('endpoint-error: refused a semantic peer because 4 sockets are already active');
+  });
+
   it('rolls back its Windows named-pipe listener when listen fails', async () => {
     const server = createServer();
     const close = vi.spyOn(server, 'close');

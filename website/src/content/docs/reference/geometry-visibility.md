@@ -68,7 +68,7 @@ Public availability is computed by traversing the same graph used by certificati
 | Textual | textual@8.2.8/0.2.0 | native-hook | native hook |
 | tview | tview@v0.42.0/0.2.0 | checksummed-replacement | `packages/probe-tview/upstream-patches/tcell/v2.8.1/manifest.json`<br>`packages/probe-tview/upstream-patches/tview/v0.42.0/manifest.json` |
 | Ratatui | ratatui@0.30.2/0.2.0 | checksummed-replacement | `clients/rust-probe/upstream-patches/ratatui-core/0.1.2/manifest.json`<br>`clients/rust-probe/upstream-patches/ratatui-widgets/0.3.2/manifest.json` |
-| Bubble Tea / Bubbles | charm@v1.3.10/0.2.0<br>charm@v2.0.8/0.2.0 | checksummed-replacement | `packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json` |
+| Bubble Tea / Bubbles | charm@v1.3.10/0.2.0<br>charm@v2.0.8/0.2.0<br>charm@v2.0.9/0.2.0 | checksummed-replacement | `packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.9/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json` |
 
 ## Application-integrated providers
 

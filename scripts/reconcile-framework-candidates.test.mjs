@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { digestTree } from './prepare-framework-candidate.mjs';
 import { canonicalJson, selectCandidates } from './discover-framework-candidates.mjs';
-import { addCertifiedRuntimeProfile, reconcile, recordVerifiedFrameworkVersion, renderCertifiedTextualVersions, renderExactPeerRange, sameHookProfile, verifyGeneratedHookProfile, verifyGeneratedRuntimeProfile, verifyGeneratedUpdate } from './reconcile-framework-candidates.mjs';
+import { addCertifiedRuntimeProfile, generatedUpdateDirectories, reconcile, recordVerifiedFrameworkVersion, renderCertifiedTextualPyproject, renderCertifiedTextualVersions, renderExactPeerRange, sameHookProfile, verifyGeneratedHookProfile, verifyGeneratedRuntimeProfile, verifyGeneratedTextualLock, verifyGeneratedUpdate } from './reconcile-framework-candidates.mjs';
 
 const candidate = { id: 'example@2.1.1', streamId: 'example', package: 'example', version: '2.1.1', certificationRevision: 1, publishedAt: '2026-01-03T00:00:00Z', source: { checksum: 'a'.repeat(64) }, patch: { status: 'ready', path: 'patches/2.1.1/manifest.json', manifestDigest: `sha256:${'b'.repeat(64)}` }, candidateDigest: `sha256:${'c'.repeat(64)}` };
 
@@ -29,14 +29,76 @@ describe('framework candidate reconciliation', () => {
     expect(source).toContain('CERTIFIED_TEXTUAL_VERSIONS = ("8.2.8", "8.3.0",)');
   });
 
+  it('pins the Textual extra and dev environment to the latest certified exact version', () => {
+    const registry = { frameworks: [{ id: 'textual', versions: { verified: ['8.2.8', '8.2.10'] } }] };
+    const source = '[project.optional-dependencies]\ntextual = ["textual==8.2.8"]\ndev = ["pytest>=7", "pytest-asyncio>=0.21", "textual==8.2.8"]\n\n[project.urls]\n';
+    expect(renderCertifiedTextualPyproject(source, registry)).toContain('textual = ["textual==8.2.10"]\ndev = ["pytest>=7", "pytest-asyncio>=0.21", "textual==8.2.10"]');
+    for (const malformedSource of [
+      'textual = ["textual>=8"]\ndev = ["pytest>=7", "pytest-asyncio>=0.21", "textual==8.2.8"]\n',
+      'textual = ["not-textual==8.2.8"]\ndev = ["pytest>=7", "pytest-asyncio>=0.21", "not-textual==8.2.8"]\n',
+      'textual = ["textual==8.2.8; sys_platform == \'win32\'"]\ndev = ["pytest>=7", "pytest-asyncio>=0.21", "textual==8.2.8"]\n',
+      '[tool.example]\ntextual = ["textual==8.2.8"]\ndev = ["pytest>=7", "pytest-asyncio>=0.21", "textual==8.2.8"]\n\n[project.urls]\n',
+      `${source}\n${source}`,
+    ]) expect(() => renderCertifiedTextualPyproject(malformedSource, registry)).toThrow(/exact certified pin grammar/u);
+    for (const version of ['v8.2.10', '8.2.10rc1', '08.2.10', '9007199254740992.2.10', '8.2.10"\nmalicious = ["x']) {
+      const malformed = { frameworks: [{ id: 'textual', versions: { verified: ['8.2.8', version] } }] };
+      expect(() => renderCertifiedTextualPyproject(source, malformed)).toThrow(/invalid PyPI version/u);
+      expect(() => renderCertifiedTextualVersions(malformed)).toThrow(/invalid PyPI version/u);
+    }
+  });
+
+  it('accepts only the source-run-bound Textual lock artifact and its exact trusted pyproject', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-textual-lock-'));
+    const candidate = {
+      id: 'textual@8.2.9', frameworkId: 'textual', registry: 'pypi', version: '8.2.9',
+      candidateDigest: `sha256:${'a'.repeat(64)}`,
+    };
+    const revision = 'b'.repeat(40);
+    const verdict = { state: 'green', sourceRevision: revision };
+    const pyproject = 'textual = ["textual==8.2.9"]\n';
+    const lock = 'version = 1\n';
+    await writeFile(join(directory, 'pyproject.toml'), pyproject);
+    await writeFile(join(directory, 'uv.lock'), lock);
+    await writeFile(join(directory, 'bundle.json'), canonicalJson({
+      schemaVersion: 1,
+      kind: 'termwright-generated-textual-lock',
+      candidateId: candidate.id,
+      candidateDigest: candidate.candidateDigest,
+      sourceRevision: revision,
+      framework: 'textual',
+      version: candidate.version,
+      pyprojectSha256: `sha256:${createHash('sha256').update(pyproject).digest('hex')}`,
+      lockSha256: `sha256:${createHash('sha256').update(lock).digest('hex')}`,
+    }));
+    await expect(verifyGeneratedTextualLock({ candidate, verdict, updateDirectory: directory, expectedRevision: revision, expectedPyproject: pyproject }))
+      .resolves.toEqual({ pyproject, lock: Buffer.from(lock) });
+    await writeFile(join(directory, 'uv.lock'), `${lock}tampered = true\n`);
+    await expect(verifyGeneratedTextualLock({ candidate, verdict, updateDirectory: directory, expectedRevision: revision, expectedPyproject: pyproject }))
+      .rejects.toThrow(/lock digest mismatch/u);
+  });
+
+  it('discovers only direct aggregate-owned update namespaces, never nested forged bundles', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-update-discovery-'));
+    const direct = join(directory, 'candidate-update-runtime-aaaaaaaaaaaaaaaa');
+    const nested = join(direct, 'aaa-forged-textual');
+    await mkdir(nested, { recursive: true });
+    await writeFile(join(direct, 'bundle.json'), '{}\n');
+    await writeFile(join(nested, 'bundle.json'), '{}\n');
+    const updates = await generatedUpdateDirectories(directory);
+    expect([...updates.keys()]).toEqual(['candidate-update-runtime-aaaaaaaaaaaaaaaa']);
+    expect([...updates.values()]).toEqual([direct]);
+  });
+
   it('promotes only the exact behaviorally green Textual candidate into registry and bundled allowlist', () => {
     const compatibility = { frameworks: [{
-      id: 'textual',
+      id: 'textual', frameworkPackage: 'textual',
       versions: { policy: 'exact', declared: '8.2.8', verified: ['8.2.8'] },
+      certification: { adapterVersion: '0.2.0', ids: ['textual@8.2.8/0.2.0'], strategy: 'native-hook' },
     }] };
     recordVerifiedFrameworkVersion(compatibility, {
       id: 'textual@8.2.9',
       frameworkId: 'textual',
+      package: 'textual',
       version: '8.2.9',
     });
     expect(compatibility.frameworks[0].versions).toEqual({
@@ -44,7 +106,49 @@ describe('framework candidate reconciliation', () => {
       declared: '8.2.8 or 8.2.9',
       verified: ['8.2.8', '8.2.9'],
     });
+    expect(compatibility.frameworks[0].certification.ids).toEqual([
+      'textual@8.2.8/0.2.0',
+      'textual@8.2.9/0.2.0',
+    ]);
     expect(renderCertifiedTextualVersions(compatibility)).toContain('("8.2.8", "8.2.9",)');
+  });
+
+  it('adds the exact runtime module variant and certification id for a green OpenTUI version', () => {
+    const compatibility = { frameworks: [{
+      id: 'opentui', frameworkPackage: '@opentui/core',
+      versions: { policy: 'exact', declared: '0.5.3', verified: ['0.5.3'] },
+      instrumentation: { variants: [] },
+      certification: {
+        adapterVersion: '0.2.0', ids: ['opentui@0.5.3/0.2.0'],
+        strategy: 'runtime-capability-and-behavior',
+      },
+    }] };
+    const next = { id: 'opentui@0.5.4', frameworkId: 'opentui', package: '@opentui/core', version: '0.5.4' };
+
+    recordVerifiedFrameworkVersion(compatibility, next);
+    recordVerifiedFrameworkVersion(compatibility, next);
+
+    expect(compatibility.frameworks[0].certification.ids).toEqual([
+      'opentui@0.5.3/0.2.0', 'opentui@0.5.4/0.2.0',
+    ]);
+    expect(compatibility.frameworks[0].instrumentation.variants).toEqual([
+      { id: 'opentui-0.5.3', frameworkVersion: '0.5.3', modules: [{ name: '@opentui/core', version: '0.5.3' }] },
+      { id: 'opentui-0.5.4', frameworkVersion: '0.5.4', modules: [{ name: '@opentui/core', version: '0.5.4' }] },
+    ]);
+
+    const beforeWrongPackage = structuredClone(compatibility);
+    expect(() => recordVerifiedFrameworkVersion(compatibility, {
+      ...next, id: 'opentui@0.5.5', package: '@opentui/not-core', version: '0.5.5',
+    })).toThrow(/does not match/u);
+    expect(compatibility).toEqual(beforeWrongPackage);
+
+    const conflicting = structuredClone(compatibility);
+    conflicting.frameworks[0].instrumentation.variants[0].id = 'wrong-id';
+    const beforeConflict = structuredClone(conflicting);
+    expect(() => recordVerifiedFrameworkVersion(conflicting, {
+      ...next, id: 'opentui@0.5.5', version: '0.5.5',
+    })).toThrow(/another identity/u);
+    expect(conflicting).toEqual(beforeConflict);
   });
 
   it('updates the ledger only for a matching green verdict and is idempotent', () => {

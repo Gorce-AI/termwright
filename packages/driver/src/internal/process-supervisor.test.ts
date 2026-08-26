@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ExitStatus } from '../api.js';
 import type { PtyProcess, PtySignal, PtyUnsubscribe } from '../pty.js';
 import { ProcessSupervisor } from './process-supervisor.js';
@@ -96,6 +96,19 @@ function supervisor(pty: FakePty, clock: ManualClock, platform: NodeJS.Platform 
 }
 
 describe('ProcessSupervisor', () => {
+  it('uses the same lazy monotonic clock domain as callers of the default supervisor', async () => {
+    const pty = new FakePty();
+    const process = new ProcessSupervisor(pty);
+    vi.stubGlobal('performance', { now: () => -1_000_000 });
+    try {
+      await expect(process.shutdown({ deadline: -999_000, gracefulMs: 100 }))
+        .resolves.toEqual({ code: 0, signal: null });
+      expect(pty.disposeCount).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('uses a delegated backend lifecycle request instead of inventing a signal', async () => {
     const clock = new ManualClock();
     const pty = new FakePty();

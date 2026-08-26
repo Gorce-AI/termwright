@@ -109,7 +109,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(ciJobs['conformance-posix'].match(/^    needs:.*$/gmu)).toBeNull();
     expect(ciJobs['conformance-posix']).toContain('os: [ubuntu-latest, macos-latest]');
     expect(ciJobs['conformance-windows']).toContain('name: conformance windows-latest');
-    expect(ciJobs.opentui).toContain("bun-version: '1.2.15'");
+    expect(ciJobs.opentui).toContain("bun-version: '1.4.0'");
     expect(ciJobs.opentui).not.toContain('bun-version: latest');
     const certificationNeeds = [...(ciJobs.certification ?? '').matchAll(/^      - ([a-z0-9-]+)$/gmu)]
       .map((match) => match[1]);

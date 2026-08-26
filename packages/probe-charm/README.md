@@ -27,7 +27,7 @@ concludes the application is v1.
 import {detectCharmFlavour, capabilitiesFor} from '@termwright/probe-charm';
 
 const flavour = await detectCharmFlavour('path/to/app');
-// → {major: 'v2', module: 'charm.land/bubbletea/v2', version: 'v2.0.8', companions: {…}}
+// → {major: 'v2', module: 'charm.land/bubbletea/v2', version: 'v2.0.9', companions: {…}}
 
 capabilitiesFor(flavour.major); // neither shipped patch set claims `bounds`
 ```

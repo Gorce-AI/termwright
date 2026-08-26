@@ -118,10 +118,15 @@ jobs:
           } >> "$GITHUB_ENV"
           mkdir -p "$CANDIDATE_DIR" "$VERDICT_DIR"
           gh run download "$RUN_ID" --name framework-candidate-registry --dir "$CANDIDATE_DIR"
-          count=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
-            --jq '[.artifacts[] | select(.expired == false and (.name | startswith("framework-verdict-")))] | length')
-          if [ "$count" -gt 0 ]; then
-            gh run download "$RUN_ID" --pattern 'framework-verdict-*' --dir "$VERDICT_DIR"
+          mapfile -t verdict_artifacts < <(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '.artifacts[] | select(.expired == false and (.name | startswith("framework-verdict-"))) | .name')
+          candidate_count=$(jq '.candidates | length' "$CANDIDATE_DIR/candidate-registry.json")
+          if [ "$candidate_count" -eq 0 ]; then
+            test "${#verdict_artifacts[@]}" -eq 0
+          else
+            test "${#verdict_artifacts[@]}" -eq 1
+            test "${verdict_artifacts[0]}" = framework-verdict-aggregate
+            gh run download "$RUN_ID" --name framework-verdict-aggregate --dir "$VERDICT_DIR"
           fi
 
       - name: Start from the trusted default-branch ledger
@@ -320,10 +325,15 @@ jobs:
           NODE
           node scripts/autonomous-release-coordinator.mjs validate-upstream "$work/source-run-event.json" "$BASE_SHA"
           gh run download "$SOURCE_RUN_ID" --name framework-candidate-registry --dir "$candidates"
-          count=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" \
-            --jq '[.artifacts[] | select(.expired == false and (.name | startswith("framework-verdict-")))] | length')
-          if [ "$count" -gt 0 ]; then
-            gh run download "$SOURCE_RUN_ID" --pattern 'framework-verdict-*' --dir "$verdicts"
+          mapfile -t verdict_artifacts < <(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" \
+            --jq '.artifacts[] | select(.expired == false and (.name | startswith("framework-verdict-"))) | .name')
+          candidate_count=$(jq '.candidates | length' "$candidates/candidate-registry.json")
+          if [ "$candidate_count" -eq 0 ]; then
+            test "${#verdict_artifacts[@]}" -eq 0
+          else
+            test "${#verdict_artifacts[@]}" -eq 1
+            test "${verdict_artifacts[0]}" = framework-verdict-aggregate
+            gh run download "$SOURCE_RUN_ID" --name framework-verdict-aggregate --dir "$verdicts"
           fi
           git fetch origin "$BASE_SHA" "$HEAD_SHA"
           git checkout --detach "$BASE_SHA"

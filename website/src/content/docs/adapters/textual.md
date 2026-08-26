@@ -61,7 +61,8 @@ geometry, or visibility.
 
 ## Supported behavior
 
-Textual 8.2.8 is verified. The integration observes stable widget identity, intended
+The Textual versions listed in the compatibility registry are verified exactly.
+The integration observes stable widget identity, intended
 and clipped geometry, ancestor display, focus, native widget state, and exact
 fresh-pointer ownership through `Screen.get_widget_at()`. Active mouse capture
 is outside that contract.

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LocatorWheelOptions
 
-Defined in: [driver/src/api.ts:547](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L547)
+Defined in: [driver/src/api.ts:549](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L549)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -40,7 +40,7 @@ await terminal.close();
 
 > `readonly` `optional` **deltaX?**: `number`
 
-Defined in: [driver/src/api.ts:553](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L553)
+Defined in: [driver/src/api.ts:555](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L555)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [driver/src/api.ts:553](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **deltaY?**: `number`
 
-Defined in: [driver/src/api.ts:552](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L552)
+Defined in: [driver/src/api.ts:554](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L554)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: [driver/src/api.ts:552](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **modifiers?**: readonly [`MouseModifier`](../../type-aliases/mousemodifier/)[]
 
-Defined in: [driver/src/api.ts:278](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L278)
+Defined in: [driver/src/api.ts:280](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L280)
 
 #### Inherited from
 
@@ -68,7 +68,7 @@ Defined in: [driver/src/api.ts:278](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **position?**: `object`
 
-Defined in: [driver/src/api.ts:548](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L548)
+Defined in: [driver/src/api.ts:550](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L550)
 
 #### columnOffset
 
@@ -84,7 +84,7 @@ Defined in: [driver/src/api.ts:548](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [driver/src/api.ts:537](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L537)
+Defined in: [driver/src/api.ts:539](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L539)
 
 #### Inherited from
 

@@ -55,6 +55,11 @@ const UPSTREAM: Readonly<
   v2: { version: "v2.0.8", path: ["charm.land", "bubbletea", "v2@v2.0.8"] },
 };
 
+const V2_PROFILES = [
+  { version: "v2.0.8", path: ["charm.land", "bubbletea", "v2@v2.0.8"] },
+  { version: "v2.0.9", path: ["charm.land", "bubbletea", "v2@v2.0.9"] },
+] as const;
+
 async function goAvailable(): Promise<boolean> {
   return goTestCapability(
     async () => {
@@ -75,18 +80,16 @@ afterAll(async () => {
   );
 });
 
-function patchSetFor(major: CharmMajor): string {
-  return join(
-    here,
-    "..",
-    "upstream-patches",
-    "bubbletea",
-    UPSTREAM[major].version,
-  );
+function patchSetFor(
+  major: CharmMajor,
+  version = UPSTREAM[major].version,
+): string {
+  return join(here, "..", "upstream-patches", "bubbletea", version);
 }
 
 async function instrumentedCopy(
   major: CharmMajor,
+  upstream = UPSTREAM[major],
 ): Promise<{ copy: string; workspace: string }> {
   const dir = await realpath(
     await mkdtemp(join(tmpdir(), `tw-charm-${major}-`)),
@@ -97,12 +100,12 @@ async function instrumentedCopy(
   await materializeUpstream(
     await ensureUpstreamModule({
       module: BUBBLETEA_MODULES[major],
-      version: UPSTREAM[major].version,
-      cachePath: UPSTREAM[major].path,
+      version: upstream.version,
+      cachePath: upstream.path,
     }),
     copy,
   );
-  await applyPatchSet(copy, patchSetFor(major));
+  await applyPatchSet(copy, patchSetFor(major, upstream.version));
 
   const workspace = await writeWorkspace(join(dir, "probe.work"), {
     moduleDir: copy,
@@ -118,11 +121,14 @@ async function instrumentedCopy(
 }
 
 describe("the runtime capability declarations", () => {
-  it.each(["v1", "v2"] as const)(
-    "declares the exact honest capabilities in %s",
-    async (major) => {
+  it.each([
+    { major: "v1", version: "v1.3.10" },
+    ...V2_PROFILES.map(({ version }) => ({ major: "v2" as const, version })),
+  ] as const)(
+    "declares the exact honest capabilities in $major $version",
+    async ({ major, version }) => {
       const source = await readFile(
-        join(patchSetFor(major), "add", "termwright_probe.go"),
+        join(patchSetFor(major, version), "add", "termwright_probe.go"),
         "utf8",
       );
       const literal =
@@ -144,9 +150,7 @@ describe("the runtime capability declarations", () => {
 
       // This is a different capability vocabulary: it describes facts the
       // framework exposes, not message kinds the adapter can send.
-      expect(source).toContain(
-        `frameworkVersion = "${UPSTREAM[major].version}"`,
-      );
+      expect(source).toContain(`frameworkVersion = "${version}"`);
       expect(source).toContain('Framework:        "charm"');
       expect(source).toMatch(
         /IdentityKind:\s+protocol\.ProbeIdentityFrameLocal/u,
@@ -165,59 +169,96 @@ describe("the runtime capability declarations", () => {
 });
 
 describe.skipIf(!hasGo)("the patch sets", () => {
-  it("instruments v2 with a single anchor and compiles", async () => {
-    const { copy, workspace } = await instrumentedCopy("v2");
+  it.each(V2_PROFILES)(
+    "instruments exact $version with a single anchor and compiles",
+    async (profile) => {
+      const { copy, workspace } = await instrumentedCopy("v2", profile);
 
-    const tea = await readFile(join(copy, "tea.go"), "utf8");
-    // Program.render captures the model-aware semantic frame, while the
-    // renderer's successful flush is the only commit boundary.
-    expect(tea.match(/termwrightRenderAndObserve\(p, model\)/gu)).toHaveLength(
-      1,
-    );
-    const renderer = await readFile(join(copy, "cursed_renderer.go"), "utf8");
-    expect(renderer).toContain("termwrightAfterRendererFlush(s, false)");
-    expect(renderer).toContain("termwrightAfterRendererFlush(s, true)");
-    expect(renderer).toContain("written != int64(outputLen)");
-    expect(renderer).toContain("err = io.ErrShortWrite");
-    expect(
-      renderer.lastIndexOf("termwrightAfterRendererFlush(s, true)"),
-    ).toBeGreaterThan(renderer.indexOf("io.Copy(s.w, &buf)"));
-    expect(
-      renderer.indexOf("termwrightAfterRendererFlush(s, false)"),
-    ).toBeGreaterThan(renderer.indexOf("s.scr.Flush()"));
-    const probe = await readFile(join(copy, "termwright_probe.go"), "utf8");
-    expect(probe).toContain("p.publish(renderer.w, frame)");
-    expect(probe).toContain(
-      'p.failOutput("Bubble Tea renderer did not commit the complete terminal frame")',
-    );
-    expect(probe).not.toContain("os.Stdout");
-    const replay = probe.slice(
-      probe.indexOf("func (p *termwrightProbeState) replayLatestFrames()"),
-    );
-    expect(replay.indexOf("renderer.mu.Lock()")).toBeLessThan(
-      replay.indexOf("frame := p.latest[renderer]"),
-    );
-    expect(replay.indexOf("frame := p.latest[renderer]")).toBeLessThan(
-      replay.indexOf("frame.sequence > p.published[renderer]"),
-    );
+      const tea = await readFile(join(copy, "tea.go"), "utf8");
+      // Program.render captures the model-aware semantic frame, while the
+      // renderer's successful flush is the only commit boundary.
+      expect(
+        tea.match(/termwrightRenderAndObserve\(p, model\)/gu),
+      ).toHaveLength(1);
+      const renderer = await readFile(join(copy, "cursed_renderer.go"), "utf8");
+      expect(renderer).toContain("termwrightAfterRendererFlush(s, false)");
+      expect(renderer).toContain("termwrightAfterRendererFlush(s, true)");
+      if (profile.version === "v2.0.9") {
+        expect(renderer).toContain("!s.pendingErase");
+        expect(renderer.indexOf("!s.pendingErase")).toBeLessThan(
+          renderer.indexOf("termwrightAfterRendererFlush(s, true)"),
+        );
+      }
+      expect(renderer).toContain("written != int64(outputLen)");
+      expect(renderer).toContain("err = io.ErrShortWrite");
+      expect(
+        renderer.lastIndexOf("termwrightAfterRendererFlush(s, true)"),
+      ).toBeGreaterThan(renderer.indexOf("io.Copy(s.w, &buf)"));
+      expect(
+        renderer.indexOf("termwrightAfterRendererFlush(s, false)"),
+      ).toBeGreaterThan(renderer.indexOf("s.scr.Flush()"));
+      const probe = await readFile(join(copy, "termwright_probe.go"), "utf8");
+      expect(probe).toContain("p.publish(renderer.w, frame)");
+      expect(probe).toContain(
+        'p.failOutput("Bubble Tea renderer did not commit the complete terminal frame")',
+      );
+      expect(probe).not.toContain("os.Stdout");
+      const replay = probe.slice(
+        probe.indexOf("func (p *termwrightProbeState) replayLatestFrames()"),
+      );
+      expect(replay.indexOf("renderer.mu.Lock()")).toBeLessThan(
+        replay.indexOf("frame := p.latest[renderer]"),
+      );
+      expect(replay.indexOf("frame := p.latest[renderer]")).toBeLessThan(
+        replay.indexOf("frame.sequence > p.published[renderer]"),
+      );
 
-    await expect(
-      run("go", ["build", "./..."], {
-        cwd: copy,
-        env: { ...process.env, GOWORK: workspace },
-      }),
-    ).resolves.toBeDefined();
-    const { stdout } = await runGo(
-      ["test", "-run", "Termwright", "-count=1", "-v", "."],
-      {
-        cwd: copy,
-        env: { ...process.env, GOWORK: workspace },
-      },
-    );
-    expect(stdout).toContain(
-      "PASS: TestTermwrightSemanticKeysStabiliseIDsAndResolveRelations",
-    );
-  }, 900_000);
+      await expect(
+        run("go", ["build", "./..."], {
+          cwd: copy,
+          env: { ...process.env, GOWORK: workspace },
+        }),
+      ).resolves.toBeDefined();
+      const { stdout } = await runGo(
+        ["test", "-run", "Termwright", "-count=1", "-v", "."],
+        {
+          cwd: copy,
+          env: { ...process.env, GOWORK: workspace },
+        },
+      );
+      expect(stdout).toContain(
+        "PASS: TestTermwrightSemanticKeysStabiliseIDsAndResolveRelations",
+      );
+    },
+    900_000,
+  );
+
+  it.each([
+    { source: V2_PROFILES[0], patch: V2_PROFILES[1] },
+    { source: V2_PROFILES[1], patch: V2_PROFILES[0] },
+  ])(
+    "refuses the $patch.version profile for exact source $source.version",
+    async ({ source, patch }) => {
+      const dir = await realpath(
+        await mkdtemp(join(tmpdir(), "tw-charm-v2-cross-")),
+      );
+      roots.push(dir);
+      const copy = join(dir, "bubbletea");
+      await materializeUpstream(
+        await ensureUpstreamModule({
+          module: BUBBLETEA_MODULES.v2,
+          version: source.version,
+          cachePath: source.path,
+        }),
+        copy,
+      );
+
+      await expect(
+        applyPatchSet(copy, patchSetFor("v2", patch.version)),
+      ).rejects.toThrow(/does not match charm\.land\/bubbletea\/v2 v2\.0\.[89]/u);
+    },
+    600_000,
+  );
 
   it("instruments v1 at all three call sites and compiles", async () => {
     const { copy, workspace } = await instrumentedCopy("v1");
@@ -271,13 +312,18 @@ describe.skipIf(!hasGo)("the patch sets", () => {
   }, 900_000);
 
   it("keeps the majors on separate patch sets, keyed by their own module path", async () => {
-    const [v1, v2] = await Promise.all([
+    const [v1, ...v2] = await Promise.all([
       readFile(join(patchSetFor("v1"), "manifest.json"), "utf8"),
-      readFile(join(patchSetFor("v2"), "manifest.json"), "utf8"),
+      ...V2_PROFILES.map(({ version }) =>
+        readFile(join(patchSetFor("v2", version), "manifest.json"), "utf8"),
+      ),
     ]);
 
     expect(JSON.parse(v1).framework).toBe(BUBBLETEA_MODULES.v1);
-    expect(JSON.parse(v2).framework).toBe(BUBBLETEA_MODULES.v2);
+    expect(v2.map((manifest) => JSON.parse(manifest).framework)).toEqual([
+      BUBBLETEA_MODULES.v2,
+      BUBBLETEA_MODULES.v2,
+    ]);
   });
 
   it("refuses to apply one major to the other", async () => {

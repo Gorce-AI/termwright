@@ -109,9 +109,13 @@ function canonical(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+export function renderSemanticCompletenessReport(registry) {
+  return canonical(buildSemanticCompletenessReport(registry));
+}
+
 async function main() {
   const registry = JSON.parse(await readFile(registryUrl, 'utf8'));
-  const expected = canonical(buildSemanticCompletenessReport(registry));
+  const expected = renderSemanticCompletenessReport(registry);
   if (process.argv.includes('--write')) {
     await writeFile(outputUrl, expected);
     process.stdout.write('wrote compatibility/framework-semantic-completeness.json\n');

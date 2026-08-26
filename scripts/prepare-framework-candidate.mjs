@@ -120,12 +120,26 @@ export async function prepareSyntheticPatchBundle(options) {
   return preparePatchBundle({ ...options, outputDirectory: options.outputDirectory ?? directory });
 }
 
+export async function assertGoDownloadBinding(result, candidate) {
+  if (
+    typeof result?.Dir !== 'string'
+    || typeof result?.Zip !== 'string'
+    || result.Sum !== candidate.source?.sum
+    || result.GoModSum !== candidate.source?.goModSum
+  ) throw new Error(`${candidate.id}: downloaded Go module identity does not match discovery`);
+  const zipSha256 = createHash('sha256').update(await readFile(result.Zip)).digest('hex');
+  if (zipSha256 !== candidate.source?.zipSha256) {
+    throw new Error(`${candidate.id}: downloaded Go module archive does not match discovery`);
+  }
+}
+
 export async function materializeCandidateSource(candidate) {
   const directory = await mkdtemp(join(tmpdir(), 'termwright-upstream-'));
   const sourceRoot = join(directory, 'source');
   await mkdir(sourceRoot);
   if (candidate.registry === 'go') {
     const result = JSON.parse((await exec('go', ['mod', 'download', '-json', `${candidate.package}@${candidate.version}`], { env: trustedGoEnvironment({ GOFLAGS: '', GOWORK: 'off', GOPROXY: 'https://proxy.golang.org', GOSUMDB: 'sum.golang.org' }) })).stdout);
+    await assertGoDownloadBinding(result, candidate);
     await cp(result.Dir, sourceRoot, { recursive: true });
   } else if (candidate.registry === 'crates.io') {
     const response = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(candidate.package)}/${encodeURIComponent(candidate.version)}/download`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
@@ -141,12 +155,21 @@ export function proposeCompatibilityUpdate(registry, candidate, manifest) {
   const next = structuredClone(registry);
   const framework = next.frameworks?.find((entry) => entry.id === candidate.frameworkId);
   if (framework === undefined) throw new Error(`${candidate.id}: compatibility framework row is missing`);
+  if (manifest.framework !== candidate.package || manifest.frameworkVersion !== candidate.version) {
+    throw new Error(`${candidate.id}: patch manifest targets another exact framework artifact`);
+  }
   const patchSets = framework.instrumentation?.patchSets;
   if (!Array.isArray(patchSets)) throw new Error(`${candidate.id}: certified patch-set declarations are missing`);
   const existing = patchSets.find((entry) => entry.name === candidate.package && entry.version === candidate.version);
   if (existing === undefined) patchSets.push({ name: candidate.package, version: candidate.version, patchSetVersion: manifest.patchSetVersion });
   else if (existing.patchSetVersion !== manifest.patchSetVersion) throw new Error(`${candidate.id}: patch-set declaration conflicts with the generated manifest`);
   patchSets.sort((a, b) => a.name.localeCompare(b.name) || compareVersions(a.version, b.version));
+  const checksumSources = framework.certification?.checksumSources;
+  if (!Array.isArray(checksumSources) || typeof candidate.patch?.path !== 'string') {
+    throw new Error(`${candidate.id}: exact patch certification metadata is incomplete`);
+  }
+  if (!checksumSources.includes(candidate.patch.path)) checksumSources.push(candidate.patch.path);
+  checksumSources.sort();
   return next;
 }
 
@@ -166,16 +189,30 @@ export function recordExecutableVariant(registry, candidate, resolution) {
     }
   }
   modules.sort((a, b) => a.name.localeCompare(b.name) || compareVersions(a.version, b.version));
+  // Only an already-certified variant may establish which module owns the
+  // framework version. The candidate variant must not be able to authorize
+  // itself as primary merely by sharing the same version string.
+  const primaryModules = new Set(framework.instrumentation.variants.flatMap((variant) =>
+    variant.modules
+      .filter((module) => module.optional !== true && module.version === variant.frameworkVersion)
+      .map((module) => module.name)));
   const signature = canonicalJson({ frameworkVersion: resolution.frameworkVersion, modules });
   const id = `${candidate.frameworkId}-${resolution.frameworkVersion}-${createHash('sha256').update(signature).digest('hex').slice(0, 12)}`.replace(/[^A-Za-z0-9._-]/gu, '-');
   const variants = framework.instrumentation.variants;
   const existing = variants.find((variant) => canonicalJson({ frameworkVersion: variant.frameworkVersion, modules: variant.modules }) === signature);
   if (existing === undefined) variants.push({ id, frameworkVersion: resolution.frameworkVersion, modules });
   variants.sort((a, b) => a.id.localeCompare(b.id));
-  if (framework.frameworkPackage === candidate.package && !framework.versions.verified.includes(candidate.version)) {
+  const isPrimaryFrameworkCandidate = framework.frameworkPackage === candidate.package || primaryModules.has(candidate.package);
+  if (isPrimaryFrameworkCandidate && resolution.frameworkVersion === candidate.version && !framework.versions.verified.includes(candidate.version)) {
     framework.versions.verified.push(candidate.version);
     framework.versions.verified.sort(compareVersions);
     if (framework.versions.policy === 'exact') framework.versions.declared = framework.versions.verified.join(' or ');
   }
+  if (!Array.isArray(framework.certification?.ids) || typeof framework.probe?.packageVersion !== 'string') {
+    throw new Error(`${candidate.id}: framework certification identity metadata is incomplete`);
+  }
+  framework.certification.ids = framework.versions.verified.map(
+    (version) => `${framework.id}@${version}/${framework.probe.packageVersion}`,
+  );
   return next;
 }

@@ -37,11 +37,18 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('aggregate-framework-candidate-verdicts.mjs');
     expect(workflow).toContain('--assessments compatibility/candidate-assessments.json');
     expect(certifier).toContain("'--ignore-scripts'");
+    const aggregate = jobBlock(workflow, 'aggregate');
+    expect(jobBlock(workflow, 'certify')).not.toContain('astral-sh/setup-uv@');
+    expect(aggregate).toContain('astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1');
+    expect(aggregate).toContain("version: '0.12.6'");
+    expect(aggregate).toContain('enable-cache: false');
+    expect(aggregate).toContain("python-version: '3.12'");
   });
 
   it('coordinates only completed workflow_run events and never checks out the PR head in a write-token job', async () => {
     const workflow = await readWorkflow('autonomous-coordinator.yml');
     const coordinator = await readFile(new URL('./autonomous-release-coordinator.mjs', import.meta.url), 'utf8');
+    const reconciler = await readFile(new URL('./reconcile-framework-candidates.mjs', import.meta.url), 'utf8');
     expect(workflow).toContain('workflow_run:');
     expect(workflow).toContain("types: [completed]");
     expect(workflow).toContain('autonomous-coordinator-${{ github.event.repository.full_name }}');
@@ -50,6 +57,11 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('Compatibility PR differs from exact trusted artifact reconciliation');
     expect(workflow).toContain("workflows: ['Framework compatibility candidates', 'CI', 'Release']");
     expect(workflow).not.toContain('rerun-failed-jobs');
+    expect(workflow).not.toContain('astral-sh/setup-uv@');
+    expect(workflow).not.toContain("--pattern 'framework-verdict-*'");
+    expect(workflow.match(/--name framework-verdict-aggregate --dir/gu)).toHaveLength(2);
+    expect(workflow.match(/test "\$\{#verdict_artifacts\[@\]\}" -eq 1/gu)).toHaveLength(2);
+    expect(workflow.match(/test "\$\{verdict_artifacts\[0\]\}" = framework-verdict-aggregate/gu)).toHaveLength(2);
     expect(workflow).toContain('validate-release-failure');
     expect(workflow).toContain('gh pr list --state open --head "$BRANCH"');
     expect(workflow).not.toContain('gh pr view "$BRANCH"');
@@ -61,6 +73,9 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('.user.login == "github-actions[bot]"');
     expect(workflow).toContain('dispatch-pending-changesets');
     expect(workflow).toContain('refresh-heartbeat');
+    expect(coordinator).toContain('framework-semantic-completeness');
+    expect(reconciler).toContain("join(root, 'compatibility/framework-semantic-completeness.json')");
+    expect(reconciler).toContain('renderSemanticCompletenessReport(compatibility)');
     expect(workflow).toContain('automation/workflow-heartbeat');
     expect(workflow).toContain('Heartbeat PR differs from the deterministic source-run-bound transformation');
     expect(workflow).toContain('notify-upstream-failure:');
@@ -160,7 +175,7 @@ describe('autonomous workflow security', () => {
     for (const job of ['build', 'windows-driver-native']) {
       const block = jobBlock(workflow, job);
       expect(block).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
-      expect(block).toContain("bun-version: '1.2.15'");
+      expect(block).toContain("bun-version: '1.4.0'");
       expect(block.indexOf('oven-sh/setup-bun@')).toBeLessThan(
         block.indexOf('name: Run the certified Termwright host'),
       );
@@ -200,16 +215,16 @@ describe('autonomous workflow security', () => {
     for (const job of ['build', 'windows-driver-native', 'opentui', 'examples']) {
       const block = jobBlock(ci, job);
       expect(block).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
-      expect(block).toContain("bun-version: '1.2.15'");
+      expect(block).toContain("bun-version: '1.4.0'");
       expect(block).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
     }
     const verify = jobBlock(release, 'verify');
     expect(verify).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
-    expect(verify).toContain("bun-version: '1.2.15'");
+    expect(verify).toContain("bun-version: '1.4.0'");
     expect(verify).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
     const candidateCertification = jobBlock(upstreamCandidates, 'certify');
     expect(candidateCertification).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
-    expect(candidateCertification).toContain("bun-version: '1.2.15'");
+    expect(candidateCertification).toContain("bun-version: '1.4.0'");
     expect(candidateCertification).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
     expect(candidateCertification.indexOf('oven-sh/setup-bun@')).toBeLessThan(
       candidateCertification.indexOf('name: Certify artifact identity and behavioral conformance'),

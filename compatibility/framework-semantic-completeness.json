@@ -242,7 +242,7 @@
       "remainsUnknowableAutomatically": [
         "Application component names disappear before the retained Ink host tree is created.",
         "Ink cannot attribute focus to a host node automatically; an application production focus manager can provide it through the focus-evidence contract. Text selection and third-party input values remain unobservable automatically.",
-        "Only the checksummed Ink 7.1.1 renderer is certified; modified or other versions fail closed without negotiating semantics.",
+        "Only the exact checksummed Ink versions listed in this registry are certified; modified or other versions fail closed without negotiating semantics.",
         "Occlusion is unknown, so semantic click is refused even when qualified bounds are present.",
         "Ink does not retain aria-label; name-from-content roles use rendered text and containers remain unnamed."
       ],
@@ -842,7 +842,7 @@
         "PYTHONPATH is inherited, so child processes are instrumented unless the application scrubs it.",
         "Inactive screens are absent rather than represented as hidden nodes.",
         "No frame-begin capability is advertised: the exact display attempt is staged internally and becomes semantic evidence only after its successful same-writer FIFO enqueue reaches post_display_hook.",
-        "The Textual 8.2.8 Driver.flush method is a no-op; certification proves causal WriterThread queue order rather than claiming a physical terminal flush. A full writer queue fails semantic publication immediately instead of blocking the application.",
+        "For the exact Textual versions listed in this registry, certification proves causal WriterThread queue order rather than claiming a physical terminal flush. A full writer queue fails semantic publication immediately instead of blocking the application.",
         "A Static subclass with custom render() is named from stored content, not the final rendered segments."
       ],
       "executableClaims": [
@@ -1591,6 +1591,21 @@
               "name": "charm.land/bubbles/v2",
               "version": "v2.1.1",
               "optional": true
+            }
+          ]
+        },
+        {
+          "id": "charm-v2.0.9-ba5de3a6cd17",
+          "frameworkVersion": "v2.0.9",
+          "modules": [
+            {
+              "name": "charm.land/bubbles/v2",
+              "version": "v2.1.1",
+              "optional": true
+            },
+            {
+              "name": "charm.land/bubbletea/v2",
+              "version": "v2.0.9"
             }
           ]
         }

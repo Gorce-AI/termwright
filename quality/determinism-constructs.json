@@ -15,7 +15,7 @@
     "deterministic-adversarial-fixture-schedule": 34,
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 206,
+    "explicit-external-or-ui-source-polling": 203,
     "explicit-test-selection-reviewed-with-platform-registry": 92,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
@@ -2074,25 +2074,7 @@
       "path": "packages/probe-charm/src/zero-config.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await app.getByRole('textbox', { name: 'Name' }).semanticState())?.focused)"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await app.getByRole('textbox', { name: 'Password' }).semanticState())?.focused)"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => app.getByRole('textbox', { name: 'Name' }).textContent()).toContain('ada');"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => app.getByRole('textbox', { name: 'Password' }).count()).toBe(1);"
+      "excerpt": ".poll(async () => (await app.getByRole('status').semanticState())?.positionInSet)"
     },
     {
       "path": "packages/probe-charm/src/zero-config.pty.test.ts",

@@ -106,7 +106,7 @@ jobs:
       # turn a supported-runtime row into an environment-dependent skip.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: '1.2.15'
+          bun-version: '1.4.0'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.25'
@@ -347,7 +347,7 @@ jobs:
           node-version: ${{ matrix.node }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: '1.2.15'
+          bun-version: '1.4.0'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.25'
@@ -848,7 +848,7 @@ jobs:
       # CI would claim adapter coverage it does not have.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: '1.2.15'
+          bun-version: '1.4.0'
 
       - run: pnpm build
 
@@ -1192,7 +1192,7 @@ jobs:
             examples/bubbletea-login/app/go.sum
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: '1.2.15'
+          bun-version: '1.4.0'
       - uses: dtolnay/rust-toolchain@2eae45db285e407f22119950686d47e1101e071b # 1.88
 
       - run: pnpm build

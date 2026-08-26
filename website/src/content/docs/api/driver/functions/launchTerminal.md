@@ -13,15 +13,16 @@ editUrl: false
 
 > **launchTerminal**(`options`): `Promise`\<[`TerminalHarness`](../../interfaces/terminalharness/)\>
 
-Defined in: [driver/src/session.ts:271](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L271)
+Defined in: [driver/src/session.ts:272](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L272)
 
 Launches a program in a real PTY and returns a harness over it.
 
 The semantic endpoint is created *before* the child starts, so an
 instrumented application can hand over its first tree during startup. An
 uninstrumented application simply never connects: after
-`semanticNegotiationMs` the session settles as generic (`semanticTree:
-false`) and keeps working with grid locators.
+`semanticNegotiationMs` adapter discovery closes and the session settles as
+generic (`semanticTree: false`). A peer accepted before that boundary keeps
+only its own bounded hello deadline before the same fail-closed outcome.
 
 ## Parameters
 

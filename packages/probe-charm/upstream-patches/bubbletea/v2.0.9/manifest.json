@@ -1,0 +1,38 @@
+{
+  "framework": "charm.land/bubbletea/v2",
+  "frameworkVersion": "v2.0.9",
+  "patchSetVersion": 17,
+  "note": "Program.render stages the model-aware observation; cursedRenderer.flush commits it only after both screen flush and complete same-writer output succeed, and closes the semantic channel on either failure.",
+  "patched": [
+    {
+      "path": "tea.go",
+      "patch": "patches/tea.go.patch",
+      "sha256Before": "sha256:2b0d9badb43327e5c5a7e618501a542befccc498b826e50188ee6793463345df",
+      "sha256After": "sha256:c303b2123ff1c23944837b1bda6555115054075325588e02d616a26bc4f7df61"
+    },
+    {
+      "path": "cursed_renderer.go",
+      "patch": "patches/cursed_renderer.go.patch",
+      "sha256Before": "sha256:7d964370cd88c9aa122238a37ebd0e64e46dd38af4f33e33ad99e0ca2ed266f5",
+      "sha256After": "sha256:1de03134e629fe2f21847507a24add2b7bb4633b3afd6898f921006bddf188f7"
+    },
+    {
+      "path": "go.mod",
+      "patch": "patches/go.mod.patch",
+      "sha256Before": "sha256:751049c026efd6817be643df2a8bfc4dd459048ead81a6db9f9748e520bfd595",
+      "sha256After": "sha256:e6f06f02b66ed7cf39b87a78f336bed405432a891a16e85b84f4373336496075"
+    }
+  ],
+  "added": [
+    {
+      "path": "termwright_probe.go",
+      "source": "add/termwright_probe.go",
+      "sha256": "sha256:4f3be71d275256e1dbbe27cf7022945f391c091a3e299a7731193d9ef6b5f6b6"
+    },
+    {
+      "path": "termwright_probe_test.go",
+      "source": "add/termwright_probe_test.go",
+      "sha256": "sha256:b1ffb8ca436524311546843b05f41635e020433e8695fb762050c86bd6559407"
+    }
+  ]
+}

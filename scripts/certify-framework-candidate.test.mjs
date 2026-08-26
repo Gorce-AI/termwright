@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { assertCandidateSemanticSession, candidateToolchainBlock, deriveHookInstrumentationProfile, installedDependencyFrom, packageContentDigestForEntries, verifyCandidateEvidence, verifyInstalledNpmClosure } from './certify-framework-candidate.mjs';
+import { assertCandidateSemanticSession, candidateToolchainBlock, deriveHookInstrumentationProfile, installedDependencyFrom, packageContentDigestForEntries, selectCharmCandidateComposition, verifyCandidateEvidence, verifyInstalledNpmClosure, verifyPreparedUpdateInvariant } from './certify-framework-candidate.mjs';
+import { digestTree } from './prepare-framework-candidate.mjs';
 
 const exec = promisify(execFile);
 
@@ -83,6 +84,53 @@ async function npmClosureFixture() {
 }
 
 describe('framework candidate evidence binding', () => {
+  it('rejects a generated patch bundle changed by candidate code after trusted preparation', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-prepared-update-'));
+    await mkdir(join(directory, 'patch'));
+    await writeFile(join(directory, 'patch', 'manifest.json'), '{"version":1}\n');
+    await writeFile(join(directory, 'bundle.json'), '{"trusted":true}\n');
+    const invariant = {
+      directory,
+      bundle: await readFile(join(directory, 'bundle.json')),
+      patchTreeDigest: await digestTree(join(directory, 'patch')),
+    };
+    await expect(verifyPreparedUpdateInvariant(invariant)).resolves.toBeUndefined();
+    await writeFile(join(directory, 'patch', 'manifest.json'), '{"version":2}\n');
+    await expect(verifyPreparedUpdateInvariant(invariant)).rejects.toThrow(/patch tree changed/u);
+    await writeFile(join(directory, 'patch', 'manifest.json'), '{"version":1}\n');
+    await writeFile(join(directory, 'bundle.json'), '{"trusted":false}\n');
+    await expect(verifyPreparedUpdateInvariant(invariant)).rejects.toThrow(/bundle changed/u);
+  });
+  it('executes Bubble Tea and Bubbles candidates with an exact certified companion', () => {
+    const tea = 'charm.land/bubbletea/v2';
+    const bubbles = 'charm.land/bubbles/v2';
+    const patchSets = [
+      { name: tea, version: 'v2.0.8' },
+      { name: tea, version: 'v2.0.9' },
+      { name: bubbles, version: 'v2.1.1' },
+    ];
+    expect(selectCharmCandidateComposition(
+      { id: 'bubbletea-v2@v2.0.9', package: tea, version: 'v2.0.9' }, patchSets, tea, bubbles,
+    )).toEqual({ teaVersion: 'v2.0.9', bubblesVersion: 'v2.1.1' });
+    expect(selectCharmCandidateComposition(
+      { id: 'bubbles-v2@v2.2.0', package: bubbles, version: 'v2.2.0' },
+      [...patchSets, { name: bubbles, version: 'v2.2.0' }], tea, bubbles,
+    )).toEqual({ teaVersion: 'v2.0.9', bubblesVersion: 'v2.2.0' });
+  });
+
+  it('fails closed when a Charm candidate has no exact companion profile', () => {
+    expect(() => selectCharmCandidateComposition(
+      { id: 'bubbletea-v2@v2.0.9', package: 'tea', version: 'v2.0.9' },
+      [{ name: 'tea', version: 'v2.0.9' }], 'tea', 'bubbles',
+    )).toThrow(/no exact certified Charm companion/u);
+  });
+
+  it('fails closed when the exact candidate patch declaration is missing', () => {
+    expect(() => selectCharmCandidateComposition(
+      { id: 'bubbletea-v2@v2.0.9', package: 'tea', version: 'v2.0.9' },
+      [{ name: 'tea', version: 'v2.0.8' }, { name: 'bubbles', version: 'v2.1.1' }], 'tea', 'bubbles',
+    )).toThrow(/exact candidate patch declaration is missing/u);
+  });
   it('walks the real pnpm package location when dependency versions diverge', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-pnpm-closure-'));
     const packageDirectory = (key, name) => join(directory, '.pnpm', key, 'node_modules', name);

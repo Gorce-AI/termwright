@@ -51,7 +51,7 @@ annotations and reported with framework provenance.
 
 Ink does not retain component names, `aria-label`, the active focus id, or
 third-party input values on its host tree. The probe omits those facts rather
-than allowing annotations to impersonate them. The certified Ink 7.1.1
+than allowing annotations to impersonate them. The exact-certified Ink
 instrumentation correlates Yoga layout, nested overflow clipping, Static/live
 origins, emitted output, and the committed VT buffer, so intended and visible
 geometry are automatic for the frozen adapter contract. Exact pointer ownership
