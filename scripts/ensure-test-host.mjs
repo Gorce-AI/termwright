@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyImmutableWorkspaceBuild } from './immutable-build-manifest.mjs';
+import { pnpmInvocation } from './package-manager-command.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 export const testHostEntrypoint = fileURLToPath(
@@ -24,12 +25,8 @@ function run(command, args) {
 }
 
 async function buildTestHost() {
-  const pnpmCli = process.env['npm_execpath'];
-  if (pnpmCli !== undefined && pnpmCli.length > 0) {
-    await run(process.execPath, [pnpmCli, 'run', 'build']);
-    return;
-  }
-  await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['run', 'build']);
+  const invocation = pnpmInvocation(['run', 'build'], { env: process.env });
+  await run(invocation.command, invocation.args);
 }
 
 /** Ensures every worker will consume one fresh, fingerprinted workspace build. */

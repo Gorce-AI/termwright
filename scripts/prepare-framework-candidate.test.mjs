@@ -1,10 +1,10 @@
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { assertArtifactSha256, assertGoDownloadBinding, collectTcellConsoleProfileEvidence, preparePatchBundle, preparePatchBundles, proposeCompatibilityUpdate, recordExecutableVariant, selectTcellConsoleProfiles } from './prepare-framework-candidate.mjs';
+import { assertArtifactSha256, assertGoDownloadBinding, collectTcellConsoleProfileEvidence, createMaterializedCandidateSourceLease, preparePatchBundle, preparePatchBundles, proposeCompatibilityUpdate, recordExecutableVariant, removeMaterializedCandidateSource, selectTcellConsoleProfiles } from './prepare-framework-candidate.mjs';
 
 const sha = (value) => `sha256:${value.repeat(64)}`;
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -116,6 +116,48 @@ const [oldPrepared, newPreparedOne, newPreparedTwo] = await preparePatchBundles(
 ]);
 
 describe('framework candidate patch preparation', () => {
+  it('removes an owned read-only module-cache copy and refuses any other tree', async () => {
+    const lease = await createMaterializedCandidateSourceLease();
+    const { sourceRoot } = lease;
+    const directory = dirname(sourceRoot);
+    const nested = join(sourceRoot, '.github');
+    await mkdir(nested, { recursive: true });
+    const file = join(nested, 'FUNDING.yml');
+    await writeFile(file, 'github: termwright\n');
+    await chmod(file, 0o444);
+    await chmod(nested, 0o555);
+    await chmod(sourceRoot, 0o555);
+
+    await expect(removeMaterializedCandidateSource({ ...lease })).rejects.toThrow(/not owned/u);
+    await expect(removeMaterializedCandidateSource(lease)).resolves.toBeUndefined();
+    await expect(removeMaterializedCandidateSource(lease)).resolves.toBeUndefined();
+    await expect(access(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(removeMaterializedCandidateSource(repositoryRoot))
+      .rejects.toThrow(/not owned by Termwright/u);
+
+    const forgedDirectory = await mkdtemp(join(tmpdir(), 'termwright-upstream-forged-'));
+    const forgedSource = join(forgedDirectory, 'source');
+    await mkdir(forgedSource);
+    await expect(removeMaterializedCandidateSource(Object.freeze({ sourceRoot: forgedSource })))
+      .rejects.toThrow(/not owned by Termwright/u);
+    await expect(access(forgedDirectory)).resolves.toBeUndefined();
+    await rm(forgedDirectory, { recursive: true });
+  });
+
+  it('unlinks a nested symlink or junction without touching its external target', async () => {
+    const lease = await createMaterializedCandidateSourceLease();
+    const external = await mkdtemp(join(tmpdir(), 'termwright-external-target-'));
+    const externalFile = join(external, 'preserved.txt');
+    await mkdir(lease.sourceRoot);
+    await writeFile(externalFile, 'preserved');
+    await symlink(external, join(lease.sourceRoot, 'external'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    await removeMaterializedCandidateSource(lease);
+
+    await expect(readFile(externalFile, 'utf8')).resolves.toBe('preserved');
+    await rm(external, { recursive: true });
+  });
+
   it('classifies the shared tcell fixture matrix in one AST helper process', () => {
     expect(selectTcellConsoleProfiles([
       tcellEvidenceByProfile.get('old-vten'),

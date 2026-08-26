@@ -31,6 +31,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { pnpmInvocation } from './package-manager-command.mjs';
 import { safeExtractTarGz } from './safe-tar.mjs';
 
 const exec = promisify(execFile);
@@ -332,10 +333,15 @@ async function run(command, args, options = {}) {
   }
 }
 
+async function runPnpm(args, options = {}) {
+  const invocation = pnpmInvocation(args, { env: options.env ?? process.env });
+  return run(invocation.command, invocation.args, options);
+}
+
 async function collectToolchains(root, ecosystems) {
   const toolchains = {
     node: { version: process.version },
-    pnpm: { version: (await run('pnpm', ['--version'], { cwd: root })).stdout },
+    pnpm: { version: (await runPnpm(['--version'], { cwd: root })).stdout },
   };
   if (ecosystems.has('go')) {
     toolchains.go = {
@@ -519,11 +525,11 @@ async function runExistingTests(root, ecosystems) {
   // The registry is only evidence when its capabilities still match the
   // handshakes/detectors in source. This gate catches a manifest that applies
   // perfectly while the declared contract silently drifted.
-  await run('pnpm', ['run', 'test:compatibility'], { cwd: root });
+  await runPnpm(['run', 'test:compatibility'], { cwd: root });
   const gates = [{ id: 'compatibility-registry-runtime-drift', status: 'pass' }];
   if (ecosystems.has('go')) {
     for (const packageName of ['@termwright/probe-go', '@termwright/probe-tview', '@termwright/probe-charm']) {
-      await run('pnpm', ['--filter', packageName, 'run', 'test'], { cwd: root });
+      await runPnpm(['--filter', packageName, 'run', 'test'], { cwd: root });
       gates.push({ id: `existing-tests:${packageName}`, status: 'pass' });
     }
   }

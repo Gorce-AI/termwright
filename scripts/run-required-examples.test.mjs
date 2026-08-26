@@ -1,7 +1,30 @@
 import { EventEmitter } from 'node:events';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { describe, expect, it, vi } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { requiredExamples, requiredExampleArguments, runRequiredExamples } from './run-required-examples.mjs';
+
+const temporaryDirectories = [];
+
+function fakePnpmCli() {
+  const directory = mkdtempSync(join(tmpdir(), 'termwright-required-examples-'));
+  temporaryDirectories.push(directory);
+  const bin = join(directory, 'bin', 'pnpm.cjs');
+  mkdirSync(join(directory, 'bin'));
+  writeFileSync(join(directory, 'package.json'), JSON.stringify({
+    name: 'pnpm',
+    version: '9.4.0',
+    bin: { pnpm: 'bin/pnpm.cjs' },
+  }));
+  writeFileSync(bin, "process.stdout.write('9.4.0\\n');\n");
+  return realpathSync(bin);
+}
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true });
+});
 
 function childThatExits(code = 0) {
   const child = new EventEmitter();
@@ -24,43 +47,47 @@ function childThatErrors(error) {
 describe('required public examples', () => {
   it('uses pnpm through Node and promotes every missing prerequisite to a failure', async () => {
     const spawnProcess = vi.fn(() => childThatExits());
+    const npmExecPath = fakePnpmCli();
     await runRequiredExamples({
-      env: { TERMWRIGHT_REQUIRE_EXAMPLES: '0' },
-      npmExecPath: '/tools/pnpm.cjs',
+      env: { npm_execpath: npmExecPath, TERMWRIGHT_REQUIRE_EXAMPLES: '0' },
       spawnProcess,
     });
 
     expect(spawnProcess).toHaveBeenCalledOnce();
     const [command, args, options] = spawnProcess.mock.calls[0];
     expect(command).toBe(process.execPath);
-    expect(args).toEqual(['/tools/pnpm.cjs', ...requiredExampleArguments]);
+    expect(args).toEqual([npmExecPath, ...requiredExampleArguments]);
     expect(options.env.TERMWRIGHT_REQUIRE_EXAMPLES).toBe('1');
     expect(requiredExamples).toHaveLength(7);
   });
 
-  it('uses the Windows pnpm shim when npm_execpath is unavailable', async () => {
+  it('fails closed on Windows when a real pnpm JavaScript CLI is unavailable', async () => {
     const spawnProcess = vi.fn(() => childThatExits());
-    await runRequiredExamples({ npmExecPath: '', platform: 'win32', spawnProcess });
-    expect(spawnProcess).toHaveBeenCalledWith('pnpm.cmd', [...requiredExampleArguments], expect.any(Object));
+    await expect(runRequiredExamples({
+      env: { npm_execpath: '', PNPM_HOME: '' },
+      platform: 'win32',
+      spawnProcess,
+    })).rejects.toThrow(/refusing a pnpm\.cmd or shell fallback/u);
+    expect(spawnProcess).not.toHaveBeenCalled();
   });
 
   it('propagates a failed example run', async () => {
     await expect(runRequiredExamples({
-      npmExecPath: '/tools/pnpm.cjs',
+      env: { npm_execpath: fakePnpmCli() },
       spawnProcess: () => childThatExits(7),
     })).rejects.toThrow('required example tests exited with code 7');
   });
 
   it('propagates a signal that stops the example run', async () => {
     await expect(runRequiredExamples({
-      npmExecPath: '/tools/pnpm.cjs',
+      env: { npm_execpath: fakePnpmCli() },
       spawnProcess: () => childThatSignals('SIGTERM'),
     })).rejects.toThrow('required example tests stopped by SIGTERM');
   });
 
   it('propagates a process spawn error', async () => {
     await expect(runRequiredExamples({
-      npmExecPath: '/tools/pnpm.cjs',
+      env: { npm_execpath: fakePnpmCli() },
       spawnProcess: () => childThatErrors(new Error('spawn failed')),
     })).rejects.toThrow('spawn failed');
   });

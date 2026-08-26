@@ -2,19 +2,22 @@
 
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { canonicalJson, compareVersions, parseVersion, trustedGoEnvironment } from './discover-framework-candidates.mjs';
 import { safeExtractTarGz } from './safe-tar.mjs';
+import { finishWithCleanups } from './cleanup-resources.mjs';
 
 const exec = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TCELL_MODULE = 'github.com/gdamore/tcell/v2';
 const TCELL_PATCH_ROOT = 'packages/probe-tview/upstream-patches/tcell';
 const TCELL_TEMPLATE_ROOT = 'packages/probe-tview/upstream-patch-templates/tcell';
+const materializedSourceDirectories = new WeakMap();
+const disposedMaterializedSourceLeases = new WeakSet();
 
 function safeRelative(value, field) {
   if (typeof value !== 'string' || value.length === 0 || isAbsolute(value) || value.includes('\\') || value.split('/').some((part) => part === '' || part === '.' || part === '..')) {
@@ -287,21 +290,65 @@ export async function assertGoDownloadBinding(result, candidate) {
 }
 
 export async function materializeCandidateSource(candidate) {
-  const directory = await mkdtemp(join(tmpdir(), 'termwright-upstream-'));
-  const sourceRoot = join(directory, 'source');
-  await mkdir(sourceRoot);
-  if (candidate.registry === 'go') {
-    const result = JSON.parse((await exec('go', ['mod', 'download', '-json', `${candidate.package}@${candidate.version}`], { env: trustedGoEnvironment({ GOFLAGS: '', GOWORK: 'off', GOPROXY: 'https://proxy.golang.org', GOSUMDB: 'sum.golang.org' }) })).stdout);
-    await assertGoDownloadBinding(result, candidate);
-    await cp(result.Dir, sourceRoot, { recursive: true });
-  } else if (candidate.registry === 'crates.io') {
-    const response = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(candidate.package)}/${encodeURIComponent(candidate.version)}/download`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
-    if (!response.ok) throw new Error(`${candidate.id}: crates.io source download failed with ${response.status}`);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    assertArtifactSha256(bytes, candidate.source?.checksum, candidate.id);
-    await safeExtractTarGz(bytes, sourceRoot, { stripComponents: 1 });
-  } else throw new Error(`${candidate.id}: patch preparation does not support ${candidate.registry}`);
-  return sourceRoot;
+  const lease = await createMaterializedCandidateSourceLease();
+  const { sourceRoot } = lease;
+  try {
+    await mkdir(sourceRoot);
+    if (candidate.registry === 'go') {
+      const result = JSON.parse((await exec('go', ['mod', 'download', '-json', `${candidate.package}@${candidate.version}`], { env: trustedGoEnvironment({ GOFLAGS: '', GOWORK: 'off', GOPROXY: 'https://proxy.golang.org', GOSUMDB: 'sum.golang.org' }) })).stdout);
+      await assertGoDownloadBinding(result, candidate);
+      await cp(result.Dir, sourceRoot, { recursive: true });
+    } else if (candidate.registry === 'crates.io') {
+      const response = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(candidate.package)}/${encodeURIComponent(candidate.version)}/download`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
+      if (!response.ok) throw new Error(`${candidate.id}: crates.io source download failed with ${response.status}`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assertArtifactSha256(bytes, candidate.source?.checksum, candidate.id);
+      await safeExtractTarGz(bytes, sourceRoot, { stripComponents: 1 });
+    } else throw new Error(`${candidate.id}: patch preparation does not support ${candidate.registry}`);
+    // Go's module cache is intentionally read-only. A private materialization
+    // is a working tree, not a cache mirror: transforms must be able to edit it
+    // and the owning process must be able to remove every directory afterwards.
+    await makeOwnedTreeWritable(sourceRoot);
+    return lease;
+  } catch (error) {
+    await finishWithCleanups({
+      hasPrimary: true,
+      primaryError: error,
+      cleanups: [async () => removeMaterializedCandidateSource(lease)],
+      message: `${candidate.id}: source materialization and cleanup failed`,
+    });
+  }
+}
+
+/** Creates a private source lease. Exported only for ownership tests. */
+export async function createMaterializedCandidateSourceLease() {
+  const directory = resolve(await mkdtemp(join(tmpdir(), 'termwright-upstream-')));
+  const lease = Object.freeze({ sourceRoot: join(directory, 'source') });
+  materializedSourceDirectories.set(lease, directory);
+  return lease;
+}
+
+async function makeOwnedTreeWritable(path) {
+  const metadata = await lstat(path);
+  if (metadata.isSymbolicLink()) return;
+  await chmod(path, metadata.mode | (metadata.isDirectory() ? 0o700 : 0o600));
+  if (!metadata.isDirectory()) return;
+  for (const entry of await readdir(path, { withFileTypes: true })) {
+    await makeOwnedTreeWritable(join(path, entry.name));
+  }
+}
+
+/** Removes only the exact opaque lease created by {@link materializeCandidateSource}. */
+export async function removeMaterializedCandidateSource(lease) {
+  if (typeof lease === 'object' && lease !== null && disposedMaterializedSourceLeases.has(lease)) return;
+  const directory = typeof lease === 'object' && lease !== null
+    ? materializedSourceDirectories.get(lease)
+    : undefined;
+  if (directory === undefined) throw new Error('refusing to remove a source tree not owned by Termwright');
+  await makeOwnedTreeWritable(directory);
+  await rm(directory, { recursive: true, force: true });
+  materializedSourceDirectories.delete(lease);
+  disposedMaterializedSourceLeases.add(lease);
 }
 
 export function proposeCompatibilityUpdate(registry, candidate, manifest) {

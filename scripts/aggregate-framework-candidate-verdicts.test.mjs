@@ -62,7 +62,8 @@ describe('framework candidate platform aggregation', () => {
         path: `packages/probe-tview/upstream-patches/tcell/${version}/manifest.json`,
       },
     }));
-    const materialize = vi.fn(async (entry) => `/source/${entry.version}`);
+    const leases = new Map(candidates.map((entry) => [entry.version, Object.freeze({ sourceRoot: `/source/${entry.version}` })]));
+    const materialize = vi.fn(async (entry) => leases.get(entry.version));
     const freshOutput = vi.fn(async (_output, name) => `/trusted/${name}`);
     const prepare = vi.fn(async () => []);
     const cleanup = vi.fn(async () => {});
@@ -81,7 +82,7 @@ describe('framework candidate platform aggregation', () => {
       outputDirectory: `/trusted/candidate-update-${String(index + 1).repeat(16)}`,
       sourceRevision: revision,
     })));
-    expect(cleanup.mock.calls.map(([sourceRoot]) => sourceRoot)).toEqual(candidates.map((entry) => `/source/${entry.version}`));
+    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(candidates.map((entry) => leases.get(entry.version)));
 
     cleanup.mockClear();
     prepare.mockRejectedValueOnce(new Error('batch failed'));
@@ -89,7 +90,49 @@ describe('framework candidate platform aggregation', () => {
       { candidates, output: '/trusted', sourceRevision: revision },
       { materialize, freshOutput, prepare, cleanup },
     )).rejects.toThrow(/batch failed/u);
-    expect(cleanup.mock.calls.map(([sourceRoot]) => sourceRoot)).toEqual(candidates.map((entry) => `/source/${entry.version}`));
+    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(candidates.map((entry) => leases.get(entry.version)));
+
+    cleanup.mockClear();
+    prepare.mockRejectedValueOnce(new Error('primary batch failure'));
+    cleanup.mockImplementation(async (lease) => {
+      throw new Error(`cleanup failed: ${lease.sourceRoot}`);
+    });
+    let failure;
+    try {
+      await writeTrustedPatchUpdates(
+        { candidates, output: '/trusted', sourceRevision: revision },
+        { materialize, freshOutput, prepare, cleanup },
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(candidates.map((entry) => leases.get(entry.version)));
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure.errors.map((error) => error.message)).toEqual([
+      'primary batch failure',
+      ...candidates.map((entry) => `cleanup failed: /source/${entry.version}`),
+    ]);
+
+    const acquisitionFailure = new Error('second materialization failed');
+    materialize.mockImplementationOnce(async () => leases.get(candidates[0].version));
+    materialize.mockImplementationOnce(async () => { throw acquisitionFailure; });
+    cleanup.mockClear();
+    cleanup.mockRejectedValueOnce(new Error('first lease cleanup failed'));
+    failure = undefined;
+    try {
+      await writeTrustedPatchUpdates(
+        { candidates, output: '/trusted', sourceRevision: revision },
+        { materialize, freshOutput, prepare, cleanup },
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(prepare).toHaveBeenCalledTimes(3);
+    expect(cleanup).toHaveBeenCalledExactlyOnceWith(leases.get(candidates[0].version));
+    expect(failure.errors.map((error) => error.message)).toEqual([
+      'second materialization failed',
+      'first lease cleanup failed',
+    ]);
   });
 
   it('requires the exact bounded platform set for each integration mechanism', () => {
