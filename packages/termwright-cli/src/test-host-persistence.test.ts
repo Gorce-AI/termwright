@@ -119,9 +119,13 @@ describe('test-host persistence seams', () => {
     };
     const budget = new HostRunBudget(100, 25, runtime);
     expect(budget.elapsedMs()).toBe(0);
+    expect(budget.executionRemainingMs()).toBe(75);
+    expect(budget.finalizationRemainingMs()).toBe(100);
     const execution = budget.execution('unit execution', () => new Promise<never>(() => undefined));
     now = 75;
     expect(budget.elapsedMs()).toBe(75);
+    expect(budget.executionRemainingMs()).toBe(0);
+    expect(budget.finalizationRemainingMs()).toBe(25);
     for (const timer of [...timers]) if (timer.at <= now) timer.elapsed();
     await expect(execution).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT', phase: 'unit execution' });
   });

@@ -89,6 +89,7 @@ export async function createCertifiedVitestEngine(options: CertifiedVitestEngine
       workerEpoch: 0,
       workerIdPrefix: 'termwright-bootstrap',
       handshakeTimeoutMs: 1,
+      admissionDeadline: performance.timeOrigin + performance.now() + 60_000,
       resourceProfile: {},
     },
     journal: {

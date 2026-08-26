@@ -23,6 +23,7 @@ import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
 
 const executeFile = promisify(execFile);
+const MAX_RUNTIME_TIMER_MS = 2_147_483_647;
 const CI_PROVENANCE_KEYS = [
   'CI', 'GITHUB_ACTIONS', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_WORKFLOW', 'GITHUB_JOB',
   'GITLAB_CI', 'CI_PIPELINE_ID', 'CI_JOB_ID', 'BUILDKITE', 'BUILDKITE_BUILD_ID',
@@ -73,6 +74,7 @@ export class HostRunBudget {
   ) {
     positiveFinite(totalMs, 'run timeout');
     positiveFinite(finalizationReserveMs, 'host finalization reserve');
+    if (totalMs > MAX_RUNTIME_TIMER_MS) throw new TypeError(`run timeout must not exceed ${MAX_RUNTIME_TIMER_MS} ms`);
     if (finalizationReserveMs >= totalMs) throw new TypeError('host finalization reserve must be smaller than the total run timeout');
     this.#startedAt = runtime.now();
     this.#deadlineAt = this.#startedAt + totalMs;
@@ -86,6 +88,16 @@ export class HostRunBudget {
       throw new Error('host monotonic clock regressed during the run');
     }
     return elapsed;
+  }
+
+  /** Remaining execution time for scheduler work that precedes an Attempt. */
+  executionRemainingMs(): number {
+    return Math.max(0, this.#executionDeadlineAt - this.runtime.now());
+  }
+
+  /** Remaining total time, used only as the scheduler admission backstop. */
+  finalizationRemainingMs(): number {
+    return Math.max(0, this.#deadlineAt - this.runtime.now());
   }
 
   execution<T>(phase: string, operation: () => Promise<T>): Promise<T> {

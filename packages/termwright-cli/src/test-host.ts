@@ -443,6 +443,11 @@ export class TermwrightTestHost {
         workerEpoch: 0,
         workerIdPrefix: this.invocationId,
         handshakeTimeoutMs: 5_000,
+        // Host execution cancellation is the causal owner of admission. This
+        // later total-run deadline is only a backstop if worker cancellation
+        // fails; using the execution instant here makes two processes race to
+        // classify the same timeout. The epoch form is comparable across forks.
+        admissionDeadline: performance.timeOrigin + performance.now() + active.budget.finalizationRemainingMs(),
         resourceProfile: this.#resourceProfile.perTerminal,
       } as const;
       const journalContext = {
@@ -621,7 +626,13 @@ export class TermwrightTestHost {
     if (!active.cancellationRequested && resourceFailure === undefined && expectedTasks.size > 0) {
       const unfinished = [...attempts.entries()].filter(([, attempt]) => !attempt.finished);
       const observedTasks = new Set([...attempts.values()].filter((attempt) => attempt.finished).map((attempt) => attempt.task));
-      const missingTasks = [...expectedTasks].filter((task) => !observedTasks.has(task) && !skippedTasks.has(task));
+      // A runner/setup failure can happen before an authored Attempt exists
+      // (notably scheduler admission). Vitest's failed task plus its recorded
+      // test.failed event is complete evidence for that path; inventing an
+      // attempt.started event would falsely claim admission had succeeded.
+      const failedTasks = new Set(testFailures.map((test) => test.runnerTaskId));
+      const missingTasks = [...expectedTasks].filter((task) =>
+        !observedTasks.has(task) && !skippedTasks.has(task) && !failedTasks.has(task));
       if (unfinished.length > 0 || missingTasks.length > 0) {
         // Name the tasks. A RunnerTaskId identifies the attempt to the journal
         // but tells a reader nothing about which test stopped short, and this

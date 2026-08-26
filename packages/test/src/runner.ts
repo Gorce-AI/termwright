@@ -98,6 +98,7 @@ const taskJournals = new WeakMap<object, WorkerJournal>();
 
 const MAX_HOST_TASKS = 100_000;
 const MAX_NATIVE_TASK_ID_LENGTH = 4096;
+const MAX_RUNTIME_TIMER_MS = 2_147_483_647;
 const brokerConnections = new Map<string, Promise<ResourceBrokerClient>>();
 const journalConnections = new Map<string, Promise<WorkerJournal>>();
 
@@ -148,6 +149,8 @@ export interface TermwrightRunnerBrokerContext {
   readonly workerEpoch: number;
   readonly workerIdPrefix: string;
   readonly handshakeTimeoutMs: number;
+  /** Absolute monotonic epoch deadline owned by the host scheduler. */
+  readonly admissionDeadline: number;
   readonly resourceProfile: ResourceVector;
 }
 
@@ -245,7 +248,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
       : broker.acquire({
           attemptId,
           resources: identity.resourceReservation,
-          deadline: performance.timeOrigin + performance.now() + task.timeout,
+          deadline: this.#hostContext.broker.admissionDeadline,
         });
     if (reservationAdmission !== undefined) {
       // The engine invokes onBeforeTryTask before beforeEach and before the
@@ -437,7 +440,7 @@ function validateJournal(value: unknown): TermwrightRunnerJournalContext {
 
 function validateBroker(value: unknown): TermwrightRunnerBrokerContext {
   if (!plainDataObject(value, [
-    'endpoint', 'token', 'workerEpoch', 'workerIdPrefix', 'handshakeTimeoutMs', 'resourceProfile',
+    'endpoint', 'token', 'workerEpoch', 'workerIdPrefix', 'handshakeTimeoutMs', 'admissionDeadline', 'resourceProfile',
   ])) return invalidHostContext();
   const record = value as Record<string, unknown>;
   const endpoint = boundedString(record['endpoint'], 'broker endpoint', 4_096);
@@ -449,9 +452,15 @@ function validateBroker(value: unknown): TermwrightRunnerBrokerContext {
   if (typeof handshakeTimeoutMs !== 'number' || !Number.isSafeInteger(handshakeTimeoutMs) || handshakeTimeoutMs <= 0) {
     return invalidHostContext();
   }
+  const admissionDeadline = record['admissionDeadline'];
+  if (typeof admissionDeadline !== 'number' || !Number.isFinite(admissionDeadline) || admissionDeadline <= 0) {
+    return invalidHostContext();
+  }
+  const admissionDelay = admissionDeadline - (performance.timeOrigin + performance.now());
+  if (admissionDelay > MAX_RUNTIME_TIMER_MS) return invalidHostContext();
   const resourceProfile = validateResourceVector(record['resourceProfile']);
   return Object.freeze({ endpoint, token, workerIdPrefix, workerEpoch: record['workerEpoch'], handshakeTimeoutMs,
-    resourceProfile });
+    admissionDeadline, resourceProfile });
 }
 
 function validateResourceVector(value: unknown): ResourceVector {

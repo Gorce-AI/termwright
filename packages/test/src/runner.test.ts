@@ -65,7 +65,8 @@ describe('exact Vitest certification', () => {
   it('accepts only a complete host hierarchy keyed by native task id', () => {
     const broker = {
       endpoint: '/tmp/termwright-runner-test.sock', token: 'x'.repeat(32), workerEpoch: 0,
-      workerIdPrefix: 'runner-test', handshakeTimeoutMs: 5_000, resourceProfile: {},
+      workerIdPrefix: 'runner-test', handshakeTimeoutMs: 5_000,
+      admissionDeadline: performance.timeOrigin + performance.now() + 60_000, resourceProfile: {},
     } as const;
     const context = {
       invocationId: createRunId('invocation'),
@@ -92,6 +93,14 @@ describe('exact Vitest certification', () => {
     expect(() => validateHostContext({ ...context, invocationId: 'invocation:bad' })).toThrow(/canonical/u);
     expect(() => validateHostContext({ ...context, unexpected: true })).toThrow(/TermwrightTestHost/u);
     expect(() => validateHostContext({ ...context, broker: undefined })).toThrow(/TermwrightTestHost/u);
+    expect(() => validateHostContext({
+      ...context,
+      broker: { ...broker, admissionDeadline: Number.POSITIVE_INFINITY },
+    })).toThrow(/TermwrightTestHost/u);
+    expect(() => validateHostContext({
+      ...context,
+      broker: { ...broker, admissionDeadline: Number.MAX_SAFE_INTEGER },
+    })).toThrow(/TermwrightTestHost/u);
     expect(() => validateHostContext({ ...context, journal: undefined })).toThrow(/TermwrightTestHost/u);
     expect(() => validateHostContext({
       ...context,

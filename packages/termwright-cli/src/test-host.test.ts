@@ -55,6 +55,7 @@ class FakeEngine implements TermwrightVitestEngine {
   blockRun: Promise<void> | undefined;
   runError: unknown;
   omitFinished = false;
+  omitAttemptLifecycle = false;
   leakLease = false;
   runStarted: (() => void) | undefined;
   sourceListener: ((file: string) => void) | undefined;
@@ -113,12 +114,14 @@ class FakeEngine implements TermwrightVitestEngine {
           executionId,
           attemptId,
         } as const;
-        await client.append(producer.emit({
-          eventClass: 'authoritative',
-          type: 'attempt.started',
-          identity: eventIdentity,
-          payload: { nativeTaskId, repeat: 0, retry: 0 },
-        }), performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs);
+        if (!this.omitAttemptLifecycle) {
+          await client.append(producer.emit({
+            eventClass: 'authoritative',
+            type: 'attempt.started',
+            identity: eventIdentity,
+            payload: { nativeTaskId, repeat: 0, retry: 0 },
+          }), performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs);
+        }
         if (this.consoleContent !== undefined) {
           this.consoleListener?.({
             content: this.consoleContent,
@@ -136,7 +139,7 @@ class FakeEngine implements TermwrightVitestEngine {
           });
         }
         const state = this.tests.find((test) => test.id === nativeTaskId)?.result()?.state === 'failed' ? 'failed' : 'passed';
-        if (!this.omitFinished) {
+        if (!this.omitAttemptLifecycle && !this.omitFinished) {
           await client.append(producer.emit({
             eventClass: 'authoritative',
             type: 'attempt.finished',
@@ -712,6 +715,23 @@ describe('TermwrightTestHost', () => {
     await host.close();
   });
 
+  it('accepts a failed native task as complete pre-Attempt admission evidence', async () => {
+    const engine = new FakeEngine();
+    engine.tests = [testCase('native-admission', 'scheduler rejects admission', 'failed')];
+    engine.runResult = result(engine.tests);
+    engine.omitAttemptLifecycle = true;
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+
+    const completion = await host.requestRun().completed;
+
+    expect(completion.state).toBe('failed');
+    expect(completion.failures).toHaveLength(1);
+    expect(completion.events.some((event) => event.type === 'test.failed')).toBe(true);
+    expect(completion.events.some((event) => event.type.startsWith('attempt.'))).toBe(false);
+    expect(String(completion.error)).not.toContain('attempt journal incomplete');
+    await host.close();
+  });
+
   it('follows an error to the layer that knows what happened', () => {
     // A wrapper's own text names which layer noticed, not what went wrong, and
     // the pool errors that end a Windows run are exactly that shape.
@@ -817,12 +837,21 @@ describe('TermwrightTestHost', () => {
 });
 
 describe('HostRunBudget', () => {
+  it('rejects deadlines that the runtime would silently collapse to one millisecond', () => {
+    const clock = new ManualDeadlineRuntime();
+    expect(() => new HostRunBudget(2_147_483_648, 100, clock)).toThrow(/must not exceed 2147483647/u);
+  });
+
   it('uses one execution deadline and preserves the finalization reserve', async () => {
     const clock = new ManualDeadlineRuntime();
     const budget = new HostRunBudget(250, 100, clock);
+    expect(budget.executionRemainingMs()).toBe(150);
+    expect(budget.finalizationRemainingMs()).toBe(250);
     const execution = budget.execution('Vitest execution', () => new Promise<never>(() => undefined));
 
     clock.advance(150);
+    expect(budget.executionRemainingMs()).toBe(0);
+    expect(budget.finalizationRemainingMs()).toBe(100);
     await expect(execution).rejects.toMatchObject({
       code: 'TW_HOST_TIMEOUT',
       phase: 'Vitest execution',
