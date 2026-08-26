@@ -15,8 +15,11 @@ if (-not [TermwrightConsoleMarkerProbe]::GetConsoleMode($output, [ref]$original)
 $withoutRequiredModes = [uint32]($original -band 0xFFFFFFFA)
 if (-not [TermwrightConsoleMarkerProbe]::SetConsoleMode($output, $withoutRequiredModes)) { exit 41 }
 try {
-  & $env:TW_MARKER_NODE $env:TW_MARKER_SCRIPT
-  if ($LASTEXITCODE -ne 0) { exit 42 }
+  # PowerShell's native-command pipeline replaces stdout with a pipe before
+  # launching the child. Start-Process with no redirection lets the marker
+  # runtime inherit the actual active console handle that probes receive.
+  $markerProcess = Start-Process -FilePath $env:TW_MARKER_NODE -ArgumentList @($env:TW_MARKER_SCRIPT) -NoNewWindow -Wait -PassThru
+  if ($markerProcess.ExitCode -ne 0) { exit 42 }
   $restored = 0
   if (-not [TermwrightConsoleMarkerProbe]::GetConsoleMode($output, [ref]$restored)) { exit 43 }
   if ($restored -ne $withoutRequiredModes) { exit 44 }

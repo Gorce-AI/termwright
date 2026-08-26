@@ -212,7 +212,7 @@ async function certifyConsoleMarkerMode(executable: string): Promise<void> {
   const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
   const [status] = await Promise.all([exited, handle.outputEnded]);
 
-  expect(status).toEqual({ code: 0, signal: null });
+  expect(status, output.text()).toEqual({ code: 0, signal: null });
   expect(output.text()).toContain(marker);
   expect(output.text()).toContain("MODE_RESTORED");
   expect(handle.sawRealEof).toBe(true);
