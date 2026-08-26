@@ -14,12 +14,15 @@ type Callable = (...arguments_: never[]) => unknown;
 const wrappedFunctions = new WeakMap<Callable, Callable>();
 
 export interface TermwrightTestResources {
+  /** Maximum simultaneously live terminal sessions in this Attempt. */
   readonly terminals?: number;
+  /** Maximum simultaneously live retained trace writers in this Attempt. */
   readonly traceWriters?: number;
   /** Makes native transport pressure exclusive while preserving the true terminal count. */
   readonly nativeHost?: 'shared' | 'exclusive';
 }
 
+/** Vitest's Test API with declaration-time atomic resource ownership. */
 export type ResourceAwareTestApi<T> = T & {
   resources(resources: TermwrightTestResources): ResourceAwareTestApi<T>;
 };

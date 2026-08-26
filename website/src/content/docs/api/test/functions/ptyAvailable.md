@@ -17,9 +17,9 @@ Defined in: [test/src/pty-available.ts:55](https://github.com/Gorce-AI/termwrigh
 
 Whether this machine can open a pseudo-terminal.
 
-Spawns the shortest-lived process there is and disposes it. The result is
-memoized: it cannot change within a process, and probing per test file would
-spawn one process per file for no information.
+Loads and validates the native backend without spawning a process. The real
+launch stays inside the resource-aware test attempt, where failure is a red
+test rather than a collection-time skip and host admission is enforceable.
 
 Set `TERMWRIGHT_SKIP_PTY=1` to answer `false` without probing — the escape
 hatch for skipping PTY suites deliberately.
