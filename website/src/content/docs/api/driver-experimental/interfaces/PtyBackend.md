@@ -11,7 +11,9 @@ editUrl: false
 
 # Interface: PtyBackend
 
-Defined in: [pty.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L40)
+Defined in: [pty.ts:70](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L70)
+
+Factory for pseudo-terminals.
 
 ## Properties
 
@@ -19,7 +21,7 @@ Defined in: [pty.ts:40](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `readonly` **name**: `string`
 
-Defined in: [pty.ts:41](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L41)
+Defined in: [pty.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L71)
 
 ## Methods
 
@@ -27,7 +29,7 @@ Defined in: [pty.ts:41](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **spawn**(`options`): [`PtyProcess`](../ptyprocess/)
 
-Defined in: [pty.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L42)
+Defined in: [pty.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L72)
 
 #### Parameters
 

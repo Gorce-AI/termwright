@@ -11,7 +11,9 @@ editUrl: false
 
 # Interface: PtyProcess
 
-Defined in: [pty.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L15)
+Defined in: [pty.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L19)
+
+A live pseudo-terminal hosting one child process.
 
 ## Properties
 
@@ -19,7 +21,9 @@ Defined in: [pty.ts:15](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `readonly` `optional` **lifecycle?**: `object`
 
-Defined in: [pty.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L17)
+Defined in: [pty.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L22)
+
+Truthful lifecycle properties when the backend can prove them.
 
 #### outputDrain
 
@@ -35,7 +39,9 @@ Defined in: [pty.ts:17](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `readonly` `optional` **outputEnded?**: `Promise`\<`void`\>
 
-Defined in: [pty.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L29)
+Defined in: [pty.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L48)
+
+Settles once the backend's output producer can deliver no more bytes.
 
 ***
 
@@ -43,7 +49,7 @@ Defined in: [pty.ts:29](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `readonly` **pid**: `number`
 
-Defined in: [pty.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L16)
+Defined in: [pty.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L20)
 
 ***
 
@@ -51,7 +57,10 @@ Defined in: [pty.ts:16](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `readonly` `optional` **sawOutputEnd?**: () => `boolean`
 
-Defined in: [pty.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L30)
+Defined in: [pty.ts:53](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L53)
+
+Whether the producer reached its authoritative EOF rather than being torn
+down with bytes potentially unread. `outputEnded` settles in both cases.
 
 #### Returns
 
@@ -63,7 +72,9 @@ Defined in: [pty.ts:30](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `optional` **attach**(`signal`): `Promise`\<`void`\>
 
-Defined in: [pty.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L31)
+Defined in: [pty.ts:55](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L55)
+
+Settles once an asynchronously created native session is ready for lifecycle operations.
 
 #### Parameters
 
@@ -81,7 +92,9 @@ Defined in: [pty.ts:31](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **dispose**(): `void`
 
-Defined in: [pty.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L35)
+Defined in: [pty.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L63)
+
+Idempotent finalizer; hangs up a live PTY before releasing listeners.
 
 #### Returns
 
@@ -93,7 +106,10 @@ Defined in: [pty.ts:35](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `optional` **hardKillTree**(`signal`): `Promise`\<`void`\>
 
-Defined in: [pty.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L26)
+Defined in: [pty.ts:44](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L44)
+
+Hard-kills an owned process tree. The operation must reject promptly when
+`signal` is aborted; dispose must settle any backend work started by it.
 
 #### Parameters
 
@@ -111,7 +127,9 @@ Defined in: [pty.ts:26](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `optional` **killOwnedTreeAtExitBoundary**(): `void`
 
-Defined in: [pty.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L24)
+Defined in: [pty.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L37)
+
+Synchronously closes the owned POSIX group at the root-exit boundary.
 
 #### Returns
 
@@ -123,7 +141,7 @@ Defined in: [pty.ts:24](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **onData**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L27)
+Defined in: [pty.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L45)
 
 #### Parameters
 
@@ -141,7 +159,7 @@ Defined in: [pty.ts:27](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **onExit**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L28)
+Defined in: [pty.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L46)
 
 #### Parameters
 
@@ -159,7 +177,9 @@ Defined in: [pty.ts:28](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `optional` **onWriteDrain**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L33)
+Defined in: [pty.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L59)
+
+Queue-drained notification; it does not claim child consumption.
 
 #### Parameters
 
@@ -177,7 +197,9 @@ Defined in: [pty.ts:33](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `optional` **onWriteError**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L32)
+Defined in: [pty.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L57)
+
+Fatal asynchronous failures after `write()` accepted bytes.
 
 #### Parameters
 
@@ -195,7 +217,7 @@ Defined in: [pty.ts:32](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **resize**(`columns`, `rows`): `void`
 
-Defined in: [pty.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L22)
+Defined in: [pty.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L33)
 
 #### Parameters
 
@@ -217,7 +239,9 @@ Defined in: [pty.ts:22](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **signal**(`sig`): `void`
 
-Defined in: [pty.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L23)
+Defined in: [pty.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L35)
+
+Delivers a POSIX signal. On Windows only `KILL` is supported.
 
 #### Parameters
 
@@ -235,7 +259,9 @@ Defined in: [pty.ts:23](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `optional` **terminate**(): `void`
 
-Defined in: [pty.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L25)
+Defined in: [pty.ts:39](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L39)
+
+Backend-native graceful lifecycle request; required when tree ownership is delegated.
 
 #### Returns
 
@@ -247,7 +273,9 @@ Defined in: [pty.ts:25](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `optional` **treeState**(): `"alive"` \| `"gone"` \| `"unsupported"`
 
-Defined in: [pty.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L34)
+Defined in: [pty.ts:61](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L61)
+
+Liveness of the owned tree, when the backend has an OS primitive for it.
 
 #### Returns
 
@@ -259,7 +287,12 @@ Defined in: [pty.ts:34](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **write**(`data`): `void`
 
-Defined in: [pty.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L21)
+Defined in: [pty.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L32)
+
+Queues raw bytes in the backend's ordered input stream. Never appends a
+newline. A successful return proves queue admission, not child
+consumption; semantic actions prove consumption through their committed
+postcondition.
 
 #### Parameters
 
