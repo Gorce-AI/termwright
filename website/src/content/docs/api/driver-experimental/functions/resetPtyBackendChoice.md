@@ -13,7 +13,7 @@ editUrl: false
 
 > **resetPtyBackendChoice**(): `void`
 
-Defined in: [backend-selection.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L46)
+Defined in: [backend-selection.ts:39](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L39)
 
 Forgets the cached choice. Tests that change the platform need this.
 

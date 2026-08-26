@@ -20,11 +20,11 @@ Application tests should import from `@termwright/driver` instead.
 
 ## Interfaces
 
-- [ConPtySessionHandle](interfaces/conptysessionhandle/)
 - [GenericQuery](interfaces/genericquery/)
 - [KeyEncodingModes](interfaces/keyencodingmodes/)
 - [LaunchTerminalWithBackendOptions](interfaces/launchterminalwithbackendoptions/)
 - [MouseEvent](interfaces/mouseevent/)
+- [NativePtySessionHandle](interfaces/nativeptysessionhandle/)
 - [PtyBackend](interfaces/ptybackend/)
 - [PtyBackendChoice](interfaces/ptybackendchoice/)
 - [PtyProcess](interfaces/ptyprocess/)
@@ -37,9 +37,9 @@ Application tests should import from `@termwright/driver` instead.
 
 ## Type Aliases
 
-- [ConPtySpawn](type-aliases/conptyspawn/)
 - [LocatorQuery](type-aliases/locatorquery/)
 - [MouseButton](type-aliases/mousebutton/)
+- [NativePtySpawn](type-aliases/nativeptyspawn/)
 - [ParsedRef](type-aliases/parsedref/)
 - [ProcessLifecycleErrorCode](type-aliases/processlifecycleerrorcode/)
 - [PtySignal](type-aliases/ptysignal/)
@@ -49,12 +49,11 @@ Application tests should import from `@termwright/driver` instead.
 
 ## Variables
 
-- [CONPTY\_BACKEND\_NAME](variables/conpty_backend_name/)
+- [NATIVE\_PTY\_BACKEND\_NAME](variables/native_pty_backend_name/)
 
 ## Functions
 
-- [createConPtyBackend](functions/createconptybackend/)
-- [createNodePtyBackend](functions/createnodeptybackend/)
+- [createNativePtyBackend](functions/createnativeptybackend/)
 - [encodeKeys](functions/encodekeys/)
 - [encodeMouse](functions/encodemouse/)
 - [encodePaste](functions/encodepaste/)

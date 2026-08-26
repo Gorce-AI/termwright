@@ -3,7 +3,8 @@ title: Run tests in CI
 description: Certify a Termwright run with explicit resources, zero hidden retries, and transactional evidence.
 ---
 
-Termwright runs on macOS, Windows, and glibc-based Linux. Use Node.js 22 or
+Termwright runs on macOS >= 13.5, Windows 10 version 1809 / Server 2019 or newer, and
+glibc-based Linux at the Ubuntu 22.04 ABI floor (glibc >= 2.35). Use Node.js 22 or
 newer. Alpine/musl is not supported by the prebuilt PTY dependency.
 
 ## GitHub Actions

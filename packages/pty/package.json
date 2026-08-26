@@ -1,0 +1,43 @@
+{
+  "name": "@termwright/pty",
+  "version": "0.2.0",
+  "description": "Termwright's native PTY backend with authoritative output EOF and owned process trees",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/pty"
+  },
+  "type": "module",
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "build:native": "node-gyp rebuild",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm --dir ../.. test -- -- --run packages/pty"
+  },
+  "optionalDependencies": {
+    "@termwright/pty-darwin-arm64": "workspace:*",
+    "@termwright/pty-darwin-x64": "workspace:*",
+    "@termwright/pty-linux-arm64": "workspace:*",
+    "@termwright/pty-linux-x64": "workspace:*",
+    "@termwright/pty-win32-arm64": "workspace:*",
+    "@termwright/pty-win32-x64": "workspace:*"
+  },
+  "devDependencies": {
+    "node-addon-api": "^8.3.0",
+    "node-gyp": "^12.3.0",
+    "vitest": "4.1.11"
+  }
+}

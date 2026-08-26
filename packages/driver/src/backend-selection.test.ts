@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetPtyBackendChoice, resolveDefaultPtyBackend } from './backend-selection.js';
-import { CONPTY_BACKEND_NAME } from './conpty-backend.js';
+import { NATIVE_PTY_BACKEND_NAME } from './native-pty-backend.js';
 
 /**
  * A session that silently ran on the weaker backend would still pass its
@@ -13,10 +13,9 @@ describe('choosing a pseudo-terminal backend', () => {
     resetPtyBackendChoice();
   });
 
-  it('has nothing to choose off Windows, and says nothing', async () => {
+  it('selects the authoritative native backend off Windows', async () => {
     const choice = await resolveDefaultPtyBackend('darwin');
-    expect(choice.backend.name).not.toBe(CONPTY_BACKEND_NAME);
-    // No complaint, because there is no better option being passed over.
+    expect(choice.backend.name).toBe(NATIVE_PTY_BACKEND_NAME);
     expect(choice.degradedReason).toBeUndefined();
   });
 
@@ -26,19 +25,8 @@ describe('choosing a pseudo-terminal backend', () => {
     expect(second).toBe(first);
   });
 
-  it('gives Windows the native backend or nothing, never a weaker substitute', async () => {
-    // Both architectures Windows runs on ship a prebuild, so a machine that
-    // cannot load one has a broken install rather than an unsupported
-    // toolchain. Substituting node-pty there would hand the caller an output
-    // boundary that looks identical and means something weaker, which is the
-    // one failure a test can never catch afterwards.
+  it('gives Windows the same native backend rather than a platform fallback', async () => {
     const attempt = resolveDefaultPtyBackend('win32');
-    if (process.platform === 'win32') {
-      await expect(attempt).resolves.toMatchObject({ backend: { name: CONPTY_BACKEND_NAME } });
-      return;
-    }
-    // Elsewhere the addon genuinely cannot exist, and the refusal has to say
-    // what it tried rather than only that it failed.
-    await expect(attempt).rejects.toMatchObject({ code: 'pty-backend-failed' });
+    await expect(attempt).resolves.toMatchObject({ backend: { name: NATIVE_PTY_BACKEND_NAME } });
   });
 });

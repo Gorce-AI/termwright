@@ -96,7 +96,7 @@
     {
       "target": 16,
       "status": "already-fixed",
-      "evidence": "ConPTY observability remains fail-closed, while a revision-bound production-parser provider can authoritatively prove mouse/focus modes. Non-skipped Ink E2E sends real SGR mouse and focus-report bytes through the PTY/ConPTY path, validates the application parser result, rejects VT/provider disagreement, and stops on provider loss."
+      "evidence": "The public contract explicitly keeps an opaque ConPTY child fail-closed because neither ConPTY nor a JavaScript stdout wrapper can observe every descriptor/native/descendant write. An explicitly registered, revision-bound provider backed by the application's production input-mode state can prove mouse/focus modes. Non-skipped Ink E2E covers real pointer and focus bytes through the PTY/ConPTY-compatible path, provider/VT disagreement and provider loss; a negative bypass test proves why the generic claim is intentionally unavailable."
     },
     {
       "target": 17,
@@ -135,13 +135,13 @@
     },
     {
       "target": 24,
-      "status": "partially-fixed",
-      "evidence": "POSIX process groups are escalated and verified dead, including a root that exits before its grandchild. The exact ConPTY adapter captures the console process list before hard kill and verifies every captured PID disappeared. A new Windows-native adversarial test makes the root exit 900 ms before its grandchild and rejects an early terminal exit; Node 22/24 CI is the required execution proof because node-pty exposes neither a Job Object nor a cross-platform descendant primitive."
+      "status": "already-fixed",
+      "evidence": "The Termwright-owned POSIX addon keeps the root unreaped at its waitid(WNOWAIT) boundary, kills the still-unreusable process group, and only then reaps it. The Windows addon assigns the suspended root to a kill-on-close Job Object before it can run and queries that job for tree liveness. Native lifecycle tests cover roots exiting before descendants and hard teardown on both operating-system families."
     },
     {
       "target": 25,
-      "status": "partially-fixed",
-      "evidence": "The exact-version adapter now owns the Unix EOF boundary: stream end/EIO is observed before node-pty's exit callback, then TerminalSession drains the VT exactly before publishing exit; source-shape certification and a real 1 MiB sentinel prove it. Deeper ConPTY inspection shows beta.15 destroys its output socket after a private 100-ms flush timer, so Windows remains honestly bounded-fallback rather than falsely treating close as EOF."
+      "status": "already-fixed",
+      "evidence": "The Termwright-owned addon reads the POSIX master through kernel EOF/EIO and the ConPTY output pipe through its real end. Data and EOF share one bounded ordered native-to-JS channel; TerminalSession drains the VT before publishing exit. Saturated tail-plus-sentinel tests and packed clean-install smokes certify the boundary without a timer, quiet window or dependency-private field."
     },
     {
       "target": 26,
@@ -161,12 +161,12 @@
     {
       "target": 29,
       "status": "already-fixed",
-      "evidence": "PtyProcess.write explicitly means ordered backend-queue admission, never child consumption; high-level actions require committed postconditions. Without patching dependencies, the exact-version adapter owns a bounded ordered write queue over the certified private Unix fd and ConPTY input socket, exposes drain, and converts fatal asynchronous delivery failure into typed pty-backend-failed followed by verified cleanup. Exact private-shape certification fails installation when that boundary drifts."
+      "evidence": "PtyProcess.write explicitly means ordered backend-queue admission, never child consumption; high-level actions require committed postconditions. The native POSIX and ConPTY writers each own an 8 MiB ordered queue, reject overflow synchronously, publish drain only after admitted bytes leave the queue, and enter a permanent fail-closed state after delivery failure. Saturation, drain, post-EOF rejection and teardown-under-pressure tests exercise the real addon rather than a fake adapter."
     },
     {
       "target": 30,
       "status": "incorrect after deeper evidence",
-      "evidence": "The original diagnosis that Termwright could reliably consume this through node-pty's public stream was incorrect: exact upstream CustomWriteStream logs asynchronous EBADF/EIO directly and exposes no callback or error channel. Termwright removed dependency patches and owns the write boundary in its exact-version adapter instead; certification validates all six unpatched artifacts and deterministic teardown tests prove queued writes are cancelled without hidden stderr. An upstream public async-write error/drain API would still be preferable."
+      "evidence": "The original diagnosis that a dependency's public stream could supply the required write/error/drain and EOF contracts was incorrect. Termwright now owns the native input queue, output channel, pseudoterminal and process tree on every supported platform; no node-pty source, private field, patch, fallback or compatibility path remains."
     },
     {
       "target": 31,

@@ -1,17 +1,18 @@
 # Windows PTY backend — decision record
 
-Status: **accepted and certified.** POSIX retains node-pty. Windows uses the
-Termwright-owned `@termwright/conpty` N-API backend exclusively, with x64 and
-ARM64 prebuild packages. A missing or unloadable addon fails closed; there is
-no node-pty fallback on Windows. CI certifies the real x64 backend on Node 22
-and 24, while ARM64 is cross-compiled and its package layout is verified.
+Status: **accepted, certified, and unified.** Windows uses the Windows branch of
+the Termwright-owned `@termwright/pty` N-API backend. Darwin, Linux, and Windows
+arm64/x64 addons share one conditional loader and six prebuild packages. A
+missing or unloadable addon fails closed; no supported platform falls back to
+node-pty. CI certifies real host behavior and the release matrix validates all
+six native artifacts.
 
 The investigation below is retained as historical decision evidence. Its
 intermediate failures and hypotheses do not describe the current backend.
 
 ## What is being replaced
 
-Only the Windows branch of `packages/driver/src/pty.ts`:
+The former Windows branch of `packages/driver/src/pty.ts`:
 
 - `spawn` from `@lydell/node-pty` on win32
 - `createWindowsWriteChannel`, which writes through the private `_agent.inSocket`
@@ -20,9 +21,9 @@ Only the Windows branch of `packages/driver/src/pty.ts`:
 - `observeExactNodePtyOutputBoundary`, which reads the private `_socket`
 - the `ready_datapipe` attach barrier
 
-POSIX keeps node-pty. Its master fd ends with EOF or EIO after its queued
-bytes, which is the property the whole exercise is about, and it already has
-it.
+The later cross-platform migration also replaced node-pty on POSIX. The unified
+addon now owns the `forkpty()` master itself, so EOF/EIO and process-group
+ownership are public Termwright contracts rather than certified private fields.
 
 ## Why not simply keep node-pty on Windows
 

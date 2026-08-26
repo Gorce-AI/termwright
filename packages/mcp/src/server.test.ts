@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createNodePtyBackend } from '@termwright/driver/experimental';
+import { createNativePtyBackend } from '@termwright/driver/experimental';
 import { Client, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveInMemory } from './server.js';
 import type { RunningServer } from './server.js';
@@ -21,7 +21,7 @@ const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'driv
 function ptyAvailable(): boolean {
   if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
   try {
-    const pty = createNodePtyBackend().spawn({
+    const pty = createNativePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
       env: {},
       columns: 20,

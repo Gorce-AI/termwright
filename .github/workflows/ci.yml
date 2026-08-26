@@ -101,6 +101,7 @@ jobs:
       - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
+          compile-native-pty: 'true'
       # The full catalogue includes OpenTUI's real bun:ffi process contract.
       # Pin Bun here too; relying on an incidental runner-image binary would
       # turn a supported-runtime row into an environment-dependent skip.
@@ -114,16 +115,16 @@ jobs:
 
       - name: Install test (the native pty binding resolves on this platform)
         shell: bash
-        run: pnpm --filter @termwright/driver exec node -e "import('@lydell/node-pty').then(m => { if (typeof m.spawn !== 'function') process.exit(1); console.log('pty backend loaded'); })"
+        run: pnpm --filter @termwright/driver exec node -e "import('@termwright/pty').then(m => { if (!m.ptyAvailable()) process.exit(1); console.log('pty backend loaded'); })"
 
       - run: pnpm build
       # A bundled native dependency resolves its addon beside the wrong file,
-      # and the only symptom is a silent fallback to the backend it replaces.
+      # so a valid consumer installation would fail closed at startup.
       - run: node scripts/check-optional-native-externals.mjs
       # The certification smoke imports the packed-shape driver entrypoint; a
       # fresh checkout has no dist/ and must build before this check. Running
       # it earlier accidentally depended on stale local artifacts.
-      - run: pnpm check:node-pty
+      - run: pnpm check:pty
       - name: Verify packed driver on the native PTY backend
         shell: bash
         run: |
@@ -131,8 +132,15 @@ jobs:
           pack_dir="$RUNNER_TEMP/termwright-driver-packs"
           install_dir="$RUNNER_TEMP/termwright-driver-install"
           mkdir -p "$pack_dir" "$install_dir"
+          platform=$(node -p 'process.platform')
+          architecture=$(node -p 'process.arch')
+          cp packages/pty/build/Release/termwright_pty.node \
+             "packages/pty-$platform-$architecture/termwright_pty.node"
+          node scripts/check-prebuild.mjs "$platform" "$architecture"
           pnpm --dir packages/protocol pack --pack-destination "$pack_dir"
           pnpm --dir packages/vt pack --pack-destination "$pack_dir"
+          pnpm --dir "packages/pty-$platform-$architecture" pack --pack-destination "$pack_dir"
+          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           pnpm --dir packages/driver pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
@@ -168,6 +176,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
       - run: pnpm build
 
       # Hostile suites still run through the certified host. NODE_OPTIONS is
@@ -192,14 +201,11 @@ jobs:
 
   # Windows native artifact DAG: architecture producers are independent and
   # runnable x64 consumers never wait for the ARM64 release artifact.
-  conpty-native-build-x64:
-    name: build the ConPTY addon (x64)
-    # Pinned to the 2022 image on purpose. windows-latest now ships Visual
-    # Studio 18, which node-gyp 11 cannot identify — it reports "unknown
-    # version undefined" and gives up. Users are never asked to compile this
-    # (prebuilds ship with the package), so the toolchain that produces the
-    # binary and the Windows that runs it are separate choices, and this is
-    # the one where the toolchain is supported.
+  pty-native-build-x64:
+    name: build the Windows PTY addon (x64)
+    # Keep the x64 artifact on the oldest supported Windows compiler image;
+    # downstream jobs load that exact binary on windows-latest. Users are never
+    # asked to compile it because the package ships this certified prebuild.
     runs-on: windows-2022
     timeout-minutes: 25
     steps:
@@ -214,7 +220,7 @@ jobs:
       # Node-API, so one binary serves every supported Node line. Building it
       # twice per architecture would only prove the compiler runs twice.
       - name: Compile
-        working-directory: packages/conpty
+        working-directory: packages/pty
         run: pnpm exec node-gyp rebuild --arch=x64
 
       # Into the package that publishes it, so the layout the release job packs
@@ -223,23 +229,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp packages/conpty/build/Release/termwright_conpty.node \
-             packages/conpty-win32-x64/termwright_conpty.node
-          node scripts/check-prebuild.mjs x64
+          cp packages/pty/build/Release/termwright_pty.node \
+             packages/pty-win32-x64/termwright_pty.node
+          node scripts/check-prebuild.mjs win32 x64
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: conpty-addon-x64
-          path: packages/conpty-win32-x64/termwright_conpty.node
+          name: pty-addon-x64
+          path: packages/pty-win32-x64/termwright_pty.node
           if-no-files-found: error
           retention-days: 1
 
-  conpty-native-build-arm64:
-    name: build the ConPTY addon (arm64)
-    # ARM64 is cross-compiled independently. It is a release artifact, but an
-    # issue in that toolchain must not prevent x64 Windows certification from
-    # consuming the x64 artifact that it actually runs.
-    runs-on: windows-2022
+  pty-native-build-arm64:
+    name: build and run the Windows PTY addon (arm64)
+    # A publishable native artifact is certified only by loading and exercising
+    # it on the architecture that will consume it. node-gyp 12+ also keeps this
+    # lane valid through the announced Visual Studio 2026 image migration.
+    runs-on: windows-11-arm
     timeout-minutes: 25
     steps:
       - name: Reject workflow reruns
@@ -249,30 +255,34 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
-      - name: Cross-compile
-        working-directory: packages/conpty
+      - name: Compile natively
+        working-directory: packages/pty
         run: pnpm exec node-gyp rebuild --arch=arm64
       - name: Place the binary in its prebuild package
         shell: bash
         run: |
           set -euo pipefail
-          cp packages/conpty/build/Release/termwright_conpty.node \
-             packages/conpty-win32-arm64/termwright_conpty.node
-          node scripts/check-prebuild.mjs arm64
+          cp packages/pty/build/Release/termwright_pty.node \
+             packages/pty-win32-arm64/termwright_pty.node
+          node scripts/check-prebuild.mjs win32 arm64
+      - run: pnpm build
+      - name: Certify the real Windows ARM64 PTY contract
+        env: { TERMWRIGHT_RETRIES: '0' }
+        run: pnpm test -- --resource-profile windows-ci --json -- --run packages/pty/src
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: conpty-addon-arm64
-          path: packages/conpty-win32-arm64/termwright_conpty.node
+          name: pty-addon-arm64
+          path: packages/pty-win32-arm64/termwright_pty.node
           if-no-files-found: error
           retention-days: 1
 
-  conpty-native:
-    name: native ConPTY backend (Windows / Node ${{ matrix.node }})
+  pty-native:
+    name: native PTY backend (Windows / Node ${{ matrix.node }})
     # 24H2, which is where ReleasePseudoConsole exists. The addon detects the
     # symbol rather than the version, and this is the image that proves the
     # modern path is the one taken.
     runs-on: windows-latest
-    needs: conpty-native-build-x64
+    needs: pty-native-build-x64
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -292,14 +302,14 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: conpty-addon-x64
-          path: packages/conpty/build/Release
+          name: pty-addon-x64
+          path: packages/pty/build/Release
 
       - name: Record which pseudoconsole path this runner takes
         shell: bash
         run: |
           node -e "
-            const { ConPtySession } = require('./packages/conpty/build/Release/termwright_conpty.node');
+            const { ConPtySession } = require('./packages/pty/build/Release/termwright_pty.node');
             const s = new ConPtySession({ commandLine: process.execPath + ' -e \"process.exit(0)\"', columns: 80, rows: 24 }, () => {});
             console.log('ReleasePseudoConsole available:', s.releaseSupported);
             s.dispose();
@@ -309,7 +319,7 @@ jobs:
       # failure: these cases exist because nothing else can prove them.
       - name: Certify the real ConPTY contract
         env: { TERMWRIGHT_RETRIES: '0' }
-        run: pnpm test -- --resource-profile windows-ci --json -- --run packages/conpty/src
+        run: pnpm test -- --resource-profile windows-ci --json -- --run packages/pty/src
       - name: Upload Termwright failure evidence
         if: ${{ failure() || cancelled() }}
         uses: ./.github/actions/upload-termwright-runs
@@ -329,7 +339,7 @@ jobs:
     # not confirm a tree was gone, plus settled() and the shell inference;
     # against the certified session, all five pass.
     runs-on: windows-latest
-    needs: conpty-native-build-x64
+    needs: pty-native-build-x64
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -355,18 +365,17 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: conpty-addon-x64
+          name: pty-addon-x64
           # Into the prebuild package rather than the build directory, so this
           # job resolves the addon the way an installed copy will. The build
           # directory is the developer's path and is already covered by the
           # certification job; this one is the users'.
-          path: packages/conpty-win32-x64
+          path: packages/pty-win32-x64
 
       - run: pnpm build
 
-      # A selection step, not a smoke test. If this prints the node-pty name
-      # the job below proves nothing, and a silent fallback would make it look
-      # like it had.
+      # A selection step, not a smoke test. The exact backend name proves the
+      # job below is exercising the native package it intends to certify.
       - name: Confirm the driver selects the native backend
         shell: bash
         run: |
@@ -384,14 +393,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pack_dir="$RUNNER_TEMP/termwright-conpty-packs"
-          install_dir="$RUNNER_TEMP/termwright-conpty-install"
+          pack_dir="$RUNNER_TEMP/termwright-pty-packs"
+          install_dir="$RUNNER_TEMP/termwright-pty-install"
           mkdir -p "$pack_dir" "$install_dir"
-          node scripts/check-prebuild.mjs x64
-          pnpm --dir packages/conpty-win32-x64 pack --pack-destination "$pack_dir"
-          pnpm --dir packages/conpty pack --pack-destination "$pack_dir"
+          node scripts/check-prebuild.mjs win32 x64
+          pnpm --dir packages/pty-win32-x64 pack --pack-destination "$pack_dir"
+          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
-          node scripts/check-installed-conpty.mjs "$install_dir"
+          node scripts/check-installed-pty.mjs "$install_dir"
 
       - run: pnpm -r --filter './packages/*' run typecheck
       - name: Verify packed driver on the native PTY backend
@@ -407,8 +416,8 @@ jobs:
           # The driver's Windows backend is an optional dependency that is not
           # published yet, so an install of the packed driver alone would skip
           # it and leave the installed copy with no backend at all.
-          pnpm --dir packages/conpty-win32-x64 pack --pack-destination "$pack_dir"
-          pnpm --dir packages/conpty pack --pack-destination "$pack_dir"
+          pnpm --dir packages/pty-win32-x64 pack --pack-destination "$pack_dir"
+          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
 
@@ -450,6 +459,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
       - run: pnpm build
       - name: Repeat concurrency-sensitive slices in one persistent host
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -482,6 +492,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
       - run: pnpm build
       - name: Saturate the explicit PTY/process/endpoint budget
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -506,6 +517,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
       - run: pnpm build
       - name: Every cycle must finish with zero broker leases and owned processes
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -543,6 +555,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
       - run: pnpm build
       - name: Acquisition, persistence, handshake and cleanup fault matrix
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -572,6 +585,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
       - run: pnpm build
       - name: Shuffle concurrency-sensitive tests with a reproducible seed
         shell: bash
@@ -594,7 +608,7 @@ jobs:
   windows-native-stress:
     name: Windows native lifecycle stress / Node ${{ matrix.node }}
     runs-on: windows-latest
-    needs: conpty-native-build-x64
+    needs: pty-native-build-x64
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -616,8 +630,8 @@ jobs:
       # anything. There is no fallback to run on if it is absent.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: conpty-addon-x64
-          path: packages/conpty-win32-x64
+          name: pty-addon-x64
+          path: packages/pty-win32-x64
 
 
       - name: ConPTY process tree, close-under-load and worker pressure
@@ -627,7 +641,7 @@ jobs:
           set -euo pipefail
           pnpm test -- --resource-profile windows-ci --json -- --run \
             packages/driver/src/process-lifecycle.pty.test.ts \
-            packages/driver/src/pty-upstream-boundary.test.ts \
+            packages/driver/src/native-pty-backend.test.ts \
             packages/driver/src/session-lifecycle.test.ts
           pnpm test -- --resource-profile stress --json -- \
             --config quality/stress/vitest.config.ts --run \
@@ -658,6 +672,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
 
       # The adapter-contract rows for Textual and tview drive real apps as
       # subprocesses. Without these toolchains those rows skip, and a skipped
@@ -765,7 +780,7 @@ jobs:
           artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   conformance-windows:
-    needs: conpty-native-build-x64
+    needs: pty-native-build-x64
     name: conformance windows-latest
     runs-on: windows-latest
     timeout-minutes: 45
@@ -787,8 +802,8 @@ jobs:
       - run: pnpm build
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: conpty-addon-x64
-          path: packages/conpty-win32-x64
+          name: pty-addon-x64
+          path: packages/pty-win32-x64
       - name: Install the Python client (Textual adapter row)
         shell: bash
         run: |
@@ -842,6 +857,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
 
       # OpenTUI loads its native Zig library through bun:ffi, so this suite
       # cannot run under Node at all. Without Bun on PATH it skips itself, and
@@ -1181,6 +1197,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
+        with: { compile-native-pty: 'true' }
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
@@ -1259,9 +1276,9 @@ jobs:
       - deterministic-core-coverage
       - build
       - hostile
-      - conpty-native-build-x64
-      - conpty-native-build-arm64
-      - conpty-native
+      - pty-native-build-x64
+      - pty-native-build-arm64
+      - pty-native
       - windows-driver-native
       - determinism
       - concurrency-stress

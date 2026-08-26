@@ -12,27 +12,35 @@ geometry, revisions, query domains, and certified framework injection) are
 maintained in the repository's
 [`core-testing-model-decisions.md`](https://github.com/Gorce-AI/termwright/blob/main/docs/architecture/core-testing-model-decisions.md).
 
-## ADR-1 — A real pseudo-terminal, and a pinned PTY binding
+## ADR-1 — A real, Termwright-owned pseudo-terminal
 
 **Decision.** Every session owns a real pty, spawned through a `PtyBackend`
-interface; the implementation is `@lydell/node-pty`, pinned to an exact version.
+interface. The implementation is the Termwright-owned `@termwright/pty` native
+addon, shipped through six platform/architecture prebuild packages.
 
 **Why.** Anything short of a real pty — a pipe, a captured stream, an in-process
 fake — changes what the program under test does: raw mode, `SIGWINCH`, terminal
 size, `isatty` checks and signal delivery all differ. A test on a fake is
 evidence about the fake.
 
-The fork rather than upstream `node-pty` because upstream's stable release lacks
-Linux prebuilds, while the fork ships all six platforms as optional
-dependencies. It is pinned exactly, with install tests per platform in CI,
-because the alternative is a native binding changing under a patch release.
+The addon owns the POSIX `forkpty()` master or Windows pseudoconsole directly.
+It observes the operating system's real output EOF, keeps writes ordered and
+owns the complete process group/job. No timer, quiet window, retry, or private
+field in another package defines lifecycle completion.
 
-**Known cost.** The fork has a bus factor of one, and its `latest` tag has
-pointed at a beta. The `PtyBackend` interface is the insurance: it is the only
-place in the driver that knows which binding is in use.
+Input admission is capped at 8 MiB and fails synchronously on overflow; an OS
+write failure closes it permanently. Native output crosses a bounded event
+queue, so a busy JavaScript consumer backpressures the PTY instead of consuming
+memory without limit. Teardown aborts that queue before joining its producers.
 
-**Revisit when.** Upstream `node-pty` ships a stable release with Linux
-prebuilds.
+**Known cost.** Termwright maintains native C++ and six release artifacts. The
+release matrix builds and opens every packed addon on its real OS/architecture;
+clean-install smoke tests prove the loader and matching optional dependency
+together.
+
+**Revisit when.** Another public PTY API can provide authoritative EOF, ordered
+backpressured writes, and complete tree ownership without weakening any of
+those contracts.
 
 ## ADR-2 — `@xterm/headless` as the VT emulator
 

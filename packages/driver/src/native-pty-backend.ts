@@ -1,0 +1,190 @@
+/** Translation from the Termwright-owned native session to the driver PTY contract. */
+import { spawnPty as spawnNativePty } from "@termwright/pty";
+import type { ExitStatus } from "./api.js";
+import { EarlyPtyOutput } from "./internal/early-pty-output.js";
+import { ProcessLifecycleError } from "./internal/process-supervisor.js";
+import type {
+  PtyBackend,
+  PtyProcess,
+  PtySignal,
+  PtySpawnOptions,
+  PtyUnsubscribe,
+} from "./pty.js";
+
+export interface NativePtySessionHandle {
+  readonly pid: number;
+  readonly outputEnded: Promise<void>;
+  readonly sawRealEof: boolean;
+  write(data: Uint8Array): void;
+  resize(columns: number, rows: number): boolean;
+  signal(signal: PtySignal): boolean;
+  treeState(): "alive" | "gone" | "unsupported";
+  onData(listener: (data: Uint8Array) => void): () => void;
+  onExit(listener: (status: ExitStatus) => void): () => void;
+  onError(listener: (error: Error) => void): () => void;
+  onDrain(listener: () => void): () => void;
+  dispose(): void;
+}
+
+export type NativePtySpawn = (options: {
+  readonly command: readonly string[];
+  readonly cwd?: string;
+  readonly env: Readonly<Record<string, string>>;
+  readonly columns: number;
+  readonly rows: number;
+}) => NativePtySessionHandle;
+
+export const NATIVE_PTY_BACKEND_NAME = "termwright-native-pty";
+
+/**
+ * Adapts the native package without adding lifecycle policy or weaker fallbacks.
+ * The package owns EOF, process groups/jobs and ordered writes; this layer only
+ * preserves early events until TerminalSession has attached its journal.
+ */
+export function createNativePtyBackend(
+  spawn: NativePtySpawn = spawnNativePty,
+  platform: NodeJS.Platform = process.platform,
+): PtyBackend {
+  return {
+    name: NATIVE_PTY_BACKEND_NAME,
+    spawn(options: PtySpawnOptions): PtyProcess {
+      const env = { ...options.env, TERM: options.term ?? options.env.TERM ?? "xterm-256color" };
+      const session = spawn({
+        command: options.command,
+        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+        env,
+        columns: options.columns,
+        rows: options.rows,
+      });
+      let disposed = false;
+      let exitStatus: ExitStatus | undefined;
+      let fatalError: Error | undefined;
+      const dataListeners = new Set<(data: Uint8Array) => void>();
+      const exitListeners = new Set<(status: ExitStatus) => void>();
+      const errorListeners = new Set<(error: Error) => void>();
+      const drainListeners = new Set<() => void>();
+      const pendingData = new EarlyPtyOutput();
+
+      const releaseData = session.onData((data) => {
+        if (dataListeners.size === 0) {
+          pendingData.push(data);
+          return;
+        }
+        for (const listener of [...dataListeners]) listener(data);
+      });
+      const releaseExit = session.onExit((status) => {
+        exitStatus = status;
+        for (const listener of [...exitListeners]) listener(status);
+      });
+      const releaseError = session.onError((error) => {
+        fatalError ??= error;
+        for (const listener of [...errorListeners]) listener(fatalError);
+      });
+      const releaseDrain = session.onDrain(() => {
+        for (const listener of [...drainListeners]) listener();
+      });
+
+      return {
+        get pid(): number { return session.pid; },
+        lifecycle: {
+          tree: platform === "win32" ? "conpty-console" : "posix-process-group",
+          outputDrain: "eof",
+        },
+        write(data): void {
+          if (disposed) throw new Error("native PTY input is closed");
+          session.write(data);
+        },
+        resize(columns, rows): void {
+          if (!disposed) session.resize(columns, rows);
+        },
+        signal(signal): void {
+          if (disposed) return;
+          if (!session.signal(signal)) {
+            throw new ProcessLifecycleError(
+              "unsupported-signal",
+              `the native PTY backend cannot deliver ${signal} on ${platform}`,
+            );
+          }
+        },
+        ...(platform !== "win32"
+          ? {
+              // The native waitid(WNOWAIT) watcher already kills descendants
+              // before reaping the root. There is no JS-time PGID operation.
+              killOwnedTreeAtExitBoundary(): void {},
+            }
+          : {}),
+        async hardKillTree(signal: AbortSignal): Promise<void> {
+          signal.throwIfAborted();
+          if (!disposed && !session.signal("KILL")) {
+            throw new ProcessLifecycleError(
+              "cleanup-failed",
+              `the native PTY backend could not terminate its tree on ${platform}`,
+            );
+          }
+        },
+        onData(listener): PtyUnsubscribe {
+          dataListeners.add(listener);
+          try {
+            pendingData.drain(listener);
+          } catch (error) {
+            dataListeners.delete(listener);
+            throw error;
+          }
+          return () => dataListeners.delete(listener);
+        },
+        onExit(listener): PtyUnsubscribe {
+          exitListeners.add(listener);
+          const observed = exitStatus;
+          if (observed !== undefined) queueMicrotask(() => {
+            if (exitListeners.has(listener)) listener(observed);
+          });
+          return () => exitListeners.delete(listener);
+        },
+        outputEnded: session.outputEnded,
+        sawOutputEnd: (): boolean => session.sawRealEof,
+        async attach(signal: AbortSignal): Promise<void> {
+          signal.throwIfAborted();
+        },
+        onWriteError(listener): PtyUnsubscribe {
+          errorListeners.add(listener);
+          const observed = fatalError;
+          if (observed !== undefined) queueMicrotask(() => {
+            if (errorListeners.has(listener)) listener(observed);
+          });
+          return () => errorListeners.delete(listener);
+        },
+        onWriteDrain(listener): PtyUnsubscribe {
+          drainListeners.add(listener);
+          return () => drainListeners.delete(listener);
+        },
+        treeState(): "alive" | "gone" | "unsupported" {
+          return session.treeState();
+        },
+        dispose(): void {
+          if (disposed) return;
+          disposed = true;
+          const errors: unknown[] = [];
+          for (const release of [
+            releaseData,
+            releaseExit,
+            releaseError,
+            releaseDrain,
+            () => session.dispose(),
+          ]) {
+            try {
+              release();
+            } catch (error) {
+              errors.push(error);
+            }
+          }
+          dataListeners.clear();
+          exitListeners.clear();
+          errorListeners.clear();
+          drainListeners.clear();
+          if (errors.length === 1) throw errors[0];
+          if (errors.length > 1) throw new AggregateError(errors, "multiple native PTY disposal failures");
+        },
+      };
+    },
+  };
+}

@@ -17,7 +17,7 @@ import {
   ProbeAttachFailedError,
   TermwrightError,
 } from "./errors.js";
-import { createNodePtyBackend } from "./pty.js";
+import { createNativePtyBackend } from "./native-pty-backend.js";
 import { launchTerminal } from "./session.js";
 import { sensitive } from "@termwright/protocol";
 
@@ -38,7 +38,7 @@ function environment(): Record<string, string> {
 function ptyAvailable(): boolean {
   if (process.env["TERMWRIGHT_SKIP_PTY"] === "1") return false;
   try {
-    const pty = createNodePtyBackend().spawn({
+    const pty = createNativePtyBackend().spawn({
       command: [process.execPath, "-e", "process.exit(0)"],
       env: environment(),
       columns: 20,
@@ -125,7 +125,7 @@ describe.skipIf(!ptyAvailable())(
   { timeout: 20_000 },
   () => {
     it("exposes the child pid after the PTY becomes ready", async () => {
-      const pty = createNodePtyBackend().spawn({
+      const pty = createNativePtyBackend().spawn({
         command: [
           process.execPath,
           "-e",
@@ -149,10 +149,10 @@ describe.skipIf(!ptyAvailable())(
     });
 
     it.skipIf(process.platform !== "win32")(
-      "closes concurrent live ConPTY sessions without the AttachConsole fallback stall",
+      "closes concurrent live ConPTY sessions through owned job teardown",
       async () => {
         const ptys = Array.from({ length: 10 }, () =>
-          createNodePtyBackend().spawn({
+          createNativePtyBackend().spawn({
             command: [
               process.execPath,
               "-e",

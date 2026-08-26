@@ -1,22 +1,15 @@
 /**
  * Which pseudo-terminal a session gets.
  *
- * Windows has one, and it is the native backend. There was a fallback while
- * the addon had to be compiled locally, and prebuilds removed the reason for
- * it: both architectures Windows runs on ship a binary, so a machine that
- * cannot load one has something wrong with its installation rather than an
- * unsupported toolchain.
+ * Every supported platform has exactly one Termwright-owned native backend.
  *
- * Falling back would be worse than failing. The two implementations do not
- * offer the same guarantee — the native one ends its stream when the pipe
- * ends, node-pty's Windows path ends it when a flush window elapses — so a
- * quiet substitution hands the caller a boundary that looks identical and
- * means something weaker. This raises instead, with what it tried.
+ * A quiet substitution would hand the caller a boundary that looks identical
+ * and means something weaker, so a missing native capability fails closed.
  */
 
-import { createConPtyBackend, type ConPtySpawn } from './conpty-backend.js';
+import { createNativePtyBackend, type NativePtySpawn } from './native-pty-backend.js';
 import { PtyBackendError } from './errors.js';
-import { createNodePtyBackend, type PtyBackend } from './pty.js';
+import type { PtyBackend } from './pty.js';
 
 export interface PtyBackendChoice {
   readonly backend: PtyBackend;
@@ -48,34 +41,34 @@ export function resetPtyBackendChoice(): void {
 }
 
 /**
- * Loads the native Windows backend, or explains what stopped it.
+ * Loads the native backend for the active platform, or explains what stopped it.
  *
  * Split out so the failure has one shape. An addon that was never built and an
  * addon that cannot be loaded on this machine are both "no native backend
  * here", and the difference belongs in the message rather than in the control
  * flow of the caller.
  */
-async function loadNativeWindowsBackend(): Promise<PtyBackendChoice> {
+async function loadNativeBackend(platform: NodeJS.Platform): Promise<PtyBackendChoice> {
   let module_: {
-    conPtyAvailable(): boolean;
-    conPtyUnavailableReason?(): string | undefined;
-    spawnConPty: ConPtySpawn;
+    ptyAvailable(): boolean;
+    ptyUnavailableReason?(): string | undefined;
+    spawnPty: NativePtySpawn;
   };
   try {
-    module_ = (await import('@termwright/conpty')) as typeof module_;
+    module_ = (await import('@termwright/pty')) as typeof module_;
   } catch (error) {
     throw backendUnavailable(
-      '@termwright/conpty is not installed, so this Windows machine has no pseudo-terminal backend: ' +
+      '@termwright/pty is not installed, so this machine has no pseudo-terminal backend: ' +
         `${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  if (!module_.conPtyAvailable()) {
+  if (!module_.ptyAvailable()) {
     throw backendUnavailable(
-      'the termwright ConPTY addon did not load, so this Windows machine has no pseudo-terminal ' +
-        `backend: ${module_.conPtyUnavailableReason?.() ?? 'no reason reported'}`,
+      `the Termwright PTY addon did not load for ${platform}-${process.arch}: ` +
+        `${module_.ptyUnavailableReason?.() ?? 'no reason reported'}`,
     );
   }
-  return { backend: createConPtyBackend(module_.spawnConPty) };
+  return { backend: createNativePtyBackend(module_.spawnPty, platform) };
 }
 
 /**
@@ -88,8 +81,6 @@ async function loadNativeWindowsBackend(): Promise<PtyBackendChoice> {
 export function resolveDefaultPtyBackend(
   platform: NodeJS.Platform = process.platform,
 ): Promise<PtyBackendChoice> {
-  cached ??= platform === 'win32'
-    ? loadNativeWindowsBackend()
-    : Promise.resolve({ backend: createNodePtyBackend() });
+  cached ??= loadNativeBackend(platform);
   return cached;
 }

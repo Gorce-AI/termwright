@@ -6,6 +6,10 @@ inputs:
     description: Supported Node.js major to install.
     required: false
     default: '22'
+  compile-native-pty:
+    description: Compile the host POSIX PTY addon for jobs that launch terminals.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -22,3 +26,8 @@ runs:
     - name: Install the frozen workspace
       shell: bash
       run: pnpm install --frozen-lockfile
+    - name: Compile the native POSIX PTY binding
+      if: runner.os != 'Windows' && inputs.compile-native-pty == 'true'
+      shell: bash
+      working-directory: packages/pty
+      run: pnpm exec node-gyp rebuild

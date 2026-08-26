@@ -243,8 +243,11 @@ function optionalRuntimeArtifacts(packageRoot, packageJson, declared) {
   if (!Array.isArray(configured) || configured.length === 0) {
     throw new Error(`termwrightBuild.optionalArtifacts must be a non-empty array in ${packageRoot}`);
   }
-  if (!Array.isArray(packageJson.os) || packageJson.os.length !== 1 || packageJson.os[0] !== 'win32') {
-    throw new Error(`optional production artifacts are supported only by win32 packages: ${packageRoot}`);
+  const platform = Array.isArray(packageJson.os) && packageJson.os.length === 1
+    ? packageJson.os[0]
+    : undefined;
+  if (!['darwin', 'linux', 'win32'].includes(platform)) {
+    throw new Error(`optional production artifacts require one supported native platform: ${packageRoot}`);
   }
   const build = packageJson.scripts?.build;
   if (typeof build !== 'string' || !build.includes('check-prebuild.mjs') || !build.includes('--allow-missing')) {

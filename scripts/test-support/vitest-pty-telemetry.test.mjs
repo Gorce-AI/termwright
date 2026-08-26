@@ -104,7 +104,7 @@ describe('Vitest PTY telemetry certification', () => {
     expect(workflow).toContain('pnpm --filter @termwright/driver... build');
     expect(harness).toContain("packages', 'driver', 'dist', 'experimental.js'");
     expect(pressure).toContain('context.onTestFinished');
-    expect(pressure).toContain("import { createNodePtyBackend } from '../driver-backend.mjs'");
+    expect(pressure).toContain("import { createNativePtyBackend } from '../driver-backend.mjs'");
     expect(pressure).not.toContain("from '@lydell/node-pty'");
     expect(pressure).not.toContain('setInterval(advertise');
     expect(pressure.indexOf('output.includes(readyOutput)')).toBeLessThan(pressure.indexOf("pty.write(Buffer.from('release'))"));

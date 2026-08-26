@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AppLogEvent, SessionDiagnostic, TerminalHarness } from './api.js';
-import { createNodePtyBackend } from './pty.js';
+import { createNativePtyBackend } from './native-pty-backend.js';
 import { inheritedSpawnEnv, launchTerminal } from './session.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtures');
@@ -16,7 +16,7 @@ const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtu
 function ptyAvailable(): boolean {
   if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
   try {
-    const pty = createNodePtyBackend().spawn({
+    const pty = createNativePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
       env: inheritedSpawnEnv(),
       columns: 20,

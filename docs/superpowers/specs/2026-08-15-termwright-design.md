@@ -43,11 +43,11 @@ Three headline differentiators (nobody has any of them):
 | Brand / npm scope | `termwright` / `@termwright` (npm+PyPI free; dead `fcoury/termwright` and taken crate name accepted — crate ships as `termwright-protocol`) |
 | GitHub org | `gorce-ai` |
 | 1.0 scope | Everything: protocol, driver, adapters, component testing, MCP, conformance, trace, Vitest preset, interactive runner UI with time travel |
-| Windows | Full ConPTY support in 1.0, own conformance lane + Windows CI |
+| Windows | First-class ConPTY backend in 1.0, own conformance lane + Windows CI; opaque child pointer/focus modes fail closed unless authoritative application evidence exists |
 | Runner | Vitest as the first-class preset; driver stays runner-agnostic (works from node:test/Jest/scripts) |
 | Core language | TypeScript core; protocol is language-neutral with thin clients for TS, Python, Go, Rust |
 | 1.0 adapters | Ink (full, first), OpenTUI, Textual, tview; Bubble Tea honest degradation (+ Lip Gloss Canvas adapter); Ratatui instrumented adapter in 1.x |
-| PTY | `@lydell/node-pty` pinned exact `1.1.0`, behind a `PtyBackend` interface (upstream node-pty stable lacks Linux prebuilds; fork has all 6 platforms as optionalDependencies) |
+| PTY | Termwright-owned `@termwright/pty`, with one loader and six optional native packages for Windows, Linux and macOS on x64/arm64; the native implementation owns producer EOF, process-tree teardown and write ordering |
 | VT | `@xterm/headless` 6.0 + `@xterm/addon-unicode11` (explicitly activated) + `@xterm/addon-serialize` |
 | Render marker encoding | Private **DCS** (or private OSC fallback) — verified registrable and grid-invisible in xterm headless; **not APC** (unsupported by xterm.js) |
 | Semantic transport | Out-of-band local channel (unix socket / named pipe), CDP-style request-response + subscriptions; in-band marker is a frame **commit** (Neovim `flush` semantics), never a data carrier |
@@ -388,7 +388,8 @@ run under `--max-old-space-size=128`.
   interaction scenarios (§20.4) — all as origin spec §20.
 - Adapter contract tests are runnable against any adapter (including Py/Go/Rust
   via subprocess fixtures) so third-party adapters can self-certify.
-- CI matrix: macOS, Linux (glibc), **Windows/ConPTY first-class**; Node 22/24;
+- CI matrix: macOS >= 13.5, Linux at the Ubuntu 22.04 ABI floor (glibc >=
+  2.35), **Windows/ConPTY first-class**; Node 22/24;
   prebuild install tests per platform; 128 MiB adversarial gate; Alpine/musl
   documented as unsupported (use `node:22-slim`).
 
@@ -411,9 +412,12 @@ run under `--max-old-space-size=128`.
    mitigated by capability flag + documented `alternateScreen` recommendation.
 3. **Windows/ConPTY in 1.0** — known divergent resize/mouse behavior; own
    conformance lane budgeted; honest capability output where behavior differs.
-4. **`@lydell/node-pty` bus factor 1, `latest` tag on beta** — exact pin,
-   install tests in CI, `PtyBackend` abstraction as insurance; migrate to
-   upstream 1.2.0 stable when released.
+   ConPTY does not expose generic child pointer/focus mode negotiation, so an
+   opaque child is unsupported for those actions unless its production state is
+   supplied by an explicit authoritative provider.
+4. **Native PTY maintenance across six targets** — one public loader contract,
+   platform-specific prebuild certification, packed clean-install tests and
+   real Windows/Linux/macOS conformance keep the owned implementation honest.
 5. **MCP SDK v1→v2 split** — facade isolation; Zod v4 from day one.
 6. **Scope weight of full-1.0** (UI + Windows + 4 adapters + 3 language clients)
    — mitigated by strict package boundaries and the milestone order below;

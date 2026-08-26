@@ -289,9 +289,9 @@ export class ProcessSupervisor {
         // available operation before releasing backend handles.
         this.#trySignal('KILL', failures);
       } else if (lifecycle?.tree === 'conpty-console') {
-        // ConPTY exposes no graceful signal or Job Object through node-pty.
-        // Its public kill() enumerates the attached console tree and closes the
-        // pseudoconsole, so this is deliberately the hard-kill path.
+        // Windows cannot deliver POSIX graceful signals through ConPTY. The
+        // native backend owns a Job Object and exposes its termination as this
+        // deliberately separate hard-kill path.
         if (this.#pty.hardKillTree === undefined) {
           failures.push(new ProcessLifecycleError(
             'cleanup-failed',
@@ -361,7 +361,7 @@ export class ProcessSupervisor {
       if (observed !== null && this.#exitTreeConfirmedGone) {
         // An EPERM from a numeric PGID followed by real root-exit evidence and
         // a `gone` snapshot at that exact boundary means the number was reused
-        // by a foreign process before node-pty delivered its callback. Keeping
+        // by a foreign process before a backend delivered its callback. Keeping
         // the error would be false failure; retrying the signal would be worse
         // because it would target a process Termwright does not own.
         for (let index = failures.length - 1; index >= 0; index -= 1) {

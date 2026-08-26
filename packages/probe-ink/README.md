@@ -86,6 +86,13 @@ hover, or drag by themselves. Those actions require an application evidence
 provider that publishes revision-bound pointer regions and a native hit test;
 device input still travels through the real PTY.
 
+Ink instrumentation also does not automatically certify terminal input modes.
+Its output shadow sees JavaScript `stream.write` calls, but direct descriptor or
+native writes and inherited descendant output bypass that surface. On ConPTY,
+where the transport hides DEC mouse/focus negotiation, an opaque Ink child
+therefore remains fail-closed. Hidden-mode pointer/focus input requires an
+explicit provider backed by the application's production input-mode state.
+
 ## Deliberate limits
 
 Ink's reconciler discards application component names before creating the host

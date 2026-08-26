@@ -11,12 +11,12 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 40,
-    "deadline-or-scheduler-regression-test": 63,
+    "deadline-or-scheduler-regression-test": 62,
     "deterministic-adversarial-fixture-schedule": 34,
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 203,
-    "explicit-test-selection-reviewed-with-platform-registry": 92,
+    "explicit-test-selection-reviewed-with-platform-registry": 94,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
     "production-process-isolation-review": 35,
@@ -583,108 +583,6 @@
       "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') {"
     },
     {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'const timer = setInterval(() => {',"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setTimeout(() => { note(\"done\"); }, 4000);',"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setTimeout(() => { note(\"outlived the root\"); }, 1500);',"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setTimeout(() => { note(\"timer fired\"); process.stdout.write(\"FINAL_CHILD_MARKER\\\\r\\\\n\"); }, 400);',"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setTimeout(() => note(\"still here\"), 2000);',"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setTimeout(() => process.exit(0), 2000);',"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setTimeout(() => process.exit(0), 300);',"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setTimeout(() => process.exit(0), 300);',"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 50));"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "command: node('setInterval(() => {}, 1000);'),"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "command: node('setInterval(() => process.stdout.write(\"f\".repeat(8192)), 1);'),"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "const timer = setTimeout(() => {"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "const timer = setTimeout(() => {"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "const timer = setTimeout(() => {"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "const deadline = Date.now() + budgetMs;"
-    },
-    {
-      "path": "packages/conpty/src/conpty.win.test.ts",
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "if (Date.now() >= deadline) return false;"
-    },
-    {
       "path": "packages/desktop-host/src/deadline.test.ts",
       "kind": "fire-and-forget",
       "classification": "test-observer-or-intentional-background-task",
@@ -1157,12 +1055,6 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeout: 20_000 }, () => {"
-    },
-    {
-      "path": "packages/driver/src/pty-upstream-boundary.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "const timer = setTimeout(() => {"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
@@ -2537,6 +2429,120 @@
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
       "excerpt": "process.env['TERMWRIGHT_TOKEN_TEST'] = token;"
+    },
+    {
+      "path": "packages/pty/src/index.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "describe.skipIf(process.platform === \"win32\")(\"the Termwright-owned POSIX PTY\", () => {"
+    },
+    {
+      "path": "packages/pty/src/index.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "describe.skipIf(process.platform === \"win32\")(\"the Termwright-owned POSIX PTY\", () => {"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "describe.skipIf(!windows)(\"ConPTY backend\", { timeout: 30_000 }, () => {"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setInterval(() => process.stdout.write(\"f\".repeat(8192)), 1);',"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => { note(\"done\"); }, 4000);',"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => { note(\"outlived the root\"); }, 1500);',"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => { note(\"timer fired\"); process.stdout.write(\"FINAL_CHILD_MARKER\\\\r\\\\n\"); }, 400);',"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => note(\"still here\"), 2000);',"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "\"const timer = setInterval(() => {\","
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "\"setTimeout(() => process.exit(0), 2000);\","
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "\"setTimeout(() => process.exit(0), 300);\","
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "\"setTimeout(() => process.exit(0), 300);\","
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 50));"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "command: node(\"setInterval(() => {}, 1000);\"),"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "const timer = setTimeout(() => {"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "const timer = setTimeout(() => {"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "const timer = setTimeout(() => {"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const deadline = Date.now() + budgetMs;"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "if (Date.now() >= deadline) return false;"
     },
     {
       "path": "packages/resource-broker/src/index.ts",

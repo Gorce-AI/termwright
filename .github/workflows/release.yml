@@ -246,17 +246,21 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   prebuilds:
-    name: compile the ConPTY prebuild (${{ matrix.arch }})
+    name: compile PTY prebuild (${{ matrix.platform }}-${{ matrix.arch }})
     needs: detect
     if: needs.detect.outputs.release == 'true'
-    # The same 2022 image CI compiles on, for the same reason: node-gyp 11
-    # cannot identify the Visual Studio that windows-latest now ships.
-    runs-on: windows-2022
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        include:
+          - { platform: win32, arch: x64, runner: windows-2022 }
+          - { platform: win32, arch: arm64, runner: windows-11-arm }
+          - { platform: linux, arch: x64, runner: ubuntu-22.04 }
+          - { platform: linux, arch: arm64, runner: ubuntu-22.04-arm }
+          - { platform: darwin, arch: x64, runner: macos-15-intel, macos_target: '13.5' }
+          - { platform: darwin, arch: arm64, runner: macos-15, macos_target: '13.5' }
     steps:
       - name: Reject workflow reruns
         shell: bash
@@ -274,19 +278,35 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Compile
-        working-directory: packages/conpty
+        working-directory: packages/pty
+        env:
+          # Match Node's supported macOS floor instead of inheriting the
+          # runner SDK's current host version into the published binary.
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}
         run: pnpm exec node-gyp rebuild --arch=${{ matrix.arch }}
+      - run: pnpm --filter @termwright/pty build
       - name: Place the binary in its prebuild package
         shell: bash
         run: |
           set -euo pipefail
-          cp packages/conpty/build/Release/termwright_conpty.node \
-             "packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node"
-          node scripts/check-prebuild.mjs "${{ matrix.arch }}"
+          cp packages/pty/build/Release/termwright_pty.node \
+             "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}/termwright_pty.node"
+          node scripts/check-prebuild.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"
+      - name: Exercise the packed addon on its native host
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-pty-packs"
+          install_dir="$RUNNER_TEMP/termwright-pty-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm --dir "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}" pack --pack-destination "$pack_dir"
+          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
+          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
+          node scripts/check-installed-pty.mjs "$install_dir"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: release-conpty-${{ matrix.arch }}
-          path: packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node
+          name: release-pty-${{ matrix.platform }}-${{ matrix.arch }}
+          path: packages/pty-${{ matrix.platform }}-${{ matrix.arch }}/termwright_pty.node
           if-no-files-found: error
           retention-days: 1
 
@@ -379,26 +399,32 @@ jobs:
       - name: Every npm package has a registry bootstrap
         run: pnpm check:npm-release-readiness
 
+      # Use the exact six artifacts produced by the prebuild matrix for tests
+      # and packing. The Linux verification host exercises the publishable
+      # package shape rather than an incidental local build.
+      - name: Download all six native PTY prebuilds
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: release-pty-*
+          path: packages
+          merge-multiple: false
+      - name: Place downloaded PTY binaries in their packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-arm64 win32-x64; do
+            cp "packages/release-pty-$target/termwright_pty.node" \
+               "packages/pty-$target/termwright_pty.node"
+          done
+          node scripts/check-prebuild.mjs --all
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm check:packed-private-boundaries
-      - run: pnpm check:node-pty
+      - run: pnpm check:pty
       - run: pnpm -r --filter './packages/*' run typecheck
       - name: Run the certified Termwright host
         run: pnpm test -- --resource-profile ci --json
-
-      # The prebuilds are compiled on Windows and published from here, so they
-      # have to arrive before anything is packed. A missing one would otherwise
-      # publish an empty package that installs cleanly and supplies no addon.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: release-conpty-x64
-          path: packages/conpty-win32-x64
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: release-conpty-arm64
-          path: packages/conpty-win32-arm64
-      - run: node scripts/check-prebuild.mjs --all
 
       - name: Pack npm packages
         shell: bash
@@ -421,11 +447,10 @@ jobs:
               exit 1
             fi
             # A prebuild package is nothing but its binary. Packed without it,
-            # it installs without complaint and supplies no addon, and every
-            # Windows session silently runs on the fallback instead.
+            # it installs without complaint but the matching host fails closed.
             case "$directory" in
-              packages/conpty-win32-*)
-                if ! tar -tf "$archive" | grep -qx 'package/termwright_conpty.node'; then
+              packages/pty-*)
+                if ! tar -tf "$archive" | grep -qx 'package/termwright_pty.node'; then
                   echo "::error::$archive carries no addon; a prebuild package without its binary is an empty promise"
                   exit 1
                 fi
@@ -442,6 +467,8 @@ jobs:
           npm install --prefix "$install_dir" \
             release/npm/termwright-protocol-*.tgz \
             release/npm/termwright-vt-*.tgz \
+            release/npm/termwright-pty-linux-x64-*.tgz \
+            release/npm/termwright-pty-[0-9]*.tgz \
             release/npm/termwright-driver-*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
 

@@ -41,10 +41,10 @@ describe('immutable workspace build inputs', () => {
         './runtime': './runtime-entry.mjs',
       },
       ...(options.optionalNative === true ? {
-        os: ['win32'],
+        os: [options.optionalPlatform ?? 'win32'],
         cpu: ['x64'],
         termwrightBuild: { optionalArtifacts: ['fixture.node'] },
-        scripts: { build: 'node ../../scripts/check-prebuild.mjs x64 --allow-missing' },
+        scripts: { build: `node ../../scripts/check-prebuild.mjs ${options.optionalPlatform ?? 'win32'} x64 --allow-missing` },
       } : {}),
     }));
     await writeFile(rootBuildScript, 'export const buildVersion = 1;\n');
@@ -171,8 +171,8 @@ describe('immutable workspace build inputs', () => {
     })).rejects.toThrow(/declared production artifact is missing/u);
   });
 
-  it('permits only a declaratively optional platform .node artifact to be absent', async () => {
-    const built = await workspace({ optionalNative: true });
+  it.each(['darwin', 'linux', 'win32'])('permits a declaratively optional %s .node artifact to be absent', async (optionalPlatform) => {
+    const built = await workspace({ optionalNative: true, optionalPlatform });
     const manifest = await writeImmutableBuildManifest({
       root: built.root,
       manifestPath: built.manifestPath,

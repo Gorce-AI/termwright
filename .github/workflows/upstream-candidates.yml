@@ -94,8 +94,8 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  conpty-native-build-x64:
-    name: Build the candidate ConPTY addon (x64)
+  pty-native-build-x64:
+    name: Build the candidate Windows PTY addon (x64)
     needs: discovery
     if: needs.discovery.outputs.has-windows-candidates == 'true'
     runs-on: windows-2022
@@ -114,29 +114,29 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
       - name: Compile the exact x64 addon
-        working-directory: packages/conpty
+        working-directory: packages/pty
         run: pnpm exec node-gyp rebuild --arch=x64
       - name: Place and verify the exact prebuild
         run: |
           set -euo pipefail
-          cp packages/conpty/build/Release/termwright_conpty.node \
-             packages/conpty-win32-x64/termwright_conpty.node
-          node scripts/check-prebuild.mjs x64
+          cp packages/pty/build/Release/termwright_pty.node \
+             packages/pty-win32-x64/termwright_pty.node
+          node scripts/check-prebuild.mjs win32 x64
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: upstream-candidate-conpty-addon-x64
-          path: packages/conpty-win32-x64/termwright_conpty.node
+          name: upstream-candidate-pty-addon-x64
+          path: packages/pty-win32-x64/termwright_pty.node
           if-no-files-found: error
           retention-days: 1
 
   certify:
     name: Certify ${{ matrix.id }} (${{ matrix.platform }})
-    needs: [discovery, conpty-native-build-x64]
+    needs: [discovery, pty-native-build-x64]
     if: >-
       always() &&
       needs.discovery.result == 'success' &&
       needs.discovery.outputs.has-candidates == 'true' &&
-      (needs.discovery.outputs.has-windows-candidates != 'true' || needs.conpty-native-build-x64.result == 'success')
+      (needs.discovery.outputs.has-windows-candidates != 'true' || needs.pty-native-build-x64.result == 'success')
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -177,11 +177,11 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         if: matrix.platform == 'windows'
         with:
-          name: upstream-candidate-conpty-addon-x64
-          path: packages/conpty-win32-x64
+          name: upstream-candidate-pty-addon-x64
+          path: packages/pty-win32-x64
       - name: Require the exact native Windows backend
         if: matrix.platform == 'windows'
-        run: node scripts/check-prebuild.mjs x64
+        run: node scripts/check-prebuild.mjs win32 x64
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
@@ -205,6 +205,10 @@ jobs:
       - name: Verify the certified Bun runtime
         run: bun --version
       - run: pnpm install --frozen-lockfile
+      - name: Compile the native POSIX PTY binding
+        if: matrix.platform != 'windows'
+        working-directory: packages/pty
+        run: pnpm exec node-gyp rebuild
       - run: python -m pip install -e 'clients/python[dev]'
       - run: pnpm build
       - if: matrix.ecosystem == 'rust'

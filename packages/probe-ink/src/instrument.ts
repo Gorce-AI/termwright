@@ -18,7 +18,6 @@ import {
   retainInkFrame,
 } from './frame-capture.js';
 import { instrumentationSentinel } from './instrumentation.js';
-import { registerTerminalInputModeEvidenceProvider } from '@termwright/evidence-provider';
 import { trackTerminal } from './terminal-tracker.js';
 import { onInkAnnotationChange } from './annotations.js';
 import { RenderBoundaryQueue } from './render-boundary.js';
@@ -26,15 +25,13 @@ import { RenderBoundaryQueue } from './render-boundary.js';
 /**
  * Shadowing starts when this module is evaluated, not when render() runs.
  *
- * Import evaluation precedes the importing module's body, so an application
- * that arms mouse or focus reporting at module scope — before it renders
- * anything — is still observed. Starting later would let the probe report
- * those modes as off while they were on, and "authoritatively off" is a worse
- * answer than none at all.
- *
- * Handing the observation to a render-time tracker instead was tried and does
- * not work: the shadow parses its bytes on a queue, so the modes are not
- * readable at the synchronous moment render() would collect them.
+ * Import evaluation precedes the importing module's body, so cursor movement,
+ * alternate-buffer changes and positioning written before the first render are
+ * included in the same terminal shadow used to place the captured Ink frame.
+ * Starting at render() would lose that prefix and derive incorrect bounds.
+ * Pointer and focus modes are intentionally not inferred here: fd/native and
+ * descendant writes bypass this JavaScript stream wrapper, so such evidence
+ * would not be authoritative for an opaque child.
  */
 const processTracker = trackTerminal(process.stdout, process.stderr);
 
@@ -108,18 +105,6 @@ function instrumentedRender(
   // where earlier bytes exist to have been missed.
   const ownsTracker = stdout !== process.stdout || stderr !== process.stderr;
   const tracker = ownsTracker ? trackTerminal(stdout, stderr) : processTracker;
-  // The shadow parsed the same bytes the application wrote, so the probe knows
-  // which mouse and focus modes are on without asking the terminal. Publishing
-  // that closes the gap where a terminal cannot report its own modes — every
-  // ConPTY session — and pointer actions were refused there not because the
-  // application had mouse tracking off but because nothing could say it was on.
-  const inputModeEvidence = registerTerminalInputModeEvidenceProvider({
-    id: `${ADAPTER_NAME}/terminal-input-modes`,
-    version: ADAPTER_VERSION,
-    method: 'native',
-    family: 'input-mode',
-    observe: () => ({ inputModes: tracker.inputModes() }),
-  });
   const probeRef: { current: DOMElement | null } = { current: null };
   const state: { channel: ProbeChannel | null; session: InkProbeSession | null } = {
     channel: null,
@@ -265,7 +250,6 @@ function instrumentedRender(
     renderBoundaries.stop();
     releaseCapture();
     releaseAnnotations();
-    inputModeEvidence.dispose();
     if (ownsTracker) tracker.stop();
     state.session?.stop();
     state.channel?.close();

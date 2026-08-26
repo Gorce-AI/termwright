@@ -14,7 +14,8 @@ and keyboard input, so it works without a framework integration.
 - Termwright embeds and certifies exactly Vitest 4.1.11.
 <!-- END GENERATED RUNTIME REQUIREMENTS -->
 - an ESM project
-- macOS, Windows, or glibc-based Linux
+- macOS >= 13.5, Windows 10 version 1809 / Server 2019 or newer, or glibc-based Linux at
+  the Ubuntu 22.04 ABI floor (glibc >= 2.35)
 
 Alpine/musl is not currently supported by the prebuilt PTY dependency. For
 Linux CI, use a Debian- or Ubuntu-based Node image such as `node:22-slim`.

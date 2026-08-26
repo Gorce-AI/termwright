@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PtyBackendChoice
 
-Defined in: [backend-selection.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L21)
+Defined in: [backend-selection.ts:14](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L14)
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: [backend-selection.ts:21](https://github.com/Gorce-AI/termwright/blo
 
 > `readonly` **backend**: [`PtyBackend`](../ptybackend/)
 
-Defined in: [backend-selection.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L22)
+Defined in: [backend-selection.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L15)
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: [backend-selection.ts:22](https://github.com/Gorce-AI/termwright/blo
 
 > `readonly` `optional` **degradedReason?**: `string`
 
-Defined in: [backend-selection.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L28)
+Defined in: [backend-selection.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L21)
 
 Retained for callers that report on the choice. Every supported platform
 now has exactly one backend, so nothing sets it; a future platform with a

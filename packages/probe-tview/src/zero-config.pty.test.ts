@@ -24,7 +24,7 @@ import {
   type TerminalHarness,
 } from "@termwright/driver";
 import {
-  createNodePtyBackend,
+  createNativePtyBackend,
   inheritedSpawnEnv,
   launchTerminalWithBackend,
   type PtyBackend,
@@ -67,7 +67,7 @@ async function goAvailable(): Promise<boolean> {
 function ptyAvailable(): boolean {
   if (process.env["TERMWRIGHT_SKIP_PTY"] === "1") return false;
   try {
-    const pty = createNodePtyBackend().spawn({
+    const pty = createNativePtyBackend().spawn({
       command: [process.execPath, "-e", "process.exit(0)"],
       env: inheritedSpawnEnv(),
       columns: 20,
@@ -108,7 +108,7 @@ function byteCapturingBackend(): {
   readonly backend: PtyBackend;
   readonly bytes: () => Buffer;
 } {
-  const upstream = createNodePtyBackend();
+  const upstream = createNativePtyBackend();
   const chunks: Buffer[] = [];
   return {
     bytes: () => Buffer.concat(chunks),

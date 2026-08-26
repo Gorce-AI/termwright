@@ -40,16 +40,16 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('--assessments compatibility/candidate-assessments.json');
     expect(workflow).toContain('discovery_args+=(--stream "$STREAM")');
     expect(certifier).toContain("'--ignore-scripts'");
-    const conpty = jobBlock(workflow, 'conpty-native-build-x64');
-    expect(conpty).toContain('runs-on: windows-2022');
-    expect(conpty).toContain('shell: bash');
-    expect(conpty.match(/name: upstream-candidate-conpty-addon-x64/gu)).toHaveLength(1);
-    expect(conpty).toContain('pnpm exec node-gyp rebuild --arch=x64');
+    const pty = jobBlock(workflow, 'pty-native-build-x64');
+    expect(pty).toContain('runs-on: windows-2022');
+    expect(pty).toContain('shell: bash');
+    expect(pty.match(/name: upstream-candidate-pty-addon-x64/gu)).toHaveLength(1);
+    expect(pty).toContain('pnpm exec node-gyp rebuild --arch=x64');
     const certification = jobBlock(workflow, 'certify');
     expect(certification).toContain("if: matrix.platform == 'windows'");
-    expect(certification).toContain('name: upstream-candidate-conpty-addon-x64');
-    expect(certification).toContain('path: packages/conpty-win32-x64');
-    expect(certification).toContain('node scripts/check-prebuild.mjs x64');
+    expect(certification).toContain('name: upstream-candidate-pty-addon-x64');
+    expect(certification).toContain('path: packages/pty-win32-x64');
+    expect(certification).toContain('node scripts/check-prebuild.mjs win32 x64');
     expect(certification).not.toMatch(/fallback|node-pty/u);
     const aggregate = jobBlock(workflow, 'aggregate');
     expect(jobBlock(workflow, 'certify')).not.toContain('astral-sh/setup-uv@');
@@ -314,7 +314,7 @@ describe('autonomous workflow security', () => {
       'deterministic-core-coverage',
       'build',
       'hostile',
-      'conpty-native',
+      'pty-native',
       'windows-driver-native',
       'determinism',
       'concurrency-stress',

@@ -69,8 +69,8 @@ the child — which covers both ways the value gets falsified: a request the
 terminal swallowed, and a state the terminal added on its own. ConPTY does
 the second: it reports focus reporting as enabled for a child that never
 asked, so a driver that believes it sends `CSI I` to a program that will
-print it. A production-parser provider may supply the revision-bound fact;
-if VT output is also observable, both sources must agree.
+print it. Only an explicit production-state provider may supply the
+revision-bound fact; generic children/shadows may not. Observable VT must agree.
 
 ***
 
@@ -96,16 +96,16 @@ Defined in: [driver/src/api.ts:448](https://github.com/Gorce-AI/termwright/blob/
 Mouse tracking level the child asked for, or `'unknown'`.
 
 `'none'` means observed off — the child enabled nothing. `'unknown'` means
-neither the transport nor an application input-mode provider can prove
+neither the transport nor an explicit production-state provider can prove
 it. ConPTY is an emulator, so it
 consumes the child's `CSI ? 1000/1002/1006 h` instead of forwarding it, and
 the driver never learns what was asked for. The distinction is load-bearing
 for pointer actions: `'none'` is authoritatively off, while `'unknown'`
-means Termwright cannot select a protocol without guessing. An
-authoritative provider backed by the application's production parser may
-supply this fact for the same committed revision. Both definite `none`
-and unresolved `unknown` fail
-before input is written, with distinct diagnostics.
+means Termwright cannot select a protocol without guessing. An explicitly
+registered production-state provider may supply same-revision evidence;
+a stdout shadow cannot, because descriptor/native/descendant writes bypass it.
+Both definite `none` and unresolved `unknown` fail before input is written,
+with distinct diagnostics.
 
 ***
 

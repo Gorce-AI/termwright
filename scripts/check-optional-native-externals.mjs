@@ -2,13 +2,12 @@
 /**
  * A bundled native dependency loads from the wrong directory.
  *
- * `@termwright/conpty` finds its addon relative to its own module, so inlining
+ * `@termwright/pty` finds its addon relative to its own module, so inlining
  * it into another package's bundle makes it look one directory above that
- * bundle instead — a path that does not exist. The failure is quiet: the
- * driver simply reports no native backend and falls back, and every Windows
- * suite then certifies the implementation it was meant to replace.
- *
- * This is what caught it, so this is what keeps it caught.
+ * bundle instead — a path that does not exist. The driver has no fallback:
+ * inlining would make a supported installation
+ * fail closed even though its exact prebuild is present. This is what caught
+ * the packaging error, so this is what keeps it caught.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -19,10 +18,10 @@ const CASES = [
     // Explicit backend selection is intentionally absent from the stable root;
     // the experimental integration entry point owns the optional native load.
     entry: 'packages/driver/dist/experimental.js',
-    specifier: '@termwright/conpty',
+    specifier: '@termwright/pty',
     // What inlining looks like: the addon's own require, sitting in a bundle
     // that is not the addon's package.
-    inlined: "'../build/Release/termwright_conpty.node'",
+    inlined: "'../build/Release/termwright_pty.node'",
   },
 ];
 

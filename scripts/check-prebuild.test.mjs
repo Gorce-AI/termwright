@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { verifyPeMachine } from './check-prebuild.mjs';
+import { verifyBinaryArchitecture } from './check-prebuild.mjs';
 
 const execute = promisify(execFile);
 
@@ -15,34 +15,67 @@ function peFixture(machine) {
   return bytes;
 }
 
-describe('Windows prebuild architecture guard', () => {
+function elfFixture(machine) {
+  const bytes = Buffer.alloc(128);
+  bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1]);
+  bytes.writeUInt16LE(machine, 18);
+  bytes.write('GLIBC_2.35\0GLIBCXX_3.4.29\0CXXABI_1.3.13\0', 32, 'latin1');
+  return bytes;
+}
+
+function machFixture(cpu, minimum = (13 << 16) | (5 << 8)) {
+  const bytes = Buffer.alloc(56);
+  bytes.writeUInt32LE(0xfeedfacf, 0);
+  bytes.writeUInt32LE(cpu, 4);
+  bytes.writeUInt32LE(1, 16);
+  bytes.writeUInt32LE(24, 20);
+  bytes.writeUInt32LE(0x32, 32);
+  bytes.writeUInt32LE(24, 36);
+  bytes.writeUInt32LE(1, 40);
+  bytes.writeUInt32LE(minimum, 44);
+  return bytes;
+}
+
+describe('native PTY prebuild architecture guard', () => {
   it('accepts the exact AMD64 and ARM64 PE Machine values', () => {
-    expect(() => verifyPeMachine(peFixture(0x8664), 'x64')).not.toThrow();
-    expect(() => verifyPeMachine(peFixture(0xaa64), 'arm64')).not.toThrow();
+    expect(() => verifyBinaryArchitecture(peFixture(0x8664), 'win32', 'x64')).not.toThrow();
+    expect(() => verifyBinaryArchitecture(peFixture(0xaa64), 'win32', 'arm64')).not.toThrow();
   });
 
-  it('rejects a valid PE image packaged for the wrong architecture', () => {
-    expect(() => verifyPeMachine(peFixture(0x8664), 'arm64')).toThrow(
-      /arm64 prebuild has PE Machine 0x8664, expected 0xaa64/u,
-    );
-    expect(() => verifyPeMachine(peFixture(0xaa64), 'x64')).toThrow(
-      /x64 prebuild has PE Machine 0xaa64, expected 0x8664/u,
-    );
+  it('accepts exact ELF and Mach-O architectures', () => {
+    expect(() => verifyBinaryArchitecture(elfFixture(62), 'linux', 'x64')).not.toThrow();
+    expect(() => verifyBinaryArchitecture(elfFixture(183), 'linux', 'arm64')).not.toThrow();
+    expect(() => verifyBinaryArchitecture(machFixture(0x01000007), 'darwin', 'x64')).not.toThrow();
+    expect(() => verifyBinaryArchitecture(machFixture(0x0100000c), 'darwin', 'arm64')).not.toThrow();
   });
 
-  it('rejects truncated and non-PE files', () => {
-    expect(() => verifyPeMachine(Buffer.alloc(8), 'x64')).toThrow(/missing DOS header/u);
-    const missingSignature = peFixture(0x8664);
-    missingSignature.fill(0, 0x40, 0x44);
-    expect(() => verifyPeMachine(missingSignature, 'x64')).toThrow(/missing PE signature/u);
+  it('rejects a binary packaged for another platform or architecture', () => {
+    expect(() => verifyBinaryArchitecture(peFixture(0x8664), 'win32', 'arm64')).toThrow(/wrong PE/u);
+    expect(() => verifyBinaryArchitecture(elfFixture(62), 'linux', 'arm64')).toThrow(/wrong ELF/u);
+    expect(() => verifyBinaryArchitecture(machFixture(0x0100000c), 'darwin', 'x64')).toThrow(/wrong Mach-O/u);
+  });
+
+  it('rejects a Darwin binary whose deployment target drifted from 13.5', () => {
+    expect(() => verifyBinaryArchitecture(
+      machFixture(0x0100000c, 15 << 16),
+      'darwin',
+      'arm64',
+    )).toThrow(/targets macOS 15\.0\.0, expected 13\.5\.0/u);
+  });
+
+  it('rejects Linux symbols above the documented Ubuntu 22.04 ABI floor', () => {
+    const bytes = elfFixture(183);
+    bytes.write('GLIBC_2.36\0', 96, 'latin1');
+    expect(() => verifyBinaryArchitecture(bytes, 'linux', 'arm64')).toThrow(
+      /requires GLIBC_2\.36, above Ubuntu 22\.04 floor/u,
+    );
   });
 
   it('keeps an absent development prebuild optional only with --allow-missing', async () => {
     const script = new URL('./check-prebuild.mjs', import.meta.url);
-    const missing = 'deliberately-missing-test-architecture';
-    await expect(execute(process.execPath, [fileURLToPath(script), missing, '--allow-missing'])).resolves.toMatchObject({
+    await expect(execute(process.execPath, [fileURLToPath(script), 'darwin', 'arm64', '--allow-missing'])).resolves.toMatchObject({
       stdout: expect.stringContaining('is absent (not built in this tree)'),
     });
-    await expect(execute(process.execPath, [fileURLToPath(script), missing])).rejects.toMatchObject({ code: 1 });
+    await expect(execute(process.execPath, [fileURLToPath(script), 'darwin', 'arm64'])).rejects.toMatchObject({ code: 1 });
   });
 });

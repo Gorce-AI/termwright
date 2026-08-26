@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createNodePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
+import { createNativePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
 import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
 import { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
 import { DEFAULT_TERMWRIGHT_HOST_TIMEOUTS } from './test-host.js';
@@ -91,9 +91,9 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
 }
 
 async function checkPty(): Promise<DoctorCheck> {
-  let pty: ReturnType<ReturnType<typeof createNodePtyBackend>['spawn']> | undefined;
+  let pty: ReturnType<ReturnType<typeof createNativePtyBackend>['spawn']> | undefined;
   try {
-    pty = createNodePtyBackend().spawn({
+    pty = createNativePtyBackend().spawn({
       command: [process.execPath, '-e', "process.stdout.write('termwright-doctor'); process.exit(0)"],
       env: inheritedSpawnEnv(),
       columns: 20,

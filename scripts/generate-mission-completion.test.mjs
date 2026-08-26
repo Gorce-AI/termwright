@@ -6,27 +6,23 @@ describe('mission completion report', () => {
     const report = buildMissionCompletionReport();
 
     expect(report.summary).toEqual({
-      alreadyFixed: 124,
-      partiallyFixed: 3,
-      obsoleteBecauseArchitectureChanged: 1,
-      stillOpen: 3,
+      alreadyFixed: 126,
+      partiallyFixed: 0,
+      obsoleteBecauseArchitectureChanged: 2,
+      stillOpen: 0,
       remainingExternalEvidence: 0,
-      remainingImplementation: 3,
+      remainingImplementation: 0,
       incorrectAfterDeeperEvidence: 0,
     });
     expect(report.sections.filter((section) => section.status === 'partially-fixed').map((section) => ({
       section: section.section,
       kind: section.remainingKind,
-    }))).toEqual([
-      { section: 81, kind: 'implementation' },
-      { section: 112, kind: 'implementation' },
-      { section: 113, kind: 'implementation' },
-    ]);
+    }))).toEqual([]);
     expect(report.releaseReadiness).toMatchObject({
       status: 'blocked',
-      technicalMissionPartialSections: [81, 112, 113],
+      technicalMissionPartialSections: [],
     });
-    expect(report.releaseReadiness.missingNpmRegistryBootstraps).toHaveLength(7);
+    expect(report.releaseReadiness.missingNpmRegistryBootstraps).toHaveLength(11);
   });
 
   it('binds completed claims to reviewed first-attempt Windows evidence', () => {
@@ -50,7 +46,7 @@ describe('mission completion report', () => {
     expect([53, 70, 81, 110, 114].map((section) => report.sections[section - 1]?.status)).toEqual([
       'already-fixed',
       'already-fixed',
-      'partially-fixed',
+      'already-fixed',
       'already-fixed',
       'already-fixed',
     ]);

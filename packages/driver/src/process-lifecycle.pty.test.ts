@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolveDefaultPtyBackend } from './backend-selection.js';
-import { CONPTY_BACKEND_NAME } from './conpty-backend.js';
+import { NATIVE_PTY_BACKEND_NAME } from './native-pty-backend.js';
 import { launchTerminal } from './session.js';
 import type { TerminalHarness } from './api.js';
 
@@ -104,14 +104,13 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
       `bytes delivered to the driver: ${delivered}, ` +
         `the sentinel among them: ${sentinelDelivered}`,
     ).toContain('FINAL OUTPUT SENTINEL');
-    // A property of the backend, not of the operating system. node-pty cannot
-    // certify an EOF drain on Linux because libuv may discard a PTY tail on
-    // POLLHUP; native ConPTY owns an actual pipe-end boundary.
+    // The Termwright-owned reader drains the native source to EOF on every
+    // supported platform.
     const { backend } = await resolveDefaultPtyBackend();
     expect(
       terminal.diagnostics().some((entry) => entry.code === 'degraded-output-drain'),
       `backend in use: ${backend.name}`,
-    ).toBe(backend.name !== CONPTY_BACKEND_NAME);
+    ).toBe(backend.name !== NATIVE_PTY_BACKEND_NAME);
     await terminal.close();
   });
 

@@ -137,34 +137,22 @@ Deviation closure policy`.split('\n');
 
 if (titles.length !== 128) throw new Error(`mission title inventory has ${titles.length} entries, expected 128`);
 
-const partial = new Map([
-  [81, {
-    kind: 'implementation',
-    remainingEvidence: 'Native ConPTY exposes an EOF-coupled output boundary. The POSIX node-pty backend does not: its saturated-output fixture uses a causal terminal acknowledgement to avoid the Linux POLLHUP tail-loss race, and the driver truthfully reports degraded-output-drain for that backend. A general EOF-driven final-output guarantee therefore still requires a POSIX backend with an observable producer-end boundary.',
-  }],
-  [112, {
-    kind: 'implementation',
-    remainingEvidence: 'The Ink provider proves and supplies application input modes on ConPTY, but generic Windows applications remain fail-closed because the backend cannot universally expose the child\'s pointer/focus negotiation. Closing the registered deviation requires a backend capability or equivalent general production evidence path, not another CI run.',
-  }],
-  [113, {
-    kind: 'implementation',
-    remainingEvidence: 'Windows runs exclusively on the native ConPTY backend. POSIX still uses the exact-certified private node-pty write boundary; removing that coupling requires a replacement implementation, not another CI run.',
-  }],
-]);
+const partial = new Map();
 
 const obsolete = new Map([
   [51, 'Product policy intentionally removed plain-Vitest compatibility. Termwright native-host execution is the only product mode; Vitest remains the embedded engine, not a parallel user-facing runner.'],
+  [112, 'The universal generic ConPTY input-mode claim was removed. ConPTY does not expose the child\'s DEC pointer/focus negotiation, and process-local stdout interception cannot cover direct descriptor/native writes or descendants. The supported contract is capability-based: opaque children fail closed, while an explicitly registered provider backed by the application\'s production mode state may publish authoritative revision-bound evidence.'],
 ]);
 
 const exactEvidence = new Map([
   [53, ['packages/test/src/vitest-engine.ts', 'packages/test/src/runner.test.ts', 'scripts/run-vitest-pty-matrix.mjs']],
   [70, ['.github/workflows/vitest-reliability.yml', 'scripts/run-vitest-pty-matrix.mjs', 'quality/experiments/vitest-pty-pressure.test.mjs', 'quality/experiments/pty-lease.mjs']],
   [79, ['packages/driver/src/internal/process-supervisor.ts', 'packages/driver/src/process-lifecycle.pty.test.ts', '.github/workflows/ci.yml']],
-  [81, ['packages/driver/src/process-lifecycle.pty.test.ts', 'packages/driver/test-fixtures/output-flood-exit.mjs', 'packages/driver/src/session.ts', '.github/workflows/ci.yml']],
+  [81, ['packages/pty/src/index.test.ts', 'packages/pty/src/posix-session.cc', 'scripts/check-pty-certification.mjs', 'packages/driver/src/native-pty-backend.test.ts']],
   [110, ['.github/workflows/ci.yml', '.github/workflows/vitest-reliability.yml', 'quality/experiments/vitest-pty-pressure.test.mjs', 'quality/platform-deviations.json']],
   [111, ['packages/driver/src/internal/process-supervisor.ts', 'packages/driver/src/process-lifecycle.pty.test.ts', '.github/workflows/ci.yml']],
-  [112, ['packages/driver/src/session.pty.test.ts', 'packages/conformance/src/suites/interaction.test.ts', 'quality/platform-deviations.json']],
-  [113, ['packages/driver/src/pty-upstream-boundary.test.ts', 'scripts/check-node-pty-certification.mjs', 'packages/driver/src/pty.ts']],
+  [112, ['packages/driver/src/api.ts', 'packages/conformance/src/suites/driver-generic.test.ts', 'packages/probe-ink/src/provider.pty.test.ts', 'packages/probe-ink/src/terminal-tracker.test.ts', 'quality/platform-deviations.json']],
+  [113, ['packages/pty/src/index.test.ts', 'packages/pty/src/posix-session.cc', 'scripts/check-pty-certification.mjs', 'packages/driver/src/native-pty-backend.ts']],
   [114, ['scripts/run-vitest-pty-matrix.mjs', 'quality/experiments/vitest-pty-pressure.test.mjs', 'quality/experiments/pty-lease.mjs', '.github/workflows/vitest-reliability.yml']],
 ]);
 
@@ -182,7 +170,7 @@ function evidenceFor(section) {
   if (section <= 94) return ['packages/trace/src/writer.ts', 'packages/run-history/src/index.ts', 'packages/test/src/snapshot-store.ts'];
   if (section <= 102) return ['packages/termwright-cli/src/test-host.ts', 'packages/ui/src/server.ts', 'packages/ui/src/runs.ts'];
   if (section <= 109) return ['.github/workflows/ci.yml', '.github/workflows/reliability.yml', 'quality/platform-deviations.json'];
-  if (section <= 114) return ['scripts/run-vitest-pty-matrix.mjs', 'scripts/check-node-pty-certification.mjs', 'packages/driver/src/process-lifecycle.pty.test.ts'];
+  if (section <= 114) return ['scripts/run-vitest-pty-matrix.mjs', 'scripts/check-pty-certification.mjs', 'packages/driver/src/process-lifecycle.pty.test.ts'];
   return ['clients/test-vectors', 'packages/ui/src/live.ts', 'compatibility/framework-semantic-completeness.json', 'compatibility/registry.test.ts'];
 }
 
@@ -201,10 +189,14 @@ export function buildMissionCompletionReport() {
     status: 'blocked',
     technicalMissionPartialSections: [...partial.keys()],
     missingNpmRegistryBootstraps: [
-      '@termwright/conpty',
-      '@termwright/conpty-win32-arm64',
-      '@termwright/conpty-win32-x64',
       '@termwright/evidence-provider',
+      '@termwright/pty',
+      '@termwright/pty-darwin-arm64',
+      '@termwright/pty-darwin-x64',
+      '@termwright/pty-linux-arm64',
+      '@termwright/pty-linux-x64',
+      '@termwright/pty-win32-arm64',
+      '@termwright/pty-win32-x64',
       '@termwright/resource-broker',
       '@termwright/run-history',
       '@termwright/run-journal-transport',
@@ -260,12 +252,12 @@ export function buildMissionCompletionReport() {
     url: 'https://github.com/Gorce-AI/termwright/actions/runs/32723013280',
     observedAt: '2026-08-24',
     classification: [
-      'Windows runs on @termwright/conpty, a native session that owns the pseudoconsole, both pipe ends and a job object created before the root could run.',
+      'Windows runs through @termwright/pty, whose native ConPTY session owns the pseudoconsole, both pipe ends and a job object created before the root could run; this is the same certified Windows implementation formerly packaged separately as @termwright/conpty.',
       'Certified on real Windows for Node 22 and 24: a stream that ends because the pipe ended with its last byte delivered, a codepoint split byte-by-byte across reads and reassembled, a tree proven empty by the job, a hard kill mid-burst, input reaching a silent child, a descendant delivering its own output in order, and a console-attached descendant not surviving its root.',
       'A descendant detached from the console does survive its root and is still owned and killable by the job, which is what identifies the console as what ends the other one.',
-      'Prebuilds ship for win32-x64 and win32-arm64; a clean consumer install of the packed tarballs opens a real pseudoconsole with no compiler present.',
-      'There is no fallback: a Windows machine that cannot load the addon raises rather than silently substituting a weaker output boundary.',
-      'Against node-pty the same suites failed three cleanups that could not confirm a tree was gone, plus settled() and the shell inference; against this backend they pass.',
+      'The unified package defines six prebuilds for Darwin, Linux and Windows on x64 and arm64; the release remains blocked until fresh CI certifies each real artifact and a clean packed consumer install.',
+      'There is no fallback: a machine that cannot load its exact native addon raises rather than silently substituting a weaker output boundary.',
+      'The Termwright-owned POSIX implementation removes the former private node-pty boundary and exposes the same authoritative EOF, exit and tree lifecycle contract without a timer or causal-output workaround.',
     ],
   },
   localVitestPressureEvidence: {

@@ -11,9 +11,7 @@ editUrl: false
 
 # Interface: PtyProcess
 
-Defined in: [pty.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L29)
-
-A live pseudo-terminal hosting one child process.
+Defined in: [pty.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L15)
 
 ## Properties
 
@@ -21,9 +19,7 @@ A live pseudo-terminal hosting one child process.
 
 > `readonly` `optional` **lifecycle?**: `object`
 
-Defined in: [pty.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L32)
-
-Truthful lifecycle properties when the backend can prove them.
+Defined in: [pty.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L17)
 
 #### outputDrain
 
@@ -39,9 +35,7 @@ Truthful lifecycle properties when the backend can prove them.
 
 > `readonly` `optional` **outputEnded?**: `Promise`\<`void`\>
 
-Defined in: [pty.ts:61](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L61)
-
-Settles once the backend's output producer can deliver no more bytes.
+Defined in: [pty.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L29)
 
 ***
 
@@ -49,7 +43,7 @@ Settles once the backend's output producer can deliver no more bytes.
 
 > `readonly` **pid**: `number`
 
-Defined in: [pty.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L30)
+Defined in: [pty.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L16)
 
 ***
 
@@ -57,17 +51,7 @@ Defined in: [pty.ts:30](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `readonly` `optional` **sawOutputEnd?**: () => `boolean`
 
-Defined in: [pty.ts:73](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L73)
-
-Whether the producer stopped because its source ended, as opposed to being
-torn down with bytes still unread.
-
-`outputEnded` settles either way — a waiter must not outlive the thing it
-waits for — so on its own it cannot say whether the stream is complete.
-The two are different facts and a session that publishes an exit needs the
-second one: a destroyed source has lost whatever had not been read yet,
-and reporting that as a clean finish hands the caller a screen that is
-missing its last line with nothing to indicate it.
+Defined in: [pty.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L30)
 
 #### Returns
 
@@ -79,15 +63,7 @@ missing its last line with nothing to indicate it.
 
 > `optional` **attach**(`signal`): `Promise`\<`void`\>
 
-Defined in: [pty.ts:83](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L83)
-
-Settles once the backend has finished attaching, if it attaches at all.
-
-ConPTY creates the child from a callback that fires when its output worker
-is ready, so a freshly spawned pty has no pid and an empty console process
-list until then — the same two values a reaped tree produces. A session
-that waits for this before running cannot reach teardown in that state.
-The operation must reject and settle promptly when `signal` is aborted.
+Defined in: [pty.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L31)
 
 #### Parameters
 
@@ -105,9 +81,7 @@ The operation must reject and settle promptly when `signal` is aborted.
 
 > **dispose**(): `void`
 
-Defined in: [pty.ts:91](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L91)
-
-Idempotent finalizer; hangs up a still-live PTY before releasing listeners.
+Defined in: [pty.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L35)
 
 #### Returns
 
@@ -119,13 +93,7 @@ Idempotent finalizer; hangs up a still-live PTY before releasing listeners.
 
 > `optional` **hardKillTree**(`signal`): `Promise`\<`void`\>
 
-Defined in: [pty.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L57)
-
-Hard-kills an owned process tree and captures the exact members that must
-subsequently be proven gone. Backends that claim tree ownership should
-expose this when the preparation step is asynchronous. The operation must
-reject and settle promptly when `signal` is aborted; dispose must settle
-any backend work started by it.
+Defined in: [pty.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L26)
 
 #### Parameters
 
@@ -143,9 +111,7 @@ any backend work started by it.
 
 > `optional` **killOwnedTreeAtExitBoundary**(): `void`
 
-Defined in: [pty.ts:47](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L47)
-
-Synchronously kills the owned POSIX group at the root-exit callback boundary.
+Defined in: [pty.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L24)
 
 #### Returns
 
@@ -157,7 +123,7 @@ Synchronously kills the owned POSIX group at the root-exit callback boundary.
 
 > **onData**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:58](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L58)
+Defined in: [pty.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L27)
 
 #### Parameters
 
@@ -175,7 +141,7 @@ Defined in: [pty.ts:58](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **onExit**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L59)
+Defined in: [pty.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L28)
 
 #### Parameters
 
@@ -193,9 +159,7 @@ Defined in: [pty.ts:59](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `optional` **onWriteDrain**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L87)
-
-Queue-drained notification; it still does not claim child consumption.
+Defined in: [pty.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L33)
 
 #### Parameters
 
@@ -213,9 +177,7 @@ Queue-drained notification; it still does not claim child consumption.
 
 > `optional` **onWriteError**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:85](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L85)
-
-Fatal asynchronous failures after write() accepted bytes.
+Defined in: [pty.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L32)
 
 #### Parameters
 
@@ -233,7 +195,7 @@ Fatal asynchronous failures after write() accepted bytes.
 
 > **resize**(`columns`, `rows`): `void`
 
-Defined in: [pty.ts:43](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L43)
+Defined in: [pty.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L22)
 
 #### Parameters
 
@@ -255,9 +217,7 @@ Defined in: [pty.ts:43](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **signal**(`sig`): `void`
 
-Defined in: [pty.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L45)
-
-Delivers a POSIX signal. On Windows only `KILL` is honored (TerminateProcess).
+Defined in: [pty.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L23)
 
 #### Parameters
 
@@ -275,9 +235,7 @@ Delivers a POSIX signal. On Windows only `KILL` is honored (TerminateProcess).
 
 > `optional` **terminate**(): `void`
 
-Defined in: [pty.ts:49](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L49)
-
-Backend-native graceful lifecycle request; required when tree is delegated.
+Defined in: [pty.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L25)
 
 #### Returns
 
@@ -289,9 +247,7 @@ Backend-native graceful lifecycle request; required when tree is delegated.
 
 > `optional` **treeState**(): `"alive"` \| `"gone"` \| `"unsupported"`
 
-Defined in: [pty.ts:89](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L89)
-
-Liveness of the owned tree, when the backend has an OS primitive for it.
+Defined in: [pty.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L34)
 
 #### Returns
 
@@ -303,12 +259,7 @@ Liveness of the owned tree, when the backend has an OS primitive for it.
 
 > **write**(`data`): `void`
 
-Defined in: [pty.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L42)
-
-Queues raw bytes in the backend's ordered input stream. Never appends a
-newline. A successful return proves queue admission, not child
-consumption; semantic actions prove consumption through their committed
-postcondition.
+Defined in: [pty.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L21)
 
 #### Parameters
 

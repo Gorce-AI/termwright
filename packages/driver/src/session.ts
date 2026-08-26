@@ -3256,10 +3256,9 @@ const POSIX_ENV_KEYS = [
  * answers to `xterm-256color` and renders 24-bit colour, and both statements
  * are true on every platform the driver runs on.
  *
- * This also settles a split that only showed up on Windows: on POSIX
- * `node-pty` already forces `TERM` from the terminal name it is given, while
- * on Windows it does not, so a runner without `TERM` in its own environment
- * handed the child nothing and ncurses-style libraries fell back to guessing.
+ * The driver sets this explicitly on every platform rather than inheriting a
+ * runner-specific terminal description or delegating policy to the native
+ * PTY implementation.
  */
 const EMULATED_TERM = "xterm-256color";
 const EMULATED_COLORTERM = "truecolor";
@@ -3318,10 +3317,9 @@ export function inheritedSpawnEnv(): Record<string, string> {
 /**
  * Rejects a launch whose paths do not exist, before a pty is opened.
  *
- * `node-pty` does not fail on either mistake: it hands back a live pty whose
- * child dies immediately, so the caller saw an exit code of 1 and a blank
- * screen — the same thing a program that genuinely failed produces. Naming the
- * missing path costs one `stat` and turns that into an answer.
+ * A failed exec would otherwise look like an application that exited with a
+ * blank screen. Naming the missing path costs one `stat` and turns that into
+ * an actionable answer before a native session is allocated.
  *
  * Only a command that *is* a path is checked. Resolving a bare name would mean
  * reimplementing the platform's lookup (`PATH`, and `PATHEXT` on Windows), and
