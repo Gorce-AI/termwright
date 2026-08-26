@@ -1278,21 +1278,13 @@ describe.skipIf(!ptyAvailable())(
   "mouse input over a real PTY",
   { timeout: 20_000 },
   () => {
-    // ConPTY hides the application's DECSET mouse negotiation. The frozen
-    // contract correctly reports pointer-input unsupported, so positive PTY
-    // delivery tests cannot run authoritatively there. The negative hidden-mode
-    // tests below remain enabled on Windows and assert that no bytes are guessed.
-    it.skipIf(process.platform === "win32")(
+    // The pinned passthrough ConPTY exposes the same DECSET contract as POSIX.
+    it(
       "sends an SGR mouse report the child can decode",
       async () => {
         const terminal = await launch("mouse-app.mjs");
         await terminal.waitForText("MOUSE ON");
-        // ConPTY consumes the child's DECSET, so on Windows the encoding is
-        // unobservable rather than absent. Either way the child must receive SGR —
-        // which the waits below, not this assertion, are what actually prove.
-        expect(["sgr", "unknown"]).toContain(
-          terminal.screen().modes.mouseEncoding,
-        );
+        expect(terminal.screen().modes.mouseEncoding).toBe("sgr");
 
         const target = terminal.getByScreenText("MOUSE ON");
         expect(target.domain).toBe("screen");
@@ -1302,7 +1294,7 @@ describe.skipIf(!ptyAvailable())(
       },
     );
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "sends wheel reports and right-button clicks",
       async () => {
         const terminal = await launch("mouse-app.mjs");
@@ -1316,7 +1308,7 @@ describe.skipIf(!ptyAvailable())(
       },
     );
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "delivers semantic modifier-click through PTY and preserves it in the receipt",
       async () => {
         const terminal = await launch("semantic-app.mjs", {
@@ -1342,7 +1334,7 @@ describe.skipIf(!ptyAvailable())(
       },
     );
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "delivers semantic hover as real any-motion terminal input",
       async () => {
         const terminal = await launch("semantic-app.mjs", {
@@ -1361,7 +1353,7 @@ describe.skipIf(!ptyAvailable())(
       },
     );
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "plans horizontal wheel input truthfully and returns the executed operations",
       async () => {
         const terminal = await launch("mouse-app.mjs");
@@ -1424,7 +1416,7 @@ describe.skipIf(!ptyAvailable())(
       expect(input).toHaveLength(0);
     });
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "executes a locator drag as one checkpointed stepped device plan",
       async () => {
         const terminal = await launch("mouse-app.mjs", {
@@ -1468,7 +1460,7 @@ describe.skipIf(!ptyAvailable())(
       },
     );
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "re-resolves both drag endpoints without bytes when destination resolution makes the source stale",
       async () => {
         const terminal = await launch("mouse-app.mjs", {
@@ -1488,7 +1480,8 @@ describe.skipIf(!ptyAvailable())(
         const drag = terminal
           .getByScreenText("MOUSE ON")
           .dragTo(terminal.getByScreenText("LATE TARGET"));
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await terminal.write("z");
+        await terminal.waitForText("RAW:7a");
         expect(input).toHaveLength(0);
         await terminal.write("l");
         const receipt = await drag;
@@ -1602,8 +1595,7 @@ describe.skipIf(!ptyAvailable())(
     });
 
     it("refuses focus reports the child never asked for, unless the terminal enabled them", async () => {
-      // ConPTY turns focus reporting on by itself, and that is observable — so
-      // the expectation follows the mode the session reports, not the OS.
+      // The child never asks for focus reporting, so the action is refused.
       const terminal = await launch("mouse-app.mjs");
       await terminal.waitForText("MOUSE ON");
 
@@ -2209,11 +2201,8 @@ describe.skipIf(!ptyAvailable())(
     });
 
     it("clicks through a transport that hides DEC modes when the application declares them", async () => {
-      // ConPTY consumes the child's DECSET before the driver can read it, so
-      // an uninstrumented app has no observable mouse mode there. An
-      // instrumented one knows what it enabled and says so, and that evidence
-      // is authoritative. modesObservable:false reproduces the ConPTY
-      // condition on every platform, and the assertion is that the click
+      // An embedding may explicitly hide DECSET from the driver. Production
+      // input-mode evidence remains authoritative in that contract, and the assertion is that the click
       // actually reaches the application — not merely that the contract calls
       // pointer-input supported.
       const terminal = await launch("semantic-app.mjs", {
@@ -2247,7 +2236,7 @@ describe.skipIf(!ptyAvailable())(
       await terminal.waitForText("CLICKED reject");
     });
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "clicks a semantic node through the PTY and observes the new revision",
       async () => {
         const terminal = await launch("semantic-app.mjs", {
@@ -2259,18 +2248,14 @@ describe.skipIf(!ptyAvailable())(
         await terminal.getByRole("button", { name: "Reject" }).click();
         await terminal.waitForText("CLICKED reject");
 
-        await expect
-          .poll(() => terminal.semanticTree()?.revision ?? 0, {
-            timeout: 5_000,
-          })
-          .toBeGreaterThan(before);
+        await waitForPairedSemanticRevision(terminal, before + 1);
         expect(
           await terminal.getByTestId("reject").semanticState(),
         ).toMatchObject({ focused: true });
       },
     );
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "allows unrelated status animation without weakening target-local pointer safety",
       async () => {
         const terminal = await launch("semantic-app.mjs", {
@@ -2292,7 +2277,7 @@ describe.skipIf(!ptyAvailable())(
       },
     );
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "emits no pointer bytes when unpaired output damages the target cells",
       async () => {
         const terminal = await launch("semantic-app.mjs", {
@@ -2314,7 +2299,7 @@ describe.skipIf(!ptyAvailable())(
       },
     );
 
-    it.skipIf(process.platform === "win32")(
+    it(
       "plans around a covered center cell using the authoritative hit region",
       async () => {
         const terminal = await launch("semantic-app.mjs", {

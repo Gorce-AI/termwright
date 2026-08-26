@@ -7,7 +7,16 @@ import (
 	"io"
 	"syscall"
 	"unicode/utf16"
+	"unsafe"
 )
+
+var (
+	termwrightKernel32       = syscall.NewLazyDLL("kernel32.dll")
+	termwrightGetConsoleMode = termwrightKernel32.NewProc("GetConsoleMode")
+	termwrightSetConsoleMode = termwrightKernel32.NewProc("SetConsoleMode")
+)
+
+const termwrightMarkerOutputMode = uint32(0x0001 | 0x0004) // processed output + VT processing
 
 // TermwrightWriteMarker exposes the exact console handle hidden behind the
 // screenImpl interface returned by NewConsoleScreen.
@@ -28,9 +37,21 @@ func (b *baseScreen) TermwrightWriteMarker(marker string) error {
 	if len(encoded) == 0 {
 		return nil
 	}
-	var written uint32
-	if err := syscall.WriteConsole(s.out, &encoded[0], uint32(len(encoded)), &written, nil); err != nil {
+	var originalMode uint32
+	if ok, _, err := termwrightGetConsoleMode.Call(uintptr(s.out), uintptr(unsafe.Pointer(&originalMode))); ok == 0 {
 		return err
+	}
+	if ok, _, err := termwrightSetConsoleMode.Call(uintptr(s.out), uintptr(originalMode|termwrightMarkerOutputMode)); ok == 0 {
+		return err
+	}
+	var written uint32
+	writeErr := syscall.WriteConsole(s.out, &encoded[0], uint32(len(encoded)), &written, nil)
+	restored, _, restoreErr := termwrightSetConsoleMode.Call(uintptr(s.out), uintptr(originalMode))
+	if writeErr != nil {
+		return writeErr
+	}
+	if restored == 0 {
+		return restoreErr
 	}
 	if written != uint32(len(encoded)) {
 		return io.ErrShortWrite

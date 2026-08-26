@@ -772,7 +772,7 @@
           {
             "name": "github.com/gdamore/tcell/v2",
             "version": "v2.8.1",
-            "patchSetVersion": 2
+            "patchSetVersion": 3
           },
           {
             "name": "github.com/rivo/tview",

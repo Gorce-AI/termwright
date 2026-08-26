@@ -53,7 +53,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "github.com/gdamore/tcell/v2",
-      "certificationRevision": 2,
+      "certificationRevision": 3,
       "minimumVersion": "v2.8.1",
       "major": 2,
       "mode": "patch",

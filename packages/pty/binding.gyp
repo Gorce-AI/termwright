@@ -11,9 +11,9 @@
       },
       "conditions": [
         ["OS==\"win\"", {
-          "sources": ["src/windows-binding.cc", "src/windows-session.cc"],
+          "sources": ["src/windows-binding.cc", "src/windows-conpty-api.cc", "src/windows-session.cc"],
           "defines": ["UNICODE", "_UNICODE"],
-          "libraries": ["kernel32.lib"],
+          "libraries": ["bcrypt.lib", "kernel32.lib"],
           "msvs_settings": {
             "VCCLCompilerTool": {
               "ExceptionHandling": 1,

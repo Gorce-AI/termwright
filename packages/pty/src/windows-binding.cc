@@ -12,11 +12,35 @@
 #include <string>
 #include <vector>
 
+#include "windows-conpty-api.h"
 #include "windows-session.h"
 
 namespace {
 
 constexpr size_t kMaximumPendingEvents = 64;
+
+Napi::Object RuntimeInfo(Napi::Env env) {
+  const termwright::ConPtyRuntimeInfo& info = termwright::GetConPtyApi().runtime_info();
+  Napi::Object value = Napi::Object::New(env);
+  value.Set("provider", Napi::String::New(env, info.provider));
+  value.Set("package", Napi::String::New(env, info.package));
+  value.Set("version", Napi::String::New(env, info.version));
+  value.Set("mode", Napi::String::New(env, info.mode));
+  value.Set("policy", Napi::String::New(env, info.policy));
+  value.Set("selectedHostArchitecture",
+            Napi::String::New(env, info.selected_host_architecture));
+  value.Set("failureCode", Napi::String::New(env, info.failure_code));
+  value.Set("failureWin32", Napi::Number::New(env, info.failure_win32));
+  value.Set("assetsValidated", Napi::Boolean::New(env, info.assets_validated));
+  value.Set("coreExports", Napi::Boolean::New(env, info.core_exports));
+  value.Set("orderedMarkerSemantics",
+            Napi::String::New(env, info.ordered_marker_semantics));
+  return value;
+}
+
+Napi::Value ConPtyRuntimeInfo(const Napi::CallbackInfo& info) {
+  return RuntimeInfo(info.Env());
+}
 
 std::wstring ToWide(const std::string& utf8) {
   if (utf8.empty()) return std::wstring();
@@ -52,7 +76,6 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
             InstanceMethod("activeProcesses", &ConPtySession::ActiveProcesses),
             InstanceMethod("dispose", &ConPtySession::Dispose),
             InstanceAccessor("pid", &ConPtySession::Pid, nullptr),
-            InstanceAccessor("releaseSupported", &ConPtySession::ReleaseSupported, nullptr),
         });
     exports.Set("ConPtySession", constructor);
     return exports;
@@ -210,10 +233,6 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
     return Napi::Number::New(info.Env(), static_cast<double>(session_->pid()));
   }
 
-  Napi::Value ReleaseSupported(const Napi::CallbackInfo& info) {
-    return Napi::Boolean::New(info.Env(), session_->release_supported());
-  }
-
   void Shutdown() {
     if (shuttingDown_.exchange(true)) return;
     if (!started_.load()) return;
@@ -233,7 +252,18 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
 };
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
+  const termwright::ConPtyApi& api = termwright::GetConPtyApi();
+  if (!api.available()) {
+    const termwright::ConPtyRuntimeInfo& info = api.runtime_info();
+    Napi::Error::New(
+        env, "strict vendored ConPTY initialization failed: " +
+                 info.failure_code + " (Win32 " +
+                 std::to_string(info.failure_win32) + ")")
+        .ThrowAsJavaScriptException();
+    return exports;
+  }
   ConPtySession::Init(env, exports);
+  exports.Set("conPtyRuntimeInfo", Napi::Function::New(env, ConPtyRuntimeInfo));
   return exports;
 }
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LocatorDragOptions
 
-Defined in: [driver/src/api.ts:542](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L542)
+Defined in: [driver/src/api.ts:539](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L539)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:280](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **path?**: readonly [`MousePoint`](../mousepoint/)[]
 
-Defined in: [driver/src/api.ts:546](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L546)
+Defined in: [driver/src/api.ts:543](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L543)
 
 Explicit viewport-cell path. The resolved destination is appended.
 
@@ -62,7 +62,7 @@ Explicit viewport-cell path. The resolved destination is appended.
 
 > `readonly` `optional` **steps?**: `number`
 
-Defined in: [driver/src/api.ts:544](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L544)
+Defined in: [driver/src/api.ts:541](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L541)
 
 Number of interpolated pointer moves. Defaults to the cell distance.
 
@@ -72,7 +72,7 @@ Number of interpolated pointer moves. Defaults to the cell distance.
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [driver/src/api.ts:539](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L539)
+Defined in: [driver/src/api.ts:536](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L536)
 
 #### Inherited from
 

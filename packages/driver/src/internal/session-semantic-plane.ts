@@ -44,7 +44,7 @@ export function buildSessionContract(input: SessionContractInput): EffectiveSess
     for (const capability of provider.capabilities) producerNodes.add(`provider.${capability}`);
   }
   producerNodes.add("terminal.writable-pty");
-  if (input.modesObservable ?? input.platform !== "win32") {
+  if (input.modesObservable !== false) {
     producerNodes.add("terminal.input-modes-observable");
   }
   const produced = sessionCapabilitiesFromProducers(producerNodes);
@@ -113,7 +113,7 @@ export function buildSessionContract(input: SessionContractInput): EffectiveSess
     terminal: Object.freeze({
       profile: input.terminalProfile,
       platform: input.platform,
-      mouseModesObservable: input.modesObservable ?? input.platform !== "win32",
+      mouseModesObservable: input.modesObservable !== false,
     }),
   });
 }

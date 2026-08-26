@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SessionEventGap
 
-Defined in: [driver/src/api.ts:866](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L866)
+Defined in: [driver/src/api.ts:863](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L863)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **firstAvailableSequence**: `number`
 
-Defined in: [driver/src/api.ts:868](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L868)
+Defined in: [driver/src/api.ts:865](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L865)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:868](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **lastLostSequence**: `number`
 
-Defined in: [driver/src/api.ts:869](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L869)
+Defined in: [driver/src/api.ts:866](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L866)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:869](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **lostBytes**: `number`
 
-Defined in: [driver/src/api.ts:871](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L871)
+Defined in: [driver/src/api.ts:868](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L868)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [driver/src/api.ts:871](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **lostEvents**: `number`
 
-Defined in: [driver/src/api.ts:870](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L870)
+Defined in: [driver/src/api.ts:867](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L867)
 
 ***
 
@@ -68,4 +68,4 @@ Defined in: [driver/src/api.ts:870](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **requestedSequence**: `number`
 
-Defined in: [driver/src/api.ts:867](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L867)
+Defined in: [driver/src/api.ts:864](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L864)

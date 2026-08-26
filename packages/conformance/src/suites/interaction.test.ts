@@ -14,10 +14,10 @@ import { TermwrightError } from '@termwright/driver';
 import {
   CONFORMANCE_FIXTURES,
   createSessionPool,
+  disableFocusReporting,
+  disableMouseReporting,
   enableFocusReporting,
   enableMouseReporting,
-  focusMode,
-  mouseModeHidden,
   ptyAvailable,
   rejection,
 } from '../support/pty.js';
@@ -46,18 +46,16 @@ async function generic(options = {}): Promise<TerminalHarness> {
 /**
  * Turns on the child's mouse reporting.
  *
- * Returns whether the emulator could see it happen: ConPTY consumes the
- * DECSET, so the mode reads `'unknown'` there while the child is in fact
- * tracking. Callers branch on that rather than on the platform.
+ * Every certified backend exposes the resulting DECSET transition.
  */
-async function enableMouse(terminal: TerminalHarness, mode: 'click' | 'drag'): Promise<boolean> {
+async function enableMouse(terminal: TerminalHarness, mode: 'click' | 'drag'): Promise<void> {
   return enableMouseReporting(terminal, mode);
 }
 
 afterEach(sessions.closeAll);
 
 describe.skipIf(!ptyAvailable())('pointer interaction', () => {
-  it.skipIf(process.platform === 'win32')('clicks, double-clicks and misses', async () => {
+  it('clicks, double-clicks and misses', async () => {
     const terminal = await generic();
     await enableMouse(terminal, 'click');
 
@@ -77,7 +75,7 @@ describe.skipIf(!ptyAvailable())('pointer interaction', () => {
     await terminal.waitForText('ev: MOUSE press b=0 c=43 r=12');
   });
 
-  it.skipIf(process.platform === 'win32')('drags and lets the application own the selection', async () => {
+  it('drags and lets the application own the selection', async () => {
     const terminal = await generic();
     await enableMouse(terminal, 'drag');
 
@@ -154,19 +152,15 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     expect(wide?.row).toBe(wideStart?.row);
   });
 
-  it.skipIf(process.platform === 'win32')('follows mouse mode on and off', async () => {
+  it('follows mouse mode on and off', async () => {
     const terminal = await generic();
     await enableMouse(terminal, 'click');
     await terminal.getByScreenText('Alpha').click();
     await terminal.waitForText('ev: MOUSE press b=0');
 
-    await terminal.press('m'); // the child gives the mouse back
-    if (!mouseModeHidden(terminal)) {
-      // Observed off: the driver knows there is nothing listening and says so.
-      await expect.poll(() => terminal.screen().modes.mouseTracking).toBe('none');
-      const refused = (await rejection(terminal.getByScreenText('Alpha').click())) as TermwrightError;
-      expect(refused.code).toBe('input-mode-disabled');
-    }
+    await disableMouseReporting(terminal);
+    const refused = (await rejection(terminal.getByScreenText('Alpha').click())) as TermwrightError;
+    expect(refused.code).toBe('input-mode-disabled');
 
     await enableMouse(terminal, 'drag');
     await terminal.mouse.drag({ from: { row: 1, column: 2 }, to: { row: 2, column: 2 } });
@@ -175,32 +169,18 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
 
   it('reports focus in and out only while the child asks for it', async () => {
     const terminal = await generic();
-    // Where the mode is observable, prove the disabled precondition directly.
-    // The unobservable branch below separately proves fail-closed behavior.
-    if (focusMode(terminal) === 'off') {
-      const before = (await rejection(terminal.window.focus())) as TermwrightError;
-      expect(before.code).toBe('input-mode-disabled');
-    }
+    const before = (await rejection(terminal.window.focus())) as TermwrightError;
+    expect(before.code).toBe('input-mode-disabled');
 
-    const reporting = await enableFocusReporting(terminal);
-    if (reporting === 'unknown') {
-      // Unknown is not permission to emit input. ConPTY hides the child's
-      // DECSET, so the authoritative result is a typed refusal, not a guessed
-      // focus report through the PTY.
-      const unavailable = (await rejection(terminal.window.focus())) as TermwrightError;
-      expect(unavailable.code).toBe('input-mode-disabled');
-      expect(unavailable.message).toContain('not observable');
-      return;
-    }
-    expect(reporting).toBe('on');
+    await enableFocusReporting(terminal);
+    expect(terminal.screen().modes.focusReporting).toBe('on');
 
     await terminal.window.focus();
     await terminal.waitForText('ev: FOCUS:in');
     await terminal.window.blur();
     await terminal.waitForText('ev: FOCUS:out');
 
-    await terminal.press('f');
-    await expect.poll(() => terminal.screen().modes.focusReporting).toBe('off');
+    await disableFocusReporting(terminal);
     expect(((await rejection(terminal.window.focus())) as TermwrightError).code).toBe('input-mode-disabled');
   });
 

@@ -19,20 +19,47 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { argv, execPath, exit, platform, arch } from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const installDirectory = argv[2];
+const verdictFlag = argv.indexOf('--verdict');
+const verdictPath = verdictFlag < 0 ? undefined : argv[verdictFlag + 1];
+const causalFixturePath = fileURLToPath(new URL('./fixtures/conpty-causal-order.ps1', import.meta.url));
 if (installDirectory === undefined) {
-  console.error('usage: check-installed-pty.mjs <install-dir>');
+  console.error('usage: check-installed-pty.mjs <install-dir> [--verdict <path>]');
+  exit(1);
+}
+if (verdictFlag >= 0 && verdictPath === undefined) {
+  console.error('--verdict requires an output path');
   exit(1);
 }
 
 const probe = `
-const { createServer } = await import('node:net');
-const pty = await import('@termwright/pty');
+	const { createServer } = await import('node:net');
+	const { spawnSync } = await import('node:child_process');
+	const pty = await import('@termwright/pty');
 if (!pty.ptyAvailable()) {
   console.error('resolved no addon: ' + (pty.ptyUnavailableReason?.() ?? 'no reason reported'));
   process.exit(2);
+}
+if (process.platform === 'win32') {
+  const runtime = pty.conPtyRuntimeInfo();
+  const nativeArchitecture = process.env.PROCESSOR_ARCHITEW6432?.toLowerCase() === 'arm64' ||
+    process.env.PROCESSOR_ARCHITECTURE?.toLowerCase() === 'arm64' ? 'arm64' : 'x64';
+  if (runtime.provider !== 'vendored' || runtime.package !== 'Microsoft.Windows.Console.ConPTY' ||
+      runtime.version !== '1.24.260710001' || runtime.mode !== 'ordered-vt-passthrough' ||
+      runtime.policy !== 'strict' || runtime.assetsValidated !== true ||
+      runtime.coreExports !== true || runtime.failureCode !== '' || runtime.failureWin32 !== 0 ||
+      runtime.selectedHostArchitecture !== nativeArchitecture) {
+    console.error('the installed addon did not load the certified vendored ConPTY runtime: ' + JSON.stringify(runtime));
+    process.exit(9);
+  }
+  console.log('[pty-cert] vendored-conpty ' + JSON.stringify(runtime));
 }
 // Loading is not running. A binary that loads and then cannot open a
 // pseudoconsole would still satisfy a resolution check, and the point of
@@ -68,13 +95,88 @@ if (!rejectedAfterEof) {
 handle.dispose();
 
 const environment = { ...process.env, TERM: 'xterm-256color' };
-const command = (source) => [process.execPath, '-e', source];
-const collect = (source) => {
-  const session = pty.spawnPty({ command: command(source), env: environment, columns: 80, rows: 24 });
+const command = (source, executable = process.execPath) => [executable, '-e', source];
+const collect = (source, executable = process.execPath) => {
+  const session = pty.spawnPty({ command: command(source, executable), env: environment, columns: 80, rows: 24 });
   const output = [];
   session.onData((data) => output.push(Buffer.from(data)));
   return { session, output, text: () => Buffer.concat(output).toString('utf8') };
 };
+
+if (process.platform === 'win32') {
+  const causalCycles = 256;
+  const causalSource = [
+    'const { writeSync } = require("node:fs");',
+    'for (let index = 0; index < ' + causalCycles + '; index += 1) {',
+    '  const id = index.toString(16).padStart(4, "0");',
+    '  writeSync(1, Buffer.from("A" + id + "\\x1b]8486;TW_CAUSAL;A;" + id + "\\x07"));',
+    '  writeSync(1, Buffer.from("B" + id + "\\x1b]8486;TW_CAUSAL;B;" + id + "\\x07"));',
+    '  writeSync(1, Buffer.from("A" + id + "\\x1b]8486;TW_CAUSAL;C;" + id + "\\x07"));',
+    '}',
+    'writeSync(1, Buffer.from("\\x1b[?1049hALT\\x1b]8486;TW_CAUSAL;ALT\\x07\\x1b[?1049lPRIMARY\\x1b]8486;TW_CAUSAL;FINAL\\x07"));',
+  ].join('');
+  const certifyVtOrder = async (name, executable) => {
+    const causal = collect(causalSource, executable);
+    await causal.session.outputEnded;
+    const bytes = causal.text();
+    let cursor = bytes.indexOf('A0000\x1b]8486;TW_CAUSAL;A;0000\x07');
+    let valid = cursor >= 0 && !/[AB][0-9a-f]{4}/u.test(bytes.slice(0, cursor));
+    for (let index = 0; index < causalCycles && valid; index += 1) {
+      const id = index.toString(16).padStart(4, '0');
+      for (const [text, phase] of [['A', 'A'], ['B', 'B'], ['A', 'C']]) {
+        const expected = text + id + '\x1b]8486;TW_CAUSAL;' + phase + ';' + id + '\x07';
+        if (bytes.indexOf(expected, cursor) !== cursor) { valid = false; break; }
+        cursor += expected.length;
+      }
+    }
+    const tail = '\x1b[?1049hALT\x1b]8486;TW_CAUSAL;ALT\x07\x1b[?1049lPRIMARY\x1b]8486;TW_CAUSAL;FINAL\x07';
+    valid &&= bytes.indexOf(tail, cursor) === cursor && causal.session.sawRealEof;
+    causal.session.dispose();
+    if (!valid) throw new Error(name + ' application writes lost causal VT/alternate-screen order');
+  };
+
+  console.log('[pty-cert] causal-vt-node');
+  await certifyVtOrder('Node', process.execPath);
+  if (process.env.TERMWRIGHT_REQUIRE_BUN === '1') {
+    if (spawnSync('bun', ['--version'], { stdio: 'ignore' }).status !== 0) {
+      throw new Error('Bun is required for Windows PTY certification');
+    }
+    console.log('[pty-cert] causal-vt-bun');
+    await certifyVtOrder('Bun', 'bun');
+  }
+
+  console.log('[pty-cert] causal-legacy');
+  const legacySession = pty.spawnPty({
+    command: ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', process.env.TERMWRIGHT_CONPTY_CAUSAL_FIXTURE],
+    env: environment,
+    columns: 100,
+    rows: 30,
+  });
+  const legacyOutput = [];
+  legacySession.onData((data) => legacyOutput.push(Buffer.from(data)));
+  const legacy = { session: legacySession, text: () => Buffer.concat(legacyOutput).toString('utf8') };
+  await legacy.session.outputEnded;
+  const legacyBytes = legacy.text();
+  let legacyCursor = legacyBytes.indexOf('A0000\x1b]8486;TW_LEGACY;A;0000\x07');
+  let legacyValid = legacyCursor >= 0;
+  for (let index = 0; index < 256 && legacyValid; index += 1) {
+    const id = index.toString(16).padStart(4, '0');
+    const first = 'A' + id + '\x1b]8486;TW_LEGACY;A;' + id + '\x07';
+    legacyValid &&= legacyBytes.indexOf(first, legacyCursor) === legacyCursor;
+    legacyCursor += first.length;
+    const textIndex = legacyBytes.indexOf('B' + id, legacyCursor);
+    const markerText = '\x1b]8486;TW_LEGACY;B;' + id + '\x07';
+    const markerIndex = legacyBytes.indexOf(markerText, legacyCursor);
+    legacyValid &&= textIndex >= legacyCursor && markerIndex > textIndex;
+    legacyCursor = markerIndex + markerText.length;
+    const final = 'A' + id + '\x1b]8486;TW_LEGACY;C;' + id + '\x07';
+    legacyValid &&= legacyBytes.indexOf(final, legacyCursor) === legacyCursor;
+    legacyCursor += final.length;
+  }
+  legacyValid &&= legacy.session.sawRealEof;
+  legacy.session.dispose();
+  if (!legacyValid) throw new Error('legacy Console API output was overtaken by its following VT marker');
+}
 const waitForText = ({ session, text }, marker) => {
   if (text().includes(marker)) return Promise.resolve();
   return new Promise((resolve) => {
@@ -184,14 +286,14 @@ await pressure.session.outputEnded;
 const pressureOutput = Buffer.concat(pressure.output);
 const pressurePrefix = Buffer.from('\x1b]8486;TW_PRESSURE;');
 const pressureSentinel = Buffer.from('PRESSURE_SENTINEL');
-let pressureCursor = 0;
+let pressureCursor = pressureOutput.indexOf(pressurePrefix);
 let pressureValid = true;
 for (let index = 0; index < pressureFrameCount; index += 1) {
   const start = pressureOutput.indexOf(pressurePrefix, pressureCursor);
   const end = start < 0 ? -1 : pressureOutput.indexOf(0x07, start + pressurePrefix.length);
   const body = end < 0 ? Buffer.alloc(0) : pressureOutput.subarray(start + pressurePrefix.length, end);
   const header = index.toString(16).padStart(8, '0') + ';';
-  const startIsValid = process.platform === 'win32' ? start >= pressureCursor : start === pressureCursor;
+  const startIsValid = start === pressureCursor;
   if (!startIsValid || end <= start || body.length !== 9 + pressureFrameBytes ||
       body.subarray(0, 9).toString('ascii') !== header ||
       !body.subarray(9).every((byte) => byte === 0x71)) {
@@ -201,9 +303,7 @@ for (let index = 0; index < pressureFrameCount; index += 1) {
   pressureCursor = end + 1;
 }
 const sentinelIndex = pressureOutput.indexOf(pressureSentinel, pressureCursor);
-const sentinelIsValid = process.platform === 'win32'
-  ? sentinelIndex >= pressureCursor
-  : sentinelIndex === pressureCursor && sentinelIndex + pressureSentinel.length === pressureOutput.length;
+const sentinelIsValid = sentinelIndex === pressureCursor;
 pressureValid &&= pressureOutput.indexOf(pressurePrefix, pressureCursor) === -1 &&
   sentinelIsValid && sentinelIndex === pressureOutput.lastIndexOf(pressureSentinel);
 if (!pressureValid || !pressure.session.sawRealEof) {
@@ -218,6 +318,7 @@ console.log('ran native PTY lifecycle and flow-control certification');
 const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
   cwd: installDirectory,
   encoding: 'utf8',
+  env: { ...process.env, TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 
@@ -226,5 +327,25 @@ if (result.stderr) process.stderr.write(result.stderr);
 if (result.status !== 0) {
   console.error(`the installed @termwright/pty failed on ${platform}-${arch} (exit ${result.status})`);
   exit(1);
+}
+if (verdictPath !== undefined) {
+  if (platform !== 'win32') {
+    console.error('--verdict is only supported for a Windows ConPTY bundle');
+    exit(1);
+  }
+  const installedRequire = createRequire(join(installDirectory, 'termwright-pty-certifier.cjs'));
+  const addonPath = installedRequire.resolve(`@termwright/pty-win32-${arch}/termwright_pty.node`);
+  const manifestPath = join(dirname(addonPath), 'vendor', 'conpty-manifest.json');
+  const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
+  const runtime = installedRequire(addonPath).conPtyRuntimeInfo();
+  writeFileSync(verdictPath, `${JSON.stringify({
+    schemaVersion: 1,
+    platform,
+    architecture: arch,
+    addonSha256: sha256(addonPath),
+    conptyManifestSha256: sha256(manifestPath),
+    runtime,
+    causal: { node: true, bun: process.env.TERMWRIGHT_REQUIRE_BUN === '1', legacy: true, alternateScreen: true },
+  }, null, 2)}\n`);
 }
 console.log(`the installed @termwright/pty runs a real pseudoterminal on ${platform}-${arch}`);

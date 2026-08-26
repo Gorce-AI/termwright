@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -8,6 +9,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const BINARY = 'termwright_pty.node';
 const MINIMUM_BYTES = 16 * 1024;
 const TARGET = /^(darwin|linux|win32)-(arm64|x64)$/u;
+const CONPTY_LOCK_PATH = join(ROOT, 'packages/pty/conpty-assets.json');
 
 const WINDOWS_MACHINE = Object.freeze({ x64: 0x8664, arm64: 0xaa64 });
 const ELF_MACHINE = Object.freeze({ x64: 62, arm64: 183 });
@@ -111,6 +113,78 @@ export function verifyBinaryArchitecture(bytes, platform, architecture) {
   throw new TypeError(`unsupported prebuild platform: ${platform}`);
 }
 
+async function filesBelow(directory, prefix = '') {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) files.push(...await filesBelow(join(directory, entry.name), relative));
+    else if (entry.isFile()) files.push(relative);
+    else throw new Error(`Windows ConPTY bundle contains a non-file entry: ${relative}`);
+  }
+  return files;
+}
+
+export async function verifyWindowsConptyBundle(packageDirectory, architecture) {
+  const CONPTY_LOCK = JSON.parse(await readFile(CONPTY_LOCK_PATH, 'utf8'));
+  const vendor = join(packageDirectory, 'vendor');
+  const assets = CONPTY_LOCK.assets[architecture];
+  const metadata = CONPTY_LOCK.metadata[architecture];
+  const expected = [...Object.keys(assets), ...Object.keys(metadata), 'conpty-manifest.json'].sort();
+  let actual;
+  try {
+    actual = (await filesBelow(vendor)).sort();
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw new Error(`${packageDirectory}/vendor is absent`);
+    throw error;
+  }
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`Windows ConPTY bundle inventory differs: ${actual.join(', ')}`);
+  }
+  const manifest = JSON.parse(await readFile(join(vendor, 'conpty-manifest.json'), 'utf8'));
+  const lockedAssetDigests = Object.fromEntries(
+    Object.entries(assets).map(([relative, asset]) => [relative, asset.sha256]),
+  );
+  if (manifest.package !== CONPTY_LOCK.package || manifest.version !== CONPTY_LOCK.version ||
+      manifest.sourceSha256 !== CONPTY_LOCK.sha256 || manifest.architecture !== architecture ||
+      manifest.mode !== 'ordered-vt-passthrough' ||
+      JSON.stringify(manifest.assets) !== JSON.stringify(lockedAssetDigests) ||
+      JSON.stringify(manifest.metadata) !== JSON.stringify(metadata)) {
+    throw new Error('Windows ConPTY bundle manifest does not match the pinned runtime');
+  }
+  for (const [relative, asset] of Object.entries(assets)) {
+    const bytes = await readFile(join(vendor, relative));
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== asset.sha256 || manifest.assets?.[relative] !== digest) {
+      throw new Error(`Windows ConPTY bundle SHA-256 mismatch: ${relative}`);
+    }
+    const assetArchitecture = relative.startsWith('arm64/') ? 'arm64' :
+      relative.startsWith('x64/') ? 'x64' : architecture;
+    verifyBinaryArchitecture(bytes, 'win32', assetArchitecture);
+  }
+  for (const [relative, expectedDigest] of Object.entries(metadata)) {
+    const bytes = await readFile(join(vendor, relative));
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== expectedDigest || manifest.metadata?.[relative] !== digest) {
+      throw new Error(`Windows ConPTY metadata SHA-256 mismatch: ${relative}`);
+    }
+  }
+  const sbom = JSON.parse(await readFile(join(vendor, 'SBOM.spdx.json'), 'utf8'));
+  const described = sbom.packages?.find((entry) => entry.SPDXID === 'SPDXRef-Package-ConPTY');
+  const sbomFiles = new Map((sbom.files ?? []).map((entry) => [
+    entry.fileName?.replace(/^\.\//u, ''),
+    entry.checksums?.find((checksum) => checksum.algorithm === 'SHA256')?.checksumValue,
+  ]));
+  if (described?.name !== CONPTY_LOCK.package || described.versionInfo !== CONPTY_LOCK.version ||
+      described.filesAnalyzed !== true ||
+      !described.externalRefs?.some((entry) =>
+        entry.referenceType === 'purl' &&
+        entry.referenceLocator === `pkg:nuget/${CONPTY_LOCK.package}@${CONPTY_LOCK.version}`) ||
+      Object.entries(assets).some(([relative, asset]) => sbomFiles.get(relative) !== asset.sha256)) {
+    throw new Error('Windows ConPTY SBOM does not describe the sealed binary payload');
+  }
+}
+
 async function discoveredTargets() {
   const entries = await readdir(join(ROOT, 'packages'), { withFileTypes: true });
   return entries
@@ -133,7 +207,9 @@ async function main(argv) {
     const match = TARGET.exec(target);
     if (match === null) throw new TypeError(`invalid PTY prebuild target: ${target}`);
     const [, platform, architecture] = match;
-    const path = join(ROOT, 'packages', `pty-${target}`, BINARY);
+    const packageDirectory = join(ROOT, 'packages', `pty-${target}`);
+    if (platform === 'win32') await verifyWindowsConptyBundle(packageDirectory, architecture);
+    const path = join(packageDirectory, BINARY);
     let size;
     try {
       size = (await stat(path)).size;

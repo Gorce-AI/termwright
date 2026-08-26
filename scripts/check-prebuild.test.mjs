@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process';
-import { cp, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { verifyBinaryArchitecture } from './check-prebuild.mjs';
+import { verifyBinaryArchitecture, verifyWindowsConptyBundle } from './check-prebuild.mjs';
 
 const execute = promisify(execFile);
 
@@ -40,6 +40,29 @@ function machFixture(cpu, minimum = (13 << 16) | (5 << 8)) {
 }
 
 describe('native PTY prebuild architecture guard', () => {
+  it('seals the complete x64 and ARM64 ConPTY runtime inventories', async () => {
+    const packages = fileURLToPath(new URL('../packages/', import.meta.url));
+    await expect(verifyWindowsConptyBundle(join(packages, 'pty-win32-x64'), 'x64'))
+      .resolves.toBeUndefined();
+    await expect(verifyWindowsConptyBundle(join(packages, 'pty-win32-arm64'), 'arm64'))
+      .resolves.toBeUndefined();
+  });
+
+  it('rejects modified legal and SBOM metadata', async () => {
+    const packages = fileURLToPath(new URL('../packages/', import.meta.url));
+    const root = await mkdtemp(join(tmpdir(), 'tw-conpty-metadata-'));
+    const candidate = join(root, 'pty-win32-x64');
+    try {
+      await cp(join(packages, 'pty-win32-x64'), candidate, { recursive: true });
+      const sbom = join(candidate, 'vendor', 'SBOM.spdx.json');
+      await writeFile(sbom, `${await readFile(sbom, 'utf8')}\n`);
+      await expect(verifyWindowsConptyBundle(candidate, 'x64'))
+        .rejects.toThrow(/metadata SHA-256 mismatch/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('accepts the exact AMD64 and ARM64 PE Machine values', () => {
     expect(() => verifyBinaryArchitecture(peFixture(0x8664), 'win32', 'x64')).not.toThrow();
     expect(() => verifyBinaryArchitecture(peFixture(0xaa64), 'win32', 'arm64')).not.toThrow();

@@ -175,9 +175,6 @@ function declaredApplicabilitySkips() {
     'packages/conformance/src/suites/language-adapters.test.ts::adapter conformance: termwright (Textual) > the dormant rule > produces the same bytes as a build without the adapter',
     'packages/conformance/src/suites/language-adapters.test.ts::adapter conformance: termwright (Textual) > an instrumented session > carries a log record without printing it',
     'packages/conformance/src/suites/language-adapters.test.ts::adapter conformance: termwright (tview) > an instrumented session > carries a log record without printing it',
-    ...(process.platform === 'win32'
-      ? []
-      : ['packages/conformance/src/suites/driver-generic.test.ts::a generic session > fails closed when ConPTY hides terminal input modes']),
   ];
 }
 

@@ -528,7 +528,7 @@ describe('a crash recorded in the archive', () => {
       recentInputs: [{ timeMs: 2_400, kind: 'key', bytes: 1, preview: '\\r' }],
       diagnosticsTail: [
         { code: 'pairing-timeout', detail: 'no marker for revision 3', timeMs: 2_450 },
-        { code: 'mode-unverifiable', detail: 'ConPTY hides the mode', timeMs: 40, mode: 'focus' },
+        { code: 'mode-unverifiable', detail: 'embedding hides the mode', timeMs: 40, mode: 'focus' },
       ],
       lastSemanticRevision: 2,
     };

@@ -25,7 +25,6 @@ type NativeEvent =
 
 interface NativeSession {
   readonly pid: number;
-  readonly releaseSupported: boolean;
   write(data: Buffer): void;
   resize(columns: number, rows: number): boolean;
   terminateTree(): void;
@@ -48,6 +47,37 @@ interface NativeBindingConstructor {
 
 interface LoadedWindowsBinding {
   readonly ConPtySession: NativeBindingConstructor;
+  conPtyRuntimeInfo(): WindowsConPtyRuntimeInfo;
+}
+
+/** Provenance and behavioral contract of the loaded Windows pseudoconsole. */
+export interface WindowsConPtyRuntimeInfo {
+  readonly provider: "vendored";
+  readonly package: "Microsoft.Windows.Console.ConPTY";
+  readonly version: "1.24.260710001";
+  readonly mode: "ordered-vt-passthrough";
+  readonly policy: "strict";
+  readonly selectedHostArchitecture: "x64" | "arm64";
+  readonly failureCode: "";
+  readonly failureWin32: 0;
+  readonly assetsValidated: true;
+  readonly coreExports: true;
+  readonly orderedMarkerSemantics: "marker-authoritative-after-behavioral-certification";
+}
+
+function assertRuntimeInfo(value: WindowsConPtyRuntimeInfo): WindowsConPtyRuntimeInfo {
+  if (value.provider !== "vendored" ||
+      value.package !== "Microsoft.Windows.Console.ConPTY" ||
+      value.version !== "1.24.260710001" ||
+      value.mode !== "ordered-vt-passthrough" ||
+      value.policy !== "strict" ||
+      (value.selectedHostArchitecture !== "x64" && value.selectedHostArchitecture !== "arm64") ||
+      value.failureCode !== "" || value.failureWin32 !== 0 ||
+      value.assetsValidated !== true || value.coreExports !== true ||
+      value.orderedMarkerSemantics !== "marker-authoritative-after-behavioral-certification") {
+    throw new Error(`uncertified vendored ConPTY runtime: ${JSON.stringify(value)}`);
+  }
+  return value;
 }
 
 let cachedBinding: LoadedWindowsBinding | undefined;
@@ -80,7 +110,9 @@ export function loadWindowsBinding(): LoadedWindowsBinding {
   for (const candidate of windowsCandidatePaths(process.arch)) {
     try {
       const resolved = require.resolve(candidate);
-      cachedBinding = require(resolved) as LoadedWindowsBinding;
+      const loaded = require(resolved) as LoadedWindowsBinding;
+      assertRuntimeInfo(loaded.conPtyRuntimeInfo());
+      cachedBinding = loaded;
       return cachedBinding;
     } catch (error) {
       // Kept per candidate. "No addon" is the same sentence whether the
@@ -95,6 +127,11 @@ export function loadWindowsBinding(): LoadedWindowsBinding {
   throw new Error(
     `no termwright ConPTY addon could be loaded for win32-${process.arch}. Tried:\n  ${attempts.join("\n  ")}`,
   );
+}
+
+/** Returns the exact validated runtime used by every Windows session. */
+export function windowsConPtyRuntimeInfo(): WindowsConPtyRuntimeInfo {
+  return assertRuntimeInfo(loadWindowsBinding().conPtyRuntimeInfo());
 }
 
 let unavailableReason: string | undefined;
@@ -188,7 +225,7 @@ export interface WindowsPtyExit {
  */
 export interface WindowsPtyHandle {
   readonly pid: number;
-  readonly releaseSupported: boolean;
+  readonly runtimeInfo: WindowsConPtyRuntimeInfo;
   readonly outputEnded: Promise<void>;
   /**
    * True only when the output pipe actually ended.
@@ -313,8 +350,8 @@ export function spawnWindowsPty(
     get pid(): number {
       return session.pid;
     },
-    get releaseSupported(): boolean {
-      return session.releaseSupported;
+    get runtimeInfo(): WindowsConPtyRuntimeInfo {
+      return windowsConPtyRuntimeInfo();
     },
     get sawRealEof(): boolean {
       return ended;

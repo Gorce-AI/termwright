@@ -21,7 +21,14 @@
     "./termwright_pty.node": "./termwright_pty.node"
   },
   "files": [
-    "termwright_pty.node"
+    "termwright_pty.node",
+    "vendor/conpty.dll",
+    "vendor/x64/OpenConsole.exe",
+    "vendor/arm64/OpenConsole.exe",
+    "vendor/conpty-manifest.json",
+    "vendor/LICENSE.microsoft-terminal.txt",
+    "vendor/THIRD_PARTY_NOTICES.md",
+    "vendor/SBOM.spdx.json"
   ],
   "termwrightBuild": {
     "optionalArtifacts": [

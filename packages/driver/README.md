@@ -136,14 +136,11 @@ await terminal.close();
   actions require known terminal-cell geometry and proof of the exact pointer
   recipient. Paint order is not that proof. No semantic tree means no invented
   roles.
-- **Authoritative hidden modes.** When a backend such as ConPTY hides DEC mode
-  changes, an explicitly registered application input-mode provider may publish
-  the production parser's revision-bound mouse/focus configuration. A generic
-  child and a wrapper around selected stdout writes remain fail-closed because
-  descriptor/native writes and descendants can bypass that wrapper. A provider
-  never enables or dispatches input; Termwright still writes real PTY bytes,
-  rejects disagreement with observable VT state, and stops using the evidence
-  if its provider is lost.
+- **Authoritative input modes.** Certified PTY backends, including pinned
+  passthrough ConPTY, expose DEC mouse/focus changes directly. An embedding
+  that explicitly hides them may use a registered application provider for the
+  production parser's revision-bound configuration. Termwright still writes
+  real PTY bytes and rejects provider disagreement or loss.
 - **Dormant by default.** The endpoint and token are injected as
   `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN`; without
   them a conforming probe or adapter opens nothing and the run is byte-identical.

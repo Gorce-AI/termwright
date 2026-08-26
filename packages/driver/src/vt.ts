@@ -72,9 +72,9 @@ export interface VtOptions {
   /** Terminal profile; decides how characters are counted. */
   readonly profile?: TerminalProfile | string;
   /**
-   * Whether the child's input-mode requests can be observed at all. False
-   * under ConPTY, which consumes the mouse ones and reports focus reporting as
-   * enabled whether or not the child asked; defaults to the platform's answer.
+   * Whether the child's input-mode requests can be observed at all. Defaults
+   * to true for certified PTY backends. Embeddings and synthetic backends may
+   * explicitly set false when they cannot expose every relevant DECSET.
    *
    * This is a property of the transport, so it is not revised by what arrives:
    * a request that got through would only prove that *that* request got
@@ -188,10 +188,12 @@ export class VtScreen {
 
   constructor(options: VtOptions) {
     this.#scrollbackLines = options.scrollbackLines;
-    // ConPTY consumes the child's mouse DECSET on the way out; a probe
-    // (escapes.pty.test.ts) measured 1000/1002/1006 never arriving while the
-    // child's own mouse handling stayed live.
-    this.#modesObservable = options.modesObservable ?? process.platform !== 'win32';
+    // Every supported backend now preserves the child's mode changes. In
+    // particular, the pinned passthrough ConPTY replaces the legacy inbox
+    // renderer that consumed mouse/focus DECSET before it reached this VT.
+    // `false` remains an explicit test/embedding capability declaration; the
+    // host platform is no longer evidence that modes are hidden.
+    this.#modesObservable = options.modesObservable ?? true;
     // The emulator is built by @termwright/vt, not here: a session, its replay
     // and a screenshot of that replay must count characters identically, and
     // they only do that if one factory builds all three.
@@ -313,16 +315,12 @@ export class VtScreen {
   /**
    * Input-relevant modes, merged from `Terminal.modes` and our own tracking.
    *
-   * The input modes read `'unknown'` where the platform makes them so: the
-   * reading is then the host's state and says nothing about the child. Both
-   * ways of falsifying it are covered — a request the terminal swallowed
-   * (mouse) and a state the terminal added on its own (focus) — and in either
-   * case reporting a definite value would be a claim we cannot make, which is
-   * exactly the claim that decides whether an action is refused.
+   * Input modes read `'unknown'` only when an embedding explicitly declares
+   * them unobservable. Reporting a definite value in that case would be a
+   * claim the transport cannot support, so mode-gated actions fail closed.
    *
-   * `bracketedPaste`, the application modes and `synchronizedOutput` are not
-   * masked: the probe measured `2004` and `1049` crossing ConPTY intact, and a
-   * mode that arrives is a mode we may report.
+   * The pinned passthrough ConPTY carries the same DECSET stream as POSIX PTYs,
+   * including mouse, focus, bracketed-paste and alternate-screen modes.
    */
   modes(): TerminalModes {
     const m = this.terminal.modes;

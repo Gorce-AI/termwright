@@ -142,9 +142,9 @@ current end, so a session never replays a previous run.
 
 Defined in: [session.ts:229](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L229)
 
-Whether the child's mouse mode requests are observable. Defaults to the
-platform's answer (false under ConPTY). Framework integrations may pin the
-value when their transport has stronger knowledge than the host platform.
+Whether the child's input-mode requests are observable. Defaults to true
+for every certified backend, including pinned passthrough ConPTY. Set false
+only for an embedding or synthetic backend that cannot expose DECSET.
 
 #### Inherited from
 

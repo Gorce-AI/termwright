@@ -224,6 +224,8 @@ describe('framework candidate patch preparation', () => {
     expect(newPreparedOne.metadata.template).toEqual({ profileId: 'vt-required', selection: 'go-ast-capability', patchSetVersion: 3 });
     expect(newPreparedOne.manifest).toMatchObject({ framework: candidate.package, frameworkVersion: candidate.version, patchSetVersion: 3 });
     expect(marker).toContain('syscall.WriteConsole(s.out');
+    expect(marker).toContain('termwrightGetConsoleMode.Call(uintptr(s.out)');
+    expect(marker).toContain('termwrightSetConsoleMode.Call(uintptr(s.out)');
     expect(marker).not.toContain('s.vten');
     expect(newPreparedTwo.metadata).toEqual(newPreparedOne.metadata);
     expect(newPreparedTwo.manifest).toEqual(newPreparedOne.manifest);

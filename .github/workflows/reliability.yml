@@ -41,7 +41,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Compile the addon
         working-directory: packages/pty
-        run: pnpm exec node-gyp rebuild --arch=x64
+        run: |
+          pnpm exec node-gyp rebuild --arch=x64
+          node ../../scripts/stage-vendored-conpty.mjs --architecture x64 --destination build/Release/vendor
       - name: Place the binary in its prebuild package
         shell: bash
         run: |
@@ -52,7 +54,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: nightly-pty-addon-x64
-          path: packages/pty-win32-x64/termwright_pty.node
+          path: packages/pty-win32-x64
           if-no-files-found: error
           retention-days: 1
 

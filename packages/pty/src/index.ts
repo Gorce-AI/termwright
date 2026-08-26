@@ -10,8 +10,10 @@ import { createRequire } from "node:module";
 import { getSystemErrorName } from "node:util";
 import {
   spawnWindowsPty,
+  windowsConPtyRuntimeInfo,
   windowsPtyAvailable,
   windowsPtyUnavailableReason,
+  type WindowsConPtyRuntimeInfo,
 } from "./windows.js";
 import { NativeWriteDrainEpoch } from "./write-drain-epoch.js";
 
@@ -114,6 +116,15 @@ export interface PtyExit {
 }
 
 export type PtySignal = "INT" | "TERM" | "KILL" | "HUP";
+export type { WindowsConPtyRuntimeInfo };
+
+/** Exact provenance of the strict Windows runtime loaded by this process. */
+export function conPtyRuntimeInfo(): WindowsConPtyRuntimeInfo {
+  if (process.platform !== "win32") {
+    throw new Error("ConPTY runtime information is only available on Windows");
+  }
+  return windowsConPtyRuntimeInfo();
+}
 
 export interface PtyHandle {
   readonly pid: number;

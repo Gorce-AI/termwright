@@ -25,8 +25,11 @@ evidence about the fake.
 
 The addon owns the POSIX `forkpty()` master or Windows pseudoconsole directly.
 It observes the operating system's real output EOF, keeps writes ordered and
-owns the complete process group/job. No timer, quiet window, retry, or private
-field in another package defines lifecycle completion.
+owns the complete process group/job. Windows ships a pinned passthrough ConPTY
+beside the addon, validates its exact runtime assets, and fails closed instead
+of using an inbox conhost with non-causal frame emission. No timer, quiet
+window, retry, or private field in another package defines lifecycle
+completion.
 
 Input admission is capped at 8 MiB and fails synchronously on overflow; an OS
 write failure closes it permanently. Native output crosses a bounded event

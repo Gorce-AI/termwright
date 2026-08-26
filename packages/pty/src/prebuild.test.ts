@@ -13,6 +13,26 @@ const targets = [
   ["win32", "x64"],
 ] as const;
 
+const windowsVendorFiles = {
+  arm64: [
+    "vendor/conpty.dll",
+    "vendor/arm64/OpenConsole.exe",
+    "vendor/conpty-manifest.json",
+    "vendor/LICENSE.microsoft-terminal.txt",
+    "vendor/THIRD_PARTY_NOTICES.md",
+    "vendor/SBOM.spdx.json",
+  ],
+  x64: [
+    "vendor/conpty.dll",
+    "vendor/x64/OpenConsole.exe",
+    "vendor/arm64/OpenConsole.exe",
+    "vendor/conpty-manifest.json",
+    "vendor/LICENSE.microsoft-terminal.txt",
+    "vendor/THIRD_PARTY_NOTICES.md",
+    "vendor/SBOM.spdx.json",
+  ],
+} as const;
+
 async function manifest(path: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(fileURLToPath(new URL(path, packageRoot)), "utf8")) as Record<string, unknown>;
 }
@@ -36,7 +56,12 @@ describe("the universal PTY prebuild contract", () => {
       expect(child.os).toEqual([platform]);
       expect(child.cpu).toEqual([architecture]);
       expect(child.libc).toEqual(platform === "linux" ? ["glibc"] : undefined);
-      expect(child.files).toEqual(["termwright_pty.node"]);
+      const expectedFiles = platform === "win32"
+        ? ["termwright_pty.node", ...windowsVendorFiles[architecture]]
+        : ["termwright_pty.node"];
+      expect(child.files).toEqual(expectedFiles);
+      expect((child.termwrightBuild as { optionalArtifacts: string[] }).optionalArtifacts)
+        .toEqual(["termwright_pty.node"]);
       expect(child.exports).toEqual({ "./termwright_pty.node": "./termwright_pty.node" });
       expect(child.version).toBe(parent.version);
     }

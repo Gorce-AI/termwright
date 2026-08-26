@@ -226,7 +226,9 @@ jobs:
       # twice per architecture would only prove the compiler runs twice.
       - name: Compile
         working-directory: packages/pty
-        run: pnpm exec node-gyp rebuild --arch=x64
+        run: |
+          pnpm exec node-gyp rebuild --arch=x64
+          node ../../scripts/stage-vendored-conpty.mjs --architecture x64 --destination build/Release/vendor
 
       # Into the package that publishes it, so the layout the release job packs
       # is the layout every other job already used.
@@ -241,7 +243,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pty-addon-x64
-          path: packages/pty-win32-x64/termwright_pty.node
+          path: packages/pty-win32-x64
           if-no-files-found: error
           retention-days: 1
 
@@ -260,9 +262,14 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.4.0'
       - name: Compile natively
         working-directory: packages/pty
-        run: pnpm exec node-gyp rebuild --arch=arm64
+        run: |
+          pnpm exec node-gyp rebuild --arch=arm64
+          node ../../scripts/stage-vendored-conpty.mjs --architecture arm64 --destination build/Release/vendor
       - name: Place the binary in its prebuild package
         shell: bash
         run: |
@@ -272,20 +279,21 @@ jobs:
           node scripts/check-prebuild.mjs win32 arm64
       - run: pnpm build
       - name: Certify the real Windows ARM64 PTY contract
-        env: { TERMWRIGHT_RETRIES: '0' }
+        env:
+          TERMWRIGHT_RETRIES: '0'
+          TERMWRIGHT_REQUIRE_BUN: '1'
         run: pnpm test -- --resource-profile windows-ci --json -- --run packages/pty/src
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pty-addon-arm64
-          path: packages/pty-win32-arm64/termwright_pty.node
+          path: packages/pty-win32-arm64
           if-no-files-found: error
           retention-days: 1
 
   pty-native:
     name: native PTY backend (Windows / Node ${{ matrix.node }})
-    # 24H2, which is where ReleasePseudoConsole exists. The addon detects the
-    # symbol rather than the version, and this is the image that proves the
-    # modern path is the one taken.
+    # The consumer image exercises the exact pinned runtime built on the oldest
+    # supported compiler image; runtime identity is asserted before behavior.
     runs-on: windows-latest
     needs: pty-native-build-x64
     timeout-minutes: 30
@@ -303,6 +311,9 @@ jobs:
       - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.4.0'
       - run: pnpm build
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -310,26 +321,149 @@ jobs:
           name: pty-addon-x64
           path: packages/pty/build/Release
 
-      - name: Record which pseudoconsole path this runner takes
+      - name: Prove the pinned vendored pseudoconsole is loaded
         shell: bash
         run: |
           node -e "
-            const { ConPtySession } = require('./packages/pty/build/Release/termwright_pty.node');
+            const { ConPtySession, conPtyRuntimeInfo } = require('./packages/pty/build/Release/termwright_pty.node');
+            const runtime = conPtyRuntimeInfo();
+            console.log(runtime);
+            if (runtime.provider !== 'vendored' || runtime.version !== '1.24.260710001' || runtime.mode !== 'ordered-vt-passthrough' || runtime.assetsValidated !== true) process.exit(1);
             const s = new ConPtySession({ commandLine: process.execPath + ' -e \"process.exit(0)\"', columns: 80, rows: 24 }, () => {});
-            console.log('ReleasePseudoConsole available:', s.releaseSupported);
             s.dispose();
           "
 
       # Real pseudoconsole, real job object, real pipes. A skip here is a
       # failure: these cases exist because nothing else can prove them.
       - name: Certify the real ConPTY contract
-        env: { TERMWRIGHT_RETRIES: '0' }
+        env:
+          TERMWRIGHT_RETRIES: '0'
+          TERMWRIGHT_REQUIRE_BUN: '1'
         run: pnpm test -- --resource-profile windows-ci --json -- --run packages/pty/src
       - name: Upload Termwright failure evidence
         if: ${{ failure() || cancelled() }}
         uses: ./.github/actions/upload-termwright-runs
         with:
           artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-node-${{ matrix.node }}
+
+  pty-native-arm64:
+    name: native PTY backend (Windows ARM64 / Node ${{ matrix.node }})
+    runs-on: windows-11-arm
+    needs: pty-native-build-arm64
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-js-workspace
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.4.0'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pty-addon-arm64
+          path: packages/pty-win32-arm64
+      - run: pnpm build
+      - name: Verify the packed native ARM64 runtime
+        shell: bash
+        env:
+          TERMWRIGHT_REQUIRE_BUN: '1'
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-pty-arm64-packs"
+          install_dir="$RUNNER_TEMP/termwright-pty-arm64-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          node scripts/check-prebuild.mjs win32 arm64
+          pnpm --dir packages/pty-win32-arm64 pack --pack-destination "$pack_dir"
+          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
+          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
+          node scripts/check-installed-pty.mjs "$install_dir" --verdict packages/pty-win32-arm64/certification-verdict.json
+          node scripts/verify-windows-pty-verdict.mjs packages/pty-win32-arm64
+      - name: Certify causal ordering and lifecycle
+        env:
+          TERMWRIGHT_RETRIES: '0'
+          TERMWRIGHT_REQUIRE_BUN: '1'
+        run: pnpm test -- --resource-profile windows-ci --json -- --run packages/pty/src
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-node-${{ matrix.node }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pty-verdict-arm64-node-${{ matrix.node }}
+          path: packages/pty-win32-arm64/certification-verdict.json
+          if-no-files-found: error
+          retention-days: 7
+
+  pty-native-x64-on-arm64:
+    name: native PTY backend (Windows ARM64 / x64 Node ${{ matrix.node }})
+    runs-on: windows-11-arm
+    needs: pty-native-build-x64
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-js-workspace
+        with:
+          node-version: ${{ matrix.node }}
+          node-architecture: x64
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.4.0'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pty-addon-x64
+          path: packages/pty-win32-x64
+      - run: pnpm build
+      - name: Verify a clean x64 install selects the native ARM64 console host
+        shell: bash
+        env:
+          TERMWRIGHT_REQUIRE_BUN: '1'
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-pty-x64-packs"
+          install_dir="$RUNNER_TEMP/termwright-pty-x64-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          node scripts/check-prebuild.mjs win32 x64
+          pnpm --dir packages/pty-win32-x64 pack --pack-destination "$pack_dir"
+          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
+          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
+          node scripts/check-installed-pty.mjs "$install_dir" --verdict packages/pty-win32-x64/certification-verdict.json
+          node scripts/verify-windows-pty-verdict.mjs packages/pty-win32-x64
+      - name: Certify causal ordering and lifecycle under x64 emulation
+        env:
+          TERMWRIGHT_RETRIES: '0'
+          TERMWRIGHT_REQUIRE_BUN: '1'
+        run: pnpm test -- --resource-profile windows-ci --json -- --run packages/pty/src
+      - name: Upload Termwright failure evidence
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/upload-termwright-runs
+        with:
+          artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-node-${{ matrix.node }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pty-verdict-x64-on-arm64-node-${{ matrix.node }}
+          path: packages/pty-win32-x64/certification-verdict.json
+          if-no-files-found: error
+          retention-days: 7
 
   windows-driver-native:
     name: build windows-latest / node ${{ matrix.node }}
@@ -405,7 +539,15 @@ jobs:
           pnpm --dir packages/pty-win32-x64 pack --pack-destination "$pack_dir"
           pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
-          node scripts/check-installed-pty.mjs "$install_dir"
+          node scripts/check-installed-pty.mjs "$install_dir" --verdict packages/pty-win32-x64/certification-verdict.json
+          node scripts/verify-windows-pty-verdict.mjs packages/pty-win32-x64
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pty-verdict-x64-node-${{ matrix.node }}
+          path: packages/pty-win32-x64/certification-verdict.json
+          if-no-files-found: error
+          retention-days: 7
 
       - run: pnpm -r --filter './packages/*' run typecheck
       - name: Verify packed driver on the native PTY backend
@@ -1285,6 +1427,8 @@ jobs:
       - pty-native-build-x64
       - pty-native-build-arm64
       - pty-native
+      - pty-native-arm64
+      - pty-native-x64-on-arm64
       - windows-driver-native
       - determinism
       - concurrency-stress

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: RoleLocatorOptions
 
-Defined in: [driver/src/api.ts:511](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L511)
+Defined in: [driver/src/api.ts:508](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L508)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **exact?**: `boolean`
 
-Defined in: [driver/src/api.ts:513](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L513)
+Defined in: [driver/src/api.ts:510](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L510)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:513](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **frameworkType?**: `string` \| `RegExp`
 
-Defined in: [driver/src/api.ts:523](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L523)
+Defined in: [driver/src/api.ts:520](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L520)
 
 Narrows to nodes whose framework type matches, e.g.
 `getByRole('generic', { frameworkType: 'ScrollView' })`.
@@ -59,7 +59,7 @@ apart.
 
 > `readonly` `optional` **name?**: `string` \| `RegExp`
 
-Defined in: [driver/src/api.ts:512](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L512)
+Defined in: [driver/src/api.ts:509](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L509)
 
 ***
 
@@ -67,4 +67,4 @@ Defined in: [driver/src/api.ts:512](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **state?**: `Partial`\<`SemanticState`\>
 
-Defined in: [driver/src/api.ts:514](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L514)
+Defined in: [driver/src/api.ts:511](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L511)

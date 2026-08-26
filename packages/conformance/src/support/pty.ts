@@ -290,46 +290,40 @@ export function commandAvailable(
 }
 
 /**
- * Turns on the child's mouse reporting and reports whether the emulator can
- * see that it happened.
- *
- * ConPTY consumes the child's DECSET, so on Windows the mode reads `'unknown'`.
- * Unknown never authorizes pointer input: callers use the return value either
- * to run a positive protocol-delivery proof or to assert the typed refusal.
- *
- * @returns `true` when the mode is observable, so mode-specific claims (an
- * exact tracking level, a refusal for the wrong level) can be asserted.
+ * Turns on the child's mouse reporting and waits for the exact observed mode.
+ * Every certified PTY backend, including pinned passthrough ConPTY, carries
+ * the child's DECSET to the emulator.
  */
 export async function enableMouseReporting(
   terminal: TerminalHarness,
   mode: 'click' | 'drag',
-): Promise<boolean> {
+): Promise<void> {
   const expected = mode === 'click' ? 'vt200' : 'drag';
   await terminal.press(mode === 'click' ? 'm' : 'M');
-  await waitForTerminal(terminal, () => {
-    const tracking = terminal.screen().modes.mouseTracking;
-    return tracking === expected || tracking === 'unknown';
-  });
-  return terminal.screen().modes.mouseTracking === expected;
+  await waitForTerminal(terminal, () => terminal.screen().modes.mouseTracking === expected);
+}
+
+/** Turns mouse reporting off and waits for the observed DECSET reset. */
+export async function disableMouseReporting(terminal: TerminalHarness): Promise<void> {
+  await terminal.press('m');
+  await waitForTerminal(terminal, () => terminal.screen().modes.mouseTracking === 'none');
 }
 
 /**
- * Asks the child to enable focus reporting and reports what the emulator made
- * of it.
- *
- * Same shape as the mouse: `'on'` where the DECSET was seen, `'unknown'` where
- * the platform cannot prove the child's state — ConPTY does that — and `'off'`
- * only while the request is still in flight. Unknown requires a typed refusal;
- * it is never treated as permission to send a focus report.
+ * Asks the child to enable focus reporting and waits until DECSET 1004 is
+ * observed through owned checkpoint changes.
  */
 export async function enableFocusReporting(
   terminal: TerminalHarness,
-): Promise<'on' | 'off' | 'unknown'> {
+): Promise<void> {
   await terminal.press('f');
-  await waitForTerminal(terminal, () => terminal.screen().modes.focusReporting !== 'off', 3_000).catch(
-    () => undefined,
-  );
-  return terminal.screen().modes.focusReporting;
+  await waitForTerminal(terminal, () => terminal.screen().modes.focusReporting === 'on');
+}
+
+/** Turns focus reporting off and waits for the observed DECSET reset. */
+export async function disableFocusReporting(terminal: TerminalHarness): Promise<void> {
+  await terminal.press('f');
+  await waitForTerminal(terminal, () => terminal.screen().modes.focusReporting === 'off');
 }
 
 /**
@@ -374,16 +368,6 @@ export function diagnosticTally(terminal: TerminalHarness): string {
     counts.set(entry.code, (counts.get(entry.code) ?? 0) + 1);
   }
   return [...counts].map(([code, count]) => `${code}×${count}`).join(', ') || 'none';
-}
-
-/** What the emulator currently makes of the child's focus-reporting request. */
-export function focusMode(terminal: TerminalHarness): 'on' | 'off' | 'unknown' {
-  return terminal.screen().modes.focusReporting;
-}
-
-/** True while the emulator cannot see which mouse mode the child asked for. */
-export function mouseModeHidden(terminal: TerminalHarness): boolean {
-  return terminal.screen().modes.mouseTracking === 'unknown';
 }
 
 /** Waits on the driver's owned observation generation until a predicate holds. */

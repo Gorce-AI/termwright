@@ -766,6 +766,8 @@ it("uses a causal handshake redraw and the screen's own marker writer", async ()
   );
   expect(windows).toContain("b.screenImpl.(*cScreen)");
   expect(windows).toContain("if !s.vten");
+  expect(windows).toContain("termwrightGetConsoleMode.Call(uintptr(s.out)");
+  expect(windows).toContain("termwrightSetConsoleMode.Call(uintptr(s.out)");
   expect(windows).toContain("syscall.WriteConsole(s.out");
   expect(windows).not.toContain("os.Stdout");
   expect(windowsTest).toContain("screen, err := NewConsoleScreen()");
@@ -796,6 +798,8 @@ describe.skipIf(!hasGo)("the Windows tcell companion", () => {
     expect(workspace).toContain("replace github.com/gdamore/tcell/v2 =>");
     expect(prepared.tcellCopyDir).toContain("v2.8.1");
     expect(hook).toContain("syscall.WriteConsole(s.out");
+    expect(hook).toContain("termwrightGetConsoleMode.Call(uintptr(s.out)");
+    expect(hook).toContain("termwrightSetConsoleMode.Call(uintptr(s.out)");
     await run("go", ["build", "-o", join(dir, "fixture.exe"), "."], {
       cwd: app,
       env: {
