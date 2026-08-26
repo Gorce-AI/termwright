@@ -9,7 +9,9 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { canonicalJson, compareVersions, downloadVerifiedNpmTarball, resolveNpmSource, trustedGoEnvironment } from './discover-framework-candidates.mjs';
-import { digestTree, materializeCandidateSource, preparePatchBundle, proposeCompatibilityUpdate, recordExecutableVariant } from './prepare-framework-candidate.mjs';
+import { digestTree, materializeCandidateSource, preparePatchBundle, proposeCompatibilityUpdate, recordExecutableVariant, removeMaterializedCandidateSource } from './prepare-framework-candidate.mjs';
+import { pnpmInvocation } from './package-manager-command.mjs';
+import { finishWithCleanups } from './cleanup-resources.mjs';
 import { safeExtractTarGz } from './safe-tar.mjs';
 
 const exec = promisify(execFile);
@@ -55,6 +57,11 @@ async function run(command, args, env = process.env, cwd = root) {
     const detail = [error instanceof Error ? error.message : String(error), stdout, stderr].filter(Boolean).join('\n');
     throw new Error(detail, { cause: error });
   }
+}
+
+async function runPnpm(args, env = process.env, cwd = root) {
+  const invocation = pnpmInvocation(args, { env });
+  return run(invocation.command, invocation.args, env, cwd);
 }
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -557,13 +564,13 @@ async function main(argv) {
             else process.env[key] = value;
           }
         }
-        await run('pnpm', ['--filter', probe, 'add', '--save-dev', '--save-exact', '--lockfile=false', '--ignore-scripts', archive], certificationEnv);
+        await runPnpm(['--filter', probe, 'add', '--save-dev', '--save-exact', '--lockfile=false', '--ignore-scripts', archive], certificationEnv);
         if (candidate.monitorDependencyClosure === true) {
           await verifyInstalledNpmClosure(candidate, join(root, `packages/probe-${candidate.frameworkId}`));
         }
         if (candidate.frameworkId === 'opentui') await run('bun', ['--version'], certificationEnv);
-        await run('pnpm', ['--filter', probe, 'run', 'test'], certificationEnv);
-        await run('pnpm', ['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], certificationEnv);
+        await runPnpm(['--filter', probe, 'run', 'test'], certificationEnv);
+        await runPnpm(['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], certificationEnv);
       } else if (candidate.registry === 'pypi') {
         await run('python', ['-m', 'pip', 'install', `${candidate.source.url}#sha256=${candidate.source.sha256}`]);
         const certificationEnv = {
@@ -576,7 +583,7 @@ async function main(argv) {
           TERMWRIGHT_REQUIRE_RATATUI: '1',
         };
         await run('python', ['-m', 'pytest', 'clients/python/tests'], certificationEnv);
-        await run('pnpm', ['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], certificationEnv);
+        await runPnpm(['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], certificationEnv);
       } else {
         throw new Error(`${candidate.id}: unsupported hook registry ${candidate.registry}`);
       }
@@ -592,13 +599,22 @@ async function main(argv) {
     let preparedUpdate;
     if (candidate.patch.status === 'needs-patch') {
       const updateDirectory = await mkdtemp(join(tmpdir(), 'termwright-candidate-update-'));
-      const sourceRoot = await materializeCandidateSource(candidate);
+      const sourceLease = await materializeCandidateSource(candidate);
       let prepared;
+      let hasPreparationError = false;
+      let preparationError;
       try {
-        prepared = await preparePatchBundle({ rootDir: root, candidate, sourceRoot, outputDirectory: updateDirectory, sourceRevision: revision });
-      } finally {
-        await rm(dirname(sourceRoot), { recursive: true, force: true });
+        prepared = await preparePatchBundle({ rootDir: root, candidate, sourceRoot: sourceLease.sourceRoot, outputDirectory: updateDirectory, sourceRevision: revision });
+      } catch (error) {
+        hasPreparationError = true;
+        preparationError = error;
       }
+      await finishWithCleanups({
+        hasPrimary: hasPreparationError,
+        primaryError: preparationError,
+        cleanups: [async () => removeMaterializedCandidateSource(sourceLease)],
+        message: `${candidate.id}: patch preparation and source cleanup failed`,
+      });
       preparedUpdate = {
         directory: updateDirectory,
         bundle: await readFile(join(updateDirectory, 'bundle.json')),
@@ -628,8 +644,8 @@ async function main(argv) {
     verifyCandidateEvidence(candidate, JSON.parse(await readFile(join(evidenceDirectory, 'candidate-report.json'), 'utf8')), behavioral);
     proposedRegistry = recordExecutableVariant(proposedRegistry, candidate, behavioral.resolution);
     await writeFile(join(root, 'compatibility/registry.json'), canonicalJson(proposedRegistry));
-    await run('pnpm', ['run', 'test:compatibility']);
-    await run('pnpm', ['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' });
+    await runPnpm(['run', 'test:compatibility']);
+    await runPnpm(['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' });
     if (preparedUpdate !== undefined) await verifyPreparedUpdateInvariant(preparedUpdate);
     await writeVerdict(output, candidate, 'green', 'Exact source, deterministic patching, candidate-specific real-process behavior, and full conformance passed.', revision, behavioral.resolution);
   } catch (error) {

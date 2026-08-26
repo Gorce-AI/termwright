@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pnpmInvocation } from './package-manager-command.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -41,15 +42,13 @@ function waitForExit(child) {
 /** Runs every public example with skips promoted to failures on every platform. */
 export async function runRequiredExamples(options = {}) {
   const spawnProcess = options.spawnProcess ?? spawn;
-  const npmExecPath = options.npmExecPath ?? process.env['npm_execpath'];
   const platform = options.platform ?? process.platform;
   const env = {
     ...process.env,
     ...options.env,
     TERMWRIGHT_REQUIRE_EXAMPLES: '1',
   };
-  const command = npmExecPath ? process.execPath : platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-  const args = npmExecPath ? [npmExecPath, ...requiredExampleArguments] : [...requiredExampleArguments];
+  const { command, args } = pnpmInvocation(requiredExampleArguments, { env, platform });
   await waitForExit(spawnProcess(command, args, { cwd: repositoryRoot, env, stdio: 'inherit' }));
 }
 

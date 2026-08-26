@@ -5,16 +5,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
+import { pnpmInvocation } from './package-manager-command.mjs';
 
 const exec = promisify(execFile);
 // `URL.pathname` yields "/D:/a/repo" on Windows, which is not a usable path.
 const root = fileURLToPath(new URL('..', import.meta.url));
-// Node refuses to spawn a .cmd without a shell on Windows (the mitigation for
-// CVE-2024-27980), and without one it cannot find pnpm at all because
-// execFile does not consult PATHEXT. Both arguments below are literals owned
-// by this test, so enabling the shell here introduces no injection surface.
-const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const PNPM_OPTIONS = process.platform === 'win32' ? { shell: true } : {};
+const pnpm = pnpmInvocation([], { env: process.env });
 const scratch = [];
 
 afterEach(async () => {
@@ -30,7 +26,7 @@ describe('published protocol subpath exports', () => {
     await mkdir(archiveDirectory, { recursive: true });
     await mkdir(packageDirectory, { recursive: true });
 
-    await exec(PNPM, ['--dir', 'packages/protocol', 'pack', '--pack-destination', archiveDirectory], { cwd: root, ...PNPM_OPTIONS });
+    await exec(pnpm.command, [...pnpm.args, '--dir', 'packages/protocol', 'pack', '--pack-destination', archiveDirectory], { cwd: root });
     const archive = (await readdir(archiveDirectory)).find((name) => name.endsWith('.tgz'));
     expect(archive).toBeDefined();
     // The tar on Windows runners is GNU tar, which reads a colon in a path
