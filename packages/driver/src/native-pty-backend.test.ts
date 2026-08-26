@@ -98,6 +98,24 @@ describe("the native PTY driver adapter", () => {
     expect(process.treeState?.()).toBe("gone");
   });
 
+  it("preserves a native POSIX signal errno for lifecycle reconciliation", () => {
+    const refusal = Object.assign(new Error("kill(PTY process group) failed"), {
+      code: "EPERM",
+      errno: 1,
+    });
+    const process = createNativePtyBackend(() => fakeSession({
+      signal: () => { throw refusal; },
+    }), "darwin").spawn({ command: ["/app"], env: {}, columns: 80, rows: 24 });
+
+    let observed: unknown;
+    try {
+      process.signal("HUP");
+    } catch (error) {
+      observed = error;
+    }
+    expect(observed).toBe(refusal);
+  });
+
   it("disposes the session and all four native subscriptions exactly once", () => {
     const releases = [vi.fn(), vi.fn(), vi.fn(), vi.fn()];
     const session = fakeSession({

@@ -516,10 +516,15 @@ bool PosixSession::Resize(unsigned short columns, unsigned short rows) {
   return ioctl(master, TIOCSWINSZ, &size) == 0;
 }
 
-bool PosixSession::Signal(int signal) {
-  if (pid_ <= 0 || disposed_.load()) return false;
-  if (kill(-pid_, signal) == 0) return true;
-  return errno == ESRCH;
+int PosixSession::Signal(int signal) {
+  if (pid_ <= 0 || disposed_.load()) return EBADF;
+  if (kill(-pid_, signal) == 0) return 0;
+  const int code = errno;
+  // A process group that is already gone satisfies the lifecycle request.
+  // Preserve every other errno for the supervisor: Darwin can report EPERM
+  // while the root is an unreaped zombie, and only later exit/tree evidence is
+  // allowed to decide whether that refusal was harmless.
+  return code == ESRCH ? 0 : code;
 }
 
 int PosixSession::TreeState() const {
