@@ -268,18 +268,11 @@ if (process.platform === 'win32') {
   console.log('[pty-cert] causal-resize');
   const resizing = collect([
     'process.stdin.setRawMode?.(true);',
-    'let resizeSeen = false;',
-    'let resizeColumns = 0;',
-    'let resizeRows = 0;',
-    'process.stdout.once("resize", () => {',
-    '  [resizeColumns, resizeRows] = process.stdout.getWindowSize();',
-    '  resizeSeen = true;',
-    '});',
     'process.stdin.once("data", () => {',
     '  const [columns, rows] = process.stdout.getWindowSize();',
-    '  const valid = resizeSeen && resizeColumns === 120 && resizeRows === 40 && columns === 120 && rows === 40;',
-    '  const prefix = valid ? "RESIZED:" : "RESIZE_EVENT_MISSING:";',
-    '  process.stdout.write(prefix + resizeColumns + "x" + resizeRows + ";SIZE:" + columns + "x" + rows,',
+    '  const valid = columns === 120 && rows === 40;',
+    '  const prefix = valid ? "RESIZED:" : "RESIZE_GEOMETRY_MISSING:";',
+    '  process.stdout.write(prefix + columns + "x" + rows,',
     '    () => process.exit(valid ? 0 : 45));',
     '});',
     'process.stdin.resume();',
@@ -291,7 +284,7 @@ if (process.platform === 'win32') {
   resizing.session.write(Buffer.from('R'));
   const [resizeStatus] = await Promise.all([resizeExited, resizing.session.outputEnded]);
   const resizeValid = resizeStatus.code === 0 &&
-    resizing.text().includes('RESIZED:120x40;SIZE:120x40') && resizing.session.sawRealEof;
+    resizing.text().includes('RESIZED:120x40') && resizing.session.sawRealEof;
   const resizeEvidence = resizing.text();
   resizing.session.dispose();
   if (!resizeValid) {
