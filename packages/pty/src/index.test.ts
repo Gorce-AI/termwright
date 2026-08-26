@@ -216,35 +216,77 @@ describe("the Termwright-owned native PTY flow control", () => {
   });
 
   it("publishes drain only after every admitted input byte is written", async () => {
-    // This test proves queue ordering, not terminal throughput. A separate
-    // capacity test fills the full 8 MiB queue and the output-pressure test
-    // saturates the native-to-JS channel.
-    const bytes = 64 * 1024;
-    const session = collect(node([
-      "process.stdin.setRawMode(true);",
-      "process.stdin.resume();",
-      "let received = 0;",
-      "process.stdout.write('READY');",
-      "process.stdin.on('data', chunk => {",
-      "received += chunk.length;",
-      `if (received >= ${bytes}) { process.stdout.write('INPUT_DRAINED'); process.exit(0); }`,
-      "});",
-    ].join("")));
-    await waitForText(session.handle, session.chunks, "READY");
-    let drained = false;
-    const drain = new Promise<void>((resolve) => {
-      const release = session.handle.onDrain(() => {
-        drained = true;
-        release();
-        resolve();
-      });
+    const bytes = 7 * 1024 * 1024;
+    const server = createServer();
+    const controlConnected = new Promise<import("node:net").Socket>((resolve) => {
+      server.once("connection", resolve);
     });
-    session.handle.write(Buffer.alloc(bytes, 0x62));
-    expect(drained).toBe(false);
-    await drain;
-    await Promise.all([session.exit, session.handle.outputEnded]);
-    expect(session.text()).toContain("INPUT_DRAINED");
-    session.handle.dispose();
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    let session: ReturnType<typeof collect> | undefined;
+    let control: import("node:net").Socket | undefined;
+    try {
+      const address = server.address();
+      if (address === null || typeof address === "string")
+        throw new Error("drain control server has no TCP port");
+      session = collect(node([
+        "const net = require('node:net');",
+        "process.stdin.setRawMode(true);",
+        "process.stdin.pause();",
+        "let received = 0;",
+        `const control = net.connect(${address.port}, '127.0.0.1', () => process.stdout.write('READY'));`,
+        "control.on('data', command => {",
+        "if (command.includes('PROBE')) control.write('PAUSED');",
+        "if (command.includes('CONSUME')) process.stdin.resume();",
+        "if (command.includes('EXIT')) process.exit(0);",
+        "});",
+        "process.stdin.on('data', chunk => {",
+        "received += chunk.length;",
+        `if (received === ${bytes}) process.stdout.write('INPUT_DRAINED');`,
+        "});",
+      ].join("")));
+      await waitForText(session.handle, session.chunks, "READY");
+      let drained = false;
+      const drain = new Promise<void>((resolve, reject) => {
+        const releases: Array<() => void> = [];
+        const settle = (outcome: () => void): void => {
+          for (const release of releases.splice(0)) release();
+          outcome();
+        };
+        releases.push(session!.handle.onDrain(() => {
+          drained = true;
+          settle(resolve);
+        }));
+        releases.push(session!.handle.onError((error) => settle(() => reject(error))));
+        releases.push(session!.handle.onExit((status) => settle(() => reject(new Error(
+          `PTY exited before input drain: ${JSON.stringify(status)}`,
+        )))));
+      });
+      session.handle.write(Buffer.alloc(bytes, 0x62));
+      control = await controlConnected;
+      const paused = new Promise<void>((resolve, reject) => {
+        control!.once("data", (data) => data.toString() === "PAUSED"
+          ? resolve()
+          : reject(new Error(`unexpected drain-control response: ${JSON.stringify(data.toString())}`)));
+        control!.once("error", reject);
+      });
+      control.write("PROBE");
+      await paused;
+      expect(drained).toBe(false);
+      control.write("CONSUME");
+      await drain;
+      await waitForText(session.handle, session.chunks, "INPUT_DRAINED");
+      control.write("EXIT");
+      await Promise.all([session.exit, session.handle.outputEnded]);
+    } finally {
+      session?.handle.dispose();
+      control?.destroy();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error === undefined ? resolve() : reject(error));
+      });
+    }
   });
 
   it("rejects input after the authoritative output end", async () => {
@@ -274,7 +316,8 @@ describe("the Termwright-owned native PTY flow control", () => {
     let cursor = 0;
     for (let index = 0; index < frameCount; index += 1) {
       const start = output.indexOf(prefix, cursor);
-      expect(start).toBeGreaterThanOrEqual(cursor);
+      if (process.platform === "win32") expect(start).toBeGreaterThanOrEqual(cursor);
+      else expect(start).toBe(cursor);
       const end = output.indexOf(0x07, start + prefix.length);
       expect(end).toBeGreaterThan(start);
       const body = output.subarray(start + prefix.length, end);
@@ -287,7 +330,11 @@ describe("the Termwright-owned native PTY flow control", () => {
     }
     expect(output.indexOf(prefix, cursor)).toBe(-1);
     const sentinelIndex = output.indexOf(sentinel, cursor);
-    expect(sentinelIndex).toBeGreaterThanOrEqual(cursor);
+    if (process.platform === "win32") expect(sentinelIndex).toBeGreaterThanOrEqual(cursor);
+    else {
+      expect(sentinelIndex).toBe(cursor);
+      expect(sentinelIndex + sentinel.length).toBe(output.length);
+    }
     expect(sentinelIndex).toBe(output.lastIndexOf(sentinel));
     expect(session.handle.sawRealEof).toBe(true);
     session.handle.dispose();

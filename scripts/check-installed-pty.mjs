@@ -28,6 +28,7 @@ if (installDirectory === undefined) {
 }
 
 const probe = `
+const { createServer } = await import('node:net');
 const pty = await import('@termwright/pty');
 if (!pty.ptyAvailable()) {
   console.error('resolved no addon: ' + (pty.ptyUnavailableReason?.() ?? 'no reason reported'));
@@ -107,29 +108,64 @@ if (!overflowRejected) {
 // Drain must follow every admitted byte leaving the native queue, and the
 // child must observe all of it. This exercises the platform writer rather than
 // only proving that the addon can be loaded.
-const inputBytes = 64 * 1024;
+const inputBytes = 7 * 1024 * 1024;
 console.log('[pty-cert] drain');
+const controlServer = createServer();
+const controlConnected = new Promise((resolve) => controlServer.once('connection', resolve));
+await new Promise((resolve, reject) => {
+  controlServer.once('error', reject);
+  controlServer.listen(0, '127.0.0.1', resolve);
+});
+const controlAddress = controlServer.address();
+if (controlAddress === null || typeof controlAddress === 'string') {
+  console.error('the drain control server has no TCP port');
+  process.exit(7);
+}
 const draining = collect([
+  'const net = require("node:net");',
   'process.stdin.setRawMode?.(true);',
-  'process.stdin.resume();',
+  'process.stdin.pause();',
   'let received = 0;',
-  'process.stdout.write("READY");',
+  'const control = net.connect(' + controlAddress.port + ', "127.0.0.1", () => process.stdout.write("READY"));',
+  'control.on("data", command => {',
+  '  if (command.includes("PROBE")) control.write("PAUSED");',
+  '  if (command.includes("CONSUME")) process.stdin.resume();',
+  '  if (command.includes("EXIT")) process.exit(0);',
+  '});',
   'process.stdin.on("data", chunk => {',
   '  received += chunk.length;',
-  '  if (received >= ' + inputBytes + ') { process.stdout.write("INPUT_DRAINED"); process.exit(0); }',
+  '  if (received === ' + inputBytes + ') process.stdout.write("INPUT_DRAINED");',
   '});',
 ].join(''));
 await waitForText(draining, 'READY');
+const control = await controlConnected;
+let drainPublished = false;
 const drained = new Promise((resolve) => {
-  const release = draining.session.onDrain(() => { release(); resolve(); });
+  const release = draining.session.onDrain(() => { drainPublished = true; release(); resolve(); });
 });
 draining.session.write(Buffer.alloc(inputBytes, 0x62));
-await Promise.all([drained, draining.session.outputEnded]);
+const paused = new Promise((resolve, reject) => control.once('data', (data) => {
+  if (data.toString() === 'PAUSED') resolve();
+  else reject(new Error('unexpected drain-control response: ' + JSON.stringify(data.toString())));
+}));
+control.write('PROBE');
+await paused;
+if (drainPublished) {
+  console.error('the installed addon published drain while native input was still blocked');
+  process.exit(7);
+}
+control.write('CONSUME');
+await drained;
+await waitForText(draining, 'INPUT_DRAINED');
+control.write('EXIT');
+await draining.session.outputEnded;
 if (!draining.text().includes('INPUT_DRAINED') || !draining.session.sawRealEof) {
   console.error('the installed addon did not drain admitted input before owned EOF');
   process.exit(7);
 }
 draining.session.dispose();
+control.destroy();
+await new Promise((resolve, reject) => controlServer.close((error) => error === undefined ? resolve() : reject(error)));
 
 // Drive a burst several times larger than the bounded native-to-JavaScript
 // queue's maximum represented byte volume and prove every framed application
@@ -159,7 +195,8 @@ for (let index = 0; index < pressureFrameCount; index += 1) {
   const end = start < 0 ? -1 : pressureOutput.indexOf(0x07, start + pressurePrefix.length);
   const body = end < 0 ? Buffer.alloc(0) : pressureOutput.subarray(start + pressurePrefix.length, end);
   const header = index.toString(16).padStart(8, '0') + ';';
-  if (start < pressureCursor || end <= start || body.length !== 9 + pressureFrameBytes ||
+  const startIsValid = process.platform === 'win32' ? start >= pressureCursor : start === pressureCursor;
+  if (!startIsValid || end <= start || body.length !== 9 + pressureFrameBytes ||
       body.subarray(0, 9).toString('ascii') !== header ||
       !body.subarray(9).every((byte) => byte === 0x71)) {
     pressureValid = false;
@@ -168,8 +205,11 @@ for (let index = 0; index < pressureFrameCount; index += 1) {
   pressureCursor = end + 1;
 }
 const sentinelIndex = pressureOutput.indexOf(pressureSentinel, pressureCursor);
+const sentinelIsValid = process.platform === 'win32'
+  ? sentinelIndex >= pressureCursor
+  : sentinelIndex === pressureCursor && sentinelIndex + pressureSentinel.length === pressureOutput.length;
 pressureValid &&= pressureOutput.indexOf(pressurePrefix, pressureCursor) === -1 &&
-  sentinelIndex >= pressureCursor && sentinelIndex === pressureOutput.lastIndexOf(pressureSentinel);
+  sentinelIsValid && sentinelIndex === pressureOutput.lastIndexOf(pressureSentinel);
 if (!pressureValid || !pressure.session.sawRealEof) {
   console.error('the installed addon lost its final output under channel pressure');
   process.exit(8);
