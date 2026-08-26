@@ -263,26 +263,36 @@ if (process.platform === 'win32') {
   console.log('[pty-cert] causal-resize');
   const resizing = collect([
     'process.stdin.setRawMode?.(true);',
+    'let resizeSeen = false;',
+    'let resizeColumns = 0;',
+    'let resizeRows = 0;',
     'process.stdout.once("resize", () => {',
-    '  const [columns, rows] = process.stdout.getWindowSize();',
-    '  process.stdout.write("RESIZED:" + columns + "x" + rows);',
+    '  [resizeColumns, resizeRows] = process.stdout.getWindowSize();',
+    '  resizeSeen = true;',
     '});',
     'process.stdin.once("data", () => {',
     '  const [columns, rows] = process.stdout.getWindowSize();',
-    '  process.stdout.write("SIZE:" + columns + "x" + rows);',
-    '  process.exit(0);',
+    '  const valid = resizeSeen && resizeColumns === 120 && resizeRows === 40 && columns === 120 && rows === 40;',
+    '  const prefix = valid ? "RESIZED:" : "RESIZE_EVENT_MISSING:";',
+    '  process.stdout.write(prefix + resizeColumns + "x" + resizeRows + ";SIZE:" + columns + "x" + rows,',
+    '    () => process.exit(valid ? 0 : 45));',
     '});',
     'process.stdin.resume();',
     'process.stdout.write("RESIZE-READY");',
   ].join(''));
   await waitForText(resizing, 'RESIZE-READY');
+  const resizeExited = new Promise((resolve) => resizing.session.onExit(resolve));
   if (!resizing.session.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
-  await waitForText(resizing, 'RESIZED:120x40');
   resizing.session.write(Buffer.from('R'));
-  await resizing.session.outputEnded;
-  const resizeValid = resizing.text().includes('SIZE:120x40') && resizing.session.sawRealEof;
+  const [resizeStatus] = await Promise.all([resizeExited, resizing.session.outputEnded]);
+  const resizeValid = resizeStatus.code === 0 &&
+    resizing.text().includes('RESIZED:120x40;SIZE:120x40') && resizing.session.sawRealEof;
+  const resizeEvidence = resizing.text();
   resizing.session.dispose();
-  if (!resizeValid) throw new Error('resize did not become visible before the following child input');
+  if (!resizeValid) {
+    throw new Error('resize did not become visible before the following child input: ' +
+      JSON.stringify({ status: resizeStatus, output: resizeEvidence }));
+  }
 
   console.log('[pty-cert] split-production-marker');
   const splitMarker = collect([
