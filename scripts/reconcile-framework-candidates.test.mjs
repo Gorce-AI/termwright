@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { digestTree } from './prepare-framework-candidate.mjs';
-import { canonicalJson } from './discover-framework-candidates.mjs';
+import { canonicalJson, selectCandidates } from './discover-framework-candidates.mjs';
 import { addCertifiedRuntimeProfile, reconcile, recordVerifiedFrameworkVersion, renderCertifiedTextualVersions, renderExactPeerRange, sameHookProfile, verifyGeneratedHookProfile, verifyGeneratedRuntimeProfile, verifyGeneratedUpdate } from './reconcile-framework-candidates.mjs';
 
-const candidate = { id: 'example@2.1.1', streamId: 'example', package: 'example', version: '2.1.1', publishedAt: '2026-01-03T00:00:00Z', source: { checksum: 'a'.repeat(64) }, patch: { status: 'ready', path: 'patches/2.1.1/manifest.json', manifestDigest: `sha256:${'b'.repeat(64)}` }, candidateDigest: `sha256:${'c'.repeat(64)}` };
+const candidate = { id: 'example@2.1.1', streamId: 'example', package: 'example', version: '2.1.1', certificationRevision: 1, publishedAt: '2026-01-03T00:00:00Z', source: { checksum: 'a'.repeat(64) }, patch: { status: 'ready', path: 'patches/2.1.1/manifest.json', manifestDigest: `sha256:${'b'.repeat(64)}` }, candidateDigest: `sha256:${'c'.repeat(64)}` };
 
 describe('framework candidate reconciliation', () => {
   it('compares exact-source Ink profiles canonically without OpenTUI chunk machinery', () => {
@@ -59,9 +59,100 @@ describe('framework candidate reconciliation', () => {
   it('keeps a red candidate out of the ledger and produces a stable issue key', () => {
     const result = reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [{ candidateId: candidate.id, candidateDigest: candidate.candidateDigest, state: 'red', detail: 'failed' }], { runUrl: 'https://github.com/owner/repo/actions/runs/1', owner: 'owner' });
     expect(result.ledger.streams).toEqual({});
+    expect(result.assessments.streams.example).toEqual([{
+      state: 'red',
+      version: candidate.version,
+      certificationRevision: 1,
+      candidateDigest: candidate.candidateDigest,
+      source: candidate.source,
+    }]);
     expect(result.plan.issues[0].key).toBe(candidate.id);
     expect(result.plan.issues[0]).toMatchObject({ owner: 'owner' });
     expect(result.plan.issues[0].body).toContain('https://github.com/owner/repo/actions/runs/1');
+    expect(result.plan.issues[0].body).toContain('Certification revision: `1`');
+    expect(result.plan.issues[0].body).toContain('increment `certificationRevision` for stream `example`');
+  });
+
+  it('records red assessments separately while promoting green candidates in the same batch', () => {
+    const green = { ...candidate, id: 'green@2.1.2', streamId: 'green', version: '2.1.2', candidateDigest: `sha256:${'d'.repeat(64)}` };
+    const result = reconcile(
+      { candidates: [candidate, green] },
+      { schemaVersion: 1, streams: {} },
+      [
+        { candidateId: candidate.id, candidateDigest: candidate.candidateDigest, state: 'red', detail: 'failed' },
+        { candidateId: green.id, candidateDigest: green.candidateDigest, state: 'green', detail: 'ok' },
+      ],
+      { runUrl: 'https://github.com/owner/repo/actions/runs/4', owner: 'owner' },
+    );
+    expect(result.ledger.streams.green).toHaveLength(1);
+    expect(result.ledger.streams.example).toBeUndefined();
+    expect(result.assessments.streams.example).toHaveLength(1);
+    expect(result.assessments.streams.green).toBeUndefined();
+    expect(result.plan.green).toEqual([green.id]);
+    expect(result.plan.issues.map((entry) => entry.key)).toEqual([candidate.id]);
+  });
+
+  it('removes a superseded red assessment only after that version turns green', () => {
+    const assessments = { schemaVersion: 1, streams: { example: [{
+      state: 'red',
+      version: candidate.version,
+      certificationRevision: 1,
+      candidateDigest: `sha256:${'d'.repeat(64)}`,
+      source: candidate.source,
+    }] } };
+    const result = reconcile(
+      { candidates: [candidate] },
+      { schemaVersion: 1, streams: {} },
+      [{ candidateId: candidate.id, candidateDigest: candidate.candidateDigest, state: 'green', detail: 'ok' }],
+      { assessments },
+    );
+    expect(result.ledger.streams.example).toHaveLength(1);
+    expect(result.assessments.streams).toEqual({});
+  });
+
+  it('round-trips a red assessment through discovery and admits it again after a certifier revision bump', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-assessment-roundtrip-'));
+    const stream = {
+      id: 'example',
+      frameworkId: 'example',
+      ecosystem: 'rust',
+      registry: 'crates.io',
+      package: 'example',
+      certificationRevision: 1,
+      minimumVersion: '2.0.0',
+      major: 2,
+      patchRoot: 'patches/example',
+    };
+    const config = { maxCandidatesPerRun: 1, streams: [stream] };
+    const catalogs = { example: [{ version: '2.1.1', publishedAt: '2026-01-03T00:00:00Z', source: { checksum: 'a'.repeat(64) } }] };
+    const discovered = await selectCandidates({ rootDir: directory, config, ledger: { streams: {} }, catalogs });
+    const exact = discovered.candidates[0];
+    const red = reconcile(
+      discovered,
+      { schemaVersion: 1, streams: {} },
+      [{ candidateId: exact.id, candidateDigest: exact.candidateDigest, state: 'red', detail: 'failed' }],
+      { runUrl: 'https://github.com/owner/repo/actions/runs/5', owner: 'owner' },
+    );
+    const skipped = await selectCandidates({ rootDir: directory, config, ledger: red.ledger, assessments: red.assessments, catalogs });
+    expect(skipped.candidates).toEqual([]);
+
+    const revised = await selectCandidates({
+      rootDir: directory,
+      config: { ...config, streams: [{ ...stream, certificationRevision: 2 }] },
+      ledger: red.ledger,
+      assessments: red.assessments,
+      catalogs,
+    });
+    expect(revised.candidates).toHaveLength(1);
+    const revisedCandidate = revised.candidates[0];
+    const green = reconcile(
+      revised,
+      red.ledger,
+      [{ candidateId: revisedCandidate.id, candidateDigest: revisedCandidate.candidateDigest, state: 'green', detail: 'ok' }],
+      { assessments: red.assessments },
+    );
+    expect(green.ledger.streams.example).toHaveLength(1);
+    expect(green.assessments.streams).toEqual({});
   });
 
   it('does not prescribe a source patch for a runtime or hook candidate', () => {

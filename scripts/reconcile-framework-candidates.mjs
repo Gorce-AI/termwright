@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { access, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { canonicalJson, compareVersions } from './discover-framework-candidates.mjs';
+import { canonicalJson, compareVersions, validateCandidateAssessments } from './discover-framework-candidates.mjs';
 import { digestTree } from './prepare-framework-candidate.mjs';
 import { proposeCompatibilityUpdate, recordExecutableVariant } from './prepare-framework-candidate.mjs';
 
@@ -39,6 +39,7 @@ async function generatedUpdateDirectories(directory) {
 }
 
 export function reconcile(registry, ledger, verdicts, context = {}) {
+  const assessments = validateCandidateAssessments(context.assessments ?? { schemaVersion: 1, streams: {} });
   const candidates = new Map(registry.candidates.map((entry) => [entry.id, entry]));
   const byCandidate = new Map();
   for (const verdict of verdicts) {
@@ -60,6 +61,8 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
   }
   const next = structuredClone(ledger);
   next.streams ??= {};
+  const nextAssessments = structuredClone(assessments);
+  nextAssessments.streams ??= {};
   const issues = [];
   for (const candidate of registry.candidates) {
     const verdict = byCandidate.get(candidate.id);
@@ -71,6 +74,10 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
       else if (entries[existing].candidateDigest !== candidate.candidateDigest) entries[existing] = record;
       entries.sort((a, b) => compareVersions(a.version, b.version));
       next.streams[candidate.streamId] = entries;
+      const assessed = nextAssessments.streams[candidate.streamId] ?? [];
+      const remaining = assessed.filter((entry) => entry.version !== candidate.version);
+      if (remaining.length === 0) delete nextAssessments.streams[candidate.streamId];
+      else nextAssessments.streams[candidate.streamId] = remaining;
     } else {
       if (typeof context.runUrl !== 'string' || !/^https:\/\//u.test(context.runUrl)) throw new Error(`${candidate.id}: failure issue requires an authenticated source run URL`);
       if (typeof context.owner !== 'string' || !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u.test(context.owner)) throw new Error(`${candidate.id}: failure issue requires a repository owner`);
@@ -82,6 +89,7 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
           `Upstream published \`${candidate.package}@${candidate.version}\`.`,
           '',
           `Candidate digest: \`${candidate.candidateDigest}\``,
+          `Certification revision: \`${candidate.certificationRevision}\``,
           `Published: ${candidate.publishedAt}`,
           `Integration mode: \`${candidate.mode}\``,
           ...(candidate.mode === 'hook' ? [`Hook strategy: \`${candidate.hookStrategy}\``] : []),
@@ -101,11 +109,31 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
               : candidate.patch.status === 'needs-patch'
                 ? 'The compatibility registry is unchanged. Prepare an exact checksummed structural patch, then rerun the workflow. A PR is created only after every gate passes without a missing conformance area.'
                 : 'The compatibility registry is unchanged. Review the existing exact patch and behavioral failure, then rerun only after the incompatibility is fixed. A PR is created only after every gate passes without a missing conformance area.',
+          '',
+          `This exact red candidate is recorded and will not be retried unchanged. If the adapter or certifier changes without changing the upstream source or patch digest, increment \`certificationRevision\` for stream \`${candidate.streamId}\` before starting a new first-attempt workflow run.`,
         ].join('\n'),
       });
+      if (verdict?.state === 'red') {
+        if (!Number.isSafeInteger(candidate.certificationRevision) || candidate.certificationRevision < 1) {
+          throw new Error(`${candidate.id}: red verdict lacks a certification revision`);
+        }
+        const entries = nextAssessments.streams[candidate.streamId] ?? [];
+        const record = {
+          state: 'red',
+          version: candidate.version,
+          certificationRevision: candidate.certificationRevision,
+          candidateDigest: candidate.candidateDigest,
+          source: candidate.source,
+        };
+        const existing = entries.findIndex((entry) => entry.version === candidate.version);
+        if (existing === -1) entries.push(record);
+        else entries[existing] = record;
+        entries.sort((a, b) => compareVersions(a.version, b.version));
+        nextAssessments.streams[candidate.streamId] = entries;
+      }
     }
   }
-  return { ledger: next, plan: { schemaVersion: 1, green: registry.candidates.filter((entry) => byCandidate.get(entry.id)?.state === 'green').map((entry) => entry.id), issues } };
+  return { ledger: next, assessments: nextAssessments, plan: { schemaVersion: 1, green: registry.candidates.filter((entry) => byCandidate.get(entry.id)?.state === 'green').map((entry) => entry.id), issues } };
 }
 
 export async function verifyGeneratedUpdate({ candidate, verdict, updateDirectory, expectedRevision }) {
@@ -218,17 +246,22 @@ async function main(argv) {
   let registryPath;
   let verdictDirectory;
   let ledgerPath = join(root, 'compatibility/certified-upstreams.json');
+  let assessmentsPath = join(root, 'compatibility/candidate-assessments.json');
   let planPath = join(root, 'upstream-publish-plan.json');
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--registry') registryPath = resolve(argv[++i]);
     else if (argv[i] === '--verdicts') verdictDirectory = resolve(argv[++i]);
     else if (argv[i] === '--ledger') ledgerPath = resolve(argv[++i]);
+    else if (argv[i] === '--assessments') assessmentsPath = resolve(argv[++i]);
     else if (argv[i] === '--plan') planPath = resolve(argv[++i]);
     else throw new Error(`unknown argument ${argv[i]}`);
   }
   if (registryPath === undefined || verdictDirectory === undefined) throw new Error('--registry and --verdicts are required');
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
+  const assessments = JSON.parse(await readFile(assessmentsPath, 'utf8'));
+  const config = JSON.parse(await readFile(join(root, 'compatibility/upstream-patches.json'), 'utf8'));
+  validateCandidateAssessments(assessments, config.streams.map((stream) => stream.id));
   const verdicts = await Promise.all((await verdictFiles(verdictDirectory)).map(async (path) => JSON.parse(await readFile(path, 'utf8'))));
   const expectedRevision = process.env.GITHUB_SHA ?? 'local-unpinned';
   const result = reconcile(registry, ledger, verdicts, {
@@ -236,6 +269,7 @@ async function main(argv) {
     owner: process.env.ISSUE_OWNER,
     sourceRevision: expectedRevision,
     strictArtifacts: true,
+    assessments,
   });
   let compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
   const updates = await generatedUpdateDirectories(verdictDirectory);
@@ -313,6 +347,7 @@ async function main(argv) {
     await writeFile(join(root, '.changeset/framework-compatibility-auto.md'), `---\n${frontmatter}\n---\n\nCertify upstream framework releases: ${result.plan.green.join(', ')}.\n`);
   }
   await writeFile(ledgerPath, canonicalJson(result.ledger));
+  await writeFile(assessmentsPath, canonicalJson(result.assessments));
   await writeFile(planPath, canonicalJson(result.plan));
 }
 

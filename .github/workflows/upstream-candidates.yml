@@ -6,10 +6,10 @@ on:
   workflow_dispatch:
     inputs:
       maximum:
-        description: 'Maximum oldest unverified releases to process'
+        description: 'Maximum fairly interleaved unverified releases to process'
         type: choice
         options: ['1', '2', '4', '8', '16']
-        default: '8'
+        default: '16'
 
 concurrency:
   group: framework-compatibility-daily
@@ -57,10 +57,11 @@ jobs:
 
       - name: Build bounded deterministic candidate registry
         env:
-          MAXIMUM: ${{ inputs.maximum || '8' }}
+          MAXIMUM: ${{ inputs.maximum || '16' }}
         run: |
           node scripts/discover-framework-candidates.mjs \
             --ledger upstream-candidates/effective-ledger.json \
+            --assessments compatibility/candidate-assessments.json \
             --max "$MAXIMUM" \
             --output upstream-candidates/candidate-registry.json
 

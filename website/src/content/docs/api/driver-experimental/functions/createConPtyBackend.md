@@ -13,7 +13,7 @@ editUrl: false
 
 > **createConPtyBackend**(`spawn`): [`PtyBackend`](../../interfaces/ptybackend/)
 
-Defined in: [conpty-backend.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L63)
+Defined in: [conpty-backend.ts:66](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L66)
 
 Wraps a ConPTY session as a driver backend.
 

@@ -129,6 +129,23 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
 });
 
 describe.skipIf(process.platform !== 'win32')('Windows process lifecycle', { timeout: 20_000 }, () => {
+  if (process.platform === 'win32') {
+    it('retains output and exit from a native ConPTY child that finishes during listener attachment', async () => {
+      const terminal = await open({
+        command: [
+          process.execPath,
+          '-e',
+          'process.stdout.write("NATIVE EARLY OUTPUT\\r\\n"); process.exit(23)',
+        ],
+        envMode: 'inherit',
+      });
+
+      expect(await terminal.waitForExit()).toEqual({ code: 23, signal: null });
+      expect(terminal.screen().text()).toContain('NATIVE EARLY OUTPUT');
+      await terminal.close();
+    });
+  }
+
   it('does not publish natural exit while a console descendant remains alive', async () => {
     const terminal = await open({
       command: [process.execPath, `${fixtures}/process-tree-natural-exit.mjs`],

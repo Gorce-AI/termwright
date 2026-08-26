@@ -8,6 +8,7 @@
  * is not fully self-contained.
  */
 
+import { statSync } from 'node:fs';
 import { openSync, type Font, type FontCollection } from 'fontkit';
 
 /** Metrics of the primary font, in font units. */
@@ -74,6 +75,20 @@ export interface FontSetOptions {
   readonly system?: boolean;
 }
 
+/** @internal File access boundary used to prove lazy loading without timing tests. */
+export interface FontCandidateSource {
+  identity(file: string): string | null;
+  open(file: string): readonly Font[];
+}
+
+interface LazyFontState {
+  readonly candidates: readonly string[];
+  readonly source: FontCandidateSource;
+  nextCandidate: number;
+}
+
+const lazyFontStates = new WeakMap<FontSet, LazyFontState>();
+
 /**
  * Platform fonts tried when no file is configured.
  *
@@ -124,17 +139,18 @@ const SYSTEM_FONTS: Readonly<Record<string, readonly string[]>> = {
  * glyphs drawn from a few dozen distinct characters.
  */
 export class FontSet {
-  readonly #fonts: readonly LoadedFace[];
+  readonly #fonts: LoadedFace[];
   readonly #cache = new Map<string, Glyph | null>();
   readonly #used = new Set<string>();
 
   /** @internal Use {@link loadFonts}. */
   constructor(fonts: readonly LoadedFace[]) {
-    this.#fonts = fonts;
+    this.#fonts = [...fonts];
   }
 
   /** `true` when at least one font loaded and outlines can be embedded. */
   get available(): boolean {
+    this.#loadUntil(() => this.#fonts.length > 0);
     return this.#fonts.length > 0;
   }
 
@@ -145,14 +161,17 @@ export class FontSet {
 
   /** True when a real face exists for this combination of bold and italic. */
   hasFace(face: FaceRequest): boolean {
-    return this.#fonts.some(
+    const matches = (): boolean => this.#fonts.some(
       (entry) =>
         entry.bold === (face.bold ?? false) && entry.italic === (face.italic ?? false),
     );
+    this.#loadUntil(matches);
+    return matches();
   }
 
   /** Metrics of the first loaded font, or `null` when none loaded. */
   get metrics(): FontMetrics | null {
+    this.#loadUntil(() => this.#fonts.length > 0);
     const primary = this.#fonts[0]?.font;
     if (primary === undefined) return null;
     return {
@@ -175,44 +194,90 @@ export class FontSet {
     const wantBold = face.bold ?? false;
     const wantItalic = face.italic ?? false;
     const key = `${char}:${wantBold ? 'b' : ''}${wantItalic ? 'i' : ''}`;
-    const cached = this.#cache.get(key);
-    if (cached !== undefined) return cached;
-
-    // Faces matching the requested style first, then everything else: a bold
-    // cell prefers the bold face, but a character only the regular face has
-    // still beats no glyph at all.
-    const ordered = [
-      ...this.#fonts.filter((e) => e.bold === wantBold && e.italic === wantItalic),
-      ...this.#fonts.filter((e) => e.bold !== wantBold || e.italic !== wantItalic),
-    ];
+    if (this.#cache.has(key)) return this.#cache.get(key) ?? null;
 
     // U+FE0F is the author saying "emoji presentation, please". Several
     // monochrome fonts also cover those code points, so without this a warning
     // sign written as an emoji would come out as a thin black outline.
     const wantsColour = char.includes('\uFE0F');
+    const exactStyle = (entry: LoadedFace): boolean =>
+      entry.bold === wantBold && entry.italic === wantItalic;
+    let monochromeFallback: GlyphMatch | null = null;
 
-    let result: Glyph | null = null;
-    let monochromeFallback: { glyph: Glyph; file: string } | null = null;
-    for (const entry of ordered) {
+    // Preserve the old global ordering (all exact faces, then other faces)
+    // while opening candidate files only as a character actually needs them.
+    // A normal ASCII glyph in the primary face therefore never parses the CJK
+    // and emoji fallback files on Windows.
+    let result = this.#findGlyph(char, exactStyle, wantsColour, (fallback) => {
+      monochromeFallback ??= fallback;
+    });
+    while (result === null && this.#loadNextCandidate()) {
+      result = this.#findGlyph(char, exactStyle, wantsColour, (fallback) => {
+        monochromeFallback ??= fallback;
+      });
+    }
+    if (result === null) {
+      result = this.#findGlyph(char, (entry) => !exactStyle(entry), wantsColour, (fallback) => {
+        monochromeFallback ??= fallback;
+      });
+    }
+    result ??= monochromeFallback;
+    if (result !== null) this.#used.add(result.file);
+    const glyph = result?.glyph ?? null;
+    this.#cache.set(key, glyph);
+    return glyph;
+  }
+
+  #findGlyph(
+    char: string,
+    include: (entry: LoadedFace) => boolean,
+    wantsColour: boolean,
+    rememberFallback: (match: GlyphMatch) => void,
+  ): GlyphMatch | null {
+    for (const entry of this.#fonts) {
+      if (!include(entry)) continue;
       const glyph = resolveGlyph(entry.font, char);
       if (glyph === null) continue;
       const described = describeGlyph(glyph, entry);
       if (described === null) continue;
+      const match = { glyph: described, file: entry.file };
       if (wantsColour && described.kind === 'outline') {
-        monochromeFallback ??= { glyph: described, file: entry.file };
+        rememberFallback(match);
         continue;
       }
-      this.#used.add(entry.file);
-      result = described;
-      break;
+      return match;
     }
-    if (result === null && monochromeFallback !== null) {
-      this.#used.add(monochromeFallback.file);
-      result = monochromeFallback.glyph;
-    }
-    this.#cache.set(key, result);
-    return result;
+    return null;
   }
+
+  #loadUntil(done: () => boolean): void {
+    while (!done() && this.#loadNextCandidate()) {
+      // The predicate is re-evaluated after each candidate, preserving order.
+    }
+  }
+
+  #loadNextCandidate(): boolean {
+    const state = lazyFontStates.get(this);
+    if (state === undefined) return false;
+    const file = state.candidates[state.nextCandidate];
+    if (file === undefined) return false;
+    state.nextCandidate += 1;
+    for (const font of cachedFaces(file, state.source)) {
+      this.#fonts.push({
+        font,
+        file,
+        bold: isBold(font),
+        italic: isItalic(font),
+        index: this.#fonts.length,
+      });
+    }
+    return true;
+  }
+}
+
+interface GlyphMatch {
+  readonly glyph: Glyph;
+  readonly file: string;
 }
 
 /** One loaded face, with the style flags the font reports about itself. */
@@ -331,19 +396,17 @@ export function loadFonts(options: FontSetOptions = {}): FontSet {
     ...(options.files ?? []),
     ...(options.system === false ? [] : systemCandidates()),
   ];
-  const loaded: LoadedFace[] = [];
-  for (const file of candidates) {
-    for (const font of openFaces(file)) {
-      loaded.push({
-        font,
-        file,
-        bold: isBold(font),
-        italic: isItalic(font),
-        index: loaded.length,
-      });
-    }
-  }
-  return new FontSet(loaded);
+  return loadFontCandidates(candidates, systemFontSource);
+}
+
+/** @internal Deterministic boundary for lazy-loading and cache conformance tests. */
+export function loadFontCandidates(
+  candidates: readonly string[],
+  source: FontCandidateSource,
+): FontSet {
+  const fonts = new FontSet([]);
+  lazyFontStates.set(fonts, { candidates, source, nextCandidate: 0 });
+  return fonts;
 }
 
 /** Platform default font paths, plus the `TERMWRIGHT_FONT` override. */
@@ -371,6 +434,63 @@ function openFaces(file: string): readonly Font[] {
   return faces.sort(
     (a, b) => Number(isBold(a) || isItalic(a)) - Number(isBold(b) || isItalic(b)),
   );
+}
+
+const systemFontSource: FontCandidateSource = {
+  identity(file) {
+    try {
+      const stat = statSync(file, { bigint: true });
+      return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+    } catch {
+      return null;
+    }
+  },
+  open: openFaces,
+};
+
+interface CachedFaces {
+  readonly identity: string;
+  readonly faces: readonly Font[];
+}
+
+/** @internal Parsed system/custom faces retained across screenshot renders. */
+export const MAX_PARSED_FONT_CACHE_ENTRIES = 32;
+
+const faceCaches = new WeakMap<FontCandidateSource, Map<string, CachedFaces>>();
+
+/**
+ * Parsed font objects are immutable inputs to per-render FontSets. Cache them
+ * only while the file identity is unchanged; replacement of an explicit font
+ * is therefore observed by the next screenshot in the same process.
+ */
+function cachedFaces(file: string, source: FontCandidateSource): readonly Font[] {
+  const identity = source.identity(file);
+  if (identity === null) return [];
+  let cache = faceCaches.get(source);
+  if (cache === undefined) {
+    cache = new Map();
+    faceCaches.set(source, cache);
+  }
+  const cached = cache.get(file);
+  if (cached?.identity === identity) {
+    // Map insertion order is the LRU order: a hit becomes newest.
+    cache.delete(file);
+    cache.set(file, cached);
+    return cached.faces;
+  }
+  const faces = source.open(file);
+  cache.delete(file);
+  // A missing/corrupt file can become valid without a portable stat identity
+  // change. More importantly, retaining failures turns unbounded temp paths
+  // into process-lifetime entries with no rendering value.
+  if (faces.length === 0) return faces;
+  cache.set(file, { identity, faces });
+  while (cache.size > MAX_PARSED_FONT_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+  return faces;
 }
 
 /** The font's own opinion about its weight, not a guess from its name. */

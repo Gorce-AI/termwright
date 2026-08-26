@@ -26,7 +26,11 @@ test('builds the workspace', async ({terminal}) => {
 `openShell()` starts PowerShell on Windows and `$SHELL -i` (or `/bin/sh -i`) on
 POSIX systems. It adds exact OSC 133 command boundaries in both modes. Pass
 `shell` to choose another compatible shell command. Termwright does not identify
-prompts by matching their text.
+prompts by matching their text. Managed PowerShell commands accept only the
+composable startup switches `-NoLogo`, `-NoProfile`, `-NoExit`,
+`-ExecutionPolicy <value>`, and `-WorkingDirectory <value>`; script and command
+modes are rejected because Termwright owns the startup command that publishes
+the initial boundary.
 
 ## Choose the command API
 

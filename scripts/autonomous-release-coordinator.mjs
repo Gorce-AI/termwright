@@ -91,7 +91,7 @@ export const CI_JOBS = Object.freeze(
 export const REQUIRED_BRANCH_CHECKS = Object.freeze(['certification gate']);
 
 const compatibilityFiles = [
-  /^compatibility\/(?:certified-upstreams|registry)\.json$/u,
+  /^compatibility\/(?:candidate-assessments|certified-upstreams|registry)\.json$/u,
   /^\.changeset\/framework-compatibility-auto\.md$/u,
   /^packages\/(?:probe-tview|probe-charm)\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
   /^clients\/rust-probe\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
@@ -191,7 +191,7 @@ export function validateFailedReleaseRun(run, { repository, defaultBranch }) {
 }
 
 const prShape = {
-  compatibility: (target) => ({ branch: 'automation/framework-compatibility', title: 'chore(compatibility): record certified upstream releases', target }),
+  compatibility: (target) => ({ branch: 'automation/framework-compatibility', title: 'chore(compatibility): reconcile upstream candidates', target }),
   version: (target) => ({ branch: `release-pr/${target}`, title: `chore(release): version packages (${target})`, target }),
   heartbeat: (target) => ({ branch: 'automation/workflow-heartbeat', title: 'chore(automation): refresh schedule heartbeat', target }),
 };

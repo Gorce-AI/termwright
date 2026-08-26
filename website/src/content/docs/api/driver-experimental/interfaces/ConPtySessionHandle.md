@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ConPtySessionHandle
 
-Defined in: [conpty-backend.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L27)
+Defined in: [conpty-backend.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L28)
 
 The part of `@termwright/conpty` this adapter needs.
 
@@ -21,7 +21,7 @@ The part of `@termwright/conpty` this adapter needs.
 
 > `readonly` **outputEnded**: `Promise`\<`void`\>
 
-Defined in: [conpty-backend.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L29)
+Defined in: [conpty-backend.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L30)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [conpty-backend.ts:29](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` **pid**: `number`
 
-Defined in: [conpty-backend.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L28)
+Defined in: [conpty-backend.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L29)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [conpty-backend.ts:28](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` **sawRealEof**: `boolean`
 
-Defined in: [conpty-backend.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L31)
+Defined in: [conpty-backend.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L32)
 
 True only when the output pipe actually ended; disposal does not set it.
 
@@ -47,7 +47,7 @@ True only when the output pipe actually ended; disposal does not set it.
 
 > **activeProcesses**(): `number`
 
-Defined in: [conpty-backend.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L35)
+Defined in: [conpty-backend.ts:36](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L36)
 
 #### Returns
 
@@ -59,7 +59,7 @@ Defined in: [conpty-backend.ts:35](https://github.com/Gorce-AI/termwright/blob/m
 
 > **dispose**(): `void`
 
-Defined in: [conpty-backend.ts:39](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L39)
+Defined in: [conpty-backend.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L42)
 
 #### Returns
 
@@ -71,7 +71,7 @@ Defined in: [conpty-backend.ts:39](https://github.com/Gorce-AI/termwright/blob/m
 
 > **onData**(`listener`): () => `void`
 
-Defined in: [conpty-backend.ts:36](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L36)
+Defined in: [conpty-backend.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L37)
 
 #### Parameters
 
@@ -89,7 +89,7 @@ Defined in: [conpty-backend.ts:36](https://github.com/Gorce-AI/termwright/blob/m
 
 > **onError**(`listener`): () => `void`
 
-Defined in: [conpty-backend.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L38)
+Defined in: [conpty-backend.ts:41](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L41)
 
 #### Parameters
 
@@ -107,7 +107,7 @@ Defined in: [conpty-backend.ts:38](https://github.com/Gorce-AI/termwright/blob/m
 
 > **onExit**(`listener`): () => `void`
 
-Defined in: [conpty-backend.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L37)
+Defined in: [conpty-backend.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L38)
 
 #### Parameters
 
@@ -125,7 +125,7 @@ Defined in: [conpty-backend.ts:37](https://github.com/Gorce-AI/termwright/blob/m
 
 > **resize**(`columns`, `rows`): `boolean`
 
-Defined in: [conpty-backend.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L33)
+Defined in: [conpty-backend.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L34)
 
 #### Parameters
 
@@ -147,7 +147,7 @@ Defined in: [conpty-backend.ts:33](https://github.com/Gorce-AI/termwright/blob/m
 
 > **terminateTree**(): `void`
 
-Defined in: [conpty-backend.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L34)
+Defined in: [conpty-backend.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L35)
 
 #### Returns
 
@@ -159,7 +159,7 @@ Defined in: [conpty-backend.ts:34](https://github.com/Gorce-AI/termwright/blob/m
 
 > **write**(`data`): `void`
 
-Defined in: [conpty-backend.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L32)
+Defined in: [conpty-backend.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L33)
 
 #### Parameters
 

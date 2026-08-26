@@ -8,7 +8,7 @@ import { canonicalJson, compareVersions, npmCatalog, parseGoDownloadResult, pypi
 const source = (digit) => ({ checksum: digit.repeat(64), registry: 'https://crates.io' });
 const config = {
   maxCandidatesPerRun: 2,
-  streams: [{ id: 'example-v2', frameworkId: 'example', ecosystem: 'rust', registry: 'crates.io', package: 'example', minimumVersion: '2.0.0', major: 2, patchRoot: 'patches/example' }],
+  streams: [{ id: 'example-v2', frameworkId: 'example', ecosystem: 'rust', registry: 'crates.io', package: 'example', certificationRevision: 1, minimumVersion: '2.0.0', major: 2, patchRoot: 'patches/example' }],
 };
 
 describe('framework candidate discovery', () => {
@@ -43,6 +43,187 @@ describe('framework candidate discovery', () => {
     expect(result.candidates.map((entry) => entry.version)).toEqual(['2.0.1', '2.1.0']);
     expect(result.totalPending).toBe(3);
     expect(result.backlog).toBe(1);
+  });
+
+  it('gives every pending stream one oldest candidate before another stream gets a second slot', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const fairConfig = {
+      maxCandidatesPerRun: 3,
+      streams: [
+        { ...config.streams[0], id: 'older-backlog', frameworkId: 'older' },
+        { ...config.streams[0], id: 'newer-stream', frameworkId: 'newer' },
+      ],
+    };
+    const result = await selectCandidates({
+      rootDir: directory,
+      config: fairConfig,
+      maximum: 3,
+      ledger: { streams: {} },
+      catalogs: {
+        'older-backlog': [
+          { version: '2.0.1', publishedAt: '2026-01-01T00:00:00Z', source: source('1') },
+          { version: '2.0.2', publishedAt: '2026-01-02T00:00:00Z', source: source('2') },
+          { version: '2.0.3', publishedAt: '2026-01-03T00:00:00Z', source: source('3') },
+        ],
+        'newer-stream': [
+          { version: '2.1.0', publishedAt: '2026-02-01T00:00:00Z', source: source('4') },
+        ],
+      },
+    });
+    expect(result.candidates.map((entry) => entry.id)).toEqual([
+      'older-backlog@2.0.1',
+      'newer-stream@2.1.0',
+      'older-backlog@2.0.2',
+    ]);
+    expect(result.totalPending).toBe(4);
+    expect(result.backlog).toBe(1);
+
+    const permuted = await selectCandidates({
+      rootDir: directory,
+      config: { ...fairConfig, streams: [...fairConfig.streams].reverse() },
+      maximum: 3,
+      ledger: { streams: {} },
+      catalogs: {
+        'newer-stream': [...result.candidates.filter((entry) => entry.streamId === 'newer-stream').map((entry) => ({ version: entry.version, publishedAt: entry.publishedAt, source: entry.source }))],
+        'older-backlog': [
+          { version: '2.0.3', publishedAt: '2026-01-03T00:00:00Z', source: source('3') },
+          { version: '2.0.1', publishedAt: '2026-01-01T00:00:00Z', source: source('1') },
+          { version: '2.0.2', publishedAt: '2026-01-02T00:00:00Z', source: source('2') },
+        ],
+      },
+    });
+    expect(permuted.candidates.map((entry) => entry.id)).toEqual(result.candidates.map((entry) => entry.id));
+  });
+
+  it('keeps the scheduled default large enough to visit every configured stream', async () => {
+    const repositoryConfig = JSON.parse(await readFile(new URL('../compatibility/upstream-patches.json', import.meta.url), 'utf8'));
+    const workflow = await readFile(new URL('../.github/workflows/upstream-candidates.yml', import.meta.url), 'utf8');
+    expect(repositoryConfig.maxCandidatesPerRun).toBeGreaterThanOrEqual(repositoryConfig.streams.length);
+    expect(workflow).toContain(`default: '${repositoryConfig.maxCandidatesPerRun}'`);
+    expect(workflow).toContain(`inputs.maximum || '${repositoryConfig.maxCandidatesPerRun}'`);
+  });
+
+  it('does not retry an exact red assessment until its artifact or certifier revision changes', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const catalogs = { 'example-v2': [{ version: '2.0.1', publishedAt: '2026-01-01T00:00:00Z', source: source('1') }] };
+    const first = await selectCandidates({ rootDir: directory, config, ledger: { streams: {} }, catalogs });
+    const candidate = first.candidates[0];
+    const assessments = { schemaVersion: 1, streams: { 'example-v2': [{
+      state: 'red',
+      version: candidate.version,
+      certificationRevision: candidate.certificationRevision,
+      candidateDigest: candidate.candidateDigest,
+      source: candidate.source,
+    }] } };
+    const unchanged = await selectCandidates({ rootDir: directory, config, ledger: { streams: {} }, assessments, catalogs });
+    expect(unchanged).toMatchObject({ totalPending: 0, backlog: 0, candidates: [] });
+
+    const revised = await selectCandidates({
+      rootDir: directory,
+      config: { ...config, streams: [{ ...config.streams[0], certificationRevision: 2 }] },
+      ledger: { streams: {} },
+      assessments,
+      catalogs,
+    });
+    expect(revised.candidates).toHaveLength(1);
+    expect(revised.candidates[0]).toMatchObject({ version: '2.0.1', certificationRevision: 2 });
+    expect(revised.candidates[0].candidateDigest).not.toBe(candidate.candidateDigest);
+
+    const changedSource = await selectCandidates({
+      rootDir: directory,
+      config,
+      ledger: { streams: {} },
+      assessments,
+      catalogs: { 'example-v2': [{ ...catalogs['example-v2'][0], source: source('2') }] },
+    });
+    expect(changedSource.candidates).toHaveLength(1);
+    expect(changedSource.candidates[0].candidateDigest).not.toBe(candidate.candidateDigest);
+
+    await mkdir(join(directory, 'patches/example/2.0.1'), { recursive: true });
+    await writeFile(join(directory, 'patches/example/2.0.1/manifest.json'), '{"framework":"example"}\n');
+    const preparedPatch = await selectCandidates({ rootDir: directory, config, ledger: { streams: {} }, assessments, catalogs });
+    expect(preparedPatch.candidates).toHaveLength(1);
+    expect(preparedPatch.candidates[0]).toMatchObject({ patch: { status: 'ready' } });
+    expect(preparedPatch.candidates[0].candidateDigest).not.toBe(candidate.candidateDigest);
+  });
+
+  it('does not resolve an unbounded history of unchanged red assessments before scheduling', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const entries = Array.from({ length: 20 }, (_, index) => ({
+      version: `2.0.${index + 1}`,
+      publishedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
+      source: source(String((index % 9) + 1)),
+    }));
+    const assessments = { schemaVersion: 1, streams: { 'example-v2': entries.map((entry) => ({
+      state: 'red',
+      version: entry.version,
+      certificationRevision: 1,
+      candidateDigest: 'sha256:'.concat('a'.repeat(64)),
+      source: entry.source,
+    })) } };
+    let resolutions = 0;
+    const result = await selectCandidates({
+      rootDir: directory,
+      config,
+      maximum: 1,
+      ledger: { streams: {} },
+      assessments,
+      catalogs: { 'example-v2': entries },
+      sourceResolver: async (_stream, _version, candidateSource) => {
+        resolutions += 1;
+        return candidateSource;
+      },
+    });
+    expect(result.candidates).toHaveLength(1);
+    expect(resolutions).toBe(0);
+  });
+
+  it('resolves the current npm closure when a certifier revision requalifies a red root', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const closure = { dependencyRoots: [], dependencyClosure: [] };
+    const npmSource = {
+      registry: 'https://registry.npmjs.org', tarball: 'https://registry.invalid/runtime.tgz', integrity: 'sha512-evidence',
+      shasum: 'a'.repeat(40), tarballSha256: 'b'.repeat(64), dependencies: { dep: '^1.0.0' }, optionalDependencies: {},
+      peerDependencies: {}, peerDependenciesMeta: {}, bundledDependencies: [], os: [], cpu: [], libc: [],
+      ...closure, closureDigest: `sha256:${createHash('sha256').update(canonicalJson(closure)).digest('hex')}`, closureComplete: true,
+    };
+    const stream = {
+      id: 'runtime-npm', frameworkId: 'runtime-npm', ecosystem: 'npm', registry: 'npm', package: 'runtime-npm', certificationRevision: 1,
+      minimumVersion: '2.0.0', major: 2, mode: 'hook', hookStrategy: 'runtime', monitorDependencyClosure: true,
+    };
+    const catalogEntry = { version: '2.0.1', publishedAt: '2026-01-01T00:00:00Z', source: npmSource };
+    const first = await selectCandidates({ rootDir: directory, config: { maxCandidatesPerRun: 1, streams: [stream] }, ledger: { streams: {} }, catalogs: { 'runtime-npm': [catalogEntry] } });
+    const assessment = { schemaVersion: 1, streams: { 'runtime-npm': [{
+      state: 'red', version: '2.0.1', certificationRevision: 1, candidateDigest: first.candidates[0].candidateDigest, source: npmSource,
+    }] } };
+    const lightweightSource = Object.fromEntries(Object.entries(npmSource).filter(([key]) => !['tarballSha256', 'dependencyRoots', 'dependencyClosure', 'closureDigest', 'closureComplete'].includes(key)));
+    const changedClosure = {
+      dependencyRoots: [{ name: 'dep', requested: '^1.0.0', type: 'dependency', packageName: 'dep', version: '1.1.0' }],
+      dependencyClosure: [{ name: 'dep', version: '1.1.0', integrity: 'sha512-dep', tarball: 'https://registry.invalid/dep.tgz', tarballSha256: 'd'.repeat(64), platform: { os: [], cpu: [], libc: [] }, dependencies: [] }],
+    };
+    let resolutions = 0;
+    const revised = await selectCandidates({
+      rootDir: directory,
+      config: { maxCandidatesPerRun: 1, streams: [{ ...stream, certificationRevision: 2 }] },
+      ledger: { streams: {} }, assessments: assessment,
+      catalogs: { 'runtime-npm': [{ ...catalogEntry, source: lightweightSource }] },
+      sourceResolver: async (_stream, _version, _source, recordedSource) => {
+        resolutions += 1;
+        return { ...recordedSource, ...changedClosure, closureDigest: `sha256:${createHash('sha256').update(canonicalJson(changedClosure)).digest('hex')}` };
+      },
+    });
+    expect(resolutions).toBe(1);
+    expect(revised.candidates).toHaveLength(1);
+    expect(revised.candidates[0]).toMatchObject({ certificationRevision: 2, source: { dependencyClosure: [{ version: '1.1.0' }] } });
+  });
+
+  it('fails closed on malformed, duplicate, or unknown-stream assessments', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const catalogs = { 'example-v2': [] };
+    const valid = { state: 'red', version: '2.0.1', certificationRevision: 1, candidateDigest: `sha256:${'a'.repeat(64)}`, source: source('1') };
+    await expect(selectCandidates({ rootDir: directory, config, ledger: { streams: {} }, catalogs, assessments: { schemaVersion: 1, streams: { unknown: [valid] } } })).rejects.toThrow(/unknown stream/u);
+    await expect(selectCandidates({ rootDir: directory, config, ledger: { streams: {} }, catalogs, assessments: { schemaVersion: 1, streams: { 'example-v2': [valid, valid] } } })).rejects.toThrow(/duplicate/u);
+    await expect(selectCandidates({ rootDir: directory, config, ledger: { streams: {} }, catalogs, assessments: { schemaVersion: 1, streams: { 'example-v2': [{ ...valid, candidateDigest: 'not-a-digest' }] } } })).rejects.toThrow(/malformed/u);
   });
 
   it('marks an exact prepared patch and content-addresses its manifest', async () => {
@@ -90,7 +271,7 @@ describe('framework candidate discovery', () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
     const hookConfig = {
       maxCandidatesPerRun: 2,
-      streams: [{ id: 'ink', frameworkId: 'ink', ecosystem: 'npm', registry: 'npm', package: 'ink', minimumVersion: '7.1.1', major: 7, mode: 'hook', hookStrategy: 'exact-source' }],
+      streams: [{ id: 'ink', frameworkId: 'ink', ecosystem: 'npm', registry: 'npm', package: 'ink', certificationRevision: 1, minimumVersion: '7.1.1', major: 7, mode: 'hook', hookStrategy: 'exact-source' }],
     };
     const npmSource = { integrity: `sha512-${Buffer.alloc(64).toString('base64')}`, shasum: 'a'.repeat(40), tarballSha256: 'b'.repeat(64), dependencyClosure: [] };
     const result = await selectCandidates({ rootDir: directory, config: hookConfig, ledger: { streams: {} }, catalogs: { ink: [{ version: '7.1.2', publishedAt: '2026-03-01T00:00:00Z', source: npmSource }] } });
@@ -99,7 +280,7 @@ describe('framework candidate discovery', () => {
 
   it('refuses a hook stream whose certification mechanism is implicit', async () => {
     await expect(selectCandidates({
-      config: { maxCandidatesPerRun: 1, streams: [{ id: 'implicit', mode: 'hook', minimumVersion: '1.0.0' }] },
+      config: { maxCandidatesPerRun: 1, streams: [{ id: 'implicit', mode: 'hook', certificationRevision: 1, minimumVersion: '1.0.0' }] },
       ledger: { streams: {} },
       catalogs: { implicit: [] },
     })).rejects.toThrow(/explicit exact-source or runtime strategy/u);
@@ -166,7 +347,7 @@ describe('framework candidate discovery', () => {
 
   it('reselects the same npm root version when its transitive closure digest changes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
-    const npmConfig = { maxCandidatesPerRun: 2, streams: [{ id: 'native', frameworkId: 'native', ecosystem: 'npm', registry: 'npm', package: 'native', minimumVersion: '1.0.0', mode: 'hook', hookStrategy: 'runtime', monitorDependencyClosure: true }] };
+    const npmConfig = { maxCandidatesPerRun: 2, streams: [{ id: 'native', frameworkId: 'native', ecosystem: 'npm', registry: 'npm', package: 'native', certificationRevision: 1, minimumVersion: '1.0.0', mode: 'hook', hookStrategy: 'runtime', monitorDependencyClosure: true }] };
     const complete = (version) => {
       const dependencyRoots = [{ name: 'platform', packageName: 'platform', requested: '^1', type: 'optional', optionalPeer: false, version }];
       const dependencyClosure = [{ name: 'platform', version, integrity: `sha512-${Buffer.alloc(64).toString('base64')}`, tarball: `https://registry.invalid/platform-${version}.tgz`, tarballSha256: 'e'.repeat(64), platform: { os: [], cpu: [], libc: [] }, dependencies: [] }];
@@ -179,7 +360,7 @@ describe('framework candidate discovery', () => {
 
   it('reselects the same npm root version when its own immutable artifact evidence drifts', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
-    const npmConfig = { maxCandidatesPerRun: 2, streams: [{ id: 'native', frameworkId: 'native', ecosystem: 'npm', registry: 'npm', package: 'native', minimumVersion: '1.0.0', mode: 'hook', hookStrategy: 'runtime', monitorDependencyClosure: true }] };
+    const npmConfig = { maxCandidatesPerRun: 2, streams: [{ id: 'native', frameworkId: 'native', ecosystem: 'npm', registry: 'npm', package: 'native', certificationRevision: 1, minimumVersion: '1.0.0', mode: 'hook', hookStrategy: 'runtime', monitorDependencyClosure: true }] };
     const dependencyRoots = [];
     const dependencyClosure = [];
     const closureDigest = `sha256:${createHash('sha256').update(canonicalJson({ dependencyRoots, dependencyClosure })).digest('hex')}`;
