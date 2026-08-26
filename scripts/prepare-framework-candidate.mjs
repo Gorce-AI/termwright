@@ -63,10 +63,13 @@ async function latestTemplate(rootDir, patchRoot, candidateVersion) {
   return sameLine[0];
 }
 
-export async function classifyTcellConsoleProfile(sourceRoot) {
+export async function collectTcellConsoleProfileEvidence(sourceRoots) {
+  if (!Array.isArray(sourceRoots) || sourceRoots.length === 0 || sourceRoots.some((sourceRoot) => typeof sourceRoot !== 'string' || sourceRoot.length === 0)) {
+    throw new TypeError('tcell Windows console structural classification requires at least one source root');
+  }
   let parsed;
   try {
-    const { stdout } = await exec('go', ['run', join(root, 'scripts/classify-tcell-console-profile.go'), sourceRoot], {
+    const { stdout } = await exec('go', ['run', join(root, 'scripts/classify-tcell-console-profile.go'), ...sourceRoots], {
       cwd: root,
       env: trustedGoEnvironment({ GOFLAGS: '', GOWORK: 'off', GOPROXY: 'off', GOSUMDB: 'off' }),
     });
@@ -74,15 +77,31 @@ export async function classifyTcellConsoleProfile(sourceRoot) {
   } catch (error) {
     throw new Error(`tcell Windows console structural classification failed: ${error.stderr || error.message}`);
   }
-  const matches = parsed?.matches;
-  if (!Array.isArray(matches) || matches.some((entry) => typeof entry !== 'string')) {
+  const profiles = parsed?.profiles;
+  if (
+    !Array.isArray(profiles)
+    || profiles.length !== sourceRoots.length
+    || profiles.some((profile, index) => profile?.sourceRoot !== sourceRoots[index] || !Array.isArray(profile.matches) || profile.matches.some((entry) => typeof entry !== 'string'))
+  ) {
     throw new Error('tcell Windows console structural classifier returned invalid evidence');
   }
-  const unique = [...new Set(matches)];
-  if (unique.length !== 1) {
-    throw new Error(`tcell Windows console structural classification matched ${unique.length} audited profiles${unique.length === 0 ? '' : `: ${unique.join(', ')}`}`);
+  return profiles;
+}
+
+export function selectTcellConsoleProfiles(profiles) {
+  if (!Array.isArray(profiles) || profiles.length === 0) {
+    throw new TypeError('tcell Windows console profile selection requires structural evidence');
   }
-  return unique[0];
+  return profiles.map((profile, index) => {
+    if (typeof profile?.sourceRoot !== 'string' || !Array.isArray(profile.matches) || profile.matches.some((entry) => typeof entry !== 'string')) {
+      throw new Error('tcell Windows console structural classifier returned invalid evidence');
+    }
+    const unique = [...new Set(profile.matches)];
+    if (unique.length !== 1) {
+      throw new Error(`tcell Windows console structural classification for source root ${index} matched ${unique.length} audited profiles${unique.length === 0 ? '' : `: ${unique.join(', ')}`}`);
+    }
+    return unique[0];
+  });
 }
 
 function validateTcellTemplate(template, profileId) {
@@ -110,12 +129,12 @@ function validateTcellTemplate(template, profileId) {
   return template;
 }
 
-async function tcellTemplate(rootDir, candidate, streamRoot, sourceRoot) {
+function validateTcellCandidateBinding(candidate, streamRoot) {
   const targetsTcell = streamRoot === TCELL_PATCH_ROOT;
   if (candidate.package === TCELL_MODULE && !targetsTcell) {
     throw new Error(`${candidate.id}: tcell candidate targets another patch stream`);
   }
-  if (!targetsTcell) return null;
+  if (!targetsTcell) return false;
   const expectedPath = `${TCELL_PATCH_ROOT}/${candidate.version}/manifest.json`;
   if (
     candidate.package !== TCELL_MODULE
@@ -124,7 +143,10 @@ async function tcellTemplate(rootDir, candidate, streamRoot, sourceRoot) {
     || parseVersion(candidate.version)?.major !== 2
     || candidate.patch.path !== expectedPath
   ) throw new Error(`${candidate.id}: tcell patch request is not bound to the exact stream, package, and version`);
-  const profileId = await classifyTcellConsoleProfile(sourceRoot);
+  return true;
+}
+
+async function tcellTemplate(rootDir, candidate, profileId) {
   const directory = join(rootDir, TCELL_TEMPLATE_ROOT, safeRelative(profileId, 'tcell profileId'));
   const template = validateTcellTemplate(
     JSON.parse(await readFile(join(directory, 'template.json'), 'utf8')),
@@ -160,15 +182,16 @@ async function materializeTemplate(template, destination) {
   await writeFile(join(destination, 'manifest.json'), canonicalJson(template.manifest));
 }
 
-export async function preparePatchBundle({ rootDir = root, candidate, sourceRoot, outputDirectory, sourceRevision }) {
+async function preparePatchBundleWithProfile({ rootDir = root, candidate, sourceRoot, outputDirectory, sourceRevision }, tcellProfileId) {
   if (candidate.mode !== 'patch' || candidate.patch?.status !== 'needs-patch') throw new Error(`${candidate.id}: candidate does not need a generated patch`);
   if (typeof sourceRevision !== 'string' || sourceRevision.length < 7) throw new Error('sourceRevision is required');
   const streamRoot = safeRelative(candidate.patch.path, 'candidate.patch.path').split('/').slice(0, -2).join('/');
-  const template = await tcellTemplate(rootDir, candidate, streamRoot, sourceRoot)
+  const template = tcellProfileId === undefined ? null : await tcellTemplate(rootDir, candidate, tcellProfileId);
+  const selectedTemplate = template
     ?? await latestTemplate(rootDir, streamRoot, candidate.version);
   const destination = join(outputDirectory, 'patch');
   await mkdir(outputDirectory, { recursive: true });
-  await materializeTemplate(template, destination);
+  await materializeTemplate(selectedTemplate, destination);
   const manifestPath = join(destination, 'manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   const oldVersion = manifest.frameworkVersion;
@@ -209,13 +232,40 @@ export async function preparePatchBundle({ rootDir = root, candidate, sourceRoot
     candidateDigest: candidate.candidateDigest,
     sourceRevision,
     targetPath: candidate.patch.path.split('/').slice(0, -1).join('/'),
-    template: template.kind === 'structural-profile'
-      ? { profileId: template.profileId, selection: 'go-ast-capability', patchSetVersion: template.manifest.patchSetVersion }
-      : { frameworkVersion: oldVersion, patchSetVersion: template.manifest.patchSetVersion },
+    template: selectedTemplate.kind === 'structural-profile'
+      ? { profileId: selectedTemplate.profileId, selection: 'go-ast-capability', patchSetVersion: selectedTemplate.manifest.patchSetVersion }
+      : { frameworkVersion: oldVersion, patchSetVersion: selectedTemplate.manifest.patchSetVersion },
     patchTreeDigest,
   };
   await writeFile(join(outputDirectory, 'bundle.json'), canonicalJson(metadata));
   return { metadata, manifest, destination };
+}
+
+export async function preparePatchBundles(requests) {
+  if (!Array.isArray(requests) || requests.length === 0) throw new TypeError('at least one patch bundle request is required');
+  const bindings = requests.map((request) => {
+    if (request.candidate?.mode !== 'patch' || request.candidate.patch?.status !== 'needs-patch') {
+      throw new Error(`${request.candidate?.id}: candidate does not need a generated patch`);
+    }
+    if (typeof request.sourceRevision !== 'string' || request.sourceRevision.length < 7) throw new Error('sourceRevision is required');
+    const streamRoot = safeRelative(request.candidate?.patch?.path, 'candidate.patch.path').split('/').slice(0, -2).join('/');
+    return { request, tcell: validateTcellCandidateBinding(request.candidate, streamRoot) };
+  });
+  const tcellBindings = bindings.filter((entry) => entry.tcell);
+  const profiles = tcellBindings.length === 0
+    ? []
+    : selectTcellConsoleProfiles(await collectTcellConsoleProfileEvidence(tcellBindings.map((entry) => entry.request.sourceRoot)));
+  let tcellIndex = 0;
+  const prepared = [];
+  for (const binding of bindings) {
+    prepared.push(await preparePatchBundleWithProfile(binding.request, binding.tcell ? profiles[tcellIndex++] : undefined));
+  }
+  return prepared;
+}
+
+export async function preparePatchBundle(request) {
+  const [prepared] = await preparePatchBundles([request]);
+  return prepared;
 }
 
 export async function prepareSyntheticPatchBundle(options) {

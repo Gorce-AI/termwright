@@ -1,10 +1,12 @@
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { aggregateCandidate, requiredPlatforms, writeTrustedRuntimeUpdate } from './aggregate-framework-candidate-verdicts.mjs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it, vi } from 'vitest';
+import { aggregateCandidate, requiredPlatforms, writeTrustedPatchUpdates, writeTrustedRuntimeUpdate } from './aggregate-framework-candidate-verdicts.mjs';
 
 const revision = 'a'.repeat(40);
+const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const candidate = {
   id: 'opentui@0.5.7',
   frameworkId: 'opentui',
@@ -17,10 +19,10 @@ const candidate = {
 const runtimeUpdate = `candidate-update-runtime-${'b'.repeat(16)}`;
 const tcellCandidate = {
   ...candidate,
-  id: 'tcell-v2@v2.9.13',
+  id: 'tcell-v2@v2.9.0',
   frameworkId: 'tview',
   package: 'github.com/gdamore/tcell/v2',
-  version: 'v2.9.13',
+  version: 'v2.9.0',
   mode: 'patch',
   patch: { status: 'ready' },
 };
@@ -49,6 +51,47 @@ async function fixture(states, updateName = null, fixtureCandidate = candidate) 
 }
 
 describe('framework candidate platform aggregation', () => {
+  it('materializes every trusted tcell version before one ordered preparation batch', async () => {
+    const candidates = ['v2.9.0', 'v2.12.0', 'v2.13.10'].map((version, index) => ({
+      ...tcellCandidate,
+      id: `tcell-v2@${version}`,
+      version,
+      candidateDigest: `sha256:${String(index + 1).repeat(64)}`,
+      patch: {
+        status: 'needs-patch',
+        path: `packages/probe-tview/upstream-patches/tcell/${version}/manifest.json`,
+      },
+    }));
+    const materialize = vi.fn(async (entry) => `/source/${entry.version}`);
+    const freshOutput = vi.fn(async (_output, name) => `/trusted/${name}`);
+    const prepare = vi.fn(async () => []);
+    const cleanup = vi.fn(async () => {});
+
+    await writeTrustedPatchUpdates(
+      { candidates, output: '/trusted', sourceRevision: revision },
+      { materialize, freshOutput, prepare, cleanup },
+    );
+
+    expect(materialize.mock.calls.map(([entry]) => entry.id)).toEqual(candidates.map((entry) => entry.id));
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(prepare).toHaveBeenCalledWith(candidates.map((entry, index) => ({
+      rootDir: repositoryRoot,
+      candidate: entry,
+      sourceRoot: `/source/${entry.version}`,
+      outputDirectory: `/trusted/candidate-update-${String(index + 1).repeat(16)}`,
+      sourceRevision: revision,
+    })));
+    expect(cleanup.mock.calls.map(([sourceRoot]) => sourceRoot)).toEqual(candidates.map((entry) => `/source/${entry.version}`));
+
+    cleanup.mockClear();
+    prepare.mockRejectedValueOnce(new Error('batch failed'));
+    await expect(writeTrustedPatchUpdates(
+      { candidates, output: '/trusted', sourceRevision: revision },
+      { materialize, freshOutput, prepare, cleanup },
+    )).rejects.toThrow(/batch failed/u);
+    expect(cleanup.mock.calls.map(([sourceRoot]) => sourceRoot)).toEqual(candidates.map((entry) => `/source/${entry.version}`));
+  });
+
   it('requires the exact bounded platform set for each integration mechanism', () => {
     expect(requiredPlatforms(candidate)).toEqual(['linux', 'macos']);
     expect(requiredPlatforms(tcellCandidate)).toEqual(['linux', 'windows']);

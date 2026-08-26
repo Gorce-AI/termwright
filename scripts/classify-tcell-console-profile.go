@@ -14,14 +14,29 @@ import (
 )
 
 type result struct {
-	Matches []string `json:"matches"`
+	Profiles []profileResult `json:"profiles"`
+}
+
+type profileResult struct {
+	SourceRoot string   `json:"sourceRoot"`
+	Matches    []string `json:"matches"`
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fail("usage: classify-tcell-console-profile SOURCE_ROOT")
+	if len(os.Args) < 2 {
+		fail("usage: classify-tcell-console-profile SOURCE_ROOT [SOURCE_ROOT ...]")
 	}
-	files := parseFiles(os.Args[1], "console_win.go", "screen.go")
+	profiles := make([]profileResult, 0, len(os.Args)-1)
+	for _, sourceRoot := range os.Args[1:] {
+		profiles = append(profiles, profileResult{SourceRoot: sourceRoot, Matches: classify(sourceRoot)})
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(result{Profiles: profiles}); err != nil {
+		fail(err.Error())
+	}
+}
+
+func classify(sourceRoot string) []string {
+	files := parseFiles(sourceRoot, "console_win.go", "screen.go")
 	common := hasStructFields(files, "cScreen", "out", "fini") &&
 		hasEmbeddedSelector(files, "cScreen", "sync", "Mutex") &&
 		hasStructField(files, "baseScreen", "screenImpl") &&
@@ -34,9 +49,7 @@ func main() {
 	if common && initFailsWithoutVT(files) {
 		matches = append(matches, "vt-required")
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(result{Matches: matches}); err != nil {
-		fail(err.Error())
-	}
+	return matches
 }
 
 func fail(message string) {

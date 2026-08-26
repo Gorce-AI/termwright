@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { canonicalJson, compareVersions, npmCatalog, parseGoDownloadResult, pypiCatalog, recoverGoDownloadFailure, resolveNpmDependencyClosure, selectCandidates, trustedGoEnvironment } from './discover-framework-candidates.mjs';
 
 const exec = promisify(execFile);
@@ -158,7 +159,7 @@ describe('framework candidate discovery', () => {
     }] } }));
 
     await exec(process.execPath, [
-      new URL('./discover-framework-candidates.mjs', import.meta.url).pathname,
+      fileURLToPath(new URL('./discover-framework-candidates.mjs', import.meta.url)),
       '--ledger', ledger,
       '--assessments', assessments,
       '--catalog', catalog,

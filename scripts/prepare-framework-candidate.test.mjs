@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { assertArtifactSha256, assertGoDownloadBinding, classifyTcellConsoleProfile, preparePatchBundle, proposeCompatibilityUpdate, recordExecutableVariant } from './prepare-framework-candidate.mjs';
+import { assertArtifactSha256, assertGoDownloadBinding, collectTcellConsoleProfileEvidence, preparePatchBundle, preparePatchBundles, proposeCompatibilityUpdate, recordExecutableVariant, selectTcellConsoleProfiles } from './prepare-framework-candidate.mjs';
 
 const sha = (value) => `sha256:${value.repeat(64)}`;
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -89,7 +89,40 @@ function tcellCandidate(version = 'v2.12.0') {
   };
 }
 
+const tcellFixtureProfiles = [
+  'old-vten',
+  'vt-required',
+  'unsupported',
+  'ambiguous',
+  'wrong-mode-source',
+  'wrong-order',
+  'wrong-receiver',
+  'wrong-writer',
+  'nested-return',
+];
+const tcellFixtureEntries = await Promise.all(tcellFixtureProfiles.map(async (profile) => [profile, await tcellSource(profile)]));
+const tcellSources = new Map(tcellFixtureEntries);
+// Fixture collection mirrors production: one ordered AST process classifies
+// the complete bounded matrix, then pure tests inspect its exact evidence.
+const tcellEvidence = await collectTcellConsoleProfileEvidence(tcellFixtureEntries.map(([, sourceRoot]) => sourceRoot));
+const tcellEvidenceByProfile = new Map(tcellFixtureProfiles.map((profile, index) => [profile, tcellEvidence[index]]));
+const oldOutput = await mkdtemp(join(tmpdir(), 'tw-tcell-old-bundle-'));
+const newOutputOne = await mkdtemp(join(tmpdir(), 'tw-tcell-new-bundle-'));
+const newOutputTwo = await mkdtemp(join(tmpdir(), 'tw-tcell-new-bundle-'));
+const [oldPrepared, newPreparedOne, newPreparedTwo] = await preparePatchBundles([
+  { rootDir: repositoryRoot, candidate: tcellCandidate('v2.11.0'), sourceRoot: tcellSources.get('old-vten'), outputDirectory: oldOutput, sourceRevision: 'abcdef123' },
+  { rootDir: repositoryRoot, candidate: tcellCandidate(), sourceRoot: tcellSources.get('vt-required'), outputDirectory: newOutputOne, sourceRevision: 'abcdef123' },
+  { rootDir: repositoryRoot, candidate: tcellCandidate(), sourceRoot: tcellSources.get('vt-required'), outputDirectory: newOutputTwo, sourceRevision: 'abcdef123' },
+]);
+
 describe('framework candidate patch preparation', () => {
+  it('classifies the shared tcell fixture matrix in one AST helper process', () => {
+    expect(selectTcellConsoleProfiles([
+      tcellEvidenceByProfile.get('old-vten'),
+      tcellEvidenceByProfile.get('vt-required'),
+    ])).toEqual(['old-vten', 'vt-required']);
+  });
+
   it('binds trusted Go materialization to the discovered sum, go.mod sum, and zip bytes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-go-download-binding-'));
     const zip = join(directory, 'module.zip');
@@ -134,51 +167,43 @@ describe('framework candidate patch preparation', () => {
   });
 
   it('selects the old-vten tcell template from structural Go evidence', async () => {
-    const sourceRoot = await tcellSource('old-vten');
     const candidate = tcellCandidate('v2.11.0');
-    const outputDirectory = await mkdtemp(join(tmpdir(), 'tw-tcell-old-bundle-'));
-    const prepared = await preparePatchBundle({ rootDir: repositoryRoot, candidate, sourceRoot, outputDirectory, sourceRevision: 'abcdef123' });
-    const marker = await readFile(join(prepared.destination, 'add/termwright_marker_windows.go'), 'utf8');
+    const marker = await readFile(join(oldPrepared.destination, 'add/termwright_marker_windows.go'), 'utf8');
 
-    expect(prepared.metadata.template).toEqual({ profileId: 'old-vten', selection: 'go-ast-capability', patchSetVersion: 2 });
-    expect(prepared.manifest).toMatchObject({ framework: candidate.package, frameworkVersion: candidate.version, patchSetVersion: 2 });
+    expect(oldPrepared.metadata.template).toEqual({ profileId: 'old-vten', selection: 'go-ast-capability', patchSetVersion: 2 });
+    expect(oldPrepared.manifest).toMatchObject({ framework: candidate.package, frameworkVersion: candidate.version, patchSetVersion: 2 });
     expect(marker).toContain('if !s.vten');
   });
 
   it('selects the vt-required tcell template and emits no legacy field reference', async () => {
-    const sourceRoot = await tcellSource('vt-required');
     const candidate = tcellCandidate();
-    const one = await mkdtemp(join(tmpdir(), 'tw-tcell-new-bundle-'));
-    const two = await mkdtemp(join(tmpdir(), 'tw-tcell-new-bundle-'));
-    const first = await preparePatchBundle({ rootDir: repositoryRoot, candidate, sourceRoot, outputDirectory: one, sourceRevision: 'abcdef123' });
-    const second = await preparePatchBundle({ rootDir: repositoryRoot, candidate, sourceRoot, outputDirectory: two, sourceRevision: 'abcdef123' });
-    const marker = await readFile(join(first.destination, 'add/termwright_marker_windows.go'), 'utf8');
+    const marker = await readFile(join(newPreparedOne.destination, 'add/termwright_marker_windows.go'), 'utf8');
 
-    expect(first.metadata.template).toEqual({ profileId: 'vt-required', selection: 'go-ast-capability', patchSetVersion: 3 });
-    expect(first.manifest).toMatchObject({ framework: candidate.package, frameworkVersion: candidate.version, patchSetVersion: 3 });
+    expect(newPreparedOne.metadata.template).toEqual({ profileId: 'vt-required', selection: 'go-ast-capability', patchSetVersion: 3 });
+    expect(newPreparedOne.manifest).toMatchObject({ framework: candidate.package, frameworkVersion: candidate.version, patchSetVersion: 3 });
     expect(marker).toContain('syscall.WriteConsole(s.out');
     expect(marker).not.toContain('s.vten');
-    expect(second.metadata).toEqual(first.metadata);
-    expect(second.manifest).toEqual(first.manifest);
+    expect(newPreparedTwo.metadata).toEqual(newPreparedOne.metadata);
+    expect(newPreparedTwo.manifest).toEqual(newPreparedOne.manifest);
   });
 
-  it('fails closed when structural evidence matches zero or multiple tcell profiles', async () => {
-    await expect(classifyTcellConsoleProfile(await tcellSource('unsupported')))
-      .rejects.toThrow(/matched 0 audited profiles/u);
-    await expect(classifyTcellConsoleProfile(await tcellSource('ambiguous')))
-      .rejects.toThrow(/matched 2 audited profiles: old-vten, vt-required/u);
+  it('fails closed when structural evidence matches zero or multiple tcell profiles', () => {
+    expect(() => selectTcellConsoleProfiles([tcellEvidenceByProfile.get('unsupported')]))
+      .toThrow(/matched 0 audited profiles/u);
+    expect(() => selectTcellConsoleProfiles([tcellEvidenceByProfile.get('ambiguous')]))
+      .toThrow(/matched 2 audited profiles: old-vten, vt-required/u);
   });
 
   it.each(['wrong-mode-source', 'wrong-order', 'wrong-receiver', 'wrong-writer', 'nested-return'])(
     'rejects incomplete structural evidence: %s',
-    async (profile) => {
-      await expect(classifyTcellConsoleProfile(await tcellSource(profile)))
-        .rejects.toThrow(/matched 0 audited profiles/u);
+    (profile) => {
+      expect(() => selectTcellConsoleProfiles([tcellEvidenceByProfile.get(profile)]))
+        .toThrow(/matched 0 audited profiles/u);
     },
   );
 
   it('binds tcell profile generation to the exact package, stream, and version path', async () => {
-    const sourceRoot = await tcellSource('vt-required');
+    const sourceRoot = tcellSources.get('vt-required');
     const wrongPackage = { ...tcellCandidate(), package: 'example.com/not-tcell' };
     await expect(preparePatchBundle({
       rootDir: repositoryRoot,
@@ -197,6 +222,7 @@ describe('framework candidate patch preparation', () => {
       outputDirectory: await mkdtemp(join(tmpdir(), 'tw-tcell-binding-')),
       sourceRevision: 'abcdef123',
     })).rejects.toThrow(/not bound to the exact stream, package, and version/u);
+
   });
 
   it('keeps structural templates outside manifest-based candidate seeding', async () => {

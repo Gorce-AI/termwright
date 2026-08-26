@@ -4,12 +4,12 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { deriveHookInstrumentationProfile } from './certify-framework-candidate.mjs';
 import { canonicalJson, downloadVerifiedNpmTarball } from './discover-framework-candidates.mjs';
-import { materializeCandidateSource, preparePatchBundle } from './prepare-framework-candidate.mjs';
+import { materializeCandidateSource, preparePatchBundles } from './prepare-framework-candidate.mjs';
 import { renderCertifiedTextualPyproject } from './textual-certification.mjs';
 
 const exec = promisify(execFile);
@@ -210,11 +210,39 @@ export async function writeTrustedHookUpdate({ candidate, output, sourceRevision
   }));
 }
 
+export async function writeTrustedPatchUpdates(
+  { candidates, output, sourceRevision },
+  {
+    materialize = materializeCandidateSource,
+    prepare = preparePatchBundles,
+    freshOutput = freshUpdateDirectory,
+    cleanup = async (sourceRoot) => rm(dirname(sourceRoot), { recursive: true, force: true }),
+  } = {},
+) {
+  if (candidates.length === 0) return;
+  const requests = [];
+  const sourceRoots = [];
+  try {
+    for (const candidate of candidates) {
+      const suffix = candidate.candidateDigest.slice('sha256:'.length, 'sha256:'.length + 16);
+      const sourceRoot = await materialize(candidate);
+      sourceRoots.push(sourceRoot);
+      requests.push({
+        rootDir: root,
+        candidate,
+        sourceRoot,
+        outputDirectory: await freshOutput(output, `candidate-update-${suffix}`),
+        sourceRevision,
+      });
+    }
+    await prepare(requests);
+  } finally {
+    await Promise.all(sourceRoots.map((sourceRoot) => cleanup(sourceRoot)));
+  }
+}
+
 export async function writeTrustedPatchUpdate({ candidate, output, sourceRevision }) {
-  const suffix = candidate.candidateDigest.slice('sha256:'.length, 'sha256:'.length + 16);
-  const directory = await freshUpdateDirectory(output, `candidate-update-${suffix}`);
-  const sourceRoot = await materializeCandidateSource(candidate);
-  await preparePatchBundle({ rootDir: root, candidate, sourceRoot, outputDirectory: directory, sourceRevision });
+  await writeTrustedPatchUpdates({ candidates: [candidate], output, sourceRevision });
 }
 
 async function main(argv) {
@@ -237,11 +265,15 @@ async function main(argv) {
     const aggregate = await aggregateCandidate({ candidate, slot, inputs, output, sourceRevision });
     if (aggregate.state === 'green') trustedUpdates.push(candidate);
   }
+  await writeTrustedPatchUpdates({
+    candidates: trustedUpdates.filter((candidate) => candidate.mode === 'patch' && candidate.patch.status === 'needs-patch'),
+    output,
+    sourceRevision,
+  });
   for (const candidate of trustedUpdates) {
     if (candidate.frameworkId === 'textual') await writeTrustedTextualLock({ candidate, output, sourceRevision });
     else if (candidate.mode === 'hook' && candidate.hookStrategy === 'runtime') await writeTrustedRuntimeUpdate({ candidate, output, sourceRevision });
     else if (candidate.mode === 'hook' && candidate.hookStrategy === 'exact-source') await writeTrustedHookUpdate({ candidate, output, sourceRevision });
-    else if (candidate.mode === 'patch' && candidate.patch.status === 'needs-patch') await writeTrustedPatchUpdate({ candidate, output, sourceRevision });
   }
 }
 

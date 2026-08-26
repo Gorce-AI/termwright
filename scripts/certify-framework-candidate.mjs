@@ -593,7 +593,12 @@ async function main(argv) {
     if (candidate.patch.status === 'needs-patch') {
       const updateDirectory = await mkdtemp(join(tmpdir(), 'termwright-candidate-update-'));
       const sourceRoot = await materializeCandidateSource(candidate);
-      const prepared = await preparePatchBundle({ rootDir: root, candidate, sourceRoot, outputDirectory: updateDirectory, sourceRevision: revision });
+      let prepared;
+      try {
+        prepared = await preparePatchBundle({ rootDir: root, candidate, sourceRoot, outputDirectory: updateDirectory, sourceRevision: revision });
+      } finally {
+        await rm(dirname(sourceRoot), { recursive: true, force: true });
+      }
       preparedUpdate = {
         directory: updateDirectory,
         bundle: await readFile(join(updateDirectory, 'bundle.json')),
