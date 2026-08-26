@@ -1,4 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { execPath } from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 async function collectVitestConfigs(directory, output) {
@@ -49,6 +52,14 @@ function expectArtifactStep(job, action, name, path) {
 }
 
 describe('the native host is the only Termwright test entrypoint', () => {
+  it('parses the exact packed PTY certification payload', () => {
+    expect(() => execFileSync(
+      execPath,
+      [fileURLToPath(new URL('./check-installed-pty.mjs', import.meta.url)), '--check-probe-syntax'],
+      { stdio: 'pipe' },
+    )).not.toThrow();
+  });
+
   it('keeps repository and release certification single-attempt', async () => {
     const rootConfig = (await import('../vitest.config.ts')).default;
     const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
