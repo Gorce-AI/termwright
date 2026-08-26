@@ -11,11 +11,11 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 40,
-    "deadline-or-scheduler-regression-test": 61,
+    "deadline-or-scheduler-regression-test": 60,
     "deterministic-adversarial-fixture-schedule": 34,
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 200,
+    "explicit-external-or-ui-source-polling": 199,
     "explicit-test-selection-reviewed-with-platform-registry": 79,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
@@ -1316,12 +1316,6 @@
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "timeout = setTimeout("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const deadline = Date.now() + 3_000;"
@@ -2270,12 +2264,6 @@
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => app.semanticTree()?.v).toBe(2);"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
       "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_PTY\"] === \"1\") return false;"
@@ -2332,7 +2320,7 @@
       "path": "packages/pty/src/windows-native.win.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(!bun)(\"preserves causal VT marker order for Bun applications\", async () => {"
+      "excerpt": "it.skipIf(!bun)("
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",

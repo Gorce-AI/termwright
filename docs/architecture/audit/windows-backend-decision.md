@@ -199,9 +199,10 @@ runtime's ConPTY path passes client VT into one ordered output stream without
 the legacy renderer. The addon finds its own module directory, rejects a
 sibling `OpenConsole.exe`, validates the exact DLL and all required native-host
 hashes, loads the DLL by absolute path, verifies the final mapped path, and
-retains one immutable Create/Resize/Close table for every `HPCON`. Missing,
-partial, modified, wrong-export, or wrong-layout bundles fail while the addon
-loads, before application code starts.
+retains one immutable Create/Resize/Close table for every `HPCON`. The addon
+still loads far enough to expose a structured capability report for missing,
+partial, modified, wrong-export, or wrong-layout bundles, but session creation
+fails closed before application code starts.
 
 This is deliberately a scoped claim: a framework must still flush its own
 output before writing its authenticated marker. The certified guarantee is

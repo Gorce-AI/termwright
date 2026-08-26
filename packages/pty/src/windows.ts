@@ -13,6 +13,7 @@
 
 import { createRequire } from "node:module";
 import { NativeWriteDrainEpoch } from "./write-drain-epoch.js";
+import { ConPtyControlPlaneNormalizer } from "./windows-output-normalizer.js";
 
 /** Ordered messages the native session emits. Data always precedes the end. */
 type NativeEvent =
@@ -57,30 +58,61 @@ export interface WindowsConPtyRuntimeInfo {
   readonly version: "1.24.260710001";
   readonly mode: "ordered-vt-passthrough";
   readonly policy: "strict";
-  readonly selectedHostArchitecture: "x64" | "arm64";
-  readonly failureCode: "";
-  readonly failureWin32: 0;
-  readonly assetsValidated: true;
-  readonly coreExports: true;
+  readonly selectedHostArchitecture: "" | "x64" | "arm64";
+  readonly failureCode: string;
+  readonly failureWin32: number;
+  readonly assetsValidated: boolean;
+  readonly coreExports: boolean;
   readonly orderedMarkerSemantics: "marker-authoritative-after-behavioral-certification";
 }
 
-function assertRuntimeInfo(value: WindowsConPtyRuntimeInfo): WindowsConPtyRuntimeInfo {
-  if (value.provider !== "vendored" ||
-      value.package !== "Microsoft.Windows.Console.ConPTY" ||
-      value.version !== "1.24.260710001" ||
-      value.mode !== "ordered-vt-passthrough" ||
-      value.policy !== "strict" ||
-      (value.selectedHostArchitecture !== "x64" && value.selectedHostArchitecture !== "arm64") ||
-      value.failureCode !== "" || value.failureWin32 !== 0 ||
-      value.assetsValidated !== true || value.coreExports !== true ||
-      value.orderedMarkerSemantics !== "marker-authoritative-after-behavioral-certification") {
-    throw new Error(`uncertified vendored ConPTY runtime: ${JSON.stringify(value)}`);
+function assertRuntimeInfoShape(
+  value: WindowsConPtyRuntimeInfo,
+): WindowsConPtyRuntimeInfo {
+  if (
+    value.provider !== "vendored" ||
+    value.package !== "Microsoft.Windows.Console.ConPTY" ||
+    value.version !== "1.24.260710001" ||
+    value.mode !== "ordered-vt-passthrough" ||
+    value.policy !== "strict" ||
+    (value.selectedHostArchitecture !== "" &&
+      value.selectedHostArchitecture !== "x64" &&
+      value.selectedHostArchitecture !== "arm64") ||
+    typeof value.failureCode !== "string" ||
+    typeof value.failureWin32 !== "number" ||
+    typeof value.assetsValidated !== "boolean" ||
+    typeof value.coreExports !== "boolean" ||
+    value.orderedMarkerSemantics !==
+      "marker-authoritative-after-behavioral-certification"
+  ) {
+    throw new Error(
+      `invalid vendored ConPTY capability report: ${JSON.stringify(value)}`,
+    );
+  }
+  return value;
+}
+
+function assertCertifiedRuntimeInfo(
+  value: WindowsConPtyRuntimeInfo,
+): WindowsConPtyRuntimeInfo {
+  assertRuntimeInfoShape(value);
+  if (
+    (value.selectedHostArchitecture !== "x64" &&
+      value.selectedHostArchitecture !== "arm64") ||
+    value.failureCode !== "" ||
+    value.failureWin32 !== 0 ||
+    value.assetsValidated !== true ||
+    value.coreExports !== true
+  ) {
+    throw new Error(
+      `uncertified vendored ConPTY runtime: ${JSON.stringify(value)}`,
+    );
   }
   return value;
 }
 
 let cachedBinding: LoadedWindowsBinding | undefined;
+let cachedDiagnosticBinding: LoadedWindowsBinding | undefined;
 
 /**
  * Where the addon is looked for, in order.
@@ -111,7 +143,7 @@ export function loadWindowsBinding(): LoadedWindowsBinding {
     try {
       const resolved = require.resolve(candidate);
       const loaded = require(resolved) as LoadedWindowsBinding;
-      assertRuntimeInfo(loaded.conPtyRuntimeInfo());
+      assertCertifiedRuntimeInfo(loaded.conPtyRuntimeInfo());
       cachedBinding = loaded;
       return cachedBinding;
     } catch (error) {
@@ -129,9 +161,48 @@ export function loadWindowsBinding(): LoadedWindowsBinding {
   );
 }
 
-/** Returns the exact validated runtime used by every Windows session. */
+/**
+ * Returns a capability report even when strict runtime initialization failed.
+ * A healthy candidate is preferred over an earlier diagnostic-only candidate.
+ */
 export function windowsConPtyRuntimeInfo(): WindowsConPtyRuntimeInfo {
-  return assertRuntimeInfo(loadWindowsBinding().conPtyRuntimeInfo());
+  if (cachedBinding !== undefined) {
+    return assertRuntimeInfoShape(cachedBinding.conPtyRuntimeInfo());
+  }
+  if (process.platform !== "win32") {
+    throw new Error(
+      "@termwright/pty Windows binding cannot load on a non-Windows host",
+    );
+  }
+  const require = createRequire(import.meta.url);
+  const attempts: string[] = [];
+  for (const candidate of windowsCandidatePaths(process.arch)) {
+    try {
+      const resolved = require.resolve(candidate);
+      const loaded = require(resolved) as LoadedWindowsBinding;
+      const runtime = assertRuntimeInfoShape(loaded.conPtyRuntimeInfo());
+      if (
+        runtime.failureCode === "" &&
+        runtime.failureWin32 === 0 &&
+        runtime.assetsValidated &&
+        runtime.coreExports
+      ) {
+        cachedBinding = loaded;
+        return runtime;
+      }
+      cachedDiagnosticBinding ??= loaded;
+    } catch (error) {
+      attempts.push(
+        `${candidate}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+      );
+    }
+  }
+  if (cachedDiagnosticBinding !== undefined) {
+    return assertRuntimeInfoShape(cachedDiagnosticBinding.conPtyRuntimeInfo());
+  }
+  throw new Error(
+    `no termwright ConPTY addon could be loaded for win32-${process.arch}. Tried:\n  ${attempts.join("\n  ")}`,
+  );
 }
 
 let unavailableReason: string | undefined;
@@ -293,6 +364,7 @@ export function spawnWindowsPty(
   let endReason: number | undefined;
   let disposed = false;
   const writeEpoch = new NativeWriteDrainEpoch();
+  const outputNormalizer = new ConPtyControlPlaneNormalizer();
   const notices: string[] = [];
   const NOTICE_LIMIT = 64;
 
@@ -307,7 +379,12 @@ export function spawnWindowsPty(
     (event) => {
       switch (event.type) {
         case "data":
-          for (const listener of [...dataListeners]) listener(event.data);
+          {
+            const data = outputNormalizer.push(event.data);
+            if (data.length > 0) {
+              for (const listener of [...dataListeners]) listener(data);
+            }
+          }
           return;
         case "exit": {
           // A Windows exit code is not a signal. Reporting it as one would
@@ -317,6 +394,15 @@ export function spawnWindowsPty(
           return;
         }
         case "eof":
+          {
+            // A possible prefix withheld across a ReadFile boundary is child
+            // output unless the rest of the host structure actually arrives.
+            // Release it on the same ordered channel, before authoritative EOF.
+            const tail = outputNormalizer.finish();
+            if (tail.length > 0) {
+              for (const listener of [...dataListeners]) listener(tail);
+            }
+          }
           endReason = event.code;
           // Delivered on the same ordered channel as the data before it, so
           // every chunk has already reached its listeners by now.

@@ -56,4 +56,19 @@ describe('Windows PTY causal verdict', () => {
     await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
     await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
+
+  it('verifies a separately named cross-host verdict against the same bytes', async () => {
+    const { root, verdict } = await fixture();
+    verdict.runtime.selectedHostArchitecture = 'arm64';
+    await writeFile(
+      join(root, 'certification-verdict-arm64-host.json'),
+      `${JSON.stringify(verdict)}\n`,
+    );
+    await expect(
+      verifyWindowsPtyVerdict(root, 'certification-verdict-arm64-host.json'),
+    ).resolves.toEqual(verdict);
+    await expect(verifyWindowsPtyVerdict(root, '../outside.json')).rejects.toThrow(
+      /invalid Windows PTY verdict filename/u,
+    );
+  });
 });

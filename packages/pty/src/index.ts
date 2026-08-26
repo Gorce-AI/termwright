@@ -118,7 +118,7 @@ export interface PtyExit {
 export type PtySignal = "INT" | "TERM" | "KILL" | "HUP";
 export type { WindowsConPtyRuntimeInfo };
 
-/** Exact provenance of the strict Windows runtime loaded by this process. */
+/** Runtime provenance and strict initialization status for the Windows backend. */
 export function conPtyRuntimeInfo(): WindowsConPtyRuntimeInfo {
   if (process.platform !== "win32") {
     throw new Error("ConPTY runtime information is only available on Windows");

@@ -49,13 +49,19 @@ if (!pty.ptyAvailable()) {
 }
 if (process.platform === 'win32') {
   const runtime = pty.conPtyRuntimeInfo();
-  const nativeArchitecture = process.env.PROCESSOR_ARCHITEW6432?.toLowerCase() === 'arm64' ||
-    process.env.PROCESSOR_ARCHITECTURE?.toLowerCase() === 'arm64' ? 'arm64' : 'x64';
+  // Do not infer the native machine from PROCESSOR_ARCHITECTURE. GitHub's
+  // ARM64 runners do not consistently expose PROCESSOR_ARCHITEW6432 to an
+  // emulated x64 child, while IsWow64Process2 (used by the addon) still
+  // correctly selects the native ARM64 OpenConsole host. An ARM64 addon can
+  // only run on ARM64; an x64 addon may validly select either host.
+  const selectedHostIsValid = process.arch === 'arm64'
+    ? runtime.selectedHostArchitecture === 'arm64'
+    : runtime.selectedHostArchitecture === 'x64' || runtime.selectedHostArchitecture === 'arm64';
   if (runtime.provider !== 'vendored' || runtime.package !== 'Microsoft.Windows.Console.ConPTY' ||
       runtime.version !== '1.24.260710001' || runtime.mode !== 'ordered-vt-passthrough' ||
       runtime.policy !== 'strict' || runtime.assetsValidated !== true ||
       runtime.coreExports !== true || runtime.failureCode !== '' || runtime.failureWin32 !== 0 ||
-      runtime.selectedHostArchitecture !== nativeArchitecture) {
+      !selectedHostIsValid) {
     console.error('the installed addon did not load the certified vendored ConPTY runtime: ' + JSON.stringify(runtime));
     process.exit(9);
   }
@@ -210,7 +216,11 @@ if (!overflowRejected) {
 // Keep the child alive until both native drain and exact child receipt are
 // observed. This avoids racing the writer's drain publication against input
 // pipe teardown while exercising the installed platform writer.
-const inputBytes = 64 * 1024;
+// Keep this to one OpenConsole input-read quantum. Without VT input mode each
+// ASCII byte becomes key-down/key-up INPUT_RECORDs, so a large repeated write
+// measures keyboard-event expansion rather than strengthening the drain proof.
+const inputPayload = Buffer.from('termwright-input-0123456789'.repeat(152)).subarray(0, 4096);
+const inputReceipt = createHash('sha256').update(inputPayload).digest('hex');
 console.log('[pty-cert] drain');
 const controlServer = createServer();
 const controlConnected = new Promise((resolve) => controlServer.once('connection', resolve));
@@ -227,22 +237,27 @@ const draining = collect([
   'const net = require("node:net");',
   'process.stdin.setRawMode?.(true);',
   'process.stdin.resume();',
+  'const { createHash } = require("node:crypto");',
+  'const hash = createHash("sha256");',
   'let received = 0;',
   'const control = net.connect(' + controlAddress.port + ', "127.0.0.1", () => process.stdout.write("READY"));',
   'control.once("data", () => control.end("BYE"));',
   'control.once("close", () => process.exit(0));',
   'process.stdin.on("data", chunk => {',
   '  received += chunk.length;',
-  '  if (received === ' + inputBytes + ') process.stdout.write("INPUT_DRAINED");',
+  '  hash.update(chunk);',
+  '  if (received === ' + inputPayload.length + ') process.stdout.write("INPUT_DRAINED:" + hash.digest("hex"));',
   '});',
 ].join(''));
 await waitForText(draining, 'READY');
 const control = await controlConnected;
+let drainObserved = false;
 const drained = new Promise((resolve) => {
-  const release = draining.session.onDrain(() => { release(); resolve(); });
+  const release = draining.session.onDrain(() => { drainObserved = true; release(); resolve(); });
 });
-draining.session.write(Buffer.alloc(inputBytes, 0x62));
-await Promise.all([drained, waitForText(draining, 'INPUT_DRAINED')]);
+draining.session.write(inputPayload);
+if (drainObserved) throw new Error('native drain was published synchronously with admission');
+await Promise.all([drained, waitForText(draining, 'INPUT_DRAINED:' + inputReceipt)]);
 const controlClosed = new Promise((resolve, reject) => {
   const reply = [];
   control.on('data', (data) => reply.push(data));
@@ -257,7 +272,7 @@ const controlClosed = new Promise((resolve, reject) => {
 });
 control.write('X');
 await Promise.all([controlClosed, draining.session.outputEnded]);
-if (!draining.text().includes('INPUT_DRAINED') || !draining.session.sawRealEof) {
+if (!draining.text().includes('INPUT_DRAINED:' + inputReceipt) || !draining.session.sawRealEof) {
   console.error('the installed addon did not drain admitted input before owned EOF');
   process.exit(7);
 }

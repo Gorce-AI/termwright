@@ -523,7 +523,8 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     });
     sessions.push(app);
     await app.waitForText("readme.md");
-    await expect.poll(() => app.semanticTree()?.v).toBe(2);
+    await app.settled();
+    expect(app.semanticTree()?.v).toBe(2);
 
     const tree = app.semanticTree();
     expect(tree?.hitGrid).toEqual({
@@ -556,6 +557,7 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     });
     sessions.push(app);
     await app.waitForText("readme.md");
+    await app.settled();
 
     // The claim of the whole phase: semantics from an application that was
     // never told about us. Terminal output and the side-channel handshake are
@@ -619,6 +621,7 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     });
     sessions.push(app);
     await app.waitForText("readme.md");
+    await app.settled();
 
     const state = async (
       role: "list" | "button" | "listitem" | "textbox",

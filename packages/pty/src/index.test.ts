@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -241,7 +242,13 @@ describe("the Termwright-owned native PTY flow control", () => {
   });
 
   it("keeps the child alive while admitted input and its drain complete", async () => {
-    const bytes = 64 * 1024;
+    // One upstream ConPTY input read quantum is enough to prove both causal
+    // edges. A larger ASCII write is not stronger evidence on Windows: unless
+    // ENABLE_VIRTUAL_TERMINAL_INPUT is enabled, OpenConsole expands every byte
+    // into key-down/key-up INPUT_RECORDs and turns the test into a benchmark of
+    // console keyboard synthesis rather than of our native drain contract.
+    const payload = Buffer.from("termwright-input-0123456789".repeat(152)).subarray(0, 4096);
+    const receipt = createHash("sha256").update(payload).digest("hex");
     const server = createServer();
     const controlConnected = new Promise<import("node:net").Socket>((resolve) => {
       server.once("connection", resolve);
@@ -260,16 +267,20 @@ describe("the Termwright-owned native PTY flow control", () => {
         "const net = require('node:net');",
         "process.stdin.setRawMode(true);",
         "process.stdin.resume();",
+        "const { createHash } = require('node:crypto');",
+        "const hash = createHash('sha256');",
         "let received = 0;",
         `const control = net.connect(${address.port}, '127.0.0.1', () => process.stdout.write('READY'));`,
         "control.once('data', () => control.end('BYE'));",
         "control.once('close', () => process.exit(0));",
         "process.stdin.on('data', chunk => {",
         "received += chunk.length;",
-        `if (received === ${bytes}) process.stdout.write('INPUT_DRAINED');`,
+        "hash.update(chunk);",
+        `if (received === ${payload.length}) process.stdout.write('INPUT_DRAINED:' + hash.digest('hex'));`,
         "});",
       ].join("")));
       await waitForText(session.handle, session.chunks, "READY");
+      let drained = false;
       const drain = new Promise<void>((resolve, reject) => {
         const releases: Array<() => void> = [];
         const settle = (outcome: () => void): void => {
@@ -277,6 +288,7 @@ describe("the Termwright-owned native PTY flow control", () => {
           outcome();
         };
         releases.push(session!.handle.onDrain(() => {
+          drained = true;
           settle(resolve);
         }));
         releases.push(session!.handle.onError((error) => settle(() => reject(error))));
@@ -284,8 +296,9 @@ describe("the Termwright-owned native PTY flow control", () => {
           `PTY exited before input drain: ${JSON.stringify(status)}`,
         )))));
       });
-      session.handle.write(Buffer.alloc(bytes, 0x62));
-      await Promise.all([drain, waitForText(session.handle, session.chunks, "INPUT_DRAINED")]);
+      session.handle.write(payload);
+      expect(drained).toBe(false);
+      await Promise.all([drain, waitForText(session.handle, session.chunks, `INPUT_DRAINED:${receipt}`)]);
       control = await controlConnected;
       const controlClosed = new Promise<void>((resolve, reject) => {
         const reply: Buffer[] = [];
