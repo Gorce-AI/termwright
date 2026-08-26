@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "kind": "termwright-tcell-patch-template",
+  "profileId": "vt-required",
+  "framework": "github.com/gdamore/tcell/v2",
+  "patchSetVersion": 3,
+  "note": "Add-only Windows capability for cScreen implementations whose Init fails closed without VT output: write the semantic marker synchronously through cScreen's exact console handle after tview's Show returns.",
+  "patched": [],
+  "added": [
+    {
+      "path": "termwright_marker_windows.go",
+      "source": "add/termwright_marker_windows.go"
+    },
+    {
+      "path": "termwright_marker_windows_test.go",
+      "source": "add/termwright_marker_windows_test.go"
+    }
+  ]
+}

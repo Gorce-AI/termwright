@@ -19,8 +19,9 @@ describe('autonomous workflow security', () => {
     const certifier = await readFile(new URL('./certify-framework-candidate.mjs', import.meta.url), 'utf8');
     expect(workflow).not.toMatch(/contents:\s*write|pull-requests:\s*write|issues:\s*write/u);
     expect(workflow).not.toContain('git push');
-    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(3);
+    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(4);
     expect(workflow).toContain('--candidate "$CANDIDATE_ID"');
+    expect(workflow.match(/--platform "\$CANDIDATE_PLATFORM"/gu)).toHaveLength(2);
     expect(workflow).not.toContain('continue-on-error');
     const certificationStep = workflow.slice(
       workflow.indexOf('      - name: Certify artifact identity and behavioral conformance'),
@@ -31,12 +32,25 @@ describe('autonomous workflow security', () => {
     expect(workflow).toMatch(/uses: actions\/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6\n        if: always\(\)/u);
     expect(workflow).not.toContain("--candidate '${{ matrix.id }}'");
     expect(workflow).toContain('runner: "macos-latest"');
+    expect(workflow).toContain('runner: "windows-latest"');
     expect(workflow).toContain('runs-on: ${{ matrix.runner }}');
     expect(workflow).toContain('name: framework-candidate-result-${{ matrix.slot }}-${{ matrix.platform }}');
     expect(workflow).toContain('name: framework-verdict-aggregate');
     expect(workflow).toContain('aggregate-framework-candidate-verdicts.mjs');
     expect(workflow).toContain('--assessments compatibility/candidate-assessments.json');
+    expect(workflow).toContain('discovery_args+=(--stream "$STREAM")');
     expect(certifier).toContain("'--ignore-scripts'");
+    const conpty = jobBlock(workflow, 'conpty-native-build-x64');
+    expect(conpty).toContain('runs-on: windows-2022');
+    expect(conpty).toContain('shell: bash');
+    expect(conpty.match(/name: upstream-candidate-conpty-addon-x64/gu)).toHaveLength(1);
+    expect(conpty).toContain('pnpm exec node-gyp rebuild --arch=x64');
+    const certification = jobBlock(workflow, 'certify');
+    expect(certification).toContain("if: matrix.platform == 'windows'");
+    expect(certification).toContain('name: upstream-candidate-conpty-addon-x64');
+    expect(certification).toContain('path: packages/conpty-win32-x64');
+    expect(certification).toContain('node scripts/check-prebuild.mjs x64');
+    expect(certification).not.toMatch(/fallback|node-pty/u);
     const aggregate = jobBlock(workflow, 'aggregate');
     expect(jobBlock(workflow, 'certify')).not.toContain('astral-sh/setup-uv@');
     expect(aggregate).toContain('astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1');

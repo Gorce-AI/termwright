@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -145,11 +145,15 @@ function validateSource(entry, stream) {
   }
 }
 
-export async function selectCandidates({ rootDir = root, config, ledger, assessments = { schemaVersion: 1, streams: {} }, catalogs, maximum = config.maxCandidatesPerRun, sourceResolver }) {
+export async function selectCandidates({ rootDir = root, config, ledger, assessments = { schemaVersion: 1, streams: {} }, catalogs, maximum = config.maxCandidatesPerRun, sourceResolver, streamId }) {
   if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 32) throw new Error('maximum must be between 1 and 32');
   validateCandidateAssessments(assessments, config.streams.map((stream) => stream.id));
+  if (streamId !== undefined && !config.streams.some((stream) => stream.id === streamId)) {
+    throw new Error(`unknown candidate stream ${streamId}`);
+  }
   const pending = [];
-  for (const stream of [...config.streams].sort((a, b) => a.id.localeCompare(b.id))) {
+  const selectedStreams = config.streams.filter((stream) => streamId === undefined || stream.id === streamId);
+  for (const stream of [...selectedStreams].sort((a, b) => a.id.localeCompare(b.id))) {
     if (!Number.isSafeInteger(stream.certificationRevision) || stream.certificationRevision < 1) {
       throw new Error(`${stream.id}: certificationRevision must be a positive integer`);
     }
@@ -666,32 +670,22 @@ async function main(argv) {
   let ledgerPath = join(root, 'compatibility/certified-upstreams.json');
   let assessmentsPath = join(root, 'compatibility/candidate-assessments.json');
   let maximum;
+  let streamId;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--output') output = resolve(argv[++i]);
     else if (argv[i] === '--catalog') catalogPath = resolve(argv[++i]);
     else if (argv[i] === '--ledger') ledgerPath = resolve(argv[++i]);
     else if (argv[i] === '--assessments') assessmentsPath = resolve(argv[++i]);
     else if (argv[i] === '--max') maximum = Number(argv[++i]);
+    else if (argv[i] === '--stream') streamId = argv[++i];
     else throw new Error(`unknown argument ${argv[i]}`);
   }
   const config = JSON.parse(await readFile(join(root, 'compatibility/upstream-patches.json'), 'utf8'));
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
   const assessments = JSON.parse(await readFile(assessmentsPath, 'utf8'));
   ledger.streams ??= {};
-  const compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
-  for (const stream of config.streams) {
-    const seeded = new Map((ledger.streams[stream.id] ?? []).map((entry) => [entry.version, entry]));
-    const framework = compatibility.frameworks?.find((entry) => entry.id === stream.frameworkId);
-    if (framework?.frameworkPackage === stream.package) for (const version of framework.versions?.verified ?? []) if (!seeded.has(version)) seeded.set(version, { version });
-    if (stream.mode !== 'hook') {
-      for (const version of await readdir(join(root, stream.patchRoot)).catch(() => [])) {
-        if (await access(join(root, stream.patchRoot, version, 'manifest.json')).then(() => true, () => false) && !seeded.has(version)) seeded.set(version, { version });
-      }
-    }
-    ledger.streams[stream.id] = [...seeded.values()];
-  }
   const catalogs = catalogPath === undefined ? await liveCatalogs(config) : JSON.parse(await readFile(catalogPath, 'utf8')).streams;
-  const registry = await selectCandidates({ config, ledger, assessments, catalogs, maximum, ...(catalogPath === undefined ? { sourceResolver: resolveSource } : {}) });
+  const registry = await selectCandidates({ config, ledger, assessments, catalogs, maximum, streamId, ...(catalogPath === undefined ? { sourceResolver: resolveSource } : {}) });
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, canonicalJson(registry));
   process.stdout.write(`${registry.candidates.length} selected, ${registry.backlog} queued\n`);

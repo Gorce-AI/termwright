@@ -50,10 +50,12 @@ version selected by the verified patch set, not the Go runtime version.
 
 The tree is staged while tview holds its draw lock and committed only after
 `screen.Show()` succeeds. On Unix the marker follows through tcell's public
-`Tty()` writer. On Windows the exact tcell v2.8.1 companion forwards through
-the real `baseScreen` to `cScreen` and writes under the same lock and console
-handle used by `Show`; virtual-terminal mode is required. There is no stdout
-fallback, and a missing writer capability fails the semantic session closed.
+`Tty()` writer. On Windows an exact tcell companion forwards through the real
+`baseScreen` to `cScreen` and writes under the same lock and console handle
+used by `Show`; virtual-terminal mode is required. Each supported tcell release
+has its own source-bound manifest, selected from an AST-classified console
+capability family. There is no stdout fallback, and a missing writer capability
+fails the semantic session closed.
 
 ## Describing what the probe cannot see
 
@@ -118,9 +120,10 @@ to be byte-identical.
   compiles.
 - A framework version with no patch set is named as such — "this is not
   tview v0.42.0" — instead of failing somewhere inside a diff.
-- The resolved tcell version must have its own exact companion patch set;
-  currently that is v2.8.1. This is required for causal Windows marker output,
-  not merely a transitive dependency preference.
+- The resolved tcell version must have its own exact companion patch set. This
+  is required for causal Windows marker output, not merely a transitive
+  dependency preference. A structurally similar but uncertified release is
+  refused rather than matched fuzzily.
 
 ## Development
 

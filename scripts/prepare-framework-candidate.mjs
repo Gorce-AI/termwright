@@ -12,6 +12,9 @@ import { safeExtractTarGz } from './safe-tar.mjs';
 
 const exec = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const TCELL_MODULE = 'github.com/gdamore/tcell/v2';
+const TCELL_PATCH_ROOT = 'packages/probe-tview/upstream-patches/tcell';
+const TCELL_TEMPLATE_ROOT = 'packages/probe-tview/upstream-patch-templates/tcell';
 
 function safeRelative(value, field) {
   if (typeof value !== 'string' || value.length === 0 || isAbsolute(value) || value.includes('\\') || value.split('/').some((part) => part === '' || part === '.' || part === '..')) {
@@ -60,14 +63,112 @@ async function latestTemplate(rootDir, patchRoot, candidateVersion) {
   return sameLine[0];
 }
 
+export async function classifyTcellConsoleProfile(sourceRoot) {
+  let parsed;
+  try {
+    const { stdout } = await exec('go', ['run', join(root, 'scripts/classify-tcell-console-profile.go'), sourceRoot], {
+      cwd: root,
+      env: trustedGoEnvironment({ GOFLAGS: '', GOWORK: 'off', GOPROXY: 'off', GOSUMDB: 'off' }),
+    });
+    parsed = JSON.parse(stdout);
+  } catch (error) {
+    throw new Error(`tcell Windows console structural classification failed: ${error.stderr || error.message}`);
+  }
+  const matches = parsed?.matches;
+  if (!Array.isArray(matches) || matches.some((entry) => typeof entry !== 'string')) {
+    throw new Error('tcell Windows console structural classifier returned invalid evidence');
+  }
+  const unique = [...new Set(matches)];
+  if (unique.length !== 1) {
+    throw new Error(`tcell Windows console structural classification matched ${unique.length} audited profiles${unique.length === 0 ? '' : `: ${unique.join(', ')}`}`);
+  }
+  return unique[0];
+}
+
+function validateTcellTemplate(template, profileId) {
+  if (
+    template?.schemaVersion !== 1
+    || template.kind !== 'termwright-tcell-patch-template'
+    || template.profileId !== profileId
+    || template.framework !== TCELL_MODULE
+    || !Number.isSafeInteger(template.patchSetVersion)
+    || template.patchSetVersion < 1
+    || typeof template.note !== 'string'
+    || template.note.length === 0
+    || !Array.isArray(template.patched)
+    || template.patched.length !== 0
+    || !Array.isArray(template.added)
+    || template.added.length === 0
+  ) throw new Error(`invalid audited tcell template ${profileId}`);
+  const targets = new Set();
+  for (const [index, entry] of template.added.entries()) {
+    const target = safeRelative(entry?.path, `tcell template ${profileId}.added[${index}].path`);
+    safeRelative(entry?.source, `tcell template ${profileId}.added[${index}].source`);
+    if (targets.has(target)) throw new Error(`tcell template ${profileId} adds ${target} more than once`);
+    targets.add(target);
+  }
+  return template;
+}
+
+async function tcellTemplate(rootDir, candidate, streamRoot, sourceRoot) {
+  const targetsTcell = streamRoot === TCELL_PATCH_ROOT;
+  if (candidate.package === TCELL_MODULE && !targetsTcell) {
+    throw new Error(`${candidate.id}: tcell candidate targets another patch stream`);
+  }
+  if (!targetsTcell) return null;
+  const expectedPath = `${TCELL_PATCH_ROOT}/${candidate.version}/manifest.json`;
+  if (
+    candidate.package !== TCELL_MODULE
+    || candidate.registry !== 'go'
+    || candidate.frameworkId !== 'tview'
+    || parseVersion(candidate.version)?.major !== 2
+    || candidate.patch.path !== expectedPath
+  ) throw new Error(`${candidate.id}: tcell patch request is not bound to the exact stream, package, and version`);
+  const profileId = await classifyTcellConsoleProfile(sourceRoot);
+  const directory = join(rootDir, TCELL_TEMPLATE_ROOT, safeRelative(profileId, 'tcell profileId'));
+  const template = validateTcellTemplate(
+    JSON.parse(await readFile(join(directory, 'template.json'), 'utf8')),
+    profileId,
+  );
+  return {
+    kind: 'structural-profile',
+    directory,
+    profileId,
+    manifest: {
+      framework: template.framework,
+      frameworkVersion: candidate.version,
+      patchSetVersion: template.patchSetVersion,
+      note: template.note,
+      patched: [],
+      added: template.added.map((entry) => ({ ...entry, sha256: '' })),
+    },
+  };
+}
+
+async function materializeTemplate(template, destination) {
+  if (template.kind !== 'structural-profile') {
+    await cp(template.directory, destination, { recursive: true, errorOnExist: true });
+    return;
+  }
+  await mkdir(destination, { recursive: false });
+  for (const [index, entry] of template.manifest.added.entries()) {
+    const source = safeRelative(entry.source, `added[${index}].source`);
+    const output = join(destination, source);
+    await mkdir(dirname(output), { recursive: true });
+    await cp(join(template.directory, source), output, { errorOnExist: true, force: false });
+  }
+  await writeFile(join(destination, 'manifest.json'), canonicalJson(template.manifest));
+}
+
 export async function preparePatchBundle({ rootDir = root, candidate, sourceRoot, outputDirectory, sourceRevision }) {
   if (candidate.mode !== 'patch' || candidate.patch?.status !== 'needs-patch') throw new Error(`${candidate.id}: candidate does not need a generated patch`);
   if (typeof sourceRevision !== 'string' || sourceRevision.length < 7) throw new Error('sourceRevision is required');
   const streamRoot = safeRelative(candidate.patch.path, 'candidate.patch.path').split('/').slice(0, -2).join('/');
-  const template = await latestTemplate(rootDir, streamRoot, candidate.version);
+  const template = await tcellTemplate(rootDir, candidate, streamRoot, sourceRoot)
+    ?? await latestTemplate(rootDir, streamRoot, candidate.version);
   const destination = join(outputDirectory, 'patch');
   await mkdir(outputDirectory, { recursive: true });
-  await cp(template.directory, destination, { recursive: true, errorOnExist: true });
+  await materializeTemplate(template, destination);
   const manifestPath = join(destination, 'manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   const oldVersion = manifest.frameworkVersion;
@@ -108,7 +209,9 @@ export async function preparePatchBundle({ rootDir = root, candidate, sourceRoot
     candidateDigest: candidate.candidateDigest,
     sourceRevision,
     targetPath: candidate.patch.path.split('/').slice(0, -1).join('/'),
-    template: { frameworkVersion: oldVersion, patchSetVersion: template.manifest.patchSetVersion },
+    template: template.kind === 'structural-profile'
+      ? { profileId: template.profileId, selection: 'go-ast-capability', patchSetVersion: template.manifest.patchSetVersion }
+      : { frameworkVersion: oldVersion, patchSetVersion: template.manifest.patchSetVersion },
     patchTreeDigest,
   };
   await writeFile(join(outputDirectory, 'bundle.json'), canonicalJson(metadata));

@@ -418,6 +418,33 @@ describe.skipIf(!runnable)("the launcher call", () => {
     ).rejects.toThrow(/-mod=vendor/u);
   }, 120_000);
 
+  it("fails closed when the resolved tcell version has no exact certified companion", async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), "tw-launch-tcell-")));
+    roots.push(dir);
+    const app = join(dir, "app");
+    await mkdir(app, { recursive: true });
+    await cp(FIXTURE, app, { recursive: true });
+    await run(
+      "go",
+      ["mod", "edit", "-require=github.com/gdamore/tcell/v2@v2.7.4"],
+      { cwd: app },
+    );
+    await run(
+      "go",
+      ["mod", "download", "github.com/gdamore/tcell/v2@v2.7.4"],
+      { cwd: app },
+    );
+
+    await expect(
+      prepareInstrumentedBuild({
+        moduleDir: app,
+        env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") },
+      }),
+    ).rejects.toThrow(
+      /no exact certified patch set for github\.com\/gdamore\/tcell\/v2 v2\.7\.4/u,
+    );
+  }, 120_000);
+
   it.each([
     {
       module: "github.com/rivo/tview",
@@ -769,6 +796,15 @@ describe.skipIf(!hasGo)("the Windows tcell companion", () => {
     expect(workspace).toContain("replace github.com/gdamore/tcell/v2 =>");
     expect(prepared.tcellCopyDir).toContain("v2.8.1");
     expect(hook).toContain("syscall.WriteConsole(s.out");
+    await run("go", ["build", "-o", join(dir, "fixture.exe"), "."], {
+      cwd: app,
+      env: {
+        ...prepared.env,
+        GOOS: "windows",
+        GOARCH: "amd64",
+        CGO_ENABLED: "0",
+      },
+    });
     if (process.platform === "win32") {
       const { stdout } = await run(
         "go",
@@ -791,9 +827,17 @@ describe.skipIf(!hasGo)("the Windows tcell companion", () => {
 
 /** Kept for the failure message when the fixture stops being zero-config. */
 it("the fixture imports nothing of ours", async () => {
-  const source = await readFile(join(FIXTURE, "main.go"), "utf8");
+  const source = (
+    await Promise.all(
+      ["main.go", "screen_nonwindows.go", "screen_windows.go"].map((file) =>
+        readFile(join(FIXTURE, file), "utf8"),
+      ),
+    )
+  ).join("\n");
   const imports = source.slice(source.indexOf("import ("), source.indexOf(")"));
 
   expect(imports).not.toContain("termwright");
   expect(imports).toContain("github.com/rivo/tview");
+  expect(source).toContain("tcell.NewConsoleScreen()");
+  expect(source).toContain("app.SetScreen(screen)");
 });

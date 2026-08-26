@@ -15,6 +15,17 @@ import { safeExtractTarGz } from './safe-tar.mjs';
 const exec = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+export function certificationPlatform(nodePlatform = process.platform) {
+  if (nodePlatform === 'linux') return 'linux';
+  if (nodePlatform === 'darwin') return 'macos';
+  if (nodePlatform === 'win32') return 'windows';
+  throw new Error(`unsupported certification host platform ${nodePlatform}`);
+}
+
+export function candidateExecutableName(platform = certificationPlatform()) {
+  return platform === 'windows' ? 'candidate-app.exe' : 'candidate-app';
+}
+
 async function writeVerdict(path, candidate, state, detail, sourceRevision, executableResolution) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, canonicalJson({
@@ -23,6 +34,7 @@ async function writeVerdict(path, candidate, state, detail, sourceRevision, exec
     candidateId: candidate.id,
     candidateDigest: candidate.candidateDigest,
     sourceRevision,
+    platform: certificationPlatform(),
     state,
     detail: String(detail).slice(-12_000),
     ...(executableResolution === undefined ? {} : { executableResolution }),
@@ -379,7 +391,7 @@ export async function certifyGoCandidateBehavior(candidate) {
   }
   const launcher = await import(pathToFileURL(launcherPackage).href);
   const prepared = await launcher.prepareInstrumentedBuild({ moduleDir: app, env });
-  const binary = join(scratch, 'candidate-app');
+  const binary = join(scratch, candidateExecutableName());
   await run('go', ['build', '-o', binary, '.'], prepared.env, app);
   const driver = await import(pathToFileURL(join(root, 'packages/driver/dist/index.js')).href);
   const session = await driver.launchTerminal({
@@ -393,6 +405,15 @@ export async function certifyGoCandidateBehavior(candidate) {
     await assertCandidateSemanticSession(session, candidate.id);
     if (candidate.frameworkId === 'tview') {
       await session.getByRole('button', { name: 'Save' }).waitFor({ state: 'attached' });
+      const initial = await session.waitForCommittedObservation();
+      if (initial.semanticRevision === null) throw new Error(`${candidate.id}: initial semantic tree has no committed revision`);
+      await session.press('r');
+      await session.waitForText('status: ready redraw:1');
+      const redrawn = await session.waitForCommittedObservation();
+      if (redrawn.semanticRevision === null || redrawn.semanticRevision <= initial.semanticRevision) {
+        throw new Error(`${candidate.id}: causal redraw did not publish a newer semantic tree`);
+      }
+      await assertCandidateSemanticSession(session, candidate.id);
       await session.press('Tab');
     } else {
       const spinner = session.getByRole('status');
@@ -462,20 +483,28 @@ async function main(argv) {
   let registryPath;
   let candidateId;
   let output;
+  let expectedPlatform;
   let initializeOnly = false;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--registry') registryPath = resolve(argv[++i]);
     else if (argv[i] === '--candidate') candidateId = argv[++i];
     else if (argv[i] === '--output') output = resolve(argv[++i]);
+    else if (argv[i] === '--platform') expectedPlatform = argv[++i];
     else if (argv[i] === '--initialize-only') initializeOnly = true;
     else throw new Error(`unknown argument ${argv[i]}`);
   }
-  if (registryPath === undefined || candidateId === undefined || output === undefined) throw new Error('--registry, --candidate and --output are required');
+  if (registryPath === undefined || candidateId === undefined || output === undefined || expectedPlatform === undefined) {
+    throw new Error('--registry, --candidate, --platform and --output are required');
+  }
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
   const candidate = registry.candidates.find((entry) => entry.id === candidateId);
   if (candidate === undefined) throw new Error(`candidate registry has no ${candidateId}`);
   const revision = process.env.GITHUB_SHA ?? 'local-unpinned';
   await writeVerdict(output, candidate, 'red', 'Certification did not complete; inspect the job log.', revision);
+  const actualPlatform = certificationPlatform();
+  if (expectedPlatform !== actualPlatform) {
+    throw new Error(`${candidate.id}: expected ${expectedPlatform} certification but host is ${actualPlatform}`);
+  }
   if (initializeOnly) return;
   const toolchainBlock = candidateToolchainBlock(candidate, process.env.TERMWRIGHT_UPSTREAM_GO_VERSION ?? 'unknown');
   if (toolchainBlock !== null) {

@@ -35,7 +35,6 @@ const run = promisify(execFile);
 export const FRAMEWORK = "github.com/rivo/tview";
 
 const TCELL_FRAMEWORK = "github.com/gdamore/tcell/v2";
-const TCELL_VERSION = "v2.8.1";
 
 /** Module path of the protocol client the injected probe imports. */
 export const CLIENT_MODULE = "github.com/gorce-ai/termwright/clients/go";
@@ -99,17 +98,15 @@ export async function prepareInstrumentedBuild(
     );
   }
   const patchSetDir = patchSetFor(frameworkVersion);
-  const manifest = await readManifest(patchSetDir);
+  const manifest = await readExactManifest(
+    patchSetDir,
+    FRAMEWORK,
+    frameworkVersion,
+  );
 
   const tcellVersion = (
     await resolvedOfficialModule(options.moduleDir, TCELL_FRAMEWORK, env)
   ).version;
-  if (tcellVersion !== TCELL_VERSION) {
-    throw new Error(
-      `@termwright/probe-tview supports ${TCELL_FRAMEWORK} ${TCELL_VERSION}, ` +
-        `but the application resolves ${tcellVersion || "no version"}`,
-    );
-  }
 
   const key: CopyKeyInput = {
     framework: FRAMEWORK,
@@ -134,12 +131,16 @@ export async function prepareInstrumentedBuild(
     packageRoot(),
     "upstream-patches",
     "tcell",
-    TCELL_VERSION,
+    tcellVersion,
   );
-  const tcellManifest = await readManifest(tcellPatchSet);
+  const tcellManifest = await readExactManifest(
+    tcellPatchSet,
+    TCELL_FRAMEWORK,
+    tcellVersion,
+  );
   const tcellKey: CopyKeyInput = {
     framework: TCELL_FRAMEWORK,
-    frameworkVersion: TCELL_VERSION,
+    frameworkVersion: tcellVersion,
     probeVersion: PROBE_VERSION,
     toolchain: await toolchain(env),
     patchDigest: await digestPatchSet(tcellPatchSet),
@@ -151,8 +152,8 @@ export async function prepareInstrumentedBuild(
     await materializeUpstream(
       await ensureUpstreamModule({
         module: TCELL_FRAMEWORK,
-        version: TCELL_VERSION,
-        cachePath: moduleCachePath(TCELL_FRAMEWORK, TCELL_VERSION),
+        version: tcellVersion,
+        cachePath: moduleCachePath(TCELL_FRAMEWORK, tcellVersion),
         env,
       }),
       tcellCopy,
@@ -287,6 +288,32 @@ function moduleCachePath(module: string, version: string): readonly string[] {
 
 function patchSetFor(version: string): string {
   return join(packageRoot(), "upstream-patches", "tview", version);
+}
+
+async function readExactManifest(
+  patchSetDir: string,
+  framework: string,
+  version: string,
+): Promise<Awaited<ReturnType<typeof readManifest>>> {
+  let manifest: Awaited<ReturnType<typeof readManifest>>;
+  try {
+    manifest = await readManifest(patchSetDir);
+  } catch (cause) {
+    throw new Error(
+      `@termwright/probe-tview has no exact certified patch set for ${framework} ${version || "no version"}`,
+      { cause },
+    );
+  }
+  if (
+    manifest.framework !== framework ||
+    manifest.frameworkVersion !== version
+  ) {
+    throw new Error(
+      `@termwright/probe-tview patch identity mismatch for ${framework} ${version || "no version"}: ` +
+        `manifest declares ${manifest.framework} ${manifest.frameworkVersion}`,
+    );
+  }
+  return manifest;
 }
 
 /**

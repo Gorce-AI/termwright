@@ -9,7 +9,10 @@ Commit semantic frames only at causal framework output boundaries. OpenTUI now
 observes render geometry at runtime instead of patching generated render-loop
 operations; Bubble Tea commits staged model observations after renderer flush;
 and tview commits after `Screen.Show` with same-output marker ordering on Unix
-and Windows.
+and Windows. The tview launcher resolves the application's exact tcell module
+and accepts only a shipped, identity-matching companion manifest; new tcell
+companions are selected structurally from reviewed Windows console capability
+profiles and certified on both Linux and native Windows.
 
 The Termwright CLI now projects recognized toolchain and
 candidate-certification controls into Vitest's explicit worker configuration,

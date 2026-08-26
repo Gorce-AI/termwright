@@ -823,7 +823,7 @@
         "GOFLAGS=-mod=vendor is refused because an ephemeral workspace and vendor mode are incompatible.",
         "Grid hierarchy is available only because the exact-version patch reads tview's private item list; unsupported versions are refused.",
         "Publication occurs only after tview's screen Show returns; the probe drops instead of blocking when the driver is slow.",
-        "Unix markers use tcell's public Tty writer. Windows requires the exact certified tcell v2.8.1 add-only companion so the marker is written through cScreen's console handle; absence of either capability fails closed.",
+        "Unix markers use tcell's public Tty writer. Windows requires an exact certified tcell add-only companion so the marker is written through cScreen's console handle; absence of either capability fails closed.",
         "tview GetRect values do not prove pointer ownership; high-level pointer actions require an application provider exposing the production router."
       ],
       "documentation": "/reference/compatibility/#tview",

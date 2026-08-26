@@ -7,9 +7,12 @@ on:
     inputs:
       maximum:
         description: 'Maximum fairly interleaved unverified releases to process'
-        type: choice
-        options: ['1', '2', '4', '8', '16']
-        default: '16'
+        type: number
+        default: 16
+      stream:
+        description: 'Optional exact stream id to process (for example tcell-v2)'
+        type: string
+        required: false
 
 concurrency:
   group: framework-compatibility-daily
@@ -34,6 +37,7 @@ jobs:
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       has-candidates: ${{ steps.matrix.outputs.has-candidates }}
+      has-windows-candidates: ${{ steps.matrix.outputs.has-windows-candidates }}
     steps:
       - name: Reject workflow reruns
         shell: bash
@@ -58,21 +62,29 @@ jobs:
       - name: Build bounded deterministic candidate registry
         env:
           MAXIMUM: ${{ inputs.maximum || '16' }}
+          STREAM: ${{ inputs.stream || '' }}
+        shell: bash
         run: |
-          node scripts/discover-framework-candidates.mjs \
+          set -euo pipefail
+          discovery_args=( \
             --ledger upstream-candidates/effective-ledger.json \
             --assessments compatibility/candidate-assessments.json \
             --max "$MAXIMUM" \
-            --output upstream-candidates/candidate-registry.json
+            --output upstream-candidates/candidate-registry.json \
+          )
+          if [ -n "$STREAM" ]; then discovery_args+=(--stream "$STREAM"); fi
+          node scripts/discover-framework-candidates.mjs "${discovery_args[@]}"
 
       - id: matrix
         name: Export bounded matrix
         shell: bash
         run: |
-          matrix="$(jq -c '{include: [.candidates | to_entries[] | if .value.frameworkId == "opentui" then {slot: .key, id: .value.id, ecosystem: .value.ecosystem, platform: "linux", runner: "ubuntu-latest"}, {slot: .key, id: .value.id, ecosystem: .value.ecosystem, platform: "macos", runner: "macos-latest"} else {slot: .key, id: .value.id, ecosystem: .value.ecosystem, platform: "linux", runner: "ubuntu-latest"} end]}' upstream-candidates/candidate-registry.json)"
+          matrix="$(jq -c '{include: [.candidates | to_entries[] | if .value.frameworkId == "opentui" then {slot: .key, id: .value.id, ecosystem: .value.ecosystem, platform: "linux", runner: "ubuntu-latest"}, {slot: .key, id: .value.id, ecosystem: .value.ecosystem, platform: "macos", runner: "macos-latest"} elif .value.frameworkId == "tview" then {slot: .key, id: .value.id, ecosystem: .value.ecosystem, platform: "linux", runner: "ubuntu-latest"}, {slot: .key, id: .value.id, ecosystem: .value.ecosystem, platform: "windows", runner: "windows-latest"} else {slot: .key, id: .value.id, ecosystem: .value.ecosystem, platform: "linux", runner: "ubuntu-latest"} end]}' upstream-candidates/candidate-registry.json)"
           count="$(jq '.candidates | length' upstream-candidates/candidate-registry.json)"
+          windows_count="$(jq '[.candidates[] | select(.frameworkId == "tview")] | length' upstream-candidates/candidate-registry.json)"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           if [ "$count" -gt 0 ]; then echo 'has-candidates=true' >> "$GITHUB_OUTPUT"; else echo 'has-candidates=false' >> "$GITHUB_OUTPUT"; fi
+          if [ "$windows_count" -gt 0 ]; then echo 'has-windows-candidates=true' >> "$GITHUB_OUTPUT"; else echo 'has-windows-candidates=false' >> "$GITHUB_OUTPUT"; fi
           jq -r '"### Framework release discovery\n\nSelected: \(.candidates | length) / \(.totalPending); backlog: \(.backlog)."' upstream-candidates/candidate-registry.json >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -82,10 +94,49 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  conpty-native-build-x64:
+    name: Build the candidate ConPTY addon (x64)
+    needs: discovery
+    if: needs.discovery.outputs.has-windows-candidates == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-js-workspace
+      - name: Compile the exact x64 addon
+        working-directory: packages/conpty
+        run: pnpm exec node-gyp rebuild --arch=x64
+      - name: Place and verify the exact prebuild
+        run: |
+          set -euo pipefail
+          cp packages/conpty/build/Release/termwright_conpty.node \
+             packages/conpty-win32-x64/termwright_conpty.node
+          node scripts/check-prebuild.mjs x64
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: upstream-candidate-conpty-addon-x64
+          path: packages/conpty-win32-x64/termwright_conpty.node
+          if-no-files-found: error
+          retention-days: 1
+
   certify:
     name: Certify ${{ matrix.id }} (${{ matrix.platform }})
-    needs: discovery
-    if: needs.discovery.outputs.has-candidates == 'true'
+    needs: [discovery, conpty-native-build-x64]
+    if: >-
+      always() &&
+      needs.discovery.result == 'success' &&
+      needs.discovery.outputs.has-candidates == 'true' &&
+      (needs.discovery.outputs.has-windows-candidates != 'true' || needs.conpty-native-build-x64.result == 'success')
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -94,6 +145,9 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: bash
     env:
       TERMWRIGHT_REQUIRE_BUN: '1'
     steps:
@@ -107,17 +161,27 @@ jobs:
         with:
           name: framework-candidate-registry
           path: upstream-candidates
-
       - name: Initialize red verdict before setup
         env:
           CANDIDATE_ID: ${{ matrix.id }}
+          CANDIDATE_PLATFORM: ${{ matrix.platform }}
           CANDIDATE_SLOT: ${{ matrix.slot }}
         run: |
           node scripts/certify-framework-candidate.mjs \
             --initialize-only \
             --registry upstream-candidates/candidate-registry.json \
             --candidate "$CANDIDATE_ID" \
+            --platform "$CANDIDATE_PLATFORM" \
             --output "candidate-verdict/verdict-$CANDIDATE_SLOT.json"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: matrix.platform == 'windows'
+        with:
+          name: upstream-candidate-conpty-addon-x64
+          path: packages/conpty-win32-x64
+      - name: Require the exact native Windows backend
+        if: matrix.platform == 'windows'
+        run: node scripts/check-prebuild.mjs x64
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
@@ -152,11 +216,13 @@ jobs:
         # workflow conclusion.
         env:
           CANDIDATE_ID: ${{ matrix.id }}
+          CANDIDATE_PLATFORM: ${{ matrix.platform }}
           CANDIDATE_SLOT: ${{ matrix.slot }}
         run: |
           node scripts/certify-framework-candidate.mjs \
             --registry upstream-candidates/candidate-registry.json \
             --candidate "$CANDIDATE_ID" \
+            --platform "$CANDIDATE_PLATFORM" \
             --output "candidate-verdict/verdict-$CANDIDATE_SLOT.json"
 
       - name: Candidate summary

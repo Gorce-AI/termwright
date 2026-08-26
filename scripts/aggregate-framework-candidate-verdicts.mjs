@@ -15,9 +15,11 @@ import { renderCertifiedTextualPyproject } from './textual-certification.mjs';
 const exec = promisify(execFile);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-const requiredPlatforms = (candidate) => candidate.frameworkId === 'opentui'
+export const requiredPlatforms = (candidate) => candidate.frameworkId === 'opentui'
   ? ['linux', 'macos']
-  : ['linux'];
+  : candidate.frameworkId === 'tview'
+    ? ['linux', 'windows']
+    : ['linux'];
 
 async function treeDigest(directory, omittedFile) {
   const files = [];
@@ -49,6 +51,7 @@ function validateVerdict(verdict, candidate, sourceRevision, platform) {
     || verdict.candidateId !== candidate.id
     || verdict.candidateDigest !== candidate.candidateDigest
     || verdict.sourceRevision !== sourceRevision
+    || verdict.platform !== platform
     || !['green', 'red'].includes(verdict.state)
     || typeof verdict.detail !== 'string'
     || verdict.detail.length === 0
@@ -56,15 +59,15 @@ function validateVerdict(verdict, candidate, sourceRevision, platform) {
   ) throw new Error(`${candidate.id}: invalid or stale ${platform} verdict`);
 }
 
-async function validateGreenArtifactShape(result, slot) {
+async function validatePlatformArtifactShape(result, slot) {
   const entries = await readdir(result.directory, { withFileTypes: true });
   const expected = [`verdict-${slot}.json`];
   if (entries.map((entry) => entry.name).sort().join('\0') !== expected.join('\0')) {
-    throw new Error(`${result.verdict.candidateId}: green certifier emitted an unexpected artifact shape`);
+    throw new Error(`${result.verdict.candidateId}: platform certifier emitted an unexpected artifact shape`);
   }
   for (const entry of entries) {
     if (entry.name === `verdict-${slot}.json` ? !entry.isFile() : !entry.isDirectory()) {
-      throw new Error(`${result.verdict.candidateId}: green certifier artifact has an unexpected type`);
+      throw new Error(`${result.verdict.candidateId}: platform certifier artifact has an unexpected type`);
     }
   }
 }
@@ -78,6 +81,7 @@ export async function aggregateCandidate({ candidate, slot, inputs, output, sour
     validateVerdict(verdict, candidate, sourceRevision, platform);
     results.push({ directory, platform, verdict, verdictPath });
   }
+  await Promise.all(results.map((result) => validatePlatformArtifactShape(result, slot)));
 
   const green = results.every(({ verdict }) => verdict.state === 'green');
   let executableResolution;
@@ -113,7 +117,6 @@ export async function aggregateCandidate({ candidate, slot, inputs, output, sour
   await mkdir(output, { recursive: true });
   if (green) {
     const [canonical, ...others] = results;
-    await Promise.all(results.map((result) => validateGreenArtifactShape(result, slot)));
     const expected = await treeDigest(canonical.directory, canonical.verdictPath);
     for (const result of others) {
       if (await treeDigest(result.directory, result.verdictPath) !== expected) {
