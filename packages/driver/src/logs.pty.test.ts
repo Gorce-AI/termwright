@@ -6,27 +6,17 @@ import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { AppLogEvent, SessionDiagnostic, TerminalHarness } from './api.js';
-import { createNativePtyBackend } from './native-pty-backend.js';
-import { inheritedSpawnEnv, launchTerminal } from './session.js';
+import { nativePtyAvailable } from './native-pty-backend.js';
+import { launchTerminal } from './session.js';
 
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtures');
 
 function ptyAvailable(): boolean {
-  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
-  try {
-    const pty = createNativePtyBackend().spawn({
-      command: [process.execPath, '-e', 'process.exit(0)'],
-      env: inheritedSpawnEnv(),
-      columns: 20,
-      rows: 4,
-    });
-    pty.dispose();
-    return true;
-  } catch {
-    return false;
-  }
+  return nativePtyAvailable();
 }
 
 interface Harness {

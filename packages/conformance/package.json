@@ -32,6 +32,7 @@
   "dependencies": {
     "@termwright/driver": "workspace:*",
     "@termwright/protocol": "workspace:*",
+    "@termwright/resource-broker": "workspace:*",
     "@xterm/headless": "^6.0.0"
   },
   "devDependencies": {

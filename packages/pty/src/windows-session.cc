@@ -558,7 +558,7 @@ long long Session::ActiveProcesses() const {
 }
 
 void Session::Dispose() {
-  if (state_.exchange(State::kDisposed) == State::kDisposed) return;
+  if (disposing_.exchange(true)) return;
 
   writer_stop_.store(true);
   {
@@ -578,27 +578,32 @@ void Session::Dispose() {
   // No operation can now be using the handle.
   host_input_write_.Close();
 
-  // Disposal owns the entire process tree. Both blocking lifecycle waits have
-  // an explicit shutdown edge, so even an OS-level termination failure cannot
-  // strand synchronous teardown. Closing the job below is the independent
-  // KILL_ON_JOB_CLOSE fallback.
+  // Disposal owns the entire process tree. A successful TerminateJobObject is
+  // followed by the existing lifecycle thread's causal barriers: the root
+  // process handle becomes signalled, then JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO
+  // is confirmed by QueryInformationJobObject. Joining that thread makes a
+  // successful dispose mean the complete job is gone, not merely that Windows
+  // accepted a termination request.
+  //
+  // Only a failed termination request takes the emergency wake path. Closing
+  // the job is then the independent KILL_ON_JOB_CLOSE fallback, and the
+  // shutdown events ensure an OS-level failure cannot strand teardown.
   std::string terminate_error;
   const bool terminated = TerminateTree(&terminate_error);
-  const bool root_wait_woken =
-      shutdown_event_.valid() && SetEvent(shutdown_event_.get()) != FALSE;
-  const bool tree_wait_woken = completion_port_.valid() &&
-                               PostQueuedCompletionStatus(completion_port_.get(), 0, 0, nullptr) !=
-                                   FALSE;
-  if (!terminated || !root_wait_woken || !tree_wait_woken) {
-    // Closing the last job handle activates KILL_ON_JOB_CLOSE. It is the
-    // independent wake path when either explicit signal API itself fails.
+  if (!terminated) {
+    state_.store(State::kDisposed);
+    if (shutdown_event_.valid()) SetEvent(shutdown_event_.get());
+    if (completion_port_.valid()) {
+      PostQueuedCompletionStatus(completion_port_.get(), 0, 0, nullptr);
+    }
     std::lock_guard<std::mutex> lock(job_mutex_);
     job_.Close();
   }
-  CloseOwnedPseudoConsole();
 
-  if (reader_.joinable()) reader_.join();
   if (exit_watcher_.joinable()) exit_watcher_.join();
+  state_.store(State::kDisposed);
+  CloseOwnedPseudoConsole();
+  if (reader_.joinable()) reader_.join();
 
   {
     std::lock_guard<std::mutex> lock(write_mutex_);

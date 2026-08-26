@@ -52,6 +52,7 @@
   },
   "devDependencies": {
     "@termwright/driver": "workspace:*",
+    "@termwright/resource-broker": "workspace:*",
     "@types/react": "^19.2.18",
     "ink": "7.1.1",
     "react": "^19.2.8"

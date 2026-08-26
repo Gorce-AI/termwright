@@ -150,6 +150,7 @@ class Session {
   const ConPtyApi* conpty_api_ = nullptr;
 
   std::atomic<State> state_{State::kCreated};
+  std::atomic<bool> disposing_{false};
   std::atomic<bool> writer_stop_{false};
 
   std::thread reader_;

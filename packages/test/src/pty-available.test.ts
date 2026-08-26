@@ -23,7 +23,7 @@ describe('pseudo-terminal probing', () => {
     expect(ptyUnavailableReason()).toEqual({ kind: 'opted-out', detail: 'TERMWRIGHT_SKIP_PTY=1' });
   });
 
-  it('reports no reason when a pseudo-terminal really is available', async () => {
+  it('reports no reason when the native pseudo-terminal backend loads', async () => {
     delete process.env['TERMWRIGHT_SKIP_PTY'];
     resetPtyProbe();
     const available = await ptyAvailable();

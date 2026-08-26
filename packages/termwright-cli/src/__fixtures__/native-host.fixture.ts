@@ -16,6 +16,7 @@ test.resources({ terminals: 2 })('duplicate title', async () => {
     ptySession: 2,
     externalProcess: 2,
     semanticEndpoint: 2,
+    nativeHostPressure: 2,
     traceWriter: 2,
   });
 });

@@ -10,7 +10,8 @@
  * Run under `pnpm test:hostile` to execute the same suite with the worker's old
  * space capped at 128 MB, so exhaustion cases cannot pass on a roomy heap.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { DEFAULT_LIMITS } from '@termwright/protocol';
 import type { SessionDiagnostic, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
@@ -24,6 +25,12 @@ import {
 } from '../support/pty.js';
 
 const sessions = createSessionPool();
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
+const nativePressureIt = resourceAwareIt.resources({
+  terminals: 1,
+  traceWriters: 0,
+  nativeHost: 'exclusive',
+});
 
 /** The `log-flood` scenario sends this many records in one turn. */
 const LOG_FLOOD_RECORDS = 500;
@@ -358,7 +365,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
-  it(
+  nativePressureIt(
     'survives a rerender storm and settles on the last revision',
     async () => {
       const terminal = await arm('rapid-rerender');
@@ -369,7 +376,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     180_000,
   );
 
-  it('survives an output flood with a retained scrollback floor', async () => {
+  nativePressureIt('survives an output flood with a retained scrollback floor', async () => {
     const terminal = await sessions.launch(CONFORMANCE_FIXTURES.adversarialPeer(), {
       columns: 70,
       rows: 16,

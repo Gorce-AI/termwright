@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { literalLeafTitles, validateExactSkipReferences } from './check-platform-deviations.mjs';
+import { literalLeafTitles, literalPlatformSkips, validateExactSkipReferences } from './check-platform-deviations.mjs';
 
 const registry = (file, title) => ({
   version: 1,
@@ -73,5 +73,30 @@ describe('exact native skip-policy references', () => {
       test(dynamicTitle, () => {});
       // it('comment-only', () => {});
     `)).toEqual(['plain', 'quoted', 'conditional', 'parameterized']);
+  });
+
+  it('recognizes resource-aware imports and configured declaration aliases', () => {
+    expect(literalLeafTitles(`
+      import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+      const nativePressureIt = resourceAwareIt.resources({ terminals: 1, nativeHost: 'exclusive' });
+      nativePressureIt('pressure case', () => {});
+      resourceAwareIt.resources({ terminals: 2 })('group case', () => {});
+    `)).toEqual(['pressure case', 'group case']);
+  });
+
+  it('finds platform skips through a resource-aware declaration chain', () => {
+    const source = `
+      import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+      resourceAwareIt.resources({ terminals: 4 }).skipIf(process.platform !== 'win32')(
+        'Windows ownership',
+        () => {},
+      );
+      describe.skipIf(process.platform === 'win32')('POSIX ownership', () => {});
+    `;
+    expect(literalPlatformSkips(source)).toEqual([
+      { title: 'Windows ownership', condition: "process.platform !== 'win32'" },
+      { title: 'POSIX ownership', condition: "process.platform === 'win32'" },
+    ]);
+    expect(literalLeafTitles(source)).toEqual(['Windows ownership']);
   });
 });

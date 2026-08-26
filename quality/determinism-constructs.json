@@ -16,12 +16,12 @@
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 199,
-    "explicit-test-selection-reviewed-with-platform-registry": 80,
+    "explicit-test-selection-reviewed-with-platform-registry": 79,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
     "production-process-isolation-review": 35,
     "test-observer-or-intentional-background-task": 13,
-    "test-process-isolation-review": 43
+    "test-process-isolation-review": 37
   },
   "findings": [
     {
@@ -541,12 +541,6 @@
       "excerpt": "const timer = setTimeout(finish, Math.max(0, deadline - performance.now()));"
     },
     {
-      "path": "packages/conformance/src/support/pty.ts",
-      "kind": "process-global-mutation",
-      "classification": "production-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') {"
-    },
-    {
       "path": "packages/desktop-host/src/deadline.test.ts",
       "kind": "fire-and-forget",
       "classification": "test-observer-or-intentional-background-task",
@@ -659,12 +653,6 @@
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
       "excerpt": "process.env['TERMWRIGHT_ENV_TEST_SECRET'] = 'shared-on-purpose';"
-    },
-    {
-      "path": "packages/driver/src/escapes.pty.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;"
     },
     {
       "path": "packages/driver/src/escapes.pty.test.ts",
@@ -932,12 +920,6 @@
     },
     {
       "path": "packages/driver/src/logs.pty.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;"
-    },
-    {
-      "path": "packages/driver/src/logs.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, () => {"
@@ -995,6 +977,12 @@
       "kind": "timer",
       "classification": "explicit-external-file-polling",
       "excerpt": "const timer = setInterval(() => { void poll(); }, POLL_MS);"
+    },
+    {
+      "path": "packages/driver/src/native-pty-backend.ts",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_PTY\"] === \"1\") return \"TERMWRIGHT_SKIP_PTY=1\";"
     },
     {
       "path": "packages/driver/src/pairing.ts",
@@ -1162,12 +1150,6 @@
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_PTY\"] === \"1\") return false;"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
       "excerpt": "process.env[\"TERMWRIGHT_FIXTURE_SECRET\"] = \"leaked\";"
     },
     {
@@ -1271,12 +1253,6 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())(\"the debug log\", { timeout: 20_000 }, () => {"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform !== \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
@@ -1718,12 +1694,6 @@
     },
     {
       "path": "packages/mcp/src/server.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;"
-    },
-    {
-      "path": "packages/mcp/src/server.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout: 30_000 }, () => {"
@@ -1871,12 +1841,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => session.getByTestId('server-host').count()).toBe(1);"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;"
     },
     {
       "path": "packages/probe-charm/src/zero-config.pty.test.ts",
@@ -2261,12 +2225,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => (await state(\"listitem\", \"readme.md\"))?.selected)"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_PTY\"] === \"1\") return false;"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",

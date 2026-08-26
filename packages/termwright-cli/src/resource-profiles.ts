@@ -54,8 +54,9 @@ function resourceProfile(name: TermwrightResourceProfileName, terminals: number,
       ptySession: terminals,
       externalProcess: terminals,
       semanticEndpoint: terminals,
+      nativeHostPressure: terminals,
       traceWriter: terminals,
     }),
-    perTerminal: Object.freeze({ semanticEndpoint: 1 }),
+    perTerminal: Object.freeze({ semanticEndpoint: 1, nativeHostPressure: 1 }),
   });
 }

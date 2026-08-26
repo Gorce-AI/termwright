@@ -36,6 +36,7 @@
     "@termwright/pty-win32-x64": "workspace:*"
   },
   "devDependencies": {
+    "@termwright/resource-broker": "workspace:*",
     "node-addon-api": "^8.3.0",
     "node-gyp": "^12.3.0",
     "vitest": "4.1.11"

@@ -338,4 +338,49 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(source).toContain('TermwrightTestHost.open');
     expect(source).not.toMatch(/spawn|reporter=json|vitestEntry|VITEST/u);
   });
+
+  it('requires Attempt admission for every repository-owned real PTY test', async () => {
+    const testSources = [];
+    await collectTestSources('packages', testSources);
+    const directNative = /\b(?:spawnPty|spawnWindowsPty|launchTerminal)\s*\(|createNativePtyBackend\s*\(\s*\)\s*\.\s*spawn\s*\(/u;
+    const indirectNative = new Set([
+      'packages/conformance/src/suites/adversarial.test.ts',
+      'packages/conformance/src/suites/driver-generic.test.ts',
+      'packages/conformance/src/suites/interaction.test.ts',
+      'packages/conformance/src/suites/mcp-sessions.test.ts',
+      'packages/conformance/src/suites/ready.test.ts',
+      'packages/mcp/src/server.test.ts',
+    ]);
+
+    for (const file of testSources) {
+      const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+      if (!directNative.test(source) && !indirectNative.has(file)) continue;
+      expect(source, `${file} must use the resource-aware Vitest declaration API`).toMatch(
+        /from ['"](?:@termwright\/resource-broker\/vitest|@termwright\/test)['"]/u,
+      );
+      expect(source, `${file} must declare its complete live terminal group`).toMatch(
+        /\.resources\s*\(\s*\{[\s\S]*?terminals\s*:/u,
+      );
+    }
+
+    const adapterSuite = await readFile(new URL('../packages/conformance/src/adapter-conformance.ts', import.meta.url), 'utf8');
+    expect(adapterSuite).toContain('beforeEach(');
+    expect(adapterSuite).toContain("resources({ terminals: 1, traceWriters: 0 })");
+    expect(adapterSuite).not.toMatch(/beforeAll\s*\([\s\S]{0,500}AdapterProbe\.start/u);
+
+    const pressureSources = await Promise.all([
+      readFile(new URL('../packages/pty/src/index.test.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../packages/pty/src/windows-native.win.test.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../packages/driver/src/escapes.pty.test.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../packages/driver/src/process-lifecycle.pty.test.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../packages/conformance/src/suites/adversarial.test.ts', import.meta.url), 'utf8'),
+    ]);
+    for (const source of pressureSources) expect(source).toMatch(/nativeHost:\s*["']exclusive["']/u);
+
+    const availability = await readFile(new URL('../packages/test/src/pty-available.ts', import.meta.url), 'utf8');
+    expect(availability).toContain('nativePtyAvailable()');
+    expect(availability, 'collection-time availability must never create an unadmitted child').not.toMatch(
+      /createNativePtyBackend|\.spawn\s*\(|spawnPty|spawnWindowsPty/u,
+    );
+  });
 });

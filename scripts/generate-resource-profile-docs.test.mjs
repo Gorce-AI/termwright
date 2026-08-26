@@ -5,14 +5,14 @@ const profiles = {
   local: {
     name: 'local',
     scheduler: { pool: 'forks', maxWorkers: 4, fileParallelism: true },
-    capacities: { ptySession: 4, externalProcess: 4, semanticEndpoint: 4, traceWriter: 4 },
-    perTerminal: { semanticEndpoint: 1 },
+    capacities: { ptySession: 4, externalProcess: 4, semanticEndpoint: 4, nativeHostPressure: 4, traceWriter: 4 },
+    perTerminal: { semanticEndpoint: 1, nativeHostPressure: 1 },
   },
 };
 
 describe('resource profile documentation generator', () => {
   it('renders scheduler and every resource dimension from the source value', () => {
-    expect(renderResourceProfiles(profiles)).toContain('| `local` | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |');
+    expect(renderResourceProfiles(profiles)).toContain('| `local` | 4 | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |');
   });
 
   it('replaces exactly one marked block', () => {

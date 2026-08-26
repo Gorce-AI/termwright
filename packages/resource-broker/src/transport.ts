@@ -620,7 +620,7 @@ function leaseSnapshot(value: JsonObject): ResourceLeaseSnapshot {
 
 function resourceVector(value: unknown): ResourceVector {
   const input = object(value, 'resources');
-  const allowed = new Set(['ptySession', 'externalProcess', 'semanticEndpoint', 'traceWriter']);
+  const allowed = new Set(['ptySession', 'externalProcess', 'semanticEndpoint', 'nativeHostPressure', 'traceWriter']);
   for (const key of Object.keys(input)) if (!allowed.has(key)) throw protocolError(`unknown resource class ${key}`);
   const output: Record<string, number> = {};
   for (const key of allowed) {
@@ -634,7 +634,7 @@ function attachments(value: unknown): readonly ResourceAttachment[] {
   return Object.freeze(value.map((entry, index) => {
     const attachment = object(entry, `attachments[${index}]`);
     const resource = string(attachment.resource, `attachments[${index}].resource`, 64);
-    if (!['ptySession', 'externalProcess', 'semanticEndpoint', 'traceWriter'].includes(resource)) {
+    if (!['ptySession', 'externalProcess', 'semanticEndpoint', 'nativeHostPressure', 'traceWriter'].includes(resource)) {
       throw protocolError(`unknown attachment resource ${resource}`);
     }
     const pid = attachment.pid === undefined ? undefined : positiveInteger(attachment.pid, `attachments[${index}].pid`);

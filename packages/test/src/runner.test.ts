@@ -121,7 +121,7 @@ describe('native AttemptContext', () => {
     const runId = createRunId('run');
     let nested: { readonly stdout: string; readonly stderr: string } | undefined;
     const broker = new ResourceBroker({ runId, capacities: {
-      ptySession: 4, externalProcess: 4, semanticEndpoint: 4, traceWriter: 4,
+      ptySession: 4, externalProcess: 4, semanticEndpoint: 4, nativeHostPressure: 4, traceWriter: 4,
     } });
     const server = await startResourceBrokerServer({ broker, runId });
     const journalEvents: RunEvent[] = [];
@@ -234,7 +234,7 @@ describe('native AttemptContext', () => {
     const config = fileURLToPath(new URL('__fixtures__/broker-denied.vitest.config.ts', import.meta.url));
     const runId = createRunId('run');
     const broker = new ResourceBroker({ runId, capacities: {
-      ptySession: 0, externalProcess: 0, semanticEndpoint: 0, traceWriter: 0,
+      ptySession: 0, externalProcess: 0, semanticEndpoint: 0, nativeHostPressure: 0, traceWriter: 0,
     } });
     const server = await startResourceBrokerServer({ broker, runId });
     const journalEvents: RunEvent[] = [];

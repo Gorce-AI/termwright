@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
+import { it as resourceAwareIt } from "@termwright/resource-broker/vitest";
 import {
   CapabilityProviderLostError,
   CapabilityProviderViolationError,
@@ -13,6 +14,7 @@ import {
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const providerApp = join(packageRoot, "src", "testing", "provider-app.mjs");
 const preload = pathToFileURL(join(packageRoot, "dist", "node-hook.js")).href;
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 describe(
   "Ink application evidence provider over a real PTY",

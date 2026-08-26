@@ -112,6 +112,7 @@ installTerminalLaunchResourceProvider(async () => {
     ptySession: Math.max(1, profile.ptySession ?? 0),
     externalProcess: Math.max(1, profile.externalProcess ?? 0),
     semanticEndpoint: Math.max(1, profile.semanticEndpoint ?? 0),
+    nativeHostPressure: Math.max(1, profile.nativeHostPressure ?? 0),
   }));
   return Object.freeze({
     attach: async (sessionId: string): Promise<void> => {
@@ -454,7 +455,7 @@ function validateBroker(value: unknown): TermwrightRunnerBrokerContext {
 }
 
 function validateResourceVector(value: unknown): ResourceVector {
-  const keys = ['ptySession', 'externalProcess', 'semanticEndpoint', 'traceWriter'] as const;
+  const keys = ['ptySession', 'externalProcess', 'semanticEndpoint', 'nativeHostPressure', 'traceWriter'] as const;
   if (!plainDataObject(value, keys)) return invalidHostContext();
   const record = value as Record<string, unknown>;
   const result: Partial<Record<(typeof keys)[number], number>> = {};

@@ -6,6 +6,7 @@ export const RESOURCE_CLASSES = Object.freeze([
   'ptySession',
   'externalProcess',
   'semanticEndpoint',
+  'nativeHostPressure',
   'traceWriter',
 ] as const);
 
@@ -134,6 +135,7 @@ const ZERO = (): Record<ResourceClass, number> => ({
   ptySession: 0,
   externalProcess: 0,
   semanticEndpoint: 0,
+  nativeHostPressure: 0,
   traceWriter: 0,
 });
 

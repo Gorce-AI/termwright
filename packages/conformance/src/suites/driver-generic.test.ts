@@ -6,7 +6,8 @@
  * fallback, grid locators, real PTY bytes for every input, no invented roles,
  * and exact exit/close semantics.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { SemanticCapabilityUnavailableError, TermwrightError, type AnyLocator } from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import {
@@ -19,6 +20,7 @@ import {
 } from '../support/pty.js';
 
 const sessions = createSessionPool();
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 async function intendedRect(locator: AnyLocator): Promise<Rect | null> {
   const observation = (await locator.geometry()).intendedRect;

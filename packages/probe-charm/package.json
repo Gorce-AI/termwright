@@ -32,6 +32,7 @@
     "@termwright/protocol": "workspace:*"
   },
   "devDependencies": {
-    "@termwright/driver": "workspace:*"
+    "@termwright/driver": "workspace:*",
+    "@termwright/resource-broker": "workspace:*"
   }
 }

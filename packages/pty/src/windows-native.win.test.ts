@@ -11,7 +11,8 @@ import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
+import { it as resourceAwareIt } from "@termwright/resource-broker/vitest";
 import { bunTestCapability } from "../../../scripts/test-support/bun-runtime.mjs";
 import {
   spawnWindowsPty,
@@ -37,6 +38,17 @@ const bun =
   bunTestCapability(
     () => spawnSync("bun", ["--version"], { stdio: "ignore" }).status === 0,
   );
+
+// These are behavioral certifications of the vendored native host, not normal
+// application sessions. They exercise OpenConsole, PowerShell, Node/Bun,
+// process trees and high-volume native channels. Reserving the complete host
+// pressure envelope prevents their correctness from depending on another
+// worker's unrelated ConPTY traffic.
+const it = resourceAwareIt.resources({
+  terminals: 1,
+  traceWriters: 0,
+  nativeHost: "exclusive",
+});
 
 function collect(handle: WindowsPtyHandle): { text(): string } {
   const chunks: Uint8Array[] = [];

@@ -807,7 +807,10 @@ export class TermwrightTestHost {
         this.#tasks.set(testCase.id, identity);
       }
       const metadata = testCase.meta();
-      const resourceReservation = resourceReservationFromMetadata(metadata);
+      const resourceReservation = resourceReservationFromMetadata(
+        metadata,
+        this.#resourceProfile.capacities.nativeHostPressure,
+      );
       return Object.freeze({
         runnerTaskId: identity.runnerTaskId,
         nativeTaskId: testCase.id,
@@ -1342,7 +1345,10 @@ function nonNegativeInteger(value: unknown): value is number {
 }
 
 /** Converts the closed public hint into the broker's complete atomic vector. */
-function resourceReservationFromMetadata(metadata: unknown): ResourceVector | undefined {
+function resourceReservationFromMetadata(
+  metadata: unknown,
+  exclusiveNativeHostPressure: number,
+): ResourceVector | undefined {
   if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) return undefined;
   const termwright = (metadata as Record<string, unknown>)['termwright'];
   if (typeof termwright !== 'object' || termwright === null || Array.isArray(termwright)) return undefined;
@@ -1353,7 +1359,7 @@ function resourceReservationFromMetadata(metadata: unknown): ResourceVector | un
   }
   const record = resources as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (key !== 'terminals' && key !== 'traceWriters') {
+    if (key !== 'terminals' && key !== 'traceWriters' && key !== 'nativeHost') {
       throw new TypeError(`collected termwright.resources contains unknown key ${key}`);
     }
   }
@@ -1364,7 +1370,15 @@ function resourceReservationFromMetadata(metadata: unknown): ResourceVector | un
   const traceWriters = record['traceWriters'] === undefined
     ? terminals
     : boundedResourceAmount(record['traceWriters'], 'traceWriters');
-  if (terminals === 0 && traceWriters === 0) {
+  const nativeHost = record['nativeHost'];
+  if (nativeHost !== undefined && nativeHost !== 'shared' && nativeHost !== 'exclusive') {
+    throw new TypeError('collected termwright.resources.nativeHost must be shared or exclusive');
+  }
+  if (nativeHost === 'exclusive' && terminals === 0) {
+    throw new TypeError('collected termwright.resources.nativeHost exclusive requires a terminal');
+  }
+  const nativeHostPressure = nativeHost === 'exclusive' ? exclusiveNativeHostPressure : terminals;
+  if (terminals === 0 && traceWriters === 0 && nativeHostPressure === 0) {
     throw new TypeError('collected termwright.resources must reserve at least one resource');
   }
   return Object.freeze({
@@ -1373,6 +1387,7 @@ function resourceReservationFromMetadata(metadata: unknown): ResourceVector | un
       externalProcess: terminals,
       semanticEndpoint: terminals,
     }),
+    ...(nativeHostPressure === 0 ? {} : { nativeHostPressure }),
     ...(traceWriters === 0 ? {} : { traceWriter: traceWriters }),
   });
 }

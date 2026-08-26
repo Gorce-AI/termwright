@@ -1,5 +1,9 @@
 /** Translation from the Termwright-owned native session to the driver PTY contract. */
-import { spawnPty as spawnNativePty } from "@termwright/pty";
+import {
+  ptyAvailable as nativeBindingAvailable,
+  ptyUnavailableReason as nativeBindingUnavailableReason,
+  spawnPty as spawnNativePty,
+} from "@termwright/pty";
 import type { ExitStatus } from "./api.js";
 import { EarlyPtyOutput } from "./internal/early-pty-output.js";
 import { ProcessLifecycleError } from "./internal/process-supervisor.js";
@@ -35,6 +39,17 @@ export type NativePtySpawn = (options: {
 }) => NativePtySessionHandle;
 
 export const NATIVE_PTY_BACKEND_NAME = "termwright-native-pty";
+
+/** Loads and validates the native binding without creating an unowned PTY. */
+export function nativePtyAvailable(): boolean {
+  return process.env["TERMWRIGHT_SKIP_PTY"] !== "1" && nativeBindingAvailable();
+}
+
+/** Exact loader diagnostic from the native package, when availability is false. */
+export function nativePtyUnavailableReason(): string | undefined {
+  if (process.env["TERMWRIGHT_SKIP_PTY"] === "1") return "TERMWRIGHT_SKIP_PTY=1";
+  return nativeBindingUnavailableReason();
+}
 
 /**
  * Adapts the native package without adding lifecycle policy or weaker fallbacks.

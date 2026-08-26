@@ -42,6 +42,7 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
       ptySession: 2,
       externalProcess: 2,
       semanticEndpoint: 2,
+      nativeHostPressure: 2,
       traceWriter: 2,
     });
     expect(new Set(first.catalog?.tests.map((test) => test.nativeTaskId)).size).toBe(2);

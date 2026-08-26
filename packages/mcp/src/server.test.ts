@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createNativePtyBackend } from '@termwright/driver/experimental';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { nativePtyAvailable } from '@termwright/driver/experimental';
 import { Client, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveInMemory } from './server.js';
 import type { RunningServer } from './server.js';
@@ -19,19 +20,7 @@ import type { RunningServer } from './server.js';
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'driver', 'test-fixtures');
 
 function ptyAvailable(): boolean {
-  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
-  try {
-    const pty = createNativePtyBackend().spawn({
-      command: [process.execPath, '-e', 'process.exit(0)'],
-      env: {},
-      columns: 20,
-      rows: 4,
-    });
-    pty.dispose();
-    return true;
-  } catch {
-    return false;
-  }
+  return nativePtyAvailable();
 }
 
 interface ToolResult {
@@ -101,6 +90,7 @@ afterEach(async () => {
 });
 
 describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout: 30_000 }, () => {
+  const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
   it('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {
     const { call } = await connectSession();
     const terminal = await launchSemantic(call);
@@ -430,19 +420,22 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(since.text).toContain('logs: none');
   });
 
-  it('keeps one session’s terminals invisible to another', async () => {
-    const first = await connectSession();
-    const second = await connectSession();
-    const terminal = await launchSemantic(first.call);
+  resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })(
+    'keeps one session’s terminals invisible to another',
+    async () => {
+      const first = await connectSession();
+      const second = await connectSession();
+      const terminal = await launchSemantic(first.call);
 
-    const foreign = await second.call('terminal.snapshot', { terminal });
-    expect(foreign.isError).toBe(true);
-    expect(foreign.error?.kind).toBe('no-session');
+      const foreign = await second.call('terminal.snapshot', { terminal });
+      expect(foreign.isError).toBe(true);
+      expect(foreign.error?.kind).toBe('no-session');
 
-    // The second session numbers its own terminals from t1 as well.
-    const own = await launchSemantic(second.call);
-    expect(own).toBe(terminal);
-  });
+      // The second session numbers its own terminals from t1 as well.
+      const own = await launchSemantic(second.call);
+      expect(own).toBe(terminal);
+    },
+  );
 });
 
 describe('argument validation', () => {
