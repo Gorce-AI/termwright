@@ -75,6 +75,8 @@ export interface PrepareOptions {
 }
 
 export interface PreparedBuild {
+  /** Canonical module directory that must be used as the build cwd. */
+  readonly moduleDir: string;
   /** The exact detected major, module versions and companions. */
   readonly flavour: CharmFlavour;
   /** Hand this to the build as `GOWORK`. */
@@ -83,7 +85,7 @@ export interface PreparedBuild {
   readonly copyDir: string;
   /** Instrumented companion copies, keyed by Go module path. */
   readonly companionCopyDirs: Readonly<Record<string, string>>;
-  /** Environment to build with: the caller's, plus the generated GOWORK. */
+  /** Environment to build with: the caller's, plus canonical PWD and generated GOWORK. */
   readonly env: NodeJS.ProcessEnv;
   /** True when at least one copy was materialised rather than reused. */
   readonly built: boolean;
@@ -108,9 +110,10 @@ export async function prepareInstrumentedBuild(
   options: PrepareOptions,
 ): Promise<PreparedBuild> {
   const env = options.env ?? process.env;
+  const moduleDir = await realpath(options.moduleDir);
   assertNoVendorMode(env);
 
-  const flavour = await detectCharmFlavour(options.moduleDir, env);
+  const flavour = await detectCharmFlavour(moduleDir, env);
   const teaPatchSet = requirePatchSet('bubbletea', flavour.module, flavour.version);
   const toolchainVersion = await toolchain(env);
   const tea = await prepareCopy({
@@ -145,19 +148,19 @@ export async function prepareInstrumentedBuild(
   const replaces = [
     { from: flavour.module, to: tea.dir },
     ...Object.entries(companionCopyDirs).map(([from, to]) => ({ from, to })),
-    ...(await clientVersionReplacements(options.moduleDir, clientDir, env)),
+    ...(await clientVersionReplacements(moduleDir, clientDir, env)),
   ];
-  const inherited = await readWorkspace(options.moduleDir);
+  const inherited = await readWorkspace(moduleDir);
   const requestedWorkspace =
     options.workspaceFile === undefined
-      ? await defaultWorkspaceFile({ moduleDir: options.moduleDir, inherited, replaces }, env)
+      ? await defaultWorkspaceFile({ moduleDir, inherited, replaces }, env)
       : resolve(options.workspaceFile);
   const workspaceFile = await writeWorkspace(
     requestedWorkspace,
     {
-      moduleDir: options.moduleDir,
+      moduleDir,
       inherited,
-      suppliedUses: (await modulePath(options.moduleDir, env)) === CLIENT_MODULE
+      suppliedUses: (await modulePath(moduleDir, env)) === CLIENT_MODULE
         ? []
         : [{ dir: clientDir, module: CLIENT_MODULE }],
       replaces,
@@ -165,11 +168,12 @@ export async function prepareInstrumentedBuild(
   );
 
   return {
+    moduleDir,
     flavour,
     workspaceFile,
     copyDir: tea.dir,
     companionCopyDirs,
-    env: { ...env, GOWORK: workspaceFile },
+    env: { ...env, PWD: moduleDir, GOWORK: workspaceFile },
     built: builtModules.length > 0,
     builtModules,
   };

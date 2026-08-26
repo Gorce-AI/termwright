@@ -42,7 +42,8 @@ The normal launcher path is one call:
 import {prepareInstrumentedBuild} from '@termwright/probe-charm';
 
 const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
-// Use build.env for `go build`; it contains the generated GOWORK.
+// Use both values for `go build`: moduleDir is the canonical cwd; env aligns PWD and GOWORK.
+await execFile('go', ['build', '-o', 'app-binary', '.'], {cwd: build.moduleDir, env: build.env});
 ```
 
 It detects the major and exact versions, materialises independently cached

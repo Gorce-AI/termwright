@@ -17,7 +17,7 @@ import {prepareInstrumentedBuild} from '@termwright/probe-charm';
 
 const build = await prepareInstrumentedBuild({moduleDir: appDirectory});
 await execFile('go', ['build', '-o', binaryPath, '.'], {
-  cwd: appDirectory,
+  cwd: build.moduleDir,
   env: {...process.env, ...build.env},
 });
 const app = await terminal.launch({command: [binaryPath]});

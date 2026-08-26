@@ -14,7 +14,7 @@ const baseline = join(tmpdir(), 'termwright-conformance-tview-plain');
 
 const prepared = await prepareInstrumentedBuild({ moduleDir });
 await run('go', ['build', '-o', instrumented, './examples/permission'], {
-  cwd: moduleDir,
+  cwd: prepared.moduleDir,
   env: prepared.env,
 });
 await run('go', ['build', '-o', baseline, './examples/permission'], {

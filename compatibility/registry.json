@@ -754,7 +754,7 @@
       "probe": {
         "package": "@termwright/probe-tview",
         "packageVersion": "0.2.0",
-        "launch": "prepareInstrumentedBuild({moduleDir}) and build with the returned GOWORK",
+        "launch": "prepareInstrumentedBuild({moduleDir}) and build from the returned moduleDir with the returned GOWORK",
         "identityKind": "stable",
         "capabilities": ["stable-identity", "annotations"],
         "adapterCapabilities": [
@@ -1219,7 +1219,7 @@
       "probe": {
         "package": "@termwright/probe-charm",
         "packageVersion": "0.2.0",
-        "launch": "prepareInstrumentedBuild({moduleDir}) and build with the returned GOWORK",
+        "launch": "prepareInstrumentedBuild({moduleDir}) and build from the returned moduleDir with the returned GOWORK",
         "identityKind": "frame-local",
         "capabilities": ["annotations"],
         "adapterCapabilities": [

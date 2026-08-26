@@ -25,8 +25,8 @@ import {prepareInstrumentedBuild} from '@termwright/probe-tview';
 
 const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
 
-// build.env carries GOWORK; the project's own files are untouched.
-await execFile('go', ['build', '-o', 'app-binary', '.'], {cwd: 'path/to/app', env: build.env});
+// build.env aligns PWD and GOWORK; the project's own files are untouched.
+await execFile('go', ['build', '-o', 'app-binary', '.'], {cwd: build.moduleDir, env: build.env});
 
 await launchTerminal({command: ['./app-binary']});
 ```

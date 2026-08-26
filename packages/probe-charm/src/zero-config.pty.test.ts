@@ -98,7 +98,7 @@ async function buildBubblesFixture(version = 'v2.0.8'): Promise<string> {
 
   const binary = join(dir, 'app-binary');
   await run('go', ['build', '-o', binary, '.'], {
-    cwd: app,
+    cwd: prepared.moduleDir,
     env: prepared.env,
   });
   return binary;
@@ -130,7 +130,7 @@ async function buildFixture(version = 'v2.0.8'): Promise<string> {
 
   const binary = join(dir, 'app-binary');
   await run('go', ['build', '-o', binary, '.'], {
-    cwd: app,
+    cwd: prepared.moduleDir,
     env: prepared.env,
   });
   return binary;
@@ -147,7 +147,7 @@ async function buildV1Fixture(): Promise<string> {
     env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') },
   });
   const binary = join(dir, 'app-binary');
-  await run('go', ['build', '-o', binary, '.'], { cwd: app, env: prepared.env });
+  await run('go', ['build', '-o', binary, '.'], { cwd: prepared.moduleDir, env: prepared.env });
   return binary;
 }
 
@@ -265,7 +265,7 @@ describe.skipIf(!runnable)('developer annotations', () => {
 
     const binary = join(dir, 'app-binary');
     await run('go', ['build', '-o', binary, '.'], {
-      cwd: app,
+      cwd: prepared.moduleDir,
       env: prepared.env,
     });
 

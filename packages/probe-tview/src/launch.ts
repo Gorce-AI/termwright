@@ -9,6 +9,7 @@
 
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -56,13 +57,15 @@ export interface PrepareOptions {
 }
 
 export interface PreparedBuild {
+  /** Canonical module directory that must be used as the build cwd. */
+  readonly moduleDir: string;
   /** Hand this to the build as `GOWORK`. */
   readonly workspaceFile: string;
   /** The instrumented copy, for a canary check or for diagnosis. */
   readonly copyDir: string;
   /** Exact tcell companion copy providing the Windows same-handle marker hook. */
   readonly tcellCopyDir: string;
-  /** Environment to build with: the caller's, plus GOWORK. */
+  /** Environment to build with: the caller's, plus canonical PWD and GOWORK. */
   readonly env: NodeJS.ProcessEnv;
   /** True when the copy was built during this call rather than reused. */
   readonly built: boolean;
@@ -80,12 +83,13 @@ export async function prepareInstrumentedBuild(
   options: PrepareOptions,
 ): Promise<PreparedBuild> {
   const env = options.env ?? process.env;
+  const moduleDir = await realpath(options.moduleDir);
   // Refused rather than overridden: forcing workspace mode over a vendored
   // build would change what compiles, behind the user's back.
   assertNoVendorMode(env);
 
   const frameworkResolution = await resolvedOfficialModule(
-    options.moduleDir,
+    moduleDir,
     FRAMEWORK,
     env,
   );
@@ -105,7 +109,7 @@ export async function prepareInstrumentedBuild(
   );
 
   const tcellVersion = (
-    await resolvedOfficialModule(options.moduleDir, TCELL_FRAMEWORK, env)
+    await resolvedOfficialModule(moduleDir, TCELL_FRAMEWORK, env)
   ).version;
 
   const key: CopyKeyInput = {
@@ -166,22 +170,23 @@ export async function prepareInstrumentedBuild(
   const workspaceFile = await writeWorkspace(
     options.workspaceFile ?? join(copy, "..", "generated.work"),
     {
-      moduleDir: options.moduleDir,
-      inherited: await readWorkspace(options.moduleDir),
-      suppliedUses: await clientWorkspaceUses(options, env),
+      moduleDir,
+      inherited: await readWorkspace(moduleDir),
+      suppliedUses: await clientWorkspaceUses({ ...options, moduleDir }, env),
       replaces: [
         { from: FRAMEWORK, to: copy },
         { from: TCELL_FRAMEWORK, to: tcellCopy },
-        ...(await clientVersionReplacements(options, env)),
+        ...(await clientVersionReplacements({ ...options, moduleDir }, env)),
       ],
     },
   );
 
   return {
+    moduleDir,
     workspaceFile,
     copyDir: copy,
     tcellCopyDir: tcellCopy,
-    env: { ...env, GOWORK: workspaceFile },
+    env: { ...env, PWD: moduleDir, GOWORK: workspaceFile },
     built: built || tcellBuilt,
   };
 }

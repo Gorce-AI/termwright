@@ -11,7 +11,7 @@
  */
 
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -373,18 +373,26 @@ describe.skipIf(!runnable)("the launcher call", () => {
     const app = join(dir, "app");
     await mkdir(app, { recursive: true });
     await cp(FIXTURE, app, { recursive: true });
+    const appAlias = join(dir, "app-alias");
+    await symlink(app, appAlias, process.platform === "win32" ? "junction" : "dir");
 
     // A cache of its own, so the assertion about building versus reusing is
     // about this test rather than about whatever ran before it.
-    const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") };
+    const env = {
+      ...process.env,
+      PWD: appAlias,
+      TERMWRIGHT_CACHE_DIR: join(dir, "cache"),
+    };
 
-    const first = await prepareInstrumentedBuild({ moduleDir: app, env });
+    const first = await prepareInstrumentedBuild({ moduleDir: appAlias, env });
+    expect(first.moduleDir).toBe(await realpath(app));
+    expect(first.env.PWD).toBe(first.moduleDir);
     expect(first.built).toBe(true);
     // The version was detected from the module, not passed in.
     expect(first.copyDir).toContain("v0.42.0");
 
     await run("go", ["build", "-o", join(dir, "bin"), "."], {
-      cwd: app,
+      cwd: first.moduleDir,
       env: first.env,
     });
 
@@ -395,10 +403,10 @@ describe.skipIf(!runnable)("the launcher call", () => {
     // And the canary still proves it is our copy that compiles.
     const canary = await canaryCheck({
       copyDir: second.copyDir,
-      moduleDir: app,
+      moduleDir: second.moduleDir,
       workspaceFile: second.workspaceFile,
       packageName: "tview",
-      env,
+      env: second.env,
     });
     expect(canary.proved).toBe(true);
   }, 600_000);
@@ -506,7 +514,7 @@ describe.skipIf(!runnable)("the launcher call", () => {
       "go",
       ["build", "-o", join(dir, "permission"), "./examples/permission"],
       {
-        cwd: CLIENT,
+        cwd: prepared.moduleDir,
         env: prepared.env,
       },
     );
@@ -797,7 +805,7 @@ describe.skipIf(!hasGo)("the Windows tcell companion", () => {
     expect(prepared.tcellCopyDir).toContain("v2.8.1");
     expect(hook).toContain("syscall.WriteConsole(s.out");
     await run("go", ["build", "-o", join(dir, "fixture.exe"), "."], {
-      cwd: app,
+      cwd: prepared.moduleDir,
       env: {
         ...prepared.env,
         GOOS: "windows",
