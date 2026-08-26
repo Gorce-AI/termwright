@@ -21,7 +21,7 @@ const server = createServer((socket) => {
         socket.write('DONE\n');
       } else if (command === 'EXIT') {
         socket.destroy();
-        server.close();
+        server.close(() => process.exit(0));
       } else {
         throw new Error(`unexpected marker control command ${JSON.stringify(command)}`);
       }

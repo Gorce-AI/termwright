@@ -53,7 +53,10 @@ try {
   [Console]::Out.Write("MODE_RESTORED")
   $writer.WriteLine("EXIT")
   $markerProcess.WaitForExit()
-  if ($markerProcess.ExitCode -ne 0) { exit 47 }
+  if ($markerProcess.ExitCode -ne 0) {
+    [Console]::Error.Write("MARKER_PROCESS_EXIT:" + $markerProcess.ExitCode)
+    exit 47
+  }
 } finally {
   if ($writer) { $writer.Dispose() }
   if ($reader) { $reader.Dispose() }
