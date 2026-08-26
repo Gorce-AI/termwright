@@ -1,4 +1,241 @@
 {
   "schemaVersion": 1,
-  "streams": {}
+  "streams": {
+    "tcell-v2": [
+      {
+        "candidateDigest": "sha256:c16304a1c63db1de6ff2a1a0f859d5ee41fc90395fe9352731d6b17591c7a6da",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:bj8ori1BG3OYMjmb3IklZVWfZUJ1UBQt9JXrOCOhGWw=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:KPNxyqclpWpWQlPLx6Xui1pMk8S+7+R37h3g07997NU=",
+          "zipSha256": "28ec9a195c369405a264531593e1d5c394ba3e1926792a2ba3069e17ffe7b7ac"
+        },
+        "state": "red",
+        "version": "v2.8.1"
+      },
+      {
+        "candidateDigest": "sha256:fa48e62296fcf65c65b10a6e3a530c4d27d59feb4c87214dd6e9a2e5332b82d0",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:8/ZoqM9rxzYphT9tH/9LnunhV9oPBqwS8WHGYm5nrmo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:N6t+eqK7/xwtRPwxzs1PXeRWnm0H9l02CrgJ7DLn1ys=",
+          "zipSha256": "e36d0cb01474c5456b4fd28dc6b0c1dc115d1788ed174885afd4bf5fa2b9af42"
+        },
+        "state": "red",
+        "version": "v2.9.0"
+      },
+      {
+        "candidateDigest": "sha256:eb0d73194048794ab7c0f21a03a9c281988fa18a26be1131ad13252dac627bd7",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:K2DslmrxoadNP0709mqdgVuM6QcJjzYvJisintiFBfY=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:u/czxSDixtjOR7UzXXtxHyO4Av2aoZvr2te9TGOaANo=",
+          "zipSha256": "8f45c083e9359144d90966ab4b0707394ff50532f7cfd283f6857b9127c994ad"
+        },
+        "state": "red",
+        "version": "v2.10.0"
+      },
+      {
+        "candidateDigest": "sha256:37dd63e2064cd26ea1d7bbcaded19dec9f6b60ee3f5c29629f8dc588a70b9b23",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:pytyB+bE6zrRVf6u/ZMWX9AZqSVcW4bpimuDiR5k2mU=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:ntVCx4v2M7ev2hMuAHad5ZRPymfpxb8VR3X3VRz+/YQ=",
+          "zipSha256": "0b2dbd497d24b326dde493f0287877dde01035e7fa2f09c329ca550d228e796c"
+        },
+        "state": "red",
+        "version": "v2.11.0"
+      },
+      {
+        "candidateDigest": "sha256:3f9b3d75196cc05e01c013116d272e42abdf22bc4c070f4413853f35f4ddd338",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:7nsWSL2G32QC19BcoGcFCqB2tc9fIvHH5pfi/ZYv8gw=",
+          "zipSha256": "ef3a6aa13680c50a2e7aac99e1d60a88683b5ae9c418c673e2a159ada0f0bd46"
+        },
+        "state": "red",
+        "version": "v2.12.0"
+      },
+      {
+        "candidateDigest": "sha256:84e4e856deeb29c0e5e39c0b292bbb8cd48817ada80307355f7a7183d7404c64",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:UcivYwRuPcZLjAok2SJ+3LzJUiJR0+3qnUte7Hz6Rbg=",
+          "zipSha256": "ed20797362d6f2b345dcddbc3f6104a570fcf1c938bd9bffddc01f1c243f7d9e"
+        },
+        "state": "red",
+        "version": "v2.12.1"
+      },
+      {
+        "candidateDigest": "sha256:c7ce3ab36811c801bd8f92b17808a2747526d481b5bf7161fef38f5cef1b5fc3",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:7hBtHPlPGNH6/ZLl22eLl7q0kfNsL+FGEggcWZuk6jk=",
+          "zipSha256": "be5a78583e343953463afd5229cfede60bc59beb6de630c602cc6dd07a688515"
+        },
+        "state": "red",
+        "version": "v2.12.2"
+      },
+      {
+        "candidateDigest": "sha256:f6e3dc77714a30ca6d8e756ee1515ff4399eef3f7b4a167f2a2e7fd211ed9e7e",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:2FTgKjbOMp9adqEJ5qE1f7YmnUGm3fW2vF84gc18dZU=",
+          "zipSha256": "e79eed1cff262be1fad839e89fd3937867f83664e5b1fa3cb62f9af9800beb29"
+        },
+        "state": "red",
+        "version": "v2.13.0"
+      },
+      {
+        "candidateDigest": "sha256:237a530f00b6c75b3b4999bb7f329bc238f246e1c2116120043f2abad24a48d6",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:Ca2N6mHxhXuElCgn+nfKuZjS7gwNiIRKHFiljrZQ26A=",
+          "zipSha256": "37dedf80a0a10b974961967e021e32e6ef94ed01699824b5c2ac3521b308aed1"
+        },
+        "state": "red",
+        "version": "v2.13.1"
+      },
+      {
+        "candidateDigest": "sha256:b7a70df4aca422d0ab5e57c3ba4a7195b209bdcbefcc6a77a32286a0b9b7cf4c",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:5j4srfF8ow3HICOv/61/sOhQtA25qxEB2XR3Q/Bhx2g=",
+          "zipSha256": "9c57e837185b8133174a7a651757dd97fb5ccac3e29071912bdb28d0e20e8cd8"
+        },
+        "state": "red",
+        "version": "v2.13.2"
+      },
+      {
+        "candidateDigest": "sha256:9a578fe19b444f73c5e14d7dcddf32156f71349f44e5b5bbabf8e646d3c5d908",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:ZTvu7wR23EPEmYhxXTn6ucc6ktHb3hELZosszHGDiBs=",
+          "zipSha256": "3e4bab71ff6f3c0cc8810bb86edcbe3c32eb3df3281e7bd8b66d228e979cee37"
+        },
+        "state": "red",
+        "version": "v2.13.3"
+      },
+      {
+        "candidateDigest": "sha256:fada478dfb7878fd4b50bc4f81aa3b57c5ce40970aed1b619a574a8cf00ffa96",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:k4fdtdHGvLsLr2RttPnWEGTZEkEuTaL+rL6AOVFyRWU=",
+          "zipSha256": "10e8140f5ef30405f1fd687f002578da077a85b9399f0a115fa383cb0e598ae6"
+        },
+        "state": "red",
+        "version": "v2.13.4"
+      },
+      {
+        "candidateDigest": "sha256:10dc0a2b8bf13489c9904aa0093310e345f92d2629f2abfffb61bb40a4b839a8",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:YvWYCSr6gr2Ovs84dXbZLjDuOfQchhj8buOEqY52rpA=",
+          "zipSha256": "3e985f616ac199f91cab2aceaea42981b4b1bfeca5be932fdec2af70e2d89114"
+        },
+        "state": "red",
+        "version": "v2.13.5"
+      },
+      {
+        "candidateDigest": "sha256:a975f8b36ec4e2f74de7aefd8d65cbccef04ca5d301c1869fd59594f8560a40e",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:ZAKaC+z7EHtDlELEVw5qxvO560cCXOtn0Su4YqMahJM=",
+          "zipSha256": "b60575aecba3b0dc9cf5689a37e76f13efead2d4de9dd7a9aa9b168b98e9c23a"
+        },
+        "state": "red",
+        "version": "v2.13.6"
+      },
+      {
+        "candidateDigest": "sha256:ce17064388f4db4e65856e2539f1a86eb7493712e89723ec5c8d31334742662c",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:yfHdeC7ODIYCc6dgRos8L1VujQtXHmUpU6UZotzD6os=",
+          "zipSha256": "0681b6dae603a00df4c9d7dc9f0e3a7e57b426e7909ae96cf92431be54df2dc7"
+        },
+        "state": "red",
+        "version": "v2.13.7"
+      },
+      {
+        "candidateDigest": "sha256:0998df91914e3e002326ffbc990d79d8f2d60c8af613e2607b781fb784ba455f",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:Mys/Kl5wfC/GcC5Cx4C2BIQH9dbnhnkPgS9/wF3RlfU=",
+          "zipSha256": "a8990d22693e7a2805688943a5ae6212708ee81146bc3a0842efe0b2d7b98108"
+        },
+        "state": "red",
+        "version": "v2.13.8"
+      },
+      {
+        "candidateDigest": "sha256:c53d256302a944362e74a6dcd4c0843e28b9637dacc32c333bcc6c145e0f0b9e",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:uI5l3DYPcFvHINKlGft+en23evOKL+dwtD21QR8ejVA=",
+          "zipSha256": "6db38818b17a7ede413eba4ca3c37867ee0a6af778233592ed8fa403c7876354"
+        },
+        "state": "red",
+        "version": "v2.13.9"
+      },
+      {
+        "candidateDigest": "sha256:39be5ad6e66485c4403338e70daa90ac83b21c887dcc9914e996f3f4eea8ef87",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:Afs3JKt83HnhuUKdZ3MnxUgOqQRWftj5JyDqv1LLynA=",
+          "zipSha256": "7664c451b58bb5fe7469e3dbda3711ac1d24206c13fff62f045e9e62ed1f2217"
+        },
+        "state": "red",
+        "version": "v2.13.10"
+      }
+    ]
+  }
 }
