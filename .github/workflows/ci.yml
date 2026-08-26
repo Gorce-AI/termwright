@@ -113,11 +113,13 @@ jobs:
           go-version: '1.25'
           cache: false
 
+      - run: pnpm build
+      # The workspace package exports dist/index.js. Test resolution only after
+      # the same build a packed consumer receives; checking before this point
+      # tests an impossible half-built workspace rather than native loading.
       - name: Install test (the native pty binding resolves on this platform)
         shell: bash
         run: pnpm --filter @termwright/driver exec node -e "import('@termwright/pty').then(m => { if (!m.ptyAvailable()) process.exit(1); console.log('pty backend loaded'); })"
-
-      - run: pnpm build
       # A bundled native dependency resolves its addon beside the wrong file,
       # so a valid consumer installation would fail closed at startup.
       - run: node scripts/check-optional-native-externals.mjs
