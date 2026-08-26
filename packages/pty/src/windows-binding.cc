@@ -10,6 +10,8 @@
 #include <atomic>
 #include <climits>
 #include <cmath>
+#include <condition_variable>
+#include <deque>
 #include <io.h>
 #include <memory>
 #include <mutex>
@@ -21,7 +23,20 @@
 
 namespace {
 
-constexpr size_t kMaximumPendingEvents = 64;
+constexpr size_t kMaximumPendingOutputBytes = 8 * 1024 * 1024;
+constexpr size_t kMaximumDataBatchBytes = 256 * 1024;
+
+struct DeliveryState {
+  std::mutex mutex;
+  std::condition_variable space_available;
+  std::deque<termwright::SessionEvent> events;
+  // Bounds bytes waiting in the native queue. A batch already swapped into
+  // the JS callback can coexist with one new queue budget, so peak live data
+  // is at most two budgets rather than being unbounded.
+  size_t pending_output_bytes = 0;
+  bool callback_scheduled = false;
+  std::atomic<bool> closed{false};
+};
 
 std::mutex console_marker_mutex;
 
@@ -174,7 +189,9 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
   }
 
   explicit ConPtySession(const Napi::CallbackInfo& info)
-      : Napi::ObjectWrap<ConPtySession>(info), session_(std::make_unique<termwright::Session>()) {
+      : Napi::ObjectWrap<ConPtySession>(info),
+        session_(std::make_unique<termwright::Session>()),
+        delivery_(std::make_shared<DeliveryState>()) {
     Napi::Env env = info.Env();
     const termwright::ConPtyApi& api = termwright::GetConPtyApi();
     if (!api.available()) {
@@ -210,7 +227,7 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
 
     channel_ = Napi::ThreadSafeFunction::New(env, info[1].As<Napi::Function>(),
                                              "termwright-windows-pty",
-                                             kMaximumPendingEvents, 1);
+                                             1, 1);
 
     // Armed before Start, never after. Start launches the reader, the writer
     // and the exit watcher and only then returns, so a gate flipped afterwards
@@ -241,51 +258,123 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
 
   void Deliver(termwright::SessionEvent event) {
     if (!started_.load()) return;
-    auto* carried = new termwright::SessionEvent(std::move(event));
-    // The bounded queue keeps events ordered and applies backpressure to the
-    // producing thread instead of growing without bound.
-    napi_status status = channel_.BlockingCall(
-        carried, [](Napi::Env env, Napi::Function callback, termwright::SessionEvent* payload) {
-          std::unique_ptr<termwright::SessionEvent> owned(payload);
-          if (env == nullptr) return;
-          Napi::Object message = Napi::Object::New(env);
-          switch (owned->kind) {
-            case termwright::EventKind::kData: {
-              message.Set("type", Napi::String::New(env, "data"));
-              message.Set("data", Napi::Buffer<uint8_t>::Copy(env, owned->data.data(),
-                                                              owned->data.size()));
-              break;
-            }
-            case termwright::EventKind::kExit: {
-              message.Set("type", Napi::String::New(env, "exit"));
-              message.Set("exitCode", Napi::Number::New(env, static_cast<double>(owned->exit_code)));
-              break;
-            }
-            case termwright::EventKind::kEof: {
-              message.Set("type", Napi::String::New(env, "eof"));
-              message.Set("code", Napi::Number::New(env, static_cast<double>(owned->last_error)));
-              break;
-            }
-            case termwright::EventKind::kDrain: {
-              message.Set("type", Napi::String::New(env, "drain"));
-              message.Set("generation", Napi::BigInt::New(env, owned->write_generation));
-              break;
-            }
-            case termwright::EventKind::kNotice: {
-              message.Set("type", Napi::String::New(env, "notice"));
-              message.Set("message", Napi::String::New(env, owned->message));
-              break;
-            }
-            case termwright::EventKind::kError: {
-              message.Set("type", Napi::String::New(env, "error"));
-              message.Set("message", Napi::String::New(env, owned->message));
-              message.Set("code", Napi::Number::New(env, static_cast<double>(owned->last_error)));
-              break;
-            }
-          }
-          callback.Call({message});
+    const auto delivery = delivery_;
+    bool schedule = false;
+    {
+      std::unique_lock<std::mutex> lock(delivery->mutex);
+      if (event.kind == termwright::EventKind::kData) {
+        const size_t incoming = event.data.size();
+        delivery->space_available.wait(lock, [&] {
+          return delivery->closed.load() ||
+                 incoming <= kMaximumPendingOutputBytes - delivery->pending_output_bytes;
         });
-    if (status != napi_ok) delete carried;
+        if (delivery->closed.load()) return;
+        delivery->pending_output_bytes += incoming;
+        if (!delivery->events.empty() &&
+            delivery->events.back().kind == termwright::EventKind::kData &&
+            delivery->events.back().data.size() + incoming <= kMaximumDataBatchBytes) {
+          auto& tail = delivery->events.back().data;
+          tail.insert(tail.end(), event.data.begin(), event.data.end());
+        } else {
+          delivery->events.push_back(std::move(event));
+        }
+      } else {
+        if (delivery->closed.load()) return;
+        delivery->events.push_back(std::move(event));
+      }
+      if (!delivery->callback_scheduled) {
+        delivery->callback_scheduled = true;
+        schedule = true;
+      }
+    }
+    if (!schedule) return;
+
+    auto* carried = new std::shared_ptr<DeliveryState>(delivery);
+    // One JS edge drains a byte-bounded native batch. Passthrough ConPTY emits
+    // one pipe write for every WriteConsole call; forwarding those calls as
+    // one TSFN item each lets event-count backpressure stall a renderer even
+    // when only a few kilobytes are pending. Adjacent data is therefore
+    // coalesced before crossing into JS, while non-data events retain their
+    // exact position in the ordered queue.
+    napi_status status;
+    {
+      // Shutdown aborts and resets the TSFN under this same lock. A producer
+      // that passed the started_ check therefore either schedules before the
+      // abort or observes a closing channel; it never calls a reset handle.
+      std::lock_guard<std::mutex> lock(channel_mutex_);
+      status = channel_.NonBlockingCall(
+          carried, [](Napi::Env env, Napi::Function callback,
+                    std::shared_ptr<DeliveryState>* payload) {
+            const std::shared_ptr<DeliveryState> delivery = std::move(*payload);
+            delete payload;
+            std::deque<termwright::SessionEvent> events;
+            {
+              std::lock_guard<std::mutex> lock(delivery->mutex);
+              if (env != nullptr && !delivery->closed.load()) {
+                events.swap(delivery->events);
+              } else {
+                delivery->events.clear();
+              }
+              delivery->pending_output_bytes = 0;
+              delivery->callback_scheduled = false;
+            }
+            delivery->space_available.notify_all();
+            if (env == nullptr) return;
+            for (auto& event : events) {
+              if (delivery->closed.load()) return;
+              Napi::Object message = Napi::Object::New(env);
+              switch (event.kind) {
+                case termwright::EventKind::kData: {
+                  message.Set("type", Napi::String::New(env, "data"));
+                  message.Set("data", Napi::Buffer<uint8_t>::Copy(
+                                          env, event.data.data(), event.data.size()));
+                  break;
+                }
+                case termwright::EventKind::kExit: {
+                  message.Set("type", Napi::String::New(env, "exit"));
+                  message.Set("exitCode",
+                              Napi::Number::New(env, static_cast<double>(event.exit_code)));
+                  break;
+                }
+                case termwright::EventKind::kEof: {
+                  message.Set("type", Napi::String::New(env, "eof"));
+                  message.Set("code",
+                              Napi::Number::New(env, static_cast<double>(event.last_error)));
+                  break;
+                }
+                case termwright::EventKind::kDrain: {
+                  message.Set("type", Napi::String::New(env, "drain"));
+                  message.Set("generation", Napi::BigInt::New(env, event.write_generation));
+                  break;
+                }
+                case termwright::EventKind::kNotice: {
+                  message.Set("type", Napi::String::New(env, "notice"));
+                  message.Set("message", Napi::String::New(env, event.message));
+                  break;
+                }
+                case termwright::EventKind::kError: {
+                  message.Set("type", Napi::String::New(env, "error"));
+                  message.Set("message", Napi::String::New(env, event.message));
+                  message.Set("code",
+                              Napi::Number::New(env, static_cast<double>(event.last_error)));
+                  break;
+                }
+              }
+              callback.Call({message});
+            }
+          });
+    }
+    if (status != napi_ok) {
+      delete carried;
+      {
+        std::lock_guard<std::mutex> lock(delivery->mutex);
+        delivery->events.clear();
+        delivery->pending_output_bytes = 0;
+        delivery->callback_scheduled = false;
+        delivery->closed.store(true);
+      }
+      delivery->space_available.notify_all();
+    }
   }
 
   Napi::Value Write(const Napi::CallbackInfo& info) {
@@ -342,12 +431,29 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
     // be blocked by a busy JS thread; joining it first would deadlock a
     // synchronous dispose. Clean exits deliver EOF before callers dispose.
     started_.store(false);
-    channel_.Abort();
+    {
+      std::lock_guard<std::mutex> lock(delivery_->mutex);
+      delivery_->closed.store(true);
+      delivery_->events.clear();
+      delivery_->pending_output_bytes = 0;
+    }
+    delivery_->space_available.notify_all();
+    {
+      std::lock_guard<std::mutex> lock(channel_mutex_);
+      channel_.Abort();
+    }
     session_->Dispose();
-    channel_ = Napi::ThreadSafeFunction();
+    {
+      // All native producers have joined, so no later Deliver can race the
+      // final handle release after this point.
+      std::lock_guard<std::mutex> lock(channel_mutex_);
+      channel_ = Napi::ThreadSafeFunction();
+    }
   }
 
   std::unique_ptr<termwright::Session> session_;
+  std::shared_ptr<DeliveryState> delivery_;
+  std::mutex channel_mutex_;
   Napi::ThreadSafeFunction channel_;
   std::atomic<bool> started_{false};
   std::atomic<bool> shuttingDown_{false};

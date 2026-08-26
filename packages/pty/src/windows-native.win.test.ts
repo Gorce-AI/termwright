@@ -918,6 +918,69 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     handle.dispose();
   });
 
+  it("drains a fragmented console frame while the JavaScript edge is busy", async () => {
+    // Six MiB forces at least 96 reads through ReaderLoop's 64 KiB buffer.
+    // On Windows the TTY writer divides it further into WriteConsole calls,
+    // which is the shape produced by tcell's Show().  The payload remains
+    // below the native delivery queue's eight MiB byte budget.
+    const payloadBytes = 6 * 1024 * 1024;
+    const sentinel = "DELIVERY_QUEUE_SENTINEL";
+    const script = [
+      "process.stdin.resume();",
+      'process.stdin.once("data", () => {',
+      `  const payload = Buffer.alloc(${payloadBytes}, 0x58);`,
+      "  process.stdout.write(payload, () => {",
+      `    process.stdout.write(${JSON.stringify(sentinel)}, () => process.exit(0));`,
+      "  });",
+      "});",
+    ].join("\n");
+    const handle = spawnWindowsPty({
+      command: node(script),
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+
+    handle.write(Buffer.from("go\r"));
+    // Deliberately keep the JS event loop out of the delivery callback until
+    // the child has completed its writes.  This is a process-exit barrier,
+    // not a quiet window: the old 64-item TSFN queue stopped ReaderLoop,
+    // filled the ConPTY pipe and could never reach this boundary.  A
+    // byte-bounded single-edge queue continues draining and lets the child
+    // exit without using elapsed time as evidence.
+    const waited = spawnSync(
+      "powershell.exe",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `$target = Get-Process -Id ${handle.pid} -ErrorAction SilentlyContinue; if ($null -ne $target -and -not $target.WaitForExit(10000)) { exit 71 }`,
+      ],
+      { encoding: "utf8" },
+    );
+    if (waited.status !== 0) {
+      handle.dispose();
+      throw new Error(
+        `fragmented console writer did not reach process exit ` +
+          `(helper ${String(waited.status)}): ${waited.stderr}`,
+      );
+    }
+
+    await handle.outputEnded;
+    const observed = output.text();
+    const sentinelAt = observed.indexOf(sentinel);
+    expect(sentinelAt).toBeGreaterThanOrEqual(payloadBytes);
+    let payloadStart = sentinelAt;
+    while (payloadStart > 0 && observed.charCodeAt(payloadStart - 1) === 0x58) {
+      payloadStart -= 1;
+    }
+    expect(sentinelAt - payloadStart).toBe(payloadBytes);
+    expect(handle.sawRealEof).toBe(true);
+    handle.dispose();
+  });
+
   it("reassembles a codepoint split across reads", async () => {
     // Emoji byte-by-byte with pauses, so the split lands inside the sequence.
     const script = [

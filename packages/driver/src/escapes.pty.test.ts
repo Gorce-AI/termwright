@@ -1,12 +1,11 @@
 /**
  * Escape-sequence permeability probe.
  *
- * The Windows CI run proved that a session's render marker never reaches the
- * emulator while everything else about the session works, which points at
- * ConPTY: it is an emulator sitting between the child and us, not a pipe, and
- * it re-emits what it understood rather than forwarding what it received. This
- * suite measures, on whatever platform it runs, which escape families actually
- * survive that trip — the answer decides how a render marker may be encoded.
+ * This began as an investigation of the legacy, frame-based inbox ConPTY,
+ * which re-rendered what it understood instead of forwarding the child's byte
+ * stream. Termwright now ships a pinned passthrough ConPTY and this suite is a
+ * regression probe: on every platform it measures which escape families
+ * survive the PTY and remain usable by the emulator.
  *
  * Three independent things are measured per candidate, because they fail
  * differently:
@@ -15,7 +14,7 @@
  *   sequence that fails here was eaten in transit and no parser can recover it.
  * - **parsed** — our handler on the emulator fired. A sequence can survive
  *   transport and still be useless if xterm does not expose it (APC has no
- *   handler API at all, which is why the driver's marker is a DCS today).
+ *   handler API at all). The production marker is private OSC 8487.
  * - **leaked** — the payload showed up as visible text on the grid. A sequence
  *   whose introducer is stripped while its payload survives is worse than one
  *   that vanishes: it corrupts every screen assertion the user writes.
@@ -114,7 +113,7 @@ const CANDIDATES: readonly Candidate[] = [
     sequence: `${ESC}Ptwm;0;probe-dcs${ST}`,
     signature: /\x1bPtwm;0;probe-dcs/,
     leak: 'probe-dcs',
-    note: 'negative control / status quo: how the render marker is encoded today',
+    note: 'historical candidate rejected on legacy inbox ConPTY; passthrough is now regression-tested',
     listen: (terminal, seen) => {
       terminal.parser.registerDcsHandler({ final: 't' }, (data) => {
         if (data.startsWith('wm;0;probe-dcs')) seen();

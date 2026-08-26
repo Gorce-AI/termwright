@@ -22,7 +22,7 @@ async function fixture() {
   await writeFile(join(root, 'termwright_pty.node'), addon);
   await writeFile(join(root, 'vendor', 'conpty-manifest.json'), manifest);
   const verdict = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     platform: 'win32',
     architecture: 'x64',
     addonSha256: sha256(addon),
@@ -58,6 +58,14 @@ async function fixture() {
       sgrStyleTruecolorSequencePassthrough: true,
       adjacentMarkerPassthrough: true,
       forgedMarkerPassthrough: true,
+      mouseDecsetPassthrough: true,
+      focusDecsetPassthrough: true,
+      osc8Passthrough: true,
+      dcsPassthrough: true,
+      apcPassthrough: true,
+      fragmentedControlPassthrough: true,
+      batchedControlPassthrough: true,
+      fragmentedConsoleDelivery: true,
     },
   };
   await writeFile(
@@ -70,7 +78,7 @@ async function fixture() {
 describe('Windows PTY causal verdict', () => {
   it('rejects the previous schema before the extended visual and semantic facts existed', async () => {
     const { root, verdict } = await fixture();
-    verdict.schemaVersion = 2;
+    verdict.schemaVersion = 3;
     await writeFile(
       join(root, 'certification-verdict.json'),
       `${JSON.stringify(verdict)}\n`,
@@ -113,6 +121,14 @@ describe('Windows PTY causal verdict', () => {
     'sgrStyleTruecolorSequencePassthrough',
     'adjacentMarkerPassthrough',
     'forgedMarkerPassthrough',
+    'mouseDecsetPassthrough',
+    'focusDecsetPassthrough',
+    'osc8Passthrough',
+    'dcsPassthrough',
+    'apcPassthrough',
+    'fragmentedControlPassthrough',
+    'batchedControlPassthrough',
+    'fragmentedConsoleDelivery',
   ])('rejects a verdict without the %s causal fact', async (fact) => {
     const { root, verdict } = await fixture();
     verdict.causal[fact] = false;

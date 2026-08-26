@@ -268,6 +268,67 @@ if (process.platform === 'win32') {
   modes.session.dispose();
   if (!modesValid) throw new Error('ConPTY changed application DEC modes or injected host control-plane modes');
 
+  // Certify the passthrough families whose loss on the legacy inbox ConPTY
+  // originally constrained Windows. Boundaries deliberately cut through CSI,
+  // OSC and APC sequences, while the drag+SGR mouse modes share one write.
+  // The exact reconstructed byte string proves both fragmented and batched
+  // child writes preserve their order; no quiet interval participates.
+  console.log('[pty-cert] control-family-permeability');
+  const controlEsc = String.fromCharCode(27);
+  const controlSt = controlEsc + String.fromCharCode(92);
+  const mouseClick = controlEsc + '[?1000h';
+  const mouseDrag = controlEsc + '[?1002h';
+  const mouseSgr = controlEsc + '[?1006h';
+  const focus = controlEsc + '[?1004h';
+  const osc8 = controlEsc + ']8;id=tw-packed;https://termwright.invalid/packed' +
+    controlSt + 'LINK' + controlEsc + ']8;;' + controlSt;
+  const dcs = controlEsc + 'PqTW-PACKED-DCS' + controlSt;
+  const apc = controlEsc + '_TW-PACKED-APC' + controlSt;
+  const permeabilityPieces = [
+    'PERMEABILITY-BEGIN',
+    controlEsc + '[?10', '00h',
+    mouseDrag + mouseSgr,
+    controlEsc + '[?100', '4h',
+    controlEsc + ']8;id=tw-packed;https://termwright.invalid/',
+    'packed' + controlSt + 'LINK' + controlEsc + ']8;;' + controlSt,
+    controlEsc + 'PqTW-PACKED-', 'DCS' + controlSt,
+    controlEsc + '_', 'TW-PACKED-APC' + controlSt,
+    'PERMEABILITY-END',
+  ];
+  const permeability = collect([
+    'const { writeSync } = require("node:fs");',
+    'const pieces = ' + JSON.stringify(permeabilityPieces) + ';',
+    'for (const piece of pieces) writeSync(1, Buffer.from(piece));',
+  ].join(''));
+  await permeability.session.outputEnded;
+  const permeabilityBytes = permeability.text();
+  const exactPermeability = permeabilityPieces.join('');
+  const fragmentedControlPassthroughValid = permeabilityBytes.includes(exactPermeability);
+  const batchedControlPassthroughValid = permeabilityBytes.includes(mouseDrag + mouseSgr);
+  const mouseDecsetPassthroughValid =
+    permeabilityBytes.includes(mouseClick + mouseDrag + mouseSgr);
+  const focusDecsetPassthroughValid = permeabilityBytes.includes(focus);
+  const osc8PassthroughValid = permeabilityBytes.includes(osc8);
+  const dcsPassthroughValid = permeabilityBytes.includes(dcs);
+  const apcPassthroughValid = permeabilityBytes.includes(apc);
+  const permeabilityEof = permeability.session.sawRealEof;
+  permeability.session.dispose();
+  if (!fragmentedControlPassthroughValid || !batchedControlPassthroughValid ||
+      !mouseDecsetPassthroughValid || !focusDecsetPassthroughValid ||
+      !osc8PassthroughValid || !dcsPassthroughValid ||
+      !apcPassthroughValid || !permeabilityEof) {
+    throw new Error('ConPTY control-family permeability certification failed: ' + JSON.stringify({
+      fragmentedControlPassthroughValid,
+      batchedControlPassthroughValid,
+      mouseDecsetPassthroughValid,
+      focusDecsetPassthroughValid,
+      osc8PassthroughValid,
+      dcsPassthroughValid,
+      apcPassthroughValid,
+      observed: permeabilityBytes,
+    }));
+  }
+
   // ResizePseudoConsole and the input pipe are independent channels. A public
   // WINDOW_BUFFER_SIZE_EVENT, followed by public geometry inspection in the
   // child, is the causal acknowledgement. This tests the ConPTY contract below
@@ -526,6 +587,54 @@ if (!pressureValid || !pressure.session.sawRealEof) {
 }
 pressure.session.dispose();
 
+// A passthrough ConPTY preserves the application's WriteConsole boundaries.
+// Keep JavaScript out of the TSFN callback until the child exits and prove the
+// native reader continues draining more than the former 64-event limit. The
+// 10-second process wait is only a failure watchdog; process exit is the
+// causal success boundary.
+console.log('[pty-cert] fragmented-console-delivery');
+const fragmentedPayloadBytes = 6 * 1024 * 1024;
+const fragmentedSentinel = 'FRAGMENTED_CONSOLE_SENTINEL';
+const fragmented = collect([
+  'process.stdin.resume();',
+  'process.stdin.once("data", () => {',
+  '  const payload = Buffer.alloc(' + fragmentedPayloadBytes + ', 0x58);',
+  '  process.stdout.write(payload, () => {',
+  '    process.stdout.write(' + JSON.stringify(fragmentedSentinel) + ', () => process.exit(0));',
+  '  });',
+  '});',
+].join(''));
+fragmented.session.write(Buffer.from('go\r'));
+const fragmentedWait = spawnSync('powershell.exe', [
+  '-NoLogo',
+  '-NoProfile',
+  '-NonInteractive',
+  '-Command',
+  '$target = Get-Process -Id ' + fragmented.session.pid +
+    ' -ErrorAction SilentlyContinue; if ($null -ne $target -and -not $target.WaitForExit(10000)) { exit 71 }',
+], { encoding: 'utf8' });
+if (fragmentedWait.status !== 0) {
+  fragmented.session.dispose();
+  throw new Error('fragmented console writer did not reach process exit ' +
+    '(helper ' + fragmentedWait.status + '): ' + fragmentedWait.stderr);
+}
+await fragmented.session.outputEnded;
+const fragmentedOutput = Buffer.concat(fragmented.output);
+const fragmentedSentinelBytes = Buffer.from(fragmentedSentinel);
+const fragmentedSentinelAt = fragmentedOutput.indexOf(fragmentedSentinelBytes);
+let fragmentedPayloadStart = fragmentedSentinelAt;
+while (fragmentedPayloadStart > 0 && fragmentedOutput[fragmentedPayloadStart - 1] === 0x58) {
+  fragmentedPayloadStart -= 1;
+}
+const fragmentedConsoleDeliveryValid =
+  fragmentedSentinelAt >= fragmentedPayloadBytes &&
+  fragmentedSentinelAt - fragmentedPayloadStart === fragmentedPayloadBytes &&
+  fragmented.session.sawRealEof;
+fragmented.session.dispose();
+if (!fragmentedConsoleDeliveryValid) {
+  throw new Error('installed addon did not preserve fragmented console delivery through EOF');
+}
+
 console.log('ran native PTY lifecycle and flow-control certification');
 `;
 
@@ -577,7 +686,7 @@ if (verdictPath !== undefined) {
     verdictPath,
     `${JSON.stringify(
       {
-        schemaVersion: 3,
+        schemaVersion: 4,
         platform,
         architecture: arch,
         addonSha256: sha256(addonPath),
@@ -600,6 +709,14 @@ if (verdictPath !== undefined) {
           sgrStyleTruecolorSequencePassthrough: true,
           adjacentMarkerPassthrough: true,
           forgedMarkerPassthrough: true,
+          mouseDecsetPassthrough: true,
+          focusDecsetPassthrough: true,
+          osc8Passthrough: true,
+          dcsPassthrough: true,
+          apcPassthrough: true,
+          fragmentedControlPassthrough: true,
+          batchedControlPassthrough: true,
+          fragmentedConsoleDelivery: true,
         },
       },
       null,

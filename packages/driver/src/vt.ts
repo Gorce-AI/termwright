@@ -16,9 +16,11 @@
  *
  * The render-commit marker arrives as a private OSC sequence
  * (`ESC ] 8487 ; twm;{rev};{mac} BEL`) and is consumed here before it can reach
- * the grid. OSC is what the marker rides because ConPTY forwards it: the
- * permeability probe in `escapes.pty.test.ts` measured it dropping DCS, APC and
- * OSC 8 while passing private OSC with either terminator.
+ * the grid. OSC was selected after the permeability probe in
+ * `escapes.pty.test.ts` measured the legacy, frame-based inbox ConPTY dropping
+ * DCS, APC and OSC 8 while passing private OSC. The pinned passthrough ConPTY
+ * now forwards all of those families; OSC 8487 remains the one cross-platform
+ * encoding certified end to end.
  */
 import { createTerminal, loadSerializeAddon, type Terminal, type TerminalProfile } from '@termwright/vt';
 import { MARKER_OSC_CODE, type CursorInfo } from '@termwright/protocol';

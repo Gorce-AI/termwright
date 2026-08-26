@@ -16,10 +16,12 @@
  *
  * ## Why OSC and not DCS
  *
- * ConPTY rewrites the stream it forwards. A passthrough probe run in CI across
- * the three platforms showed it dropping DCS, APC and OSC 8, while passing
+ * The legacy, frame-based inbox ConPTY rewrote the stream it forwarded. A
+ * permeability probe showed it dropping DCS, APC and OSC 8 while passing
  * private OSC with either terminator, and OSC 133. DCS therefore could not
- * carry a marker on Windows at all.
+ * carry a marker on the original Windows backend. The pinned passthrough
+ * ConPTY now forwards those families, but OSC 8487 remains the single encoding
+ * certified across every supported platform.
  *
  * One encoding is used everywhere rather than negotiating per platform: two
  * paths double the surface that has to stay correct, and the path used least

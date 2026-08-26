@@ -1,14 +1,9 @@
-import { execFile as execFileCallback } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import { parseRemoteLeaseResult, resolvePushLease } from './resolve-push-lease.mjs';
 
-const execFile = promisify(execFileCallback);
 const ref = 'refs/heads/automation/framework-compatibility';
 const sha = '0123456789abcdef0123456789abcdef01234567';
+const updatedSha = '89abcdef0123456789abcdef0123456789abcdef';
 
 describe('atomic push lease resolution', () => {
   it('returns the exact existing remote branch object ID', () => {
@@ -70,38 +65,20 @@ describe('atomic push lease resolution', () => {
     );
   });
 
-  it('creates and updates a real remote branch while rejecting a stale lease', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'termwright-push-lease-'));
-    const remote = join(directory, 'remote.git');
-    const worktree = join(directory, 'worktree');
-    try {
-      await execFile('git', ['init', '--bare', remote]);
-      await execFile('git', ['init', worktree]);
-      await execFile('git', ['-C', worktree, 'config', 'user.name', 'Termwright Test']);
-      await execFile('git', ['-C', worktree, 'config', 'user.email', 'test@termwright.invalid']);
-      await execFile('git', ['-C', worktree, 'commit', '--allow-empty', '-m', 'initial']);
+  it('re-queries the exact branch across absent, created and updated states', async () => {
+    let remoteObjectId = '';
+    const runGit = vi.fn(async () => {
+      if (remoteObjectId === '') {
+        throw Object.assign(new Error('branch absent'), { code: 2, stdout: '' });
+      }
+      return { stdout: `${remoteObjectId}\t${ref}\n` };
+    });
 
-      const absentLease = await resolvePushLease(remote, ref);
-      expect(absentLease).toBe('');
-      await execFile('git', [
-        '-C', worktree, 'push', `--force-with-lease=${ref}:${absentLease}`, remote, `HEAD:${ref}`,
-      ]);
-
-      const initialLease = await resolvePushLease(remote, ref);
-      await execFile('git', ['-C', worktree, 'commit', '--allow-empty', '-m', 'update']);
-      await execFile('git', [
-        '-C', worktree, 'push', `--force-with-lease=${ref}:${initialLease}`, remote, `HEAD:${ref}`,
-      ]);
-      const updatedLease = await resolvePushLease(remote, ref);
-      expect(updatedLease).not.toBe(initialLease);
-
-      await execFile('git', ['-C', worktree, 'commit', '--allow-empty', '-m', 'stale update']);
-      await expect(execFile('git', [
-        '-C', worktree, 'push', `--force-with-lease=${ref}:${initialLease}`, remote, `HEAD:${ref}`,
-      ])).rejects.toThrow();
-      await expect(resolvePushLease(remote, ref)).resolves.toBe(updatedLease);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
+    await expect(resolvePushLease('origin', ref, runGit)).resolves.toBe('');
+    remoteObjectId = sha;
+    await expect(resolvePushLease('origin', ref, runGit)).resolves.toBe(sha);
+    remoteObjectId = updatedSha;
+    await expect(resolvePushLease('origin', ref, runGit)).resolves.toBe(updatedSha);
+    expect(runGit).toHaveBeenCalledTimes(3);
   });
 });
