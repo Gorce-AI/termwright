@@ -127,7 +127,8 @@ const draining = collect([
   'process.stdin.resume();',
   'let received = 0;',
   'const control = net.connect(' + controlAddress.port + ', "127.0.0.1", () => process.stdout.write("READY"));',
-  'control.once("data", () => process.exit(0));',
+  'control.once("data", () => control.end("BYE"));',
+  'control.once("close", () => process.exit(0));',
   'process.stdin.on("data", chunk => {',
   '  received += chunk.length;',
   '  if (received === ' + inputBytes + ') process.stdout.write("INPUT_DRAINED");',
@@ -140,8 +141,20 @@ const drained = new Promise((resolve) => {
 });
 draining.session.write(Buffer.alloc(inputBytes, 0x62));
 await Promise.all([drained, waitForText(draining, 'INPUT_DRAINED')]);
+const controlClosed = new Promise((resolve, reject) => {
+  const reply = [];
+  control.on('data', (data) => reply.push(data));
+  control.once('error', reject);
+  control.once('end', () => control.end());
+  control.once('close', (hadError) => {
+    if (hadError) return;
+    const message = Buffer.concat(reply).toString();
+    if (message === 'BYE') resolve();
+    else reject(new Error('unexpected drain-control farewell: ' + JSON.stringify(message)));
+  });
+});
 control.write('X');
-await draining.session.outputEnded;
+await Promise.all([controlClosed, draining.session.outputEnded]);
 if (!draining.text().includes('INPUT_DRAINED') || !draining.session.sawRealEof) {
   console.error('the installed addon did not drain admitted input before owned EOF');
   process.exit(7);

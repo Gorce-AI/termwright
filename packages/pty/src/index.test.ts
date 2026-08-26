@@ -257,7 +257,8 @@ describe("the Termwright-owned native PTY flow control", () => {
         "process.stdin.resume();",
         "let received = 0;",
         `const control = net.connect(${address.port}, '127.0.0.1', () => process.stdout.write('READY'));`,
-        "control.once('data', () => process.exit(0));",
+        "control.once('data', () => control.end('BYE'));",
+        "control.once('close', () => process.exit(0));",
         "process.stdin.on('data', chunk => {",
         "received += chunk.length;",
         `if (received === ${bytes}) process.stdout.write('INPUT_DRAINED');`,
@@ -281,8 +282,20 @@ describe("the Termwright-owned native PTY flow control", () => {
       session.handle.write(Buffer.alloc(bytes, 0x62));
       await Promise.all([drain, waitForText(session.handle, session.chunks, "INPUT_DRAINED")]);
       control = await controlConnected;
+      const controlClosed = new Promise<void>((resolve, reject) => {
+        const reply: Buffer[] = [];
+        control!.on("data", (data) => reply.push(data));
+        control!.once("error", reject);
+        control!.once("end", () => control!.end());
+        control!.once("close", (hadError) => {
+          if (hadError) return;
+          const message = Buffer.concat(reply).toString();
+          if (message === "BYE") resolve();
+          else reject(new Error(`unexpected drain-control farewell: ${JSON.stringify(message)}`));
+        });
+      });
       control.write("X");
-      await Promise.all([session.exit, session.handle.outputEnded]);
+      await Promise.all([controlClosed, session.exit, session.handle.outputEnded]);
     } finally {
       session?.handle.dispose();
       control?.destroy();
