@@ -80,13 +80,16 @@ meaning: bytes were admitted to the backend's ordered queue, not consumed by
 the child. High-level actions prove their effect through committed semantic
 postconditions.
 
-## Windows: the mouse mode is hidden, not absent
+## Windows: mouse-mode opacity was an inbox ConPTY limitation
 
-ConPTY is an emulator sitting between the child and the driver, so it consumes
-the child's `CSI ? 1000/1002/1006 h` instead of forwarding it — measured by the
-permeability probe in `escapes.pty.test.ts`, which also found DCS, APC and
-OSC 8 dropped while private OSC (either terminator) and OSC 133 pass. That is
-why the render marker rides OSC 8487.
+> Historical investigation. These measurements describe the frame-based inbox
+> ConPTY used before Termwright shipped its pinned passthrough runtime. They are
+> retained to explain the old fail-closed design, not current capability.
+
+The legacy inbox ConPTY consumed the child's `CSI ? 1000/1002/1006 h` instead
+of forwarding it. The same permeability probe found DCS, APC and OSC 8 dropped
+while private OSC and OSC 133 passed. That historical result selected OSC 8487
+for the render marker.
 
 Another probe measured the other direction: a child whose DECSET was swallowed
 can still decode a report the driver writes. That proves only that ConPTY is
@@ -95,34 +98,38 @@ that basis would turn missing evidence into a capability claim, so opaque-child
 pointer actions fail closed while `mouseTracking` or `mouseEncoding` is
 `'unknown'`. No physical pointer bytes are written.
 
-`'unknown'` is not revised by a request that does arrive: that would prove only
-that one arrived, and treating it as proof about the rest would report a
-partial view as a complete one. If ConPTY ever starts forwarding these, the
-probe table says so and the default flips deliberately.
+Termwright's pinned `Microsoft.Windows.Console.ConPTY` passthrough runtime does
+forward the child's mouse DECSET, DCS, APC and OSC 8. Its behavior is certified
+on the packaged runtime rather than inferred from the host OS, and Windows now
+uses observable mode tracking just like the POSIX backends. `'unknown'` remains
+only for an embedding that explicitly cannot expose the child's mode stream.
 
 An adapter may make the mode actionable only through an explicit,
 revision-bound evidence provider backed by application production state. The
 driver validates provenance, agreement and evidence loss; it does not infer
 the mode by shadowing a JavaScript stream.
 
-## Windows: focus reporting is the same disease, catching the other way
+## Windows: host focus injection required normalization
 
-The conformance finding read this as a mirror of the mouse: ConPTY swallows
-`CSI ? 1004 h`, the driver reports `false`, and a program that asked for focus
-events is refused. The CI log says otherwise. In run 31939398845 the test
-`refuses focus reports the child never asked for` failed with
-`Cannot read properties of undefined (reading 'code')` — `focus()` **resolved**.
+> Historical investigation of the frame-based inbox ConPTY follows. The pinned
+> passthrough runtime is normalized before its output reaches the driver.
+
+The historical conformance hypothesis read this as a mirror of the mouse: the
+inbox ConPTY swallowed `CSI ? 1004 h`, the driver reported `false`, and a
+program that asked for focus events was refused. The CI log said otherwise. In
+run 31939398845 the test `refuses focus reports the child never asked for`
+failed with `Cannot read properties of undefined (reading 'code')` — `focus()` **resolved**.
 The gate reads `if (!modes().focusReporting) throw`, so the mode must have been
 reported enabled, for `mouse-app.mjs`, which only ever sends `?1000h` and
 `?1006h` and never asks for 1004.
 
-So the value is not missing, it is *the host's*: ConPTY can report focus
-reporting as enabled whichever program is running. The harm runs the other way
-— the driver could send `CSI I` to a program that will print it. Therefore
-`'unknown'` means "this reading says nothing authoritative about the child",
-and opaque-child focus actions fail closed without writing physical bytes.
-As with pointer input, only explicit revision-bound production-state evidence
-can authorize the action.
+The pinned runtime still emits `?1004h` and `?9001h` for its own control plane:
+at startup, after a child reset, and after RIS. `@termwright/pty` removes only
+those structurally injected SET sequences, split-safely, while preserving DA1,
+an optional cursor-position query, and every original child sequence. The
+driver therefore observes the child's focus request rather than the host's.
+Application evidence remains available for embeddings that really do hide
+their input modes; it is not required merely because the platform is Windows.
 
 ## Floods: the pairing timeout was measuring our own backlog
 

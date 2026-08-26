@@ -15,7 +15,9 @@ import { describe, expect, it } from "vitest";
 import { bunTestCapability } from "../../../scripts/test-support/bun-runtime.mjs";
 import {
   spawnWindowsPty,
+  type WindowsPtyExit,
   type WindowsPtyHandle,
+  writeWindowsConsoleMarker,
   windowsConPtyRuntimeInfo,
   windowsCandidatePaths,
   windowsPtyAvailable,
@@ -178,6 +180,45 @@ const environment = (): Readonly<Record<string, string>> => {
   return env;
 };
 
+async function certifyConsoleMarkerMode(executable: string): Promise<void> {
+  const marker = "\x1b]8487;native-console-marker\x07";
+  const fixture = fileURLToPath(
+    new URL("../../../scripts/fixtures/conpty-console-marker.ps1", import.meta.url),
+  );
+  const markerScript = fileURLToPath(
+    new URL("../../../scripts/fixtures/conpty-console-marker.mjs", import.meta.url),
+  );
+  const handle = spawnWindowsPty({
+    command: [
+      "powershell.exe",
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      fixture,
+    ],
+    env: {
+      ...environment(),
+      TW_MARKER_NODE: executable,
+      TW_MARKER_SCRIPT: markerScript,
+      TW_MARKER_TEXT: marker,
+    },
+    columns: 80,
+    rows: 24,
+  });
+  const output = collect(handle);
+  const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+  const [status] = await Promise.all([exited, handle.outputEnded]);
+
+  expect(status).toEqual({ code: 0, signal: null });
+  expect(output.text()).toContain(marker);
+  expect(output.text()).toContain("MODE_RESTORED");
+  expect(handle.sawRealEof).toBe(true);
+  handle.dispose();
+}
+
 describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
   it("loads only the pinned, validated passthrough runtime", () => {
     expect(windowsConPtyRuntimeInfo()).toMatchObject({
@@ -193,16 +234,32 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     });
   });
 
+  it("writes a console marker with VT enabled and restores the disabled mode", async () => {
+    expect(() => writeWindowsConsoleMarker(-1, "marker")).toThrow(
+      /fd must be a non-negative integer/u,
+    );
+    expect(() => writeWindowsConsoleMarker(1, "")).toThrow(
+      /marker must be a non-empty string/u,
+    );
+
+    await certifyConsoleMarkerMode(process.execPath);
+  });
+
+  it.skipIf(!bun)("writes the same mode-safe console marker under Bun", async () => {
+    await certifyConsoleMarkerMode("bun");
+  });
+
   it("reports application modes without ConPTY control-plane injection", async () => {
     const focusOn = "\x1b[?1004h";
     const focusOff = "\x1b[?1004l";
     const win32On = "\x1b[?9001h";
     const win32Off = "\x1b[?9001l";
     const reset = "\x1bc";
-    const childOutput =
-      `BEGIN${focusOff}${focusOn}${win32Off}${win32On}${reset}${focusOn}${win32On}END`;
+    const childOutput = `BEGIN${focusOff}${focusOn}${win32Off}${win32On}${reset}${focusOn}${win32On}END`;
     const handle = spawnWindowsPty({
-      command: node(`require("node:fs").writeSync(1, ${JSON.stringify(childOutput)})`),
+      command: node(
+        `require("node:fs").writeSync(1, ${JSON.stringify(childOutput)})`,
+      ),
       env: environment(),
       columns: 80,
       rows: 24,
@@ -321,11 +378,11 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
       'const { writeSync } = require("node:fs");',
       `for (let index = 0; index < ${cycles}; index += 1) {`,
       '  const id = index.toString(16).padStart(4, "0");',
-      '  writeSync(1, Buffer.from("A" + id + "\\x1b]8486;TW_CAUSAL;A;" + id + "\\x07"));',
-      '  writeSync(1, Buffer.from("B" + id + "\\x1b]8486;TW_CAUSAL;B;" + id + "\\x07"));',
-      '  writeSync(1, Buffer.from("A" + id + "\\x1b]8486;TW_CAUSAL;C;" + id + "\\x07"));',
+      '  writeSync(1, Buffer.from("A" + id + "\\x1b]8487;TW_CAUSAL;A;" + id + "\\x07"));',
+      '  writeSync(1, Buffer.from("B" + id + "\\x1b]8487;TW_CAUSAL;B;" + id + "\\x07"));',
+      '  writeSync(1, Buffer.from("A" + id + "\\x1b]8487;TW_CAUSAL;C;" + id + "\\x07"));',
       "}",
-      'writeSync(1, Buffer.from("\\x1b[?1049hALT\\x1b]8486;TW_CAUSAL;ALT\\x07\\x1b[?1049lPRIMARY\\x1b]8486;TW_CAUSAL;FINAL\\x07"));',
+      'writeSync(1, Buffer.from("\\x1b[?1049hALT\\x1b]8487;TW_CAUSAL;ALT\\x07\\x1b[?1049lPRIMARY\\x1b]8487;TW_CAUSAL;FINAL\\x07"));',
     ].join("");
     const handle = spawnWindowsPty({
       command: [executable, "-e", script],
@@ -336,7 +393,7 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     const output = collect(handle);
     await handle.outputEnded;
     const bytes = output.text();
-    let cursor = bytes.indexOf("A0000\x1b]8486;TW_CAUSAL;A;0000\x07");
+    let cursor = bytes.indexOf("A0000\x1b]8487;TW_CAUSAL;A;0000\x07");
     expect(
       cursor,
       `${name} emitted no first causal frame`,
@@ -349,7 +406,7 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
         ["B", "B"],
         ["A", "C"],
       ] as const) {
-        const expected = `${text}${id}\x1b]8486;TW_CAUSAL;${phase};${id}\x07`;
+        const expected = `${text}${id}\x1b]8487;TW_CAUSAL;${phase};${id}\x07`;
         expect(
           bytes.indexOf(expected, cursor),
           `${name} frame ${phase}/${id}`,
@@ -358,7 +415,7 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
       }
     }
     const tail =
-      "\x1b[?1049hALT\x1b]8486;TW_CAUSAL;ALT\x07\x1b[?1049lPRIMARY\x1b]8486;TW_CAUSAL;FINAL\x07";
+      "\x1b[?1049hALT\x1b]8487;TW_CAUSAL;ALT\x07\x1b[?1049lPRIMARY\x1b]8487;TW_CAUSAL;FINAL\x07";
     expect(bytes.indexOf(tail, cursor)).toBe(cursor);
     expect(handle.sawRealEof).toBe(true);
     handle.dispose();
@@ -400,21 +457,21 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     const output = collect(handle);
     await handle.outputEnded;
     const bytes = output.text();
-    let cursor = bytes.indexOf("A0000\x1b]8486;TW_LEGACY;A;0000\x07");
+    let cursor = bytes.indexOf("A0000\x1b]8487;TW_LEGACY;A;0000\x07");
     expect(cursor).toBeGreaterThanOrEqual(0);
     for (let index = 0; index < 256; index += 1) {
       const id = index.toString(16).padStart(4, "0");
-      const first = `A${id}\x1b]8486;TW_LEGACY;A;${id}\x07`;
+      const first = `A${id}\x1b]8487;TW_LEGACY;A;${id}\x07`;
       expect(bytes.indexOf(first, cursor), `legacy A/${id}`).toBe(cursor);
       cursor += first.length;
       const legacy = bytes.indexOf(`B${id}`, cursor);
-      const marker = bytes.indexOf(`\x1b]8486;TW_LEGACY;B;${id}\x07`, cursor);
+      const marker = bytes.indexOf(`\x1b]8487;TW_LEGACY;B;${id}\x07`, cursor);
       expect(legacy, `legacy text/${id}`).toBeGreaterThanOrEqual(cursor);
       expect(marker, `legacy marker/${id} overtook its text`).toBeGreaterThan(
         legacy,
       );
-      cursor = marker + `\x1b]8486;TW_LEGACY;B;${id}\x07`.length;
-      const final = `A${id}\x1b]8486;TW_LEGACY;C;${id}\x07`;
+      cursor = marker + `\x1b]8487;TW_LEGACY;B;${id}\x07`.length;
+      const final = `A${id}\x1b]8487;TW_LEGACY;C;${id}\x07`;
       expect(bytes.indexOf(final, cursor), `legacy C/${id}`).toBe(cursor);
       cursor += final.length;
     }
@@ -447,9 +504,9 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     const output = collect(handle);
     await handle.outputEnded;
     const bytes = output.text();
-    const before = bytes.indexOf("ACTIVE-BEFORE\x1b]8486;TW_BUFFER;BEFORE\x07");
+    const before = bytes.indexOf("ACTIVE-BEFORE\x1b]8487;TW_BUFFER;BEFORE\x07");
     const activated = bytes.indexOf("INACTIVE-BUFFER", before + 1);
-    const after = bytes.indexOf("\x1b]8486;TW_BUFFER;AFTER\x07", activated + 1);
+    const after = bytes.indexOf("\x1b]8487;TW_BUFFER;AFTER\x07", activated + 1);
     expect(before).toBeGreaterThanOrEqual(0);
     expect(
       activated,
@@ -459,7 +516,7 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
       after,
       "the marker overtook the activated buffer contents",
     ).toBeGreaterThan(activated);
-    expect(bytes).not.toContain("\x1b]8486;TW_BUFFER;INACTIVE\x07");
+    expect(bytes).not.toContain("\x1b]8487;TW_BUFFER;INACTIVE\x07");
     expect(handle.sawRealEof).toBe(true);
     handle.dispose();
   });

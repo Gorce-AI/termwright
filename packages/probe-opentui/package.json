@@ -37,6 +37,7 @@
   "dependencies": {
     "@termwright/probe-runtime": "workspace:*",
     "@termwright/protocol": "workspace:*",
+    "@termwright/pty": "workspace:*",
     "@termwright/recognizers": "workspace:^",
     "acorn": "^8.15.0"
   },

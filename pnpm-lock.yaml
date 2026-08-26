@@ -431,6 +431,9 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@termwright/pty':
+        specifier: workspace:*
+        version: link:../pty
       '@termwright/recognizers':
         specifier: workspace:^
         version: link:../recognizers
@@ -459,6 +462,9 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@termwright/pty':
+        specifier: workspace:*
+        version: link:../pty
       '@termwright/recognizers':
         specifier: workspace:^
         version: link:../recognizers

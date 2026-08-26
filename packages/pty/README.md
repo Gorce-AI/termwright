@@ -69,3 +69,11 @@ written on that newly active handle. Markers written while a buffer is inactive
 are deliberately not treated as observable boundaries. The
 screen-buffer probe remains useful diagnostic evidence, never visual truth or a
 publication barrier.
+
+`writeWindowsConsoleMarker(fd, marker)` is the shared child-side primitive for
+framework probes. It uses the renderer's exact console descriptor, temporarily
+enables processed VT output, writes the complete marker synchronously through
+`WriteConsoleW`, and restores the exact prior mode before returning. Ink,
+OpenTUI, Bubble Tea, and tview therefore remain authoritative even when an
+application disabled VT processing; non-console writers stay ordinary ordered
+byte streams.

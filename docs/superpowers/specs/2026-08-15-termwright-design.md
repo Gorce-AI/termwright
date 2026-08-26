@@ -43,13 +43,13 @@ Three headline differentiators (nobody has any of them):
 | Brand / npm scope | `termwright` / `@termwright` (npm+PyPI free; dead `fcoury/termwright` and taken crate name accepted — crate ships as `termwright-protocol`) |
 | GitHub org | `gorce-ai` |
 | 1.0 scope | Everything: protocol, driver, adapters, component testing, MCP, conformance, trace, Vitest preset, interactive runner UI with time travel |
-| Windows | First-class ConPTY backend in 1.0, own conformance lane + Windows CI; opaque child pointer/focus modes fail closed unless authoritative application evidence exists |
+| Windows | First-class pinned passthrough ConPTY backend in 1.0, own conformance lane + Windows CI; child pointer/focus DECSET is observable after host-control normalization |
 | Runner | Vitest as the first-class preset; driver stays runner-agnostic (works from node:test/Jest/scripts) |
 | Core language | TypeScript core; protocol is language-neutral with thin clients for TS, Python, Go, Rust |
 | 1.0 adapters | Ink (full, first), OpenTUI, Textual, tview; Bubble Tea honest degradation (+ Lip Gloss Canvas adapter); Ratatui instrumented adapter in 1.x |
 | PTY | Termwright-owned `@termwright/pty`, with one loader and six optional native packages for Windows, Linux and macOS on x64/arm64; the native implementation owns producer EOF, process-tree teardown and write ordering |
 | VT | `@xterm/headless` 6.0 + `@xterm/addon-unicode11` (explicitly activated) + `@xterm/addon-serialize` |
-| Render marker encoding | Private **DCS** (or private OSC fallback) — verified registrable and grid-invisible in xterm headless; **not APC** (unsupported by xterm.js) |
+| Render marker encoding | Private **OSC 8487**, BEL-terminated and MAC-authenticated; a registered handler consumes it before grid mutation |
 | Semantic transport | Out-of-band local channel (unix socket / named pipe), CDP-style request-response + subscriptions; in-band marker is a frame **commit** (Neovim `flush` semantics), never a data carrier |
 | MCP SDK | v1.30.x behind our own facade (v1→v2 package-rename split in progress); Zod v4 from day one |
 | No musl/Alpine in 1.0 | documented (`node:22-slim`), no PTY candidate ships musl prebuilds |
@@ -123,9 +123,9 @@ heuristically rehydrated.
 - The stdout marker is a **frame commit**, not a data channel: emitted by the
   adapter after the last byte of the render for revision N; payload is
   `N` + HMAC(token, N) so ordinary output cannot forge it.
-- Encoding: private DCS sequence (registered handler in the VT layer removes it
-  from the visible grid). Emitted only after a successful handshake; never in a
-  normal run.
+- Encoding: private OSC 8487, BEL-terminated (a registered handler in the VT
+  layer removes it from the visible grid). Emitted only after a successful
+  handshake; never in a normal run.
 - Driver publishes revision N only when it holds both the tree N and the grid
   state at marker N. Bounded waits both directions; superseded incomplete
   revisions dropped with a diagnostic; process exit publishes the last fully
@@ -410,11 +410,11 @@ run under `--max-old-space-size=128`.
    frame writes must be PoC'd in the first vertical slice (highest technical risk).
 2. **Absolute bounds outside alt-screen** — frame-offset derivation is fiddly;
    mitigated by capability flag + documented `alternateScreen` recommendation.
-3. **Windows/ConPTY in 1.0** — known divergent resize/mouse behavior; own
-   conformance lane budgeted; honest capability output where behavior differs.
-   ConPTY does not expose generic child pointer/focus mode negotiation, so an
-   opaque child is unsupported for those actions unless its production state is
-   supplied by an explicit authoritative provider.
+3. **Windows/ConPTY in 1.0** — the pinned passthrough runtime has its own
+   conformance lane. It forwards child pointer/focus DECSET; Termwright removes
+   only the host's structurally injected focus/Win32-input SET sequences before
+   driver parsing. Explicit production-state providers remain for embeddings
+   that actually hide their mode stream, not for the certified Windows backend.
 4. **Native PTY maintenance across six targets** — one public loader contract,
    platform-specific prebuild certification, packed clean-install tests and
    real Windows/Linux/macOS conformance keep the owned implementation honest.

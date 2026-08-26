@@ -1,11 +1,12 @@
 # Contract changes
 
-- 2026-08-26: generic ConPTY pointer/focus input is explicitly fail-closed when
-  the child has no authoritative application provider. An Ink stdout shadow is
-  not terminal-input-mode evidence: direct descriptor/native writes and
-  descendants can bypass `stream.write`. Hidden modes may be supplied only by
-  an explicitly registered, revision-bound provider backed by the
-  application's production mode state; observable VT state must still agree.
+- 2026-08-26: the pinned passthrough ConPTY exposes child mouse DECSET directly.
+  Its host-owned startup/reset focus and Win32-input SET sequences are removed
+  by a split-safe output normalizer before the driver, while original child
+  sequences remain intact. Windows therefore uses authoritative observed input
+  modes. A revision-bound production provider remains available only for an
+  embedding that explicitly hides those modes; an Ink stdout shadow is not
+  sufficient evidence because native writes and descendants can bypass it.
 
 - 2026-08-25: trace publication is transactional. Only an archive with a valid
   `COMMITTED` marker is complete evidence; interrupted and partial writes stay
@@ -381,21 +382,26 @@
 - 2026-08-16 (marker encoding, DECIDED by owner-delegated evidence): the
   render-commit marker moves from private DCS to a PRIVATE OSC everywhere —
   single path, no negotiation. Evidence: the in-CI escape-transparency probe
-  shows ConPTY drops DCS/APC/OSC-8 but passes private OSC (BEL and ST) and
-  OSC 133 on Windows; POSIX passes everything. Emit with BEL, accept BEL and
-  ST. The probe stays in CI as a standing invariant ("what survives the pty
-  is a conformance property"). Coordinated round: protocol (encodeMarker/
-  verifyMarkerPayload + docs), driver (OSC handler), ink + py/go clients
+  showed the former inbox ConPTY dropping DCS/APC/OSC-8 but passing private OSC
+  (BEL and ST) and OSC 133 on Windows; POSIX passed everything. Emit with BEL,
+  accept BEL and ST. The probe stays in CI as a standing invariant ("what
+  survives the pty is a conformance property"). Coordinated round: protocol
+  (encodeMarker/verifyMarkerPayload + docs), driver (OSC handler), ink + py/go clients
   (emission), conformance (fixtures + asserts).
-- 2026-08-16 (Windows mouse, DECIDED on probe evidence): ConPTY consumes
-  mouse DECSET (1000/1002/1006) on the way to the observer while the child
-  still enables and decodes mouse (probe: mouseTracking=none,
-  childDecodedReport=true; 2004/1049 pass). TerminalModes.mouseTracking and
-  mouseEncoding gain the value 'unknown', reported when the platform makes
+  This measurement was against the former frame-based inbox ConPTY. The pinned
+  passthrough runtime now forwards DCS/APC/OSC 8; OSC 8487 remains the one
+  cross-platform marker encoding rather than a current Windows workaround.
+- 2026-08-16 (Windows mouse, historical inbox probe evidence): the frame-based
+  inbox ConPTY consumed mouse DECSET (1000/1002/1006) on the way to the
+  observer while the child still enabled and decoded mouse (probe:
+  mouseTracking=none, childDecodedReport=true; 2004/1049 pass).
+  TerminalModes.mouseTracking and mouseEncoding gain the value 'unknown', reported when the platform makes
   the mode unobservable (win32/ConPTY). The pointer gate refuses only a
   KNOWN-off mode; on 'unknown' it sends SGR-encoded input and records a new
   diagnostic 'mouse-mode-unverifiable' (closed set: 18). POSIX behavior
   unchanged ('none' remains known-off).
+  Superseded on 2026-08-26 by the pinned passthrough runtime, which forwards
+  child DECSET and is certified with `modesObservable=true` on Windows.
 - 2026-08-16 (test): opcje per plik/suite przez natywne
   `test.override({ termwrightOptions })`; scalanie klucz-po-kluczu w `launch()`
   w kolejności config < scoped < launch(options), z `env` i `timeouts`
@@ -414,6 +420,9 @@
   Kod `mouse-mode-unverifiable` przemianowany na `mode-unverifiable` z polem
   `mode?: 'mouse' | 'focus'` (zbiór kodów zostaje 18, wpis raz na sesję per
   tryb). Opcja `mouseModesObservable` → `modesObservable`. Bez aliasów.
+  The host-state diagnosis remains historical evidence for inbox ConPTY. The
+  pinned runtime's host reinjection is now removed before driver parsing, so
+  the child's focus mode is observable.
 - 2026-08-16 (ui): §UI events `test-end` + wymagane `lostLogRecords: number`
   (0 reprezentowalne; „nic nie zginęło" ≠ „nikt nie liczył"). Manifest runów
   v2: licznik per test WYMAGANY; wpisy v1 odrzucane przez istniejący

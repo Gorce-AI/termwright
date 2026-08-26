@@ -14,6 +14,8 @@ const bytes = (...values: number[]): Buffer => Buffer.from(values);
 
 const DA1 = bytes(ESC, 0x5b, 0x63);
 const DSRCPR = bytes(ESC, 0x5b, 0x36, 0x6e);
+const WINDOW_DEICONIFY = bytes(ESC, 0x5b, 0x31, 0x74);
+const WINDOW_ICONIFY = bytes(ESC, 0x5b, 0x32, 0x74);
 const FOCUS_ON = bytes(ESC, 0x5b, 0x3f, 0x31, 0x30, 0x30, 0x34, 0x68);
 const FOCUS_OFF = bytes(ESC, 0x5b, 0x3f, 0x31, 0x30, 0x30, 0x34, 0x6c);
 const WIN32_ON = bytes(ESC, 0x5b, 0x3f, 0x39, 0x30, 0x30, 0x31, 0x68);
@@ -26,6 +28,16 @@ interface Rewrite {
 }
 
 const STARTUP_REWRITES: readonly Rewrite[] = [
+  ...[WINDOW_DEICONIFY, WINDOW_ICONIFY].flatMap((windowReport): readonly Rewrite[] => [
+    {
+      input: Buffer.concat([windowReport, DSRCPR, DA1, FOCUS_ON, WIN32_ON]),
+      output: Buffer.concat([windowReport, DSRCPR, DA1]),
+    },
+    {
+      input: Buffer.concat([windowReport, DA1, FOCUS_ON, WIN32_ON]),
+      output: Buffer.concat([windowReport, DA1]),
+    },
+  ]),
   {
     // With cursor inheritance VtIo asks for the cursor position before DA1.
     // Both queries are real transport output; only the modes belong to host.

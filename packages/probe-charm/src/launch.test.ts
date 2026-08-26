@@ -112,7 +112,7 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     // The launcher must consume the current manifest, not resurrect an
     // older handshake/capability patch through a parallel launcher patch set.
     await expect(readFile(join(first.copyDir, 'TERMWRIGHT.md'), 'utf8')).resolves.toContain(
-      "patch set v17 applied",
+      "patch set v18 applied",
     );
 
     await run('go', ['build', '-o', join(dir, 'app-bin'), '.'], {

@@ -162,10 +162,15 @@ cannot conclude "this byte position corresponds to this revision".
 
 ### 2.3 The evidence, because it was expensive
 
+The ConPTY permeability rows below are historical measurements of the former
+frame-based inbox runtime. The pinned passthrough runtime now forwards child
+DECSET, DCS, APC and OSC 8 and is certified independently; these rows explain
+the original marker choice rather than current Windows capability.
+
 | Measurement | Result | Source |
 |---|---|---|
-| DCS through ConPTY | dropped | escape probe, run 31947757843 |
-| APC, OSC 8 through ConPTY | dropped | same |
+| DCS through legacy inbox ConPTY | dropped | escape probe, run 31947757843 |
+| APC, OSC 8 through legacy inbox ConPTY | dropped | same |
 | Private OSC (BEL and ST), OSC 133 | pass | same |
 | OSC 8487 specifically | pass, parsed, no leak | same (candidate added so the number itself was measured, not inferred from its family) |
 | Parse-queue delay under a 200-render flood, macOS | transport +0 ms, parsing +692 ms against a 1000 ms window | flood probe |
@@ -174,16 +179,16 @@ cannot conclude "this byte position corresponds to this revision".
 
 Two conclusions Phase 1 should not re-litigate:
 
-1. **In-band correlation is fragile but currently viable.** The marker rides
-   OSC 8487 because DCS was measured dead on Windows. That was a forced move,
-   not a preference, and the same forcing can happen again — a risk to carry,
-   not a reason to abandon the mechanism.
+1. **In-band correlation is versioned by behavioral certification.** OSC 8487
+   was selected because DCS was dead on the historical inbox runtime. The
+   pinned passthrough runtime no longer has that limitation, but the existing
+   marker remains the one cross-platform encoding certified end to end.
 2. **Byte-count correlation is not an alternative on Windows.** The obvious
    escape-free design — `FRAME_END` carries the number of stdout bytes the
-   frame wrote, driver correlates by counting received bytes — dies on ConPTY,
-   which re-encodes and repaints rather than forwarding. Counts on the two ends
-   are not the same number. (macOS measured ratio 1.03; ConPTY is an emulator,
-   not a pipe.)
+   frame wrote, driver correlates by counting received bytes — is not a stable
+   PTY contract. The legacy runtime repainted output; the pinned runtime still
+   performs specified transformations such as newline translation and host
+   control-plane injection. Counts on the two ends need not be the same.
 
 ### 2.4 Recommendation
 

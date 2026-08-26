@@ -83,11 +83,13 @@ driver publishes a revision only when it holds both the tree and the grid state
 at that marker. This is Neovim's `flush` semantics, and it is what makes waits
 event-based rather than timing-based.
 
-**Why OSC 8487.** A permeability probe across the supported PTY paths found
-ConPTY drops DCS, APC and OSC 8 while forwarding private OSC and OSC 133. The
-marker therefore uses private OSC 8487 with a BEL terminator on every platform.
-A registered OSC handler consumes it before it reaches the visible grid. This
-replaced the original DCS choice; the encoding changed only after measurement.
+**Why OSC 8487.** A permeability probe against the former frame-based inbox
+ConPTY found that it dropped DCS, APC and OSC 8 while forwarding private OSC
+and OSC 133. That result replaced the original DCS choice with private OSC 8487
+and a BEL terminator. The current pinned passthrough ConPTY forwards those
+escape families, but OSC 8487 remains the single measured marker encoding on
+every platform. A registered OSC handler consumes it before it reaches the
+visible grid.
 
 **Why a MAC.** So ordinary program output — including output a test's own
 fixture prints — cannot forge a commit. It is keyed with the per-session token

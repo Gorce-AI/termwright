@@ -8,7 +8,11 @@
 #include <napi.h>
 
 #include <atomic>
+#include <climits>
+#include <cmath>
+#include <io.h>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -18,6 +22,94 @@
 namespace {
 
 constexpr size_t kMaximumPendingEvents = 64;
+
+std::mutex console_marker_mutex;
+
+std::string ConsoleMarkerError(const char* operation, DWORD code) {
+  return std::string(operation) + " failed with Win32 error " + std::to_string(code);
+}
+
+Napi::Value WriteWindowsConsoleMarker(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsString()) {
+    Napi::TypeError::New(env, "writeWindowsConsoleMarker(fd, marker) requires an integer fd and a string")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  const double numeric_fd = info[0].As<Napi::Number>().DoubleValue();
+  if (!std::isfinite(numeric_fd) || numeric_fd < 0 ||
+      numeric_fd > static_cast<double>(INT_MAX) ||
+      numeric_fd != static_cast<double>(static_cast<int>(numeric_fd))) {
+    Napi::RangeError::New(env, "writeWindowsConsoleMarker fd must be a non-negative integer")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  const std::u16string marker = info[1].As<Napi::String>().Utf16Value();
+  if (marker.empty()) {
+    Napi::RangeError::New(env, "writeWindowsConsoleMarker marker must not be empty")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (marker.size() > MAXDWORD) {
+    Napi::RangeError::New(env, "writeWindowsConsoleMarker marker is too large for WriteConsoleW")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  std::lock_guard<std::mutex> lock(console_marker_mutex);
+  const intptr_t descriptor_handle = _get_osfhandle(static_cast<int>(numeric_fd));
+  if (descriptor_handle == -1) {
+    Napi::Error::New(env, "_get_osfhandle failed for the console marker fd")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  const HANDLE handle = reinterpret_cast<HANDLE>(descriptor_handle);
+  DWORD original_mode = 0;
+  if (!GetConsoleMode(handle, &original_mode)) {
+    Napi::Error::New(env, ConsoleMarkerError("GetConsoleMode(console marker)", GetLastError()))
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  const DWORD required_mode = original_mode | ENABLE_PROCESSED_OUTPUT |
+                              ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+  const bool changed_mode = required_mode != original_mode;
+  if (changed_mode && !SetConsoleMode(handle, required_mode)) {
+    Napi::Error::New(env, ConsoleMarkerError("SetConsoleMode(console marker)", GetLastError()))
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  DWORD written = 0;
+  const BOOL wrote = WriteConsoleW(handle, marker.data(), static_cast<DWORD>(marker.size()),
+                                   &written, nullptr);
+  const DWORD write_error = wrote ? ERROR_SUCCESS : GetLastError();
+  const bool restored = !changed_mode || SetConsoleMode(handle, original_mode) != FALSE;
+  const DWORD restore_error = restored ? ERROR_SUCCESS : GetLastError();
+
+  if (!restored) {
+    std::string message = ConsoleMarkerError("SetConsoleMode(console marker restore)", restore_error);
+    if (!wrote) message += "; preceding " + ConsoleMarkerError("WriteConsoleW(console marker)", write_error);
+    else if (written != marker.size()) {
+      message += "; preceding WriteConsoleW(console marker) short write " +
+                 std::to_string(written) + "/" + std::to_string(marker.size());
+    }
+    Napi::Error::New(env, message).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!wrote) {
+    Napi::Error::New(env, ConsoleMarkerError("WriteConsoleW(console marker)", write_error))
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (written != marker.size()) {
+    Napi::Error::New(env, "WriteConsoleW(console marker) short write " +
+                              std::to_string(written) + "/" +
+                              std::to_string(marker.size()))
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  return env.Undefined();
+}
 
 Napi::Object RuntimeInfo(Napi::Env env) {
   const termwright::ConPtyRuntimeInfo& info = termwright::GetConPtyApi().runtime_info();
@@ -266,6 +358,8 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   // side-by-side bundle. Session construction below remains fail-closed.
   ConPtySession::Init(env, exports);
   exports.Set("conPtyRuntimeInfo", Napi::Function::New(env, ConPtyRuntimeInfo));
+  exports.Set("writeWindowsConsoleMarker",
+              Napi::Function::New(env, WriteWindowsConsoleMarker));
   return exports;
 }
 
