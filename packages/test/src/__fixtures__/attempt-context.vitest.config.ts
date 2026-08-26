@@ -45,6 +45,7 @@ export default defineConfig({
           workerEpoch: 0,
           workerIdPrefix: 'runner-fixture',
           handshakeTimeoutMs: 5_000,
+          admissionDeadline: performance.timeOrigin + performance.now() + 30_000,
           resourceProfile: {},
         },
         journal: {

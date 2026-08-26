@@ -36,7 +36,9 @@ export default defineConfig({
         },
         broker: {
           endpoint, token, workerEpoch: 0, workerIdPrefix: 'denied-fixture',
-          handshakeTimeoutMs: 5_000, resourceProfile: {},
+          handshakeTimeoutMs: 5_000,
+          admissionDeadline: performance.timeOrigin + performance.now() + 30_000,
+          resourceProfile: {},
         },
         journal: {
           endpoint: journalEndpoint, token: journalToken, handshakeTimeoutMs: 5_000,
