@@ -46,6 +46,15 @@ bool CreateCloseOnExecPipe(int descriptors[2], std::string* error) {
   return true;
 }
 
+bool SetNonblocking(int descriptor, std::string* error) {
+  const int flags = fcntl(descriptor, F_GETFL, 0);
+  if (flags != -1 && fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) != -1) {
+    return true;
+  }
+  *error = ErrnoMessage("fcntl(O_NONBLOCK)", errno);
+  return false;
+}
+
 void CloseDescriptor(int* descriptor) {
   if (*descriptor >= 0) close(*descriptor);
   *descriptor = -1;
@@ -55,6 +64,16 @@ void Wake(int descriptor) {
   if (descriptor < 0) return;
   const uint8_t byte = 1;
   while (write(descriptor, &byte, sizeof(byte)) == -1 && errno == EINTR) {
+  }
+}
+
+void DrainWake(int descriptor) {
+  uint8_t buffer[256];
+  for (;;) {
+    const ssize_t count = read(descriptor, buffer, sizeof(buffer));
+    if (count > 0) continue;
+    if (count == -1 && errno == EINTR) continue;
+    return;
   }
 }
 
@@ -129,7 +148,9 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
   int exec_status[2] = {-1, -1};
   if (!CreateCloseOnExecPipe(exec_status, error) ||
       !CreateCloseOnExecPipe(reader_wake_, error) ||
-      !CreateCloseOnExecPipe(writer_wake_, error)) {
+      !CreateCloseOnExecPipe(writer_wake_, error) ||
+      !SetNonblocking(writer_wake_[0], error) ||
+      !SetNonblocking(writer_wake_[1], error)) {
     CloseDescriptor(&exec_status[0]);
     CloseDescriptor(&exec_status[1]);
     CloseDescriptor(&reader_wake_[0]);
@@ -323,16 +344,34 @@ void PosixSession::WriterLoop() {
   for (;;) {
     std::vector<uint8_t> pending;
     {
-      std::unique_lock<std::mutex> lock(write_mutex_);
-      write_signal_.wait(lock, [this] {
-        return disposed_.load() || !write_queue_.empty();
-      });
+      std::lock_guard<std::mutex> lock(write_mutex_);
       if (write_queue_.empty()) {
         if (disposed_.load()) return;
-        continue;
+      } else {
+        pending = std::move(write_queue_.front());
+        write_queue_.pop_front();
       }
-      pending = std::move(write_queue_.front());
-      write_queue_.pop_front();
+    }
+    if (pending.empty()) {
+      // The same self-pipe wakes an idle writer and interrupts a writer whose
+      // PTY is backpressured. Queue state remains protected by write_mutex_;
+      // the pipe is only the causal edge that makes a state change observable.
+      // This also avoids depending on the versioned libstdc++ condition-
+      // variable wait symbol in a portable Node-API addon.
+      pollfd wake = {writer_wake_[0], POLLIN, 0};
+      int ready;
+      do {
+        ready = poll(&wake, 1, -1);
+      } while (ready == -1 && errno == EINTR);
+      if (ready == -1) {
+        FailWriter("poll(PTY input queue)", errno);
+        return;
+      }
+      if ((wake.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) != 0) {
+        DrainWake(writer_wake_[0]);
+      }
+      if (disposed_.load()) return;
+      continue;
     }
 
     size_t offset = 0;
@@ -354,25 +393,39 @@ void PosixSession::WriterLoop() {
         do {
           ready = poll(descriptors, 2, -1);
         } while (ready == -1 && errno == EINTR);
-        if (ready > 0 && (descriptors[1].revents & POLLIN) != 0) return;
+        if (ready > 0 &&
+            (descriptors[1].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) != 0) {
+          DrainWake(writer_wake_[0]);
+          if (disposed_.load()) return;
+        }
         if (ready > 0 && (descriptors[0].revents & POLLOUT) != 0) continue;
-        if (ready == -1) FailWriter("poll(PTY input)", errno);
-        else FailWriter("write(PTY master)", EIO);
-        return;
+        if (ready == -1) {
+          FailWriter("poll(PTY input)", errno);
+          return;
+        }
+        if ((descriptors[0].revents & (POLLHUP | POLLERR | POLLNVAL)) != 0) {
+          FailWriter("write(PTY master)", EIO);
+          return;
+        }
+        // A later queue admission can wake this poll while the current write
+        // is still backpressured. It changes future work, not the health of
+        // the current write, so keep waiting for the master to become writable.
+        continue;
       }
       FailWriter("write(PTY master)", count == -1 ? errno : EIO);
       return;
     }
 
-    bool drained;
+    uint64_t drained_generation = 0;
     {
       std::lock_guard<std::mutex> lock(write_mutex_);
       queued_write_bytes_ -= pending.size();
-      drained = queued_write_bytes_ == 0;
+      if (queued_write_bytes_ == 0) drained_generation = write_generation_;
     }
-    if (drained) {
+    if (drained_generation != 0) {
       PosixSessionEvent event;
       event.kind = PosixEventKind::kDrain;
+      event.write_generation = drained_generation;
       Emit(std::move(event));
     }
   }
@@ -430,22 +483,27 @@ void PosixSession::WaitForRootExit() {
 
 bool PosixSession::Write(const uint8_t* data, size_t length, std::string* error) {
   if (length == 0) return true;
-  std::lock_guard<std::mutex> lock(write_mutex_);
-  if (disposed_.load() || source_ended_.load()) {
-    *error = "PTY input is closed";
-    return false;
+  bool wake_writer = false;
+  {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    if (disposed_.load() || source_ended_.load()) {
+      *error = "PTY input is closed";
+      return false;
+    }
+    if (writer_failed_) {
+      *error = writer_error_;
+      return false;
+    }
+    if (length > kMaximumQueuedWriteBytes - queued_write_bytes_) {
+      *error = "PTY input queue capacity exceeded (8 MiB)";
+      return false;
+    }
+    wake_writer = write_queue_.empty();
+    write_queue_.emplace_back(data, data + length);
+    queued_write_bytes_ += length;
+    write_generation_ += 1;
   }
-  if (writer_failed_) {
-    *error = writer_error_;
-    return false;
-  }
-  if (length > kMaximumQueuedWriteBytes - queued_write_bytes_) {
-    *error = "PTY input queue capacity exceeded (8 MiB)";
-    return false;
-  }
-  write_queue_.emplace_back(data, data + length);
-  queued_write_bytes_ += length;
-  write_signal_.notify_one();
+  if (wake_writer) Wake(writer_wake_[1]);
   return true;
 }
 
@@ -533,8 +591,6 @@ void PosixSession::Dispose() {
     std::lock_guard<std::mutex> lock(write_mutex_);
     write_queue_.clear();
   }
-  write_signal_.notify_all();
-
   if (writer_.joinable()) writer_.join();
   if (reader_.joinable()) reader_.join();
   if (exit_watcher_.joinable()) exit_watcher_.join();

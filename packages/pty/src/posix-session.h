@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <mutex>
@@ -21,6 +20,7 @@ struct PosixSessionEvent {
   int exit_code = 0;
   int signal = 0;
   int error_code = 0;
+  uint64_t write_generation = 0;
   std::string message;
 };
 
@@ -71,9 +71,9 @@ class PosixSession {
   std::thread exit_watcher_;
 
   std::mutex write_mutex_;
-  std::condition_variable write_signal_;
   std::deque<std::vector<uint8_t>> write_queue_;
   size_t queued_write_bytes_ = 0;
+  uint64_t write_generation_ = 0;
   bool writer_failed_ = false;
   std::string writer_error_;
 

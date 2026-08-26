@@ -1,3 +1,4 @@
+import { createServer } from "node:net";
 import { describe, expect, it } from "vitest";
 import { candidatePaths, spawnPty } from "./index.js";
 
@@ -30,12 +31,20 @@ function waitForText(
   marker: string,
 ): Promise<void> {
   if (Buffer.concat(chunks).includes(marker)) return Promise.resolve();
-  return new Promise((resolve) => {
-    const release = handle.onData(() => {
+  return new Promise((resolve, reject) => {
+    const releases: Array<() => void> = [];
+    const settle = (outcome: () => void): void => {
+      for (const release of releases.splice(0)) release();
+      outcome();
+    };
+    releases.push(handle.onData(() => {
       if (!Buffer.concat(chunks).includes(marker)) return;
-      release();
-      resolve();
-    });
+      settle(resolve);
+    }));
+    releases.push(handle.onExit((status) => settle(() => reject(new Error(
+      `PTY exited before ${JSON.stringify(marker)}: ${JSON.stringify(status)}; saw ${JSON.stringify(Buffer.concat(chunks).toString("utf8"))}`,
+    )))));
+    releases.push(handle.onError((error) => settle(() => reject(error))));
   });
 }
 
@@ -102,6 +111,93 @@ describe.skipIf(process.platform === "win32")("the Termwright-owned POSIX PTY", 
     session.handle.dispose();
   });
 
+  it("does not lose a wake while many small writes race the writer", async () => {
+    const bytes = Buffer.from(Array.from({ length: 4096 }, (_, index) => index % 251));
+    const session = collect(node([
+      "process.stdin.setRawMode(true);",
+      "process.stdin.resume();",
+      "const chunks = []; let received = 0;",
+      "process.stdout.write('READY');",
+      "process.stdin.on('data', chunk => {",
+      "chunks.push(chunk); received += chunk.length;",
+      `if (received === ${bytes.length}) {`,
+      "process.stdout.write('HEX=' + Buffer.concat(chunks).toString('hex'));",
+      "process.exit(0);",
+      "}",
+      "});",
+    ].join("")));
+    try {
+      await waitForText(session.handle, session.chunks, "READY");
+      for (const byte of bytes) session.handle.write(Uint8Array.of(byte));
+      await Promise.all([session.exit, session.handle.outputEnded]);
+      expect(session.text()).toContain(`HEX=${bytes.toString("hex")}`);
+    } finally {
+      session.handle.dispose();
+    }
+  });
+
+  it("keeps a backpressured write healthy when later input wakes its poll", async () => {
+    const firstBytes = 1024 * 1024;
+    const laterBytes = 64 * 1024;
+    const totalBytes = firstBytes + laterBytes;
+    const server = createServer();
+    const controlConnected = new Promise<import("node:net").Socket>((resolve) => {
+      server.once("connection", resolve);
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    if (address === null || typeof address === "string")
+      throw new Error("backpressure control server has no TCP port");
+    let session: ReturnType<typeof collect> | undefined;
+    let control: import("node:net").Socket | undefined;
+    try {
+      session = collect(node([
+        "const net = require('node:net');",
+        "process.stdin.setRawMode(true);",
+        "process.stdin.pause();",
+        "let received = 0; let ordered = true;",
+        `const control = net.connect(${address.port}, '127.0.0.1', () => {`,
+        "process.stdin.once('readable', () => process.stdout.write('INPUT_BUFFERED'));",
+        "process.stdout.write('READY');",
+        "});",
+        "control.once('data', () => {",
+        "process.stdin.on('data', chunk => {",
+        "for (const byte of chunk) {",
+        `const expected = received < ${firstBytes} ? 0x61 : 0x62;`,
+        "if (byte !== expected) ordered = false; received += 1;",
+        "}",
+        `if (received === ${totalBytes}) {`,
+        "process.stdout.write(ordered ? 'INPUT_ORDERED' : 'INPUT_REORDERED');",
+        "process.exit(ordered ? 0 : 2);",
+        "}",
+        "});",
+        "process.stdin.resume();",
+        "});",
+      ].join("")));
+      await waitForText(session.handle, session.chunks, "READY");
+      session.handle.write(Buffer.alloc(firstBytes, 0x61));
+      // `readable` proves that the PTY delivered some input. The paused Node
+      // stream cannot absorb the remaining megabyte, so the native write is now
+      // backpressured without relying on elapsed silence.
+      await waitForText(session.handle, session.chunks, "INPUT_BUFFERED");
+      session.handle.write(Buffer.alloc(laterBytes, 0x62));
+      control = await controlConnected;
+      control.write("release");
+      await Promise.all([session.exit, session.handle.outputEnded]);
+      expect(session.text()).toContain("INPUT_ORDERED");
+      expect(session.handle.sawRealEof).toBe(true);
+    } finally {
+      session?.handle.dispose();
+      control?.destroy();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error === undefined ? resolve() : reject(error));
+      });
+    }
+  });
+
 });
 
 describe("the Termwright-owned native PTY flow control", () => {
@@ -120,7 +216,10 @@ describe("the Termwright-owned native PTY flow control", () => {
   });
 
   it("publishes drain only after every admitted input byte is written", async () => {
-    const bytes = 256 * 1024;
+    // This test proves queue ordering, not terminal throughput. A separate
+    // capacity test fills the full 8 MiB queue and the output-pressure test
+    // saturates the native-to-JS channel.
+    const bytes = 64 * 1024;
     const session = collect(node([
       "process.stdin.setRawMode(true);",
       "process.stdin.resume();",
@@ -167,9 +266,20 @@ describe("the Termwright-owned native PTY flow control", () => {
     await Promise.all([session.exit, session.handle.outputEnded]);
     const output = Buffer.concat(session.chunks);
     const sentinel = Buffer.from("PRESSURE_SENTINEL");
-    expect(output.length).toBe(bytes + sentinel.length);
-    expect(output.subarray(0, bytes).every((byte) => byte === 0x70)).toBe(true);
-    expect(output.subarray(bytes).equals(sentinel)).toBe(true);
+    if (process.platform === "win32") {
+      // ConPTY is a terminal renderer, not a transparent byte pipe: wrapping
+      // a long row adds VT cursor traffic. Count the payload byte itself and
+      // require the ordered tail instead of mistaking valid VT for corruption.
+      expect(output.reduce((count, byte) => count + (byte === 0x70 ? 1 : 0), 0)).toBe(bytes);
+      const sentinelIndex = output.indexOf(sentinel);
+      expect(sentinelIndex).toBeGreaterThanOrEqual(0);
+      expect(sentinelIndex).toBe(output.lastIndexOf(sentinel));
+      expect(output.lastIndexOf(0x70)).toBeLessThan(sentinelIndex);
+    } else {
+      expect(output.length).toBe(bytes + sentinel.length);
+      expect(output.subarray(0, bytes).every((byte) => byte === 0x70)).toBe(true);
+      expect(output.subarray(bytes).equals(sentinel)).toBe(true);
+    }
     expect(session.handle.sawRealEof).toBe(true);
     session.handle.dispose();
   });

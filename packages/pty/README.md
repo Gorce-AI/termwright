@@ -28,3 +28,14 @@ deployment target other than 13.5 and Linux symbol requirements newer than the
 Ubuntu 22.04 glibc/libstdc++ ABI floor. A missing or unloadable matching
 addon fails closed with the attempted package paths in its diagnostic; there is
 no fallback terminal implementation.
+
+ConHost screen-buffer inspection is intentionally not part of the Windows
+contract. A native proof tested `CONOUT$`, `ReadConsoleOutputW`, cursor state,
+alternate buffers, resize, Unicode and repeated A→B→A frames. The
+screen buffer could already contain B while the corresponding ConPTY VT bytes
+had not reached the host output pipe. Windows exposes neither a shared frame
+generation nor an acknowledgement tying those two channels together, so a
+screen snapshot is useful diagnostic evidence but cannot be a causal terminal
+flush barrier. Semantic revisions must therefore synchronize with owned
+framework/runtime evidence and the real ConPTY output stream, not a second
+unsynchronized console view.

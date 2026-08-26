@@ -111,6 +111,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(ciJobs['conformance-windows']).toContain('name: conformance windows-latest');
     expect(ciJobs.opentui).toContain("bun-version: '1.4.0'");
     expect(ciJobs.opentui).not.toContain('bun-version: latest');
+    expect(ciJobs['ui-browser']).toContain("compile-native-pty: 'true'");
     const certificationNeeds = [...(ciJobs.certification ?? '').matchAll(/^      - ([a-z0-9-]+)$/gmu)]
       .map((match) => match[1]);
     expect(certificationNeeds).toEqual(Object.keys(ciJobs).filter((jobId) => jobId !== 'certification'));
@@ -149,6 +150,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(releaseJobs.prebuilds).toContain('runner: ubuntu-22.04-arm }');
     expect(releaseJobs.prebuilds).toContain("macos_target: '13.5'");
     expect(releaseJobs.prebuilds).toContain('MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}');
+    expect(releaseJobs.prebuilds).not.toMatch(/^\s+CXX:/mu);
+    const setupWorkspace = await readFile(new URL('../.github/actions/setup-js-workspace/action.yml', import.meta.url), 'utf8');
+    expect(setupWorkspace).not.toMatch(/^\s+CXX:/mu);
     expect(await readFile(new URL('../packages/pty/binding.gyp', import.meta.url), 'utf8'))
       .toContain('"MACOSX_DEPLOYMENT_TARGET": "13.5"');
     expect(releaseJobs.verify).toContain('node scripts/check-prebuild.mjs --all');

@@ -315,15 +315,16 @@ void Session::WriterLoop() {
       }
       offset += written;
     }
-    bool drained;
+    uint64_t drained_generation = 0;
     {
       std::lock_guard<std::mutex> lock(write_mutex_);
       queued_write_bytes_ -= pending.size();
-      drained = queued_write_bytes_ == 0;
+      if (queued_write_bytes_ == 0) drained_generation = write_generation_;
     }
-    if (drained) {
+    if (drained_generation != 0) {
       SessionEvent event;
       event.kind = EventKind::kDrain;
+      event.write_generation = drained_generation;
       Emit(std::move(event));
     }
   }
@@ -537,6 +538,7 @@ bool Session::Write(const uint8_t* data, size_t length, std::string* error) {
   }
   write_queue_.emplace_back(data, data + length);
   queued_write_bytes_ += length;
+  write_generation_ += 1;
   write_signal_.notify_one();
   return true;
 }
