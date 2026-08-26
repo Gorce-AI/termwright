@@ -265,30 +265,30 @@ if (process.platform === 'win32') {
   modes.session.dispose();
   if (!modesValid) throw new Error('ConPTY changed application DEC modes or injected host control-plane modes');
 
-  console.log('[pty-cert] causal-resize');
+  console.log('[pty-cert] observable-resize');
+  // ResizePseudoConsole and the input pipe are independent channels. The
+  // child's public TTY resize notification is the causal acknowledgement that
+  // the requested geometry became authoritative; later input is not one.
   const resizing = collect([
-    'process.stdin.setRawMode?.(true);',
-    'process.stdin.once("data", () => {',
+    'process.stdout.once("resize", () => {',
     '  const [columns, rows] = process.stdout.getWindowSize();',
     '  const valid = columns === 120 && rows === 40;',
     '  const prefix = valid ? "RESIZED:" : "RESIZE_GEOMETRY_MISSING:";',
     '  process.stdout.write(prefix + columns + "x" + rows,',
     '    () => process.exit(valid ? 0 : 45));',
     '});',
-    'process.stdin.resume();',
     'process.stdout.write("RESIZE-READY");',
   ].join(''));
   await waitForText(resizing, 'RESIZE-READY');
   const resizeExited = new Promise((resolve) => resizing.session.onExit(resolve));
   if (!resizing.session.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
-  resizing.session.write(Buffer.from('R'));
   const [resizeStatus] = await Promise.all([resizeExited, resizing.session.outputEnded]);
   const resizeValid = resizeStatus.code === 0 &&
     resizing.text().includes('RESIZED:120x40') && resizing.session.sawRealEof;
   const resizeEvidence = resizing.text();
   resizing.session.dispose();
   if (!resizeValid) {
-    throw new Error('resize did not become visible before the following child input: ' +
+    throw new Error('resize did not publish the expected console geometry: ' +
       JSON.stringify({ status: resizeStatus, output: resizeEvidence }));
   }
 
