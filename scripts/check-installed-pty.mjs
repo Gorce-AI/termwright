@@ -333,14 +333,22 @@ if (process.platform === 'win32') {
   const cursorRestore = '\x1b[?25hVISUAL-END';
   const checkpointBytes = visualFrame + visualMarker + adjacentMarker + forgedMarker + cursorRestore;
   const checkpoints = collect(
-    'require("node:fs").writeSync(1, Buffer.from(' + JSON.stringify(checkpointBytes) + ', "utf8"))',
+    // This certifies the Node TTY path applications actually use. A Buffer
+    // passed to fs.writeSync targets Win32 WriteFile and is decoded through
+    // the console output code page; UTF-8 there is not a valid assumption
+    // unless the child explicitly selected CP_UTF8.
+    'process.stdout.write(' + JSON.stringify(checkpointBytes) + ', "utf8", () => {})',
   );
   await checkpoints.session.outputEnded;
   const observedCheckpoints = checkpoints.text();
-  const checkpointStart = observedCheckpoints.indexOf(checkpointBytes);
+  const checkpointStart = observedCheckpoints.indexOf('VISUAL-BEGIN');
+  const cursorHidden = observedCheckpoints.indexOf('\x1b[?25l', checkpointStart);
+  const visualCommit = observedCheckpoints.indexOf(visualMarker, checkpointStart);
+  const forgedCommit = observedCheckpoints.indexOf(forgedMarker, visualCommit);
+  const cursorRestored = observedCheckpoints.indexOf('\x1b[?25h', forgedCommit);
   const hiddenCursorSequencePassthroughValid = checkpointStart >= 0 &&
-    observedCheckpoints.indexOf('\x1b[?25l', checkpointStart) < observedCheckpoints.indexOf(visualMarker, checkpointStart) &&
-    observedCheckpoints.indexOf('\x1b[?25h', checkpointStart) > observedCheckpoints.indexOf(forgedMarker, checkpointStart);
+    cursorHidden > checkpointStart && visualCommit > cursorHidden &&
+    forgedCommit > visualCommit && cursorRestored > forgedCommit;
   const unicodePassthroughValid = observedCheckpoints.includes('Zażółć gęślą jaźń 😀');
   const sgrStyleTruecolorSequencePassthroughValid = observedCheckpoints.includes(
     '\x1b[1;4;38;2;10;20;30;48;2;40;50;60mSTYLED-TRUECOLOR\x1b[0m' + visualMarker,
@@ -361,6 +369,7 @@ if (process.platform === 'win32') {
       sgrStyleTruecolorSequencePassthroughValid,
       adjacentMarkerValid,
       forgedMarkerPassthroughValid,
+      observed: observedCheckpoints,
     }));
   }
 }
