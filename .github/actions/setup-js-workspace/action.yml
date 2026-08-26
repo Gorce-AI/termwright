@@ -42,4 +42,7 @@ runs:
       if: runner.os != 'Windows' && inputs.compile-native-pty == 'true'
       shell: bash
       working-directory: packages/pty
-      run: pnpm exec node-gyp rebuild
+      run: |
+        node_root="$(node -p 'require("node:path").dirname(require("node:path").dirname(process.execPath))')"
+        test -f "$node_root/include/node/node.h"
+        pnpm exec node-gyp rebuild --nodedir="$node_root"
