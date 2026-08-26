@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_LIMITS, type SemanticSnapshot } from '@termwright/protocol';
 import type { ProbeChannel } from '@termwright/probe-runtime';
 import type { InkFrameCapture } from './frame-capture.js';
-import { createInkSession, probeInfo } from './session.js';
+import {
+  createInkMarkerWriter,
+  createInkSession,
+  probeInfo,
+  type InkProbeSession,
+  type InkSessionOptions,
+} from './session.js';
 import type { InkDomElement } from './observe.js';
 import { trackTerminal, type InkTerminalTracker, type TerminalPosition } from './terminal-tracker.js';
 import { INK_VERSION } from './instrumentation.js';
@@ -77,6 +83,15 @@ function stream(writes: string[]): NodeJS.WriteStream {
 
 const flushedRender = async (): Promise<void> => undefined;
 
+function createTestInkSession(
+  options: Omit<InkSessionOptions, 'writeMarker'>,
+): InkProbeSession {
+  return createInkSession({
+    ...options,
+    writeMarker: createInkMarkerWriter(options.stdout, { certifiedHarness: true }),
+  });
+}
+
 interface DelayedWriteStream extends NodeJS.WriteStream {
   flushOne(): boolean;
   pendingWrites(): number;
@@ -130,6 +145,95 @@ async function passMacrotasks(count: number): Promise<void> {
 }
 
 describe('Ink probe session', () => {
+  it('uses the ordered in-process stream on Windows without requiring a console fd', async () => {
+    const writes: string[] = [];
+    const output = stream(writes);
+    Object.defineProperty(output, 'isTTY', { value: true });
+    const nativeWrite = vi.fn();
+
+    await createInkMarkerWriter(output, {
+      certifiedHarness: true,
+      platform: 'win32',
+      writeWindowsMarker: nativeWrite,
+    })('MARK');
+
+    expect(writes.join('')).toBe('MARK');
+    expect(nativeWrite).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for a production Windows TTY without a native console fd', async () => {
+    const output = stream([]);
+    Object.defineProperty(output, 'isTTY', { value: true });
+
+    await expect(createInkMarkerWriter(output, {
+      certifiedHarness: false,
+      platform: 'win32',
+    })('MARK')).rejects.toThrow('no certifiable Windows console handle');
+  });
+
+  it('uses the native writer for a production Windows console', async () => {
+    const output = stream([]);
+    Object.defineProperties(output, {
+      isTTY: { value: true },
+      fd: { value: 17 },
+    });
+    const nativeWrite = vi.fn();
+
+    await createInkMarkerWriter(output, {
+      certifiedHarness: false,
+      platform: 'win32',
+      writeWindowsMarker: nativeWrite,
+    })('MARK');
+
+    expect(nativeWrite).toHaveBeenCalledWith(17, 'MARK');
+  });
+
+  it('keeps a production Windows non-TTY stream ordered without a console fd', async () => {
+    const writes: string[] = [];
+    const output = stream(writes);
+    const nativeWrite = vi.fn();
+
+    await createInkMarkerWriter(output, {
+      certifiedHarness: false,
+      platform: 'win32',
+      writeWindowsMarker: nativeWrite,
+    })('MARK');
+
+    expect(writes.join('')).toBe('MARK');
+    expect(nativeWrite).not.toHaveBeenCalled();
+  });
+
+  it('fails the semantic session when the native Windows marker write fails', async () => {
+    const tree = root();
+    const output = stream([]);
+    Object.defineProperties(output, {
+      isTTY: { value: true },
+      fd: { value: 17 },
+    });
+    const violation = vi.fn();
+    const fakeChannel = channel([], []);
+    const session = createInkSession({
+      channel: fakeChannel,
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      waitForRenderFlush: flushedRender,
+      stdout: output,
+      writeMarker: createInkMarkerWriter(output, {
+        certifiedHarness: false,
+        platform: 'win32',
+        writeWindowsMarker: () => { throw new Error('native marker failed'); },
+      }),
+      tracker: fakeTracker(),
+      onGuaranteeViolation: violation,
+    });
+
+    session.notifyRender();
+    await session.flush();
+
+    expect(violation).toHaveBeenCalledWith(expect.objectContaining({ message: 'native marker failed' }));
+    expect(fakeChannel.isOpen).toBe(false);
+  });
+
   it('advertises the exact certified geometry contract', () => {
     expect(probeInfo()).toEqual({
       framework: 'ink',
@@ -145,7 +249,7 @@ describe('Ink probe session', () => {
     const snapshots: SemanticSnapshot[] = [];
     const writes: string[] = [];
     const output = stream(writes);
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: channel(snapshots, writes),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
@@ -170,7 +274,7 @@ describe('Ink probe session', () => {
     const writes: string[] = [];
     const output = delayedStream(writes);
     const tracker = trackTerminal(output, output);
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: channel(snapshots, []),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
@@ -215,16 +319,17 @@ describe('Ink probe session', () => {
     const tree = root();
     const snapshots: SemanticSnapshot[] = [];
     const writes: string[] = [];
+    const output = stream(writes);
     let releaseFlush: (() => void) | undefined;
     const renderFlush = new Promise<void>((resolve) => {
       releaseFlush = resolve;
     });
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: channel(snapshots, writes),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
       waitForRenderFlush: () => renderFlush,
-      stdout: stream(writes),
+      stdout: output,
       tracker: fakeTracker(),
     });
 
@@ -248,7 +353,7 @@ describe('Ink probe session', () => {
     (tree.childNodes as InkDomElement[]).push(staticNode);
     const withStatic: InkFrameCapture = { ...captures, geometry, staticRows: 1 };
     const snapshots: SemanticSnapshot[] = [];
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: channel(snapshots, []),
       resolveRoot: () => tree,
       resolveCapture: () => withStatic,
@@ -269,7 +374,7 @@ describe('Ink probe session', () => {
       const tree = root();
       const violation = vi.fn();
       const base = capture(tree, mode === 'buffer' ? { alternateScreen: true } : {});
-      const session = createInkSession({
+      const session = createTestInkSession({
         channel: channel([], []),
         resolveRoot: () => tree,
         resolveCapture: () => mode === 'missing' ? undefined : mode === 'screen-reader' ? { ...base, screenReader: true } : base,
@@ -289,7 +394,7 @@ describe('Ink probe session', () => {
     const snapshots: SemanticSnapshot[] = [];
     const coalesced = { count: 0 };
     const fakeChannel = channel(snapshots, [], coalesced);
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: fakeChannel,
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
@@ -309,7 +414,7 @@ describe('Ink probe session', () => {
     const tree = root();
     const snapshots: SemanticSnapshot[] = [];
     const coalesced = { count: 0 };
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: channel(snapshots, [], coalesced),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
@@ -329,7 +434,7 @@ describe('Ink probe session', () => {
 
   it('rejects a causal publication boundary when the session stops', async () => {
     const tree = root();
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: channel([], []),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
@@ -347,7 +452,7 @@ describe('Ink probe session', () => {
   it('rejects a causal publication boundary when the semantic channel closes', async () => {
     const tree = root();
     const fakeChannel = channel([], []);
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: fakeChannel,
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
@@ -366,7 +471,7 @@ describe('Ink probe session', () => {
     const tree = root();
     let currentCapture = capture(tree);
     const snapshots: SemanticSnapshot[] = [];
-    const session = createInkSession({
+    const session = createTestInkSession({
       channel: channel(snapshots, []),
       resolveRoot: () => tree,
       resolveCapture: () => currentCapture,

@@ -17,6 +17,8 @@ export interface InkSessionOptions {
   /** Resolves after Ink has enqueued and flushed every stdout write for the captured render. */
   readonly waitForRenderFlush: () => Promise<void>;
   readonly stdout: NodeJS.WriteStream;
+  /** Writes the authenticated marker through the same ordered transport as the frame. */
+  readonly writeMarker: (marker: string) => Promise<void>;
   readonly tracker: InkTerminalTracker;
   readonly onGuaranteeViolation?: (error: Error) => void;
 }
@@ -113,9 +115,9 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
     if (marker === undefined) throw new Error('Ink semantic publication was refused');
     // There must be no async gap between the final frame check and enqueueing
     // its marker: a newer Ink render could otherwise write in between them.
-    // Writable ordering now establishes FRAME -> MARKER; awaiting the marker's
-    // callback makes `flush()` an actual publication boundary for teardown.
-    await writeMarkerAndFlush(options.stdout, marker);
+    // The selected transport establishes FRAME -> MARKER; awaiting it makes
+    // `flush()` an actual publication boundary for teardown.
+    await options.writeMarker(marker);
     resolvePublications(frozen.number, revision);
     return revision;
   };
@@ -238,26 +240,37 @@ function nextMacrotask(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-function writeMarkerAndFlush(stream: NodeJS.WriteStream, data: string): Promise<void> {
-  if (process.platform === 'win32' && stream.isTTY === true) {
+export function createInkMarkerWriter(
+  stream: NodeJS.WriteStream,
+  options: {
+    readonly certifiedHarness: boolean;
+    readonly platform?: NodeJS.Platform;
+    readonly writeWindowsMarker?: (fd: number, marker: string) => void;
+  },
+): (marker: string) => Promise<void> {
+  const platform = options.platform ?? process.platform;
+  if (!options.certifiedHarness && platform === 'win32' && stream.isTTY === true) {
     const fd = (stream as NodeJS.WriteStream & { readonly fd?: unknown }).fd;
     if (typeof fd !== 'number' || !Number.isInteger(fd) || fd < 0) {
-      return Promise.reject(new Error('Ink stdout has no certifiable Windows console handle'));
+      return () => Promise.reject(new Error('Ink stdout has no certifiable Windows console handle'));
     }
-    try {
-      writeWindowsConsoleMarker(fd, data);
-      return Promise.resolve();
-    } catch (error) {
-      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
-    }
+    const writeNative = options.writeWindowsMarker ?? writeWindowsConsoleMarker;
+    return (marker) => {
+      try {
+        writeNative(fd, marker);
+        return Promise.resolve();
+      } catch (error) {
+        return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
   }
-  return new Promise((resolve, reject) => {
+  return (marker) => new Promise((resolve, reject) => {
     if (stream.writableEnded || stream.destroyed) {
       reject(new Error('Ink stdout closed before the semantic render marker could be written'));
       return;
     }
     try {
-      stream.write(data, (error?: Error | null) => {
+      stream.write(marker, (error?: Error | null) => {
         if (error instanceof Error) reject(error);
         else resolve();
       });
