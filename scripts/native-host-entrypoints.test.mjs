@@ -149,6 +149,8 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(releaseJobs.prebuilds).toContain('runner: ubuntu-22.04-arm }');
     expect(releaseJobs.prebuilds).toContain("macos_target: '13.5'");
     expect(releaseJobs.prebuilds).toContain('MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}');
+    expect(await readFile(new URL('../packages/pty/binding.gyp', import.meta.url), 'utf8'))
+      .toContain('"MACOSX_DEPLOYMENT_TARGET": "13.5"');
     expect(releaseJobs.verify).toContain('node scripts/check-prebuild.mjs --all');
 
     const configFiles = ['vitest.config.ts'];
