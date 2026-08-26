@@ -149,15 +149,16 @@ describe('fixture rerender', () => {
     ).rejects.toMatchObject({ code: 'capacity' });
   });
 
-  it('ignores a stranger on the control socket', async () => {
+  it('keeps the control endpoint private while applying an authenticated rerender', async () => {
     const harness = await launch({ label: 'Approve' });
     const endpoint = process.env['TERMWRIGHT_FIXTURE_CONTROL'];
     // The address never reaches this process: it is minted per fixture and put
     // in the child's environment only.
     expect(endpoint).toBeUndefined();
 
-    // A second connection to an already-attached channel is dropped, so even a
-    // caller that learned the address cannot drive the fixture.
+    // The authenticated channel remains usable. Rejection of a real second
+    // connection is exercised directly by the control-channel suite, where
+    // the private endpoint is intentionally available to the test.
     await harness.rerender({ label: 'Still ours' });
     expect(harness.screen().text(), pairing(harness)).toContain('Still ours');
   });

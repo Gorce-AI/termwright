@@ -43,6 +43,7 @@ const ADAPTER_VERSION = PACKAGE_VERSION;
 
 /** Private cross-package hook used by the shipped fixture runner. */
 export const INK_FLUSH_NEXT_RENDER = Symbol.for('@termwright/probe-ink/flush-next-render');
+const COMMIT_GENERATION_ATTRIBUTE = '__termwrightCommitGeneration';
 
 type InkRender = (
   node: ReactNode,
@@ -98,6 +99,7 @@ function instrumentedRender(
   if (!certifiedRuntime && !certifiedHarness) return ink.render(node, suppliedOptions);
   const options = normalizeOptions(suppliedOptions);
   let currentNode = node;
+  let commitGeneration = 0;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
   const releaseCapture = installInkCaptureHook();
@@ -139,7 +141,11 @@ function instrumentedRender(
   const wrap = (child: ReactNode): ReactNode => createElement(
     Fragment,
     null,
-    createElement(ink.Box, { ref: probeRef, display: 'none' }),
+    createElement(ink.Box, {
+      ref: probeRef,
+      display: 'none',
+      [COMMIT_GENERATION_ATTRIBUTE]: commitGeneration,
+    }),
     child,
   );
 
@@ -147,7 +153,14 @@ function instrumentedRender(
   const instance = ink.render(wrap(node), {
     ...options,
     onRender(metrics) {
-      const boundary = renderBoundaries.take();
+      // Box forwards non-layout metadata through the host style object. The
+      // hidden sentinel is excluded from semantic observation, but its host
+      // commit still gives this callback a synchronous causal generation.
+      const generation = (probeRef.current as InkDomElement | null)
+        ?.style?.[COMMIT_GENERATION_ATTRIBUTE];
+      const boundary = typeof generation === 'number'
+        ? renderBoundaries.take(generation)
+        : undefined;
       try {
         if (!certifiedRuntime) {
           const root = (probeRef.current?.parentNode as InkDomElement | undefined) ?? null;
@@ -288,7 +301,10 @@ function instrumentedRender(
     [INK_FLUSH_NEXT_RENDER](mutate: () => void): Promise<number> {
       return renderBoundaries.afterCurrentRender(
         () => instance.waitUntilRenderFlush(),
-        mutate,
+        (generation) => {
+          commitGeneration = generation;
+          mutate();
+        },
       );
     },
   };

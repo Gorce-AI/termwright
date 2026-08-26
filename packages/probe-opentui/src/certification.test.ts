@@ -58,6 +58,57 @@ describe('OpenTUI runtime certification', () => {
       TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: `sha256:${'f'.repeat(64)}`,
     })).toBeUndefined();
   });
+
+  it('gives an explicitly bound candidate precedence over a builtin version', async () => {
+    const entry = await fakePackage('0.5.3');
+    const digest = `sha256:${'a'.repeat(64)}`;
+    const revision = 'b'.repeat(40);
+    const env = {
+      GITHUB_ACTIONS: 'true',
+      GITHUB_SHA: revision,
+      TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: digest,
+      TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: revision,
+      TERMWRIGHT_CERTIFICATION_HOOK_PROFILE: JSON.stringify({
+        framework: 'opentui',
+        version: '0.5.3',
+        candidateDigest: digest,
+        sourceRevision: revision,
+      }),
+    };
+
+    expect(certifyOpenTuiEntry(entry, env)).toEqual({
+      version: '0.5.3',
+      source: 'candidate',
+      candidateDigest: digest,
+      sourceRevision: revision,
+    });
+    expect(certifyOpenTuiEntry(entry, {
+      ...env,
+      TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: 'c'.repeat(40),
+    })).toBeUndefined();
+    expect(certifyOpenTuiEntry(entry, {
+      TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: digest,
+    })).toBeUndefined();
+  });
+
+  it('does not let another framework candidate disable a builtin OpenTUI profile', async () => {
+    const entry = await fakePackage('0.5.3');
+    const revision = 'b'.repeat(40);
+    const digest = `sha256:${'a'.repeat(64)}`;
+
+    expect(certifyOpenTuiEntry(entry, {
+      GITHUB_ACTIONS: 'true',
+      GITHUB_SHA: revision,
+      TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: digest,
+      TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: revision,
+      TERMWRIGHT_CERTIFICATION_HOOK_PROFILE: JSON.stringify({
+        framework: 'ink',
+        version: '7.1.1',
+        candidateDigest: digest,
+        sourceRevision: revision,
+      }),
+    })).toEqual({ version: '0.5.3', source: 'builtin' });
+  });
 });
 
 async function fakePackage(version: string): Promise<string> {

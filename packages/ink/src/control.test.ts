@@ -41,6 +41,11 @@ async function attachFixture(channel: ControlChannel): Promise<ReturnType<typeof
   return fixture;
 }
 
+async function nextCommand(fixture: ReturnType<typeof connect>): Promise<{ commandId: number }> {
+  const [data] = await once(fixture, 'data');
+  return JSON.parse(String(data)) as { commandId: number };
+}
+
 describe('ControlChannel', () => {
   it('rolls back a Windows named-pipe listener when endpoint startup fails', async () => {
     const server = createServer();
@@ -115,6 +120,73 @@ describe('ControlChannel', () => {
     expect(channel.connected).toBe(false);
   });
 
+  it('lets the fixture authenticate while a silent stranger is connected', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+
+    const stranger = connect(channel.endpoint);
+    await once(stranger, 'connect');
+    const closed = once(stranger, 'close');
+    const fixture = await attachFixture(channel);
+
+    expect(channel.connected).toBe(true);
+    await closed;
+    fixture.destroy();
+  });
+
+  it('bounds silent authentication candidates without locking out the fixture', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+    const strangers = await Promise.all(Array.from({ length: 9 }, async () => {
+      const socket = connect(channel.endpoint);
+      const closed = new Promise<void>((resolve) => socket.once('close', resolve));
+      // Server-side candidate eviction can surface as ECONNRESET on named
+      // pipes. It is the expected lifecycle under test, never an unhandled
+      // process error.
+      socket.on('error', () => undefined);
+      await once(socket, 'connect');
+      return { socket, closed };
+    }));
+
+    const fixture = await attachFixture(channel);
+    expect(channel.connected).toBe(true);
+    await Promise.all(strangers.map(({ closed }) => closed));
+    for (const { socket } of strangers) socket.destroy();
+    fixture.destroy();
+  });
+
+  it('isolates partial unauthenticated input from the fixture hello', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+
+    const stranger = connect(channel.endpoint);
+    await once(stranger, 'connect');
+    stranger.write('{"v":1,"type":"hel');
+    const closed = once(stranger, 'close');
+    stranger.destroy();
+    await closed;
+
+    const fixture = await attachFixture(channel);
+    expect(channel.connected).toBe(true);
+    fixture.destroy();
+  });
+
+  it('refuses a second connection after the fixture authenticates', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+    const fixture = await attachFixture(channel);
+
+    const stranger = connect(channel.endpoint);
+    const closed = new Promise<void>((resolve) => {
+      stranger.on('close', resolve);
+      stranger.on('error', () => resolve());
+    });
+    await closed;
+
+    expect(channel.connected).toBe(true);
+    fixture.destroy();
+  });
+
   it('refuses a rerender when no fixture ever attached', async () => {
     const channel = await ControlChannel.listen();
     open.push(channel);
@@ -142,7 +214,7 @@ describe('ControlChannel', () => {
     const channel = await ControlChannel.listen();
     open.push(channel);
     const fixture = await attachFixture(channel);
-    const command = once(fixture, 'data');
+    const command = nextCommand(fixture);
 
     const rerender = channel.rerender({ label: 'in flight' }, 1_000);
     await command;
@@ -156,11 +228,11 @@ describe('ControlChannel', () => {
     const channel = await ControlChannel.listen();
     open.push(channel);
     const fixture = await attachFixture(channel);
-    const command = once(fixture, 'data');
+    const command = nextCommand(fixture);
 
     const rerender = channel.rerender({ label: 'paired' }, 1_000);
-    await command;
-    fixture.write('{"v":1,"type":"ok","semanticRevision":17}\n');
+    const { commandId } = await command;
+    fixture.write(`${JSON.stringify({ v: 1, commandId, type: 'ok', semanticRevision: 17 })}\n`);
 
     await expect(rerender).resolves.toBe(17);
     fixture.destroy();
@@ -170,13 +242,31 @@ describe('ControlChannel', () => {
     const channel = await ControlChannel.listen();
     open.push(channel);
     const fixture = await attachFixture(channel);
-    const command = once(fixture, 'data');
+    const command = nextCommand(fixture);
 
     const rerender = channel.rerender({ label: 'unpaired' }, 1_000);
-    await command;
-    fixture.write('{"v":1,"type":"ok"}\n');
+    const { commandId } = await command;
+    fixture.write(`${JSON.stringify({ v: 1, commandId, type: 'ok' })}\n`);
 
     await expect(rerender).rejects.toMatchObject({ code: 'protocol-violation' });
+    await expect(channel.rerender({ label: 'channel is poisoned' })).rejects.toMatchObject({
+      code: 'session-closed',
+    });
+    fixture.destroy();
+  });
+
+  it('does not let a reply for another command acknowledge the pending rerender', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+    const fixture = await attachFixture(channel);
+    const command = nextCommand(fixture);
+
+    const rerender = channel.rerender({ label: 'paired' }, 1_000);
+    const { commandId } = await command;
+    fixture.write(`${JSON.stringify({ v: 1, commandId: commandId + 1, type: 'ok', semanticRevision: 3 })}\n`);
+    fixture.write(`${JSON.stringify({ v: 1, commandId, type: 'ok', semanticRevision: 17 })}\n`);
+
+    await expect(rerender).resolves.toBe(17);
     fixture.destroy();
   });
 
