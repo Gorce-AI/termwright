@@ -18,18 +18,21 @@ const server = createServer((socket) => {
       pending = pending.slice(newline + 1);
       if (command === 'GO') {
         writeWindowsConsoleMarker(1, process.env.TW_MARKER_TEXT ?? '');
-        socket.write('DONE\n');
-      } else if (command === 'EXIT') {
-        socket.write('BYE\n', () => {
-          socket.destroy();
-          server.close(() => process.exit(0));
-        });
+        // DONE proves that the synchronous native write and mode restoration
+        // both returned. End our side of the control channel at the same
+        // boundary; the PowerShell peer closes its handle before waiting for
+        // this process, so neither runtime owns a circular shutdown wait.
+        socket.end('DONE\n');
       } else {
         throw new Error(`unexpected marker control command ${JSON.stringify(command)}`);
       }
     }
   });
   socket.write('READY\n');
+});
+
+server.on('connection', (socket) => {
+  socket.once('close', () => server.close());
 });
 
 server.listen(`\\\\.\\pipe\\${controlPipe}`);

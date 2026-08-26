@@ -51,8 +51,17 @@ try {
   if (-not [TermwrightConsoleMarkerProbe]::GetConsoleMode($output, [ref]$restored)) { exit 45 }
   if ($restored -ne $withoutRequiredModes) { exit 46 }
   [Console]::Out.Write("MODE_RESTORED")
-  $writer.WriteLine("EXIT")
-  if ($reader.ReadLine() -ne "BYE") { exit 47 }
+
+  # The marker process owns the server while this process owns the client.
+  # Close the client before waiting for the server process: waiting first
+  # creates a circular close dependency on runtimes that keep a named-pipe
+  # connection alive until its peer has acknowledged EOF.
+  $writer.Dispose()
+  $writer = $null
+  $reader.Dispose()
+  $reader = $null
+  $pipe.Dispose()
+  $pipe = $null
   $markerProcess.WaitForExit()
   if (-not $markerProcess.HasExited) { exit 49 }
 } finally {
