@@ -1063,11 +1063,11 @@ describe.skipIf(!ptyAvailable())(
     });
 
     it("times out while a command is still running", async () => {
-      const terminal = await launch("prompt-app.mjs");
+      const terminal = await launchWith(["prompt-app.mjs", "--never-complete"]);
       await terminal.waitForShellPrompt();
 
-      // The fixture marks the command as started (C) and only finishes it 120 ms
-      // later, so this deadline lands squarely inside the running command.
+      // This fixture deliberately withholds D, so the assertion is about the
+      // causal shell state and cannot race a scheduled command completion.
       await terminal.press("x");
       await terminal.waitForText("working");
       const error = await terminal

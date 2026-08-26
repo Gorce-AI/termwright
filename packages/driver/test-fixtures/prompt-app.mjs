@@ -9,6 +9,7 @@ const OSC = (payload) => process.stdout.write(`\x1b]133;${payload}\x07`);
 // `--exit-after-prompt` leaves a prompt on screen and then exits, so a test
 // can tell "a prompt is visible" apart from "the program can take input".
 const exitAfterPrompt = process.argv.includes('--exit-after-prompt');
+const neverComplete = process.argv.includes('--never-complete');
 
 function prompt() {
   OSC('A');
@@ -31,6 +32,7 @@ process.stdin.on('data', (chunk) => {
   if (text === 'q' || text === '\x03') process.exit(0);
   OSC('C');
   process.stdout.write('\r\nworking\r\n');
+  if (neverComplete) return;
   setTimeout(() => {
     OSC('D;0');
     prompt();
