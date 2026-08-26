@@ -41,6 +41,9 @@ const consoleMarkerFixturePath = fileURLToPath(
 const consoleMarkerScriptPath = fileURLToPath(
   new URL('./fixtures/conpty-console-marker.mjs', import.meta.url),
 );
+const observableResizeFixturePath = fileURLToPath(
+  new URL('./fixtures/conpty-observable-resize.ps1', import.meta.url),
+);
 if (installDirectory === undefined) {
   console.error(
     'usage: check-installed-pty.mjs <install-dir> [--verdict <path>]',
@@ -265,41 +268,32 @@ if (process.platform === 'win32') {
   modes.session.dispose();
   if (!modesValid) throw new Error('ConPTY changed application DEC modes or injected host control-plane modes');
 
-  // ResizePseudoConsole and the input pipe are independent channels. The
-  // child's public TTY resize notification is the causal acknowledgement that
-  // the requested geometry became authoritative; later input is not one. Keep
-  // stdin referenced only to preserve the child lifetime while that native
-  // notification is pending. No input byte participates in the barrier.
-  const resizeSource = [
-    'process.stdin.resume();',
-    'process.stdout.once("resize", () => {',
-    '  const [columns, rows] = process.stdout.getWindowSize();',
-    '  const valid = columns === 120 && rows === 40;',
-    '  const prefix = valid ? "RESIZED:" : "RESIZE_GEOMETRY_MISSING:";',
-    '  process.stdin.pause();',
-    '  process.stdout.write(prefix + columns + "x" + rows,',
-    '    () => process.exit(valid ? 0 : 45));',
-    '});',
-    'process.stdout.write("RESIZE-READY");',
-  ].join('');
-  const certifyObservableResize = async (name, executable) => {
-    console.log('[pty-cert] observable-resize-' + name.toLowerCase());
-    const resizing = collect(resizeSource, executable);
-    await waitForText(resizing, 'RESIZE-READY');
-    const resizeExited = new Promise((resolve) => resizing.session.onExit(resolve));
-    if (!resizing.session.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
-    const [resizeStatus] = await Promise.all([resizeExited, resizing.session.outputEnded]);
-    const resizeValid = resizeStatus.code === 0 &&
-      resizing.text().includes('RESIZED:120x40') && resizing.session.sawRealEof;
-    const resizeEvidence = resizing.text();
-    resizing.session.dispose();
-    if (!resizeValid) {
-      throw new Error(name + ' did not publish the expected console geometry after resize: ' +
-        JSON.stringify({ status: resizeStatus, output: resizeEvidence }));
-    }
-  };
-  await certifyObservableResize('Node', process.execPath);
-  if (process.env.TERMWRIGHT_REQUIRE_BUN === '1') await certifyObservableResize('Bun', 'bun');
+  // ResizePseudoConsole and the input pipe are independent channels. A public
+  // WINDOW_BUFFER_SIZE_EVENT, followed by public geometry inspection in the
+  // child, is the causal acknowledgement. This tests the ConPTY contract below
+  // Node/Bun convenience APIs; no injected input or timing window is a barrier.
+  console.log('[pty-cert] observable-resize-win32');
+  const resizeSession = pty.spawnPty({
+    command: ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', process.env.TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE],
+    env: environment,
+    columns: 80,
+    rows: 24,
+  });
+  const resizeOutput = [];
+  resizeSession.onData((data) => resizeOutput.push(Buffer.from(data)));
+  const resizing = { session: resizeSession, text: () => Buffer.concat(resizeOutput).toString('utf8') };
+  await waitForText(resizing, 'RESIZE-READY');
+  const resizeExited = new Promise((resolve) => resizeSession.onExit(resolve));
+  if (!resizeSession.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
+  const [resizeStatus] = await Promise.all([resizeExited, resizeSession.outputEnded]);
+  const resizeEvidence = resizing.text();
+  const resizeValid = resizeStatus.code === 0 &&
+    resizeEvidence.includes('RESIZED:120x40') && resizeSession.sawRealEof;
+  resizeSession.dispose();
+  if (!resizeValid) {
+    throw new Error('Win32 did not publish the expected console geometry after resize: ' +
+      JSON.stringify({ status: resizeStatus, output: resizeEvidence }));
+  }
 
   console.log('[pty-cert] split-production-marker');
   const splitMarker = collect([
@@ -479,6 +473,7 @@ const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
     TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE: inactiveBufferFixturePath,
     TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE: consoleMarkerFixturePath,
     TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(installDirectory, 'termwright console marker.mjs'),
+    TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
