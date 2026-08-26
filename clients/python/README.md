@@ -22,8 +22,9 @@ pip install termwright              # protocol client + probe + annotation SDK
 pip install "termwright[textual]"   # + Textual itself
 ```
 
-Requires Python 3.9+. The Textual extra installs the exactly certified Textual
-8.2.8 runtime; the protocol modules have no third-party dependencies.
+Requires Python 3.9+. The Textual extra installs the newest exact-certified
+Textual runtime listed in the compatibility registry; the protocol modules
+have no third-party dependencies.
 
 ## Automatic Textual semantics
 
@@ -245,7 +246,8 @@ probe waits there until the application imports Textual and observes the
 certified `App._display` / driver enqueue / `post_display_hook` boundary. The
 marker is appended without waiting to the same WriterThread FIFO, after the
 frame; a full queue fails the semantic channel instead of blocking Textual's
-event loop. Strong probing is certified only for Textual 8.2.8's exact built-in
+event loop. Strong probing is certified only for the exact Textual versions listed in
+the compatibility registry and their built-in
 `LinuxDriver` and `WindowsDriver` with their exact `WriterThread`; custom
 `driver_class` values and inline mode fail the semantic channel explicitly
 rather than publishing an unprovable commit. A driver that already sets `TERMWRIGHT_ENDPOINT` and

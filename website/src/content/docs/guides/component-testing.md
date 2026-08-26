@@ -64,7 +64,7 @@ await harness.waitForQuiet();
 await harness.press('Enter');
 ```
 
-The certified Ink 7.1.1 renderer exposes intended and clipped geometry.
+The exact-certified Ink renderer exposes intended and clipped geometry.
 Ink itself does not own a universal pointer router: without an application
 evidence provider, semantic pointer actions fail deterministically. A component
 that registers its real production router may use high-level Locator pointer

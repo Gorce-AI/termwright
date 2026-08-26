@@ -91,14 +91,17 @@ export const CI_JOBS = Object.freeze(
 export const REQUIRED_BRANCH_CHECKS = Object.freeze(['certification gate']);
 
 const compatibilityFiles = [
-  /^compatibility\/(?:candidate-assessments|certified-upstreams|registry)\.json$/u,
+  /^compatibility\/(?:candidate-assessments|certified-upstreams|framework-semantic-completeness|registry)\.json$/u,
   /^\.changeset\/framework-compatibility-auto\.md$/u,
   /^packages\/(?:probe-tview|probe-charm)\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
   /^clients\/rust-probe\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
   /^clients\/python\/src\/termwright_probe\/certified_textual\.py$/u,
+  /^clients\/python\/pyproject\.toml$/u,
+  /^clients\/python\/uv\.lock$/u,
   /^packages\/probe-ink\/src\/certified-instrumentation\.json$/u,
   /^packages\/probe-opentui\/src\/certified-runtime\.json$/u,
   /^packages\/(?:ink|probe-ink)\/package\.json$/u,
+  /^website\/src\/content\/docs\/reference\/geometry-visibility\.md$/u,
 ];
 
 const versionFiles = [

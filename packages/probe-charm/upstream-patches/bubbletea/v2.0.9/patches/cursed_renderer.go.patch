@@ -1,0 +1,39 @@
+--- a/cursed_renderer.go
++++ b/cursed_renderer.go
+@@ -286,6 +286,7 @@
+ 
+ 	if !s.starting && !closing && !s.pendingErase && s.lastView != nil && viewEquals(s.lastView, &view) && frameArea == s.cellbuf.Bounds() {
+ 		// No changes, nothing to do.
++		termwrightAfterRendererFlush(s, true)
+ 		return nil
+ 	}
+ 
+@@ -478,6 +479,7 @@
+ 	}
+ 
+ 	if err := s.scr.Flush(); err != nil {
++		termwrightAfterRendererFlush(s, false)
+ 		return fmt.Errorf("bubbletea: error flushing screen writer: %w", err)
+ 	}
+ 
+@@ -565,11 +567,19 @@
+ 		if s.logger != nil {
+ 			s.logger.Printf("output: %q", buf.String())
+ 		}
+-		if _, err := io.Copy(s.w, &buf); err != nil {
++		outputLen := buf.Len()
++		written, err := io.Copy(s.w, &buf)
++		if err == nil && written != int64(outputLen) {
++			err = io.ErrShortWrite
++		}
++		if err != nil {
++			termwrightAfterRendererFlush(s, false)
+ 			return fmt.Errorf("bubbletea: error flushing update to the writer: %w", err)
+ 		}
+ 	}
+ 
++	termwrightAfterRendererFlush(s, true)
++
+ 	s.lastView = &view
+ 
+ 	return nil

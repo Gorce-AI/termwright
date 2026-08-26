@@ -112,9 +112,11 @@ export interface LaunchOptions {
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   /**
-   * Maximum time to wait for an optional semantic adapter. Defaults to 2,000
-   * ms for generic auto-detection. When `requiredCapabilities` is non-empty,
-   * the default is the larger of 2,000 ms and the session `ready` timeout.
+   * Maximum time to discover an optional semantic adapter. Defaults to 2,000
+   * ms for generic auto-detection. A peer accepted within that window keeps
+   * its own bounded hello deadline; peers first seen afterwards are refused.
+   * When `requiredCapabilities` is non-empty, the default discovery budget is
+   * the larger of 2,000 ms and the session `ready` timeout.
    */
   readonly semanticNegotiationMs?: number;
   readonly scrollbackLines?: number; // default 2_000

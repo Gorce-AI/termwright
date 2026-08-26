@@ -13,4 +13,4 @@ editUrl: false
 
 > **ProcessLifecycleErrorCode** = `"cleanup-failed"` \| `"unsupported-signal"`
 
-Defined in: [internal/process-supervisor.ts:5](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L5)
+Defined in: [internal/process-supervisor.ts:4](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L4)

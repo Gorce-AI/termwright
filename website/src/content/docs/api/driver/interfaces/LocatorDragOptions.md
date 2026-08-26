@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LocatorDragOptions
 
-Defined in: [driver/src/api.ts:540](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L540)
+Defined in: [driver/src/api.ts:542](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L542)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -40,7 +40,7 @@ await terminal.close();
 
 > `readonly` `optional` **modifiers?**: readonly [`MouseModifier`](../../type-aliases/mousemodifier/)[]
 
-Defined in: [driver/src/api.ts:278](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L278)
+Defined in: [driver/src/api.ts:280](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L280)
 
 #### Inherited from
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:278](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **path?**: readonly [`MousePoint`](../mousepoint/)[]
 
-Defined in: [driver/src/api.ts:544](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L544)
+Defined in: [driver/src/api.ts:546](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L546)
 
 Explicit viewport-cell path. The resolved destination is appended.
 
@@ -62,7 +62,7 @@ Explicit viewport-cell path. The resolved destination is appended.
 
 > `readonly` `optional` **steps?**: `number`
 
-Defined in: [driver/src/api.ts:542](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L542)
+Defined in: [driver/src/api.ts:544](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L544)
 
 Number of interpolated pointer moves. Defaults to the cell distance.
 
@@ -72,7 +72,7 @@ Number of interpolated pointer moves. Defaults to the cell distance.
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [driver/src/api.ts:537](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L537)
+Defined in: [driver/src/api.ts:539](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L539)
 
 #### Inherited from
 

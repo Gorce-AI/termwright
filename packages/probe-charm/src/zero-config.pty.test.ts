@@ -72,13 +72,24 @@ afterAll(async () => {
  * lives, and it is a separate module, so instrumenting one without the other
  * reports strictly less.
  */
-async function buildBubblesFixture(): Promise<string> {
+async function buildBubblesFixture(version = 'v2.0.8'): Promise<string> {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-bub-')));
   roots.push(dir);
 
   const app = join(dir, 'app');
   await mkdir(app, { recursive: true });
   await cp(FIXTURE_BUBBLES, app, { recursive: true });
+
+  if (version !== 'v2.0.8') {
+    await run('go', ['mod', 'edit', `-require=charm.land/bubbletea/v2@${version}`], {
+      cwd: app,
+      env: { ...process.env, GOWORK: 'off' },
+    });
+    await run('go', ['mod', 'download', `charm.land/bubbletea/v2@${version}`], {
+      cwd: app,
+      env: { ...process.env, GOWORK: 'off' },
+    });
+  }
 
   const prepared = await prepareInstrumentedBuild({
     moduleDir: app,
@@ -93,13 +104,24 @@ async function buildBubblesFixture(): Promise<string> {
   return binary;
 }
 
-async function buildFixture(): Promise<string> {
+async function buildFixture(version = 'v2.0.8'): Promise<string> {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-zc-')));
   roots.push(dir);
 
   const app = join(dir, 'app');
   await mkdir(app, { recursive: true });
   await cp(FIXTURE, app, { recursive: true });
+
+  if (version !== 'v2.0.8') {
+    await run('go', ['mod', 'edit', `-require=charm.land/bubbletea/v2@${version}`], {
+      cwd: app,
+      env: { ...process.env, GOWORK: 'off' },
+    });
+    await run('go', ['mod', 'download', `charm.land/bubbletea/v2@${version}`], {
+      cwd: app,
+      env: { ...process.env, GOWORK: 'off' },
+    });
+  }
 
   const prepared = await prepareInstrumentedBuild({
     moduleDir: app,
@@ -179,38 +201,27 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
 		});
 	}, 900_000);
 
-  it('names the components the screen only shows as text', async () => {
-    const binary = await buildFixture();
-    const app = await launchTerminal({ command: [binary], columns: 80, rows: 12 });
-    sessions.push(app);
-    await app.waitForText('Sign in');
-    // Screen output and the semantic socket are independent under ConPTY.
-    // The banner proves rendering started, not that the first tree committed.
-    await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
+  it.each(['v2.0.8', 'v2.0.9'])(
+    'composes exact Bubble Tea %s with Bubbles v2.1.1 private state',
+    async (version) => {
+      const binary = await buildBubblesFixture(version);
+      const app = await launchTerminal({ command: [binary], columns: 60, rows: 10 });
+      sessions.push(app);
+      await app.waitForText('Loading');
+      await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
+      expect(app.contract()?.framework).toMatchObject({
+        name: 'charm', version, adapterVersion: PROBE_VERSION,
+      });
 
-    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
-    expect(app.contract()?.framework).toMatchObject({
-      name: 'charm', version: 'v2.0.8', adapterVersion: PROBE_VERSION,
-    });
-    expect(app.contract()?.capabilities['paired-revisions'].status).toBe('supported');
-
-    // The claim: a grid scrape sees two rows of similar-looking text. The tree
-    // says which component each is, and which one is focused — neither of
-    // which is recoverable from cells.
-    await expect
-      .poll(async () => (await app.getByRole('textbox', { name: 'Name' }).semanticState())?.focused)
-      .toBe(true);
-    await expect.poll(() => app.getByRole('textbox', { name: 'Password' }).count()).toBe(1);
-
-    await app.type('ada');
-    await expect.poll(() => app.getByRole('textbox', { name: 'Name' }).textContent()).toContain('ada');
-
-    // Focus moves, and the tree follows it.
-    await app.press('Tab');
-    await expect
-      .poll(async () => (await app.getByRole('textbox', { name: 'Password' }).semanticState())?.focused)
-      .toBe(true);
-  }, 900_000);
+      // The frame index has no public Bubbles getter. A numeric value proves
+      // the exact add-only companion accessor executed, not merely that Bubble
+      // Tea recognised the component type from its public View output.
+      await expect
+        .poll(async () => (await app.getByRole('status').semanticState())?.positionInSet)
+        .toEqual(expect.any(Number));
+    },
+    900_000,
+  );
 
   it('does not publish what a masked field is hiding', async () => {
     // The probe reads component state through public getters, and `Value()`

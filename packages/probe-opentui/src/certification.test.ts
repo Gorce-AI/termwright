@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { certifyOpenTuiEntry } from './certification.js';
 
 const temporary: string[] = [];
+const UNSUPPORTED_VERSION = '0.0.0-termwright-unsupported';
 
 afterEach(async () => {
   await Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true })));
@@ -23,7 +24,7 @@ describe('OpenTUI runtime certification', () => {
   });
 
   it('refuses an unsupported package version', async () => {
-    const entry = await fakePackage('0.5.8');
+    const entry = await fakePackage(UNSUPPORTED_VERSION);
 
     expect(certifyOpenTuiEntry(entry, {})).toBeUndefined();
   });

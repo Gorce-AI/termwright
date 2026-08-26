@@ -122,6 +122,13 @@ export interface SemanticChannelHooks {
    * driver's typed {@link ProtocolViolationError}.
    */
   onProtocolViolation(error: ProtocolViolationError, wireCode: ProtocolErrorMessage['code']): void;
+  /** Reports the event-driven discovery/authentication state to the session. */
+  onNegotiationStateChange?(state: SemanticNegotiationState): void;
+}
+
+export interface SemanticNegotiationState {
+  readonly admissionOpen: boolean;
+  readonly pendingHandshakes: number;
 }
 
 /** Construction options for {@link SemanticChannel}. */
@@ -163,6 +170,8 @@ const CAPABILITY_SET: ReadonlySet<string> = new Set(ADAPTER_CAPABILITIES);
 
 /** A connected but unauthenticated peer may not occupy a session indefinitely. */
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
+/** One adapter is expected; a small bound tolerates connection races without an unbounded socket set. */
+const MAX_ACCEPTED_SOCKETS = 4;
 
 type ErrorCode = ProtocolErrorMessage['code'];
 
@@ -199,6 +208,7 @@ export class SemanticChannel {
   readonly #resources: ResourceScope;
   readonly #sockets = new Set<Socket>();
   readonly #handshakeTimers = new Map<Socket, NodeJS.Timeout>();
+  #admissionOpen = true;
   #attached: Socket | null = null;
   #attachment: SemanticAttachment | null = null;
   #closed = false;
@@ -259,6 +269,17 @@ export class SemanticChannel {
     return this.#attachment;
   }
 
+  /** Ends discovery while preserving the bounded hello deadline of peers already accepted. */
+  closeAdmission(): void {
+    if (!this.#admissionOpen) return;
+    this.#admissionOpen = false;
+    this.#publishNegotiationState();
+  }
+
+  get negotiationState(): SemanticNegotiationState {
+    return Object.freeze({ admissionOpen: this.#admissionOpen, pendingHandshakes: this.#handshakeTimers.size });
+  }
+
   /** Closes the endpoint and removes the socket directory. Idempotent. */
   close(): Promise<void> {
     this.#closePromise ??= this.#close();
@@ -276,7 +297,28 @@ export class SemanticChannel {
       socket.destroy();
       return;
     }
+    // Capacity refusal cannot itself consume a tracked socket or a graceful
+    // flush timer: a connection storm must remain bounded even when peers do
+    // not read farewell frames.
+    if (this.#sockets.size >= MAX_ACCEPTED_SOCKETS) {
+      socket.destroy();
+      this.#options.hooks.onDiagnostic(
+        'endpoint-error',
+        `refused a semantic peer because ${MAX_ACCEPTED_SOCKETS} sockets are already active`,
+      );
+      return;
+    }
     this.#sockets.add(socket);
+    if (!this.#admissionOpen) {
+      socket.once('close', () => this.#sockets.delete(socket));
+      this.#refuse(socket, 'internal', 'semantic adapter discovery has closed');
+      this.#options.hooks.onDiagnostic(
+        'adapter-capability',
+        'refused a semantic peer that connected after adapter discovery closed',
+        { wireCode: 'internal' },
+      );
+      return;
+    }
     const handshakeTimer = setTimeout(() => {
       if (!this.#sockets.has(socket) || this.#attached === socket) return;
       this.#options.hooks.onDiagnostic(
@@ -287,6 +329,7 @@ export class SemanticChannel {
     }, this.#options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
     handshakeTimer.unref?.();
     this.#handshakeTimers.set(socket, handshakeTimer);
+    this.#publishNegotiationState();
 
     if (this.#attached !== null) {
       // One adapter per session; a second connection is refused, not raced.
@@ -380,7 +423,9 @@ export class SemanticChannel {
     );
 
     this.#attached = socket;
-    this.#clearHandshakeTimer(socket);
+    // Publishing zero pending before onAttach could freeze a generic contract
+    // in the middle of this successful hello after discovery has closed.
+    this.#clearHandshakeTimer(socket, false);
     const markerEnabled = capabilities.includes(MARKER_CAPABILITY);
     const logsEnabled = capabilities.includes(LOGS_CAPABILITY);
     const ack: HelloAckMessage = {
@@ -415,6 +460,7 @@ export class SemanticChannel {
       }))),
     });
     this.#options.hooks.onAttach(this.#attachment);
+    this.#publishNegotiationState();
     if (!markerEnabled) {
       this.#options.hooks.onDiagnostic(
         'adapter-capability',
@@ -554,6 +600,7 @@ export class SemanticChannel {
    * their connection was refused.
    */
   #refuse(socket: Socket, code: ErrorCode, message: string): void {
+    this.#clearHandshakeTimer(socket);
     const error: ProtocolErrorMessage = { type: 'error', code, message };
     try {
       endAfterFlush(socket, encodeFrame(error, this.#options.limits.maxFrameBytes));
@@ -581,10 +628,15 @@ export class SemanticChannel {
     );
   }
 
-  #clearHandshakeTimer(socket: Socket): void {
+  #clearHandshakeTimer(socket: Socket, publish = true): void {
     const timer = this.#handshakeTimers.get(socket);
     if (timer !== undefined) clearTimeout(timer);
-    this.#handshakeTimers.delete(socket);
+    if (!this.#handshakeTimers.delete(socket) || !publish) return;
+    this.#publishNegotiationState();
+  }
+
+  #publishNegotiationState(): void {
+    this.#options.hooks.onNegotiationStateChange?.(this.negotiationState);
   }
 
   #destroySockets(): void {

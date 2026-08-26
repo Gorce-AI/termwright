@@ -9,7 +9,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { canonicalJson, compareVersions, downloadVerifiedNpmTarball, resolveNpmSource, trustedGoEnvironment } from './discover-framework-candidates.mjs';
-import { materializeCandidateSource, preparePatchBundle, proposeCompatibilityUpdate, recordExecutableVariant } from './prepare-framework-candidate.mjs';
+import { digestTree, materializeCandidateSource, preparePatchBundle, proposeCompatibilityUpdate, recordExecutableVariant } from './prepare-framework-candidate.mjs';
 import { safeExtractTarGz } from './safe-tar.mjs';
 
 const exec = promisify(execFile);
@@ -274,40 +274,6 @@ export async function deriveHookInstrumentationProfile(candidate, archiveBytes, 
   return { ...binding, rendererSha256: sha256(renderer), coreSha256: sha256(core), sources: { renderer: renderer.toString('utf8'), core: core.toString('utf8') } };
 }
 
-async function writeHookUpdate(output, candidate, profile, sourceRevision) {
-  const directory = join(dirname(output), `candidate-update-hook-${candidate.candidateDigest.slice('sha256:'.length, 'sha256:'.length + 16)}`);
-  await mkdir(directory, { recursive: true });
-  const publicProfile = { version: profile.version, rendererSha256: profile.rendererSha256, coreSha256: profile.coreSha256 };
-  const metadata = {
-    schemaVersion: 1,
-    kind: 'termwright-generated-hook-profile',
-    candidateId: candidate.id,
-    candidateDigest: candidate.candidateDigest,
-    sourceRevision,
-    framework: candidate.frameworkId,
-    profile: publicProfile,
-    profileDigest: `sha256:${sha256(canonicalJson(publicProfile))}`,
-  };
-  await writeFile(join(directory, 'bundle.json'), canonicalJson(metadata));
-}
-
-async function writeRuntimeUpdate(output, candidate, sourceRevision) {
-  const directory = join(dirname(output), `candidate-update-runtime-${candidate.candidateDigest.slice('sha256:'.length, 'sha256:'.length + 16)}`);
-  await mkdir(directory, { recursive: true });
-  const profile = { version: candidate.version };
-  const metadata = {
-    schemaVersion: 1,
-    kind: 'termwright-generated-runtime-profile',
-    candidateId: candidate.id,
-    candidateDigest: candidate.candidateDigest,
-    sourceRevision,
-    framework: candidate.frameworkId,
-    profile,
-    profileDigest: `sha256:${sha256(canonicalJson(profile))}`,
-  };
-  await writeFile(join(directory, 'bundle.json'), canonicalJson(metadata));
-}
-
 function withoutSha256Prefix(value) {
   return typeof value === 'string' && value.startsWith('sha256:') ? value.slice('sha256:'.length) : value;
 }
@@ -330,6 +296,15 @@ export function verifyCandidateEvidence(candidate, report, behavioralCertificati
   ) throw new Error(`${candidate.id}: certified crates.io source does not match the discovered checksum`);
 }
 
+export async function verifyPreparedUpdateInvariant({ directory, bundle, patchTreeDigest }) {
+  if (!Buffer.from(await readFile(join(directory, 'bundle.json'))).equals(Buffer.from(bundle))) {
+    throw new Error('generated patch bundle changed after trusted preparation');
+  }
+  if (await digestTree(join(directory, 'patch')) !== patchTreeDigest) {
+    throw new Error('generated patch tree changed after trusted preparation');
+  }
+}
+
 export function candidateToolchainBlock(candidate, approvedGoVersion) {
   if (candidate.source?.toolchainSupported !== false) return null;
   if (typeof candidate.source.requiredGoVersion !== 'string') throw new Error(`${candidate.id}: unsupported toolchain evidence has no required Go version`);
@@ -341,6 +316,25 @@ export async function assertCandidateSemanticSession(session, candidateId) {
   if (contract.capabilities['semantic-tree'].status !== 'supported' || session.semanticTree()?.v !== 2) {
     throw new Error(`${candidateId}: exact application produced no supported semantic tree`);
   }
+}
+
+export function selectCharmCandidateComposition(candidate, patchSets, tea, bubbles) {
+  if (candidate.package !== tea && candidate.package !== bubbles) {
+    throw new Error(`${candidate.id}: unsupported Charm module candidate`);
+  }
+  if (!patchSets.some((entry) => entry.name === candidate.package && entry.version === candidate.version)) {
+    throw new Error(`${candidate.id}: exact candidate patch declaration is missing`);
+  }
+  const latest = (module) => patchSets
+    .filter((entry) => entry.name === module)
+    .map((entry) => entry.version)
+    .sort((left, right) => compareVersions(right, left))[0];
+  const teaVersion = candidate.package === tea ? candidate.version : latest(tea);
+  const bubblesVersion = candidate.package === bubbles ? candidate.version : latest(bubbles);
+  if (teaVersion === undefined || bubblesVersion === undefined) {
+    throw new Error(`${candidate.id}: no exact certified Charm companion exists for candidate-specific behavior`);
+  }
+  return { teaVersion, bubblesVersion };
 }
 
 export async function certifyGoCandidateBehavior(candidate) {
@@ -364,25 +358,14 @@ export async function certifyGoCandidateBehavior(candidate) {
     const v2 = candidate.package.startsWith('charm.land/');
     const tea = v2 ? 'charm.land/bubbletea/v2' : 'github.com/charmbracelet/bubbletea';
     const bubbles = v2 ? 'charm.land/bubbles/v2' : 'github.com/charmbracelet/bubbles';
-    const isBubbles = candidate.package === bubbles;
-    let certifiedTeaVersion;
-    if (isBubbles) {
-      const compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
-      const versions = compatibility.frameworks.find((entry) => entry.id === 'charm')?.instrumentation?.patchSets
-        ?.filter((entry) => entry.name === tea)
-        .map((entry) => entry.version)
-        .sort((left, right) => compareVersions(right, left)) ?? [];
-      [certifiedTeaVersion] = versions;
-      if (certifiedTeaVersion === undefined) throw new Error(`${candidate.id}: no certified Bubble Tea companion exists for candidate-specific behavior`);
-    }
-    source = isBubbles
-      ? (v2
-        ? `package main\nimport (\n "fmt"\n tea "${tea}"\n "${bubbles}/textinput"\n)\ntype model struct { Input textinput.Model }\nfunc initial() model { i:=textinput.New(); i.Focus(); return model{Input:i} }\nfunc (m model) Init() tea.Cmd { return nil }\nfunc (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { var c tea.Cmd; m.Input,c=m.Input.Update(msg); return m,c }\nfunc (m model) View() tea.View { return tea.NewView(fmt.Sprintf("candidate\\n%s",m.Input.View())) }\nfunc main(){ _,_ = tea.NewProgram(initial()).Run() }\n`
-        : `package main\nimport (\n "fmt"\n tea "${tea}"\n "${bubbles}/textinput"\n)\ntype model struct { Input textinput.Model }\nfunc initial() model { i:=textinput.New(); i.Focus(); return model{Input:i} }\nfunc (m model) Init() tea.Cmd { return nil }\nfunc (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { var c tea.Cmd; m.Input,c=m.Input.Update(msg); return m,c }\nfunc (m model) View() string { return fmt.Sprintf("candidate\\n%s\\n",m.Input.View()) }\nfunc main(){ if _,err:=tea.NewProgram(initial()).Run(); err!=nil { panic(err) } }\n`)
-      : (v2
-        ? `package main\nimport tea "${tea}"\ntype model struct { Status string }\nfunc (m model) Init() tea.Cmd{return nil}\nfunc (m model) Update(msg tea.Msg)(tea.Model,tea.Cmd){ if k,ok:=msg.(tea.KeyPressMsg); ok && k.String()=="x" {m.Status="changed"}; return m,nil }\nfunc (m model) View() tea.View{return tea.NewView(m.Status)}\nfunc main(){_,_=tea.NewProgram(model{Status:"ready"}).Run()}\n`
-        : `package main\nimport tea "${tea}"\ntype model struct { Status string }\nfunc (m model) Init() tea.Cmd{return nil}\nfunc (m model) Update(msg tea.Msg)(tea.Model,tea.Cmd){ if k,ok:=msg.(tea.KeyMsg); ok && k.String()=="x" {m.Status="changed"}; return m,nil }\nfunc (m model) View() string{return m.Status+"\\n"}\nfunc main(){if _,err:=tea.NewProgram(model{Status:"ready"}).Run(); err!=nil {panic(err)}}\n`);
-    await writeFile(join(app, 'go.mod'), `module example.com/termwright-candidate\n\ngo 1.24\n\nrequire (\n\t${candidate.package} ${candidate.version}\n${certifiedTeaVersion === undefined ? '' : `\t${tea} ${certifiedTeaVersion}\n`})\n`);
+    const compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
+    const patchSets = compatibility.frameworks.find((entry) => entry.id === 'charm')?.instrumentation?.patchSets;
+    if (!Array.isArray(patchSets)) throw new Error(`${candidate.id}: certified Charm patch declarations are missing`);
+    const { teaVersion, bubblesVersion } = selectCharmCandidateComposition(candidate, patchSets, tea, bubbles);
+    source = v2
+      ? `package main\nimport (\n "fmt"\n tea "${tea}"\n "${bubbles}/spinner"\n)\ntype model struct { Spinner spinner.Model }\nfunc initial() model { return model{Spinner:spinner.New()} }\nfunc (m model) Init() tea.Cmd { return m.Spinner.Tick }\nfunc (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { var c tea.Cmd; m.Spinner,c=m.Spinner.Update(msg); return m,c }\nfunc (m model) View() tea.View { return tea.NewView(fmt.Sprintf("candidate %s",m.Spinner.View())) }\nfunc main(){ _,_ = tea.NewProgram(initial()).Run() }\n`
+      : `package main\nimport (\n "fmt"\n tea "${tea}"\n "${bubbles}/spinner"\n)\ntype model struct { Spinner spinner.Model }\nfunc initial() model { return model{Spinner:spinner.New()} }\nfunc (m model) Init() tea.Cmd { return m.Spinner.Tick }\nfunc (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { var c tea.Cmd; m.Spinner,c=m.Spinner.Update(msg); return m,c }\nfunc (m model) View() string { return fmt.Sprintf("candidate %s\\n",m.Spinner.View()) }\nfunc main(){ if _,err:=tea.NewProgram(initial()).Run(); err!=nil { panic(err) } }\n`;
+    await writeFile(join(app, 'go.mod'), `module example.com/termwright-candidate\n\ngo 1.25\n\nrequire (\n\t${tea} ${teaVersion}\n\t${bubbles} ${bubblesVersion}\n)\n`);
     await writeFile(join(app, 'main.go'), source);
   } else throw new Error(`${candidate.id}: no candidate-specific Go behavioral profile`);
   await run('go', ['mod', 'tidy'], env, app);
@@ -406,18 +389,18 @@ export async function certifyGoCandidateBehavior(candidate) {
     requiredCapabilities: ['semantic-tree'],
   });
   try {
-    await session.waitForText(candidate.frameworkId === 'tview' ? 'readme.md' : candidate.package.includes('bubbles') ? 'candidate' : 'ready');
+    await session.waitForText(candidate.frameworkId === 'tview' ? 'readme.md' : 'candidate');
     await assertCandidateSemanticSession(session, candidate.id);
     if (candidate.frameworkId === 'tview') {
       await session.getByRole('button', { name: 'Save' }).waitFor({ state: 'attached' });
       await session.press('Tab');
-    } else if (candidate.package.includes('bubbles')) {
-      await session.getByRole('textbox').waitFor({ state: 'attached' });
-      await session.type('edge');
-      await session.waitForText('edge');
     } else {
-      await session.press('x');
-      await session.waitForText('changed');
+      const spinner = session.getByRole('status');
+      await spinner.waitFor({ state: 'attached' });
+      const state = await spinner.semanticState();
+      if (!Number.isSafeInteger(state?.positionInSet) || !Number.isSafeInteger(state?.setSize)) {
+        throw new Error(`${candidate.id}: Bubbles private spinner state was not observed through the exact companion patch`);
+      }
     }
   } finally {
     await session.close();
@@ -552,8 +535,6 @@ async function main(argv) {
         if (candidate.frameworkId === 'opentui') await run('bun', ['--version'], certificationEnv);
         await run('pnpm', ['--filter', probe, 'run', 'test'], certificationEnv);
         await run('pnpm', ['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], certificationEnv);
-        if (candidate.hookStrategy === 'exact-source') await writeHookUpdate(output, candidate, profile, revision);
-        else await writeRuntimeUpdate(output, candidate, revision);
       } else if (candidate.registry === 'pypi') {
         await run('python', ['-m', 'pip', 'install', `${candidate.source.url}#sha256=${candidate.source.sha256}`]);
         const certificationEnv = {
@@ -579,17 +560,22 @@ async function main(argv) {
   }
   try {
     let proposedRegistry;
+    let preparedUpdate;
     if (candidate.patch.status === 'needs-patch') {
-      const updateDirectory = join(dirname(output), `candidate-update-${candidate.candidateDigest.slice('sha256:'.length, 'sha256:'.length + 16)}`);
+      const updateDirectory = await mkdtemp(join(tmpdir(), 'termwright-candidate-update-'));
       const sourceRoot = await materializeCandidateSource(candidate);
       const prepared = await preparePatchBundle({ rootDir: root, candidate, sourceRoot, outputDirectory: updateDirectory, sourceRevision: revision });
+      preparedUpdate = {
+        directory: updateDirectory,
+        bundle: await readFile(join(updateDirectory, 'bundle.json')),
+        patchTreeDigest: prepared.metadata.patchTreeDigest,
+      };
       const targetDirectory = join(root, prepared.metadata.targetPath);
       await mkdir(dirname(targetDirectory), { recursive: true });
       await run('cp', ['-R', prepared.destination, targetDirectory]);
       const registryPath = join(root, 'compatibility/registry.json');
       proposedRegistry = proposeCompatibilityUpdate(JSON.parse(await readFile(registryPath, 'utf8')), candidate, prepared.manifest);
       await writeFile(registryPath, canonicalJson(proposedRegistry));
-      await writeFile(join(updateDirectory, 'compatibility-registry.json'), canonicalJson(proposedRegistry));
     } else if (candidate.patch.status === 'ready') {
       const registryPath = join(root, 'compatibility/registry.json');
       const manifest = JSON.parse(await readFile(join(root, candidate.patch.path), 'utf8'));
@@ -598,7 +584,7 @@ async function main(argv) {
     } else {
       throw new Error(`${candidate.id}: unsupported patch state ${candidate.patch.status}`);
     }
-    const evidenceDirectory = join(dirname(output), 'patch-evidence');
+    const evidenceDirectory = await mkdtemp(join(tmpdir(), 'termwright-patch-evidence-'));
     await run('node', ['scripts/certify-upstream-patches.mjs', '--ecosystem', candidate.ecosystem, '--source-revision', revision, '--output', evidenceDirectory]);
     const behavioral = candidate.registry === 'go'
       ? await certifyGoCandidateBehavior(candidate)
@@ -610,6 +596,7 @@ async function main(argv) {
     await writeFile(join(root, 'compatibility/registry.json'), canonicalJson(proposedRegistry));
     await run('pnpm', ['run', 'test:compatibility']);
     await run('pnpm', ['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' });
+    if (preparedUpdate !== undefined) await verifyPreparedUpdateInvariant(preparedUpdate);
     await writeVerdict(output, candidate, 'green', 'Exact source, deterministic patching, candidate-specific real-process behavior, and full conformance passed.', revision, behavioral.resolution);
   } catch (error) {
     await writeVerdict(output, candidate, 'red', error instanceof Error ? error.message : String(error), revision);

@@ -1,4 +1,3 @@
-import { performance } from 'node:perf_hooks';
 import type { ExitStatus } from '../api.js';
 import type { PtyProcess } from '../pty.js';
 
@@ -82,7 +81,7 @@ export class ProcessSupervisor {
     // after they are uninstalled — and then compares an epoch-scale reading
     // against a deadline computed from the real one, which makes every
     // shutdown look like its deadline had already expired.
-    this.#now = options.monotonicNow ?? ((): number => performance.now());
+    this.#now = options.monotonicNow ?? ((): number => globalThis.performance.now());
     this.#timers = options.timers ?? DEFAULT_TIMERS;
     this.#platform = options.platform ?? process.platform;
   }

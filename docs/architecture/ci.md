@@ -33,7 +33,7 @@ the x64 producer; POSIX conformance has no Windows-artifact dependency. The
 scheduled reliability workflow follows the same rule and downloads the x64
 addon before its Windows soak. Bun and every GitHub action are pinned.
 The supported-runtime build matrix, examples lane, release verifier, daily
-upstream-candidate certifier and the dedicated OpenTUI lane install Bun 1.2.15 and set
+upstream-candidate certifier and the dedicated OpenTUI lane install Bun 1.4.0 and set
 `TERMWRIGHT_REQUIRE_BUN=1`. The shared test-capability policy turns a missing or
 deliberately disabled Bun runtime into a hard failure in those jobs. Local runs
 may omit Bun; the genuinely Bun-only OpenTUI cases are then reported as exact

@@ -143,12 +143,17 @@ describe('trusted autonomous coordinator', () => {
       'packages/probe-ink/src/certified-instrumentation.json',
       'packages/probe-ink/package.json',
       'packages/ink/package.json',
+      'clients/python/pyproject.toml',
+      'clients/python/uv.lock',
     ])).not.toThrow();
     expect(() => validateChangedFiles('compatibility', [
       'packages/probe-opentui/src/certified-runtime.json',
       'compatibility/candidate-assessments.json',
+      'compatibility/framework-semantic-completeness.json',
       'compatibility/registry.json',
+      'website/src/content/docs/reference/geometry-visibility.md',
     ])).not.toThrow();
+    expect(() => validateChangedFiles('compatibility', ['website/src/content/docs/reference/geometry-visibility.md.bak'])).toThrow(/forbidden path/u);
     expect(() => validateChangedFiles('compatibility', ['packages/probe-opentui/src/certified-instrumentation.json'])).toThrow(/forbidden path/u);
     expect(() => validateChangedFiles('compatibility', ['compatibility/registry.json', '.github/workflows/pwn.yml'])).toThrow(/forbidden path/u);
     expect(() => validateChangedFiles('compatibility', ['packages/probe-tview/upstream-patches/../../scripts/pwn.mjs'])).toThrow(/forbidden path/u);

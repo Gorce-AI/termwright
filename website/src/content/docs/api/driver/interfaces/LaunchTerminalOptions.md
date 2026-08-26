@@ -25,7 +25,7 @@ Stable application-facing options accepted by [launchTerminal](../../functions/l
 
 > `readonly` `optional` **artifactValuePolicy?**: `"raw"` \| `"none"` \| `"redacted"`
 
-Defined in: [driver/src/api.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L125)
+Defined in: [driver/src/api.ts:127](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L127)
 
 Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in.
 
@@ -144,7 +144,7 @@ value when their transport has stronger knowledge than the host platform.
 
 > `readonly` `optional` **operationBudget?**: [`OperationBudget`](../operationbudget/)
 
-Defined in: [driver/src/api.ts:122](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L122)
+Defined in: [driver/src/api.ts:124](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L124)
 
 #### Inherited from
 
@@ -156,7 +156,7 @@ Defined in: [driver/src/api.ts:122](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **recording?**: [`RecordingOptions`](../recordingoptions/)
 
-Defined in: [driver/src/api.ts:123](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L123)
+Defined in: [driver/src/api.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L125)
 
 #### Inherited from
 
@@ -168,7 +168,7 @@ Defined in: [driver/src/api.ts:123](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"focus"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"pointer-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: [driver/src/api.ts:137](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L137)
+Defined in: [driver/src/api.ts:139](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L139)
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`
@@ -196,7 +196,7 @@ Defined in: [driver/src/api.ts:113](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **scrollbackLines?**: `number`
 
-Defined in: [driver/src/api.ts:120](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L120)
+Defined in: [driver/src/api.ts:122](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L122)
 
 #### Inherited from
 
@@ -208,11 +208,13 @@ Defined in: [driver/src/api.ts:120](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **semanticNegotiationMs?**: `number`
 
-Defined in: [driver/src/api.ts:119](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L119)
+Defined in: [driver/src/api.ts:121](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L121)
 
-Maximum time to wait for an optional semantic adapter. Defaults to 2,000
-ms for generic auto-detection. When `requiredCapabilities` is non-empty,
-the default is the larger of 2,000 ms and the session `ready` timeout.
+Maximum time to discover an optional semantic adapter. Defaults to 2,000
+ms for generic auto-detection. A peer accepted within that window keeps
+its own bounded hello deadline; peers first seen afterwards are refused.
+When `requiredCapabilities` is non-empty, the default discovery budget is
+the larger of 2,000 ms and the session `ready` timeout.
 
 #### Inherited from
 
@@ -224,7 +226,7 @@ the default is the larger of 2,000 ms and the session `ready` timeout.
 
 > `readonly` `optional` **shellIntegration?**: `"external"` \| `"termwright-posix"` \| `"termwright-powershell"`
 
-Defined in: [driver/src/api.ts:130](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L130)
+Defined in: [driver/src/api.ts:132](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L132)
 
 Termwright-managed modes instrument an interactive shell with exact
 command markers. Test authors should normally use `terminal.openShell()`.
@@ -258,7 +260,7 @@ pane can count characters exactly as the live session did.
 
 > `readonly` `optional` **timeouts?**: [`TimeoutClasses`](../timeoutclasses/)
 
-Defined in: [driver/src/api.ts:121](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L121)
+Defined in: [driver/src/api.ts:123](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L123)
 
 #### Inherited from
 

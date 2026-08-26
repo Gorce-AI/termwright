@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: ProcessLifecycleError
 
-Defined in: [internal/process-supervisor.ts:7](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L7)
+Defined in: [internal/process-supervisor.ts:6](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L6)
 
 ## Extends
 
@@ -23,7 +23,7 @@ Defined in: [internal/process-supervisor.ts:7](https://github.com/Gorce-AI/termw
 
 > **new ProcessLifecycleError**(`code`, `message`, `options?`): `ProcessLifecycleError`
 
-Defined in: [internal/process-supervisor.ts:11](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L11)
+Defined in: [internal/process-supervisor.ts:10](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L10)
 
 #### Parameters
 
@@ -53,7 +53,7 @@ Defined in: [internal/process-supervisor.ts:11](https://github.com/Gorce-AI/term
 
 > `readonly` **code**: [`ProcessLifecycleErrorCode`](../../type-aliases/processlifecycleerrorcode/)
 
-Defined in: [internal/process-supervisor.ts:8](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L8)
+Defined in: [internal/process-supervisor.ts:7](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L7)
 
 ***
 
@@ -61,4 +61,4 @@ Defined in: [internal/process-supervisor.ts:8](https://github.com/Gorce-AI/termw
 
 > `readonly` **exitObserved**: `boolean`
 
-Defined in: [internal/process-supervisor.ts:9](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L9)
+Defined in: [internal/process-supervisor.ts:8](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L8)

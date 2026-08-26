@@ -257,8 +257,9 @@ function resolveTimeouts(
  * The semantic endpoint is created *before* the child starts, so an
  * instrumented application can hand over its first tree during startup. An
  * uninstrumented application simply never connects: after
- * `semanticNegotiationMs` the session settles as generic (`semanticTree:
- * false`) and keeps working with grid locators.
+ * `semanticNegotiationMs` adapter discovery closes and the session settles as
+ * generic (`semanticTree: false`). A peer accepted before that boundary keeps
+ * only its own bounded hello deadline before the same fail-closed outcome.
  *
  * @example
  * ```ts
@@ -675,6 +676,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
           handshakeTimeoutMs: negotiationMs,
           hooks: {
             onAttach: (attachment) => this.#onAttach(attachment),
+            onNegotiationStateChange: (state) => {
+              if (!state.admissionOpen && state.pendingHandshakes === 0) {
+                this.#settleGenericAfterDiscovery(negotiationMs);
+              }
+            },
             onDisconnect: () => {
               if (
                 this.#closed ||
@@ -873,13 +879,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     }
 
     this.#negotiationTimer = setTimeout(() => {
-      if (this.#attachment === null) {
-        this.#diagnostic(
-          "negotiation-timeout",
-          `no adapter completed the handshake within ${negotiationMs} ms; the frozen session contract is generic`,
-        );
-      }
-      this.#settle();
+      this.#negotiationTimer = null;
+      this.#channel?.closeAdmission();
     }, negotiationMs);
     this.#negotiationTimer.unref?.();
 
@@ -2628,11 +2629,21 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     // in the same instant.
     this.#clockAnchor = { epochMs: Date.now(), sessionMs: this.#now() };
     this.#attachment = attachment;
+    this.#channel?.closeAdmission();
     this.#diagnostic(
       "adapter-attached",
       `adapter ${attachment.adapter.name}@${attachment.adapter.version} attached with capabilities [${attachment.capabilities.join(", ")}]`,
     );
     this.#pairing.setMarkerEnabled(attachment.markerEnabled);
+    this.#settle();
+  }
+
+  #settleGenericAfterDiscovery(negotiationMs: number): void {
+    if (this.#settled || this.#attachment !== null) return;
+    this.#diagnostic(
+      "negotiation-timeout",
+      `adapter discovery closed after ${negotiationMs} ms and no admitted peer completed its bounded handshake; the frozen session contract is generic`,
+    );
     this.#settle();
   }
 

@@ -1,0 +1,12 @@
+--- a/tea.go
++++ b/tea.go
+@@ -885,7 +885,8 @@
+ // render renders the given view to the renderer.
+ func (p *Program) render(model Model) {
+ 	if p.renderer != nil {
+-		p.renderer.render(model.View()) // send view to renderer
++		// Injected by termwright: capture now, commit only after renderer flush.
++		termwrightRenderAndObserve(p, model)
+ 	}
+ }
+ 

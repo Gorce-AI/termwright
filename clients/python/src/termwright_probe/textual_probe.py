@@ -1,4 +1,4 @@
-"""Exact Textual 8.2.8 frame observation.
+"""Exact-certified Textual frame observation.
 
 ``post_display_hook`` alone is not a commit boundary: Textual invokes it from
 ``App._display``'s ``finally`` block even when no render was attempted or the
@@ -112,7 +112,7 @@ def _evidence_for(driver: Any) -> Optional[_DriverEvidence]:
 
 
 def _wrap_driver_method(driver_type: Any, name: str) -> bool:
-    """Observe successful calls at the narrow, exact 8.2.8 driver seam."""
+    """Observe successful calls at the narrow, exact-certified driver seam."""
     owner = next((cls for cls in driver_type.__mro__ if name in cls.__dict__), None)
     if owner is None:
         return False
@@ -145,7 +145,7 @@ def _prepare_driver(driver: Any) -> Optional[_DriverEvidence]:
 
 
 def _is_certified_builtin_driver(driver: Any) -> bool:
-    """Accept only the exact platform driver classes certified for 8.2.8."""
+    """Accept only the exact platform driver classes covered by certification."""
     try:
         if sys.platform == "win32":
             from textual.drivers.windows_driver import WindowsDriver
@@ -159,7 +159,7 @@ def _is_certified_builtin_driver(driver: Any) -> bool:
 
 
 def _is_certified_writer_thread(writer_thread: Any) -> bool:
-    """Check the exact 8.2.8 WriterThread and its bounded FIFO identity."""
+    """Check the certified WriterThread and its bounded FIFO identity."""
     try:
         from queue import Queue
         from textual.drivers._writer_thread import WriterThread
@@ -174,7 +174,7 @@ def _is_certified_writer_thread(writer_thread: Any) -> bool:
 
 
 def _marker_writer_for(driver: Any) -> Optional[_MarkerWriter]:
-    """Return the exact 8.2.8 non-blocking same-writer enqueue operation.
+    """Return the exact-certified non-blocking same-writer enqueue operation.
 
     Textual's public ``Driver.write`` may block the event loop on
     ``WriterThread``'s bounded queue and ``Driver.flush`` is a no-op. The
