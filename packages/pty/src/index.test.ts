@@ -1,4 +1,9 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { candidatePaths, spawnPty } from "./index.js";
 
@@ -436,4 +441,37 @@ describe.skipIf(process.platform === "win32")("the Termwright-owned POSIX PTY", 
     expect(session.handle.treeState()).toBe("gone");
     session.handle.dispose();
   });
+
+  it.runIf(process.platform === "linux")(
+    "waits for worker threads after their process leader becomes a zombie",
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "termwright-pidfd-"));
+      try {
+        const executable = join(directory, "dead-thread-leader");
+        const source = fileURLToPath(new URL("./fixtures/dead-thread-leader.c", import.meta.url));
+        const compiled = spawnSync("cc", ["-pthread", source, "-o", executable], {
+          encoding: "utf8",
+        });
+        if (compiled.status !== 0) {
+          throw new Error(`fixture compilation failed (${String(compiled.status)}): ${compiled.stderr}`);
+        }
+
+        const session = collect(node([
+          "const { spawn } = require('node:child_process');",
+          `const child = spawn(${JSON.stringify(executable)}, [], { stdio: ['inherit', 'inherit', 'inherit', 'pipe'] });`,
+          "child.stdio[3].once('data', marker => {",
+          "process.stdout.write(marker);",
+          "child.stdio[3].destroy();",
+          "child.unref();",
+          "});",
+        ].join("")));
+        await Promise.all([session.exit, session.handle.outputEnded]);
+        expect(session.text()).toContain("DEAD_THREAD_LEADER_READY");
+        expect(session.handle.treeState()).toBe("gone");
+        session.handle.dispose();
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });
