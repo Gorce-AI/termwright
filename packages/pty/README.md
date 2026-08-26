@@ -37,6 +37,9 @@ pseudoconsole. It validates the DLL and architecture-specific
 falls back to the inbox conhost. The x64 package includes both x64 and ARM64
 hosts because an x64 Node process can run under emulation on Windows ARM64 while
 the pseudoconsole host should remain native.
+Bundle discovery is exposed through `conPtyRuntimeInfo()` even when validation
+fails, so diagnostics retain the exact failure code and Win32 status. Creating
+a session still fails closed until every asset and core export is validated.
 
 The runtime pin and SHA-256 inventory live in `conpty-assets.json`. Updating the
 pin requires regenerating the checked-in assets with
@@ -52,5 +55,17 @@ contract. A native proof showed that the legacy inbox conhost could update
 OSC markers took a separate path and could overtake that delta. The vendored
 passthrough ConPTY removes that renderer path: client VT bytes share one ordered
 stream, so a marker written after a framework flush is a causal boundary. The
+Windows output boundary also removes ConPTY's structurally injected focus and
+Win32-input `DECSET` sequences before bytes reach the driver. It preserves the
+optional startup cursor-position query, DA1, and every original child sequence,
+including an explicit disable followed by enable. The normalizer is split-safe
+and releases an incomplete candidate verbatim before authoritative EOF.
+Consequently terminal mode evidence describes requests made by the application,
+not modes ConPTY requires for its own control plane.
+
+A marker must be written to the active screen buffer; activating an inactive
+buffer publishes its stored contents synchronously, after which the marker is
+written on that newly active handle. Markers written while a buffer is inactive
+are deliberately not treated as observable boundaries. The
 screen-buffer probe remains useful diagnostic evidence, never visual truth or a
 publication barrier.

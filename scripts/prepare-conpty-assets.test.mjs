@@ -113,7 +113,8 @@ describe('the pinned ConPTY asset extractor', () => {
       const manifest = await prepareConptyAssets({
         architecture: 'x64', destination, archivePath, lock,
       });
-      expect((await readdir(destination, { recursive: true })).sort()).toEqual([
+      expect((await readdir(destination, { recursive: true }))
+        .map((path) => path.replaceAll('\\', '/')).sort()).toEqual([
         'LICENSE.microsoft-terminal.txt',
         'SBOM.spdx.json',
         'THIRD_PARTY_NOTICES.md',

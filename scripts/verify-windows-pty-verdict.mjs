@@ -8,9 +8,12 @@ import { fileURLToPath } from 'node:url';
 
 const digest = async (path) => createHash('sha256').update(await readFile(path)).digest('hex');
 
-export async function verifyWindowsPtyVerdict(directory) {
+export async function verifyWindowsPtyVerdict(directory, verdictName = 'certification-verdict.json') {
   const packageDirectory = resolve(directory);
-  const verdict = JSON.parse(await readFile(join(packageDirectory, 'certification-verdict.json'), 'utf8'));
+  if (!/^certification-verdict(?:-[a-z0-9-]+)?\.json$/u.test(verdictName)) {
+    throw new TypeError(`invalid Windows PTY verdict filename: ${verdictName}`);
+  }
+  const verdict = JSON.parse(await readFile(join(packageDirectory, verdictName), 'utf8'));
   const manifestPath = join(packageDirectory, 'vendor', 'conpty-manifest.json');
 
   if (verdict.schemaVersion !== 1 || verdict.platform !== 'win32' ||
@@ -39,8 +42,8 @@ export async function verifyWindowsPtyVerdict(directory) {
 
 if (argv[1] === fileURLToPath(import.meta.url)) {
   if (argv[2] === undefined) {
-    throw new TypeError('usage: verify-windows-pty-verdict.mjs <artifact-package-directory>');
+    throw new TypeError('usage: verify-windows-pty-verdict.mjs <artifact-package-directory> [verdict-filename]');
   }
-  const verdict = await verifyWindowsPtyVerdict(argv[2]);
+  const verdict = await verifyWindowsPtyVerdict(argv[2], argv[3]);
   console.log(`verified causal Windows PTY verdict for ${verdict.architecture} ${verdict.addonSha256}`);
 }

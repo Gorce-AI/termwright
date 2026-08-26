@@ -1,4 +1,11 @@
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -23,9 +30,11 @@ import {
  * delivered, and that the tree is empty because the job says so.
  */
 const windows = process.platform === "win32" && windowsPtyAvailable();
-const bun = windows && bunTestCapability(
-  () => spawnSync("bun", ["--version"], { stdio: "ignore" }).status === 0,
-);
+const bun =
+  windows &&
+  bunTestCapability(
+    () => spawnSync("bun", ["--version"], { stdio: "ignore" }).status === 0,
+  );
 
 function collect(handle: WindowsPtyHandle): { text(): string } {
   const chunks: Uint8Array[] = [];
@@ -47,10 +56,15 @@ function windowsAddonPath(): string {
   const require = createRequire(import.meta.url);
   const resolved = windowsCandidatePaths(process.arch)
     .map((candidate) => {
-      try { return require.resolve(candidate); } catch { return undefined; }
+      try {
+        return require.resolve(candidate);
+      } catch {
+        return undefined;
+      }
     })
     .find((candidate) => candidate !== undefined);
-  if (resolved === undefined) throw new Error("the Windows addon path is unavailable");
+  if (resolved === undefined)
+    throw new Error("the Windows addon path is unavailable");
   return resolved;
 }
 
@@ -179,37 +193,87 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     });
   });
 
-  it("fails closed for a missing or modified side-by-side runtime", () => {
+  it("reports application modes without ConPTY control-plane injection", async () => {
+    const focusOn = "\x1b[?1004h";
+    const focusOff = "\x1b[?1004l";
+    const win32On = "\x1b[?9001h";
+    const win32Off = "\x1b[?9001l";
+    const reset = "\x1bc";
+    const childOutput =
+      `BEGIN${focusOff}${focusOn}${win32Off}${win32On}${reset}${focusOn}${win32On}END`;
+    const handle = spawnWindowsPty({
+      command: node(`require("node:fs").writeSync(1, ${JSON.stringify(childOutput)})`),
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    await handle.outputEnded;
+    const observed = output.text();
+
+    // ConPTY inserted one SET after each RESET and two after RIS. The public
+    // stream contains each original child byte exactly once instead.
+    expect(observed).toContain(childOutput);
+    // Its startup DA1 remains observable, but its adjacent host modes do not.
+    expect(observed).toContain("\x1b[c");
+    expect(observed).not.toContain(`\x1b[c${focusOn}${win32On}`);
+    expect(handle.sawRealEof).toBe(true);
+    handle.dispose();
+  });
+
+  it("reports a missing or modified runtime while session creation fails closed", () => {
     const sourceAddon = windowsAddonPath();
     const sourceRoot = dirname(sourceAddon);
     const missingRoot = mkdtempSync(join(tmpdir(), "tw-conpty-missing-"));
     const missingAddon = join(missingRoot, "termwright_pty.node");
     copyFileSync(sourceAddon, missingAddon);
-    const missing = spawnSync(process.execPath, ["-e", `require(${JSON.stringify(missingAddon)})`], {
+    const missingProbe = [
+      `const addon = require(${JSON.stringify(missingAddon)});`,
+      "const info = addon.conPtyRuntimeInfo();",
+      "if (info.failureCode !== 'vendored-bundle-missing' || info.assetsValidated !== false || info.coreExports !== false) process.exit(8);",
+      "try { new addon.ConPtySession({ commandLine: 'cmd.exe /d /s /c exit 0', columns: 80, rows: 24 }, () => {}); process.exit(9); } catch (error) { if (!String(error).includes('vendored-bundle-missing')) process.exit(10); }",
+    ].join("");
+    const missing = spawnSync(process.execPath, ["-e", missingProbe], {
       encoding: "utf8",
     });
-    expect(missing.status).not.toBe(0);
-    expect(missing.stderr).toContain("vendored-bundle-missing");
+    expect(missing.status, missing.stderr).toBe(0);
 
     const corruptRoot = mkdtempSync(join(tmpdir(), "tw-conpty-corrupt-"));
     const corruptAddon = join(corruptRoot, "termwright_pty.node");
     copyFileSync(sourceAddon, corruptAddon);
-    cpSync(join(sourceRoot, "vendor"), join(corruptRoot, "vendor"), { recursive: true });
-    writeFileSync(join(corruptRoot, "vendor", "conpty.dll"), "not the pinned DLL");
-    const corrupt = spawnSync(process.execPath, ["-e", `require(${JSON.stringify(corruptAddon)})`], {
+    cpSync(join(sourceRoot, "vendor"), join(corruptRoot, "vendor"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(corruptRoot, "vendor", "conpty.dll"),
+      "not the pinned DLL",
+    );
+    const corruptProbe = [
+      `const addon = require(${JSON.stringify(corruptAddon)});`,
+      "const info = addon.conPtyRuntimeInfo();",
+      "if (info.failureCode !== 'vendored-asset-digest-mismatch' || info.assetsValidated !== false || info.coreExports !== false) process.exit(11);",
+      "try { new addon.ConPtySession({ commandLine: 'cmd.exe /d /s /c exit 0', columns: 80, rows: 24 }, () => {}); process.exit(12); } catch (error) { if (!String(error).includes('vendored-asset-digest-mismatch')) process.exit(13); }",
+    ].join("");
+    const corrupt = spawnSync(process.execPath, ["-e", corruptProbe], {
       encoding: "utf8",
     });
-    expect(corrupt.status).not.toBe(0);
-    expect(corrupt.stderr).toContain("vendored-asset-digest-mismatch");
+    expect(corrupt.status, corrupt.stderr).toBe(0);
 
     const hostileCwd = mkdtempSync(join(tmpdir(), "tw-conpty-cwd-"));
     mkdirSync(join(hostileCwd, "vendor"));
     writeFileSync(join(hostileCwd, "vendor", "conpty.dll"), "cwd injection");
-    const isolated = spawnSync(process.execPath, ["-e", [
-      `const addon = require(${JSON.stringify(sourceAddon)});`,
-      "const info = addon.conPtyRuntimeInfo();",
-      "if (info.provider !== 'vendored' || info.assetsValidated !== true) process.exit(9);",
-    ].join("")], { cwd: hostileCwd, encoding: "utf8" });
+    const isolated = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        [
+          `const addon = require(${JSON.stringify(sourceAddon)});`,
+          "const info = addon.conPtyRuntimeInfo();",
+          "if (info.provider !== 'vendored' || info.assetsValidated !== true) process.exit(9);",
+        ].join(""),
+      ],
+      { cwd: hostileCwd, encoding: "utf8" },
+    );
     expect(isolated.status, isolated.stderr).toBe(0);
   });
 
@@ -219,7 +283,9 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     const lockedRoot = mkdtempSync(join(tmpdir(), "tw-conpty-locked-"));
     const lockedAddon = join(lockedRoot, "termwright_pty.node");
     copyFileSync(sourceAddon, lockedAddon);
-    cpSync(join(sourceRoot, "vendor"), join(lockedRoot, "vendor"), { recursive: true });
+    cpSync(join(sourceRoot, "vendor"), join(lockedRoot, "vendor"), {
+      recursive: true,
+    });
     const probe = [
       `const addon = require(${JSON.stringify(lockedAddon)});`,
       "const info = addon.conPtyRuntimeInfo();",
@@ -230,13 +296,26 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
       "const session = new addon.ConPtySession({ commandLine: 'cmd.exe /d /s /c exit 0', columns: 80, rows: 24 }, () => {});",
       "session.dispose();",
     ].join("");
-    const result = spawnSync(process.execPath, ["-e", probe], { encoding: "utf8" });
+    const result = spawnSync(process.execPath, ["-e", probe], {
+      encoding: "utf8",
+    });
     expect(result.status, result.stderr).toBe(0);
-    expect(readFileSync(join(lockedRoot, "vendor", windowsConPtyRuntimeInfo().selectedHostArchitecture, "OpenConsole.exe")).byteLength)
-      .toBeGreaterThan(0);
+    expect(
+      readFileSync(
+        join(
+          lockedRoot,
+          "vendor",
+          windowsConPtyRuntimeInfo().selectedHostArchitecture,
+          "OpenConsole.exe",
+        ),
+      ).byteLength,
+    ).toBeGreaterThan(0);
   });
 
-  async function certifyCausalVtOrder(name: "Node" | "Bun", executable: string): Promise<void> {
+  async function certifyCausalVtOrder(
+    name: "Node" | "Bun",
+    executable: string,
+  ): Promise<void> {
     const cycles = 256;
     const script = [
       'const { writeSync } = require("node:fs");',
@@ -245,7 +324,7 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
       '  writeSync(1, Buffer.from("A" + id + "\\x1b]8486;TW_CAUSAL;A;" + id + "\\x07"));',
       '  writeSync(1, Buffer.from("B" + id + "\\x1b]8486;TW_CAUSAL;B;" + id + "\\x07"));',
       '  writeSync(1, Buffer.from("A" + id + "\\x1b]8486;TW_CAUSAL;C;" + id + "\\x07"));',
-      '}',
+      "}",
       'writeSync(1, Buffer.from("\\x1b[?1049hALT\\x1b]8486;TW_CAUSAL;ALT\\x07\\x1b[?1049lPRIMARY\\x1b]8486;TW_CAUSAL;FINAL\\x07"));',
     ].join("");
     const handle = spawnWindowsPty({
@@ -258,17 +337,28 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     await handle.outputEnded;
     const bytes = output.text();
     let cursor = bytes.indexOf("A0000\x1b]8486;TW_CAUSAL;A;0000\x07");
-    expect(cursor, `${name} emitted no first causal frame`).toBeGreaterThanOrEqual(0);
+    expect(
+      cursor,
+      `${name} emitted no first causal frame`,
+    ).toBeGreaterThanOrEqual(0);
     expect(bytes.slice(0, cursor)).not.toMatch(/[AB][0-9a-f]{4}/u);
     for (let index = 0; index < cycles; index += 1) {
       const id = index.toString(16).padStart(4, "0");
-      for (const [text, phase] of [["A", "A"], ["B", "B"], ["A", "C"]] as const) {
+      for (const [text, phase] of [
+        ["A", "A"],
+        ["B", "B"],
+        ["A", "C"],
+      ] as const) {
         const expected = `${text}${id}\x1b]8486;TW_CAUSAL;${phase};${id}\x07`;
-        expect(bytes.indexOf(expected, cursor), `${name} frame ${phase}/${id}`).toBe(cursor);
+        expect(
+          bytes.indexOf(expected, cursor),
+          `${name} frame ${phase}/${id}`,
+        ).toBe(cursor);
         cursor += expected.length;
       }
     }
-    const tail = "\x1b[?1049hALT\x1b]8486;TW_CAUSAL;ALT\x07\x1b[?1049lPRIMARY\x1b]8486;TW_CAUSAL;FINAL\x07";
+    const tail =
+      "\x1b[?1049hALT\x1b]8486;TW_CAUSAL;ALT\x07\x1b[?1049lPRIMARY\x1b]8486;TW_CAUSAL;FINAL\x07";
     expect(bytes.indexOf(tail, cursor)).toBe(cursor);
     expect(handle.sawRealEof).toBe(true);
     handle.dispose();
@@ -278,14 +368,31 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     await certifyCausalVtOrder("Node", process.execPath);
   });
 
-  it.skipIf(!bun)("preserves causal VT marker order for Bun applications", async () => {
-    await certifyCausalVtOrder("Bun", "bun");
-  });
+  it.skipIf(!bun)(
+    "preserves causal VT marker order for Bun applications",
+    async () => {
+      await certifyCausalVtOrder("Bun", "bun");
+    },
+  );
 
   it("keeps legacy Console API deltas ahead of their following marker", async () => {
-    const fixture = fileURLToPath(new URL("../../../scripts/fixtures/conpty-causal-order.ps1", import.meta.url));
+    const fixture = fileURLToPath(
+      new URL(
+        "../../../scripts/fixtures/conpty-causal-order.ps1",
+        import.meta.url,
+      ),
+    );
     const handle = spawnWindowsPty({
-      command: ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", fixture],
+      command: [
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        fixture,
+      ],
       env: environment(),
       columns: 100,
       rows: 30,
@@ -303,12 +410,56 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
       const legacy = bytes.indexOf(`B${id}`, cursor);
       const marker = bytes.indexOf(`\x1b]8486;TW_LEGACY;B;${id}\x07`, cursor);
       expect(legacy, `legacy text/${id}`).toBeGreaterThanOrEqual(cursor);
-      expect(marker, `legacy marker/${id} overtook its text`).toBeGreaterThan(legacy);
+      expect(marker, `legacy marker/${id} overtook its text`).toBeGreaterThan(
+        legacy,
+      );
       cursor = marker + `\x1b]8486;TW_LEGACY;B;${id}\x07`.length;
       const final = `A${id}\x1b]8486;TW_LEGACY;C;${id}\x07`;
       expect(bytes.indexOf(final, cursor), `legacy C/${id}`).toBe(cursor);
       cursor += final.length;
     }
+    expect(handle.sawRealEof).toBe(true);
+    handle.dispose();
+  });
+
+  it("orders activation of an inactive console buffer before its marker", async () => {
+    const fixture = fileURLToPath(
+      new URL(
+        "../../../scripts/fixtures/conpty-inactive-buffer-order.ps1",
+        import.meta.url,
+      ),
+    );
+    const handle = spawnWindowsPty({
+      command: [
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        fixture,
+      ],
+      env: environment(),
+      columns: 100,
+      rows: 30,
+    });
+    const output = collect(handle);
+    await handle.outputEnded;
+    const bytes = output.text();
+    const before = bytes.indexOf("ACTIVE-BEFORE\x1b]8486;TW_BUFFER;BEFORE\x07");
+    const activated = bytes.indexOf("INACTIVE-BUFFER", before + 1);
+    const after = bytes.indexOf("\x1b]8486;TW_BUFFER;AFTER\x07", activated + 1);
+    expect(before).toBeGreaterThanOrEqual(0);
+    expect(
+      activated,
+      "activation did not publish the inactive buffer",
+    ).toBeGreaterThan(before);
+    expect(
+      after,
+      "the marker overtook the activated buffer contents",
+    ).toBeGreaterThan(activated);
+    expect(bytes).not.toContain("\x1b]8486;TW_BUFFER;INACTIVE\x07");
     expect(handle.sawRealEof).toBe(true);
     handle.dispose();
   });
@@ -752,5 +903,4 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     expect(handle.sawRealEof).toBe(true);
     handle.dispose();
   });
-
 });

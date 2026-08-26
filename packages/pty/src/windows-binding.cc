@@ -84,6 +84,16 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
   explicit ConPtySession(const Napi::CallbackInfo& info)
       : Napi::ObjectWrap<ConPtySession>(info), session_(std::make_unique<termwright::Session>()) {
     Napi::Env env = info.Env();
+    const termwright::ConPtyApi& api = termwright::GetConPtyApi();
+    if (!api.available()) {
+      const termwright::ConPtyRuntimeInfo& runtime = api.runtime_info();
+      Napi::Error::New(
+          env, "strict vendored ConPTY initialization failed: " +
+                   runtime.failure_code + " (Win32 " +
+                   std::to_string(runtime.failure_win32) + ")")
+          .ThrowAsJavaScriptException();
+      return;
+    }
     if (info.Length() < 2 || !info[0].IsObject() || !info[1].IsFunction()) {
       Napi::TypeError::New(env, "ConPtySession(options, onEvent) requires an object and a function")
           .ThrowAsJavaScriptException();
@@ -252,16 +262,8 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
 };
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
-  const termwright::ConPtyApi& api = termwright::GetConPtyApi();
-  if (!api.available()) {
-    const termwright::ConPtyRuntimeInfo& info = api.runtime_info();
-    Napi::Error::New(
-        env, "strict vendored ConPTY initialization failed: " +
-                 info.failure_code + " (Win32 " +
-                 std::to_string(info.failure_win32) + ")")
-        .ThrowAsJavaScriptException();
-    return exports;
-  }
+  // Runtime discovery is diagnostic and must survive a missing or corrupt
+  // side-by-side bundle. Session construction below remains fail-closed.
   ConPtySession::Init(env, exports);
   exports.Set("conPtyRuntimeInfo", Napi::Function::New(env, ConPtyRuntimeInfo));
   return exports;

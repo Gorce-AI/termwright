@@ -225,6 +225,7 @@ describe('autonomous workflow security', () => {
   it('requires Bun in every certifying workflow job that intentionally installs it', async () => {
     const ci = await readWorkflow('ci.yml');
     const release = await readWorkflow('release.yml');
+    const preview = await readWorkflow('preview-release.yml');
     const upstreamCandidates = await readWorkflow('upstream-candidates.yml');
     for (const job of ['build', 'windows-driver-native', 'opentui', 'examples']) {
       const block = jobBlock(ci, job);
@@ -236,6 +237,15 @@ describe('autonomous workflow security', () => {
     expect(verify).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
     expect(verify).toContain("bun-version: '1.4.0'");
     expect(verify).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+    for (const block of [
+      jobBlock(release, 'certify-x64-on-arm64'),
+      jobBlock(preview, 'certify-x64-on-arm64'),
+    ]) {
+      expect(block).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
+      expect(block).toContain("bun-version: '1.4.0'");
+      expect(block).toContain('bun-windows-x64.zip');
+      expect(block).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+    }
     const candidateCertification = jobBlock(upstreamCandidates, 'certify');
     expect(candidateCertification).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
     expect(candidateCertification).toContain("bun-version: '1.4.0'");
