@@ -185,16 +185,13 @@ async function certifyConsoleMarkerMode(executable: string): Promise<void> {
   const fixture = fileURLToPath(
     new URL("../../../scripts/fixtures/conpty-console-marker.ps1", import.meta.url),
   );
+  const markerScript = fileURLToPath(
+    new URL("../../../scripts/fixtures/conpty-console-marker.mjs", import.meta.url),
+  );
   const markerDirectory = mkdtempSync(join(tmpdir(), "tw conpty marker "));
   const spacedMarkerScript = join(markerDirectory, "console marker.mjs");
   const publicEntry = new URL("../dist/index.js", import.meta.url).href;
-  writeFileSync(
-    spacedMarkerScript,
-    [
-      `import { writeWindowsConsoleMarker } from ${JSON.stringify(publicEntry)};`,
-      "writeWindowsConsoleMarker(1, process.env.TW_MARKER_TEXT ?? '');",
-    ].join("\n"),
-  );
+  copyFileSync(markerScript, spacedMarkerScript);
   const handle = spawnWindowsPty({
     command: [
       "powershell.exe",
@@ -211,6 +208,7 @@ async function certifyConsoleMarkerMode(executable: string): Promise<void> {
       TW_MARKER_NODE: executable,
       TW_MARKER_SCRIPT: spacedMarkerScript,
       TW_MARKER_TEXT: marker,
+      TW_MARKER_PTY_ENTRY: publicEntry,
     },
     columns: 80,
     rows: 24,
