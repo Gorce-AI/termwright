@@ -20,8 +20,10 @@ const server = createServer((socket) => {
         writeWindowsConsoleMarker(1, process.env.TW_MARKER_TEXT ?? '');
         socket.write('DONE\n');
       } else if (command === 'EXIT') {
-        socket.destroy();
-        server.close(() => process.exit(0));
+        socket.write('BYE\n', () => {
+          socket.destroy();
+          server.close(() => process.exit(0));
+        });
       } else {
         throw new Error(`unexpected marker control command ${JSON.stringify(command)}`);
       }
