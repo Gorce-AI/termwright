@@ -268,12 +268,16 @@ if (process.platform === 'win32') {
   console.log('[pty-cert] observable-resize');
   // ResizePseudoConsole and the input pipe are independent channels. The
   // child's public TTY resize notification is the causal acknowledgement that
-  // the requested geometry became authoritative; later input is not one.
+  // the requested geometry became authoritative; later input is not one. Keep
+  // stdin referenced only to preserve the child lifetime while that native
+  // notification is pending. No input byte participates in the barrier.
   const resizing = collect([
+    'process.stdin.resume();',
     'process.stdout.once("resize", () => {',
     '  const [columns, rows] = process.stdout.getWindowSize();',
     '  const valid = columns === 120 && rows === 40;',
     '  const prefix = valid ? "RESIZED:" : "RESIZE_GEOMETRY_MISSING:";',
+    '  process.stdin.pause();',
     '  process.stdout.write(prefix + columns + "x" + rows,',
     '    () => process.exit(valid ? 0 : 45));',
     '});',
