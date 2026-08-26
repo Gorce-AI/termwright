@@ -1,9 +1,14 @@
+import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { canonicalJson, compareVersions, npmCatalog, parseGoDownloadResult, pypiCatalog, recoverGoDownloadFailure, resolveNpmDependencyClosure, selectCandidates, trustedGoEnvironment } from './discover-framework-candidates.mjs';
+
+const exec = promisify(execFile);
 
 const source = (digit) => ({ checksum: digit.repeat(64), registry: 'https://crates.io' });
 const config = {
@@ -95,12 +100,89 @@ describe('framework candidate discovery', () => {
     expect(permuted.candidates.map((entry) => entry.id)).toEqual(result.candidates.map((entry) => entry.id));
   });
 
+  it('applies an exact stream filter and an independent bounded dispatch cap', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-stream-discovery-'));
+    const streamConfig = {
+      maxCandidatesPerRun: 16,
+      streams: [
+        { ...config.streams[0], id: 'another-v2', frameworkId: 'another' },
+        { ...config.streams[0], id: 'tcell-v2', frameworkId: 'tview', package: 'github.com/gdamore/tcell/v2' },
+      ],
+    };
+    const tcell = Array.from({ length: 20 }, (_, index) => ({
+      version: `2.0.${index + 1}`,
+      publishedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
+      source: source(String(index % 9 + 1)),
+    }));
+    const result = await selectCandidates({
+      rootDir: directory,
+      config: streamConfig,
+      streamId: 'tcell-v2',
+      maximum: 17,
+      ledger: { streams: {} },
+      catalogs: {
+        'another-v2': [{ version: '2.0.1', publishedAt: '2025-01-01T00:00:00Z', source: source('9') }],
+        'tcell-v2': tcell,
+      },
+    });
+
+    expect(result.candidates).toHaveLength(17);
+    expect(result.candidates.every((entry) => entry.streamId === 'tcell-v2')).toBe(true);
+    expect(result).toMatchObject({ limit: 17, totalPending: 20, backlog: 3 });
+    await expect(selectCandidates({
+      rootDir: directory,
+      config: streamConfig,
+      streamId: 'missing',
+      maximum: 17,
+      ledger: { streams: {} },
+      catalogs: {},
+    })).rejects.toThrow(/unknown candidate stream/u);
+  });
+
+  it('does not self-seed a prepared candidate from the working tree', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-unseeded-discovery-'));
+    const ledger = join(directory, 'ledger.json');
+    const assessments = join(directory, 'assessments.json');
+    const catalog = join(directory, 'catalog.json');
+    const output = join(directory, 'registry.json');
+    await writeFile(ledger, JSON.stringify({ schemaVersion: 1, streams: {} }));
+    await writeFile(assessments, JSON.stringify({ schemaVersion: 1, streams: {} }));
+    await writeFile(catalog, JSON.stringify({ streams: { 'tcell-v2': [{
+      version: 'v2.8.1',
+      publishedAt: '2026-01-01T00:00:00Z',
+      source: {
+        sum: 'h1:source',
+        goModSum: 'h1:gomod',
+        zipSha256: 'a'.repeat(64),
+        toolchainSupported: true,
+      },
+    }] } }));
+
+    await exec(process.execPath, [
+      fileURLToPath(new URL('./discover-framework-candidates.mjs', import.meta.url)),
+      '--ledger', ledger,
+      '--assessments', assessments,
+      '--catalog', catalog,
+      '--stream', 'tcell-v2',
+      '--max', '1',
+      '--output', output,
+    ]);
+    const registry = JSON.parse(await readFile(output, 'utf8'));
+    expect(registry.candidates).toHaveLength(1);
+    expect(registry.candidates[0]).toMatchObject({
+      id: 'tcell-v2@v2.8.1',
+      patch: { status: 'ready' },
+    });
+  });
+
   it('keeps the scheduled default large enough to visit every configured stream', async () => {
     const repositoryConfig = JSON.parse(await readFile(new URL('../compatibility/upstream-patches.json', import.meta.url), 'utf8'));
     const workflow = await readFile(new URL('../.github/workflows/upstream-candidates.yml', import.meta.url), 'utf8');
     expect(repositoryConfig.maxCandidatesPerRun).toBeGreaterThanOrEqual(repositoryConfig.streams.length);
-    expect(workflow).toContain(`default: '${repositoryConfig.maxCandidatesPerRun}'`);
+    expect(workflow).toContain(`default: ${repositoryConfig.maxCandidatesPerRun}`);
     expect(workflow).toContain(`inputs.maximum || '${repositoryConfig.maxCandidatesPerRun}'`);
+    expect(workflow).toContain("STREAM: ${{ inputs.stream || '' }}");
+    expect(workflow).toContain('discovery_args+=(--stream "$STREAM")');
   });
 
   it('does not retry an exact red assessment until its artifact or certifier revision changes', async () => {

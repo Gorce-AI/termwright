@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { assertCandidateSemanticSession, candidateToolchainBlock, deriveHookInstrumentationProfile, installedDependencyFrom, packageContentDigestForEntries, selectCharmCandidateComposition, verifyCandidateEvidence, verifyInstalledNpmClosure, verifyPreparedUpdateInvariant } from './certify-framework-candidate.mjs';
+import { assertCandidateSemanticSession, candidateExecutableName, candidateToolchainBlock, certificationPlatform, deriveHookInstrumentationProfile, installedDependencyFrom, packageContentDigestForEntries, selectCharmCandidateComposition, verifyCandidateEvidence, verifyInstalledNpmClosure, verifyPreparedUpdateInvariant } from './certify-framework-candidate.mjs';
 import { digestTree } from './prepare-framework-candidate.mjs';
 
 const exec = promisify(execFile);
@@ -84,6 +84,15 @@ async function npmClosureFixture() {
 }
 
 describe('framework candidate evidence binding', () => {
+  it('binds verdict provenance to the actual supported host platform', () => {
+    expect(certificationPlatform('linux')).toBe('linux');
+    expect(certificationPlatform('darwin')).toBe('macos');
+    expect(certificationPlatform('win32')).toBe('windows');
+    expect(() => certificationPlatform('freebsd')).toThrow(/unsupported certification host platform/u);
+    expect(candidateExecutableName('windows')).toBe('candidate-app.exe');
+    expect(candidateExecutableName('linux')).toBe('candidate-app');
+  });
+
   it('rejects a generated patch bundle changed by candidate code after trusted preparation', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-prepared-update-'));
     await mkdir(join(directory, 'patch'));
@@ -276,12 +285,14 @@ describe('framework candidate evidence binding', () => {
         fileURLToPath(new URL('./certify-framework-candidate.mjs', import.meta.url)),
         '--registry', registry,
         '--candidate', 'bubbletea-v2@v2.1.0',
+        '--platform', certificationPlatform(),
         '--output', verdict,
       ], {
         env: { ...process.env, GITHUB_SHA: 'candidate-sha', TERMWRIGHT_UPSTREAM_GO_VERSION: '1.25' },
       })).rejects.toMatchObject({ code: 1 });
       expect(JSON.parse(await readFile(verdict, 'utf8'))).toMatchObject({
         candidateId: 'bubbletea-v2@v2.1.0',
+        platform: certificationPlatform(),
         state: 'red',
         detail: 'bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25',
       });

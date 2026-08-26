@@ -68,7 +68,8 @@ a newer minor, such as `2.1.1` after `2.2.0`, remains a candidate.
 Candidates remain oldest-first within each stream. The bounded scheduler takes
 one candidate from every pending stream before assigning a second slot to any
 stream. The scheduled capacity is 16, currently enough to visit every stream;
-the manual dispatch permits 1, 2, 4, 8, or 16 for focused diagnostics. This
+a manual dispatch accepts a bounded capacity up to 32 and may select one exact
+stream for focused backlog certification. This
 prevents one incompatible backlog from starving another framework without
 giving an upstream registry unbounded test concurrency.
 
@@ -108,10 +109,13 @@ that has a write token checks out or executes a pull-request branch.
 ### Candidate outcomes
 
 For source-patched Go and Rust integrations, a missing exact manifest starts a
-deterministic `--fuzz=0` replay of the latest audited transform on the exact
-downloaded source. A transform that no longer applies is red; a successful
-replay still has to compile and pass the candidate-specific real-process and
-conformance gates before its checksummed bundle can be proposed.
+deterministic preparation against the exact downloaded source. Existing
+textual profiles use `--fuzz=0` replay of the latest audited transform. tcell's
+add-only Windows companion instead parses the Go AST and must match exactly one
+reviewed console-capability template. An absent or ambiguous structural match
+is red. Every prepared result still has to compile and pass candidate-specific
+real-process and conformance gates before its checksummed bundle can be
+proposed.
 
 Ink still requires exact source-hook instrumentation. Its candidate job
 extracts the checksum-verified npm archive, computes both audited artifact
@@ -141,6 +145,12 @@ When an exact manifest exists, the existing upstream certifier:
 3. runs the relevant probe suites;
 4. runs the full conformance matrix and refuses a run where an entire required
    area skipped.
+
+tview/tcell certification is conjunctive across native Linux and Windows jobs.
+The Windows job uses the repository's compiled x64 ConPTY addon, launches the
+fixture with `NewConsoleScreen` on the real console handle, observes the first
+semantic tree and proves a later tree is caused by fixture input. A verdict
+from either platform cannot substitute for the other.
 
 Copy-patch declarations and executable framework combinations are separate in
 `registry.json`. A deterministic patch application adds only an exact

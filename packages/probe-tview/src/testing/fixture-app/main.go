@@ -14,6 +14,10 @@ import (
 
 func main() {
 	app := tview.NewApplication()
+	if err := configureScreen(app); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	status := tview.NewTextView().SetText("status: ready")
 	redraws := 0

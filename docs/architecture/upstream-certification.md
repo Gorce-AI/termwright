@@ -61,7 +61,7 @@ an application source change.
 | Ink | Runtime module preload shims the ordinary `ink` export, while exact-certified transforms instrument `renderer.js` and `ink.js` | Node and Bun provide a stable interception seam, but `onRender`, `measureElement()` and `useBoxMetrics()` require an application-owned node and cannot expose an arbitrary application's complete committed host/layout tree | Both transformed artifacts must match one exact profile listed in the compatibility registry or the adapter fails closed. The runtime interception layer is stable; the source transforms and retained host-tree fields remain version-specific |
 | OpenTUI | Runtime module preload wraps public `createCliRenderer`; runtime observation captures geometry, while a narrow AST transform preserves the native stdout feed and same-writer commit queue | The live renderer exposes the render pass, clipping, hit grid and frame boundary. Public hooks do not expose successful native byte delivery, so transport alone remains structurally instrumented | `renderList`, `renderOffset` and constructor transport shape are version-sensitive. Admission is capability- and behavior-based; no chunk name, exact source fragment, source SHA or bundle digest participates |
 | Textual | Ephemeral `sitecustomize.py` wraps the display path, exact built-in driver write and `post_display_hook` | CPython provides the injection seam. The wrapper proves that frame bytes entered the built-in WriterThread FIFO, then appends the marker non-blockingly to that same FIFO; no installed Textual file is copied or edited | `_display`, built-in driver/WriterThread identity, `post_display_hook`, DOM geometry and hit-test APIs remain version-sensitive. Strong instrumentation is exact-certified for the versions in the generated runtime allowlist; inline and custom drivers fail closed |
-| tview | Ephemeral `go.work` redirects exact tview v0.42.0 and tcell v2.8.1 modules to checksummed copies | Public before/after draw callbacks expose neither the root nor a post-`Show` commit. The patch stages under tview's draw lock, commits after successful `Show`, and uses tcell's exact output writer/Windows console handle for the marker | tview `application.go`/`go.mod`, private container fields and tcell's Windows `cScreen` handle. tview patch-set version 18; add-only tcell companion version 2 |
+| tview | Ephemeral `go.work` redirects exact tview and tcell modules to checksummed copies | Public before/after draw callbacks expose neither the root nor a post-`Show` commit. The patch stages under tview's draw lock, commits after successful `Show`, and uses tcell's exact output writer/Windows console handle for the marker | tview `application.go`/`go.mod`, private container fields and tcell's Windows `cScreen` handle. Each tcell release has an exact manifest; a Go AST classifier selects the reviewed console-capability template before native Linux and Windows certification |
 | Bubble Tea v1/v2 | Ephemeral `go.work` redirects the exact module to a checksummed copy | Renderer methods receive a flattened view, not the live model. Model-aware hooks stage semantic state, while exact renderer-flush hooks commit only after terminal bytes reach the same writer | v1.3.10 has three `tea.go` capture anchors plus `standard_renderer.go`; v2.0.8 and v2.0.9 have exact `Program.render` plus `cursed_renderer.flush` profiles. All also patch `go.mod`; current patch-set version 17 |
 | Bubbles v1/v2 | Add-only files in independently redirected copies | Public getters do not expose all rendered state, but the missing accessors can be added without editing an upstream file. Bubble Tea discovers them by name, so unsupported optional Bubbles versions degrade to public-getter facts | Private field names and types still matter and must compile. Current add-only sets cover v1.0.0 and v2.1.1, patch-set version 1 |
 | Ratatui | Cargo `--config patch.crates-io` redirects `ratatui-core` and `ratatui-widgets` to checksummed copies | Immediate-mode render calls and the post-flush boundary are inside the crates; Rust has no loader injection seam, and `ratatui-widgets` owns concrete private list state | Ratatui 0.30.2 resolves to `ratatui-core` 0.1.2 (patch-set 3) and `ratatui-widgets` 0.3.2 (patch-set 1). `std`/`no_std`, features and MSRV are part of the contract |
@@ -199,23 +199,28 @@ It also states `targetCertificationState: "not-assessed"`,
 stage names are evidence about the bounded v1 profile, not claims that the full
 target state machine below has passed.
 
-`.github/workflows/upstream-candidates.yml` runs this profile on a daily
-schedule or `workflow_dispatch`, with Go, Rust, Node and pnpm installed, and
-uploads the available JSON evidence as a 30-day artifact. It initializes an
-explicitly failed report immediately after checkout, before toolchain setup or
-the workspace build. A successful certification atomically replaces it and
-adds provenance; a certification error replaces it with a sanitized failure
-report that contains no machine-local absolute paths. Therefore failures after
-the initialization step leave at least `candidate-report.json`, and ordinary
-step failures continue to the `always()` upload. Checkout failure, runner loss,
-job timeout or cancellation can still prevent initialization or upload; no
-workflow can promise an artifact after those infrastructure failures. Failed
-certifications never emit provenance. Its permissions are read-only. It does
-not discover a new upstream release, modify a patch, open a PR, sign an
-attestation, tag a commit or publish a package. Unit coverage for
-manifest/declaration drift, path traversal, added file tampering,
-nondeterministic runs and portable failure evidence lives in
-`scripts/certify-upstream-patches.test.mjs`.
+`.github/workflows/upstream-candidates.yml` is the trusted daily candidate
+pipeline, not a wrapper around this local profile. Discovery computes a bounded
+oldest-first matrix from registry catalogs and the default-branch certification
+ledger; manual dispatch may further select one exact stream. Each matrix job
+initializes a revision-, digest- and host-platform-bound red verdict before
+toolchain setup, then performs the integration-specific exact-source or runtime
+behavioral certification. OpenTUI requires Linux and macOS results; tview/tcell
+requires Linux and native Windows/ConPTY results. The trusted aggregate accepts
+only the complete required platform set with exact artifact shape and matching
+executable resolution, and generates a checksummed update only for conjunctive
+green candidates.
+
+Raw platform artifacts are deliberately outside the namespace consumed by the
+reconciler. Only the aggregate verdict and trusted generated bundle are exposed
+to `autonomous-coordinator.yml`, which reproduces reconciliation from the
+default-branch SHA, opens or updates the bounded compatibility PR, verifies its
+exact tree and first-attempt CI, and only then may merge it. Red candidates
+update a digest-keyed issue/assessment; pre-verdict infrastructure failures use
+the dead-man issue path. Candidate jobs remain read-only and cannot themselves
+push, open a PR, tag or publish. Checkout failure, runner loss, timeout or
+cancellation may still prevent a raw artifact, which therefore becomes an
+explicit aggregate/coordinator failure rather than an invented verdict.
 
 After building the workspace packages, the local entry point is:
 
