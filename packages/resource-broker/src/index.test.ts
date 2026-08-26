@@ -14,6 +14,7 @@ const CAPACITIES: ResourceCapacities = {
   ptySession: 1,
   externalProcess: 1,
   semanticEndpoint: 1,
+  nativeHostPressure: 1,
   traceWriter: 1,
 };
 
@@ -112,6 +113,7 @@ describe('ResourceBroker', () => {
       ptySession: 0,
       externalProcess: 0,
       semanticEndpoint: 0,
+      nativeHostPressure: 0,
       traceWriter: 0,
     });
   });

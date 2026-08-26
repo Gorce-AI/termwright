@@ -78,7 +78,7 @@
       "tests": [
         [
           "packages/driver/src/session.pty.test.ts",
-          "closes concurrent live ConPTY sessions through owned job teardown"
+          "closes four simultaneously live ConPTY sessions through owned job teardown"
         ]
       ]
     },

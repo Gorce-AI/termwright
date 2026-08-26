@@ -289,7 +289,9 @@ const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
  * ```
  */
 export async function runAdapterConformance(options: AdapterConformanceOptions): Promise<void> {
-  const { afterAll, beforeAll, describe, expect, it } = await import('vitest');
+  const { afterAll, afterEach, beforeEach, describe, expect } = await import('vitest');
+  const { it: resourceAwareIt } = await import('@termwright/resource-broker/vitest');
+  const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
   const timeout = options.timeoutMs ?? 10_000;
   const toolchain =
     options.requires === undefined ||
@@ -378,7 +380,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
       /** Everything observed before a single byte was written to the child. */
       let beforeInput: ProbeObservation;
 
-      beforeAll(
+      beforeEach(
         async () => {
           probe = await AdapterProbe.start(options.spawn(), probeOptions);
           await probe.waitForText(options.ready, timeout);
@@ -396,7 +398,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         timeout * 4,
       );
 
-      afterAll(async () => {
+      afterEach(async () => {
         await probe?.stop();
       });
 

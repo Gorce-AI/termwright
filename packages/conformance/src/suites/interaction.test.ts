@@ -7,7 +7,8 @@
  * reflow, mouse-mode transitions, Unicode width, the alternate screen, and
  * session ownership when more than one is open.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { AnyLocator, TerminalHarness } from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import { TermwrightError } from '@termwright/driver';
@@ -23,6 +24,7 @@ import {
 } from '../support/pty.js';
 
 const sessions = createSessionPool();
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 async function intendedRect(locator: AnyLocator): Promise<Rect | null> {
   const observation = (await locator.geometry()).intendedRect;
@@ -240,22 +242,25 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
 });
 
 describe.skipIf(!ptyAvailable())('session ownership', () => {
-  it('keeps concurrent sessions independent and closes exactly one', async () => {
-    const first = await generic();
-    const second = await generic();
-    expect(first.sessionId).not.toBe(second.sessionId);
+  resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })(
+    'keeps concurrent sessions independent and closes exactly one',
+    async () => {
+      const first = await generic();
+      const second = await generic();
+      expect(first.sessionId).not.toBe(second.sessionId);
 
-    await first.press('ArrowDown');
-    await first.waitForText('> Beta');
-    // The second session must be untouched by input sent to the first.
-    expect(second.screen().text()).toContain('> Alpha');
+      await first.press('ArrowDown');
+      await first.waitForText('> Beta');
+      // The second session must be untouched by input sent to the first.
+      expect(second.screen().text()).toContain('> Alpha');
 
-    await first.close();
-    expect(((await rejection(first.press('a'))) as TermwrightError).code).toBe('session-closed');
+      await first.close();
+      expect(((await rejection(first.press('a'))) as TermwrightError).code).toBe('session-closed');
 
-    await second.press('ArrowDown');
-    await second.waitForText('> Beta');
-    await second.press('q');
-    expect(await second.waitForExit()).toEqual({ code: 0, signal: null });
-  });
+      await second.press('ArrowDown');
+      await second.waitForText('> Beta');
+      await second.press('q');
+      expect(await second.waitForExit()).toEqual({ code: 0, signal: null });
+    },
+  );
 });

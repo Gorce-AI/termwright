@@ -89,6 +89,7 @@ function resourceLabel(resource) {
     ptySession: 'PTY sessions',
     externalProcess: 'External processes',
     semanticEndpoint: 'Semantic endpoints',
+    nativeHostPressure: 'Native-host pressure',
     traceWriter: 'Trace writers',
   };
   return labels[resource] ?? `\`${resource}\``;

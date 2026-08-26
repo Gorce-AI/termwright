@@ -5,7 +5,8 @@
  */
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect } from "vitest";
+import { it as resourceAwareIt } from "@termwright/resource-broker/vitest";
 import type {
   ActionEvent,
   ActionStartedEvent,
@@ -17,10 +18,11 @@ import {
   ProbeAttachFailedError,
   TermwrightError,
 } from "./errors.js";
-import { createNativePtyBackend } from "./native-pty-backend.js";
+import { createNativePtyBackend, nativePtyAvailable } from "./native-pty-backend.js";
 import { launchTerminal } from "./session.js";
 import { sensitive } from "@termwright/protocol";
 
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 const FIXTURES = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -35,20 +37,17 @@ function environment(): Record<string, string> {
   return env;
 }
 
-function ptyAvailable(): boolean {
-  if (process.env["TERMWRIGHT_SKIP_PTY"] === "1") return false;
+function processAlive(pid: number): boolean {
   try {
-    const pty = createNativePtyBackend().spawn({
-      command: [process.execPath, "-e", "process.exit(0)"],
-      env: environment(),
-      columns: 20,
-      rows: 4,
-    });
-    pty.dispose();
+    process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
+}
+
+function ptyAvailable(): boolean {
+  return nativePtyAvailable();
 }
 
 const sessions: TerminalHarness[] = [];
@@ -148,13 +147,17 @@ describe.skipIf(!ptyAvailable())(
       }
     });
 
-    it.skipIf(process.platform !== "win32")(
-      "closes concurrent live ConPTY sessions through owned job teardown",
+    resourceAwareIt.resources({
+      terminals: 4,
+      traceWriters: 0,
+      nativeHost: "exclusive",
+    }).skipIf(process.platform !== "win32")(
+      "closes four simultaneously live ConPTY sessions through owned job teardown",
       async () => {
-        // Concurrency is the invariant; elapsed teardown throughput is not.
-        // A separate stress lane exercises sustained worker pressure. Keeping
-        // four sessions live here proves independent owned jobs can close
-        // together without turning a wall-clock threshold into the verdict.
+        // Simultaneously live ownership is the invariant; elapsed teardown
+        // throughput is not. A separate stress lane exercises sustained worker
+        // pressure. Keeping four sessions live proves that their independent
+        // jobs remain owned without making a wall-clock threshold the verdict.
         const ptys = Array.from({ length: 4 }, () =>
           createNativePtyBackend().spawn({
             command: [
@@ -179,14 +182,10 @@ describe.skipIf(!ptyAvailable())(
                 }),
             ),
           );
-          const exits = ptys.map(
-            (pty) =>
-              new Promise<void>((resolve) => {
-                pty.onExit(() => resolve());
-              }),
-          );
+          const pids = ptys.map((pty) => pty.pid);
+          expect(pids.every(processAlive)).toBe(true);
           for (const pty of ptys) pty.dispose();
-          await Promise.all(exits);
+          expect(pids.every((pid) => !processAlive(pid))).toBe(true);
         } finally {
           for (const pty of ptys) pty.dispose();
         }
@@ -576,7 +575,7 @@ describe.skipIf(!ptyAvailable())("crash reports", { timeout: 20_000 }, () => {
     ).toBe(true);
   });
 
-  it("never reports a crash for a clean exit or a teardown the caller asked for", async () => {
+  resourceAwareIt.resources({ terminals: 3, traceWriters: 0 })("never reports a crash for a clean exit or a teardown the caller asked for", async () => {
     const clean = await launch("crash-app.mjs");
     await clean.waitForText("CRASH APP READY");
     await clean.press("e");
@@ -792,7 +791,7 @@ describe.skipIf(!ptyAvailable())(
       return terminal;
     }
 
-    it("reports the profile it is counting characters with", async () => {
+    resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })("reports the profile it is counting characters with", async () => {
       const terminal = await printBoxChar();
       expect(terminal.terminalProfile).toBe("default");
 
@@ -800,7 +799,7 @@ describe.skipIf(!ptyAvailable())(
       expect(chosen.terminalProfile).toBe("iterm2-ambiguous-wide");
     });
 
-    it("measures an ambiguous character the way the profile says", async () => {
+    resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })("measures an ambiguous character the way the profile says", async () => {
       // The same byte, two profiles, two layouts: this is the whole point of
       // recording the profile alongside a session.
       const narrow = await printBoxChar("default");
@@ -2109,7 +2108,7 @@ describe.skipIf(!ptyAvailable())(
       );
     });
 
-    it("composes semantic locators lazily with descendants, filters, boolean algebra and positional selection", async () => {
+    resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })("composes semantic locators lazily with descendants, filters, boolean algebra and positional selection", async () => {
       const terminal = await launch("semantic-app.mjs", {
         semanticNegotiationMs: 5_000,
       });

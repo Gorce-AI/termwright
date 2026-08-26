@@ -187,6 +187,9 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
       '@xterm/headless':
         specifier: ^6.0.0
         version: 6.0.0
@@ -265,6 +268,10 @@ importers:
       '@termwright/pty':
         specifier: workspace:*
         version: link:../pty
+    devDependencies:
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
 
   packages/evidence-provider:
     dependencies:
@@ -379,6 +386,10 @@ importers:
       zod:
         specifier: ^4.0.0
         version: 4.4.3
+    devDependencies:
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
 
   packages/opentui:
     dependencies:
@@ -417,6 +428,9 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
 
   packages/probe-go: {}
 
@@ -444,6 +458,9 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18
@@ -500,6 +517,9 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
 
   packages/protocol:
     dependencies:
@@ -528,6 +548,9 @@ importers:
         specifier: workspace:*
         version: link:../pty-win32-x64
     devDependencies:
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
       node-addon-api:
         specifier: ^8.3.0
         version: 8.9.2
@@ -565,6 +588,9 @@ importers:
       '@termwright/local-transport':
         specifier: workspace:*
         version: link:../local-transport
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   packages/run-history:
     dependencies:

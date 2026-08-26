@@ -38,5 +38,8 @@
   },
   "optionalDependencies": {
     "@termwright/pty": "workspace:*"
+  },
+  "devDependencies": {
+    "@termwright/resource-broker": "workspace:*"
   }
 }

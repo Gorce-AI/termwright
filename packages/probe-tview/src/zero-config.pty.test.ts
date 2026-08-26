@@ -16,7 +16,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect } from "vitest";
+import { it as resourceAwareIt } from "@termwright/resource-broker/vitest";
 import { goTestCapability } from "../../../scripts/test-support/go-toolchain.mjs";
 import {
   launchTerminal,
@@ -25,7 +26,7 @@ import {
 } from "@termwright/driver";
 import {
   createNativePtyBackend,
-  inheritedSpawnEnv,
+  nativePtyAvailable,
   launchTerminalWithBackend,
   type PtyBackend,
   type PtyProcess,
@@ -40,6 +41,7 @@ import {
 } from "@termwright/probe-go";
 import { prepareInstrumentedBuild, PROBE_VERSION } from "./launch.js";
 
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const PATCH_SET = join(here, "..", "upstream-patches", "tview", "v0.42.0");
@@ -65,19 +67,7 @@ async function goAvailable(): Promise<boolean> {
 }
 
 function ptyAvailable(): boolean {
-  if (process.env["TERMWRIGHT_SKIP_PTY"] === "1") return false;
-  try {
-    const pty = createNativePtyBackend().spawn({
-      command: [process.execPath, "-e", "process.exit(0)"],
-      env: inheritedSpawnEnv(),
-      columns: 20,
-      rows: 4,
-    });
-    pty.dispose();
-    return true;
-  } catch {
-    return false;
-  }
+  return nativePtyAvailable();
 }
 
 const hasGo = await goAvailable();
@@ -676,7 +666,7 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     expect(before?.width).toBe(80);
   }, 600_000);
 
-  it("is observably identical to the untouched framework when dormant", async () => {
+  resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })("is observably identical to the untouched framework when dormant", async () => {
     // The dormancy claim, measured rather than asserted from the source: the
     // instrumented binary run without the handshake variables must paint what
     // the vanilla one paints.

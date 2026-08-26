@@ -7,12 +7,14 @@
  * `envMode` is next to it because both are launch-time contracts about what the
  * child is handed before it can be ready at all.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { DiagnosticCode, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
 import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
 
 const sessions = createSessionPool();
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 /** Readiness decisions the session recorded, in order. */
 function strategies(terminal: TerminalHarness): readonly DiagnosticCode[] {
@@ -151,7 +153,7 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
     expect(terminal.screen().text()).toContain('env: unset');
   });
 
-  it('passes what the caller declares, in either mode', async () => {
+  resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })('passes what the caller declares, in either mode', async () => {
     const replaced = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
       columns: 60,
       rows: 20,

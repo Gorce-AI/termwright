@@ -1,11 +1,13 @@
 import { dirname, join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
+import { it as resourceAwareIt } from "@termwright/resource-broker/vitest";
 import { launchTerminal } from "@termwright/driver";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const app = join(packageRoot, "src", "testing", "geometry-app.mjs");
 const preload = pathToFileURL(join(packageRoot, "dist", "node-hook.js")).href;
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 async function launch(mode: string) {
   return launchTerminal({

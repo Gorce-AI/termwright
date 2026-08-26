@@ -243,8 +243,8 @@ describe('TermwrightTestHost', () => {
         resourceProfile: {
           name: 'local',
           scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },
-          capacities: { ptySession: 4, externalProcess: 4, semanticEndpoint: 4, traceWriter: 4 },
-          perTerminal: { semanticEndpoint: 1 },
+          capacities: { ptySession: 4, externalProcess: 4, semanticEndpoint: 4, nativeHostPressure: 4, traceWriter: 4 },
+          perTerminal: { semanticEndpoint: 1, nativeHostPressure: 1 },
         },
         timeouts: { totalRunMs: 600_000, finalizationReserveMs: 30_000 },
       },
@@ -275,6 +275,27 @@ describe('TermwrightTestHost', () => {
       metadata: {},
     });
     expect(Object.keys(engine.contexts.at(-1)?.tasks ?? {})).toEqual(['native-unit']);
+    await host.close();
+  });
+
+  it('expands exclusive native-host admission without inflating the terminal count', async () => {
+    const engine = new FakeEngine();
+    const pressure = testCase('native-pressure', 'native pressure', 'passed', 0, true, [], {
+      termwright: {
+        provider: { id: '@termwright/test', version: 1 },
+        resources: { terminals: 1, traceWriters: 0, nativeHost: 'exclusive' },
+      },
+    });
+    engine.tests = [pressure];
+    engine.runResult = result([pressure]);
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    await host.requestRun().completed;
+    expect(engine.contexts.at(-1)?.tasks['native-pressure']?.resourceReservation).toEqual({
+      ptySession: 1,
+      externalProcess: 1,
+      semanticEndpoint: 1,
+      nativeHostPressure: 4,
+    });
     await host.close();
   });
 
@@ -949,6 +970,7 @@ function testCase(
   retryCount = 0,
   withProviderMetadata = true,
   errors: readonly unknown[] = [],
+  metadata?: Readonly<Record<string, unknown>>,
 ): TestCase {
   const test = {
     id,
@@ -956,9 +978,9 @@ function testCase(
     location: { line: 1, column: 1 },
     project: { name: 'default' },
     module: { moduleId: '/workspace/example.test.ts' },
-    meta: () => withProviderMetadata
+    meta: () => metadata ?? (withProviderMetadata
       ? { termwright: { provider: { id: '@termwright/test', version: 1 } } }
-      : {},
+      : {}),
     result: () => ({ state, retryCount, errors }),
   };
   return test as unknown as TestCase;

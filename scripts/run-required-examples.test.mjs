@@ -94,7 +94,8 @@ describe('required public examples', () => {
 
   it('keeps recursive workspace filters portable and non-vacuous', async () => {
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-    expect(manifest.scripts.build).toContain('--filter=./packages/* --fail-if-no-match');
+    expect(manifest.scripts.build).toContain('--filter=./packages/*');
+    expect(manifest.scripts.build).toContain('--fail-if-no-match');
     expect(manifest.scripts.typecheck).toContain('--filter=./packages/* --fail-if-no-match');
     expect(manifest.scripts['check:full']).toBeUndefined();
     expect(manifest.scripts['check:local']).toContain('--filter=./examples/* --fail-if-no-match');

@@ -5,8 +5,16 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
+import { it as resourceAwareIt } from "@termwright/resource-broker/vitest";
 import { candidatePaths, spawnPty } from "./index.js";
+
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
+const nativePressureIt = resourceAwareIt.resources({
+  terminals: 1,
+  traceWriters: 0,
+  nativeHost: "exclusive",
+});
 
 const environment = (): Record<string, string> => Object.fromEntries(
   Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -142,7 +150,7 @@ describe.skipIf(process.platform === "win32")("the Termwright-owned POSIX PTY", 
     }
   });
 
-  it("keeps a backpressured write healthy when later input wakes its poll", async () => {
+  nativePressureIt("keeps a backpressured write healthy when later input wakes its poll", async () => {
     const firstBytes = 1024 * 1024;
     const laterBytes = 64 * 1024;
     const totalBytes = firstBytes + laterBytes;
@@ -228,7 +236,7 @@ describe.skipIf(process.platform === "win32")("the Termwright-owned POSIX PTY", 
 
 describe("the Termwright-owned native PTY flow control", () => {
 
-  it("bounds input admitted while the child does not consume it", async () => {
+  nativePressureIt("bounds input admitted while the child does not consume it", async () => {
     const session = collect(node([
       "require('node:net').createServer().listen(0);",
       "process.stdout.write('READY');",
@@ -330,7 +338,7 @@ describe("the Termwright-owned native PTY flow control", () => {
     session.handle.dispose();
   });
 
-  it("delivers the final tail after a pressure burst through the bounded native-to-JS channel", async () => {
+  nativePressureIt("delivers the final tail after a pressure burst through the bounded native-to-JS channel", async () => {
     const frameCount = 4096;
     const framePayloadBytes = 4096;
     const session = collect(node([
@@ -374,7 +382,7 @@ describe("the Termwright-owned native PTY flow control", () => {
     session.handle.dispose();
   });
 
-  it("can dispose from an output callback while the bounded channel is under pressure", async () => {
+  nativePressureIt("can dispose from an output callback while the bounded channel is under pressure", async () => {
     const handle = spawnPty({
       command: node([
         "const fs = require('node:fs');",

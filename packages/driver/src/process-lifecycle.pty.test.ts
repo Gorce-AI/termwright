@@ -1,10 +1,17 @@
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { resolveDefaultPtyBackend } from './backend-selection.js';
 import { NATIVE_PTY_BACKEND_NAME } from './native-pty-backend.js';
 import { launchTerminal } from './session.js';
 import type { TerminalHarness } from './api.js';
 
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
+const nativePressureIt = resourceAwareIt.resources({
+  terminals: 1,
+  traceWriters: 0,
+  nativeHost: 'exclusive',
+});
 const fixtures = fileURLToPath(new URL('../test-fixtures/', import.meta.url));
 
 // These tests own their terminals directly rather than through the fixture,
@@ -82,7 +89,7 @@ describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeo
 });
 
 describe('PTY output lifecycle', { timeout: 20_000 }, () => {
-  it('parses a saturated output stream through its causal terminal acknowledgement', async () => {
+  nativePressureIt('parses a saturated output stream through its causal terminal acknowledgement', async () => {
     const terminal = await open({
       command: [process.execPath, `${fixtures}/output-flood-exit.mjs`],
       envMode: 'inherit',

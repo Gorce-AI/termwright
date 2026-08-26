@@ -44,6 +44,14 @@ for (const directory of ['resource-broker', 'run-journal-transport']) {
   }
 }
 
+const brokerVitest = readFileSync(join(packagesRoot, 'resource-broker', 'dist', 'vitest.js'), 'utf8');
+if (!/from\s+["']vitest["']/u.test(brokerVitest)) {
+  errors.push('packages/resource-broker/dist/vitest.js must externalize the caller\'s Vitest singleton');
+}
+if (Buffer.byteLength(brokerVitest) > 32 * 1024) {
+  errors.push('packages/resource-broker/dist/vitest.js unexpectedly contains a bundled test runtime');
+}
+
 if (errors.length > 0) {
   console.error(errors.join('\n'));
   process.exit(1);
@@ -66,6 +74,7 @@ try {
     `@termwright/${directory}`,
     `file:${archive}`,
   ]));
+  dependencies.vitest = '4.1.11';
   writeFileSync(join(work, 'package.json'), `${JSON.stringify({
     private: true,
     type: 'module',
@@ -77,7 +86,7 @@ try {
     stdio: 'inherit',
   });
   const consumer = join(work, 'consumer.mjs');
-  writeFileSync(consumer, "await import('@termwright/resource-broker/transport');\nawait import('@termwright/run-journal-transport');\n");
+  writeFileSync(consumer, "await import('@termwright/resource-broker/transport');\nawait import('@termwright/resource-broker/vitest');\nawait import('@termwright/run-journal-transport');\n");
   execFileSync(process.execPath, [consumer], { cwd: work, stdio: 'inherit' });
 } finally {
   rmSync(work, { recursive: true, force: true });

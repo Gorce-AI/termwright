@@ -16,9 +16,9 @@
  */
 export interface TermwrightTaskMeta {
   /** Provider which declared this case, present before execution starts. */
-  readonly provider?: import('@termwright/ui/provider').TermwrightProviderMarker;
+  readonly provider?: import('@termwright/protocol/test-provider').TermwrightProviderMarker;
   /** Original mode before Vitest applies file-global `.only` and name filters. */
-  readonly declaration?: import('@termwright/ui/provider').TermwrightProviderDeclaration;
+  readonly declaration?: import('@termwright/protocol/test-provider').TermwrightProviderDeclaration;
   /** Physical authoring location for a transformed provider-owned case. */
   readonly source?: {
     readonly file: string;

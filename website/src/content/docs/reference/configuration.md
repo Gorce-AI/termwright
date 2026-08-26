@@ -145,18 +145,20 @@ profile; admission still cannot exceed any capacity in the table.
 
 <!-- BEGIN GENERATED RESOURCE PROFILES -->
 <!-- Generated from TERMWRIGHT_RESOURCE_PROFILES; do not edit this block by hand. -->
-| Profile | Workers | PTY sessions | External processes | Semantic endpoints | Trace writers | Per terminal |
-| --- | --- | --- | --- | --- | --- | --- |
-| `local` | 2 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
-| `ci` | 2 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
-| `windows-ci` | 2 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1 |
-| `stress` | 16 | 16 | 16 | 16 | 16 | `semanticEndpoint` × 1 |
+| Profile | Workers | PTY sessions | External processes | Semantic endpoints | Native-host pressure | Trace writers | Per terminal |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `local` | 2 | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
+| `ci` | 2 | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
+| `windows-ci` | 2 | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
+| `stress` | 16 | 16 | 16 | 16 | 16 | 16 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
 <!-- END GENERATED RESOURCE PROFILES -->
 
 The profile's PTY count is independent of Vitest's worker count. Every live
 terminal consumes one PTY, external-process, and semantic-endpoint unit at the
-driver allocation boundary; trace writers hold their own units until durable
-finalization. Several terminals launched by one test count separately. Select
+driver allocation boundary. It also consumes one native-host pressure unit;
+transport stress tests can reserve the whole profile with
+`nativeHost: 'exclusive'` without misreporting how many terminals they create.
+Trace writers hold their own units until durable finalization. Several terminals launched by one test count separately. Select
 the `stress` profile for a deliberately large fan-out. For a test which needs
 several terminals simultaneously, declare the group before collection:
 

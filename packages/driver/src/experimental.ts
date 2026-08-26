@@ -25,6 +25,8 @@ export {
 } from './backend-selection.js';
 export {
   createNativePtyBackend,
+  nativePtyAvailable,
+  nativePtyUnavailableReason,
   NATIVE_PTY_BACKEND_NAME,
   type NativePtySessionHandle,
   type NativePtySpawn,

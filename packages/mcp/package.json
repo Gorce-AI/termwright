@@ -36,5 +36,8 @@
     "@termwright/protocol": "workspace:*",
     "@termwright/screenshot": "workspace:*",
     "@termwright/trace": "workspace:*"
+  },
+  "devDependencies": {
+    "@termwright/resource-broker": "workspace:*"
   }
 }

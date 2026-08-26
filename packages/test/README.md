@@ -27,8 +27,13 @@ test.resources({ terminals: 2 })('client and server interoperate', async ({ term
 ```
 
 Each declared terminal reserves one PTY, external process, semantic endpoint,
-and—unless `traceWriters` is explicitly set—one trace writer. Exceeding the
+one native-host pressure unit, and—unless `traceWriters` is explicitly set—one trace writer. Exceeding the
 declared group fails instead of silently falling back to another queue.
+
+Native transport certification may reserve `nativeHost: 'exclusive'`, the full
+host-pressure envelope, while still declaring its actual terminal count. This
+keeps high-volume output and process-tree tests exclusive without pretending
+that they own terminals they never create.
 
 ## Install
 

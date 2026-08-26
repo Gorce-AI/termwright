@@ -183,7 +183,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     }
   });
 
-  it('does not let a handle or a ref cross sessions', async () => {
+  it.resources({ terminals: 2 })('does not let a handle or a ref cross sessions', async () => {
     const handle = await serve();
     const [first, second] = [await connect(handle), await connect(handle)];
     await launch(first);
@@ -204,7 +204,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
   });
 
-  it('kills exactly the children of the session that was deleted', async () => {
+  it.resources({ terminals: 2 })('kills exactly the children of the session that was deleted', async () => {
     const handle = await serve();
     const [first, second] = [await connect(handle), await connect(handle)];
     const owned = await launch(first);
@@ -230,7 +230,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     expect(JSON.stringify(snapshot.structuredContent)).toContain('GENERIC READY');
   });
 
-  it('reclaims a session whose client went away, and spares one still working', async () => {
+  it.resources({ terminals: 2 })('reclaims a session whose client went away, and spares one still working', async () => {
     // Streamable HTTP never signals that a client vanished, so idleness is the
     // only evidence a server has. The clock is injected rather than waited on:
     // a test that slept out a real TTL would be slow *and* would still pass if
@@ -264,7 +264,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     expect((await call(busySession, 'terminal.snapshot', { terminal: 't1' })).isError).toBeFalsy();
   });
 
-  it('never expires a session when the ttl is disabled', async () => {
+  it.resources({ terminals: 1 })('never expires a session when the ttl is disabled', async () => {
     let clock = Date.now();
     const handle = await serve({ idleTtlMs: 0, now: () => clock });
     const session = await connect(handle);
@@ -320,7 +320,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     expect(third.sessionId).not.toBe(first.sessionId);
   });
 
-  it('keeps capture_since cursors from crossing sessions', async () => {
+  it.resources({ terminals: 2 })('keeps capture_since cursors from crossing sessions', async () => {
     const handle = await serve();
     const [first, second] = [await connect(handle), await connect(handle)];
     await launch(first);

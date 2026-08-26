@@ -29,9 +29,17 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createTerminal, type Terminal } from '@termwright/vt';
 import { MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
-import { describe, expect, it } from 'vitest';
-import { createNativePtyBackend } from './native-pty-backend.js';
+import { describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { createNativePtyBackend, nativePtyAvailable } from './native-pty-backend.js';
 import type { PtyProcess } from './pty.js';
+
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
+const nativePressureIt = resourceAwareIt.resources({
+  terminals: 1,
+  traceWriters: 0,
+  nativeHost: 'exclusive',
+});
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtures');
 
@@ -244,19 +252,7 @@ function environment(): Record<string, string> {
 }
 
 function ptyAvailable(): boolean {
-  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
-  try {
-    const pty = createNativePtyBackend().spawn({
-      command: [process.execPath, '-e', 'process.exit(0)'],
-      env: environment(),
-      columns: 20,
-      rows: 4,
-    });
-    pty.dispose();
-    return true;
-  } catch {
-    return false;
-  }
+  return nativePtyAvailable();
 }
 
 function renderTable(verdicts: readonly Verdict[]): string {
@@ -454,7 +450,7 @@ describe.skipIf(!ptyAvailable())('application key modes through a real pty', { t
 });
 
 describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_000 }, () => {
-  it('reports the gap when the output pipe is slower than the commit', async () => {
+  nativePressureIt('reports the gap when the output pipe is slower than the commit', async () => {
     // The other flood shape, and the one the conformance matrix reproduces:
     // the terminal, not the driver, is the slow part. A drain barrier cannot
     // see this — bytes still in the pty are bytes we do not have — so the two
@@ -505,7 +501,7 @@ describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_00
     terminal.dispose();
   });
 
-  it('reports how far behind a commit marker falls when renders come back to back', async () => {
+  nativePressureIt('reports how far behind a commit marker falls when renders come back to back', async () => {
     // Why this exists: on Windows a flood leaves the revision chain stalled
     // with markers expiring, and two explanations fit — the terminal delays
     // the marker past the pairing window, or the driver simply cannot drink

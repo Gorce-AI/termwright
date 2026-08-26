@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
-import { createNativePtyBackend } from '@termwright/driver/experimental';
+import { nativePtyAvailable } from '@termwright/driver/experimental';
 import { withProbe } from '@termwright/probe-ink';
 
 /**
@@ -71,27 +71,12 @@ let cachedPty: boolean | null = null;
 /**
  * Whether this machine can open a pseudo-terminal at all.
  *
- * @returns `false` when `TERMWRIGHT_SKIP_PTY=1` or spawning a trivial child
- * through the PTY backend throws. Probed once and cached.
+ * @returns `false` when `TERMWRIGHT_SKIP_PTY=1` or the native binding cannot
+ * be loaded and validated. Real child creation remains inside a test attempt.
  */
 export function ptyAvailable(): boolean {
   if (cachedPty !== null) return cachedPty;
-  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') {
-    cachedPty = false;
-    return cachedPty;
-  }
-  try {
-    const pty = createNativePtyBackend().spawn({
-      command: [process.execPath, '-e', 'process.exit(0)'],
-      env: environment(),
-      columns: 20,
-      rows: 4,
-    });
-    pty.dispose();
-    cachedPty = true;
-  } catch {
-    cachedPty = false;
-  }
+  cachedPty = nativePtyAvailable();
   return cachedPty;
 }
 

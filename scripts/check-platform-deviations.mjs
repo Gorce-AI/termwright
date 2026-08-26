@@ -38,8 +38,26 @@ export function validateExactSkipReferences(registry, applicability, sources) {
 export function literalLeafTitles(source) {
   const titles = [];
   const sourceFile = ts.createSourceFile('candidate.ts', source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  const testReferences = new Set(['it', 'test']);
+  collectTestReferences(sourceFile);
   visit(sourceFile);
   return titles;
+
+  function collectTestReferences(node) {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) &&
+      ['@termwright/resource-broker/vitest', '@termwright/test'].includes(node.moduleSpecifier.text)) {
+      for (const element of node.importClause?.namedBindings?.elements ?? []) {
+        if ((element.propertyName?.text ?? element.name.text) === 'it' ||
+          (element.propertyName?.text ?? element.name.text) === 'test') testReferences.add(element.name.text);
+      }
+    }
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined &&
+      ts.isCallExpression(node.initializer) && ts.isPropertyAccessExpression(node.initializer.expression) &&
+      node.initializer.expression.name.text === 'resources' && isTestReference(node.initializer.expression.expression)) {
+      testReferences.add(node.name.text);
+    }
+    ts.forEachChild(node, collectTestReferences);
+  }
 
   function visit(node) {
     if (ts.isCallExpression(node) && isLeafCallee(node.expression)) {
@@ -50,20 +68,50 @@ export function literalLeafTitles(source) {
     }
     ts.forEachChild(node, visit);
   }
+
+  function isLeafCallee(expression) {
+    if (isTestReference(expression)) return true;
+    return ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) &&
+      (['each', 'for', 'runIf', 'skipIf'].includes(expression.expression.name.text) ||
+        expression.expression.name.text === 'resources') &&
+      isTestReference(expression.expression.expression);
+  }
+
+  function isTestReference(expression) {
+    if (ts.isIdentifier(expression)) return testReferences.has(expression.text);
+    if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) &&
+      expression.expression.name.text === 'resources') {
+      return isTestReference(expression.expression.expression);
+    }
+    return ts.isPropertyAccessExpression(expression) &&
+      ['concurrent', 'fails', 'only', 'skip', 'todo'].includes(expression.name.text) &&
+      isTestReference(expression.expression);
+  }
 }
 
-function isLeafCallee(expression) {
-  if (isTestReference(expression)) return true;
-  return ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) &&
-    ['each', 'for', 'runIf', 'skipIf'].includes(expression.expression.name.text) &&
-    isTestReference(expression.expression.expression);
-}
+export function literalPlatformSkips(source) {
+  const skips = [];
+  const sourceFile = ts.createSourceFile('candidate.ts', source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  visit(sourceFile);
+  return skips;
 
-function isTestReference(expression) {
-  if (ts.isIdentifier(expression)) return expression.text === 'it' || expression.text === 'test';
-  return ts.isPropertyAccessExpression(expression) &&
-    ['concurrent', 'fails', 'only', 'skip', 'todo'].includes(expression.name.text) &&
-    isTestReference(expression.expression);
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isCallExpression(node.expression) &&
+      ts.isPropertyAccessExpression(node.expression.expression) &&
+      node.expression.expression.name.text === 'skipIf') {
+      const title = node.arguments[0];
+      const condition = node.expression.arguments[0];
+      if ((ts.isStringLiteral(title) || ts.isNoSubstitutionTemplateLiteral(title)) &&
+        condition !== undefined && ts.isBinaryExpression(condition) &&
+        condition.left.getText(sourceFile) === 'process.platform' &&
+        (condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+          condition.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken) &&
+        ts.isStringLiteral(condition.right)) {
+        skips.push({ title: title.text, condition: condition.getText(sourceFile) });
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
 }
 
 async function main() {
@@ -74,12 +122,11 @@ async function main() {
   for (const root of ['packages', 'clients', 'compatibility', 'examples']) await collectSources(root, files);
   const sources = new Map();
   const observed = new Map();
-  const pattern = /(?:it|test|describe)\.skipIf\((process\.platform\s*(?:===|!==)\s*["'][^"']+["'])\)\(\s*["']([^"']+)["']/gu;
   for (const file of files) {
     const source = await readFile(file, 'utf8');
     const portableFile = file.replaceAll('\\', '/');
     sources.set(portableFile, source);
-    for (const match of source.matchAll(pattern)) observed.set(`${portableFile}::${match[2]}`, match[1]);
+    for (const skip of literalPlatformSkips(source)) observed.set(`${portableFile}::${skip.title}`, skip.condition);
   }
 
   const registered = new Map();

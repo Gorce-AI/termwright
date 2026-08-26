@@ -21,6 +21,7 @@ const CAPACITIES: ResourceCapacities = {
   ptySession: 1,
   externalProcess: 1,
   semanticEndpoint: 1,
+  nativeHostPressure: 1,
   traceWriter: 1,
 };
 const servers: ResourceBrokerServer[] = [];
