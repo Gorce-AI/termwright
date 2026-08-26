@@ -26,18 +26,17 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/experimental.ts --format esm --dts --sourcemap --clean --external @termwright/conpty",
+    "build": "tsup src/index.ts src/experimental.ts --format esm --dts --sourcemap --clean --external @termwright/pty",
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. test -- -- --run packages/driver"
   },
   "dependencies": {
     "@termwright/protocol": "workspace:*",
-    "@lydell/node-pty": "1.2.0-beta.15",
     "@xterm/headless": "^6.0.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@termwright/vt": "workspace:*"
   },
   "optionalDependencies": {
-    "@termwright/conpty": "workspace:*"
+    "@termwright/pty": "workspace:*"
   }
 }

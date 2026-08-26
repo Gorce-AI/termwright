@@ -13,7 +13,7 @@ editUrl: false
 
 > **resolveDefaultPtyBackend**(`platform?`): `Promise`\<[`PtyBackendChoice`](../../interfaces/ptybackendchoice/)\>
 
-Defined in: [backend-selection.ts:88](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L88)
+Defined in: [backend-selection.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/backend-selection.ts#L81)
 
 The backend a session uses when its caller did not supply one.
 

@@ -45,7 +45,7 @@ import {
 // in both, and is what the driver does.
 import xh from '@xterm/headless';
 import type { Terminal } from '@xterm/headless';
-import { createNodePtyBackend, type PtyProcess } from '@termwright/driver/experimental';
+import { createNativePtyBackend, type PtyProcess } from '@termwright/driver/experimental';
 import { environment } from './pty.js';
 
 /** How a fixture is started. Everything else about it is opaque to the probe. */
@@ -222,7 +222,7 @@ export class AdapterProbe {
     env['TERMWRIGHT_DEBUG_FILE'] = debugFile;
 
     const size = { columns: options.columns ?? 80, rows: options.rows ?? 24 };
-    const pty = createNodePtyBackend().spawn({
+    const pty = createNativePtyBackend().spawn({
       command: command.command,
       ...(command.cwd === undefined ? {} : { cwd: command.cwd }),
       env,

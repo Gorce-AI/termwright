@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { launchTerminal, type TerminalHarness } from '@termwright/driver';
-import { createNodePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
+import { createNativePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { prepareInstrumentedBuild, PROBE_VERSION } from './launch.js';
@@ -37,7 +37,7 @@ async function goAvailable(): Promise<boolean> {
 function ptyAvailable(): boolean {
   if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
   try {
-    const pty = createNodePtyBackend().spawn({
+    const pty = createNativePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
       env: inheritedSpawnEnv(),
       columns: 20,

@@ -23,15 +23,20 @@ Jobs are grouped conceptually even while they remain in one workflow:
 
 1. static policy, package metadata and deterministic-core coverage;
 2. supported Node/OS builds and hostile-input checks;
-3. Windows native artifact production and consumers;
+3. native PTY artifact production and real-host consumers;
 4. determinism, concurrency, process/resource/async-leak, fault and randomized-race barriers;
 5. platform conformance and UI/framework adapter contracts;
 6. clients, release hygiene, examples, vectors and website documentation.
 
-The x64 and ARM64 ConPTY producers are independent. Only x64 Windows jobs need
-the x64 producer; POSIX conformance has no Windows-artifact dependency. The
-scheduled reliability workflow follows the same rule and downloads the x64
-addon before its Windows soak. Bun and every GitHub action are pinned.
+The Windows x64 and ARM64 PTY producers are independent and both execute the
+real addon on their own architecture. Only x64 Windows consumers need the x64
+producer; POSIX jobs compile and exercise their host addon without a Windows
+artifact edge. The publish workflow separately builds, packs, clean-installs
+and opens the macOS 13.5-targeted, Ubuntu 22.04 ABI-floor Linux, and Windows
+x64/ARM64 artifacts on six native
+runner rows before any registry write. The scheduled reliability workflow
+downloads the x64 addon before its Windows soak. Bun and every GitHub action
+are pinned.
 The supported-runtime build matrix, examples lane, release verifier, daily
 upstream-candidate certifier and the dedicated OpenTUI lane install Bun 1.4.0 and set
 `TERMWRIGHT_REQUIRE_BUN=1`. The shared test-capability policy turns a missing or

@@ -411,12 +411,11 @@ describe(
       }
     });
 
-    it("routes a click on a terminal that cannot report its own input modes", async () => {
+    it("fails closed for an opaque Ink child when the terminal hides input modes", async () => {
       // The ConPTY condition, reproduced on every platform: the terminal hides
-      // its DEC modes, so nothing outside the application can say whether mouse
-      // tracking is on. The probe watched the application arm it and says so,
-      // which is what makes this a real click instead of a refusal. No
-      // synthetic provider here — the shipped adapter is the only witness.
+      // its DEC modes. Ink's stream shadow is not authoritative because direct
+      // descriptor/native writes and descendants can bypass it, so the adapter
+      // must not promote those observed bytes into terminal-input-modes evidence.
       const terminal = await launchTerminal({
         command: [process.execPath, "--import", preload, providerApp],
         columns: 40,
@@ -424,15 +423,27 @@ describe(
         modesObservable: false,
         requiredCapabilities: ["semantic-tree", "pointer-geometry", "pointer-hit-testing"],
         semanticNegotiationMs: 5_000,
+        env: { TERMWRIGHT_PROVIDER_SCENARIO: "opaque-input-modes" },
       });
       try {
         await terminal.settled();
         expect(terminal.contract()?.capabilities["pointer-input"]).toMatchObject({
-          status: "supported",
-          evidence: { providerId: "@termwright/probe-ink/terminal-input-modes" },
+          status: "unsupported",
+          reason: "terminal-unobservable",
         });
-        await terminal.getByRole("button", { name: "[Reject]" }).click();
-        await terminal.waitForText("last: reject@");
+        expect(terminal.contract()?.capabilities["focus-input"]).toMatchObject({
+          status: "unsupported",
+          reason: "terminal-unobservable",
+        });
+        const physicalInputs: string[] = [];
+        terminal.events.on("input", ({ kind }) => physicalInputs.push(kind));
+        await expect(
+          terminal.getByRole("button", { name: "[Reject]" }).click(),
+        ).rejects.toBeInstanceOf(CapabilityUnavailableError);
+        await expect(terminal.window.focus()).rejects.toBeInstanceOf(
+          InputModeDisabledError,
+        );
+        expect(physicalInputs).toEqual([]);
       } finally {
         await terminal.close();
       }

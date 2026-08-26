@@ -23,8 +23,8 @@ spelling.
 
 > Historical investigation. This section describes the former node-pty
 > Windows backend and the evidence that caused it to be replaced. Current
-> releases use the Termwright-owned `@termwright/conpty` addon on Windows with
-> no fallback. POSIX continues to use node-pty.
+> releases now use the unified Termwright-owned `@termwright/pty` addon on
+> Windows, macOS, and Linux with no fallback.
 
 `@lydell/node-pty` forks a helper from `kill()` to enumerate the console process
 list. On a loaded GitHub Actions runner, several helpers can race and Win32's
@@ -41,7 +41,7 @@ Worth recording because the obvious diagnosis is wrong twice over:
   mention it — the only Windows option is `conptyInheritCursor`. Passing
   `useConpty: true` would be a no-op that looks like a fix.
 
-Termwright pins `@lydell/node-pty` 1.2.0-beta.15. Its helper catches this exact
+Termwright formerly pinned `@lydell/node-pty` 1.2.0-beta.15. Its helper caught this exact
 race, sends an empty process list immediately and lets the parent close ConPTY
 without the five-second stall. A Windows-only stress regression closes several
 live PTYs concurrently and requires every exit promptly. The version also
@@ -54,7 +54,7 @@ patch. Termwright owns its input queue: on Unix it writes through the exact
 agent input socket. Async failures become `writeError`, wake pending
 operations, and make cleanup fail after resources are released. Nothing
 mutates `node_modules` or suppresses global stderr, so packed installations and
-the repository execute the same code. `check:node-pty` validates the exact
+the repository executed the same code. The former certification validated the exact
 upstream shape and exercises the Termwright-owned boundary on the active OS;
 the lockfile binds all six OS/architecture packages.
 
@@ -88,21 +88,22 @@ permeability probe in `escapes.pty.test.ts`, which also found DCS, APC and
 OSC 8 dropped while private OSC (either terminator) and OSC 133 pass. That is
 why the render marker rides OSC 8487.
 
-The mouse needed a different answer, because a second probe measured the other
-direction: a child whose DECSET was swallowed **still decodes a report the
-driver writes**. The driver is blind, not powerless. So `mouseTracking` and
-`mouseEncoding` report `'unknown'` where the platform hides them, pointer
-actions refuse only on a mode known to be off, input is sent in SGR, and the
-session records `mouse-mode-unverifiable` once.
+Another probe measured the other direction: a child whose DECSET was swallowed
+can still decode a report the driver writes. That proves only that ConPTY is
+capable of carrying the input, not that the child requested it. Sending SGR on
+that basis would turn missing evidence into a capability claim, so opaque-child
+pointer actions fail closed while `mouseTracking` or `mouseEncoding` is
+`'unknown'`. No physical pointer bytes are written.
 
 `'unknown'` is not revised by a request that does arrive: that would prove only
 that one arrived, and treating it as proof about the rest would report a
 partial view as a complete one. If ConPTY ever starts forwarding these, the
 probe table says so and the default flips deliberately.
 
-`modesObservable` on `launchTerminal` forces the verdict, so the Windows path
-is exercised on every platform — a behaviour only one OS reaches is a behaviour
-only one OS tests.
+An adapter may make the mode actionable only through an explicit,
+revision-bound evidence provider backed by application production state. The
+driver validates provenance, agreement and evidence loss; it does not infer
+the mode by shadowing a JavaScript stream.
 
 ## Windows: focus reporting is the same disease, catching the other way
 
@@ -115,13 +116,13 @@ The gate reads `if (!modes().focusReporting) throw`, so the mode must have been
 reported enabled, for `mouse-app.mjs`, which only ever sends `?1000h` and
 `?1006h` and never asks for 1004.
 
-So the value is not missing, it is *the host's*: ConPTY reports focus reporting
-as enabled whichever program is running. The harm runs the other way — the
-driver sends `CSI I` to a program that will print it — and it was happening
-silently. Hence `'unknown'` is defined as "this reading is the host's state and
-says nothing about the child", which covers both a swallowed request and an
-added one; a definition tied to the mechanism would have covered only the
-mouse.
+So the value is not missing, it is *the host's*: ConPTY can report focus
+reporting as enabled whichever program is running. The harm runs the other way
+— the driver could send `CSI I` to a program that will print it. Therefore
+`'unknown'` means "this reading says nothing authoritative about the child",
+and opaque-child focus actions fail closed without writing physical bytes.
+As with pointer input, only explicit revision-bound production-state evidence
+can authorize the action.
 
 ## Floods: the pairing timeout was measuring our own backlog
 
@@ -261,10 +262,9 @@ to the wrong widget — a test that passes while testing nothing.
 
 Open decision for the batch, and I do not think I should make it alone: with
 only an `intendedRect` and no paint order, does a pointer action refuse, or
-proceed with a diagnostic? The mouse-mode precedent says "act, and say you
-could not verify", but it is not the same case — there the input was known to
-reach the child, and only our knowledge of the mode was missing. Here the input
-lands somewhere real and may land on the wrong thing.
+proceed with a diagnostic? The mouse-mode precedent now says to fail closed
+when the prerequisite cannot be established. Geometry is the same safety
+shape: the input lands somewhere real and may land on the wrong thing.
 
 ### 3. `frameworkType` has to reach the user, or `generic` is a downgrade
 

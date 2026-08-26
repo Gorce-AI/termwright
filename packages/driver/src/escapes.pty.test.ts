@@ -30,7 +30,8 @@ import { dirname, join } from 'node:path';
 import { createTerminal, type Terminal } from '@termwright/vt';
 import { MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { describe, expect, it } from 'vitest';
-import { createNodePtyBackend, type PtyProcess } from './pty.js';
+import { createNativePtyBackend } from './native-pty-backend.js';
+import type { PtyProcess } from './pty.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtures');
 
@@ -245,7 +246,7 @@ function environment(): Record<string, string> {
 function ptyAvailable(): boolean {
   if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
   try {
-    const pty = createNodePtyBackend().spawn({
+    const pty = createNativePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
       env: environment(),
       columns: 20,
@@ -285,7 +286,7 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
     let raw = '';
     let pty: PtyProcess | undefined;
     try {
-      pty = createNodePtyBackend().spawn({
+      pty = createNativePtyBackend().spawn({
         command: [process.execPath, join(FIXTURES, 'escape-probe-app.mjs')],
         env: {
           ...environment(),
@@ -365,7 +366,7 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
     let pty: PtyProcess | undefined;
     let sawInput = false;
     try {
-      pty = createNodePtyBackend().spawn({
+      pty = createNativePtyBackend().spawn({
         command: [process.execPath, join(FIXTURES, 'mouse-app.mjs')],
         env: environment(),
         columns: 60,
@@ -414,7 +415,7 @@ describe.skipIf(!ptyAvailable())('application key modes through a real pty', { t
     const { terminal } = createTerminal({ columns: 60, rows: 10, scrollback: 0 });
     let pty: PtyProcess | undefined;
     try {
-      pty = createNodePtyBackend().spawn({
+      pty = createNativePtyBackend().spawn({
         command: [process.execPath, join(FIXTURES, 'appkeys-app.mjs')],
         env: environment(),
         columns: 60,
@@ -470,7 +471,7 @@ describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_00
 
     let pty: PtyProcess | undefined;
     try {
-      pty = createNodePtyBackend().spawn({
+      pty = createNativePtyBackend().spawn({
         command: [process.execPath, join(FIXTURES, 'flood-probe-app.mjs')],
         env: {
           ...environment(),
@@ -546,7 +547,7 @@ describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_00
     let bytesReceived = 0;
     let pty: PtyProcess | undefined;
     try {
-      pty = createNodePtyBackend().spawn({
+      pty = createNativePtyBackend().spawn({
         command: [process.execPath, join(FIXTURES, 'flood-probe-app.mjs')],
         env: { ...environment(), TERMWRIGHT_FLOOD_RENDERS: String(renders) },
         columns: 80,

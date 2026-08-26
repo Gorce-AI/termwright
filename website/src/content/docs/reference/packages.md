@@ -77,11 +77,11 @@ Node-only IPC building block used by the resource broker and run-journal
 transport. Its implementation is bundled into those published consumers; it
 is neither an application-test API nor a separately installable package.
 
-`@termwright/conpty` is the internal Windows PTY backend. Its optional
-`@termwright/conpty-win32-x64` and `@termwright/conpty-win32-arm64` packages
+`@termwright/pty` is the internal native PTY backend on macOS, Linux and
+Windows. Its six optional `@termwright/pty-{platform}-{architecture}` packages
 carry the prebuilt native addons selected by the package manager. They are not
-user-facing adapters. Windows deliberately has no fallback PTY: a missing or
-unloadable matching prebuild is an actionable startup error.
+user-facing adapters. Every supported platform deliberately has no fallback
+PTY: a missing or unloadable matching prebuild is an actionable startup error.
 
 Do not import internal `src/` or `dist/` paths. Only package `exports` entries
 are public.

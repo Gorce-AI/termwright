@@ -20,8 +20,8 @@ env:
   TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
 
 jobs:
-  conpty-native-build-x64:
-    name: build nightly ConPTY addon (x64)
+  pty-native-build-x64:
+    name: build nightly Windows PTY addon (x64)
     runs-on: windows-2022
     timeout-minutes: 25
     steps:
@@ -40,19 +40,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Compile the addon
-        working-directory: packages/conpty
+        working-directory: packages/pty
         run: pnpm exec node-gyp rebuild --arch=x64
       - name: Place the binary in its prebuild package
         shell: bash
         run: |
           set -euo pipefail
-          cp packages/conpty/build/Release/termwright_conpty.node \
-             packages/conpty-win32-x64/termwright_conpty.node
-          node scripts/check-prebuild.mjs x64
+          cp packages/pty/build/Release/termwright_pty.node \
+             packages/pty-win32-x64/termwright_pty.node
+          node scripts/check-prebuild.mjs win32 x64
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: nightly-conpty-addon-x64
-          path: packages/conpty-win32-x64/termwright_conpty.node
+          name: nightly-pty-addon-x64
+          path: packages/pty-win32-x64/termwright_pty.node
           if-no-files-found: error
           retention-days: 1
 
@@ -84,6 +84,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Compile the native POSIX PTY binding
+        working-directory: packages/pty
+        run: pnpm exec node-gyp rebuild
       - run: pnpm build
       - name: Reuse one native host across every lifecycle cycle
         shell: bash
@@ -104,7 +107,7 @@ jobs:
 
   nightly-soak-windows:
     name: nightly terminal lifecycle soak
-    needs: conpty-native-build-x64
+    needs: pty-native-build-x64
     runs-on: windows-latest
     timeout-minutes: 90
     strategy:
@@ -128,12 +131,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: nightly-conpty-addon-x64
-          path: packages/conpty-win32-x64
+          name: nightly-pty-addon-x64
+          path: packages/pty-win32-x64
       - run: pnpm build
       - name: Confirm the native backend is available
         shell: bash
-        run: node scripts/check-prebuild.mjs x64
+        run: node scripts/check-prebuild.mjs win32 x64
       - name: Reuse one native host across every lifecycle cycle
         shell: bash
         env:

@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
-import { createNodePtyBackend } from '@termwright/driver/experimental';
+import { createNativePtyBackend } from '@termwright/driver/experimental';
 import { withProbe } from '@termwright/probe-ink';
 
 /**
@@ -81,7 +81,7 @@ export function ptyAvailable(): boolean {
     return cachedPty;
   }
   try {
-    const pty = createNodePtyBackend().spawn({
+    const pty = createNativePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
       env: environment(),
       columns: 20,

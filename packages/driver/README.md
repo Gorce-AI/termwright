@@ -20,8 +20,10 @@ is real bytes. There is no callback back-channel into the application.
 pnpm add -D @termwright/driver
 ```
 
-Node >= 22, ESM only. Prebuilt PTY binaries ship for macOS, Linux (glibc) and
-Windows; Alpine/musl is not supported (use `node:22-slim`).
+Node >= 22, ESM only. Prebuilt PTY binaries ship for macOS >= 13.5,
+glibc Linux at the Ubuntu 22.04 ABI floor (glibc >= 2.35), and Windows 10
+version 1809 / Server 2019 or newer. Alpine/musl is not supported (use
+`node:22-slim`).
 
 ## API stability
 
@@ -31,7 +33,7 @@ Framework adapters and Termwright infrastructure may use the explicitly
 experimental subpath:
 
 ```ts
-import {createNodePtyBackend, type PtyBackend} from '@termwright/driver/experimental';
+import {createNativePtyBackend, type PtyBackend} from '@termwright/driver/experimental';
 ```
 
 The experimental tier contains PTY/backend selection, terminal encoders,
@@ -42,13 +44,13 @@ Framework adapters that own a backend launch it through the same tier:
 
 ```ts
 import {
-  createNodePtyBackend,
+  createNativePtyBackend,
   launchTerminalWithBackend,
 } from '@termwright/driver/experimental';
 
 const terminal = await launchTerminalWithBackend({
   command: ['node', 'app.js'],
-  backend: createNodePtyBackend(),
+  backend: createNativePtyBackend(),
 });
 ```
 
@@ -135,11 +137,13 @@ await terminal.close();
   recipient. Paint order is not that proof. No semantic tree means no invented
   roles.
 - **Authoritative hidden modes.** When a backend such as ConPTY hides DEC mode
-  changes, an application input-mode provider may publish the production
-  parser's revision-bound mouse/focus configuration. It never enables or
-  dispatches input; Termwright still writes real PTY bytes, rejects disagreement
-  with observable VT state, and stops using the evidence if its provider is
-  lost.
+  changes, an explicitly registered application input-mode provider may publish
+  the production parser's revision-bound mouse/focus configuration. A generic
+  child and a wrapper around selected stdout writes remain fail-closed because
+  descriptor/native writes and descendants can bypass that wrapper. A provider
+  never enables or dispatches input; Termwright still writes real PTY bytes,
+  rejects disagreement with observable VT state, and stops using the evidence
+  if its provider is lost.
 - **Dormant by default.** The endpoint and token are injected as
   `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN`; without
   them a conforming probe or adapter opens nothing and the run is byte-identical.

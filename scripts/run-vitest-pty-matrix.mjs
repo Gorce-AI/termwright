@@ -22,9 +22,8 @@ const pools = list('TERMWRIGHT_MATRIX_POOLS', ['forks', 'threads']);
 const workerCounts = list('TERMWRIGHT_MATRIX_WORKERS', ['1', '2', '4']).map(Number);
 const ptyConcurrency = list('TERMWRIGHT_MATRIX_PTYS', ['1', '2', '4', '8']).map(Number);
 const fileParallelism = booleanList('TERMWRIGHT_MATRIX_FILE_PARALLELISM', ['true', 'false']);
-// The pressure fixture imports the pinned node-pty boundary owned by the
-// driver workspace package. Nesting under that package makes normal Node
-// resolution use pnpm's frozen-lockfile link without a second install.
+// The pressure fixture imports the Termwright-owned native boundary from the
+// driver workspace package. Nesting here preserves workspace resolution.
 const workRoot = join(root, 'packages', 'driver', '.termwright', 'vitest-matrix');
 await mkdir(workRoot, { recursive: true });
 const work = await mkdtemp(join(workRoot, 'run-'));
@@ -35,7 +34,7 @@ try {
     const project = join(work, `vitest-${version}`);
     await cp(join(root, 'quality', 'experiments'), join(project, 'tests'), { recursive: true });
     const driverBackend = pathToFileURL(join(root, 'packages', 'driver', 'dist', 'experimental.js')).href;
-    await writeFile(join(project, 'driver-backend.mjs'), `export { createNodePtyBackend } from ${JSON.stringify(driverBackend)};\n`);
+    await writeFile(join(project, 'driver-backend.mjs'), `export { createNativePtyBackend } from ${JSON.stringify(driverBackend)};\n`);
     await writeFile(join(project, 'package.json'), `${JSON.stringify({ private: true, type: 'module' }, null, 2)}\n`);
     // Prevent Vitest from walking up into Termwright's product runner config:
     // this harness intentionally exercises the stock embedded engine directly.

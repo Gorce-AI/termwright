@@ -34,11 +34,11 @@ export const CI_JOB_CONTRACT = Object.freeze({
     'build macos-latest / node 24',
   ], { os: ['ubuntu-latest', 'macos-latest'], node: ['22', '24'] }),
   hostile: ciJob('hostile input (128 MiB heap)', ['hostile input (128 MiB heap)']),
-  'conpty-native-build-x64': ciJob('build the ConPTY addon (x64)', ['build the ConPTY addon (x64)']),
-  'conpty-native-build-arm64': ciJob('build the ConPTY addon (arm64)', ['build the ConPTY addon (arm64)']),
-  'conpty-native': ciJob('native ConPTY backend (Windows / Node ${{ matrix.node }})', [
-    'native ConPTY backend (Windows / Node 22)',
-    'native ConPTY backend (Windows / Node 24)',
+  'pty-native-build-x64': ciJob('build the Windows PTY addon (x64)', ['build the Windows PTY addon (x64)']),
+  'pty-native-build-arm64': ciJob('build the Windows PTY addon (arm64)', ['build the Windows PTY addon (arm64)']),
+  'pty-native': ciJob('native PTY backend (Windows / Node ${{ matrix.node }})', [
+    'native PTY backend (Windows / Node 22)',
+    'native PTY backend (Windows / Node 24)',
   ], { node: ['22', '24'] }),
   'windows-driver-native': ciJob('build windows-latest / node ${{ matrix.node }}', [
     'build windows-latest / node 22',

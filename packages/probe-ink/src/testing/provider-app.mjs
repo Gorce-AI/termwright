@@ -144,7 +144,7 @@ function App() {
     process.stdin.setRawMode?.(true);
     process.stdin.resume();
     process.stdout.write(
-      `\u001b[?${scenario === "hover" ? "1003" : "1002"}h\u001b[?1006h`,
+      `\u001b[?${scenario === "hover" ? "1003" : "1002"}h\u001b[?1006h${scenario === "opaque-input-modes" ? "\u001b[?1004h" : ""}`,
     );
     let dragSource = null;
     let dragMoved = false;

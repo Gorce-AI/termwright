@@ -6,12 +6,12 @@
       "capability": "pointer-input / focus-reports",
       "predicate": "win32",
       "category": "backend-observability-limitation",
-      "reason": "ConPTY consumes the child's DECSET mouse/focus negotiation before Termwright's VT observer can prove the active protocol. Generic fixtures without a production-parser provider remain fail-closed. Instrumented applications no longer do: the shipped Ink probe shadows the bytes the application writes and publishes the resulting modes as terminal-input-modes evidence, so pointer-input is supported and real input crosses ConPTY without any fixture standing in. The limitation is therefore observability by the terminal, not functional impossibility.",
-      "evidence": "docs/architecture/audit/platform-completion-baseline.json; packages/probe-ink/src/provider.pty.test.ts \"routes a click on a terminal that cannot report its own input modes\" reproduces the ConPTY condition on every platform",
-      "issueOrAdr": "CONTRACTS.md §Effective Session Contract",
-      "removalCondition": "The certified backend exposes application input-mode negotiation universally, so generic applications no longer need production-parser evidence.",
+      "reason": "ConPTY consumes the child's DECSET mouse/focus negotiation before Termwright's VT observer can prove the active protocol. An opaque child therefore remains fail-closed. Instrumenting selected JavaScript stdout methods is not authoritative: fs.writeSync/native descriptor writes and inherited descendant output bypass that surface. Pointer/focus input is supported only when an explicitly registered provider backed by the application's production input-mode state publishes revision-bound evidence; the driver still rejects provider loss or disagreement with observable VT state. This is an observability limit, not a claim that ConPTY cannot carry the input bytes.",
+      "evidence": "packages/conformance/src/suites/driver-generic.test.ts \"fails closed when ConPTY hides terminal input modes\"; packages/probe-ink/src/terminal-tracker.test.ts \"does not treat direct descriptor/native or descendant writes as observed input modes\"; packages/probe-ink/src/provider.pty.test.ts positive production-provider and negative opaque-child cases",
+      "issueOrAdr": "packages/driver/src/api.ts TerminalModes",
+      "removalCondition": "The certified backend exposes child input-mode negotiation authoritatively for every writer and descendant, so generic applications no longer need production-parser evidence.",
       "owner": "termwright-core",
-      "revalidate": "each node-pty, ConPTY backend, or Windows certification change",
+      "revalidate": "each native PTY or Windows certification change",
       "tests": [
         [
           "packages/conformance/src/suites/driver-generic.test.ts",
@@ -129,7 +129,7 @@
       "issueOrAdr": "CONTRACTS.md §PTY",
       "removalCondition": "Never; retain as a platform-specific positive certification test.",
       "owner": "termwright-core",
-      "revalidate": "each ConPTY or node-pty certification change",
+      "revalidate": "each native PTY or ConPTY certification change",
       "tests": [
         [
           "packages/driver/src/process-lifecycle.pty.test.ts",
@@ -147,17 +147,46 @@
       "capability": "ConPTY concurrent teardown",
       "predicate": "non-win32",
       "category": "fundamental-os-difference",
-      "reason": "The AttachConsole regression and helper process exist only in the Windows node-pty artifact.",
+      "reason": "Concurrent ConPTY teardown and Job Object ownership exist only in the Windows native PTY artifact.",
       "evidence": "packages/driver/src/session.pty.test.ts",
       "issueOrAdr": "docs/architecture/audit/platform-completion-baseline.json",
       "removalCondition": "Never while ConPTY is certified; retain as a Windows-native regression.",
       "owner": "termwright-core",
-      "revalidate": "each node-pty certification change",
+      "revalidate": "each Windows native PTY certification change",
       "tests": [
         [
           "packages/driver/src/session.pty.test.ts",
-          "closes concurrent live ConPTY sessions without the AttachConsole fallback stall"
+          "closes concurrent live ConPTY sessions through owned job teardown"
         ]
+      ]
+    },
+    {
+      "id": "TW-DEV-POSIX-NATIVE-PTY-PROOF",
+      "capability": "POSIX native PTY boundaries",
+      "predicate": "win32",
+      "category": "fundamental-os-difference",
+      "reason": "forkpty, kernel PTY EOF/EIO, stty sizing, and POSIX process-group signals exist only on Darwin and Linux; Windows has its own ConPTY proof.",
+      "evidence": "packages/pty/src/index.test.ts",
+      "issueOrAdr": "packages/pty/README.md",
+      "removalCondition": "Never; retain as platform-specific positive certification tests.",
+      "owner": "termwright-core",
+      "revalidate": "each POSIX native PTY implementation or packaging change",
+      "tests": [
+        [
+          "packages/pty/src/index.test.ts",
+          "the Termwright-owned POSIX PTY"
+        ]
+      ],
+      "skipPolicyTests": [
+        ["packages/pty/src/index.test.ts", "loads the local addon before the platform prebuild"],
+        ["packages/pty/src/index.test.ts", "resolves a bare executable from PATH without invoking a shell"],
+        ["packages/pty/src/index.test.ts", "fails before forking when a bare executable is absent from PATH"],
+        ["packages/pty/src/index.test.ts", "delivers a megabyte tail and its sentinel before authoritative EOF"],
+        ["packages/pty/src/index.test.ts", "writes exact bytes through the owned master"],
+        ["packages/pty/src/index.test.ts", "changes the kernel PTY size without a scheduling delay"],
+        ["packages/pty/src/index.test.ts", "reports a delivered signal and drains the terminal to EOF"],
+        ["packages/pty/src/index.test.ts", "cancels a silent live session through owned wake descriptors"],
+        ["packages/pty/src/index.test.ts", "kills descendants at the unreaped root boundary so they cannot hold the PTY open"]
       ]
     }
   ]

@@ -1,5 +1,12 @@
 # Contract changes
 
+- 2026-08-26: generic ConPTY pointer/focus input is explicitly fail-closed when
+  the child has no authoritative application provider. An Ink stdout shadow is
+  not terminal-input-mode evidence: direct descriptor/native writes and
+  descendants can bypass `stream.write`. Hidden modes may be supplied only by
+  an explicitly registered, revision-bound provider backed by the
+  application's production mode state; observable VT state must still agree.
+
 - 2026-08-25: trace publication is transactional. Only an archive with a valid
   `COMMITTED` marker is complete evidence; interrupted and partial writes stay
   distinguishable from a successful run.

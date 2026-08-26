@@ -15,8 +15,8 @@ upstream-candidate/
 test-results/
 playwright-report/
 
-# Compiled ConPTY addons. The prebuild packages are published with a binary
-# produced by CI on a Windows toolchain; a copy from a local build must never
-# be committed and mistaken for it.
-packages/conpty/build/
-packages/conpty-win32-*/termwright_conpty.node
+# Compiled native PTY addons. The prebuild packages are published with a binary
+# produced by CI on the matching native toolchain; a copy from a local build
+# must never be committed and mistaken for it.
+packages/pty/build/
+packages/pty-*/termwright_pty.node

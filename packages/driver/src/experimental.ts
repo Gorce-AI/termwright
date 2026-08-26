@@ -24,18 +24,17 @@ export {
   type PtyBackendChoice,
 } from './backend-selection.js';
 export {
-  createConPtyBackend,
-  CONPTY_BACKEND_NAME,
-  type ConPtySessionHandle,
-  type ConPtySpawn,
-} from './conpty-backend.js';
-export {
-  createNodePtyBackend,
-  type PtyBackend,
-  type PtyProcess,
-  type PtySignal,
-  type PtySpawnOptions,
-  type PtyUnsubscribe,
+  createNativePtyBackend,
+  NATIVE_PTY_BACKEND_NAME,
+  type NativePtySessionHandle,
+  type NativePtySpawn,
+} from './native-pty-backend.js';
+export type {
+  PtyBackend,
+  PtyProcess,
+  PtySignal,
+  PtySpawnOptions,
+  PtyUnsubscribe,
 } from './pty.js';
 export {
   ProcessLifecycleError,

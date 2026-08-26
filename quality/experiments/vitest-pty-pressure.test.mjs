@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { threadId } from 'node:worker_threads';
 import { expect, test } from 'vitest';
-import { createNodePtyBackend } from '../driver-backend.mjs';
+import { createNativePtyBackend } from '../driver-backend.mjs';
 import { createPtyLeasePool } from './pty-lease.mjs';
 
 const cases = Number(process.env.TERMWRIGHT_MATRIX_CASES ?? 8);
@@ -55,7 +55,7 @@ test.concurrent.for(Array.from({ length: cases }, (_, index) => index))('PTY pre
   ].join('\n');
   let pty;
   try {
-    pty = createNodePtyBackend().spawn({
+    pty = createNativePtyBackend().spawn({
       command: [process.execPath, '-e', child],
       columns: 40,
       rows: 4,

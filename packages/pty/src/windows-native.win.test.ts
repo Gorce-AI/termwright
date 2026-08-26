@@ -1,0 +1,749 @@
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { createServer } from "node:net";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import {
+  loadedWindowsBindingPath,
+  spawnWindowsPty,
+  type WindowsPtyHandle,
+  windowsPtyAvailable,
+} from "./windows.js";
+
+/**
+ * The real backend, on the only platform that has one.
+ *
+ * These are the cases the campaign calls mandatory, and each of them is a
+ * property no timer can establish: that the stream ends because the pipe
+ * ended, that a descendant outliving its parent still gets its output
+ * delivered, and that the tree is empty because the job says so.
+ */
+const windows = process.platform === "win32" && windowsPtyAvailable();
+
+function collect(handle: WindowsPtyHandle): { text(): string } {
+  const chunks: Uint8Array[] = [];
+  handle.onData((data) => chunks.push(Uint8Array.from(data)));
+  return {
+    text(): string {
+      return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString(
+        "utf8",
+      );
+    },
+  };
+}
+
+function node(script: string): readonly string[] {
+  return [process.execPath, "-e", script];
+}
+
+/**
+ * Waits for a marker in the stream, giving up after a budget.
+ *
+ * The budget is a diagnostic deadline, never a verdict: a test that reaches it
+ * fails with what it did see, so the report names the missing thing instead of
+ * saying only that time ran out. Nothing here treats elapsed time as evidence
+ * of a state.
+ */
+async function waitForMarker(
+  handle: WindowsPtyHandle,
+  output: { text(): string },
+  pattern: RegExp,
+  budgetMs: number,
+): Promise<RegExpMatchArray | undefined> {
+  const existing = pattern.exec(output.text());
+  if (existing !== null) return existing;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      release();
+      resolve(undefined);
+    }, budgetMs);
+    const release = handle.onData(() => {
+      const match = pattern.exec(output.text());
+      if (match === null) return;
+      clearTimeout(timer);
+      release();
+      resolve(match);
+    });
+  });
+}
+
+/** Waits for a lifecycle notice matching the pattern, within a budget. */
+async function waitForNotice(
+  handle: WindowsPtyHandle,
+  pattern: RegExp,
+  budgetMs: number,
+): Promise<RegExpMatchArray | undefined> {
+  const existing = handle.notices
+    .map((notice) => pattern.exec(notice))
+    .find((m) => m !== null);
+  if (existing != null) return existing;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      release();
+      resolve(undefined);
+    }, budgetMs);
+    const release = handle.onNotice((notice) => {
+      const match = pattern.exec(notice);
+      if (match === null) return;
+      clearTimeout(timer);
+      release();
+      resolve(match);
+    });
+  });
+}
+
+/** A fresh directory for a probe's on-disk journal, plus the journal's path. */
+function journalPath(name: string): string {
+  const directory = mkdtempSync(join(tmpdir(), `tw-conpty-${name}-`));
+  return join(directory, "journal.log");
+}
+
+/** What a probe managed to record before it stopped, or why nothing is there. */
+function readJournal(path: string): string {
+  try {
+    return readFileSync(path, "utf8").trim() || "(empty)";
+  } catch (error) {
+    return `(unreadable: ${(error as NodeJS.ErrnoException).code ?? "unknown"})`;
+  }
+}
+
+/**
+ * Waits for a line in a probe's journal, within a budget.
+ *
+ * Polled, because the writer is another process and there is no event to
+ * subscribe to across that boundary. The poll is what makes the wait finite;
+ * what decides the answer is the line being there.
+ */
+async function waitForJournalLine(
+  path: string,
+  pattern: RegExp,
+  budgetMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+  for (;;) {
+    if (pattern.test(readJournal(path))) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+/** Whether the operating system still has this process, asked of the OS. */
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+const environment = (): Readonly<Record<string, string>> => {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) env[key] = value;
+  }
+  env["TERM"] = "xterm-256color";
+  return env;
+};
+
+describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
+  it("can observe ConHost after writes, including A→B→A and console modes", async () => {
+    const token = randomUUID();
+    const journal = journalPath("screen-snapshot");
+    const fixture = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "testing",
+      "windows-console-snapshot-poc.cjs",
+    );
+    const outputAtCheckpoint = new Map<string, string>();
+    let output!: { text(): string };
+    let resolveCheckpoints!: () => void;
+    const checkpointsComplete = new Promise<void>((resolve) => {
+      resolveCheckpoints = resolve;
+    });
+    const expectedLabels = new Set([
+      "a-1",
+      "b",
+      "a-2",
+      "semantic-only",
+      "cursor-hidden",
+      "alternate",
+      "primary-restored",
+      "unicode-style",
+      "resized",
+    ]);
+    let authenticated = false;
+    const server = createServer((socket) => {
+      let pending = "";
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk) => {
+        pending += chunk;
+        for (;;) {
+          const newline = pending.indexOf("\n");
+          if (newline < 0) break;
+          const line = pending.slice(0, newline);
+          pending = pending.slice(newline + 1);
+          const message = JSON.parse(line) as {
+            token?: string;
+            label?: string;
+          };
+          if (!authenticated) {
+            expect(message.token).toBe(token);
+            authenticated = true;
+            continue;
+          }
+          if (message.label !== undefined) {
+            outputAtCheckpoint.set(message.label, output.text());
+            if (
+              [...expectedLabels].every((label) =>
+                outputAtCheckpoint.has(label),
+              )
+            ) {
+              resolveCheckpoints();
+            }
+          }
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    if (address === null || typeof address === "string")
+      throw new Error("snapshot server has no TCP port");
+
+    const handle = spawnWindowsPty({
+      command: [process.execPath, fixture],
+      env: {
+        ...environment(),
+        TW_SNAPSHOT_ADDON: loadedWindowsBindingPath(),
+        TW_SNAPSHOT_JOURNAL: journal,
+        TW_SNAPSHOT_PORT: String(address.port),
+        TW_SNAPSHOT_TOKEN: token,
+      },
+      columns: 40,
+      rows: 12,
+    });
+    output = collect(handle);
+
+    expect(
+      await waitForMarker(handle, output, /READY_FOR_RESIZE/u, 10_000),
+      `child did not reach resize; saw ${JSON.stringify(output.text())}`,
+    ).toBeDefined();
+    expect(handle.resize(52, 17)).toBe(true);
+    handle.write(Buffer.from("continue\r"));
+    expect(
+      await waitForMarker(handle, output, /SNAPSHOTS_READY/u, 10_000),
+      `child did not finish snapshots; saw ${JSON.stringify(output.text())}`,
+    ).toBeDefined();
+    await checkpointsComplete;
+    await handle.outputEnded;
+    server.close();
+
+    const occurrences = (label: string, needle: string): number =>
+      (outputAtCheckpoint.get(label)?.split(needle).length ?? 1) - 1;
+    // This is the actual causal claim, not merely a screen-read test: by the
+    // time the side channel receives a snapshot taken after stdout's callback,
+    // the host must already have received each preceding ConPTY segment. The
+    // repeated A is intentional; equality with an old screen cannot satisfy it.
+    expect(occurrences("a-1", "STATE_A")).toBeGreaterThanOrEqual(1);
+    expect(occurrences("b", "STATE_B")).toBeGreaterThanOrEqual(1);
+    expect(occurrences("a-2", "STATE_A")).toBeGreaterThanOrEqual(2);
+    expect(occurrences("semantic-only", "STATE_A")).toBe(
+      occurrences("a-2", "STATE_A"),
+    );
+
+    type Snapshot = {
+      label: string;
+      width: number;
+      height: number;
+      cursorVisible: boolean;
+      standardOutputIsConsole: boolean;
+      codeUnits: number[];
+      cellAttributes: number[];
+    };
+    const snapshots = JSON.parse(readFileSync(journal, "utf8")) as Snapshot[];
+    const byLabel = new Map(
+      snapshots.map((snapshot) => [snapshot.label, snapshot]),
+    );
+    const row = (label: string, index = 0): string => {
+      const snapshot = byLabel.get(label);
+      if (snapshot === undefined) throw new Error(`missing snapshot ${label}`);
+      const start = index * snapshot.width;
+      return String.fromCharCode(
+        ...snapshot.codeUnits.slice(start, start + snapshot.width),
+      );
+    };
+
+    expect(row("a-1")).toContain("STATE_A");
+    expect(byLabel.get("a-1")?.standardOutputIsConsole).toBe(true);
+    expect(row("b")).toContain("STATE_B");
+    expect(row("a-2")).toContain("STATE_A");
+    expect(byLabel.get("semantic-only")?.codeUnits).toEqual(
+      byLabel.get("a-2")?.codeUnits,
+    );
+    expect(byLabel.get("cursor-hidden")?.cursorVisible).toBe(false);
+    expect(row("alternate")).toContain("ALTERNATE");
+    expect(row("primary-restored")).toContain("STATE_A");
+    expect(row("unicode-style", 2)).toContain("😀界");
+    expect(byLabel.get("unicode-style")?.cellAttributes[2 * 40]).not.toBe(7);
+    expect(byLabel.get("resized")).toMatchObject({ width: 52, height: 17 });
+    handle.dispose();
+  });
+
+  it("ends the stream on a real pipe EOF and delivers the last byte first", async () => {
+    const handle = spawnWindowsPty({
+      command: node(
+        'process.stdout.write("A".repeat(4096) + "\\r\\nFINAL_SENTINEL\\r\\n")',
+      ),
+      env: environment(),
+      columns: 100,
+      rows: 30,
+    });
+    const output = collect(handle);
+    await handle.outputEnded;
+    // The stream ended because the pipe ended, and everything written before
+    // that is already here — the ordering is the point of the single channel.
+    expect(handle.sawRealEof).toBe(true);
+    // ERROR_BROKEN_PIPE is the ordinary end once the last client detaches; 0
+    // is a clean zero-byte read. Anything else means the stream ended for a
+    // reason, and naming it here is what makes that visible.
+    expect([0, 109]).toContain(handle.endReason);
+    expect(output.text()).toContain("FINAL_SENTINEL");
+    handle.dispose();
+  });
+
+  it("delivers a descendant’s output and lets it finish on its own terms", async () => {
+    // Output from a process this host never spawned reaches the host in order,
+    // and the descendant ends by running out of work rather than by being cut
+    // off. Both halves matter: without the second, "it was gone afterwards"
+    // would be satisfied by a descendant that had simply finished, which is
+    // what an earlier version of this test proved while claiming otherwise.
+    //
+    // The descendant keeps a journal on disk. Everything it could say through
+    // the console dies with the console, so the one channel that survives the
+    // console is the one that can report how it ended.
+    const journal = journalPath("descendant");
+    const grandchild = join(dirname(journal), "grandchild.cjs");
+    writeFileSync(
+      grandchild,
+      [
+        'const fs = require("node:fs");',
+        'const note = (line) => { try { fs.appendFileSync(process.env.TW_PROBE_JOURNAL, line + "\\n"); } catch {} };',
+        'note("up pid=" + process.pid);',
+        'for (const signal of ["SIGHUP", "SIGINT", "SIGBREAK", "SIGTERM"]) {',
+        '  try { process.on(signal, () => { note("signal " + signal); process.exit(9); }); } catch { note("no handler for " + signal); }',
+        "}",
+        'process.on("exit", (code) => note("exit " + code));',
+        'process.stdout.on("error", (failure) => note("stdout error " + failure.code));',
+        'process.stdout.write("CHILD_UP\\r\\n");',
+        'setTimeout(() => { note("timer fired"); process.stdout.write("FINAL_CHILD_MARKER\\r\\n"); }, 400);',
+      ].join("\n"),
+      "utf8",
+    );
+    const script = [
+      'const { spawn } = require("node:child_process");',
+      "let report;",
+      "try {",
+      '  const child = spawn(process.execPath, [process.env.TW_PROBE_SCRIPT], { stdio: "inherit", detached: false });',
+      '  report = child.pid === undefined ? "SPAWN_PID=none" : "SPAWN_PID=" + child.pid;',
+      '  child.on("exit", (code, signal) => process.stdout.write("CHILD_EXIT=" + code + "/" + signal + "\\r\\n"));',
+      '  child.on("error", (failure) => process.stdout.write("CHILD_ERROR=" + failure.message.replace(/\\s+/g, "_") + "\\r\\n"));',
+      '} catch (error) { report = "SPAWN_ERROR=" + error.message.replace(/\\s+/g, "_"); }',
+      'process.stdout.write(report + "\\r\\n");',
+      // Long enough that the descendant's own deadline falls first. The
+      // descendant's output has to be delivered while the console still
+      // exists, because the console ending is what ends the descendant.
+      "setTimeout(() => process.exit(0), 2000);",
+    ].join("");
+    const handle = spawnWindowsPty({
+      command: node(script),
+      env: {
+        ...environment(),
+        TW_PROBE_JOURNAL: journal,
+        TW_PROBE_SCRIPT: grandchild,
+      },
+      columns: 100,
+      rows: 30,
+    });
+    const output = collect(handle);
+    // Registered before anything is awaited. The root exits within
+    // milliseconds, so a listener attached after the first await can miss the
+    // event entirely and wait for something that has already happened.
+    let rootExited = false;
+    const rootExit = new Promise<void>((resolve) => {
+      handle.onExit(() => {
+        rootExited = true;
+        resolve();
+      });
+    });
+    // `CHILD_UP` is the descendant's own voice: it proves the grandchild ran
+    // and that its output reaches this pseudoconsole, which is what separates
+    // a descendant that was never heard from one that was never delivered.
+    const up = await waitForMarker(
+      handle,
+      output,
+      /CHILD_UP|CHILD_(?:EXIT|ERROR)=\S+/u,
+      10_000,
+    );
+    expect(
+      up?.[0],
+      `descendant never announced itself; root exited: ${rootExited}, ` +
+        `saw ${JSON.stringify(output.text())}`,
+    ).toBe("CHILD_UP");
+    const spawned = /SPAWN_(?:PID|ERROR)=(\S+)/u.exec(output.text());
+    // Counted while the root is demonstrably alive and the descendant has just
+    // spoken: the job holds both, which is the containment this backend owes.
+    expect(
+      handle.activeProcesses(),
+      `job did not hold both while the root was alive; ${spawned?.[0] ?? "unreported"}`,
+    ).toBeGreaterThan(1);
+    // The descendant's own line, written by it and delivered through the
+    // pseudoconsole. This is the part that is genuinely about this backend:
+    // output from a process the host never spawned reaches the host in order.
+    const marker = await waitForMarker(
+      handle,
+      output,
+      /FINAL_CHILD_MARKER/u,
+      10_000,
+    );
+    expect(
+      marker,
+      `descendant's output never arrived; its journal says ` +
+        `${JSON.stringify(readJournal(journal))}`,
+    ).toBeDefined();
+
+    await rootExit;
+    // The session's own count, taken natively at the instant the root left.
+    // The exit event reaches JavaScript first and the notice describing that
+    // instant follows it, so the account has to be waited for, not read.
+    const atRootExit = await waitForNotice(
+      handle,
+      /root exited with \d+; job members (-?\d+)/u,
+      5_000,
+    );
+    expect(
+      atRootExit,
+      `the session recorded no account of root exit`,
+    ).toBeDefined();
+    // Its own account of how it ended, which is the part a liveness check
+    // cannot supply. A descendant that ran its exit hook finished; one whose
+    // journal stops earlier was cut off, and the two are indistinguishable
+    // from outside.
+    expect(
+      readJournal(journal),
+      `notices ${JSON.stringify(handle.notices)}`,
+    ).toMatch(/timer fired[\s\S]*exit 0/u);
+
+    await handle.outputEnded;
+    expect(handle.sawRealEof).toBe(true);
+    handle.dispose();
+  });
+
+  it("does not keep a console-attached descendant alive past its root", async () => {
+    // The platform behaviour, pinned. The descendant has work still pending
+    // when its root goes, so if it survived it would say so; it does not, and
+    // its journal stops before the exit hook it installed — terminated, not
+    // finished. Asserted rather than tolerated, so the day this changes is a
+    // failing test instead of a quietly wider claim.
+    const journal = journalPath("cutoff");
+    const descendant = join(dirname(journal), "cutoff.cjs");
+    writeFileSync(
+      descendant,
+      [
+        'const fs = require("node:fs");',
+        'const note = (line) => { try { fs.appendFileSync(process.env.TW_PROBE_JOURNAL, line + "\\n"); } catch {} };',
+        'note("up pid=" + process.pid);',
+        'process.on("exit", (code) => note("exit " + code));',
+        'process.stdout.write("CHILD_UP\\r\\n");',
+        // Far enough out that the root is long gone first. Reaching it is what
+        // survival would look like.
+        'setTimeout(() => note("still here"), 2000);',
+      ].join("\n"),
+      "utf8",
+    );
+    const script = [
+      'const { spawn } = require("node:child_process");',
+      'const child = spawn(process.execPath, [process.env.TW_PROBE_SCRIPT], { stdio: "inherit", detached: false });',
+      'process.stdout.write("SPAWN_PID=" + child.pid + "\\r\\n");',
+      "setTimeout(() => process.exit(0), 300);",
+    ].join("");
+    const handle = spawnWindowsPty({
+      command: node(script),
+      env: {
+        ...environment(),
+        TW_PROBE_JOURNAL: journal,
+        TW_PROBE_SCRIPT: descendant,
+      },
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const rootExit = new Promise<void>((resolve) => {
+      handle.onExit(() => resolve());
+    });
+    expect(
+      await waitForMarker(handle, output, /CHILD_UP/u, 10_000),
+      `descendant never started; saw ${JSON.stringify(output.text())}`,
+    ).toBeDefined();
+    await rootExit;
+    // Given more than its pending deadline before asking. A descendant that
+    // was still running would have written by now; one that never writes again
+    // was stopped.
+    expect(await waitForJournalLine(journal, /still here/u, 3_000)).toBe(false);
+    expect(
+      readJournal(journal),
+      `notices ${JSON.stringify(handle.notices)}`,
+    ).not.toMatch(/exit \d/u);
+    await handle.outputEnded;
+    expect(handle.sawRealEof).toBe(true);
+    handle.dispose();
+  });
+
+  it("owns a descendant that left the console, and names what kills the one that stayed", async () => {
+    // Two things at once, and the second is why this exists.
+    //
+    // The property: ownership of the tree must not depend on the console. A
+    // descendant detached from the console has no terminal, writes nowhere,
+    // and is invisible to anything watching the stream — the job is the only
+    // thing that can still speak for it. If ownership survives that, the hard
+    // kill rests on something the console cannot take away.
+    //
+    // The question: a console-attached descendant is terminated the instant
+    // its root exits, before this backend has run a line, and conhost's own
+    // source does not explain it. `RemoveConsole` only recomputes the window
+    // owner when the root leaves, and `CloseConsoleProcessState` is reached
+    // from a broken output pipe — the host having stopped reading, which is
+    // not what happens here. So the killer is unidentified, and the same case
+    // run off the console separates the two suspects: if this one survives,
+    // the console kills the other; if it dies too, the cause is in the process
+    // layer and belongs to this backend.
+    const journal = journalPath("detached");
+    const descendant = join(dirname(journal), "detached.cjs");
+    writeFileSync(
+      descendant,
+      [
+        'const fs = require("node:fs");',
+        'const note = (line) => { try { fs.appendFileSync(process.env.TW_PROBE_JOURNAL, line + "\\n"); } catch {} };',
+        'note("up pid=" + process.pid);',
+        'process.on("exit", (code) => note("exit " + code));',
+        // Outlives its root by enough that "still here" is a fact about the
+        // descendant rather than about how promptly the root left.
+        'setTimeout(() => { note("outlived the root"); }, 1500);',
+        'setTimeout(() => { note("done"); }, 4000);',
+      ].join("\n"),
+      "utf8",
+    );
+    const script = [
+      'const { spawn } = require("node:child_process");',
+      // Detached: no console, no inherited handles, its own process group.
+      // Still inside the job, because job membership is inherited and nothing
+      // here asks to break away.
+      'const child = spawn(process.execPath, [process.env.TW_PROBE_SCRIPT], { stdio: "ignore", detached: true });',
+      "child.unref();",
+      'process.stdout.write("SPAWN_PID=" + child.pid + "\\r\\n");',
+      "setTimeout(() => process.exit(0), 300);",
+    ].join("");
+    const handle = spawnWindowsPty({
+      command: node(script),
+      env: {
+        ...environment(),
+        TW_PROBE_JOURNAL: journal,
+        TW_PROBE_SCRIPT: descendant,
+      },
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const rootExit = new Promise<void>((resolve) => {
+      handle.onExit(() => resolve());
+    });
+    const spawned = await waitForMarker(
+      handle,
+      output,
+      /SPAWN_PID=(\d+)/u,
+      10_000,
+    );
+    expect(
+      spawned,
+      `root never reported a spawn; saw ${JSON.stringify(output.text())}`,
+    ).toBeDefined();
+    const childPid = Number(spawned?.[1]);
+    // The property. A descendant with no console is still ours, and the job is
+    // what says so — nothing about this count comes from the stream.
+    expect(
+      handle.activeProcesses(),
+      `job lost the console-less descendant while its root was alive; journal ` +
+        `${JSON.stringify(readJournal(journal))}`,
+    ).toBeGreaterThan(1);
+
+    await rootExit;
+    const atRootExit = await waitForNotice(
+      handle,
+      /root exited with \d+; job members (-?\d+)/u,
+      5_000,
+    );
+    // The answer. Waiting for the descendant's own record of having outlived
+    // its root, because a liveness check alone cannot separate "still running"
+    // from "not dead yet".
+    const outlived = await waitForJournalLine(
+      journal,
+      /outlived the root/u,
+      6_000,
+    );
+    expect(
+      {
+        outlived,
+        alive: Number.isFinite(childPid) && processAlive(childPid),
+        members: atRootExit?.[1],
+      },
+      `journal ${JSON.stringify(readJournal(journal))}, notices ${JSON.stringify(handle.notices)}`,
+    ).toEqual({ outlived: true, alive: true, members: "1" });
+
+    // And it is still ours to end: the job takes it even though the console
+    // never had it.
+    handle.terminateTree();
+    expect(processAlive(childPid)).toBe(false);
+    handle.dispose();
+  });
+
+  it("drives a child that never writes anything", async () => {
+    // No first-output gate: the session is usable from the moment it exists,
+    // so input, resize and termination all work before a silent child speaks.
+    // The child reports what the console handed it before it waits. A child
+    // whose standard input is not a terminal never sees a keystroke no matter
+    // what the host writes, and that is a different fault from input failing
+    // to travel — one belongs to process creation, the other to the pipe.
+    const script = [
+      'const tty = require("node:tty");',
+      'process.stdout.write("STDIN_TTY=" + tty.isatty(0) + ",STDOUT_TTY=" + tty.isatty(1) + "\\r\\n");',
+      "process.stdin.resume();",
+      'process.stdin.on("data", () => process.exit(0));',
+    ].join("");
+    const handle = spawnWindowsPty({
+      command: node(script),
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    expect(handle.resize(120, 40)).toBe(true);
+    const spoke = await waitForMarker(
+      handle,
+      output,
+      /STDIN_TTY=(\w+),STDOUT_TTY=(\w+)/u,
+      10_000,
+    );
+    const processes = handle.activeProcesses();
+    expect(
+      processes,
+      `child never reported its handles; saw ${JSON.stringify(output.text())}`,
+    ).toBeGreaterThan(0);
+    // A whole line, not a bare keystroke. A console that has not been put into
+    // raw mode delivers input a line at a time, so a lone `x` sits in the
+    // line buffer and the child waits for a carriage return that never comes —
+    // which is what a silent child looks like from the outside. Sending the
+    // return makes the input complete under either mode.
+    // Armed before the write, because the child can be gone before the next
+    // line of this test runs and a listener attached afterwards would wait for
+    // an event that already happened.
+    const exit = new Promise<"exit" | "budget">((resolve) => {
+      const timer = setTimeout(() => {
+        release();
+        resolve("budget");
+      }, 10_000);
+      const release = handle.onExit(() => {
+        clearTimeout(timer);
+        release();
+        resolve("exit");
+      });
+    });
+    handle.write(Buffer.from("x\r"));
+    const exited = await exit;
+    // Naming which wait ran out is the whole difference between a report that
+    // can be acted on and one that says only that something took too long.
+    expect(
+      exited,
+      `child never exited after input; it reported ${spoke?.[0] ?? "nothing"}, ` +
+        `job members before the write: ${processes}, now: ${handle.activeProcesses()}`,
+    ).toBe("exit");
+    await handle.outputEnded;
+    handle.dispose();
+  });
+
+  it("reassembles a codepoint split across reads", async () => {
+    // Emoji byte-by-byte with pauses, so the split lands inside the sequence.
+    const script = [
+      'const bytes = Buffer.from("é😀家\\r\\n", "utf8");',
+      "let index = 0;",
+      "const timer = setInterval(() => {",
+      "  if (index >= bytes.length) { clearInterval(timer); process.exit(0); }",
+      "  else process.stdout.write(bytes.subarray(index, index + 1)); index += 1;",
+      "}, 5);",
+    ].join("");
+    const handle = spawnWindowsPty({
+      command: node(script),
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    await handle.outputEnded;
+    const text = output.text();
+    expect(text).toContain("é");
+    expect(text).toContain("😀");
+    expect(text).toContain("家");
+    expect(text).not.toContain("�");
+    handle.dispose();
+  });
+
+  it("reports its tree empty only after the job says so", async () => {
+    const handle = spawnWindowsPty({
+      command: node("setInterval(() => {}, 1000);"),
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    expect(handle.activeProcesses()).toBeGreaterThan(0);
+    handle.terminateTree();
+    await handle.outputEnded;
+    // Queried, not inferred: the job object is the owner, so this is a fact
+    // about membership rather than a guess from a process-id snapshot.
+    expect(handle.activeProcesses()).toBe(0);
+    handle.dispose();
+  });
+
+  it("survives a hard kill in the middle of a large burst", async () => {
+    const handle = spawnWindowsPty({
+      command: node(
+        'setInterval(() => process.stdout.write("f".repeat(8192)), 1);',
+      ),
+      env: environment(),
+      columns: 200,
+      rows: 50,
+    });
+    await new Promise<void>((resolve) => {
+      handle.onData(() => resolve());
+    });
+    handle.terminateTree();
+    await handle.outputEnded;
+    expect(handle.sawRealEof).toBe(true);
+    handle.dispose();
+  });
+
+  it("reports whether this Windows can release its pseudoconsole", () => {
+    const handle = spawnWindowsPty({
+      command: node("process.exit(0);"),
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    // Recorded rather than asserted: which path a machine takes is evidence
+    // the certification matrix needs, not something a test should require.
+    expect(typeof handle.releaseSupported).toBe("boolean");
+    handle.dispose();
+  });
+});

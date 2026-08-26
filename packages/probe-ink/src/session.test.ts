@@ -47,7 +47,6 @@ function fakeTracker(initial: TerminalPosition = { row: 2, column: 0, buffer: 'n
   return {
     drain: async () => undefined,
     position: () => position,
-    inputModes: () => ({ mouseTracking: 'none', mouseEncoding: 'default', focusReporting: 'off' }),
     resize: () => undefined,
     stop: () => undefined,
     set(value) { position = value; },
