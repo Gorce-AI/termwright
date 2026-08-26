@@ -139,7 +139,7 @@ behind every byte written before it. The flood probe in `escapes.pty.test.ts`
 times each marker twice — when its bytes land, and when the emulator reaches
 it — and on macOS, where no ConPTY exists, the transport added **0 ms** while
 the parse queue added up to **692 ms** against a 1000 ms pairing window. Under
-a heavier flood the window closes, and the driver reports `revision-expired`
+a heavier flood the window closes, and the driver reports `revision-pairing-watchdog`
 for a marker it is already holding, unread.
 
 There is a second shape of the same problem, and it needs a second question.
@@ -149,18 +149,19 @@ driver's hands at all, the parse queue is empty, and a drain barrier sees
 nothing to wait for. Measured with the throttled probe: 1.7 s median from
 commit to sighting, 3.4 s at the tail.
 
-So the expiry clock starts only once the evidence can no longer be in transit:
+So the diagnostic watchdog starts only once the evidence can no longer be in transit:
 the emulator has parsed everything received, **and** the output stream has been
-silent for `pairingTimeoutMs`. A timeout means "the other half never came" again, rather than "we were busy"
-or "it is still on its way". This is why the fix is not a bigger budget or a
-per-platform one: the race is platform-neutral and a budget only moves the
-flood size at which it returns.
+silent for `pairingTimeoutMs`. Elapsing reports that the counterpart is still
+missing; it does not delete the authoritative half or prove that it can never
+arrive. This is why the fix is not a bigger budget or a per-platform one: the
+race is platform-neutral and a budget only moves the flood size at which the
+diagnostic appears.
 
 Note the boundary, which is deliberate: the quiet condition only extends the
 window while output is *flowing*. A silent session whose marker turns up two
-seconds later still expires on time — nothing was in transit to wait for. That
-is also what keeps the rule bounded, together with `maxPending`: an endless
-animation postpones expiry indefinitely but evicts at 32 halves.
+seconds later is reported on time — nothing was in transit to wait for.
+Retention stays bounded by `maxPending`: an endless animation can postpone the
+watchdog, but the store still evicts at 32 halves.
 
 The eviction path (`maxPending`) is unchanged and correct: a peer producing
 revisions faster than pairs close will lose the oldest, with a diagnostic. Note

@@ -888,8 +888,8 @@ export type DiagnosticCode =
   | "revision-commit"
   /** An incomplete revision was dropped because a newer one was published. */
   | "revision-superseded"
-  /** Half a revision was dropped because its partner never arrived. */
-  | "revision-expired"
+  /** A pairing watchdog elapsed; the authoritative half remains pending. */
+  | "revision-pairing-watchdog"
   /** A revision was dropped: already published, or too many were in flight. */
   | "revision-dropped"
   /** A render marker arrived whose MAC did not verify; ordinary output cannot forge one. */

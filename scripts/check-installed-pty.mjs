@@ -63,7 +63,7 @@ writeFileSync(
 const probe = `
 	const { createServer } = await import('node:net');
 	const { spawnSync } = await import('node:child_process');
-	const { createHash } = await import('node:crypto');
+	const { createHash, createHmac } = await import('node:crypto');
 	const pty = await import('@termwright/pty');
 if (!pty.ptyAvailable()) {
   console.error('resolved no addon: ' + (pty.ptyUnavailableReason?.() ?? 'no reason reported'));
@@ -307,6 +307,62 @@ if (process.platform === 'win32') {
   const splitValid = splitMarker.text().includes(splitExpected) && splitMarker.session.sawRealEof;
   splitMarker.session.dispose();
   if (!splitValid) throw new Error('production OSC 8487 marker split across application writes lost ordering');
+
+  // One exact byte-stream case covers terminal state which is easy to lose in
+  // a frame-oriented host: cursor visibility, non-ASCII UTF-8, compound SGR and
+  // truecolour all have to remain ahead of the marker that commits them. The
+  // second marker is deliberately adjacent to the first, proving that the PTY
+  // preserves a marker-only boundary for the protocol layer above it.
+  console.log('[pty-cert] visual-and-semantic-checkpoints');
+  const markerToken = 'termwright-packed-artifact-token';
+  const markerSession = 'packed-artifact-session';
+  const markerMac = (revision, token = markerToken, sessionId = markerSession) =>
+    createHmac('sha256', Buffer.from(token, 'utf8'))
+      .update(sessionId + ':' + revision, 'utf8')
+      .digest()
+      .subarray(0, 16)
+      .toString('base64url');
+  const productionMarker = (revision, token = markerToken, sessionId = markerSession) =>
+    '\x1b]8487;twm;' + revision + ';' + markerMac(revision, token, sessionId) + '\x07';
+  const visualFrame =
+    'VISUAL-BEGIN\x1b[?25lZażółć gęślą jaźń 😀 ' +
+    '\x1b[1;4;38;2;10;20;30;48;2;40;50;60mSTYLED-TRUECOLOR\x1b[0m';
+  const visualMarker = productionMarker(1);
+  const adjacentMarker = productionMarker(2);
+  const forgedMarker = productionMarker(3, 'wrong-token');
+  const cursorRestore = '\x1b[?25hVISUAL-END';
+  const checkpointBytes = visualFrame + visualMarker + adjacentMarker + forgedMarker + cursorRestore;
+  const checkpoints = collect(
+    'require("node:fs").writeSync(1, Buffer.from(' + JSON.stringify(checkpointBytes) + ', "utf8"))',
+  );
+  await checkpoints.session.outputEnded;
+  const observedCheckpoints = checkpoints.text();
+  const checkpointStart = observedCheckpoints.indexOf(checkpointBytes);
+  const hiddenCursorSequencePassthroughValid = checkpointStart >= 0 &&
+    observedCheckpoints.indexOf('\x1b[?25l', checkpointStart) < observedCheckpoints.indexOf(visualMarker, checkpointStart) &&
+    observedCheckpoints.indexOf('\x1b[?25h', checkpointStart) > observedCheckpoints.indexOf(forgedMarker, checkpointStart);
+  const unicodePassthroughValid = observedCheckpoints.includes('Zażółć gęślą jaźń 😀');
+  const sgrStyleTruecolorSequencePassthroughValid = observedCheckpoints.includes(
+    '\x1b[1;4;38;2;10;20;30;48;2;40;50;60mSTYLED-TRUECOLOR\x1b[0m' + visualMarker,
+  );
+  const adjacentMarkerValid = observedCheckpoints.includes(visualMarker + adjacentMarker);
+  // This package certifies PTY transport, not protocol authentication. The
+  // production protocol/driver suite proves rejection of the wrong-token
+  // marker; here the exact artifact must carry every byte unchanged so that
+  // the driver's verifier can make that decision.
+  const forgedMarkerPassthroughValid = observedCheckpoints.includes(forgedMarker);
+  checkpoints.session.dispose();
+  if (!hiddenCursorSequencePassthroughValid || !unicodePassthroughValid ||
+      !sgrStyleTruecolorSequencePassthroughValid || !adjacentMarkerValid ||
+      !forgedMarkerPassthroughValid || !checkpoints.session.sawRealEof) {
+    throw new Error('visual/semantic production marker certification failed: ' + JSON.stringify({
+      hiddenCursorSequencePassthroughValid,
+      unicodePassthroughValid,
+      sgrStyleTruecolorSequencePassthroughValid,
+      adjacentMarkerValid,
+      forgedMarkerPassthroughValid,
+    }));
+  }
 }
 function waitForText({ session, text }, marker) {
   if (text().includes(marker)) return Promise.resolve();
@@ -472,7 +528,10 @@ const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
     TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath,
     TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE: inactiveBufferFixturePath,
     TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE: consoleMarkerFixturePath,
-    TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(installDirectory, 'termwright console marker.mjs'),
+    TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(
+      installDirectory,
+      'termwright console marker.mjs',
+    ),
     TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -509,7 +568,7 @@ if (verdictPath !== undefined) {
     verdictPath,
     `${JSON.stringify(
       {
-        schemaVersion: 2,
+        schemaVersion: 3,
         platform,
         architecture: arch,
         addonSha256: sha256(addonPath),
@@ -527,6 +586,11 @@ if (verdictPath !== undefined) {
           markerSplit: true,
           markerModeNode: true,
           markerModeBun: process.env.TERMWRIGHT_REQUIRE_BUN === '1',
+          hiddenCursorSequencePassthrough: true,
+          unicodePassthrough: true,
+          sgrStyleTruecolorSequencePassthrough: true,
+          adjacentMarkerPassthrough: true,
+          forgedMarkerPassthrough: true,
         },
       },
       null,

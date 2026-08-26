@@ -11,11 +11,11 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 40,
-    "deadline-or-scheduler-regression-test": 60,
+    "deadline-or-scheduler-regression-test": 59,
     "deterministic-adversarial-fixture-schedule": 34,
-    "display-or-persisted-wall-time-not-correctness-order": 92,
+    "display-or-persisted-wall-time-not-correctness-order": 90,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 199,
+    "explicit-external-or-ui-source-polling": 190,
     "explicit-test-selection-reviewed-with-platform-registry": 79,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
@@ -226,13 +226,13 @@
       "path": "packages/conformance/src/suites/adversarial.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-expired');"
+      "excerpt": "await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');"
     },
     {
       "path": "packages/conformance/src/suites/adversarial.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-expired');"
+      "excerpt": "await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');"
     },
     {
       "path": "packages/conformance/src/suites/adversarial.test.ts",
@@ -994,7 +994,7 @@
       "path": "packages/driver/src/pairing.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "this.#timer = setTimeout(onExpire, delayMs);"
+      "excerpt": "this.#timer = setTimeout(() => {"
     },
     {
       "path": "packages/driver/src/process-lifecycle.pty.test.ts",
@@ -1283,24 +1283,6 @@
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 450));"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 50));"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "const deadline = Date.now() + 3_000;"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "while (terminal.semanticTree() === null && Date.now() < deadline) {"
     },
     {
       "path": "packages/driver/src/session.ts",
@@ -2104,12 +2086,6 @@
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll("
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() =>"
     },
     {
@@ -2152,18 +2128,6 @@
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => app.getByRole(\"textbox\", { name: \"Name\" }).count())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => app.getByRole(\"textbox\", { name: \"Name\" }).textContent())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => session.contract(), { timeout: 10_000 })"
     },
     {
@@ -2189,42 +2153,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => session.semanticTree()?.v, { timeout: 10_000 })"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await state(\"button\", \"Save\"))?.focused)"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await state(\"list\", \"Files\"))?.focused)"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await state(\"list\", \"Files\"))?.focused)"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await state(\"listitem\", \"main.go\"))?.selected)"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await state(\"listitem\", \"readme.md\"))?.selected)"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await state(\"listitem\", \"readme.md\"))?.selected)"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",

@@ -190,7 +190,7 @@ const READY_QUIET_MS = 150;
 /** Quiet window that counts as idle output. */
 const IDLE_QUIET_MS = 100;
 
-/** How long a half-paired semantic revision is kept before it is dropped. */
+/** Diagnostic window for a half-paired revision; never a publication deadline. */
 const PAIRING_TIMEOUT_MS = 1_000;
 
 /**
@@ -1769,7 +1769,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       const unchanged =
         this.#vt.revision === before &&
         this.#pairing.revision === semanticBefore;
-      if (unchanged && !this.#pairing.hasPendingRender) return;
+      if (unchanged && !this.#pairing.hasBlockingRender) return;
       if (deadline.expired()) {
         throw new TimeoutError(
           `the screen and semantic evidence never stayed quiet for ${quiet} ms`,
@@ -2218,6 +2218,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     "settled" | "parser-in-flight" | "semantic-frame-open" | "pairing-pending" {
     if (this.#vt.hasPendingWrite) return "parser-in-flight";
     if (this.#pairing.hasOpenFrame) return "semantic-frame-open";
+    // Semantic actions must remain fail-closed while *any* authoritative half
+    // is retained, even after its watchdog reports it. The newer half proves
+    // that the published tree and screen may no longer describe one state.
     if (this.#pairing.hasPendingRender) return "pairing-pending";
     if (this.#inputEvidence.waitingForProviderEvidence) return "pairing-pending";
     return "settled";

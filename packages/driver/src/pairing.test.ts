@@ -94,20 +94,47 @@ describe('RevisionPairing', () => {
     expect(pairing.revision).toBe(0);
   });
 
-  it('expires a half that never finds its partner', async () => {
+  it('reports but retains a half until its authoritative partner arrives', async () => {
     vi.useFakeTimers();
     try {
-      const { pairing, diagnostics } = createPairing();
+      const { pairing, diagnostics, published } = createPairing();
       pairing.offerSnapshot(snapshot(1));
       await vi.advanceTimersByTimeAsync(60);
       expect(diagnostics.join('\n')).toContain('render marker did not arrive');
+      expect(diagnostics.join('\n')).toContain('authoritative half was retained');
+      expect(pairing.hasPendingRender).toBe(true);
+      expect(pairing.hasBlockingRender).toBe(false);
+      expect(pairing.revision).toBe(0);
+
+      pairing.offerMarker(1, 7);
+      expect(published.map((entry) => entry.snapshot.revision)).toEqual([1]);
+      expect(pairing.revision).toBe(1);
       expect(pairing.hasPendingRender).toBe(false);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('does not run the expiry clock while the emulator is still catching up', async () => {
+  it('retains a render marker after its watchdog until the tree arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      const { pairing, diagnostics, published } = createPairing();
+      pairing.offerMarker(1, 7);
+      await vi.advanceTimersByTimeAsync(60);
+      expect(diagnostics.join('\n')).toContain('tree did not arrive');
+      expect(pairing.hasPendingRender).toBe(true);
+      expect(pairing.hasBlockingRender).toBe(false);
+
+      pairing.offerSnapshot(snapshot(1));
+      expect(published).toHaveLength(1);
+      expect(published[0]?.screenRevision).toBe(7);
+      expect(pairing.hasPendingRender).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not run the watchdog while the emulator is still catching up', async () => {
     // The flood case: the tree came over a socket, its marker is bytes still
     // queued for the parser. Expiring here would report a missing half that is
     // in fact already in hand, unread.
@@ -130,7 +157,7 @@ describe('RevisionPairing', () => {
 
       caughtUp();
       await vi.advanceTimersByTimeAsync(500);
-      // Nothing expires afterwards either: the half was cancelled before its
+      // Nothing is reported afterwards either: the half was cancelled before its
       // timer was ever armed.
       expect(diagnostics).toEqual([]);
     } finally {
@@ -138,7 +165,7 @@ describe('RevisionPairing', () => {
     }
   });
 
-  it('expires once caught up, so a genuinely missing half is still reported', async () => {
+  it('reports once caught up while retaining a genuinely unmatched half', async () => {
     vi.useFakeTimers();
     try {
       let caughtUp = (): void => {};
@@ -154,13 +181,13 @@ describe('RevisionPairing', () => {
       caughtUp();
       await vi.advanceTimersByTimeAsync(60);
       expect(diagnostics.join('\n')).toContain('render marker did not arrive');
-      expect(pairing.hasPendingRender).toBe(false);
+      expect(pairing.hasPendingRender).toBe(true);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('does not expire a half while a probe has the frame open', async () => {
+  it('does not report a missing half while a probe has the frame open', async () => {
     // The fact the quiet-stream rule was approximating. "Output is arriving"
     // was only ever a guess at "the application is still drawing"; a probe
     // that says so directly makes the rule honest instead of probabilistic.
@@ -184,7 +211,7 @@ describe('RevisionPairing', () => {
     }
   });
 
-  it('expires once the frame closes without its other half', async () => {
+  it('reports once the frame closes without its other half', async () => {
     vi.useFakeTimers();
     try {
       const { pairing, diagnostics } = createPairing();
@@ -201,10 +228,10 @@ describe('RevisionPairing', () => {
     }
   });
 
-  it('does not let an abandoned frame hold expiry open forever', async () => {
+  it('does not let an abandoned frame suppress the watchdog forever', async () => {
     // A probe can die mid-render, or give up on a frame it started. The next
     // frame beginning is proof the previous one is not coming — without that,
-    // one lost frame-end wedges the session's expiry permanently.
+    // one lost frame-end suppresses the session's watchdog permanently.
     vi.useFakeTimers();
     try {
       const { pairing, diagnostics } = createPairing();
