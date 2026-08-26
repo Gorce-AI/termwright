@@ -128,9 +128,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Establish only the expected remote ref for force-with-lease. Its
-          # contents are never read or used as reconciliation input.
-          git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+          # Reconciliation always starts from the source-SHA-bound default
+          # branch. Remote automation state is observed only immediately before
+          # publish and is never used as reconciliation input.
           git checkout -B "$BRANCH"
 
       - name: Reconcile only source-SHA-bound verdicts
@@ -201,10 +201,12 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- "${changed[@]}"
           git commit -m "$title"
-          git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
-          git push --force-with-lease \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            "HEAD:refs/heads/$BRANCH"
+          target_ref="refs/heads/$BRANCH"
+          push_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          expected_remote_sha="$(node scripts/resolve-push-lease.mjs "$push_remote" "$target_ref")"
+          git push --force-with-lease="$target_ref:$expected_remote_sha" \
+            "$push_remote" \
+            "HEAD:$target_ref"
           head_sha=$(git rev-parse HEAD)
           number=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then

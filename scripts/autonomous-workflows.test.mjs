@@ -79,6 +79,11 @@ describe('autonomous workflow security', () => {
     const publish = reconcile.slice(reconcile.indexOf('      - name: Commit only the compatibility allowlist'));
     expect(publish).toContain('Source certification run: $SOURCE_RUN_ID');
     expect(publish).not.toContain('Source certification run: $RUN_ID');
+    expect(publish).toContain('node scripts/resolve-push-lease.mjs "$push_remote" "$target_ref"');
+    expect(publish).toContain('git push --force-with-lease="$target_ref:$expected_remote_sha"');
+    expect(publish).toContain('          push_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"');
+    expect(publish).not.toMatch(/git push --force-with-lease\s/u);
+    expect(reconcile).not.toContain('refs/remotes/origin/$BRANCH');
     expect(coordinator).toContain('probe-ink\\/src\\/certified-instrumentation');
     expect(coordinator).toContain('probe-opentui\\/src\\/certified-runtime');
     expect(coordinator).toContain('release dispatch intentionally suppressed');
