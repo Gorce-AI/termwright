@@ -69,9 +69,9 @@ Defined in: [native-pty-backend.ts:22](https://github.com/Gorce-AI/termwright/bl
 
 ***
 
-### onDrain()?
+### onDrain()
 
-> `optional` **onDrain**(`listener`): () => `void`
+> **onDrain**(`listener`): () => `void`
 
 Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L25)
 
