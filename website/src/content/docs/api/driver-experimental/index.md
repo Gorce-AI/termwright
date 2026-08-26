@@ -60,6 +60,8 @@ Application tests should import from `@termwright/driver` instead.
 - [encodeText](functions/encodetext/)
 - [inheritedSpawnEnv](functions/inheritedspawnenv/)
 - [launchTerminalWithBackend](functions/launchterminalwithbackend/)
+- [nativePtyAvailable](functions/nativeptyavailable/)
+- [nativePtyUnavailableReason](functions/nativeptyunavailablereason/)
 - [normalizeMouseModifiers](functions/normalizemousemodifiers/)
 - [parseRef](functions/parseref/)
 - [parseSelector](functions/parseselector/)

@@ -13,7 +13,9 @@ editUrl: false
 
 > **ResourceAwareTestApi**\<`T`\> = `T` & `object`
 
-Defined in: [test/src/provider.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/provider.ts#L27)
+Defined in: resource-broker/dist/vitest.d.ts:15
+
+Vitest's Test API with declaration-time atomic resource ownership.
 
 ## Type Declaration
 
