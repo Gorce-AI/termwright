@@ -155,10 +155,9 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     const fixture = join(
       dirname(fileURLToPath(import.meta.url)),
       "testing",
-      "windows-console-snapshot-poc.cjs",
+      "windows-console-snapshot-poc.mjs",
     );
     const outputAtCheckpoint = new Map<string, string>();
-    let output!: { text(): string };
     let resolveCheckpoints!: () => void;
     const checkpointsComplete = new Promise<void>((resolve) => {
       resolveCheckpoints = resolve;
@@ -227,7 +226,7 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
       columns: 40,
       rows: 12,
     });
-    output = collect(handle);
+    const output = collect(handle);
 
     expect(
       await waitForMarker(handle, output, /READY_FOR_RESIZE/u, 10_000),
