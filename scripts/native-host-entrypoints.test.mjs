@@ -124,6 +124,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(ciJobs['resource-leak']).toContain('packages/driver/src/internal/resource-scope.test.ts');
     expect(ciJobs['resource-leak']).toContain('packages/driver/src/internal/action-retry.test.ts');
     expect(ciJobs['resource-leak']).toContain('packages/mcp/src/sessions.test.ts');
+    expect(ciJobs.determinism).toContain('packages/probe-ink/src/render-boundary.test.ts');
+    expect(ciJobs.determinism).toContain('packages/probe-ink/src/render-boundary-ink.test.ts');
+    expect(ciJobs.determinism).toContain('packages/ink/src/fixture-rerender.test.ts');
     expect(ciJobs['windows-driver-native'].indexOf('actions/download-artifact@'))
       .toBeLessThan(ciJobs['windows-driver-native'].indexOf('- run: pnpm build'));
 

@@ -47,19 +47,25 @@ export const MAX_CONTROL_BYTES = 64 * 1024;
 /** How long a command waits for the fixture to acknowledge it. */
 const DEFAULT_COMMAND_TIMEOUT_MS = 5_000;
 
+/** Maximum simultaneous unauthenticated local peers retained for token proof. */
+const MAX_AUTH_CANDIDATES = 8;
+
 /** The one command the channel carries today. */
 export interface RerenderCommand {
   readonly v: 1;
+  readonly commandId: number;
   readonly type: 'rerender';
   readonly props: JsonProps;
 }
 
 type CommandReply = {
   readonly v: 1;
+  readonly commandId: number;
   readonly type: 'ok';
   readonly semanticRevision: number;
 } | {
   readonly v: 1;
+  readonly commandId: number;
   readonly type: 'error';
   readonly detail?: string;
 };
@@ -84,10 +90,14 @@ export class ControlChannel {
   readonly #server: Server;
   readonly #directory: string | null;
 
-  #accepted: Socket | null = null;
   #socket: Socket | null = null;
-  #buffer = '';
-  #pending: { readonly resolve: (reply: CommandReply) => void; readonly reject: (error: Error) => void } | null = null;
+  readonly #candidateBuffers = new Map<Socket, string>();
+  #pending: {
+    readonly commandId: number;
+    readonly resolve: (reply: CommandReply) => void;
+    readonly reject: (error: Error) => void;
+  } | null = null;
+  #nextCommandId = 1;
   #commandTail: Promise<void> = Promise.resolve();
   #waitingForFixture: { readonly resolve: () => void; readonly reject: (error: Error) => void }[] = [];
   #everAttached = false;
@@ -216,7 +226,13 @@ export class ControlChannel {
    */
   async rerender(props: JsonProps, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS): Promise<number> {
     assertJsonProps(props);
-    const command: RerenderCommand = { v: 1, type: 'rerender', props };
+    const command: RerenderCommand = {
+      v: 1,
+      commandId: this.#nextCommandId,
+      type: 'rerender',
+      props,
+    };
+    this.#nextCommandId += 1;
     const line = `${JSON.stringify(command)}\n`;
     if (Buffer.byteLength(line, 'utf8') > MAX_CONTROL_BYTES) {
       throw new CapacityError(
@@ -228,20 +244,23 @@ export class ControlChannel {
       );
     }
 
-    // Replies have no command id, by design. Keep the public API concurrency
-    // safe by sending only one command at a time; the runner mirrors this
-    // ordering so every acknowledgement denotes that command's own commit.
-    const commandRun = this.#commandTail.then(() => this.#sendRerender(line, timeoutMs));
+    // Commands stay serialized so React cannot coalesce two requested frames.
+    // The id additionally prevents a late reply from a failed command from
+    // acknowledging the following command.
+    const commandRun = this.#commandTail.then(
+      () => this.#sendRerender(command.commandId, line, timeoutMs),
+    );
     this.#commandTail = commandRun.then(() => undefined, () => undefined);
     return commandRun;
   }
 
-  async #sendRerender(line: string, timeoutMs: number): Promise<number> {
+  async #sendRerender(commandId: number, line: string, timeoutMs: number): Promise<number> {
     const socket = this.#socket;
     if (socket === null || this.#closed || this.#fixtureGone) throw this.#sessionClosed();
 
     const reply = await new Promise<CommandReply>((resolve, reject) => {
       const pending = {
+        commandId,
         resolve: (value: CommandReply): void => {
           clearTimeout(timer);
           if (this.#pending === pending) this.#pending = null;
@@ -290,8 +309,8 @@ export class ControlChannel {
   async #performClose(): Promise<void> {
     this.#closed = true;
     this.#rejectLifecycleWaiters(this.#sessionClosed('the control channel was closed'));
-    this.#accepted?.destroy();
-    this.#accepted = null;
+    for (const candidate of this.#candidateBuffers.keys()) candidate.destroy();
+    this.#candidateBuffers.clear();
     this.#socket?.destroy();
     this.#socket = null;
     const failures: unknown[] = [];
@@ -310,39 +329,51 @@ export class ControlChannel {
   }
 
   #accept(socket: Socket): void {
-    // One fixture, one connection — before authentication as much as after.
-    // Sharing the line buffer between two unauthenticated peers would let one
-    // of them split the other's messages.
-    if (this.#closed || this.#accepted !== null) {
+    // Authentication, not connection order, elects the fixture. An idle or
+    // partial stranger must never be able to reserve the one control slot.
+    if (this.#closed || this.#socket !== null) {
       socket.destroy();
       return;
     }
-    this.#accepted = socket;
+    if (this.#candidateBuffers.size >= MAX_AUTH_CANDIDATES) {
+      const oldest = this.#candidateBuffers.keys().next().value as Socket | undefined;
+      if (oldest !== undefined) {
+        this.#candidateBuffers.delete(oldest);
+        oldest.destroy();
+      }
+    }
+    this.#candidateBuffers.set(socket, '');
     socket.setEncoding('utf8');
     socket.on('data', (chunk: string) => this.#consume(socket, chunk));
     socket.on('error', () => socket.destroy());
     socket.on('close', () => {
-      if (this.#accepted === socket) this.#accepted = null;
+      this.#candidateBuffers.delete(socket);
       if (this.#socket === socket) this.#markFixtureGone(socket);
     });
   }
 
   #consume(socket: Socket, chunk: string): void {
-    this.#buffer += chunk;
-    if (this.#buffer.length > MAX_CONTROL_BYTES) {
+    const prior = this.#candidateBuffers.get(socket);
+    if (prior === undefined) return;
+    let buffer = prior + chunk;
+    if (Buffer.byteLength(buffer, 'utf8') > MAX_CONTROL_BYTES) {
       // A peer that floods the channel is not the fixture behaving badly, it is
       // something else on the socket; drop it rather than grow without bound.
-      this.#buffer = '';
+      this.#candidateBuffers.delete(socket);
       socket.destroy();
       return;
     }
 
     for (;;) {
-      const newline = this.#buffer.indexOf('\n');
-      if (newline === -1) return;
-      const line = this.#buffer.slice(0, newline);
-      this.#buffer = this.#buffer.slice(newline + 1);
+      const newline = buffer.indexOf('\n');
+      if (newline === -1) {
+        this.#candidateBuffers.set(socket, buffer);
+        return;
+      }
+      const line = buffer.slice(0, newline);
+      buffer = buffer.slice(newline + 1);
       this.#handleLine(socket, line);
+      if (!this.#candidateBuffers.has(socket)) return;
     }
   }
 
@@ -364,12 +395,18 @@ export class ControlChannel {
     if (this.#socket === null) {
       // Until the token checks out this connection is a stranger, and the only
       // message a stranger may send is the hello that makes it the fixture.
-      if (record['type'] !== 'hello' || record['token'] !== this.token) {
+      if (record['v'] !== 1 || record['type'] !== 'hello' || record['token'] !== this.token) {
+        this.#candidateBuffers.delete(socket);
         socket.destroy();
         return;
       }
       this.#socket = socket;
       this.#everAttached = true;
+      for (const candidate of this.#candidateBuffers.keys()) {
+        if (candidate !== socket) candidate.destroy();
+      }
+      this.#candidateBuffers.clear();
+      this.#candidateBuffers.set(socket, '');
       const waiters = this.#waitingForFixture;
       this.#waitingForFixture = [];
       for (const waiter of waiters) waiter.resolve();
@@ -380,31 +417,58 @@ export class ControlChannel {
       socket.destroy();
       return;
     }
-    if (record['type'] !== 'ok' && record['type'] !== 'error') return;
+    if (record['type'] !== 'ok' && record['type'] !== 'error') {
+      this.#failAuthenticatedProtocol(socket, new ProtocolViolationError(
+        'the fixture sent an unknown control reply',
+        { semanticTree: false, suggestion: 'use the runner shipped with this version of @termwright/ink' },
+      ));
+      return;
+    }
+    const commandId = record['commandId'];
+    if (!Number.isSafeInteger(commandId) || (commandId as number) <= 0) {
+      this.#failAuthenticatedProtocol(socket, new ProtocolViolationError(
+        'the fixture acknowledged a rerender without a valid command id',
+        { semanticTree: false, suggestion: 'use the runner shipped with this version of @termwright/ink' },
+      ));
+      return;
+    }
+    const pending = this.#pending;
+    if (pending === null || pending.commandId !== commandId) return;
     if (record['type'] === 'ok') {
       const revision = record['semanticRevision'];
       if (!Number.isSafeInteger(revision) || (revision as number) <= 0) {
-        this.#pending?.reject(new ProtocolViolationError(
+        this.#failAuthenticatedProtocol(socket, new ProtocolViolationError(
           'the fixture acknowledged a rerender without a valid semantic revision',
           { semanticTree: false, suggestion: 'use the runner shipped with this version of @termwright/ink' },
         ));
         return;
       }
-      this.#pending?.resolve({ v: 1, type: 'ok', semanticRevision: revision as number });
+      pending.resolve({
+        v: 1,
+        commandId: commandId as number,
+        type: 'ok',
+        semanticRevision: revision as number,
+      });
       return;
     }
-    this.#pending?.resolve({
+    pending.resolve({
       v: 1,
+      commandId: commandId as number,
       type: 'error',
       ...(typeof record['detail'] === 'string' ? { detail: record['detail'] } : {}),
     });
   }
 
+  #failAuthenticatedProtocol(socket: Socket, error: ProtocolViolationError): void {
+    this.#pending?.reject(error);
+    this.#markFixtureGone(socket);
+  }
+
   #markFixtureGone(socket?: Socket): void {
     if (socket !== undefined && this.#socket !== socket) return;
     this.#fixtureGone = true;
-    this.#accepted?.destroy();
-    this.#accepted = null;
+    for (const candidate of this.#candidateBuffers.keys()) candidate.destroy();
+    this.#candidateBuffers.clear();
     this.#socket?.destroy();
     this.#socket = null;
     this.#rejectLifecycleWaiters(this.#sessionClosed());

@@ -99,14 +99,14 @@ function connectControlChannel(app, Component) {
   socket.unref();
 
   let buffer = '';
-  // The protocol intentionally has no command ids, so there can only be one
-  // rerender awaiting its commit boundary at a time. Serializing here also
+  // There can only be one rerender awaiting its commit boundary at a time.
+  // Serializing here also
   // prevents React from coalescing two received prop updates into one render
   // and incorrectly acknowledging both against that single commit.
   let handling = Promise.resolve();
 
-  const reply = (message) => {
-    socket.write(`${JSON.stringify({ v: 1, ...message })}\n`);
+  const reply = (commandId, message) => {
+    socket.write(`${JSON.stringify({ v: 1, commandId, ...message })}\n`);
   };
 
   const handle = async (line) => {
@@ -114,23 +114,27 @@ function connectControlChannel(app, Component) {
     try {
       message = JSON.parse(line);
     } catch {
-      reply({ type: 'error', detail: 'message is not valid JSON' });
+      reply(null, { type: 'error', detail: 'message is not valid JSON' });
       return;
     }
     if (message === null || typeof message !== 'object' || Array.isArray(message)) {
-      reply({ type: 'error', detail: 'message must be a JSON object' });
+      reply(null, { type: 'error', detail: 'message must be a JSON object' });
       return;
     }
     if (message.v !== 1) {
-      reply({ type: 'error', detail: `unsupported control message version ${JSON.stringify(message.v)}` });
+      reply(message.commandId, { type: 'error', detail: `unsupported control message version ${JSON.stringify(message.v)}` });
+      return;
+    }
+    if (!Number.isSafeInteger(message.commandId) || message.commandId <= 0) {
+      reply(null, { type: 'error', detail: 'command id must be a positive safe integer' });
       return;
     }
     if (message.type !== 'rerender') {
-      reply({ type: 'error', detail: `unknown control message type ${JSON.stringify(message.type)}` });
+      reply(message.commandId, { type: 'error', detail: `unknown control message type ${JSON.stringify(message.type)}` });
       return;
     }
     if (message.props === null || typeof message.props !== 'object' || Array.isArray(message.props)) {
-      reply({ type: 'error', detail: 'rerender props must be a JSON object' });
+      reply(message.commandId, { type: 'error', detail: 'rerender props must be a JSON object' });
       return;
     }
     try {
@@ -151,17 +155,17 @@ function connectControlChannel(app, Component) {
       if (!Number.isSafeInteger(semanticRevision) || semanticRevision <= 0) {
         throw new Error('the Ink probe returned an invalid semantic revision');
       }
-      reply({ type: 'ok', semanticRevision });
+      reply(message.commandId, { type: 'ok', semanticRevision });
     } catch (error) {
-      reply({ type: 'error', detail: error instanceof Error ? error.message : String(error) });
+      reply(message.commandId, { type: 'error', detail: error instanceof Error ? error.message : String(error) });
     }
   };
 
   socket.on('data', (chunk) => {
     buffer += chunk;
-    if (buffer.length > MAX_CONTROL_BYTES) {
+    if (Buffer.byteLength(buffer, 'utf8') > MAX_CONTROL_BYTES) {
       buffer = '';
-      reply({ type: 'error', detail: 'control message exceeded the size limit' });
+      reply(null, { type: 'error', detail: 'control message exceeded the size limit' });
       return;
     }
     for (;;) {

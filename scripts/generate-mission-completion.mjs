@@ -138,13 +138,18 @@ Deviation closure policy`.split('\n');
 if (titles.length !== 128) throw new Error(`mission title inventory has ${titles.length} entries, expected 128`);
 
 const partial = new Map([
-  [53, 'The embedded engine is exact-pinned to Vitest 4.1.11, migrated from 3.2.7 to drop tinypool, whose ProcessWorker.send teardown crash blocked Windows; the lockfile-backed local 4.1.11 pressure matrix is green and the Windows Node 22/24 certification still needs a reviewed current run.'],
-  [70, 'Infrastructure telemetry and the independent pressure harness exist; the current Windows Node 22/24 matrix result is external execution evidence and is not fabricated locally.'],
-  [81, 'Both platforms now own an authoritative boundary: Windows through the native ConPTY session, whose stream ends when the pipe ends and is certified on real Windows, and Unix through the pty master. What remains is a Linux failure that is not yet explained — a megabyte of output followed by a sentinel, with the sentinel absent from the grid while the producer reported a clean end of source, so it is neither the node-pty destroy timer nor a torn-down producer.'],
-  [110, 'Every historical Windows issue is categorized and the lanes execute: the addon builds for x64 and arm64, the ConPTY contract is certified on both Node lines, and conformance and lifecycle stress pass on Windows. The reliability matrix artifacts for the embedded engine are the part still outstanding.'],
-  [112, 'ConPTY observability and functional provider-backed input are separated and tested, and the Windows lane executes them. The pointer case is the one open item: a transport that repaints on its own made every frame look like a moved target, and the planner now confirms the target by the name the tree gives it while keeping a moved coordinate system fatal. Green on this claim awaits the Windows row that carries that change.'],
-  [113, 'Windows no longer has this boundary at all: it runs on the native ConPTY backend, and node-pty is neither loaded nor fallen back to there. The exact-certified private write boundary remains on POSIX, where node-pty is still the backend, and that coupling is what is left to remove.'],
-  [114, 'The independent harness covers the exact embedded Vitest, pools, workers, file parallelism and PTY pressure from the repository lockfile; a reviewed current Windows artifact is the remaining evidence.'],
+  [81, {
+    kind: 'implementation',
+    remainingEvidence: 'Native ConPTY exposes an EOF-coupled output boundary. The POSIX node-pty backend does not: its saturated-output fixture uses a causal terminal acknowledgement to avoid the Linux POLLHUP tail-loss race, and the driver truthfully reports degraded-output-drain for that backend. A general EOF-driven final-output guarantee therefore still requires a POSIX backend with an observable producer-end boundary.',
+  }],
+  [112, {
+    kind: 'implementation',
+    remainingEvidence: 'The Ink provider proves and supplies application input modes on ConPTY, but generic Windows applications remain fail-closed because the backend cannot universally expose the child\'s pointer/focus negotiation. Closing the registered deviation requires a backend capability or equivalent general production evidence path, not another CI run.',
+  }],
+  [113, {
+    kind: 'implementation',
+    remainingEvidence: 'Windows runs exclusively on the native ConPTY backend. POSIX still uses the exact-certified private node-pty write boundary; removing that coupling requires a replacement implementation, not another CI run.',
+  }],
 ]);
 
 const obsolete = new Map([
@@ -155,8 +160,8 @@ const exactEvidence = new Map([
   [53, ['packages/test/src/vitest-engine.ts', 'packages/test/src/runner.test.ts', 'scripts/run-vitest-pty-matrix.mjs']],
   [70, ['.github/workflows/vitest-reliability.yml', 'scripts/run-vitest-pty-matrix.mjs', 'quality/experiments/vitest-pty-pressure.test.mjs', 'quality/experiments/pty-lease.mjs']],
   [79, ['packages/driver/src/internal/process-supervisor.ts', 'packages/driver/src/process-lifecycle.pty.test.ts', '.github/workflows/ci.yml']],
-  [81, ['packages/driver/src/pty.ts', 'packages/driver/src/pty-upstream-boundary.test.ts', 'scripts/check-node-pty-certification.mjs']],
-  [110, ['docs/architecture/audit/platform-completion-baseline.json', '.github/workflows/vitest-reliability.yml', 'quality/platform-deviations.json']],
+  [81, ['packages/driver/src/process-lifecycle.pty.test.ts', 'packages/driver/test-fixtures/output-flood-exit.mjs', 'packages/driver/src/session.ts', '.github/workflows/ci.yml']],
+  [110, ['.github/workflows/ci.yml', '.github/workflows/vitest-reliability.yml', 'quality/experiments/vitest-pty-pressure.test.mjs', 'quality/platform-deviations.json']],
   [111, ['packages/driver/src/internal/process-supervisor.ts', 'packages/driver/src/process-lifecycle.pty.test.ts', '.github/workflows/ci.yml']],
   [112, ['packages/driver/src/session.pty.test.ts', 'packages/conformance/src/suites/interaction.test.ts', 'quality/platform-deviations.json']],
   [113, ['packages/driver/src/pty-upstream-boundary.test.ts', 'scripts/check-node-pty-certification.mjs', 'packages/driver/src/pty.ts']],
@@ -181,26 +186,73 @@ function evidenceFor(section) {
   return ['clients/test-vectors', 'packages/ui/src/live.ts', 'compatibility/framework-semantic-completeness.json', 'compatibility/registry.test.ts'];
 }
 
-const report = {
+export function buildMissionCompletionReport() {
+  return {
   schemaVersion: 1,
-  capturedAt: '2026-08-24',
-  baselineHead: 'a796f17244291be08ddf64a519acbd03b23b54c5',
+  capturedAt: '2026-08-26',
+  baselineHead: '7cac4160c94868448c74e9b09ed7c082a2f3ef26',
   policy: {
     productMode: 'termwright-native-host-only',
     backwardsCompatibility: false,
     embeddedEngine: 'vitest@4.1.11',
     certificationRule: 'partial sections cannot support the final cross-platform certification claim',
   },
+  releaseReadiness: {
+    status: 'blocked',
+    technicalMissionPartialSections: [...partial.keys()],
+    missingNpmRegistryBootstraps: [
+      '@termwright/conpty',
+      '@termwright/conpty-win32-arm64',
+      '@termwright/conpty-win32-x64',
+      '@termwright/evidence-provider',
+      '@termwright/resource-broker',
+      '@termwright/run-history',
+      '@termwright/run-journal-transport',
+    ],
+    registryConfiguration: 'Trusted-publisher configuration is registry-side state and remains unverified until the bootstrap packages exist and the release workflow can prove it.',
+  },
   baselineCiEvidence: {
-    runId: '32530899608',
-    headSha: 'a77bafeca83039d9f58ff0d5054da32f71535257',
-    url: 'https://github.com/Gorce-AI/termwright/actions/runs/32530899608',
-    observedAt: '2026-08-22',
+    runId: '32918115508',
+    headSha: '60f4db96df7611121e4ebec47dbdba99cbb40a21',
+    mergedAs: '7cac4160c94868448c74e9b09ed7c082a2f3ef26',
+    url: 'https://github.com/Gorce-AI/termwright/actions/runs/32918115508',
+    observedAt: '2026-08-26',
     classification: [
-      'Windows Node 22 and 24 completed install, build and typecheck; their failures were nested pnpm.cmd spawn EINVAL in probe-Ink tests, not a worker-channel crash.',
-      'The current architecture removes those nested package-manager spawns and builds once before the Native Host run.',
-      'macOS Node 22 failed a scheduler-polled MCP semantic revision oracle; current MCP waits on the canonical focused Condition and committed-observation barrier.',
-      'This baseline does not certify the dirty current workspace; a new Windows Node 22/24 run remains mandatory.',
+      'The exact PR tree completed 38 checks successfully on the first attempt with zero failures or cancellations; the only additional skipped check was documentation deployment, which is intentionally disabled for pull requests.',
+      'Windows Node 22 and 24 completed the full certified Native Host, Getting Started example, native ConPTY contract, lifecycle stress, and framework conformance lanes.',
+      'Ubuntu and macOS Node 22 and 24, Bun OpenTUI, deterministic coverage, 50 native determinism cycles, resource/leak barriers, fault injection, examples, clients, vectors, website, and release hygiene all passed.',
+      'The reviewed tree was squash-merged without content changes as main commit 7cac4160c94868448c74e9b09ed7c082a2f3ef26; the PR head and merge commit have the same Git tree.',
+    ],
+  },
+  postMergeRegressionEvidence: {
+    runId: '32919169129',
+    headSha: '7cac4160c94868448c74e9b09ed7c082a2f3ef26',
+    jobId: '98029613061',
+    url: 'https://github.com/Gorce-AI/termwright/actions/runs/32919169129',
+    observedAt: '2026-08-26',
+    platform: 'windows-latest / Node 22',
+    failingTest: 'packages/ink/src/fixture-rerender.test.ts',
+    status: 'root-caused; correction implemented in the current change and awaiting first-attempt CI',
+    classification: [
+      'The same Git tree later exposed an Ink rerender race on a first-attempt main-branch run, so the successful PR run alone does not establish repeatable Windows stability.',
+      'The old FIFO next-onRender boundary allowed a stale Ink callback to consume a newer mutation boundary and publish an authentic semantic revision paired with the previous screen.',
+      'The correction binds each explicit mutation to a generation committed through the hidden Ink host node and binds control acknowledgements to command identities; no timeout, retry, sleep, skip, or weaker assertion is used.',
+    ],
+  },
+  vitestReliabilityEvidence: {
+    runId: '32893232378',
+    headSha: '664077315ee699ca1daf9fa7b21a2081c698ec7f',
+    url: 'https://github.com/Gorce-AI/termwright/actions/runs/32893232378',
+    observedAt: '2026-08-25',
+    embeddedEngine: 'vitest@4.1.11',
+    inputsUnchangedAtBaselineHead: true,
+    jobs: [
+      { name: 'Windows Node 22 / Vitest pool matrix', jobId: '97949920093', conclusion: 'success', artifact: 'vitest-pty-matrix-node-22' },
+      { name: 'Windows Node 24 / Vitest pool matrix', jobId: '97949920562', conclusion: 'success', artifact: 'vitest-pty-matrix-node-24' },
+    ],
+    classification: [
+      'Both Windows rows certified forks and threads, file parallelism on and off, worker and PTY pressure, complete READY-to-release-to-DONE-to-exit telemetry, and zero worker-channel closures.',
+      'The Vitest 4.1.11 resolution and the workflow, harness, pressure experiment, and PTY lease inputs are unchanged at the baseline head.',
     ],
   },
   windowsBackendEvidence: {
@@ -233,45 +285,47 @@ const report = {
     alreadyFixed: 128 - partial.size - obsolete.size,
     partiallyFixed: partial.size,
     obsoleteBecauseArchitectureChanged: obsolete.size,
-    stillOpen: 0,
-    remainingExternalEvidence: partial.size,
+    stillOpen: partial.size,
+    remainingExternalEvidence: [...partial.values()].filter((entry) => entry.kind === 'external-evidence').length,
+    remainingImplementation: [...partial.values()].filter((entry) => entry.kind === 'implementation').length,
     incorrectAfterDeeperEvidence: 0,
   },
   sections: titles.map((title, index) => {
     const section = index + 1;
-    const partialReason = partial.get(section);
+    const partialEntry = partial.get(section);
     const obsoleteReason = obsolete.get(section);
     return {
       section,
       title,
-      status: partialReason === undefined
+      status: partialEntry === undefined
         ? obsoleteReason === undefined ? 'already-fixed' : 'obsolete because architecture changed'
         : 'partially-fixed',
       evidence: evidenceFor(section),
-      ...(partialReason === undefined ? {} : { remainingEvidence: partialReason }),
+      ...(partialEntry === undefined ? {} : { remainingKind: partialEntry.kind, remainingEvidence: partialEntry.remainingEvidence }),
       ...(obsoleteReason === undefined ? {} : { architectureDecision: obsoleteReason }),
     };
   }),
-};
+  };
+}
 
-for (const section of report.sections) {
-  for (const evidence of section.evidence) {
-    await access(resolve(fileURLToPath(new URL('..', import.meta.url)), evidence)).catch(() => {
-      throw new Error(`mission section ${section.section} references missing evidence ${evidence}`);
-    });
+const isDirect = process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+if (isDirect) {
+  const report = buildMissionCompletionReport();
+  for (const section of report.sections) {
+    for (const evidence of section.evidence) {
+      await access(resolve(fileURLToPath(new URL('..', import.meta.url)), evidence)).catch(() => {
+        throw new Error(`mission section ${section.section} references missing evidence ${evidence}`);
+      });
+    }
   }
-}
 
-const expected = `${JSON.stringify(report, null, 2)}\n`;
-if (process.argv.includes('--write')) {
-  await writeFile(outputUrl, expected);
-  process.stdout.write('wrote docs/architecture/audit/mission-completion.json\n');
-} else {
-  const actual = await readFile(outputUrl, 'utf8').catch(() => '');
-  if (actual !== expected) throw new Error('mission completion audit drifted; run node scripts/generate-mission-completion.mjs --write');
-  process.stdout.write(`mission completion: ${report.summary.alreadyFixed} fixed, ${report.summary.partiallyFixed} partial, ${report.summary.obsoleteBecauseArchitectureChanged} obsolete\n`);
-}
-
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) !== resolve(process.argv[1])) {
-  throw new Error('mission completion generator must be executed directly');
+  const expected = `${JSON.stringify(report, null, 2)}\n`;
+  if (process.argv.includes('--write')) {
+    await writeFile(outputUrl, expected);
+    process.stdout.write('wrote docs/architecture/audit/mission-completion.json\n');
+  } else {
+    const actual = await readFile(outputUrl, 'utf8').catch(() => '');
+    if (actual !== expected) throw new Error('mission completion audit drifted; run node scripts/generate-mission-completion.mjs --write');
+    process.stdout.write(`mission completion: ${report.summary.alreadyFixed} fixed, ${report.summary.partiallyFixed} partial, ${report.summary.obsoleteBecauseArchitectureChanged} obsolete\n`);
+  }
 }

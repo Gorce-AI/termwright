@@ -40,11 +40,38 @@ export function certifyOpenTuiEntry(
   const value = manifest as Record<string, unknown>;
   if (value['name'] !== '@opentui/core' || typeof value['version'] !== 'string') return undefined;
   const version = value['version'];
+  // An explicitly bound candidate run must prove that exact artifact. Falling
+  // back to a builtin profile here would let a malformed candidate profile pass
+  // whenever the candidate happens to have an already-supported version.
+  if (hasOpenTuiCandidateBinding(env)) {
+    const candidate = certificationOverride(env);
+    return candidate?.version === version ? candidate : undefined;
+  }
   if (BUILTIN_PROFILES.some((profile) => profile.version === version)) {
     return Object.freeze({ version, source: 'builtin' });
   }
-  const candidate = certificationOverride(env);
-  return candidate?.version === version ? candidate : undefined;
+  return undefined;
+}
+
+function hasOpenTuiCandidateBinding(env: Readonly<Record<string, string | undefined>>): boolean {
+  const rawProfile = env['TERMWRIGHT_CERTIFICATION_HOOK_PROFILE'];
+  if (rawProfile !== undefined) {
+    try {
+      const parsed = JSON.parse(rawProfile) as unknown;
+      if (typeof parsed === 'object' && parsed !== null) {
+        const framework = (parsed as Record<string, unknown>)['framework'];
+        // Candidate variables are shared by framework jobs. A complete profile
+        // explicitly bound to another adapter must not disable builtin
+        // OpenTUI certification in a mixed process.
+        if (typeof framework === 'string' && framework !== 'opentui') return false;
+      }
+    } catch {
+      // A malformed profile could have intended to bind OpenTUI. Fail closed.
+    }
+    return true;
+  }
+  return env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'] !== undefined
+    || env['TERMWRIGHT_CERTIFICATION_SOURCE_REVISION'] !== undefined;
 }
 
 function entryPath(entry: string): string | undefined {

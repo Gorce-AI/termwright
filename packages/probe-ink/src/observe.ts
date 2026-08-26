@@ -17,7 +17,7 @@ export interface InkDomElement {
   readonly nodeName: 'ink-root' | 'ink-box' | 'ink-text' | 'ink-virtual-text';
   readonly childNodes: readonly InkDomNode[];
   readonly parentNode?: InkDomElement;
-  readonly style?: { readonly display?: string };
+  readonly style?: Readonly<Record<string, unknown>> & { readonly display?: string };
   readonly internal_static?: boolean;
   readonly staticNode?: InkDomElement;
   readonly internal_accessibility?: {

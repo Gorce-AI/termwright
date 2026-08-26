@@ -1,4 +1,5 @@
 export interface RenderBoundary {
+  readonly generation: number;
   readonly resolve: (revision: number) => void;
   readonly reject: (error: Error) => void;
 }
@@ -13,19 +14,23 @@ export interface RenderBoundary {
 export class RenderBoundaryQueue {
   readonly #pending: RenderBoundary[] = [];
   readonly #preparing = new Set<RenderBoundary>();
+  #nextGeneration = 1;
   #stopped = false;
 
-  take(): RenderBoundary | undefined {
+  take(committedGeneration: number): RenderBoundary | undefined {
+    const boundary = this.#pending[0];
+    if (boundary === undefined || boundary.generation !== committedGeneration) return undefined;
     return this.#pending.shift();
   }
 
   afterCurrentRender(
     waitForCurrentRender: () => Promise<void>,
-    mutate: () => void,
+    mutate: (generation: number) => void,
   ): Promise<number> {
     if (this.#stopped) return Promise.reject(stoppedError());
     return new Promise<number>((resolve, reject) => {
-      const boundary = { resolve, reject };
+      const boundary = { generation: this.#nextGeneration, resolve, reject };
+      this.#nextGeneration += 1;
       this.#preparing.add(boundary);
       let flush: Promise<void>;
       try {
@@ -43,7 +48,7 @@ export class RenderBoundaryQueue {
         if (this.#stopped) return;
         this.#pending.push(boundary);
         try {
-          mutate();
+          mutate(boundary.generation);
         } catch (error) {
           const index = this.#pending.indexOf(boundary);
           if (index !== -1) this.#pending.splice(index, 1);
