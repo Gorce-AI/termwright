@@ -288,7 +288,9 @@ jobs:
           # runner SDK's current host version into the published binary.
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}
         run: |
-          pnpm exec node-gyp rebuild --arch=${{ matrix.arch }}
+          node_root="$(node -p 'require("node:path").dirname(require("node:path").dirname(process.execPath)).replaceAll("\\\\", "/")')"
+          test -f "$node_root/include/node/node.h"
+          pnpm exec node-gyp rebuild --nodedir="$node_root" --arch=${{ matrix.arch }}
           if [[ "${{ matrix.platform }}" == "win32" ]]; then
             node ../../scripts/stage-vendored-conpty.mjs --architecture "${{ matrix.arch }}" --destination build/Release/vendor
           fi
