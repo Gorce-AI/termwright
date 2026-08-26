@@ -27,6 +27,7 @@ import { argv, execPath, exit, platform, arch } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const installDirectory = argv[2];
+const checkProbeSyntax = installDirectory === '--check-probe-syntax';
 const verdictFlag = argv.indexOf('--verdict');
 const verdictPath = verdictFlag < 0 ? undefined : argv[verdictFlag + 1];
 const causalFixturePath = fileURLToPath(
@@ -44,22 +45,6 @@ const consoleMarkerScriptPath = fileURLToPath(
 const observableResizeFixturePath = fileURLToPath(
   new URL('./fixtures/conpty-observable-resize.ps1', import.meta.url),
 );
-if (installDirectory === undefined) {
-  console.error(
-    'usage: check-installed-pty.mjs <install-dir> [--verdict <path>]',
-  );
-  exit(1);
-}
-if (verdictFlag >= 0 && verdictPath === undefined) {
-  console.error('--verdict requires an output path');
-  exit(1);
-}
-
-writeFileSync(
-  join(installDirectory, 'termwright console marker.mjs'),
-  readFileSync(consoleMarkerScriptPath),
-);
-
 const probe = `
 	const { createServer } = await import('node:net');
 	const { spawnSync } = await import('node:child_process');
@@ -604,7 +589,7 @@ const fragmented = collect([
   '  });',
   '});',
 ].join(''));
-fragmented.session.write(Buffer.from('go\r'));
+fragmented.session.write(Buffer.from('go\\r'));
 const fragmentedWait = spawnSync('powershell.exe', [
   '-NoLogo',
   '-NoProfile',
@@ -637,6 +622,31 @@ if (!fragmentedConsoleDeliveryValid) {
 
 console.log('ran native PTY lifecycle and flow-control certification');
 `;
+
+if (checkProbeSyntax) {
+  const syntax = spawnSync(execPath, ['--input-type=module', '--check'], {
+    encoding: 'utf8',
+    input: probe,
+  });
+  if (syntax.stdout) process.stdout.write(syntax.stdout);
+  if (syntax.stderr) process.stderr.write(syntax.stderr);
+  exit(syntax.status ?? 1);
+}
+if (installDirectory === undefined) {
+  console.error(
+    'usage: check-installed-pty.mjs <install-dir> [--verdict <path>]',
+  );
+  exit(1);
+}
+if (verdictFlag >= 0 && verdictPath === undefined) {
+  console.error('--verdict requires an output path');
+  exit(1);
+}
+
+writeFileSync(
+  join(installDirectory, 'termwright console marker.mjs'),
+  readFileSync(consoleMarkerScriptPath),
+);
 
 const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
   cwd: installDirectory,
