@@ -265,13 +265,12 @@ if (process.platform === 'win32') {
   modes.session.dispose();
   if (!modesValid) throw new Error('ConPTY changed application DEC modes or injected host control-plane modes');
 
-  console.log('[pty-cert] observable-resize');
   // ResizePseudoConsole and the input pipe are independent channels. The
   // child's public TTY resize notification is the causal acknowledgement that
   // the requested geometry became authoritative; later input is not one. Keep
   // stdin referenced only to preserve the child lifetime while that native
   // notification is pending. No input byte participates in the barrier.
-  const resizing = collect([
+  const resizeSource = [
     'process.stdin.resume();',
     'process.stdout.once("resize", () => {',
     '  const [columns, rows] = process.stdout.getWindowSize();',
@@ -282,19 +281,25 @@ if (process.platform === 'win32') {
     '    () => process.exit(valid ? 0 : 45));',
     '});',
     'process.stdout.write("RESIZE-READY");',
-  ].join(''));
-  await waitForText(resizing, 'RESIZE-READY');
-  const resizeExited = new Promise((resolve) => resizing.session.onExit(resolve));
-  if (!resizing.session.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
-  const [resizeStatus] = await Promise.all([resizeExited, resizing.session.outputEnded]);
-  const resizeValid = resizeStatus.code === 0 &&
-    resizing.text().includes('RESIZED:120x40') && resizing.session.sawRealEof;
-  const resizeEvidence = resizing.text();
-  resizing.session.dispose();
-  if (!resizeValid) {
-    throw new Error('resize did not publish the expected console geometry: ' +
-      JSON.stringify({ status: resizeStatus, output: resizeEvidence }));
-  }
+  ].join('');
+  const certifyObservableResize = async (name, executable) => {
+    console.log('[pty-cert] observable-resize-' + name.toLowerCase());
+    const resizing = collect(resizeSource, executable);
+    await waitForText(resizing, 'RESIZE-READY');
+    const resizeExited = new Promise((resolve) => resizing.session.onExit(resolve));
+    if (!resizing.session.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
+    const [resizeStatus] = await Promise.all([resizeExited, resizing.session.outputEnded]);
+    const resizeValid = resizeStatus.code === 0 &&
+      resizing.text().includes('RESIZED:120x40') && resizing.session.sawRealEof;
+    const resizeEvidence = resizing.text();
+    resizing.session.dispose();
+    if (!resizeValid) {
+      throw new Error(name + ' did not publish the expected console geometry after resize: ' +
+        JSON.stringify({ status: resizeStatus, output: resizeEvidence }));
+    }
+  };
+  await certifyObservableResize('Node', process.execPath);
+  if (process.env.TERMWRIGHT_REQUIRE_BUN === '1') await certifyObservableResize('Bun', 'bun');
 
   console.log('[pty-cert] split-production-marker');
   const splitMarker = collect([
