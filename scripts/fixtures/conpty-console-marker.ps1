@@ -52,13 +52,9 @@ try {
   if ($restored -ne $withoutRequiredModes) { exit 46 }
   [Console]::Out.Write("MODE_RESTORED")
   $writer.WriteLine("EXIT")
+  if ($reader.ReadLine() -ne "BYE") { exit 47 }
   $markerProcess.WaitForExit()
-  $markerProcess.Refresh()
-  $markerExitCode = $markerProcess.ExitCode
-  if ($markerExitCode -ne 0) {
-    [Console]::Error.Write("MARKER_PROCESS_EXIT:" + $markerExitCode)
-    exit 47
-  }
+  if (-not $markerProcess.HasExited) { exit 49 }
 } finally {
   if ($writer) { $writer.Dispose() }
   if ($reader) { $reader.Dispose() }
