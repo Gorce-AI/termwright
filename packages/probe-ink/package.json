@@ -34,7 +34,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/node-hook.ts src/bun-preload.ts src/instrument.ts src/instrumentation.ts --format esm --dts --sourcemap --clean",
+    "build": "tsup src/index.ts src/node-hook.ts src/bun-preload.ts src/instrument.ts src/instrumentation.ts src/react-commit-bridge.ts src/react-reconciler-activation.ts src/react-host-props-correlation.ts src/public-render-wrapper-poc.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. test -- -- --run packages/probe-ink"
   },
