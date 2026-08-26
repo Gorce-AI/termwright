@@ -156,6 +156,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
 
     const releaseJobs = Object.fromEntries(workflowJobBlocks(release).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
     expect(releaseJobs.prebuilds).toContain('node scripts/check-prebuild.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"');
+    expect(releaseJobs.prebuilds).toContain('--nodedir="$node_root"');
     expect(releaseJobs.prebuilds).toContain('node scripts/check-installed-pty.mjs "$install_dir"');
     expect(releaseJobs.prebuilds).toContain("bun-version: '1.4.0'");
     expect(releaseJobs.prebuilds).toContain('scripts/verify-windows-pty-verdict.mjs');
@@ -167,6 +168,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(releaseJobs.verify).toContain('certification-verdict-arm64-host.json');
     const previewJobs = Object.fromEntries(workflowJobBlocks(preview).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
     expect(previewJobs.prebuilds).toContain("bun-version: '1.4.0'");
+    expect(previewJobs.prebuilds).toContain('--nodedir="$node_root"');
     expect(previewJobs.prebuilds).toContain('scripts/check-installed-pty.mjs "$install_dir" --verdict "$verdict"');
     expect(previewJobs['certify-x64-on-arm64']).toContain('runs-on: windows-11-arm');
     expect(previewJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
