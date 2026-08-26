@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "maxCandidatesPerRun": 8,
+  "maxCandidatesPerRun": 16,
   "streams": [
     {
       "id": "ink",
@@ -8,6 +8,7 @@
       "ecosystem": "npm",
       "registry": "npm",
       "package": "ink",
+      "certificationRevision": 1,
       "minimumVersion": "7.1.1",
       "mode": "hook",
       "hookStrategy": "exact-source"
@@ -18,6 +19,7 @@
       "ecosystem": "npm",
       "registry": "npm",
       "package": "@opentui/core",
+      "certificationRevision": 1,
       "minimumVersion": "0.5.3",
       "mode": "hook",
       "hookStrategy": "runtime",
@@ -29,6 +31,7 @@
       "ecosystem": "python",
       "registry": "pypi",
       "package": "textual",
+      "certificationRevision": 1,
       "minimumVersion": "8.2.8",
       "mode": "hook",
       "hookStrategy": "runtime"
@@ -39,6 +42,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "github.com/rivo/tview",
+      "certificationRevision": 1,
       "minimumVersion": "v0.42.0",
       "mode": "patch",
       "patchRoot": "packages/probe-tview/upstream-patches/tview"
@@ -49,6 +53,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "github.com/gdamore/tcell/v2",
+      "certificationRevision": 1,
       "minimumVersion": "v2.8.1",
       "major": 2,
       "mode": "patch",
@@ -60,6 +65,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "charm.land/bubbletea/v3",
+      "certificationRevision": 1,
       "minimumVersion": "v3.0.0",
       "major": 3,
       "mode": "patch",
@@ -72,6 +78,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "github.com/charmbracelet/bubbletea",
+      "certificationRevision": 1,
       "minimumVersion": "v1.3.10",
       "major": 1,
       "mode": "patch",
@@ -83,6 +90,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "charm.land/bubbles/v3",
+      "certificationRevision": 1,
       "minimumVersion": "v3.0.0",
       "major": 3,
       "mode": "patch",
@@ -95,6 +103,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "charm.land/bubbletea/v2",
+      "certificationRevision": 1,
       "minimumVersion": "v2.0.8",
       "major": 2,
       "mode": "patch",
@@ -106,6 +115,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "github.com/charmbracelet/bubbles",
+      "certificationRevision": 1,
       "minimumVersion": "v1.0.0",
       "major": 1,
       "mode": "patch",
@@ -117,6 +127,7 @@
       "ecosystem": "go",
       "registry": "go",
       "package": "charm.land/bubbles/v2",
+      "certificationRevision": 1,
       "minimumVersion": "v2.1.1",
       "major": 2,
       "mode": "patch",
@@ -128,6 +139,7 @@
       "ecosystem": "rust",
       "registry": "crates.io",
       "package": "ratatui-core",
+      "certificationRevision": 1,
       "minimumVersion": "0.1.2",
       "mode": "patch",
       "patchRoot": "clients/rust-probe/upstream-patches/ratatui-core"
@@ -138,6 +150,7 @@
       "ecosystem": "rust",
       "registry": "crates.io",
       "package": "ratatui-widgets",
+      "certificationRevision": 1,
       "minimumVersion": "0.3.2",
       "mode": "patch",
       "patchRoot": "clients/rust-probe/upstream-patches/ratatui-widgets"

@@ -146,6 +146,7 @@ describe('trusted autonomous coordinator', () => {
     ])).not.toThrow();
     expect(() => validateChangedFiles('compatibility', [
       'packages/probe-opentui/src/certified-runtime.json',
+      'compatibility/candidate-assessments.json',
       'compatibility/registry.json',
     ])).not.toThrow();
     expect(() => validateChangedFiles('compatibility', ['packages/probe-opentui/src/certified-instrumentation.json'])).toThrow(/forbidden path/u);
@@ -198,7 +199,7 @@ describe('trusted autonomous coordinator', () => {
 
   it('accepts only the exact automation PR identity and file set', () => {
     const pr = {
-      state: 'open', merged_at: null, title: 'chore(compatibility): record certified upstream releases', user: { login: 'github-actions[bot]' },
+      state: 'open', merged_at: null, title: 'chore(compatibility): reconcile upstream candidates', user: { login: 'github-actions[bot]' },
       changed_files: 1,
       head: { sha: head, ref: 'automation/framework-compatibility', repo: { full_name: repository } },
       base: { sha: base, ref: defaultBranch, repo: { full_name: repository } },

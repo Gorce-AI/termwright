@@ -14,6 +14,34 @@ const SHA1 = /^[0-9a-f]{40}$/u;
 const liveNpmPackuments = new Map();
 const liveNpmArtifacts = new Map();
 
+export function validateCandidateAssessments(document, streamIds) {
+  if (document?.schemaVersion !== 1 || document.streams === null || typeof document.streams !== 'object' || Array.isArray(document.streams)) {
+    throw new Error('candidate assessments must be a schema-v1 stream map');
+  }
+  const allowed = streamIds === undefined ? null : new Set(streamIds);
+  for (const [streamId, entries] of Object.entries(document.streams)) {
+    if (allowed !== null && !allowed.has(streamId)) throw new Error(`candidate assessments contain unknown stream ${streamId}`);
+    if (!Array.isArray(entries)) throw new Error(`${streamId}: candidate assessments must be an array`);
+    const versions = new Set();
+    for (const entry of entries) {
+      if (
+        entry?.state !== 'red'
+        || parseVersion(entry.version) === null
+        || typeof entry.candidateDigest !== 'string'
+        || !/^sha256:[0-9a-f]{64}$/u.test(entry.candidateDigest)
+        || !Number.isSafeInteger(entry.certificationRevision)
+        || entry.certificationRevision < 1
+        || entry.source === null
+        || typeof entry.source !== 'object'
+        || Array.isArray(entry.source)
+      ) throw new Error(`${streamId}: malformed candidate assessment`);
+      if (versions.has(entry.version)) throw new Error(`${streamId}: duplicate candidate assessment for ${entry.version}`);
+      versions.add(entry.version);
+    }
+  }
+  return document;
+}
+
 function sortValue(value) {
   if (Array.isArray(value)) return value.map(sortValue);
   if (value !== null && typeof value === 'object') {
@@ -28,6 +56,19 @@ export function canonicalJson(value) {
 
 function digest(value) {
   return `sha256:${createHash('sha256').update(canonicalJson(value)).digest('hex')}`;
+}
+
+function matchesCatalogSource(catalogSource, storedSource) {
+  if (catalogSource === null || typeof catalogSource !== 'object' || storedSource === null || typeof storedSource !== 'object') {
+    return Object.is(catalogSource, storedSource);
+  }
+  if (Array.isArray(catalogSource)) {
+    return Array.isArray(storedSource)
+      && catalogSource.length === storedSource.length
+      && catalogSource.every((value, index) => matchesCatalogSource(value, storedSource[index]));
+  }
+  return !Array.isArray(storedSource)
+    && Object.entries(catalogSource).every(([key, value]) => matchesCatalogSource(value, storedSource[key]));
 }
 
 export function parseVersion(value) {
@@ -104,14 +145,19 @@ function validateSource(entry, stream) {
   }
 }
 
-export async function selectCandidates({ rootDir = root, config, ledger, catalogs, maximum = config.maxCandidatesPerRun, sourceResolver }) {
+export async function selectCandidates({ rootDir = root, config, ledger, assessments = { schemaVersion: 1, streams: {} }, catalogs, maximum = config.maxCandidatesPerRun, sourceResolver }) {
   if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 32) throw new Error('maximum must be between 1 and 32');
+  validateCandidateAssessments(assessments, config.streams.map((stream) => stream.id));
   const pending = [];
   for (const stream of [...config.streams].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (!Number.isSafeInteger(stream.certificationRevision) || stream.certificationRevision < 1) {
+      throw new Error(`${stream.id}: certificationRevision must be a positive integer`);
+    }
     if (stream.mode === 'hook' && !['exact-source', 'runtime'].includes(stream.hookStrategy)) {
       throw new Error(`${stream.id}: hook mode requires an explicit exact-source or runtime strategy`);
     }
     const seen = new Map((ledger.streams?.[stream.id] ?? []).map((entry) => [entry.version, entry]));
+    const assessed = new Map((assessments.streams[stream.id] ?? []).map((entry) => [entry.version, entry]));
     const minimum = parseVersion(stream.minimumVersion);
     if (minimum === null) throw new Error(`${stream.id}: invalid minimumVersion`);
     for (const entry of catalogs[stream.id] ?? []) {
@@ -120,11 +166,30 @@ export async function selectCandidates({ rootDir = root, config, ledger, catalog
       if (compareVersions(entry.version, stream.minimumVersion) < 0 || entry.yanked === true) continue;
       let resolvedSource = entry.source;
       const recorded = seen.get(entry.version);
+      const assessment = assessed.get(entry.version);
+      let sourceResolved = false;
       if (recorded !== undefined) {
         if (stream.registry !== 'npm' || stream.monitorDependencyClosure !== true) continue;
         resolvedSource = sourceResolver === undefined ? entry.source : await sourceResolver(stream, entry.version, entry.source, recorded.source);
         validateSource({ version: entry.version, source: resolvedSource }, stream);
         if (digest(recorded.source) === digest(resolvedSource)) continue;
+        sourceResolved = true;
+      } else if (assessment !== undefined) {
+        // Registry catalogs already carry a lightweight immutable release
+        // identity. Reuse the checksum-bound assessment while that identity is
+        // unchanged; resolving every historical red version here would make a
+        // bounded certification batch perform unbounded downloads before the
+        // scheduler even runs. A changed catalog identity remains pending and
+        // is fully resolved only if the fair scheduler selects it.
+        if (matchesCatalogSource(entry.source, assessment.source)) {
+          resolvedSource = assessment.source;
+          validateSource({ version: entry.version, source: resolvedSource }, stream);
+          // An unchanged red assessment is filtered below without resolving.
+          // If a revision or prepared patch requalifies a monitored npm root,
+          // however, the scheduled candidate must resolve today's dependency
+          // closure instead of certifying the stale stored graph.
+          sourceResolved = !(stream.registry === 'npm' && stream.monitorDependencyClosure === true);
+        }
       }
       if (!Number.isFinite(Date.parse(entry.publishedAt))) throw new Error(`${stream.id}@${entry.version}: invalid publishedAt`);
       const patchMode = stream.mode !== 'hook';
@@ -139,6 +204,7 @@ export async function selectCandidates({ rootDir = root, config, ledger, catalog
         registry: stream.registry,
         package: stream.package,
         version: entry.version,
+        certificationRevision: stream.certificationRevision,
         publishedAt: entry.publishedAt,
         source: resolvedSource,
         monitorDependencyClosure: stream.registry === 'npm' && stream.monitorDependencyClosure === true,
@@ -148,13 +214,33 @@ export async function selectCandidates({ rootDir = root, config, ledger, catalog
           ? { status: ready ? 'ready' : 'needs-patch', path: `${stream.patchRoot}/${entry.version}/manifest.json`, manifestDigest }
           : { status: 'not-applicable', path: null, manifestDigest: null },
       };
-      pending.push({ candidate, stream, sourceResolved: recorded !== undefined });
+      if (assessment !== undefined && assessment.candidateDigest === digest(candidate)) continue;
+      pending.push({ candidate, stream, sourceResolved, reuseSource: assessment?.source });
     }
   }
-  pending.sort((a, b) => Date.parse(a.candidate.publishedAt) - Date.parse(b.candidate.publishedAt) || a.candidate.streamId.localeCompare(b.candidate.streamId) || compareVersions(a.candidate.version, b.candidate.version));
+  const comparePending = (a, b) => Date.parse(a.candidate.publishedAt) - Date.parse(b.candidate.publishedAt) || a.candidate.streamId.localeCompare(b.candidate.streamId) || compareVersions(a.candidate.version, b.candidate.version);
+  pending.sort(comparePending);
+  // A permanently red stream must not consume the whole bounded batch forever.
+  // Preserve oldest-first order inside each stream, but take one candidate from
+  // every pending stream before taking a second candidate from any of them.
+  const queues = new Map();
+  for (const entry of pending) {
+    const queue = queues.get(entry.candidate.streamId) ?? [];
+    queue.push(entry);
+    queues.set(entry.candidate.streamId, queue);
+  }
+  const scheduled = [];
+  while (scheduled.length < maximum && scheduled.length < pending.length) {
+    const round = [...queues.values()].filter((queue) => queue.length > 0).sort((a, b) => comparePending(a[0], b[0]));
+    for (const queue of round) {
+      const entry = queue.shift();
+      if (entry !== undefined) scheduled.push(entry);
+      if (scheduled.length === maximum) break;
+    }
+  }
   const selected = [];
-  for (const { candidate, stream, sourceResolved } of pending.slice(0, maximum)) {
-    const source = sourceResolver === undefined || sourceResolved ? candidate.source : await sourceResolver(stream, candidate.version, candidate.source);
+  for (const { candidate, stream, sourceResolved, reuseSource } of scheduled) {
+    const source = sourceResolver === undefined || sourceResolved ? candidate.source : await sourceResolver(stream, candidate.version, candidate.source, reuseSource);
     const withSource = { ...candidate, source };
     validateSource(withSource, stream);
     selected.push({ ...withSource, candidateDigest: digest(withSource) });
@@ -578,16 +664,19 @@ async function main(argv) {
   let output = join(root, 'upstream-candidates', 'candidate-registry.json');
   let catalogPath;
   let ledgerPath = join(root, 'compatibility/certified-upstreams.json');
+  let assessmentsPath = join(root, 'compatibility/candidate-assessments.json');
   let maximum;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--output') output = resolve(argv[++i]);
     else if (argv[i] === '--catalog') catalogPath = resolve(argv[++i]);
     else if (argv[i] === '--ledger') ledgerPath = resolve(argv[++i]);
+    else if (argv[i] === '--assessments') assessmentsPath = resolve(argv[++i]);
     else if (argv[i] === '--max') maximum = Number(argv[++i]);
     else throw new Error(`unknown argument ${argv[i]}`);
   }
   const config = JSON.parse(await readFile(join(root, 'compatibility/upstream-patches.json'), 'utf8'));
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
+  const assessments = JSON.parse(await readFile(assessmentsPath, 'utf8'));
   ledger.streams ??= {};
   const compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
   for (const stream of config.streams) {
@@ -602,7 +691,7 @@ async function main(argv) {
     ledger.streams[stream.id] = [...seeded.values()];
   }
   const catalogs = catalogPath === undefined ? await liveCatalogs(config) : JSON.parse(await readFile(catalogPath, 'utf8')).streams;
-  const registry = await selectCandidates({ config, ledger, catalogs, maximum, ...(catalogPath === undefined ? { sourceResolver: resolveSource } : {}) });
+  const registry = await selectCandidates({ config, ledger, assessments, catalogs, maximum, ...(catalogPath === undefined ? { sourceResolver: resolveSource } : {}) });
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, canonicalJson(registry));
   process.stdout.write(`${registry.candidates.length} selected, ${registry.backlog} queued\n`);

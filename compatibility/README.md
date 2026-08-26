@@ -52,11 +52,12 @@ render `/reference/compatibility/` and publishes the same data at
 ## Daily upstream compatibility workflow
 
 [`upstream-patches.json`](upstream-patches.json) lists every monitored upstream
-and its explicit integration strategy. Runtime hooks use capability and
+and its explicit integration strategy plus a `certificationRevision`. Runtime hooks use capability and
 behavioral certification; exact-source hooks and copied Go/Rust modules retain
 their checksum-bound instrumentation profiles. [`certified-upstreams.json`](certified-upstreams.json)
-is the merge-reviewed ledger of releases that completed the appropriate
-workflow.
+is the merge-reviewed allowlist of releases that completed the appropriate
+workflow. [`candidate-assessments.json`](candidate-assessments.json) separately
+records exact red candidate digests; a red assessment never declares support.
 
 The scheduled workflow runs every day and can also be started with
 `workflow_dispatch`. Discovery computes the set difference between every stable
@@ -64,10 +65,25 @@ release at or above a stream's support floor and the certified ledger. It does
 not ask only for the registry's latest version. A patch release published after
 a newer minor, such as `2.1.1` after `2.2.0`, remains a candidate.
 
-Candidates are ordered by publication time, then stream and semantic version.
-At most eight are processed by the normal run; the manual dispatch permits 1,
-2, 4, 8, or 16. The oldest backlog is therefore drained deterministically
-without giving an upstream registry unbounded test concurrency.
+Candidates remain oldest-first within each stream. The bounded scheduler takes
+one candidate from every pending stream before assigning a second slot to any
+stream. The scheduled capacity is 16, currently enough to visit every stream;
+the manual dispatch permits 1, 2, 4, 8, or 16 for focused diagnostics. This
+prevents one incompatible backlog from starving another framework without
+giving an upstream registry unbounded test concurrency.
+
+An exact red digest at the current `certificationRevision` is not selected
+again. Discovery compares the registry's lightweight release identity with the
+stored checksum-bound source before scheduling; it does not download an
+unbounded history of unchanged red artifacts. A changed root release identity
+or prepared patch is tested again automatically. Transitive npm closure drift is
+continuously checked for certified releases, where Termwright makes a support
+claim; red assessments make no support claim and remain dormant until the root
+identity, patch, or certification revision changes. When adapter or certifier
+behavior changes, increment that stream's revision: every red assessment from
+the older revision then becomes eligible again. Red assessments remain visible
+as owned issues; a later green result removes the assessment and the issue
+closes only after the support allowlist PR merges.
 
 Each candidate records immutable source evidence:
 

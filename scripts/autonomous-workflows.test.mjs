@@ -35,6 +35,7 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('name: framework-candidate-result-${{ matrix.slot }}-${{ matrix.platform }}');
     expect(workflow).toContain('name: framework-verdict-aggregate');
     expect(workflow).toContain('aggregate-framework-candidate-verdicts.mjs');
+    expect(workflow).toContain('--assessments compatibility/candidate-assessments.json');
     expect(certifier).toContain("'--ignore-scripts'");
   });
 
@@ -74,6 +75,7 @@ describe('autonomous workflow security', () => {
     expect(reconcile).not.toContain("github.event.workflow_run.conclusion == 'success'");
     expect(reconcile).toContain('Typed candidate artifacts reconciled from $SOURCE_RUN_URL.');
     expect(reconcile).not.toContain('Close candidate issues only after the compatibility allowlist merged');
+    expect(reconcile.match(/--assessments compatibility\/candidate-assessments\.json/gu)).toHaveLength(1);
     const publish = reconcile.slice(reconcile.indexOf('      - name: Commit only the compatibility allowlist'));
     expect(publish).toContain('Source certification run: $SOURCE_RUN_ID');
     expect(publish).not.toContain('Source certification run: $RUN_ID');

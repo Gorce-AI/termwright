@@ -146,8 +146,8 @@ import { SemanticChannel, type SemanticAttachment } from "./semantic.js";
 import { composeProviderEvidence } from "./provider-evidence.js";
 import { ShellCommandTracker } from "./shell.js";
 import {
+  integratedPowerShellCommand,
   posixShellBootstrap,
-  powershellBootstrap,
   wrapPosixShellCommand,
   wrapPowerShellCommand,
 } from "./shell-integration.js";
@@ -776,6 +776,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
 
     assertLaunchPathsExist(this.#options.command, this.#options.cwd);
+    const launchCommand =
+      this.#options.shellIntegration === "termwright-powershell"
+        ? integratedPowerShellCommand(this.#options.command)
+        : this.#options.command;
 
     const env = buildChildEnv(
       this.#options.envMode ?? "replace",
@@ -810,7 +814,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       "pseudo-terminal",
       () =>
         this.#backend.spawn({
-          command: this.#options.command,
+          command: launchCommand,
           ...(this.#options.cwd !== undefined
             ? { cwd: this.#options.cwd }
             : {}),
@@ -846,9 +850,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
     const detachWriteError = this.#pty.onWriteError?.((error) => {
       this.#ptyFailure ??= new PtyBackendError(
-        `PTY backend ${this.#backend.name} failed after accepting terminal input: ${error.message}`,
+        `PTY backend ${this.#backend.name} reported a fatal I/O failure: ${error.message}`,
         this.errorDiagnostics({
-          suggestion: "treat this as infrastructure failure; the input was queued but its delivery cannot be certified",
+          suggestion: "treat this as infrastructure failure; terminal input and output can no longer be certified",
         }),
         { cause: error },
       );
@@ -879,24 +883,18 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     }, negotiationMs);
     this.#negotiationTimer.unref?.();
 
-    if (
-      this.#options.shellIntegration === "termwright-posix" ||
-      this.#options.shellIntegration === "termwright-powershell"
-    ) {
+    if (this.#options.shellIntegration === "termwright-posix") {
       await this.waitForQuiet({
         quietMs: READY_QUIET_MS,
         timeout: deadline.remaining(),
       });
       this.#assertLaunchTime(deadline, "waiting for shell startup output");
-      await this.sendInput(
-        encodeText(
-          this.#options.shellIntegration === "termwright-powershell"
-            ? powershellBootstrap()
-            : posixShellBootstrap(),
-        ),
-        "raw",
-      );
+      await this.sendInput(encodeText(posixShellBootstrap()), "raw");
       this.#assertLaunchTime(deadline, "installing shell integration");
+      await this.#waitForShellPrompt({ timeout: deadline.remaining() });
+    } else if (this.#options.shellIntegration === "termwright-powershell") {
+      // The startup command is the producer of this marker. Waiting for that
+      // exact fact replaces the old quiet-window -> stdin race entirely.
       await this.#waitForShellPrompt({ timeout: deadline.remaining() });
     }
   }

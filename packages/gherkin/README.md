@@ -131,10 +131,12 @@ retained in the trace for replay. A Scenario without a terminal or driver
 actions still shows its Given/When/Then lifecycle; the UI does not invent an
 empty terminal session for it.
 
-## Current slice
+## Supported surface
 
-This package currently exposes the plugin, step definitions, custom parameter
-types, Background, Scenarios, Scenario Outlines, DocStrings, and DataTables.
-The `termwright ui` host uses it for discovery, Run all, file/Scenario runs and
-reruns without writing generated source files. Hooks, tag filtering, and editor
-configuration are not part of this slice.
+This package exposes the plugin, step definitions, custom parameter types,
+Background, Scenarios, Scenario Outlines, DocStrings, DataTables, scenario
+hooks, Cucumber tag-expression filtering, and project fixtures composed through
+Vitest's native `test.extend()` and `test.override()` APIs. The `termwright ui`
+host uses it for discovery, Run all, file/Scenario runs and reruns without
+writing generated source files. Editor-specific configuration is outside the
+runtime integration.

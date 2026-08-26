@@ -13,7 +13,7 @@ editUrl: false
 
 > **ConPtySpawn** = (`options`) => [`ConPtySessionHandle`](../../interfaces/conptysessionhandle/)
 
-Defined in: [conpty-backend.ts:43](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L43)
+Defined in: [conpty-backend.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/conpty-backend.ts#L46)
 
 The spawn entry point, injected so the translation is testable off Windows.
 

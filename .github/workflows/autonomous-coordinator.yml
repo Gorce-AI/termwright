@@ -141,6 +141,7 @@ jobs:
             --registry "$CANDIDATE_DIR/candidate-registry.json" \
             --verdicts "$VERDICT_DIR" \
             --ledger compatibility/certified-upstreams.json \
+            --assessments compatibility/candidate-assessments.json \
             --plan "$PUBLISH_PLAN"
 
       - name: Reconcile owned candidate issues with the source run
@@ -177,8 +178,8 @@ jobs:
         run: |
           set -euo pipefail
           kind=compatibility
-          title='chore(compatibility): record certified upstream releases'
-          summary='Automated compatibility certification. Every recorded source is checksum-bound and all required gates passed.'
+          title='chore(compatibility): reconcile upstream candidates'
+          summary='Automated compatibility reconciliation. Green support records and red assessments are exact-candidate-bound; only green candidates enter the support allowlist.'
           mapfile -t changed < <(git ls-files --modified --deleted --others --exclude-standard | sort -u)
           if (( ${#changed[@]} == 0 )); then
             node scripts/autonomous-release-coordinator.mjs refresh-heartbeat \
@@ -228,7 +229,7 @@ jobs:
           if [ "$kind" = heartbeat ]; then
             echo 'Opened a release-suppressed schedule heartbeat PR.' >> "$GITHUB_STEP_SUMMARY"
           else
-            jq -r '"Certified: " + (.green | join(", "))' "$PUBLISH_PLAN" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '"Certified: " + ((.green | join(", ")) // "") + "\nAssessed red: " + ([.issues[].key] | join(", "))' "$PUBLISH_PLAN" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   inspect:
@@ -331,6 +332,7 @@ jobs:
             --registry "$candidates/candidate-registry.json" \
             --verdicts "$verdicts" \
             --ledger compatibility/certified-upstreams.json \
+            --assessments compatibility/candidate-assessments.json \
             --plan "$plan"
           echo "green-candidates=$(jq -c '.green' "$plan")" >> "$GITHUB_OUTPUT"
           git add -A

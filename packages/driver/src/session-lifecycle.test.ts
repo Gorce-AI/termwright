@@ -13,6 +13,7 @@ class ControlledPty implements PtyProcess {
   disposeCount = 0;
   readonly resizeCalls: Array<{ columns: number; rows: number }> = [];
   readonly signalCalls: PtySignal[] = [];
+  readonly writeCalls: Uint8Array[] = [];
   terminateCount = 0;
   readonly #failExitRegistration: boolean;
   readonly #failDispose: boolean;
@@ -22,6 +23,7 @@ class ControlledPty implements PtyProcess {
   readonly #neverAttach: boolean;
   readonly #treeState: 'gone' | 'unsupported' | 'throw';
   readonly #onAttach: (() => void) | undefined;
+  readonly #initialData: Uint8Array | undefined;
   readonly #exitListeners = new Set<(status: ExitStatus) => void>();
   readonly #writeErrorListeners = new Set<(error: Error) => void>();
 
@@ -35,6 +37,7 @@ class ControlledPty implements PtyProcess {
     readonly lifecycle?: PtyProcess['lifecycle'];
     readonly treeState?: 'gone' | 'unsupported' | 'throw';
     readonly onAttach?: () => void;
+    readonly initialData?: Uint8Array;
   } = {}) {
     this.#failExitRegistration = options.failExitRegistration ?? false;
     this.#failDispose = options.failDispose ?? false;
@@ -45,9 +48,12 @@ class ControlledPty implements PtyProcess {
     this.lifecycle = options.lifecycle ?? { tree: 'posix-process-group', outputDrain: 'eof' };
     this.#treeState = options.treeState ?? 'gone';
     this.#onAttach = options.onAttach;
+    this.#initialData = options.initialData;
   }
 
-  write(_data: Uint8Array): void {}
+  write(data: Uint8Array): void {
+    this.writeCalls.push(Uint8Array.from(data));
+  }
   resize(columns: number, rows: number): void {
     this.resizeCalls.push({ columns, rows });
   }
@@ -62,7 +68,8 @@ class ControlledPty implements PtyProcess {
       for (const listener of [...this.#exitListeners]) listener(this.#status);
     }
   }
-  onData(_cb: (data: Uint8Array) => void): PtyUnsubscribe {
+  onData(cb: (data: Uint8Array) => void): PtyUnsubscribe {
+    if (this.#initialData !== undefined) cb(this.#initialData);
     return () => undefined;
   }
   onExit(cb: (status: ExitStatus) => void): PtyUnsubscribe {
@@ -138,6 +145,40 @@ async function expectEndpointClosed(endpoint: string): Promise<void> {
 }
 
 describe('terminal session resource lifecycle', () => {
+  it('makes PowerShell publish readiness from its launch command without bootstrap input', async () => {
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const pty = new ControlledPty({
+      initialData: Buffer.from('\u001b]133;A\u0007\u001b]133;B\u0007'),
+    });
+    let spawned: PtySpawnOptions | undefined;
+    const backend: PtyBackend = {
+      name: 'controlled',
+      spawn(options): PtyProcess {
+        spawned = options;
+        endpoint.value = options.env[ENV_ENDPOINT];
+        return pty;
+      },
+    };
+
+    const terminal = await launchTerminalWithBackend({
+      command: ['pwsh.exe', '-NoLogo', '-NoProfile'],
+      backend,
+      shellIntegration: 'termwright-powershell',
+    });
+    expect(spawned?.command).toEqual([
+      'pwsh.exe',
+      '-NoLogo',
+      '-NoProfile',
+      '-NoExit',
+      '-Command',
+      '[Console]::Write("`e]133;A`a`e]133;B`a")',
+    ]);
+    expect(pty.writeCalls).toEqual([]);
+    expect(terminal.shell.status()).toMatchObject({ supported: true, ready: true });
+    await terminal.close();
+    await expectEndpointClosed(endpoint.value!);
+  });
+
   it('surfaces an asynchronous backend write failure and still tears down', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty();
