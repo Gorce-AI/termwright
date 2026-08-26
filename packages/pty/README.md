@@ -40,6 +40,12 @@ the pseudoconsole host should remain native.
 Bundle discovery is exposed through `conPtyRuntimeInfo()` even when validation
 fails, so diagnostics retain the exact failure code and Win32 status. Creating
 a session still fails closed until every asset and core export is validated.
+The report attests the canonically loaded DLL and the validated, locked host
+candidate selected for the native architecture; it is not process-image
+inspection of the spawned `OpenConsole.exe`. Inbox avoidance therefore rests
+on strict side-by-side selection plus the packaged behavioral verdict, which
+would fail on the legacy reordering path, rather than on a claimed host-PID
+attestation the public ConPTY API cannot provide.
 
 The runtime pin and SHA-256 inventory live in `conpty-assets.json`. Updating the
 pin requires regenerating the checked-in assets with
@@ -68,7 +74,10 @@ buffer publishes its stored contents synchronously, after which the marker is
 written on that newly active handle. Markers written while a buffer is inactive
 are deliberately not treated as observable boundaries. The
 screen-buffer probe remains useful diagnostic evidence, never visual truth or a
-publication barrier.
+publication barrier. Win32 exposes no stable public predicate that proves an
+arbitrary console-output handle is the active buffer, so the marker primitive
+does not pretend to diagnose that state synchronously: it stays on the
+framework's exact handle, and an inactive-buffer render remains unpaired.
 
 `writeWindowsConsoleMarker(fd, marker)` is the shared child-side primitive for
 framework probes. It uses the renderer's exact console descriptor, temporarily

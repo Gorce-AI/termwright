@@ -428,7 +428,7 @@ run under `--max-old-space-size=128`.
 ## 14. Milestones (each ends with an independent finding-only review)
 
 1. **Protocol + ADRs** — schemas, limits, DTO validation, handshake, framing;
-   marker PoC through xterm headless (DCS handler) and through a real Ink app.
+   marker PoC through the xterm private-OSC handler and a real Ink app.
 2. **Generic driver** — PTY lifecycle, VT grid, keyboard/paste/resize/mouse,
    text/cell locators, waits, typed errors; macOS/Linux/Windows green.
 3. **Semantic v1 + Ink adapter** — registration, measurement, full snapshots,
