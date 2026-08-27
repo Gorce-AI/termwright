@@ -397,6 +397,17 @@ export async function deriveHookInstrumentationProfile(candidate, archiveBytes, 
   };
 }
 
+export function verifyDerivedInkTransforms(candidateId, instrumentation, profile) {
+  const sourceRoot = '/termwright-candidate/node_modules/ink/build';
+  if (
+    instrumentation.instrumentInkRenderer(`${sourceRoot}/renderer.js`, profile.sources.renderer) ===
+      undefined ||
+    instrumentation.instrumentInkCore(`${sourceRoot}/ink.js`, profile.sources.core) === undefined
+  ) {
+    throw new Error(`${candidateId}: exact Ink transform anchors no longer apply`);
+  }
+}
+
 function withoutSha256Prefix(value) {
   return typeof value === 'string' && value.startsWith('sha256:')
     ? value.slice('sha256:'.length)
@@ -891,16 +902,7 @@ async function main(argv) {
                 join(root, `packages/probe-${candidate.frameworkId}/dist/instrumentation.js`),
               ).href
             );
-            if (
-              instrumentation.instrumentInkRenderer(
-                'ink/build/renderer.js',
-                profile.sources.renderer,
-              ) === undefined ||
-              instrumentation.instrumentInkCore('ink/build/ink.js', profile.sources.core) ===
-                undefined
-            ) {
-              throw new Error(`${candidate.id}: exact Ink transform anchors no longer apply`);
-            }
+            verifyDerivedInkTransforms(candidate.id, instrumentation, profile);
           }
         } finally {
           for (const [key, value] of Object.entries(previous)) {
