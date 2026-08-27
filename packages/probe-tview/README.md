@@ -1,137 +1,127 @@
 # @termwright/probe-tview
 
-Semantics from a [tview](https://github.com/rivo/tview) application that
-**imports nothing of ours**.
+Capability-driven semantic probing for
+[tview](https://github.com/rivo/tview), without editing or copying upstream
+source files.
 
-The application is built through an ephemeral Go workspace that redirects
-exact tview and tcell versions to instrumented copies. Nothing is written into
-the project: its `go.mod`, its `go.sum` and any `go.work` of its own come out of
-the build byte-identical.
+Termwright controls the Go build and uses the official `-toolexec` hook to add
+owned compilation units to the tview package and, on Windows, tcell. The
+compiler checks every private-field assumption. A new upstream version is
+accepted by compilation plus behavioral conformance, not by matching a source
+digest.
 
-## Install
+## Install and use
 
 ```sh
 npm install --save-dev @termwright/probe-tview
 ```
 
-Requires the Go toolchain and `git` (which the toolchain needs anyway). Node >= 22.
+The application opts in with one line immediately before `Run`:
 
-## Usage
+```go
+import "github.com/gorce-ai/termwright/clients/go/tviewprobe"
 
-One call prepares the build; the launcher owns everything else.
+app.SetRoot(root, true)
+defer tviewprobe.Attach(app, root)()
+if err := app.Run(); err != nil {
+	panic(err)
+}
+```
+
+Prepare the controlled build and pass the returned Go arguments to the build
+or test command:
 
 ```ts
+import {execFile} from 'node:child_process';
 import {prepareInstrumentedBuild} from '@termwright/probe-tview';
 
 const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
-
-// build.env carries GOWORK; the project's own files are untouched.
-await execFile('go', ['build', '-o', 'app-binary', '.'], {cwd: 'path/to/app', env: build.env});
-
-await launchTerminal({command: ['./app-binary']});
+await execFile(
+  'go',
+  ['build', ...build.goArgs, '-o', 'app-binary', '.'],
+  {cwd: 'path/to/app', env: build.env},
+);
 ```
 
-The framework version is read from the module, the instrumented copy is cached,
-and a second call with the same inputs reuses it.
+The mechanism works with ordinary module-cache dependencies, local
+replacements, workspaces and vendored applications. It does not modify the
+application's `go.mod`, `go.sum`, `go.work`, vendor tree, or upstream module
+bytes.
 
-## What it gives you
+## Intervention tiers
 
-Being inside the package is the point. A `tview.Grid` exposes no accessor for
-its children at all, so an out-of-package adapter has to be handed a callback;
-here it is a field read that also carries whether the item was drawn. A widget
-on a `Pages` page that is not shown reports as **hidden** rather than going
-missing, so a test can tell "not on screen" from "not there".
+- T0 public tview/tcell APIs provide most widget hierarchy, state, geometry
+  and the `Screen.Show` output boundary.
+- A T1 add-only tview unit exposes sealed root, Grid, Modal, DropDown and other
+  rendered state. Private-field drift is a compile error.
+- On Windows a second T1 tcell unit writes the authenticated frame marker
+  through the console handle used by `Show`. Unix uses the public `Tty()`
+  writer.
 
-Identity is the primitive's pointer: tview retains its widget tree, so the same
-`*Button` is the same button across frames. The handshake therefore reports
-`identityKind: 'stable'` and only the probe capabilities it earns:
-`stable-identity` and `annotations`. Its `frameworkVersion` is the exact
-version selected by the verified patch set, not the Go runtime version.
+The application screen is decorated before `Run`, and its existing public
+before/after-draw hooks are chained. Those hooks arm exactly tview's final
+`Show`; intermediate `Show` calls made by custom primitives or application
+hooks still flush normally but cannot publish a partial semantic frame. After
+the armed underlying `Show` completes, the probe reads the current
+`Application.root`, admits one complete snapshot to the bounded publication
+queue and writes its marker through the same screen sink. This also covers
+tview's before-draw short-circuit and roots changed through `SetRoot`. It never
+calls `Show` itself, never holds a process-global render mutex and never
+performs socket I/O on the render goroutine. Runtime displacement of either
+composed hook fails semantics closed.
 
-The tree is staged while tview holds its draw lock and committed only after
-`screen.Show()` succeeds. On Unix the marker follows through tcell's public
-`Tty()` writer. On Windows an exact tcell companion forwards through the real
-`baseScreen` to `cScreen` and writes under the same lock and console handle
-used by `Show`; virtual-terminal mode is required. Each supported tcell release
-has its own source-bound manifest, selected from an AST-classified console
-capability family. There is no stdout fallback, and a missing writer capability
-fails the semantic session closed.
+A queue refusal, re-entrant `Show`, missing writer, partial marker, worker
+failure or missing injected unit closes semantic publication with a typed
+diagnostic. It is never hidden by a timeout increase, retry, quiet window or
+stale-tree fallback.
 
-## Describing what the probe cannot see
+## Optional semantics
 
-Zero-config means the probe reads facts. It cannot read intent — which button
-is the destructive one, which list is the inbox, what "overdue" means here. For
-that, and only for that, an application may import
-`github.com/gorce-ai/termwright/clients/go/annotate`:
+The automatic tree does not require wrappers or per-widget annotations. An
+application may add intent with the framework-neutral Go SDK:
 
 ```go
-import (
-	"github.com/gorce-ai/termwright/clients/go/annotate"
-	"github.com/gorce-ai/termwright/clients/go/protocol"
-)
-
-annotate.Tag(label, annotate.Semantics{Key: "unread-label"})
 annotate.Tag(unreadBadge, annotate.Semantics{
-	Role: "status", Name: "Unread messages", TestID: "unread-badge",
-	Actions: []protocol.Action{protocol.ActionFocus, protocol.ActionActivate},
-	LabelledBy: []annotate.SemanticKey{"unread-label"},
+	Key:     "unread-badge",
+	Role:    "status",
+	Name:    "Unread messages",
+	TestID:  "unread-badge",
+	Actions: []protocol.Action{protocol.ActionFocus},
 })
 ```
 
-The probe merges this with what it observed: the wording is the author's, the
-bounds and the focus stay the probe's. `Semantics` has no field for bounds,
-focus, visibility, value, rendered text or framework state — not by convention
-but structurally, so an annotation cannot go stale against the screen. Actions
-come from the protocol's closed descriptive set and never install callbacks.
-Tagging retains nothing; the entry is released with the widget.
+Annotations can describe roles, names, ids, relationships and closed actions.
+They cannot override geometry, focus, visibility, value, rendered text or
+framework state. They are held in a side table and do not require replacing
+tview constructors or fluent widget types.
 
-`LabelledBy` and `DescribedBy` use framework-neutral `SemanticKey` strings, so
-one annotation does not retain its targets. The probe resolves them after the
-whole tree has been walked. Missing targets are omitted; duplicate non-empty
-keys are a typed fatal producer error instead of silently weakening identity.
-Pointer identity remains the
-stable node id; a key is only the relation target for tview. Primary framework
-provenance is reported in `p`, with recognizer and annotation exceptions in
-`px`.
+## Dormant and unsupported modes
 
-This is the one import that makes an application no longer zero-config, which
-is why it is optional and why the two example fixtures in this package are kept
-apart.
+Without both `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN`, `Attach` returns
+before creating a client, channel, goroutine, socket or framework hook. The
+instrumented and ordinary builds are required to render byte-identical output
+in this mode.
 
-Application-owned physical evidence is registered separately through
-`clients/go/evidence`. The injected probe freezes that registry on the first
-render, after application initialization has run, so a normal registration in
-`main()` participates in the immutable session contract. Region-only and
-hit-test-only providers may be composed; they publish evidence only and never
-dispatch tview input handlers.
+A prebuilt binary cannot receive T1 units and therefore runs as explicitly
+reported raw PTY. A controlled build whose capability unit fails to compile is
+rejected loudly; Termwright does not create an exact-version patch profile or
+silently downgrade its semantic tree.
 
-## Dormant without instrumentation
-
-Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` the instrumented copy opens
-no socket, writes no marker and renders exactly what upstream renders. That is
-measured, not asserted: the test suite builds the same application twice, once
-against untouched tview and once against the copy, and requires the two screens
-to be byte-identical.
-
-## When it refuses
-
-- `-mod=vendor` in `GOFLAGS` is reported by name rather than overridden;
-  workspace mode is incompatible with it, and overriding would change what
-  compiles.
-- A framework version with no patch set is named as such — "this is not
-  tview v0.42.0" — instead of failing somewhere inside a diff.
-- The resolved tcell version must have its own exact companion patch set. This
-  is required for causal Windows marker output, not merely a transitive
-  dependency preference. A structurally similar but uncertified release is
-  refused rather than matched fuzzily.
+Known declared limitations are clipped geometry for some tview containers and
+enumeration of application-defined custom container children. Such nodes stay
+visible as generic/opaque nodes and the reduced capability is present in run
+metadata.
 
 ## Development
 
 ```sh
-pnpm build && pnpm typecheck && pnpm test
+pnpm build
+pnpm typecheck
+pnpm test
+cd ../../clients/go && go test -race -count=1 ./...
 ```
 
-The suites that need Go or a pseudo-terminal skip themselves where either is
-missing, and say so in a test named for it. `TERMWRIGHT_SKIP_GO=1` and
-`TERMWRIGHT_SKIP_PTY=1` force it. Implementation notes, including the traps
-that cost time, are in [`NOTES.md`](NOTES.md).
+The native Linux and Windows certification rows require the relevant
+toolchain and real PTY/ConPTY rather than treating their absence as a green
+adapter result. Implementation invariants are recorded in
+[`NOTES.md`](NOTES.md).

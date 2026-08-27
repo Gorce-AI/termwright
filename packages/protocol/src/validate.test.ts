@@ -194,6 +194,17 @@ describe('validateSnapshot — generic nodes and provenance (D1, D2)', () => {
     expect(codeOf(snapshot)).toBe('ok');
   });
 
+  it('marks the affected generic node when its children are opaque', () => {
+    const snapshot = baseSnapshot();
+    (snapshot['nodes'] as Record<string, unknown>[])[1] = {
+      id: 'ok', parentId: 'root', role: 'generic', frameworkType: 'CustomContainer',
+      opaqueChildren: true, name: '', geometry: unknownGeometry(),
+    };
+    expect(codeOf(snapshot)).toBe('ok');
+    (snapshot['nodes'] as Record<string, unknown>[])[1]!['opaqueChildren'] = 'yes';
+    expect(codeOf(snapshot)).toBe('schema');
+  });
+
   it('rejects an empty frameworkType, which carries no more than its absence', () => {
     const snapshot = baseSnapshot();
     (snapshot['nodes'] as Record<string, unknown>[])[1] = {

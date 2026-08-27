@@ -35,12 +35,10 @@ const DialTimeout = 5 * time.Second
 
 // DefaultWriteTimeout bounds a single frame write.
 //
-// A probe publishes from inside the render loop — tview does it under the
-// application's write lock — so an unbounded Write turns a driver that has
-// stopped reading into a frozen application. That is the failure this whole
-// campaign exists to remove, so the ceiling is deliberately short: a driver
-// that cannot take a frame in a quarter of a second is not keeping up, and
-// waiting longer buys nothing that the next frame will not carry anyway.
+// Framework probes publish through PublicationQueue, so this deadline is a
+// worker watchdog rather than a render-loop bound. It still needs to be short:
+// once the driver stops reading, ordered publication cannot recover by waiting
+// longer and the queue must fail closed before admitting misleading markers.
 const DefaultWriteTimeout = 250 * time.Millisecond
 
 // ErrWriteTimeout reports that the driver did not read within the write
@@ -51,6 +49,11 @@ const DefaultWriteTimeout = 250 * time.Millisecond
 // snapshot was refused for being oversized, which is a *Violation with code
 // "frame-oversized" and will happen again on the next identical frame.
 var ErrWriteTimeout = errors.New("termwright: the driver did not read within the write deadline")
+
+// ErrPublicationQueueOwnsClient prevents mixing direct publication with an
+// asynchronous PublicationQueue. The queue owns revision and wire ordering
+// for the remainder of the session.
+var ErrPublicationQueueOwnsClient = errors.New("termwright: publication queue owns this client")
 
 // Options tune a Client. The zero value is usable.
 type Options struct {
@@ -87,21 +90,24 @@ type Client struct {
 	token    string
 	options  Options
 
-	mu            sync.Mutex
-	conn          net.Conn
-	limits        Limits
-	sessionID     string
-	revision      int64
-	marker        bool
-	logBudget     *LogBudget
-	subscribe     string
-	closed        bool
-	snapsSent     int64
-	logSeq        int64
-	logBucket     *tokenBucket
-	logsDropped   int64
-	performance   clientPerformanceCounters
-	providerLease EvidenceProviderLease
+	mu              sync.Mutex
+	publishMu       sync.Mutex
+	writeMu         sync.Mutex
+	conn            net.Conn
+	limits          Limits
+	sessionID       string
+	revision        int64
+	marker          bool
+	logBudget       *LogBudget
+	subscribe       string
+	closed          bool
+	snapsSent       int64
+	logSeq          int64
+	logBucket       *tokenBucket
+	logsDropped     int64
+	performance     clientPerformanceCounters
+	providerLease   EvidenceProviderLease
+	queuedPublisher bool
 
 	ready chan error
 	once  sync.Once
@@ -320,13 +326,62 @@ func (c *Client) Limits() Limits {
 // own: an adapter never picks its own revision numbers. Returns "" with a nil
 // error when there is no live session, so a dormant app takes no branch.
 func (c *Client) Publish(snapshot *Snapshot) (string, error) {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
 	c.mu.Lock()
+	queued := c.queuedPublisher
+	c.mu.Unlock()
+	if queued {
+		return "", ErrPublicationQueueOwnsClient
+	}
+	prepared, err := c.preparePublication(snapshot)
+	if err != nil || prepared == nil {
+		return "", err
+	}
+	if err := c.writePublication(prepared); err != nil {
+		c.performanceDrop()
+		return "", err
+	}
+	c.admitPublication(prepared)
+	c.completePublication(prepared)
+	return prepared.marker, nil
+}
+
+type preparedPublication struct {
+	revision        int64
+	metricsSnapshot Snapshot
+	treeFrame       []byte
+	commitFrame     []byte
+	marker          string
+	serialization   time.Duration
+}
+
+// preparePublication validates and encodes a complete snapshot+commit pair
+// without touching the transport or consuming a revision. PublicationQueue
+// uses this on the render thread before its single non-blocking admission.
+func (c *Client) preparePublication(snapshot *Snapshot) (*preparedPublication, error) {
+	return c.preparePublicationMode(snapshot, false)
+}
+
+// tryPreparePublication is the render-loop variant. It refuses immediately
+// when lifecycle state is being mutated instead of waiting behind Client.mu.
+func (c *Client) tryPreparePublication(snapshot *Snapshot) (*preparedPublication, error) {
+	return c.preparePublicationMode(snapshot, true)
+}
+
+func (c *Client) preparePublicationMode(snapshot *Snapshot, nonBlocking bool) (*preparedPublication, error) {
+	if nonBlocking {
+		if !c.mu.TryLock() {
+			return nil, ErrPublicationQueueBusy
+		}
+	} else {
+		c.mu.Lock()
+	}
 	if c.sessionID == "" || c.closed || c.conn == nil {
 		c.mu.Unlock()
-		return "", nil
+		return nil, nil
 	}
-	c.revision++
-	revision := c.revision
+	revision := c.revision + 1
 	snapshot.V = ProtocolVersion
 	snapshot.SessionID = c.sessionID
 	snapshot.Revision = revision
@@ -340,38 +395,79 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 	c.mu.Unlock()
 
 	if err := snapshot.Validate(limits); err != nil {
-		c.mu.Lock()
-		c.revision--
-		c.mu.Unlock()
-		c.options.Debug.Line("diag", "snapshot refused: "+err.Error())
-		c.performanceDrop()
-		return "", err
+		if !nonBlocking {
+			c.options.Debug.Line("diag", "snapshot refused: "+err.Error())
+			c.performanceDrop()
+		}
+		return nil, err
 	}
 
-	serialization := time.Duration(0)
-
+	prepared := &preparedPublication{
+		revision:        revision,
+		metricsSnapshot: Snapshot{Revision: revision, Nodes: append([]Node(nil), snapshot.Nodes...)},
+	}
 	if subscribe != "revisions" {
+		if !nonBlocking {
+			c.options.Debug.Line("io", fmt.Sprintf("r%d snapshot nodes=%d", snapshot.Revision, len(snapshot.Nodes)))
+		}
+		started := time.Now()
+		frame, err := EncodeFrame(SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, limits.MaxFrameBytes)
+		prepared.serialization += time.Since(started)
+		if err != nil {
+			if !nonBlocking {
+				c.performanceDrop()
+			}
+			return nil, err
+		}
+		prepared.treeFrame = frame
+	}
+	commit, err := EncodeFrame(RevisionCommit{Type: "revision-commit", Revision: revision}, limits.MaxFrameBytes)
+	if err != nil {
+		if !nonBlocking {
+			c.performanceDrop()
+		}
+		return nil, err
+	}
+	prepared.commitFrame = commit
+	if markerEnabled {
+		prepared.marker, err = EncodeMarker(c.token, sessionID, revision)
+		if err != nil {
+			if !nonBlocking {
+				c.performanceDrop()
+			}
+			return nil, err
+		}
+	}
+	return prepared, nil
+}
+
+func (c *Client) writePublication(prepared *preparedPublication) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if len(prepared.treeFrame) != 0 {
+		if err := c.writeEncodedFrame(prepared.treeFrame); err != nil {
+			return err
+		}
+	}
+	return c.writeEncodedFrame(prepared.commitFrame)
+}
+
+func (c *Client) admitPublication(prepared *preparedPublication) {
+	c.mu.Lock()
+	c.revision = prepared.revision
+	c.mu.Unlock()
+}
+
+func (c *Client) completePublication(prepared *preparedPublication) {
+	if prepared.marker != "" {
+		c.performanceMarker()
+	}
+	if len(prepared.treeFrame) != 0 {
 		c.mu.Lock()
 		c.snapsSent++
 		c.mu.Unlock()
-		c.options.Debug.Line("io", fmt.Sprintf("r%d snapshot nodes=%d", snapshot.Revision, len(snapshot.Nodes)))
-		bytes, encodedFor, err := c.sendMeasured(SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, limits, c.options.Debug != nil)
-		serialization += encodedFor
-		if err != nil {
-			c.performanceDrop()
-			return "", err
-		}
-		c.performancePublication(snapshot, bytes, serialization)
+		c.performancePublication(&prepared.metricsSnapshot, len(prepared.treeFrame), prepared.serialization)
 	}
-	if err := c.send(RevisionCommit{Type: "revision-commit", Revision: revision}, limits); err != nil {
-		c.performanceDrop()
-		return "", err
-	}
-	if !markerEnabled {
-		return "", nil
-	}
-	c.performanceMarker()
-	return EncodeMarker(c.token, sessionID, revision)
 }
 
 // tokenBucket rate-limits the log channel: `burst` capacity on top of the
@@ -563,11 +659,22 @@ func (c *Client) sendMeasured(message any, limits Limits, measure bool) (int, ti
 	if err != nil {
 		return 0, elapsed, err
 	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if err := c.writeEncodedFrame(frame); err != nil {
+		return 0, elapsed, err
+	}
+	return len(frame), elapsed, nil
+}
+
+// writeEncodedFrame writes one already validated length-prefixed frame. Its
+// caller holds writeMu so a snapshot+commit pair cannot interleave with logs.
+func (c *Client) writeEncodedFrame(frame []byte) error {
 	c.mu.Lock()
 	conn := c.conn
 	c.mu.Unlock()
 	if conn == nil {
-		return 0, elapsed, nil
+		return nil
 	}
 
 	timeout := c.writeTimeout()
@@ -577,7 +684,7 @@ func (c *Client) sendMeasured(message any, limits Limits, measure bool) (int, ti
 			// publishing into it from a render loop is the risk we refuse.
 			c.options.Debug.Line("diag", "cannot bound this write: "+errorLabel(err))
 			c.Close()
-			return 0, elapsed, err
+			return err
 		}
 	}
 	written, err := conn.Write(frame)
@@ -595,18 +702,18 @@ func (c *Client) sendMeasured(message any, limits Limits, measure bool) (int, ti
 				"write deadline exceeded after %d of %d bytes; session is unrecoverable",
 				written, len(frame)))
 			c.Close()
-			return 0, elapsed, fmt.Errorf("%w after %d of %d bytes: %v", ErrWriteTimeout, written, len(frame), err)
+			return fmt.Errorf("%w after %d of %d bytes: %v", ErrWriteTimeout, written, len(frame), err)
 		}
 		c.Close()
-		return 0, elapsed, err
+		return err
 	}
 	if written != len(frame) {
 		c.options.Debug.Line("diag", fmt.Sprintf(
 			"short write, %d of %d bytes; session is unrecoverable", written, len(frame)))
 		c.Close()
-		return 0, elapsed, fmt.Errorf("%w: wrote %d of %d bytes", ErrWriteTimeout, written, len(frame))
+		return fmt.Errorf("%w: wrote %d of %d bytes", ErrWriteTimeout, written, len(frame))
 	}
-	return len(frame), elapsed, nil
+	return nil
 }
 
 func (c *Client) writeTimeout() time.Duration {

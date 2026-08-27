@@ -31,6 +31,11 @@ describe('validateProbeInfo', () => {
     probeVersion: '0.1.0',
     identityKind: 'stable' as const,
     capabilities: ['stable-identity', 'visible-rect'],
+    instrumentation: {
+      highestTier: 'T3' as const,
+      semanticClass: 'A' as const,
+      degradedCapabilities: [],
+    },
   };
 
   it('accepts a well-formed self-description', () => {
@@ -68,6 +73,65 @@ describe('validateProbeInfo', () => {
     const { framework: _f, ...noFramework } = info;
     expect(validateProbeInfo(noFramework).ok).toBe(false);
     expect(validateProbeInfo({ ...info, probeVersion: '' }).ok).toBe(false);
+  });
+
+  it('accepts legacy protocol-v2 ProbeInfo without instrumentation metadata', () => {
+    const { instrumentation: _instrumentation, ...legacy } = info;
+    expect(validateProbeInfo(legacy).ok).toBe(true);
+  });
+
+  it('strictly validates and deeply freezes instrumentation metadata', () => {
+    const result = validateProbeInfo({
+      ...info,
+      instrumentation: {
+        highestTier: 'T3',
+        semanticClass: 'B',
+        degradedCapabilities: ['intended-geometry', 'clipped-geometry'],
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Object.isFrozen(result.info.instrumentation)).toBe(true);
+    expect(Object.isFrozen(result.info.instrumentation?.degradedCapabilities)).toBe(true);
+    expect(validateProbeInfo({
+      ...info,
+      instrumentation: { highestTier: 'T4', semanticClass: 'A', degradedCapabilities: [] },
+    }).ok).toBe(false);
+    expect(validateProbeInfo({
+      ...info,
+      instrumentation: { highestTier: 'T3', semanticClass: 'A', degradedCapabilities: ['telepathy'] },
+    }).ok).toBe(false);
+    expect(validateProbeInfo({
+      ...info,
+      instrumentation: {
+        highestTier: 'T3', semanticClass: 'A',
+        degradedCapabilities: ['intended-geometry', 'intended-geometry'],
+      },
+    }).ok).toBe(false);
+  });
+
+  it('accepts a narrow named degradation without disabling the broader session capability', () => {
+    const result = validateProbeInfo({
+      ...info,
+      instrumentation: {
+        highestTier: 'T3',
+        semanticClass: 'A',
+        degradedCapabilities: ['inactive-screen-tree'],
+      },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      info: { instrumentation: { degradedCapabilities: ['inactive-screen-tree'] } },
+    });
+  });
+
+  it('requires both geometry degradations for semantic class B', () => {
+    expect(validateProbeInfo({
+      ...info,
+      instrumentation: {
+        highestTier: 'T3', semanticClass: 'B', degradedCapabilities: ['intended-geometry'],
+      },
+    }).ok).toBe(false);
   });
 
   it('keeps the capability set closed', () => {

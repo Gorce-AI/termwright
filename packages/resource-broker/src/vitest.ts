@@ -20,6 +20,8 @@ export interface TermwrightTestResources {
   readonly traceWriters?: number;
   /** Makes native transport pressure exclusive while preserving the true terminal count. */
   readonly nativeHost?: 'shared' | 'exclusive';
+  /** Exclusively reserves host-wide process/toolchain pressure without requiring a terminal. */
+  readonly hostPressure?: 'exclusive';
 }
 
 /** Vitest's Test API with declaration-time atomic resource ownership. */
@@ -88,11 +90,16 @@ function validateResources(value: TermwrightTestResources): Readonly<TermwrightT
   }
   const record = value as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (key !== 'terminals' && key !== 'traceWriters' && key !== 'nativeHost') {
+    if (key !== 'terminals' && key !== 'traceWriters' && key !== 'nativeHost' && key !== 'hostPressure') {
       throw new TypeError(`test.resources() does not recognize ${key}`);
     }
   }
-  const result: { terminals?: number; traceWriters?: number; nativeHost?: 'shared' | 'exclusive' } = {};
+  const result: {
+    terminals?: number;
+    traceWriters?: number;
+    nativeHost?: 'shared' | 'exclusive';
+    hostPressure?: 'exclusive';
+  } = {};
   for (const key of ['terminals', 'traceWriters'] as const) {
     const amount = record[key];
     if (amount === undefined) continue;
@@ -106,7 +113,15 @@ function validateResources(value: TermwrightTestResources): Readonly<TermwrightT
     throw new TypeError('test.resources().nativeHost must be shared or exclusive');
   }
   if (nativeHost !== undefined) result.nativeHost = nativeHost;
-  if ((result.terminals ?? 0) === 0 && (result.traceWriters ?? 0) === 0) {
+  const hostPressure = record['hostPressure'];
+  if (hostPressure !== undefined && hostPressure !== 'exclusive') {
+    throw new TypeError('test.resources().hostPressure must be exclusive');
+  }
+  if (hostPressure !== undefined) result.hostPressure = hostPressure;
+  if (result.nativeHost !== undefined && result.hostPressure !== undefined) {
+    throw new TypeError('test.resources() cannot combine nativeHost and hostPressure');
+  }
+  if ((result.terminals ?? 0) === 0 && (result.traceWriters ?? 0) === 0 && result.hostPressure === undefined) {
     throw new RangeError('test.resources() must reserve at least one resource');
   }
   if (result.nativeHost === 'exclusive' && (result.terminals ?? 0) === 0) {

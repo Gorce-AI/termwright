@@ -1,8 +1,7 @@
 // The same application as fixture-app, plus developer annotations.
 //
-// Kept separate on purpose: fixture-app must import nothing of ours, and a
-// test asserts exactly that. Annotation is opt-in, so it gets its own fixture
-// rather than compromising the one that proves zero-config.
+// Kept separate on purpose: annotation is an optional accuracy upgrade, so it
+// gets its own fixture rather than becoming structural input to Attach.
 package main
 
 import (
@@ -15,6 +14,7 @@ import (
 	"github.com/gorce-ai/termwright/clients/go/annotate"
 	"github.com/gorce-ai/termwright/clients/go/evidence"
 	"github.com/gorce-ai/termwright/clients/go/protocol"
+	"github.com/gorce-ai/termwright/clients/go/tviewprobe"
 )
 
 // badge is a primitive termwright has never heard of, which is the case the
@@ -142,7 +142,9 @@ func main() {
 		return event
 	})
 
-	if err := app.SetRoot(pages, true).SetFocus(save).Run(); err != nil {
+	app.SetRoot(pages, true).SetFocus(save)
+	defer tviewprobe.Attach(app, pages)()
+	if err := app.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

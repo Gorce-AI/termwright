@@ -222,7 +222,7 @@ export async function runCharmPerformanceBenchmark(
       },
     });
     const instrumentedBinary = join(root, 'charm-instrumented');
-    await run('go', ['build', '-o', instrumentedBinary, '.'], {
+    await run('go', ['build', ...prepared.goArgs, '-o', instrumentedBinary, '.'], {
       cwd: app,
       env: prepared.env,
     });

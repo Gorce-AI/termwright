@@ -1,6 +1,6 @@
 ---
 title: Framework compatibility
-description: Exact framework versions, runtimes, automatic probe capabilities, annotation APIs and known limits.
+description: Certified framework contracts, runtimes, intervention tiers, probe capabilities, annotation APIs and known limits.
 ---
 
 import registry from '../../../../../compatibility/registry.json';
@@ -9,8 +9,8 @@ This page is rendered from the same registry that launch and patch declarations
 are checked against. Use the
 [JSON registry](../../compatibility/registry.json) and its
 [JSON Schema](../../compatibility/schema.json) when another tool needs the
-matrix. Every row is exact-certified: `declared` and `verified` identify the
-same upstream version set, backed by executable claim files.
+matrix. Exact T3 interventions remain artifact-certified; T0–T2 interventions
+are admitted by detected capabilities plus their executable conformance suites.
 
 ## Matrix
 
@@ -21,6 +21,7 @@ same upstream version set, backed by executable claim files.
       <th>Declared / verified</th>
       <th>Runtime</th>
       <th>Probe</th>
+      <th>Injection contract</th>
       <th>Automatic probe capabilities</th>
       <th>Effective session graph</th>
       <th>Annotations</th>
@@ -36,6 +37,14 @@ same upstream version set, backed by executable claim files.
         </td>
         <td>{entry.runtimes.map((runtime) => <><code>{runtime.name} {runtime.version}</code><br /></>)}</td>
         <td><code>{entry.probe.package} {entry.probe.packageVersion}</code></td>
+        <td>
+          class: <code>{entry.instrumentation.semanticClass}</code><br />
+          T3 debt: <code>{entry.instrumentation.t3DebtCount}</code><br />
+          {entry.instrumentation.interventions.map((item) => (
+            <><code>{item.capability}: {item.tier}</code><br /></>
+          ))}
+          degraded: <code>{entry.instrumentation.degradedCapabilities.join(', ') || 'none'}</code>
+        </td>
         <td>
           identity: <code>{entry.probe.identityKind}</code><br />
           {entry.probe.capabilities.length === 0
@@ -68,6 +77,21 @@ executable exact-version combination is listed in the registry and below.
     <h3 id={entry.id}>{entry.name}</h3>
     <p>
       <strong>Instrumentation:</strong> {entry.instrumentation.strategy}
+    </p>
+    <p>
+      <strong>Semantic class:</strong> <code>{entry.instrumentation.semanticClass}</code>{' · '}
+      <strong>T3 debt:</strong> <code>{entry.instrumentation.t3DebtCount}</code>{' · '}
+      <strong>Degraded capabilities:</strong>{' '}
+      <code>{entry.instrumentation.degradedCapabilities.join(', ') || 'none'}</code>
+    </p>
+    <p>
+      <strong>Interventions:</strong>{' '}
+      {entry.instrumentation.interventions.map((item) => (
+        <span>
+          <code>{item.capability}: {item.tier}</code>
+          {item.sourcePatching ? ' (source patch)' : ''}{' '}
+        </span>
+      ))}
     </p>
     {entry.instrumentation.patchSets.length > 0 && (
       <p>
@@ -106,11 +130,14 @@ executable exact-version combination is listed in the registry and below.
 
 ## What the registry guarantees
 
-The compatibility test fails when a checksummed patch manifest is missing from
-the registry, when a package version moves, or when a probe's `ProbeInfo` or
-adapter capability declaration no longer matches this data. This prevents the
-common failure mode where the documentation promises geometry, annotations or
-stable identity that the actual handshake does not announce.
+The compatibility test fails when a required manifest is missing, a T3 artifact
+or package version moves, a T1/T2 capability contract is malformed, or a
+probe's `ProbeInfo` or adapter capability declaration no longer matches this
+data. This prevents the common failure mode where the documentation promises
+geometry, annotations or stable identity that the actual handshake does not
+announce.
 
-Versions outside an exact certification row are refused. There is no range or
-feature-detection fallback that silently upgrades the session contract.
+T3 capabilities refuse versions outside their exact certification row. T0–T2
+capabilities use compile/capability admission and behavioral conformance; any
+missing capability is reported as an explicit degradation, never as a silent
+upgrade or a quietly incomplete semantic tree.

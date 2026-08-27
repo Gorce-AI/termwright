@@ -40,7 +40,7 @@ await terminal.close();
 
 > `readonly` `optional` **artifactValuePolicy?**: `"raw"` \| `"none"` \| `"redacted"`
 
-Defined in: [driver/src/api.ts:127](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L127)
+Defined in: [driver/src/api.ts:134](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L134)
 
 Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in.
 
@@ -115,7 +115,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **operationBudget?**: [`OperationBudget`](../operationbudget/)
 
-Defined in: [driver/src/api.ts:124](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L124)
+Defined in: [driver/src/api.ts:131](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L131)
 
 ***
 
@@ -123,7 +123,7 @@ Defined in: [driver/src/api.ts:124](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **recording?**: [`RecordingOptions`](../recordingoptions/)
 
-Defined in: [driver/src/api.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L125)
+Defined in: [driver/src/api.ts:132](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L132)
 
 ***
 
@@ -131,7 +131,7 @@ Defined in: [driver/src/api.ts:125](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"focus"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"pointer-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: [driver/src/api.ts:139](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L139)
+Defined in: [driver/src/api.ts:146](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L146)
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`
@@ -151,7 +151,20 @@ Defined in: [driver/src/api.ts:113](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **scrollbackLines?**: `number`
 
-Defined in: [driver/src/api.ts:122](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L122)
+Defined in: [driver/src/api.ts:129](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L129)
+
+***
+
+### semanticFrameQueueCapacity?
+
+> `readonly` `optional` **semanticFrameQueueCapacity?**: `number`
+
+Defined in: [driver/src/api.ts:128](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L128)
+
+Negotiated ceiling for semantic frames in flight between a framework
+probe and the driver. Defaults to 32 and is capped at 256. Compatible
+probes may use it as their publication budget; a full queue still fails
+closed instead of dropping or retrying a semantic revision.
 
 ***
 
@@ -173,7 +186,7 @@ the larger of 2,000 ms and the session `ready` timeout.
 
 > `readonly` `optional` **shellIntegration?**: `"external"` \| `"termwright-posix"` \| `"termwright-powershell"`
 
-Defined in: [driver/src/api.ts:132](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L132)
+Defined in: [driver/src/api.ts:139](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L139)
 
 Termwright-managed modes instrument an interactive shell with exact
 command markers. Test authors should normally use `terminal.openShell()`.
@@ -199,4 +212,4 @@ pane can count characters exactly as the live session did.
 
 > `readonly` `optional` **timeouts?**: [`TimeoutClasses`](../timeoutclasses/)
 
-Defined in: [driver/src/api.ts:123](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L123)
+Defined in: [driver/src/api.ts:130](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L130)

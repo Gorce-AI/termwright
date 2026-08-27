@@ -21,20 +21,25 @@ same terminal bytes as upstream.
 go get github.com/gorce-ai/termwright/clients/go
 ```
 
-Two packages:
+Core packages:
 
 - `.../clients/go/protocol` — framing, marker, message and snapshot validation,
   socket client. Depends on the standard library only.
 - `.../clients/go/annotate` — describe your widgets to the zero-config probes.
   Standard library only, and dormant when no driver is attached. Needs Go 1.24
   (`runtime.AddCleanup`).
+- `.../clients/go/tviewprobe` — the one-line tview attachment that composes the
+  public draw lifecycle with compiler-injected capability units.
 
 ## Automatic tview semantics
 
 ```go
 package main
 
-import "github.com/rivo/tview"
+import (
+	"github.com/gorce-ai/termwright/clients/go/tviewprobe"
+	"github.com/rivo/tview"
+)
 
 func main() {
 	app := tview.NewApplication()
@@ -45,29 +50,33 @@ func main() {
 		AddItem(reject, 1, 0, false)
 	root.SetTitle("Permission")
 
+	defer tviewprobe.Attach(app, root)()
 	if err := app.SetRoot(root, true).Run(); err != nil {
 		panic(err)
 	}
 }
 ```
 
-The application imports no Termwright package. Build it through
+This is the only application-side opt-in; without the Termwright environment it
+returns before allocating or installing a hook. Build it through
 `@termwright/probe-tview`:
 
 ```ts
 import { prepareInstrumentedBuild } from "@termwright/probe-tview";
 
 const build = await prepareInstrumentedBuild({ moduleDir: "path/to/app" });
-await execFile("go", ["build", "-o", "app-binary", "."], {
+await execFile("go", ["build", ...build.goArgs, "-o", "app-binary", "."], {
   cwd: "path/to/app",
   env: build.env,
 });
 await launchTerminal({ command: ["./app-binary"] });
 ```
 
-The generated `go.work` redirects only tview and the probe client to cached,
-verified copies. The project's `go.mod`, `go.sum`, source tree and existing
-workspace remain byte-identical.
+The prepared build uses Go's official `-toolexec` hook to compile Termwright's
+owned units into the tview package and, on Windows, tcell. It does not create a
+replacement workspace or copy dependencies. The project's `go.mod`, `go.sum`,
+source tree, vendor tree, existing workspace and upstream module bytes remain
+byte-identical.
 
 Under the driver the ordinary application publishes, after every committed frame:
 
@@ -79,10 +88,17 @@ region "Permission"   visible=(0,0,80,24)
 
 ### Where the marker is emitted
 
-The pinned tview patch observes its draw traversal and wraps the internal
-`tcell.Screen`. The tree is built from the just-drawn primitives, while the
-private `OSC 8487` marker is emitted only after `Show()` flushes the frame. A
-marker can therefore commit only the terminal bytes that precede it.
+The application opts in once with `tviewprobe.Attach`. Its public screen is
+decorated, while a compiler-checked add-only tview unit composes the existing
+before/after-draw hooks and exposes sealed state. The phase gate arms only the
+final application `Show()`, so intermediate flushes from custom primitives or
+hooks cannot publish a partial tree. The private `OSC 8487` marker is emitted
+through the same screen sink only after that final `Show()` has flushed the
+frame, and can therefore commit only the terminal bytes that precede it.
+
+No tview or tcell source is patched or matched by version digest. A missing or
+changed private capability is a loud compiler/conformance failure; there is no
+exact-version fallback.
 
 The probe also forces one redraw as soon as the handshake completes. tview has
 usually drawn its first frame by then and an idle application never draws
@@ -290,10 +306,11 @@ not listed here follows them.
   `tview.Modal` is modal by construction and the type carries no property to
   read. No other state here is inferred: `disabled`, `checked` and `focused`
   all come from `IsDisabled`, `IsChecked` and `HasFocus`.
-- **The probe is exact-version build instrumentation.** It sees private `Grid`
-  children precisely because the verified patch runs inside tview; an
-  unsupported tview version is refused rather than approximated from the
-  public API.
+- **Private access is compiler-checked capability instrumentation.** The owned
+  T1 unit sees private `Grid` children because `-toolexec` compiles it inside
+  the resolved tview package without editing upstream bytes. A candidate is
+  admitted by compilation and behavioral conformance, not an exact-version
+  source profile; missing private symbols fail the build loudly.
 - **List and DropDown entries are synthesised, not primitives** (rule 3). They
   are published as `listitem` nodes with generated ids (`p4:item0`), because
   tview keeps them as text rather than as widgets. They carry no `testId`, and

@@ -13,4 +13,4 @@ editUrl: false
 
 > **ArtifactValuePolicy** = *typeof* `ARTIFACT_VALUE_POLICIES`\[`number`\]
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:652
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:6

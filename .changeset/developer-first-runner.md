@@ -7,8 +7,10 @@ evidence-qualified observations, one canonical Condition and ActionPlanner
 pipeline, real keyboard/mouse PTY devices, revision-safe receipts, semantic
 versus screen query domains, composable providers, and typed fail-closed errors.
 
-Certify exact Ink, OpenTUI, Textual, tview, Ratatui, and Bubble Tea integrations
-with adversarial real-process conformance. Add the desktop Runner, trace replay,
+Certify exact source-bound Ink, Ratatui, and Bubble Tea integrations; compile
+tview's add-only capabilities without editing upstream bytes; and behaviorally
+certify runtime-capability OpenTUI and Textual integrations with adversarial
+real-process conformance. Add the desktop Runner, trace replay,
 Recorder and MCP projections of the same action model; shell commands, projects,
 Gherkin lifecycle/tooling, doctor/security/API documentation, and daily
 checksum-bound upstream compatibility certification with trusted autonomous

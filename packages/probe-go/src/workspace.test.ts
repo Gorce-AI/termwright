@@ -12,7 +12,8 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import {
   assertNoVendorMode,
@@ -24,6 +25,7 @@ import {
 } from './workspace.js';
 
 const run = promisify(execFile);
+const goIt = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 async function goAvailable(): Promise<string | null> {
   return goTestCapability(async () => {
@@ -35,8 +37,8 @@ async function goAvailable(): Promise<string | null> {
 const toolchain = await goAvailable();
 const roots: string[] = [];
 
-afterAll(async () => {
-  await Promise.all(roots.map((dir) => rm(dir, { recursive: true, force: true })));
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 async function scratch(): Promise<string> {
@@ -210,7 +212,7 @@ describe('vendor mode', () => {
 });
 
 describe.skipIf(toolchain === null)('against a real toolchain', () => {
-  it('reads no workspace from a plain module without calling it an error', async () => {
+  goIt('reads no workspace from a plain module without calling it an error', async () => {
     const dir = await scratch();
     await writeFile(join(dir, 'go.mod'), 'module example.com/plain\n\ngo 1.22\n', 'utf8');
 
@@ -220,7 +222,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     expect(inherited.replaces).toEqual([]);
   });
 
-  it('reads the uses of a workspace and resolves them to absolute paths', async () => {
+  goIt('reads the uses of a workspace and resolves them to absolute paths', async () => {
     const dir = await scratch();
     await mkdir(join(dir, 'app'), { recursive: true });
     await mkdir(join(dir, 'lib'), { recursive: true });
@@ -236,7 +238,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     );
   });
 
-  it('builds a multi-module project through the generated workspace', async () => {
+  goIt('builds a multi-module project through the generated workspace', async () => {
     // The end-to-end form of the rendering test above: this is the build that
     // failed with "unrecognized import path" when the generator invented a
     // workspace instead of inheriting one.
@@ -277,7 +279,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     ).resolves.toBeDefined();
   }, 120_000);
 
-  it('leaves go.mod, go.sum and the project workspace untouched', async () => {
+  goIt('leaves go.mod, go.sum and the project workspace untouched', async () => {
     const dir = await scratch();
     await mkdir(join(dir, 'app'), { recursive: true });
     const gomod = 'module example.com/app\n\ngo 1.22\n';
@@ -303,7 +305,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     await expect(readFile(join(dir, 'generated.work.sum'), 'utf8')).rejects.toThrow();
   }, 120_000);
 
-  it('proves through the canary that the copy is what compiles', async () => {
+  goIt('proves through the canary that the copy is what compiles', async () => {
     const dir = await scratch();
     await mkdir(join(dir, 'app'), { recursive: true });
     await mkdir(join(dir, 'copy'), { recursive: true });
@@ -353,7 +355,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     ).resolves.toBeDefined();
   }, 120_000);
 
-  it('reports an unproved canary rather than throwing, when the redirect is not applied', async () => {
+  goIt('reports an unproved canary rather than throwing, when the redirect is not applied', async () => {
     const dir = await scratch();
     await mkdir(join(dir, 'app'), { recursive: true });
     await mkdir(join(dir, 'copy'), { recursive: true });

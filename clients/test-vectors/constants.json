@@ -341,6 +341,7 @@
     "textRanges",
     "testId",
     "frameworkType",
+    "opaqueChildren",
     "p",
     "px",
     "geometry",

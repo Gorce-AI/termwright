@@ -37,7 +37,7 @@ describe('encodeMarker', () => {
     expect(mac).toMatch(/^[A-Za-z0-9_-]{22}$/);
   });
 
-  it('never emits DCS, APC or a bare ST — the forms ConPTY drops', () => {
+  it('uses only the cross-platform certified OSC/BEL encoding', () => {
     const sequence = encodeMarker(TOKEN, SESSION, 1);
     expect(sequence).not.toContain(`${ESC}P`);
     expect(sequence).not.toContain(`${ESC}_`);

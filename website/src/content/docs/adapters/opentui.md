@@ -49,9 +49,11 @@ framework facts.
 
 ## Supported behavior
 
-OpenTUI 0.5 is verified. The integration observes stable identity, effective display,
-focus, values, and intended geometry. The current adapter handshake does not
-guarantee clipped geometry or a complete pointer-recipient map, so viewport
-visibility and exact pointer actions are unsupported.
+OpenTUI 0.5.3 is verified. The runtime observer captures stable identity,
+effective display, focus, values, intended and ancestor-clipped geometry, plus
+the renderer's authoritative hit grid. Viewport visibility and pointer target
+selection therefore use framework evidence. Sending pointer input additionally
+requires the session's normal terminal-mode prerequisites, including observed
+mouse reporting; that runtime prerequisite is separate from hit-test fidelity.
 
 See [Framework compatibility](../../reference/compatibility/) for current versions.

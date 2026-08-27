@@ -13,7 +13,7 @@ editUrl: false
 
 > **launchTerminal**(`options`): `Promise`\<[`TerminalHarness`](../../interfaces/terminalharness/)\>
 
-Defined in: [driver/src/session.ts:272](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L272)
+Defined in: [driver/src/session.ts:273](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L273)
 
 Launches a program in a real PTY and returns a harness over it.
 

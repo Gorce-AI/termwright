@@ -15,12 +15,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { CharmDetectionError } from './detect.js';
 import { CharmPrepareError, CLIENT_MODULE, prepareInstrumentedBuild } from './launch.js';
 
 const run = promisify(execFile);
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, 'testing', 'fixture-v2');
 const roots: string[] = [];
@@ -34,8 +36,8 @@ async function goAvailable(): Promise<boolean> {
 
 const hasGo = await goAvailable();
 
-afterAll(async () => {
-  await Promise.all(roots.map((dir) => rm(dir, { recursive: true, force: true })));
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 async function scratch(prefix: string): Promise<string> {
@@ -73,9 +75,13 @@ async function snapshot(dir: string): Promise<Readonly<Record<string, Buffer>>> 
   return result;
 }
 
+function workspacePath(path: string): string {
+  return /[\s"]/u.test(path) ? JSON.stringify(path) : path;
+}
+
 describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
-  it('detects v2, instruments optional Bubbles, reuses both caches and never edits the app', async () => {
-    const dir = await scratch('tw-charm-launch-');
+  it('detects v2, injects optional Bubbles, reuses the Bubble Tea cache and never edits the app', async () => {
+    const dir = await scratch('tw charm launch ');
     const app = join(dir, 'app');
     await mkdir(app, { recursive: true });
     await cp(FIXTURE, app, { recursive: true });
@@ -92,30 +98,32 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
       version: 'v2.0.8',
     });
     expect(first.built).toBe(true);
-    expect(first.builtModules).toEqual([
-      'charm.land/bubbletea/v2',
-      'charm.land/bubbles/v2',
-    ]);
-    expect(first.companionCopyDirs['charm.land/bubbles/v2']).toContain('v2.1.1');
+    expect(first.builtModules).toEqual(['charm.land/bubbletea/v2']);
+    expect(first.goArgs).toEqual(['-toolexec', expect.any(String)]);
+    expect(first.toolExecFile).toContain('bubbles-toolexec');
+    expect(first.injectedModules).toEqual(['charm.land/bubbles/v2']);
     expect(first.workspaceFile.startsWith(app)).toBe(false);
     expect(first.env['GOWORK']).toBe(first.workspaceFile);
     expect(env['GOWORK']).toBeUndefined();
 
     const workspace = await readFile(first.workspaceFile, 'utf8');
-    expect(workspace).toContain(`replace charm.land/bubbletea/v2 => ${first.copyDir}`);
+    expect(workspace).toContain('replace charm.land/bubbletea/v2 =>');
     expect(workspace).toContain(
-      `replace charm.land/bubbles/v2 => ${first.companionCopyDirs['charm.land/bubbles/v2']}`,
+      `replace charm.land/bubbletea/v2 => ${workspacePath(first.copyDir)}`,
     );
+    expect(workspace).not.toContain('replace charm.land/bubbles/v2');
     const client = await realpath(join(here, '..', '..', '..', 'clients', 'go'));
-    expect(workspace).toContain(`use ${client}`);
-    expect(workspace).toContain(`replace ${CLIENT_MODULE} v0.0.0 => ${client}`);
+    expect(workspace).toContain(`use ${workspacePath(client)}`);
+    expect(workspace).toContain(
+      `replace ${CLIENT_MODULE} v0.0.0 => ${workspacePath(client)}`,
+    );
     // The launcher must consume the current manifest, not resurrect an
     // older handshake/capability patch through a parallel launcher patch set.
     await expect(readFile(join(first.copyDir, 'TERMWRIGHT.md'), 'utf8')).resolves.toContain(
-      "patch set v18 applied",
+      "patch set v21 applied",
     );
 
-    await run('go', ['build', '-o', join(dir, 'app-bin'), '.'], {
+    await run('go', ['build', ...first.goArgs, '-o', join(dir, 'app-bin'), '.'], {
       cwd: app,
       env: first.env,
     });
@@ -124,7 +132,9 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     expect(second.built).toBe(false);
     expect(second.builtModules).toEqual([]);
     expect(second.copyDir).toBe(first.copyDir);
-    expect(second.companionCopyDirs).toEqual(first.companionCopyDirs);
+    expect(second.goArgs).toEqual(first.goArgs);
+    expect(second.toolExecFile).toBe(first.toolExecFile);
+    expect(second.injectedModules).toEqual(first.injectedModules);
     expect(await snapshot(app)).toEqual(before);
   }, 900_000);
 
@@ -157,9 +167,10 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
     const prepared = await prepareInstrumentedBuild({ moduleDir: app, env });
     expect(prepared.flavour.major).toBe('v1');
     expect(prepared.copyDir).toContain('v1.3.10');
-    expect(prepared.companionCopyDirs['github.com/charmbracelet/bubbles']).toContain('v1.0.0');
+    expect(prepared.goArgs).toEqual(['-toolexec', expect.any(String)]);
+    expect(prepared.injectedModules).toEqual(['github.com/charmbracelet/bubbles']);
 
-    await run('go', ['build', '-o', join(dir, 'app-bin'), '.'], {
+    await run('go', ['build', ...prepared.goArgs, '-o', join(dir, 'app-bin'), '.'], {
       cwd: app,
       env: prepared.env,
     });
@@ -198,7 +209,7 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
     await expect(failure).rejects.toMatchObject({ code: 'both-majors' });
   }, 300_000);
 
-  it('refuses an unpinned Bubbles companion instead of changing semantic breadth', async () => {
+  it('admits Bubbles by compiling the owned capability profile, never by a near-enough version guess', async () => {
     const dir = await scratch('tw-charm-launch-companion-');
     const app = join(dir, 'app');
     await writeModule(app, [
@@ -207,10 +218,37 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
     ]);
     const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') };
 
+    const prepared = await prepareInstrumentedBuild({ moduleDir: app, env });
+    expect(prepared.flavour.companions['github.com/charmbracelet/bubbles']).toBe('v0.21.0');
+    expect(prepared.injectedModules).toEqual(['github.com/charmbracelet/bubbles']);
+  }, 600_000);
+
+  it('fails closed when a resolved Bubbles module lacks the owned private-state capability', async () => {
+    const dir = await scratch('tw-charm-launch-incompatible-companion-');
+    const app = join(dir, 'app');
+    const bubbles = join(dir, 'bubbles');
+    await writeModule(app, [
+      'github.com/charmbracelet/bubbletea v1.3.10',
+      'github.com/charmbracelet/bubbles v1.0.0',
+    ]);
+    await mkdir(bubbles, { recursive: true });
+    await writeFile(join(bubbles, 'go.mod'), 'module github.com/charmbracelet/bubbles\n\ngo 1.24.0\n', 'utf8');
+    for (const name of ['spinner', 'progress', 'filepicker', 'list', 'table']) {
+      const packageDir = join(bubbles, name);
+      await mkdir(packageDir, { recursive: true });
+      await writeFile(join(packageDir, `${name}.go`), `package ${name}\n\ntype Model struct{}\n`, 'utf8');
+    }
+    const goMod = await readFile(join(app, 'go.mod'), 'utf8');
+    await writeFile(
+      join(app, 'go.mod'),
+      `${goMod}\nreplace github.com/charmbracelet/bubbles => ${JSON.stringify(bubbles)}\n`,
+      'utf8',
+    );
+    const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') };
     await expect(prepareInstrumentedBuild({ moduleDir: app, env })).rejects.toMatchObject({
-      code: 'unsupported-version',
+      code: 'unsupported-capability',
       module: 'github.com/charmbracelet/bubbles',
-      version: 'v0.21.0',
+      version: 'v1.0.0',
     });
   }, 600_000);
 

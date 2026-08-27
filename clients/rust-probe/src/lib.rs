@@ -31,12 +31,13 @@ pub mod tree;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use serde_json::Value;
 use termwright_protocol::client::{ENV_ENDPOINT, ENV_TOKEN};
-use termwright_protocol::debug::{Category, DebugLog};
-use termwright_protocol::{ProbeIdentityKind, ProbeInfo};
+use termwright_protocol::{
+    ProbeIdentityKind, ProbeInfo, ProbeInjectionTier, ProbeInstrumentation, ProbeSemanticClass,
+};
 
 pub use termwright_protocol::{Action, Role};
 
@@ -246,15 +247,78 @@ fn instrumented() -> bool {
 /// Set once the probe has decided it cannot work, so it stops trying.
 static DISABLED: AtomicBool = AtomicBool::new(false);
 
-fn buffer() -> &'static Mutex<FrameBuffer> {
-    static BUFFER: OnceLock<Mutex<FrameBuffer>> = OnceLock::new();
-    BUFFER.get_or_init(|| Mutex::new(FrameBuffer::default()))
+#[derive(Debug, Default)]
+struct FrameContext {
+    buffer: FrameBuffer,
+    annotated_stack: Vec<u32>,
 }
 
 thread_local! {
-    // Ordinary Frame calls have no end hook. Only Annotated's own RAII
-    // boundaries may therefore establish a truthful nesting relation.
-    static ANNOTATED_STACK: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+    // A terminal draw is synchronous and its widget calls stay on the drawing
+    // thread. Keeping a stack per thread makes concurrent Terminals independent
+    // and lets a nested try_draw retain the suspended outer frame without a
+    // process-wide render mutex.
+    static FRAME_STACK: RefCell<Vec<FrameContext>> = const { RefCell::new(Vec::new()) };
+}
+
+fn with_current_frame<R>(operation: impl FnOnce(&mut FrameContext) -> R) -> Option<R> {
+    FRAME_STACK.with(|stack| {
+        let Ok(mut stack) = stack.try_borrow_mut() else {
+            DISABLED.store(true, Ordering::Release);
+            return None;
+        };
+        stack.last_mut().map(operation)
+    })
+}
+
+/// Owns one synchronous Ratatui render context on the current thread.
+pub struct FrameGuard {
+    active: bool,
+}
+
+/// Begin one certified `Terminal::try_draw` lifecycle.
+#[must_use]
+pub fn begin_frame() -> FrameGuard {
+    if !instrumented() || DISABLED.load(Ordering::Relaxed) {
+        return FrameGuard { active: false };
+    }
+    let active = FRAME_STACK.with(|stack| match stack.try_borrow_mut() {
+        Ok(mut stack) => {
+            stack.push(FrameContext::default());
+            true
+        }
+        Err(_) => {
+            DISABLED.store(true, Ordering::Release);
+            false
+        }
+    });
+    FrameGuard { active }
+}
+
+impl Drop for FrameGuard {
+    fn drop(&mut self) {
+        if !self.active {
+            return;
+        }
+        FRAME_STACK.with(|stack| match stack.try_borrow_mut() {
+            Ok(mut stack) => {
+                if stack.pop().is_none() {
+                    DISABLED.store(true, Ordering::Release);
+                }
+            }
+            Err(_) => DISABLED.store(true, Ordering::Release),
+        });
+    }
+}
+
+/// Whether the current thread is inside the certified full-frame lifecycle.
+pub fn frame_guard_active() -> bool {
+    FRAME_STACK.with(|stack| {
+        stack
+            .try_borrow()
+            .map(|stack| !stack.is_empty())
+            .unwrap_or(false)
+    })
 }
 
 /// RAII boundary for one authoritative `Annotated<W>` render call.
@@ -265,11 +329,9 @@ pub struct AnnotatedRenderGuard {
 impl Drop for AnnotatedRenderGuard {
     fn drop(&mut self) {
         let Some(expected) = self.ordinal else { return };
-        ANNOTATED_STACK.with(|stack| {
-            if stack.borrow_mut().pop() != Some(expected) {
-                DISABLED.store(true, Ordering::Relaxed);
-            }
-        });
+        if with_current_frame(|frame| frame.annotated_stack.pop()) != Some(Some(expected)) {
+            DISABLED.store(true, Ordering::Relaxed);
+        }
     }
 }
 
@@ -284,28 +346,22 @@ pub fn on_render(type_name: &'static str, x: u16, y: u16, width: u16, height: u1
     if !instrumented() || DISABLED.load(Ordering::Relaxed) {
         return;
     }
-    let Ok(mut frame) = buffer().lock() else {
-        // Another thread panicked while holding it. The probe is done; the
-        // application is not.
-        DISABLED.store(true, Ordering::Relaxed);
+    if !frame_guard_active() {
         return;
-    };
-    let ordinal = frame.calls.len() as u32;
-    if ordinal == 0 {
-        // The one call worth naming: it proves the patched crate is live,
-        // which is otherwise invisible from outside the process.
-        first_call_seen(type_name);
     }
-    frame.calls.push(RenderCall {
-        ordinal,
-        parent_ordinal: None,
-        type_name,
-        x,
-        y,
-        width,
-        height,
-        collection: None,
-        annotation: None,
+    let _ = with_current_frame(|frame| {
+        let ordinal = frame.buffer.calls.len() as u32;
+        frame.buffer.calls.push(RenderCall {
+            ordinal,
+            parent_ordinal: None,
+            type_name,
+            x,
+            y,
+            width,
+            height,
+            collection: None,
+            annotation: None,
+        });
     });
 }
 
@@ -326,24 +382,27 @@ pub fn begin_annotated_render(
     if !instrumented() || DISABLED.load(Ordering::Relaxed) {
         return AnnotatedRenderGuard { ordinal: None };
     }
-    let parent_ordinal = ANNOTATED_STACK.with(|stack| stack.borrow().last().copied());
-    let Ok(mut frame) = buffer().lock() else {
-        DISABLED.store(true, Ordering::Relaxed);
+    if !frame_guard_active() {
+        return AnnotatedRenderGuard { ordinal: None };
+    }
+    let Some(ordinal) = with_current_frame(|frame| {
+        let parent_ordinal = frame.annotated_stack.last().copied();
+        let ordinal = record_annotated_call(
+            &mut frame.buffer,
+            parent_ordinal,
+            wrapper_type_name,
+            widget_type_name,
+            annotation,
+            x,
+            y,
+            width,
+            height,
+        );
+        frame.annotated_stack.push(ordinal);
+        ordinal
+    }) else {
         return AnnotatedRenderGuard { ordinal: None };
     };
-    let ordinal = record_annotated_call(
-        &mut frame,
-        parent_ordinal,
-        wrapper_type_name,
-        widget_type_name,
-        annotation,
-        x,
-        y,
-        width,
-        height,
-    );
-    drop(frame);
-    ANNOTATED_STACK.with(|stack| stack.borrow_mut().push(ordinal));
     AnnotatedRenderGuard {
         ordinal: Some(ordinal),
     }
@@ -376,9 +435,6 @@ fn record_annotated_call(
         call.ordinal
     } else {
         let ordinal = frame.calls.len() as u32;
-        if ordinal == 0 {
-            first_call_seen(widget_type_name);
-        }
         frame.calls.push(RenderCall {
             ordinal,
             parent_ordinal,
@@ -407,20 +463,22 @@ pub fn on_collection(selected: Option<usize>, offset: usize, item_count: usize, 
     if !instrumented() || DISABLED.load(Ordering::Relaxed) {
         return;
     }
-    let Ok(mut frame) = buffer().lock() else {
-        DISABLED.store(true, Ordering::Relaxed);
+    if !frame_guard_active() {
         return;
-    };
-    let Some(call) = frame.calls.last_mut() else {
-        // A collection rendered without the call being announced first. Not a
-        // shape we can attribute, so it is dropped rather than guessed at.
-        return;
-    };
-    call.collection = Some(Collection {
-        selected,
-        offset,
-        item_count,
-        items: items.iter().take(MAX_ITEMS).cloned().collect(),
+    }
+    let _ = with_current_frame(|frame| {
+        let Some(call) = frame.buffer.calls.last_mut() else {
+            // A collection rendered without the call being announced first.
+            // Not a shape we can attribute, so it is dropped rather than
+            // guessed at.
+            return;
+        };
+        call.collection = Some(Collection {
+            selected,
+            offset,
+            item_count,
+            items: items.iter().take(MAX_ITEMS).cloned().collect(),
+        });
     });
 }
 
@@ -433,37 +491,7 @@ pub fn take_frame() -> Vec<RenderCall> {
     if !instrumented() || DISABLED.load(Ordering::Relaxed) {
         return Vec::new();
     }
-    match buffer().lock() {
-        Ok(mut frame) => std::mem::take(&mut frame.calls),
-        Err(_) => {
-            DISABLED.store(true, Ordering::Relaxed);
-            Vec::new()
-        }
-    }
-}
-
-/// Announce the first intercepted call, once per process.
-///
-/// The probe has no terminal to talk to — the application owns it — so the
-/// diagnostic file is the only place an instrumented run can be seen from
-/// outside. Guarded by a `OnceLock` so the render path pays one atomic read
-/// per call and nothing more.
-fn first_call_seen(type_name: &str) {
-    static ANNOUNCED: OnceLock<()> = OnceLock::new();
-    let mut announce = false;
-    ANNOUNCED.get_or_init(|| {
-        announce = true;
-    });
-    if !announce {
-        return;
-    }
-    if let Some(log) = DebugLog::from_env("ratatui-probe") {
-        log.line(
-            Category::Sem,
-            &format!("first render intercepted: {type_name}"),
-        );
-        log.close();
-    }
+    with_current_frame(|frame| std::mem::take(&mut frame.buffer.calls)).unwrap_or_default()
 }
 
 /// Whether the probe is collecting. For tests and diagnostics.
@@ -571,6 +599,58 @@ mod tests {
             Some("claimed")
         );
     }
+
+    #[test]
+    fn nested_frame_contexts_suspend_and_restore_the_outer_frame() {
+        FRAME_STACK.with(|stack| {
+            let mut stack = stack.borrow_mut();
+            assert!(stack.is_empty());
+            stack.push(FrameContext::default());
+        });
+        with_current_frame(|frame| {
+            frame.buffer.calls.push(RenderCall {
+                ordinal: 0,
+                parent_ordinal: None,
+                type_name: "Outer",
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 2,
+                collection: None,
+                annotation: None,
+            });
+        });
+        FRAME_STACK.with(|stack| stack.borrow_mut().push(FrameContext::default()));
+        with_current_frame(|frame| {
+            frame.buffer.calls.push(RenderCall {
+                ordinal: 0,
+                parent_ordinal: None,
+                type_name: "Inner",
+                x: 1,
+                y: 1,
+                width: 4,
+                height: 1,
+                collection: None,
+                annotation: None,
+            });
+        });
+
+        let inner = with_current_frame(|frame| std::mem::take(&mut frame.buffer.calls))
+            .expect("inner frame");
+        assert_eq!(inner.len(), 1);
+        assert_eq!(inner[0].type_name, "Inner");
+        FRAME_STACK.with(|stack| {
+            stack.borrow_mut().pop().expect("inner context");
+        });
+        let outer = with_current_frame(|frame| std::mem::take(&mut frame.buffer.calls))
+            .expect("restored outer frame");
+        assert_eq!(outer.len(), 1);
+        assert_eq!(outer[0].type_name, "Outer");
+        FRAME_STACK.with(|stack| {
+            stack.borrow_mut().pop().expect("outer context");
+            assert!(stack.borrow().is_empty());
+        });
+    }
 }
 
 /// What this probe tells the driver it can observe.
@@ -597,6 +677,11 @@ pub fn probe_info(framework_version: Option<&str>) -> ProbeInfo {
             "operations".to_owned(),
             "annotations".to_owned(),
         ],
+        instrumentation: Some(ProbeInstrumentation {
+            highest_tier: ProbeInjectionTier::T3,
+            semantic_class: ProbeSemanticClass::A,
+            degraded_capabilities: vec![],
+        }),
     }
 }
 
@@ -629,6 +714,8 @@ mod handshake_tests {
         }
         assert!(declared.contains("\"operations\""), "{declared}");
         assert!(declared.contains("\"annotations\""), "{declared}");
+        assert!(declared.contains("\"highestTier\":\"T3\""), "{declared}");
+        assert!(declared.contains("\"semanticClass\":\"A\""), "{declared}");
         assert!(declared.contains("0.30.2"), "{declared}");
     }
 

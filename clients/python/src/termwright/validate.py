@@ -196,6 +196,7 @@ _NODE_KEYS = (
     "textRanges",
     "testId",
     "frameworkType",
+    "opaqueChildren",
     "p",
     "px",
     "geometry",
@@ -438,6 +439,8 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
     for key in ("description", "testId", "frameworkType"):
         if key in node:
             _text(node[key], tuple(path) + (key,), limits)
+    if "opaqueChildren" in node and not isinstance(node["opaqueChildren"], bool):
+        raise _Issue(tuple(path) + ("opaqueChildren",), "expected a boolean")
     if "value" in node:
         _semantic_value(node["value"], tuple(path) + ("value",), limits)
     if "p" in node and node["p"] not in PROVENANCE_SOURCES:

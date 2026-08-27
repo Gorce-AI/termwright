@@ -13,7 +13,7 @@ Copy-based probes also list every checksummed module patch. Optional annotation
 APIs and known limitations belong in the framework row rather than in a second
 hand-maintained matrix.
 
-Schema v5 binds each executable row to:
+Schema v6 binds each executable row to:
 
 - the exact `certification.ids` emitted by the frozen session contract and the
   checksum profile or patch manifests that justify them;
@@ -109,13 +109,12 @@ that has a write token checks out or executes a pull-request branch.
 ### Candidate outcomes
 
 For source-patched Go and Rust integrations, a missing exact manifest starts a
-deterministic preparation against the exact downloaded source. Existing
-textual profiles use `--fuzz=0` replay of the latest audited transform. tcell's
-add-only Windows companion instead parses the Go AST and must match exactly one
-reviewed console-capability template. An absent or ambiguous structural match
-is red. Every prepared result still has to compile and pass candidate-specific
-real-process and conformance gates before its checksummed bundle can be
-proposed.
+deterministic preparation against the exact downloaded source. T1 Go
+candidates, including tview, tcell and Bubbles, generate no patch bundle: the
+owned add-only units must compile against the resolved package through the
+official tool-executor seam and then pass candidate-specific real-process and
+conformance gates. Missing symbols, missing injection or ambiguous module
+resolution are red; they never create an exact source profile.
 
 Ink still requires exact source-hook instrumentation. Its candidate job
 extracts the checksum-verified npm archive, computes both audited artifact
@@ -128,9 +127,11 @@ tarball and checksum-bound production dependency closure, requires real Bun,
 passes a version/digest/revision-bound temporary admission to the probe, and
 runs package behavior plus full conformance. A green result contains only a
 version profile for `certified-runtime.json`; no chunk name, source anchor or
-bundle digest is generated or retained. Textual follows the same runtime
-admission principle through its exact Python version allowlist. Merely changing
-a dependency or passing generic tests can never add a version.
+bundle digest is generated or retained. Textual uses capability and behavioral
+admission directly: the candidate job installs the checksum-bound Python
+artifact and must pass the full Python probe and cross-language conformance
+suites. A green outcome is recorded in the candidate ledger; it does not
+generate an allowlist, repin the Python extra or change the probe pipeline.
 
 Any failure opens or updates one `upstream-compatibility` issue keyed by stream
 and version. A separate dead-man issue covers discovery/setup failures that

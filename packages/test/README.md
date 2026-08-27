@@ -28,12 +28,29 @@ test.resources({ terminals: 2 })('client and server interoperate', async ({ term
 
 Each declared terminal reserves one PTY, external process, semantic endpoint,
 one native-host pressure unit, and—unless `traceWriters` is explicitly set—one trace writer. Exceeding the
-declared group fails instead of silently falling back to another queue.
+declared group fails instead of silently falling back to another queue. Because
+that condition is detected exactly, the error reports the declared, currently
+allocated and newly requested counts and shows the minimum
+`test.resources({ terminals: N })` declaration needed for intentional
+concurrent ownership.
 
 Native transport certification may reserve `nativeHost: 'exclusive'`, the full
 host-pressure envelope, while still declaring its actual terminal count. This
 keeps high-volume output and process-tree tests exclusive without pretending
 that they own terminals they never create.
+
+Host-intensive tests which do not launch a terminal, such as compiler or
+toolchain integration tests, reserve the same envelope directly:
+
+```ts
+test.resources({ hostPressure: 'exclusive' })('builds through the real toolchain', async () => {
+  // ...
+});
+```
+
+`hostPressure` composes with a real `terminals` count when both the toolchain
+and PTY are part of one test. It is intentionally exclusive-only; use
+`nativeHost` for native transport certification.
 
 ## Install
 

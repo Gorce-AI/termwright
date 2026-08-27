@@ -14,67 +14,86 @@ same fixture emits about 11 kB of escape sequences.
 from __future__ import annotations
 
 import asyncio
+import errno
 import os
 import re
-import select
 import subprocess
 import sys
-import time
+import threading
 from pathlib import Path
 
 import pytest
 
 pytest.importorskip("textual", reason="the golden runs need Textual")
 
-from termwright_probe import write_bootstrap  # noqa: E402
-
-from test_client import FakeDriver, TOKEN  # noqa: E402
+from termwright_probe import write_bootstrap
+from test_client import TOKEN, FakeDriver
 
 FIXTURE = Path(__file__).parent / "fixtures" / "vanilla_textual_app.py"
 SRC = str(Path(__file__).resolve().parents[1] / "src")
 
 #: `ESC ] 8487 ; … BEL` (or ST). What the probe adds and nothing else does.
 MARKER = re.compile(rb"\x1b\]8487;[^\x07\x1b]*(?:\x07|\x1b\\)")
+READY_FD_ENV = "TERMWRIGHT_GOLDEN_READY_FD"
 
 pytestmark = pytest.mark.skipif(
     not hasattr(os, "openpty"), reason="no pty on this platform"
 )
 
 
-def run_on_pty(env: dict, *, timeout: float = 30.0) -> bytes:
-    """Run the fixture with a pty for a terminal and return every byte it wrote."""
+def run_on_pty(env: dict, release: threading.Event | None = None) -> bytes:
+    """Run the fixture through one causal refresh/input lifecycle on a pty."""
     primary, secondary = os.openpty()
-    os.set_blocking(primary, False)
+    ready_read, ready_write = os.pipe()
+    child_env = dict(env)
+    child_env[READY_FD_ENV] = str(ready_write)
     process = subprocess.Popen(
         [sys.executable, str(FIXTURE)],
         stdin=secondary,
         stdout=secondary,
         stderr=secondary,
-        env=env,
+        env=child_env,
         close_fds=True,
+        pass_fds=(ready_write,),
     )
     os.close(secondary)
-    chunks = []
-    deadline = time.time() + timeout
+    os.close(ready_write)
+    chunks: list[bytes] = []
     try:
-        while time.time() < deadline:
-            ready, _, _ = select.select([primary], [], [], 0.1)
-            if ready:
-                try:
-                    data = os.read(primary, 65536)
-                except OSError:
+        ready = os.read(ready_read, 1)
+        if ready != b"R":
+            raise AssertionError(
+                f"Textual fixture closed before its render boundary: {ready!r}"
+            )
+        if release is not None:
+            release.wait()
+        os.write(primary, b"q")
+
+        while True:
+            try:
+                data = os.read(primary, 65536)
+            except OSError as error:
+                # POSIX PTYs report slave closure as EIO on Linux and EOF on
+                # Darwin. Both are the same causal end-of-stream boundary.
+                if error.errno == errno.EIO:
                     break
-                if not data:
-                    break
-                chunks.append(data)
-            elif process.poll() is not None:
+                raise
+            if not data:
                 break
-        process.wait(timeout=5)
+            chunks.append(data)
+        exit_code = process.wait()
+        output = b"".join(chunks)
+        if exit_code != 0:
+            raise AssertionError(
+                f"Textual fixture exited {exit_code}: {output[-2000:]!r}"
+            )
+        return output
     finally:
-        if process.poll() is None:
+        if process.returncode is None:
             process.kill()
+            process.wait()
+        os.close(ready_read)
         os.close(primary)
-    return b"".join(chunks)
 
 
 def terminal_env(**extra: str) -> dict:
@@ -119,11 +138,30 @@ async def test_instrumented_output_is_the_same_render_plus_markers(endpoint):
 
     driver = FakeDriver(endpoint)
     await driver.start()
-    with write_bootstrap(package_root=SRC) as bootstrap:
-        env = bootstrap.env(
-            terminal_env(TERMWRIGHT_ENDPOINT=endpoint, TERMWRIGHT_TOKEN=TOKEN)
-        )
-        observed = await asyncio.to_thread(run_on_pty, env)
+    release = threading.Event()
+    try:
+        with write_bootstrap(package_root=SRC) as bootstrap:
+            env = bootstrap.env(
+                terminal_env(TERMWRIGHT_ENDPOINT=endpoint, TERMWRIGHT_TOKEN=TOKEN)
+            )
+            observed_task = asyncio.create_task(
+                asyncio.to_thread(run_on_pty, env, release)
+            )
+            while not any(
+                message.get("type") == "snapshot" for message in driver.received
+            ):
+                driver.frame_arrived.clear()
+                if any(
+                    message.get("type") == "snapshot"
+                    for message in driver.received
+                ):
+                    break
+                await driver.frame_arrived.wait()
+            release.set()
+            observed = await observed_task
+    finally:
+        release.set()
+        await driver.close()
 
     markers = MARKER.findall(observed)
     assert markers, "an instrumented run committed no revision at all"

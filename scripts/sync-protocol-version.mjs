@@ -42,11 +42,6 @@ const COMPATIBILITY_REGISTRY = 'compatibility/registry.json';
 const COMPATIBILITY_VERSION_ENTRIES = 12;
 const patchChecksums = [
 	{
-		source: 'packages/probe-tview/upstream-patches/tview/v0.42.0/add/termwright_probe.go',
-		manifest: 'packages/probe-tview/upstream-patches/tview/v0.42.0/manifest.json',
-		manifestSource: 'add/termwright_probe.go',
-	},
-	{
 		source: 'packages/probe-charm/upstream-patches/bubbletea/v1.3.10/add/termwright_probe.go',
 		manifest: 'packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json',
 		manifestSource: 'add/termwright_probe.go',
@@ -113,8 +108,8 @@ const targets = [
 		whole: true,
 	},
 	{
-		file: 'packages/probe-tview/upstream-patches/tview/v0.42.0/add/termwright_probe.go',
-		pattern: /(?<=probeVersion     = ")([^"]+)(?=")/,
+		file: 'packages/probe-tview/assets/tview_probe.go.txt',
+		pattern: /(?<=probeVersion = ")([^"]+)(?=")/,
 		render: (version) => version,
 		whole: true,
 	},
@@ -284,7 +279,7 @@ async function main() {
 		console.log(`updated ${target.file}: ${current} -> ${version}`);
 	}
 
-	// Versioned Go probe sources are copied into upstream framework modules.
+	// Exact Bubble Tea probe sources are copied into upstream framework modules.
 	// Their manifests intentionally pin the exact resulting bytes, so changing
 	// the handshake version must refresh those checksums in the same operation.
 	for (const target of patchChecksums) {

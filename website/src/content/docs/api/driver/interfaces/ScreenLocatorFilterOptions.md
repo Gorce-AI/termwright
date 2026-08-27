@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ScreenLocatorFilterOptions
 
-Defined in: [driver/src/api.ts:718](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L718)
+Defined in: [driver/src/api.ts:725](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L725)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **has?**: [`ScreenLocator`](../screenlocator/)
 
-Defined in: [driver/src/api.ts:720](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L720)
+Defined in: [driver/src/api.ts:727](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L727)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:720](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **hasNot?**: [`ScreenLocator`](../screenlocator/)
 
-Defined in: [driver/src/api.ts:721](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L721)
+Defined in: [driver/src/api.ts:728](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L728)
 
 ***
 
@@ -52,4 +52,4 @@ Defined in: [driver/src/api.ts:721](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **hasText?**: `string` \| `RegExp`
 
-Defined in: [driver/src/api.ts:719](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L719)
+Defined in: [driver/src/api.ts:726](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L726)

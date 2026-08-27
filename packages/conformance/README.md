@@ -155,6 +155,12 @@ pnpm --filter @termwright/conformance test            # plain vitest
 pnpm --filter @termwright/conformance test:hostile    # adversarial suite, 128 MB heap cap
 ```
 
+The conformance orchestrator builds the probed and plain tview fixtures
+asynchronously before the native test host is opened. Each run gets a private
+temporary directory and a platform/architecture contract containing both
+binary digests. Collection only verifies that contract and never launches a
+compiler; the orchestrator removes the directory after the host closes.
+
 The table reports each area as pass, fail, or pass with an explicit skip count;
 the exact test counts intentionally are not documentation because suites grow.
 Test identities use `file::fullName`, so declarations cannot accidentally

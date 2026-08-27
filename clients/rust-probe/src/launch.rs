@@ -6,11 +6,13 @@
 //!
 //! Two things make the Rust version different from the Go one it mirrors.
 //!
-//! **Two crates, not one.** `ratatui-core` sees every render call but cannot
+//! **Three crates, not one.** `ratatui-core` sees every render call but cannot
 //! read a widget's state — `StatefulWidget::State` is `?Sized`, so it cannot
 //! even be downcast — while `ratatui-widgets` knows the concrete `ListState`
-//! and can reach `List::items`, which is `pub(crate)`. Both are patched, so
-//! two `--config` flags come back rather than one environment variable.
+//! and can reach `List::items`, which is `pub(crate)`. `ratatui-crossterm`
+//! owns the exact writer that carries a normal terminal frame and is the only
+//! backend certified to append its commit marker. The backend crate is
+//! optional in the graph; without it semantic publication fails closed.
 //!
 //! **`Cargo.lock` has to be put back.** A patched build rewrites it: the
 //! `ratatui-core` entry loses its `source` and `checksum` and becomes a path
@@ -35,7 +37,12 @@ use crate::patchset::{
 };
 
 /// Crates this probe knows how to patch, and where their patch sets live.
-const PATCHED_CRATES: [&str; 2] = ["ratatui-core", "ratatui-widgets"];
+const PATCHED_CRATES: [&str; 3] = ["ratatui-core", "ratatui-widgets", "ratatui-crossterm"];
+
+/// These provide the tree. A project may deliberately omit Crossterm and use
+/// a custom backend; that build remains valid but its semantic session is
+/// refused at runtime because no marker sink is certified.
+const REQUIRED_PATCHED_CRATES: [&str; 2] = ["ratatui-core", "ratatui-widgets"];
 
 /// The public framework package whose version belongs in the probe handshake.
 const FRAMEWORK_CRATE: &str = "ratatui";
@@ -205,7 +212,7 @@ pub fn prepare_instrumented_build(options: &PrepareOptions) -> Result<PreparedBu
     let mut env = Vec::new();
     let mut built = false;
 
-    for name in PATCHED_CRATES {
+    for name in REQUIRED_PATCHED_CRATES {
         if !resolved.iter().any(|package| package.name == name) {
             return Err(PatchError::ManifestInvalid(format!(
                 "{} does not depend on {name}; is this a Ratatui project?",
@@ -227,10 +234,9 @@ pub fn prepare_instrumented_build(options: &PrepareOptions) -> Result<PreparedBu
     env.push(("TERMWRIGHT_RATATUI_VERSION".to_owned(), framework_version));
 
     for name in PATCHED_CRATES {
-        let package = resolved
-            .iter()
-            .find(|package| package.name == name)
-            .expect("patched dependencies were preflighted above");
+        let Some(package) = resolved.iter().find(|package| package.name == name) else {
+            continue;
+        };
         let version = &package.version;
         require_crates_io_source(package)?;
         let patch_set = patch_set_dir(name, version);

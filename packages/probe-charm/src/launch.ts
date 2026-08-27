@@ -1,17 +1,16 @@
 /**
  * The one-call build preparation path for both Bubble Tea majors.
  *
- * Bubble Tea and Bubbles are separate Go modules, so a complete preparation
- * may materialise two independently cached copies. The generated workspace is
- * the only place they meet: it redirects the application's normal imports to
- * those copies without editing the application itself.
+ * Bubble Tea and Bubbles are separate Go modules. Bubble Tea still needs an
+ * exact context patch in an independently cached copy; Bubbles accessors are
+ * add-only units injected by the official Go tool executor seam.
  */
 
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { realpath } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { readFile, realpath } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
@@ -24,12 +23,14 @@ import {
   isComplete,
   markComplete,
   materializeUpstream,
+  prepareGoToolExec,
   prepareCopyDir,
   readManifest,
   readWorkspace,
   writeProvenance,
   writeWorkspace,
   type CopyKeyInput,
+  type GoToolExecUnit,
 } from '@termwright/probe-go';
 import {
   detectCharmFlavour,
@@ -51,9 +52,15 @@ export const BUBBLES_MODULES: Readonly<Record<CharmMajor, string>> = {
   v2: 'charm.land/bubbles/v2',
 };
 
+/** Owned accessor profile per module line; compilation, not this advisory version, admits a resolved candidate. */
+const BUBBLES_UNIT_PROFILES: Readonly<Record<CharmMajor, string>> = {
+  v1: 'v1.0.0',
+  v2: 'v2.1.1',
+};
+
 export class CharmPrepareError extends Error {
   constructor(
-    readonly code: 'unsupported-version',
+    readonly code: 'unsupported-version' | 'unsupported-capability',
     readonly module: string,
     readonly version: string,
     message: string,
@@ -81,13 +88,17 @@ export interface PreparedBuild {
   readonly workspaceFile: string;
   /** Instrumented Bubble Tea copy. */
   readonly copyDir: string;
-  /** Instrumented companion copies, keyed by Go module path. */
-  readonly companionCopyDirs: Readonly<Record<string, string>>;
+  /** Explicit flags to insert after every controlled `go build`/`go test` subcommand. */
+  readonly goArgs: readonly string[];
+  /** Generated compiler wrapper, or null when no supported Bubbles module is present. */
+  readonly toolExecFile: string | null;
+  /** Modules whose add-only units the wrapper injects. */
+  readonly injectedModules: readonly string[];
   /** Environment to build with: the caller's, plus the generated GOWORK. */
   readonly env: NodeJS.ProcessEnv;
-  /** True when at least one copy was materialised rather than reused. */
+  /** True when the Bubble Tea copy was materialised rather than reused. */
   readonly built: boolean;
-  /** Modules materialised during this call; useful when diagnosing a partial cache hit. */
+  /** Modules materialised during this call; add-only units are never module copies. */
   readonly builtModules: readonly string[];
 }
 
@@ -100,9 +111,9 @@ interface PreparedCopy {
  * Prepares a normal Bubble Tea application for an instrumented `go build`.
  *
  * The helper detects v1 versus v2, chooses only byte-pinned patch sets, adds a
- * Bubbles copy when the application resolves a supported Bubbles version, and
- * writes an external workspace containing all redirects. It does not build or
- * launch the application and does not write inside `moduleDir`.
+ * Bubbles compiler units when the application resolves a supported Bubbles
+ * version, and writes an external workspace for the remaining redirects. It
+ * does not build or launch the application or write inside `moduleDir`.
  */
 export async function prepareInstrumentedBuild(
   options: PrepareOptions,
@@ -122,29 +133,13 @@ export async function prepareInstrumentedBuild(
     env,
   });
 
-  const companionCopyDirs: Record<string, string> = {};
   const builtModules: string[] = tea.built ? [flavour.module] : [];
   const bubblesModule = BUBBLES_MODULES[flavour.major];
   const bubblesVersion = flavour.companions[bubblesModule];
 
-  if (bubblesVersion !== undefined) {
-    const bubblesPatchSet = requirePatchSet('bubbles', bubblesModule, bubblesVersion);
-    const bubbles = await prepareCopy({
-      module: bubblesModule,
-      version: bubblesVersion,
-      patchSetDir: bubblesPatchSet,
-      probeVersion: PROBE_VERSION,
-      toolchain: toolchainVersion,
-      env,
-    });
-    companionCopyDirs[bubblesModule] = bubbles.dir;
-    if (bubbles.built) builtModules.push(bubblesModule);
-  }
-
   const clientDir = options.clientDir ?? (await defaultClientDir(env));
   const replaces = [
     { from: flavour.module, to: tea.dir },
-    ...Object.entries(companionCopyDirs).map(([from, to]) => ({ from, to })),
     ...(await clientVersionReplacements(options.moduleDir, clientDir, env)),
   ];
   const inherited = await readWorkspace(options.moduleDir);
@@ -163,16 +158,83 @@ export async function prepareInstrumentedBuild(
       replaces,
     },
   );
+  const buildEnv = { ...env, GOWORK: workspaceFile };
+  const bubblesToolExec = bubblesVersion === undefined
+    ? null
+    : await prepareBubblesToolExec({
+        moduleDir: options.moduleDir,
+        module: bubblesModule,
+        version: bubblesVersion,
+        patchSetDir: requireBubblesUnitProfile(flavour.major, bubblesModule),
+        outputDir: join(dirname(workspaceFile), 'bubbles-toolexec'),
+        env: buildEnv,
+      });
 
   return {
     flavour,
     workspaceFile,
     copyDir: tea.dir,
-    companionCopyDirs,
-    env: { ...env, GOWORK: workspaceFile },
-    built: builtModules.length > 0,
+    goArgs: bubblesToolExec?.goArgs ?? [],
+    toolExecFile: bubblesToolExec?.wrapperFile ?? null,
+    injectedModules: bubblesToolExec === null ? [] : [bubblesModule],
+    env: bubblesToolExec?.env ?? buildEnv,
+    built: tea.built,
     builtModules,
   };
+}
+
+async function prepareBubblesToolExec(options: {
+  readonly moduleDir: string;
+  readonly module: string;
+  readonly version: string;
+  readonly patchSetDir: string;
+  readonly outputDir: string;
+  readonly env: NodeJS.ProcessEnv;
+}) {
+  const manifest = await readManifest(options.patchSetDir);
+  if (manifest.framework !== options.module) {
+    throw new CharmPrepareError(
+      'unsupported-capability',
+      options.module,
+      options.version,
+      `the patch manifest at ${options.patchSetDir} describes ` +
+        `${manifest.framework}, not ${options.module}`,
+    );
+  }
+  if (manifest.patched.length !== 0 || manifest.added.length === 0) {
+    throw new Error(
+      `the Bubbles manifest for ${options.module} ${options.version} must contain only add-only units`,
+    );
+  }
+  const units: GoToolExecUnit[] = await Promise.all(manifest.added.map(async (added) => {
+    const packageDir = dirname(added.path).replaceAll('\\', '/');
+    return {
+      packagePath: packageDir === '.' ? options.module : `${options.module}/${packageDir}`,
+      targetFile: 'zz_termwright_probe.go',
+      source: await readFile(join(options.patchSetDir, added.source), 'utf8'),
+      sourceDigest: added.sha256,
+    };
+  }));
+  const prepared = await prepareGoToolExec({
+    moduleDir: options.moduleDir,
+    outputDir: options.outputDir,
+    units,
+    env: options.env,
+  });
+  try {
+    await run('go', ['build', ...prepared.goArgs, ...units.map((unit) => unit.packagePath)], {
+      cwd: options.moduleDir,
+      env: prepared.env,
+    });
+  } catch (error) {
+    throw new CharmPrepareError(
+      'unsupported-capability',
+      options.module,
+      options.version,
+      `${options.module} ${options.version} does not compile the owned Bubbles accessor contract: ${message(error)}`,
+    );
+  }
+  return prepared;
 }
 
 async function clientVersionReplacements(
@@ -260,6 +322,18 @@ function requirePatchSet(kind: 'bubbletea' | 'bubbles', module: string, version:
   );
 }
 
+function requireBubblesUnitProfile(major: CharmMajor, module: string): string {
+  const version = BUBBLES_UNIT_PROFILES[major];
+  const dir = optionalPatchSet('bubbles', version);
+  if (dir !== undefined) return dir;
+  throw new CharmPrepareError(
+    'unsupported-capability',
+    module,
+    version,
+    `@termwright/probe-charm is missing its owned ${major} Bubbles accessor profile`,
+  );
+}
+
 function optionalPatchSet(kind: 'bubbletea' | 'bubbles', version: string): string | undefined {
   const dir = join(packageRoot(), 'upstream-patches', kind, version);
   return existsSync(join(dir, 'manifest.json')) ? dir : undefined;
@@ -327,4 +401,8 @@ async function defaultClientDir(env: NodeJS.ProcessEnv): Promise<string> {
 
 function packageRoot(): string {
   return join(fileURLToPath(new URL('.', import.meta.url)), '..');
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

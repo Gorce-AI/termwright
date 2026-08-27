@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TermwrightTestHost, TERMWRIGHT_RESOURCE_PROFILES } from '../../termwright-cli/dist/host.js';
+import { buildTviewFixture } from './build-tview-fixture.mjs';
 
 const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPOSITORY_ROOT = join(PACKAGE_ROOT, '..', '..');
@@ -30,31 +31,49 @@ if (process.argv.includes('--deviations')) {
 
 process.env.TERMWRIGHT_RETRIES = '0';
 process.env.TERMWRIGHT_UPDATE_SNAPSHOTS = 'none';
-const host = await TermwrightTestHost.open({
-  cwd: REPOSITORY_ROOT,
-  runsDir: join(REPOSITORY_ROOT, '.termwright', 'conformance-runs'),
-  resourceProfile: process.platform === 'win32'
-    ? TERMWRIGHT_RESOURCE_PROFILES['windows-ci']
-    : TERMWRIGHT_RESOURCE_PROFILES.ci,
-  preflight: {
-    requiredToolchains: [
-      { name: 'Go', commands: [['go', 'version']] },
-      {
-        name: 'Python with the Termwright and Textual clients',
-        commands: [
-          ['python3', '-c', 'import termwright, textual'],
-          ['python', '-c', 'import termwright, textual'],
-        ],
-        env: PYTHON_ENV,
-      },
-    ],
-  },
-  filters: SUITES.map(([file]) => file),
-});
+const tviewFixture = await buildTviewFixture();
+process.env.TERMWRIGHT_TVIEW_INSTRUMENTED = tviewFixture.instrumented;
+process.env.TERMWRIGHT_TVIEW_BASELINE = tviewFixture.baseline;
+process.env.TERMWRIGHT_TVIEW_CONTRACT = tviewFixture.contract;
+let host;
+try {
+  host = await TermwrightTestHost.open({
+    cwd: REPOSITORY_ROOT,
+    runsDir: join(REPOSITORY_ROOT, '.termwright', 'conformance-runs'),
+    resourceProfile: process.platform === 'win32'
+      ? TERMWRIGHT_RESOURCE_PROFILES['windows-ci']
+      : TERMWRIGHT_RESOURCE_PROFILES.ci,
+    preflight: {
+      requiredToolchains: [
+        { name: 'Go', commands: [['go', 'version']] },
+        {
+          name: 'Python with the Termwright and Textual clients',
+          commands: [
+            ['python3', '-c', 'import termwright, textual'],
+            ['python', '-c', 'import termwright, textual'],
+          ],
+          env: PYTHON_ENV,
+        },
+      ],
+    },
+    filters: SUITES.map(([file]) => file),
+  });
+} catch (error) {
+  try {
+    await tviewFixture.cleanup();
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [error, cleanupError],
+      'native host open and tview fixture cleanup both failed',
+    );
+  }
+  throw error;
+}
 
 const rows = [];
 const catalogTests = [];
 let infrastructureFailure = false;
+let runFailure;
 try {
   const discovery = await host.requestRun({ execute: false }).completed;
   if (discovery.catalog === undefined || discovery.error !== undefined) {
@@ -118,8 +137,25 @@ try {
     }
     if (completion.error !== undefined) process.stdout.write(`INFRASTRUCTURE ${String(completion.error)}\n`);
   }
-} finally {
+} catch (error) {
+  runFailure = error;
+}
+
+const teardownFailures = [];
+try {
   await host.close();
+} catch (error) {
+  teardownFailures.push(error);
+}
+try {
+  await tviewFixture.cleanup();
+} catch (error) {
+  teardownFailures.push(error);
+}
+if (runFailure !== undefined || teardownFailures.length > 0) {
+  const failures = [...(runFailure === undefined ? [] : [runFailure]), ...teardownFailures];
+  if (failures.length === 1) throw failures[0];
+  throw new AggregateError(failures, 'conformance run and teardown had multiple failures');
 }
 
 const width = Math.max(...rows.map((row) => row.area.length), 4);

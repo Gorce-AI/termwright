@@ -163,7 +163,7 @@ def test_the_node_keys_are_exactly_the_protocols():
     expected = {
         "id", "parentId", "role", "name", "description", "value", "state",
         "extended", "actions", "inputRecipes", "labelledBy", "describedBy", "textRanges",
-        "testId", "frameworkType", "p", "px", "geometry", "scroll", "paintedRegion",
+        "testId", "frameworkType", "opaqueChildren", "p", "px", "geometry", "scroll", "paintedRegion",
     }
     assert set(_NODE_KEYS) == expected, {
         "missing here": sorted(expected - set(_NODE_KEYS)),

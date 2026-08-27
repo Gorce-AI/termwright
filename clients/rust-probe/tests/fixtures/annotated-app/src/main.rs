@@ -43,8 +43,11 @@ impl Widget for DeployGroup {
 }
 
 fn main() {
-    let backend = ratatui::backend::TestBackend::new(40, 10);
-    let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+    let backend = ratatui::backend::CrosstermBackend::new(std::io::stdout());
+    let options = ratatui::TerminalOptions {
+        viewport: ratatui::Viewport::Fixed(Rect::new(0, 0, 40, 10)),
+    };
+    let mut terminal = ratatui::Terminal::with_options(backend, options).expect("terminal");
     terminal
         .draw(|frame| {
             frame.render_widget(

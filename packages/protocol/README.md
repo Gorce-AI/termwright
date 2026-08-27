@@ -182,6 +182,11 @@ Annotations may supply semantic intent such as role, name, relationships,
 actions, stable identity, and domain state. They must not override measured
 focus, rendered text, geometry, clipping, or pointer routing.
 
+An unrecognised framework node sets `opaqueChildren: true` when the probe
+cannot prove that its child enumeration is complete. This is a typed,
+framework-provenance degradation boundary; it must not be hidden in
+application-specific `extended` data.
+
 ## Snapshot validation
 
 `validateSnapshot` checks:

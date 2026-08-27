@@ -45,11 +45,45 @@ renderer.root.add(hidden);
 renderer.root.add(movedByHook);
 renderer.start();
 
-setTimeout(() => {
-  renderer.resize(40, 12);
-  renderer.requestRender();
-}, 140);
-setTimeout(() => {
+let input = '';
+let destroyed = false;
+
+const destroy = (code: number): void => {
+  if (destroyed) return;
+  destroyed = true;
   renderer.destroy();
-  process.stdout.write('', () => process.exit(0));
-}, 420);
+  process.stdout.write('', () => process.exit(code));
+};
+
+const command = (line: string): void => {
+  switch (line) {
+    case 'resize':
+      renderer.resize(40, 12);
+      return;
+    case 'destroy':
+      destroy(0);
+      return;
+    default:
+      process.stderr.write(`unknown geometry fixture command: ${JSON.stringify(line)}\n`);
+      destroy(1);
+  }
+};
+
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk: string) => {
+  input += chunk;
+  for (;;) {
+    const newline = input.indexOf('\n');
+    if (newline < 0) return;
+    const line = input.slice(0, newline).trim();
+    input = input.slice(newline + 1);
+    if (line !== '') command(line);
+  }
+});
+process.stdin.on('end', () => {
+  if (!destroyed) {
+    process.stderr.write('geometry fixture control input ended before destroy\n');
+    destroy(1);
+  }
+});
+process.stdin.resume();

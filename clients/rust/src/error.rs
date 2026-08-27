@@ -112,6 +112,12 @@ pub enum Error {
     /// will be refused again for the same tree. Part of a length-prefixed
     /// frame may already be on the wire, so the session is over, not delayed.
     WriteTimeout,
+    /// A bounded asynchronous publication queue had no free slot. The
+    /// rejected frame consumed no revision and must receive no marker.
+    PublicationQueueFull,
+    /// The asynchronous publication worker failed or was closed. No later
+    /// revision can be admitted.
+    PublicationWorkerFailed,
 }
 
 impl fmt::Display for Error {
@@ -127,6 +133,10 @@ impl fmt::Display for Error {
                     formatter,
                     "the driver did not read within the write deadline"
                 )
+            }
+            Error::PublicationQueueFull => write!(formatter, "semantic publication queue full"),
+            Error::PublicationWorkerFailed => {
+                write!(formatter, "semantic publication worker failed")
             }
         }
     }

@@ -96,6 +96,11 @@ export function probeInfo(frameworkVersion?: string): ProbeInfo {
     // The optional @termwright/opentui SDK publishes developer intent through
     // a Symbol.for + WeakMap channel consumed by every observation.
     capabilities: ['stable-identity', 'intended-rect', 'visible-rect', 'paint-order', 'annotations'],
+    instrumentation: {
+      highestTier: 'T3',
+      semanticClass: 'A',
+      degradedCapabilities: [],
+    },
   };
 }
 

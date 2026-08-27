@@ -20,6 +20,7 @@ describe("buildSessionContract", () => {
       },
     });
     expect(Object.isFrozen(contract)).toBe(true);
+    expect(contract.providers.map((provider) => provider.id)).toEqual(["termwright-vt"]);
   });
 
   it("treats the certified Windows passthrough stream as mode-observable", () => {
@@ -44,7 +45,10 @@ describe("buildSessionContract", () => {
   it("attributes provider-backed capabilities to application evidence", () => {
     const attachment = {
       adapter: { name: "ink", version: "5" },
-      probe: { framework: "ink", frameworkVersion: "5.1", capabilities: ["tree"] },
+      probe: {
+        framework: "ink", frameworkVersion: "5.1", capabilities: ["tree"],
+        instrumentation: { highestTier: "T3", semanticClass: "A", degradedCapabilities: [] },
+      },
       capabilities: ["tree"],
       providers: [{
         id: "app-router",
@@ -60,7 +64,12 @@ describe("buildSessionContract", () => {
       platform: "win32",
       modesObservable: false,
     });
-    expect(contract.framework).toMatchObject({ name: "ink", version: "5.1" });
+    expect(contract.framework).toMatchObject({
+      name: "ink", version: "5.1",
+      instrumentation: { highestTier: "T3", semanticClass: "A", degradedCapabilities: [] },
+    });
+    expect(Object.isFrozen(contract.framework?.instrumentation)).toBe(true);
+    expect(Object.isFrozen(contract.framework?.instrumentation?.degradedCapabilities)).toBe(true);
     expect(contract.capabilities["pointer-hit-testing"]).toMatchObject({
       status: "supported",
       evidence: { source: "application", providerId: "app-router" },

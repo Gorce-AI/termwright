@@ -4,6 +4,16 @@
 > retained as design evidence. Any current support or setup guidance is
 > superseded by the website tview adapter guide and compatibility reference.
 
+The release implementation resolved the build-mechanism question differently
+from this audit's initial premise: it uses an official `-toolexec` compiler
+wrapper to add owned T1 compilation units directly to the resolved tview/tcell
+packages. It does not copy modules, generate `go.work`, apply source patches or
+bind support to upstream byte digests. Chained public before/after-draw hooks
+arm only tview's final call through a public `tcell.Screen` decorator; custom
+intermediate `Show` calls cannot publish partial semantics. The T1 unit reads
+sealed state under tview's existing draw lock. The measurements below remain the evidence for that
+lifecycle and state selection, not current implementation instructions.
+
 Phase 0 of the zero-config campaign. What tview offers as a place to hook, what
 state it holds where, and how a build-time replacement reaches it.
 

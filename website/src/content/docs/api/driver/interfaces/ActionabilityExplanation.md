@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionabilityExplanation
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:841
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:195
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:841
 
 > `readonly` **actionable**: `boolean`
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:842
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:196
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:842
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:844
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:198
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:844
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:843
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:197
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:843
 
 > `readonly` `optional` **reason?**: `object`
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:847
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:201
 
 #### code
 
@@ -63,7 +63,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:847
 
 > `readonly` **requirements**: readonly [`ConditionResult`](../conditionresult/)[]
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:845
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:199
 
 ***
 
@@ -71,4 +71,4 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:845
 
 > `readonly` `optional` **strategy?**: `string`
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:846
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:200

@@ -25,7 +25,7 @@ Timeout classes, extended with the class that governs polling matchers.
 
 > `readonly` `optional` **action?**: `number`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:5
+Defined in: driver/dist/session-uL1ytjek.d.ts:5
 
 #### Inherited from
 
@@ -37,7 +37,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:5
 
 > `readonly` `optional` **exit?**: `number`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:9
+Defined in: driver/dist/session-uL1ytjek.d.ts:9
 
 #### Inherited from
 
@@ -59,7 +59,7 @@ Budget for self-polling matchers (`toBeVisible`, …). Default 5 000 ms.
 
 > `readonly` `optional` **idle?**: `number`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:7
+Defined in: driver/dist/session-uL1ytjek.d.ts:7
 
 #### Inherited from
 
@@ -71,7 +71,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:7
 
 > `readonly` `optional` **ready?**: `number`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:8
+Defined in: driver/dist/session-uL1ytjek.d.ts:8
 
 #### Inherited from
 
@@ -83,7 +83,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:8
 
 > `readonly` `optional` **text?**: `number`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:6
+Defined in: driver/dist/session-uL1ytjek.d.ts:6
 
 #### Inherited from
 

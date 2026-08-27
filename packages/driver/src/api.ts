@@ -119,6 +119,13 @@ export interface LaunchOptions {
    * the larger of 2,000 ms and the session `ready` timeout.
    */
   readonly semanticNegotiationMs?: number;
+  /**
+   * Negotiated ceiling for semantic frames in flight between a framework
+   * probe and the driver. Defaults to 32 and is capped at 256. Compatible
+   * probes may use it as their publication budget; a full queue still fails
+   * closed instead of dropping or retrying a semantic revision.
+   */
+  readonly semanticFrameQueueCapacity?: number;
   readonly scrollbackLines?: number; // default 2_000
   readonly timeouts?: TimeoutClasses;
   readonly operationBudget?: OperationBudget;

@@ -451,6 +451,14 @@ export class SemanticChannel {
           : Object.freeze({
               ...hello.probe,
               capabilities: Object.freeze([...hello.probe.capabilities]),
+              ...(hello.probe.instrumentation === undefined ? {} : {
+                instrumentation: Object.freeze({
+                  ...hello.probe.instrumentation,
+                  degradedCapabilities: Object.freeze([
+                    ...hello.probe.instrumentation.degradedCapabilities,
+                  ]),
+                }),
+              }),
             }),
       providers: Object.freeze((hello.providers ?? []).map((provider) => Object.freeze({
         id: provider.id,

@@ -23,7 +23,7 @@ and revocation pipeline.
 | OpenTUI 0.5.3 | `audit/opentui.md` | impl-ink |
 | Textual 8.2.8 + Python bootstrap | `audit/textual.md` | impl-clients |
 | Ratatui 0.30.2 + Cargo patch | `audit/ratatui.md` | impl-clients |
-| tview + go.work mechanism | `audit/tview.md` | impl-examples |
+| tview lifecycle and sealed state (historical evidence; current T0+T1 design) | `audit/tview.md` | impl-examples |
 | Bubble Tea / Bubbles / Lip Gloss (v1+v2) | `audit/charm.md` | impl-examples |
 
 ## Findings that changed the plan (not merely confirmed it)
@@ -58,12 +58,13 @@ and revocation pipeline.
 7. **Default limits already contradict each other**: `maxNodes` (5 000) ×
    measured 217.5 B/node = 1 062 KiB > `maxSnapshotBytes` (1 024 KiB), before
    any provenance byte. (driver NOTES, measured)
-8. **go.work generation must inherit the user's workspace** (`go work edit
-   -json`), or multi-module projects break; Charm v2 lives at
-   `charm.land/...`, not `github.com/charmbracelet/.../v2`; tview `afterDraw`
-   runs under the application write-lock (publication must be a non-blocking
-   channel send); Lip Gloss provenance is real only on v2 via the Compositor
-   layer/Hit-test and per-cell link params. (tview.md, charm.md)
+8. **Any Go build injection must preserve the user's real build graph**;
+   replacing it with a generated workspace breaks multi-module and vendored
+   projects. Charm v2 lives at `charm.land/...`, not
+   `github.com/charmbracelet/.../v2`; tview `afterDraw` runs under the
+   application write-lock and before `Screen.Show`, so publication admission
+   must be non-blocking and the causal commit must observe the screen's real
+   `Show` boundary. (tview.md, charm.md)
 
 ## Phase 1 decision series (binding; CHANGELOG-contracts entries follow the code)
 

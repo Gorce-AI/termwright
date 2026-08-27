@@ -17,10 +17,14 @@
 import type {
   EffectiveSessionContract,
   EvidenceProvenance,
+  ProbeDegradedCapabilityId,
   SemanticSnapshot,
 } from '@termwright/protocol';
 import {
   EVIDENCE_PROVIDER_CAPABILITIES,
+  PROBE_DEGRADED_CAPABILITIES,
+  PROBE_INJECTION_TIERS,
+  PROBE_SEMANTIC_CLASSES,
   SESSION_CAPABILITIES,
 } from '@termwright/protocol/contract';
 import { CONDITION_KINDS } from '@termwright/protocol/action-model';
@@ -1117,11 +1121,43 @@ function parseEffectiveSessionContract(value: unknown): EffectiveSessionContract
       throw new UiProtocolError('session.contract framework must be an object or null');
     }
     const candidate = frameworkValue as Record<string, unknown>;
+    const instrumentationValue = candidate['instrumentation'];
+    let instrumentation: NonNullable<EffectiveSessionContract['framework']>['instrumentation'];
+    if (instrumentationValue !== undefined) {
+      if (typeof instrumentationValue !== 'object' || instrumentationValue === null || Array.isArray(instrumentationValue)) {
+        throw new UiProtocolError('session.contract.framework.instrumentation must be an object');
+      }
+      const declared = instrumentationValue as Record<string, unknown>;
+      const highestTier = declared['highestTier'];
+      const semanticClass = declared['semanticClass'];
+      const degradedCapabilities = declared['degradedCapabilities'];
+      if (!PROBE_INJECTION_TIERS.includes(highestTier as (typeof PROBE_INJECTION_TIERS)[number])) {
+        throw new UiProtocolError('session.contract.framework.instrumentation has invalid highestTier');
+      }
+      if (!PROBE_SEMANTIC_CLASSES.includes(semanticClass as (typeof PROBE_SEMANTIC_CLASSES)[number])) {
+        throw new UiProtocolError('session.contract.framework.instrumentation has invalid semanticClass');
+      }
+      if (!Array.isArray(degradedCapabilities) || degradedCapabilities.length > PROBE_DEGRADED_CAPABILITIES.length ||
+          new Set(degradedCapabilities).size !== degradedCapabilities.length ||
+          !degradedCapabilities.every((item) => PROBE_DEGRADED_CAPABILITIES.includes(item as (typeof PROBE_DEGRADED_CAPABILITIES)[number]))) {
+        throw new UiProtocolError('session.contract.framework.instrumentation has invalid degradedCapabilities');
+      }
+      if (semanticClass === 'B' &&
+          (!degradedCapabilities.includes('intended-geometry') || !degradedCapabilities.includes('clipped-geometry'))) {
+        throw new UiProtocolError('session.contract.framework.instrumentation semantic class B requires geometry degradations');
+      }
+      instrumentation = Object.freeze({
+        highestTier: highestTier as (typeof PROBE_INJECTION_TIERS)[number],
+        semanticClass: semanticClass as (typeof PROBE_SEMANTIC_CLASSES)[number],
+        degradedCapabilities: Object.freeze([...degradedCapabilities]) as readonly ProbeDegradedCapabilityId[],
+      });
+    }
     framework = {
       name: requireBoundedString(candidate, 'name', 'session.contract.framework'),
       version: requireBoundedString(candidate, 'version', 'session.contract.framework'),
       adapterVersion: requireBoundedString(candidate, 'adapterVersion', 'session.contract.framework'),
       certificationId: requireBoundedString(candidate, 'certificationId', 'session.contract.framework'),
+      ...(instrumentation === undefined ? {} : { instrumentation }),
     };
   }
 

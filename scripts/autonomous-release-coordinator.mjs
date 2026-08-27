@@ -8,11 +8,12 @@ const SHA = /^[0-9a-f]{40}$/u;
 const GITHUB_LOGIN = /^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 const GITHUB_ACTIONS_APP_ID = 15368;
 const HEARTBEAT_INTERVAL_MS = 30 * 24 * 60 * 60 * 1_000;
-const ciJob = (workflowName, requiredChecks, matrix) => Object.freeze({
-  workflowName,
-  requiredChecks: Object.freeze(requiredChecks),
-  ...(matrix === undefined ? {} : { matrix: Object.freeze(matrix) }),
-});
+const ciJob = (workflowName, requiredChecks, matrix) =>
+  Object.freeze({
+    workflowName,
+    requiredChecks: Object.freeze(requiredChecks),
+    ...(matrix === undefined ? {} : { matrix: Object.freeze(matrix) }),
+  });
 
 /**
  * The reviewed CI surface used by both autonomous-run validation and branch
@@ -27,58 +28,38 @@ const ciJob = (workflowName, requiredChecks, matrix) => Object.freeze({
 export const CI_JOB_CONTRACT = Object.freeze({
   'package-metadata': ciJob('package metadata', ['package metadata']),
   'deterministic-core-coverage': ciJob('deterministic core coverage', ['deterministic core coverage']),
-  build: ciJob('build ${{ matrix.os }} / node ${{ matrix.node }}', [
-    'build ubuntu-22.04 / node 22',
-    'build ubuntu-22.04 / node 24',
-    'build macos-latest / node 22',
-    'build macos-latest / node 24',
-  ], { os: ['ubuntu-22.04', 'macos-latest'], node: ['22', '24'] }),
+  build: ciJob('build ${{ matrix.os }} / node ${{ matrix.node }}', ['build ubuntu-22.04 / node 22', 'build ubuntu-22.04 / node 24', 'build macos-latest / node 22', 'build macos-latest / node 24'], {
+    os: ['ubuntu-22.04', 'macos-latest'],
+    node: ['22', '24'],
+  }),
   hostile: ciJob('hostile input (128 MiB heap)', ['hostile input (128 MiB heap)']),
   'pty-native-build-x64': ciJob('build the Windows PTY addon (x64)', ['build the Windows PTY addon (x64)']),
   'pty-native-build-arm64': ciJob('build and run the Windows PTY addon (arm64)', ['build and run the Windows PTY addon (arm64)']),
-  'pty-native': ciJob('native PTY backend (Windows / Node ${{ matrix.node }})', [
-    'native PTY backend (Windows / Node 22)',
-    'native PTY backend (Windows / Node 24)',
-  ], { node: ['22', '24'] }),
-  'pty-native-arm64': ciJob('native PTY backend (Windows ARM64 / Node ${{ matrix.node }})', [
-    'native PTY backend (Windows ARM64 / Node 22)',
-    'native PTY backend (Windows ARM64 / Node 24)',
-  ], { node: ['22', '24'] }),
-  'pty-native-x64-on-arm64': ciJob('native PTY backend (Windows ARM64 / x64 Node ${{ matrix.node }})', [
-    'native PTY backend (Windows ARM64 / x64 Node 22)',
-    'native PTY backend (Windows ARM64 / x64 Node 24)',
-  ], { node: ['22', '24'] }),
-  'windows-driver-native': ciJob('build windows-latest / node ${{ matrix.node }}', [
-    'build windows-latest / node 22',
-    'build windows-latest / node 24',
-  ], { node: ['22', '24'] }),
+  'pty-native': ciJob('native PTY backend (Windows / Node ${{ matrix.node }})', ['native PTY backend (Windows / Node 22)', 'native PTY backend (Windows / Node 24)'], { node: ['22', '24'] }),
+  'pty-native-arm64': ciJob('native PTY backend (Windows ARM64 / Node ${{ matrix.node }})', ['native PTY backend (Windows ARM64 / Node 22)', 'native PTY backend (Windows ARM64 / Node 24)'], {
+    node: ['22', '24'],
+  }),
+  'pty-native-x64-on-arm64': ciJob(
+    'native PTY backend (Windows ARM64 / x64 Node ${{ matrix.node }})',
+    ['native PTY backend (Windows ARM64 / x64 Node 22)', 'native PTY backend (Windows ARM64 / x64 Node 24)'],
+    { node: ['22', '24'] },
+  ),
+  'windows-driver-native': ciJob('build windows-latest / node ${{ matrix.node }}', ['build windows-latest / node 22', 'build windows-latest / node 24'], { node: ['22', '24'] }),
   determinism: ciJob('determinism (50 native run cycles, zero retries)', ['determinism (50 native run cycles, zero retries)']),
   'concurrency-stress': ciJob('concurrency stress (16 owned terminals)', ['concurrency stress (16 owned terminals)']),
   'resource-leak': ciJob('resource and async leak barrier (25 lifecycle cycles)', ['resource and async leak barrier (25 lifecycle cycles)']),
   'fault-and-jitter': ciJob('fault injection and slow causal boundaries', ['fault injection and slow causal boundaries']),
   'randomized-race': ciJob('randomized race (recorded seed)', ['randomized race (recorded seed)']),
-  'windows-native-stress': ciJob('Windows native lifecycle stress / Node ${{ matrix.node }}', [
-    'Windows native lifecycle stress / Node 22',
-    'Windows native lifecycle stress / Node 24',
-  ], { node: ['22', '24'] }),
-  'conformance-posix': ciJob('conformance ${{ matrix.os }}', [
-    'conformance ubuntu-latest',
-    'conformance macos-latest',
-  ], { os: ['ubuntu-latest', 'macos-latest'] }),
+  'windows-native-stress': ciJob('Windows native lifecycle stress / Node ${{ matrix.node }}', ['Windows native lifecycle stress / Node 22', 'Windows native lifecycle stress / Node 24'], {
+    node: ['22', '24'],
+  }),
+  'conformance-posix': ciJob('conformance ${{ matrix.os }}', ['conformance ubuntu-latest', 'conformance macos-latest'], { os: ['ubuntu-latest', 'macos-latest'] }),
   'ui-browser': ciJob('runner UI end-to-end (Chromium)', ['runner UI end-to-end (Chromium)']),
   'conformance-windows': ciJob('conformance windows-latest', ['conformance windows-latest']),
   opentui: ciJob('opentui adapter contract (Bun)', ['opentui adapter contract (Bun)']),
-  clients: ciJob("clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})", [
-    'clients (python 3.9)',
-    'clients (python 3.12)',
-    'clients (go)',
-    'clients (rust)',
-  ], { include: [
-    { client: 'python', python: '3.9' },
-    { client: 'python', python: '3.12' },
-    { client: 'go' },
-    { client: 'rust' },
-  ] }),
+  clients: ciJob("clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})", ['clients (python 3.9)', 'clients (python 3.12)', 'clients (go)', 'clients (rust)'], {
+    include: [{ client: 'python', python: '3.9' }, { client: 'python', python: '3.12' }, { client: 'go' }, { client: 'rust' }],
+  }),
   'rust-windows-transport': ciJob('Rust semantic transport (Windows named pipe)', ['Rust semantic transport (Windows named pipe)']),
   'release-hygiene': ciJob('release hygiene', ['release hygiene']),
   'rust-msrv': ciJob('clients (rust MSRV 1.74)', ['clients (rust MSRV 1.74)']),
@@ -89,9 +70,7 @@ export const CI_JOB_CONTRACT = Object.freeze({
   certification: ciJob('certification gate', ['certification gate']),
 });
 
-export const CI_JOBS = Object.freeze(
-  Object.values(CI_JOB_CONTRACT).flatMap((job) => job.requiredChecks),
-);
+export const CI_JOBS = Object.freeze(Object.values(CI_JOB_CONTRACT).flatMap((job) => job.requiredChecks));
 
 // GitHub branch protection requires one stable aggregate context. The
 // coordinator additionally verifies every CI_JOBS entry before autonomous
@@ -101,11 +80,8 @@ export const REQUIRED_BRANCH_CHECKS = Object.freeze(['certification gate']);
 const compatibilityFiles = [
   /^compatibility\/(?:candidate-assessments|certified-upstreams|framework-semantic-completeness|registry)\.json$/u,
   /^\.changeset\/framework-compatibility-auto\.md$/u,
-  /^packages\/(?:probe-tview|probe-charm)\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
+  /^packages\/probe-charm\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
   /^clients\/rust-probe\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
-  /^clients\/python\/src\/termwright_probe\/certified_textual\.py$/u,
-  /^clients\/python\/pyproject\.toml$/u,
-  /^clients\/python\/uv\.lock$/u,
   /^packages\/probe-ink\/src\/certified-instrumentation\.json$/u,
   /^packages\/probe-opentui\/src\/certified-runtime\.json$/u,
   /^packages\/(?:ink|probe-ink)\/package\.json$/u,
@@ -117,7 +93,7 @@ const versionFiles = [
   /^pnpm-lock\.yaml$/u,
   /^packages\/[^/]+\/(?:package\.json|CHANGELOG\.md)$/u,
   /^packages\/(?:termwright-cli\/src\/version|mcp\/src\/version|desktop-host\/src\/index|probe-ink\/src\/version|probe-opentui\/src\/version|probe-tview\/src\/launch|probe-charm\/src\/launch)\.ts$/u,
-  /^packages\/(?:probe-tview|probe-charm)\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
+  /^packages\/probe-charm\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
   /^clients\/README\.md$/u,
   /^clients\/python\/(?:pyproject\.toml|uv\.lock|src\/termwright\/__init__\.py|src\/termwright_probe\/__init__\.py)$/u,
   /^clients\/(?:rust|rust-probe|rust-ratatui)\/(?:Cargo\.toml|Cargo\.lock)$/u,
@@ -132,7 +108,13 @@ export function validateChangedFiles(kind, files) {
   if (!Array.isArray(files) || files.length === 0) throw new Error(`${kind} PR has no changed files`);
   for (const file of files) {
     const path = typeof file === 'string' ? file : file?.filename;
-    if (typeof path !== 'string' || path.includes('\\') || path.startsWith('/') || path.split('/').some((part) => part === '' || part === '.' || part === '..') || !allowlist.some((pattern) => pattern.test(path))) {
+    if (
+      typeof path !== 'string' ||
+      path.includes('\\') ||
+      path.startsWith('/') ||
+      path.split('/').some((part) => part === '' || part === '.' || part === '..') ||
+      !allowlist.some((pattern) => pattern.test(path))
+    ) {
       throw new Error(`${kind} PR contains forbidden path ${String(path)}`);
     }
     if (typeof file === 'object' && file !== null) {
@@ -197,7 +179,8 @@ export function validateFailedReleaseRun(run, { repository, defaultBranch }) {
   if (!['failure', 'cancelled', 'timed_out'].includes(run.conclusion)) throw new Error(`release run conclusion ${String(run.conclusion)} does not require intervention`);
   const escaped = defaultBranch.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
   const title = new RegExp(`^Release (prepare|publish) ${escaped} @ ([0-9a-f]{40})(?: \\(Version PR ([1-9][0-9]*)\\))?$`, 'u').exec(run.display_title ?? '');
-  if (title === null || title[2] !== run.head_sha || (title[1] === 'prepare' && title[3] !== undefined) || (title[1] === 'publish' && title[3] === undefined)) throw new Error('release run title is not bound to its exact mode, branch, SHA and Version PR');
+  if (title === null || title[2] !== run.head_sha || (title[1] === 'prepare' && title[3] !== undefined) || (title[1] === 'publish' && title[3] === undefined))
+    throw new Error('release run title is not bound to its exact mode, branch, SHA and Version PR');
   return { mode: title[1], sha: title[2], versionPr: title[3] ?? null };
 }
 
@@ -213,8 +196,13 @@ export function nextHeartbeatRecord(workflowRun, currentText) {
   if (!Number.isFinite(observed)) throw new Error('heartbeat source run timestamp is invalid');
   if (currentText !== undefined) {
     let current;
-    try { current = JSON.parse(currentText); } catch { throw new Error('existing heartbeat is malformed'); }
-    if (current?.schemaVersion !== 1 || current?.kind !== 'termwright-schedule-heartbeat' || !SHA.test(current.sourceRevision ?? '') || !/^[1-9][0-9]*$/u.test(current.sourceRunId ?? '')) throw new Error('existing heartbeat contract is invalid');
+    try {
+      current = JSON.parse(currentText);
+    } catch {
+      throw new Error('existing heartbeat is malformed');
+    }
+    if (current?.schemaVersion !== 1 || current?.kind !== 'termwright-schedule-heartbeat' || !SHA.test(current.sourceRevision ?? '') || !/^[1-9][0-9]*$/u.test(current.sourceRunId ?? ''))
+      throw new Error('existing heartbeat contract is invalid');
     const previous = Date.parse(current.observedAt ?? '');
     if (!Number.isFinite(previous) || previous > observed) throw new Error('existing heartbeat timestamp is invalid or from the future');
     if (observed - previous < HEARTBEAT_INTERVAL_MS) return null;
@@ -235,9 +223,7 @@ export function validateAutomationPr(kind, pr, files, { repository, defaultBranc
 }
 
 export function releaseDispatchTitle(mode, target, sha, versionPr = null) {
-  return mode === 'prepare'
-    ? `Release prepare ${target} @ ${sha}`
-    : `Release publish ${target} @ ${sha} (Version PR ${versionPr})`;
+  return mode === 'prepare' ? `Release prepare ${target} @ ${sha}` : `Release publish ${target} @ ${sha} (Version PR ${versionPr})`;
 }
 
 export function shouldDispatchRelease(runs, expectedTitle) {
@@ -245,22 +231,23 @@ export function shouldDispatchRelease(runs, expectedTitle) {
 }
 
 export function pendingChangesetFiles(entries) {
-  return (entries ?? [])
-    .filter((entry) => typeof entry === 'string' && entry !== 'README.md' && /^[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(entry))
-    .sort();
+  return (entries ?? []).filter((entry) => typeof entry === 'string' && entry !== 'README.md' && /^[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(entry)).sort();
 }
 
 export function assertReleaseStateQuiescent(runs, { repository, defaultBranch }) {
-  const trusted = (runs ?? []).filter((run) => (
-    run?.name === 'Release'
-    && run.path === '.github/workflows/release.yml'
-    && run.event === 'workflow_dispatch'
-    && run.repository?.full_name === repository
-    && run.head_repository?.full_name === repository
-    && run.head_branch === defaultBranch
-    && SHA.test(run.head_sha ?? '')
-    && /^Release (?:prepare|publish) .+ @ [0-9a-f]{40}/u.test(run.display_title ?? '')
-  )).sort((left, right) => Date.parse(right.created_at ?? 0) - Date.parse(left.created_at ?? 0) || Number(right.id ?? 0) - Number(left.id ?? 0));
+  const trusted = (runs ?? [])
+    .filter(
+      (run) =>
+        run?.name === 'Release' &&
+        run.path === '.github/workflows/release.yml' &&
+        run.event === 'workflow_dispatch' &&
+        run.repository?.full_name === repository &&
+        run.head_repository?.full_name === repository &&
+        run.head_branch === defaultBranch &&
+        SHA.test(run.head_sha ?? '') &&
+        /^Release (?:prepare|publish) .+ @ [0-9a-f]{40}/u.test(run.display_title ?? ''),
+    )
+    .sort((left, right) => Date.parse(right.created_at ?? 0) - Date.parse(left.created_at ?? 0) || Number(right.id ?? 0) - Number(left.id ?? 0));
   const unresolved = trusted.find((run) => run.status !== 'completed' || run.conclusion !== 'success');
   if (unresolved === undefined) return;
   throw new Error(`trusted Release run ${String(unresolved.id)} is ${String(unresolved.status)}/${String(unresolved.conclusion)}; refusing to advance the release state machine`);
@@ -287,7 +274,8 @@ export function validateBranchProtection(protection) {
     throw new Error('code-owner approval blocks the bot-owned unattended PR flow');
   }
   const bypass = protection.required_pull_request_reviews.bypass_pull_request_allowances;
-  if ((bypass?.users?.length ?? 0) > 0 || (bypass?.teams?.length ?? 0) > 0 || (bypass?.apps?.length ?? 0) > 0) throw new Error('pull-request review bypass allowances are incompatible with autonomous release safety');
+  if ((bypass?.users?.length ?? 0) > 0 || (bypass?.teams?.length ?? 0) > 0 || (bypass?.apps?.length ?? 0) > 0)
+    throw new Error('pull-request review bypass allowances are incompatible with autonomous release safety');
   if (protection.restrictions != null) throw new Error('default-branch push restrictions can silently block the coordinator merge token');
   if (protection.allow_force_pushes?.enabled === true || protection.allow_deletions?.enabled === true) throw new Error('default branch must forbid force pushes and deletion');
 }
@@ -461,7 +449,7 @@ async function main(argv) {
   } else if (command === 'refresh-heartbeat') {
     const event = JSON.parse(await readFile(resolve(argv[1]), 'utf8'));
     const destination = resolve(argv[2]);
-    const current = await readFile(destination, 'utf8').catch((error) => error?.code === 'ENOENT' ? undefined : Promise.reject(error));
+    const current = await readFile(destination, 'utf8').catch((error) => (error?.code === 'ENOENT' ? undefined : Promise.reject(error)));
     const rendered = nextHeartbeatRecord(event.workflow_run, current);
     if (rendered !== null) await writeFile(destination, rendered);
     if (process.env.GITHUB_OUTPUT !== undefined) {
@@ -474,7 +462,14 @@ async function main(argv) {
     const event = JSON.parse(await readFile(resolve(argv[1]), 'utf8'));
     const pr = JSON.parse(await readFile(resolve(argv[2]), 'utf8'));
     const files = JSON.parse(await readFile(resolve(argv[3]), 'utf8'));
-    validateAutomationPr('version', pr, files, { repository: event.repository.full_name, defaultBranch: event.inputs.target, headSha: pr.head.sha, defaultHead: event.inputs.expected_sha, requireOpen: false, requireBaseSha: false });
+    validateAutomationPr('version', pr, files, {
+      repository: event.repository.full_name,
+      defaultBranch: event.inputs.target,
+      headSha: pr.head.sha,
+      defaultHead: event.inputs.expected_sha,
+      requireOpen: false,
+      requireBaseSha: false,
+    });
     if (pr.merged_at === null || pr.merge_commit_sha !== event.inputs.expected_sha) throw new Error('Version PR is not merged as the expected default-branch SHA');
   } else if (command === 'coordinate-ci') {
     await coordinateCi(JSON.parse(await readFile(resolve(argv[1]), 'utf8')));
@@ -501,5 +496,8 @@ async function main(argv) {
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main(process.argv.slice(2)).catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
+  main(process.argv.slice(2)).catch((error) => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
 }

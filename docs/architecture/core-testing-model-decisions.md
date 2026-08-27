@@ -212,10 +212,13 @@ that vocabulary. Unknown action kinds fail closed rather than being ignored.
 ## ADR-28 — Injection strategies are framework-specific and certified
 
 There is no universal best injection mechanism. Textual uses deterministic
-Python startup injection and explicitly diagnoses `-S`/`-E` bypasses. OpenTUI
-and Ink use exact-version Node/Bun instrumentation at audited render boundaries.
-tview and Bubble Tea use checksummed Go source replacement. Ratatui uses audited
-Cargo patching and explicit annotation render boundaries.
+Python startup injection and runtime capability checks. OpenTUI uses public
+runtime observation plus one structural output transform; Ink retains exact
+Node/Bun instrumentation where differential evidence found no equivalent
+public seam. tview combines a public screen decorator with compiler-checked T1
+Go units, Bubbles uses T1 state readers, Bubble Tea retains narrow exact T3
+control-flow hooks, and Ratatui uses audited Cargo patching at immediate-mode
+render boundaries.
 
 Every strategy is dormant without an active Termwright session. Where semantics
 are required and the certified hook cannot attach, startup fails with a typed

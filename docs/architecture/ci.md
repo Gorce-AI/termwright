@@ -59,6 +59,19 @@ fail with the required prebuild command. Tests never invoke package builds from
 a Vitest worker: tools such as `tsup --clean` replace a shared directory and can
 otherwise remove a preload while another project or example is executing it.
 
+The supported-runtime build rows and the release verifier partition the root
+Vitest workspace into three explicit Native Host invocations: `core`, general
+package surfaces, and framework conformance plus examples. Every configured
+project is named exactly once. A structural workflow test compares the
+selectors with `vitest.config.ts`, so adding, removing or
+renaming a project without updating the partition fails closed. Negated
+selectors such as `--project=!core` are intentionally not used: they make a
+growing, unrelated catalogue share one total-run safety boundary. Vitest file
+sharding is also not used because it reports the unselected catalogue as skips
+rather than defining independent project catalogues. Each invocation therefore
+retains its own RunId, attempt journal, resource broker and fixed safety
+boundary.
+
 Job display names are an external contract: branch protection and the trusted
 release coordinator consume them. Changes to the matrix must update the shared
 coordinator contract and its synchronization tests in the same commit.

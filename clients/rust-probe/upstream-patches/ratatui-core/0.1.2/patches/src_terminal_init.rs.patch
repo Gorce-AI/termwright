@@ -1,0 +1,22 @@
+--- a/src/terminal/init.rs
++++ b/src/terminal/init.rs
+@@ -131,6 +131,8 @@
+             }
+             Viewport::Fixed(area) => (area, area.as_position()),
+         };
++        #[cfg(feature = "std")]
++        let termwright_session = termwright_probe_ratatui::session::initialize();
+         Ok(Self {
+             backend,
+             buffers: [Buffer::empty(viewport_area), Buffer::empty(viewport_area)],
+@@ -139,8 +141,10 @@
+             viewport: options.viewport,
+             viewport_area,
+             last_known_area: area,
+             last_known_cursor_pos: cursor_pos,
+             frame_count: 0,
++            #[cfg(feature = "std")]
++            termwright_session,
+         })
+     }
+ }

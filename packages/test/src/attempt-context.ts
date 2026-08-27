@@ -186,9 +186,17 @@ function createAttemptResources(
       const normalized = normalizeVector(requested);
       for (const resource of RESOURCE_CLASSES) {
         if (allocated[resource] + normalized[resource] > reservation[resource]) {
+          const required = allocated[resource] + normalized[resource];
+          const guidance = resource === 'traceWriter'
+            ? ` Increase the declaration to test.resources({ traceWriters: ${required} }) if those writers must be live concurrently.`
+            : resource === 'nativeHostPressure'
+              ? ' Declare the intended exclusive pressure with test.resources({ hostPressure: \'exclusive\' }), or use nativeHost: \'exclusive\' for a terminal-backed native transport test.'
+              : ` Increase the declaration to test.resources({ terminals: ${required} }) if those terminals must be live concurrently.`;
           throw new ResourceBrokerError(
             'resource-unavailable',
-            `attempt ${attemptId} requested ${resource} beyond its atomic test.resources() reservation`,
+            `attempt ${attemptId} requested ${resource} beyond its atomic test.resources() reservation ` +
+              `(declared ${reservation[resource]}, already allocated ${allocated[resource]}, requested ${normalized[resource]}).` +
+              guidance,
           );
         }
       }

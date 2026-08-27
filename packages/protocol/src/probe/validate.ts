@@ -16,6 +16,9 @@ import { ProtocolViolation } from "../errors.js";
 import { encodeFrame, projectDto } from "../framing.js";
 import {
   PROBE_CAPABILITIES,
+  PROBE_DEGRADED_CAPABILITIES,
+  PROBE_INJECTION_TIERS,
+  PROBE_SEMANTIC_CLASSES,
   PROBE_UNOBSERVABLE_FIELDS,
   type ProbeAnnotations,
   type ProbeFrame,
@@ -276,6 +279,13 @@ export const probeInfoSchema = z.strictObject({
   capabilities: z
     .array(z.enum(PROBE_CAPABILITIES))
     .max(PROBE_CAPABILITIES.length),
+  instrumentation: z.strictObject({
+    highestTier: z.enum(PROBE_INJECTION_TIERS),
+    semanticClass: z.enum(PROBE_SEMANTIC_CLASSES),
+    degradedCapabilities: z
+      .array(z.enum(PROBE_DEGRADED_CAPABILITIES))
+      .max(PROBE_DEGRADED_CAPABILITIES.length),
+  }).optional(),
 });
 
 /**
@@ -299,6 +309,19 @@ export function validateProbeInfo(
     return { ok: false, detail: `${where}: ${issue.message}` };
   }
   const info = parsed.data as ProbeInfo;
+  const degraded = info.instrumentation?.degradedCapabilities;
+  if (degraded !== undefined && new Set(degraded).size !== degraded.length) {
+    return { ok: false, detail: "instrumentation.degradedCapabilities: duplicate capability" };
+  }
+  if (
+    info.instrumentation?.semanticClass === "B" &&
+    (!degraded?.includes("intended-geometry") || !degraded.includes("clipped-geometry"))
+  ) {
+    return {
+      ok: false,
+      detail: "semantic class B must declare both 'intended-geometry' and 'clipped-geometry' as degraded",
+    };
+  }
   if (
     info.identityKind === "frame-local" &&
     info.capabilities.includes("stable-identity")
@@ -310,7 +333,19 @@ export function validateProbeInfo(
         "capability: nothing in an immediate-mode frame survives to be correlated",
     };
   }
-  return { ok: true, info: Object.freeze(info) };
+  return {
+    ok: true,
+    info: Object.freeze({
+      ...info,
+      capabilities: Object.freeze([...info.capabilities]),
+      ...(info.instrumentation === undefined ? {} : {
+        instrumentation: Object.freeze({
+          ...info.instrumentation,
+          degradedCapabilities: Object.freeze([...info.instrumentation.degradedCapabilities]),
+        }),
+      }),
+    }),
+  };
 }
 
 /**

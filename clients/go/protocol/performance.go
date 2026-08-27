@@ -75,11 +75,15 @@ func (c *Client) PerformanceMetrics() ClientPerformanceMetrics {
 func floatPointer(value float64) *float64 { return &value }
 
 func (c *Client) performanceDrop() {
+	c.performanceDrops(1)
+}
+
+func (c *Client) performanceDrops(count uint64) {
 	if c.options.Debug == nil {
 		return
 	}
 	c.mu.Lock()
-	c.performance.droppedEvents++
+	c.performance.droppedEvents += int64(count)
 	dropped := c.performance.droppedEvents
 	c.mu.Unlock()
 	c.options.Debug.Line("io", fmt.Sprintf("performance_drop total=%d", dropped))

@@ -63,6 +63,7 @@ import type {
 } from "@termwright/protocol";
 import {
   DEFAULT_ARTIFACT_VALUE_POLICY,
+  ABSOLUTE_LIMITS,
   DEFAULT_LIMITS,
   DEFAULT_NEGOTIATION_MS,
   ENV_ENDPOINT,
@@ -302,6 +303,7 @@ async function prepareTerminalLaunch(options: LaunchTerminalOptions): Promise<{
   if (options.command.length === 0) {
     throw new TypeError("launchTerminal requires a non-empty command");
   }
+  resolveSemanticFrameQueueCapacity(options.semanticFrameQueueCapacity);
   const launchTimeout =
     options.operationBudget?.remaining(
       resolveTimeouts(options.timeouts).ready,
@@ -312,6 +314,20 @@ async function prepareTerminalLaunch(options: LaunchTerminalOptions): Promise<{
   // PTY exists. Standalone driver processes can install their own owner.
   const lease = await acquireTerminalLaunchResourceLease();
   return { deadline: launchDeadline, lease };
+}
+
+function resolveSemanticFrameQueueCapacity(value: number | undefined): number {
+  const capacity = value ?? DEFAULT_LIMITS.maxQueuedFrames;
+  if (
+    !Number.isSafeInteger(capacity) ||
+    capacity < 1 ||
+    capacity > ABSOLUTE_LIMITS.maxQueuedFrames
+  ) {
+    throw new TypeError(
+      `semanticFrameQueueCapacity must be an integer from 1 to ${ABSOLUTE_LIMITS.maxQueuedFrames}`,
+    );
+  }
+  return capacity;
 }
 
 async function rollbackLaunchAdmission(
@@ -471,6 +487,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   readonly #startedAt = performance.now();
   readonly #resources = new ResourceScope("terminal session");
   readonly #launchLease: TerminalLaunchResourceLease | null;
+  readonly #protocolLimits: typeof DEFAULT_LIMITS;
 
   #channel: SemanticChannel | null = null;
   #pty: PtyProcess | null = null;
@@ -517,6 +534,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   ) {
     this.#options = options;
     this.#launchLease = launchLease;
+    this.#protocolLimits = Object.freeze({
+      ...DEFAULT_LIMITS,
+      maxQueuedFrames: resolveSemanticFrameQueueCapacity(
+        options.semanticFrameQueueCapacity,
+      ),
+    });
     this.#operationBudget = options.operationBudget;
     this.timeouts = resolveTimeouts(options.timeouts);
     this.artifactValuePolicy =
@@ -554,7 +577,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
     this.#resources.defer("virtual terminal", () => this.#vt.dispose());
     this.#pairing = new RevisionPairing({
-      maxPending: DEFAULT_LIMITS.maxQueuedFrames,
+      maxPending: this.#protocolLimits.maxQueuedFrames,
       pairingTimeoutMs: PAIRING_TIMEOUT_MS,
       caughtUp: () => this.#evidenceSettled(),
       onPublish: (paired) => this.#publishSemantic(paired.snapshot),
@@ -667,7 +690,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         SemanticChannel.listen({
           sessionId: this.sessionId,
           token: this.#token,
-          limits: DEFAULT_LIMITS,
+          limits: this.#protocolLimits,
           acceptHello: () => this.semanticPossible(),
           logBudget: {
             maxRecordsPerSecond: LOG_RECORDS_PER_SECOND,

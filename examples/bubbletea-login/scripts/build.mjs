@@ -13,7 +13,7 @@ if (available.status !== 0) {
 
 mkdirSync(fileURLToPath(new URL('../dist', import.meta.url)), {recursive: true});
 const prepared = await prepareInstrumentedBuild({moduleDir: app});
-const build = spawnSync('go', ['build', '-o', '../dist/bubbletea-login', '.'], {
+const build = spawnSync('go', ['build', ...prepared.goArgs, '-o', '../dist/bubbletea-login', '.'], {
   cwd: app,
   env: prepared.env,
   stdio: 'inherit',

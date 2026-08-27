@@ -22,9 +22,10 @@ pip install termwright              # protocol client + probe + annotation SDK
 pip install "termwright[textual]"   # + Textual itself
 ```
 
-Requires Python 3.9+. The Textual extra installs the newest exact-certified
-Textual runtime listed in the compatibility registry; the protocol modules
-have no third-party dependencies.
+Requires Python 3.9+. The Textual extra accepts Textual 8.2.8 or newer as an
+advisory packaging floor. Runtime capability checks and behavioral
+conformance, not the version string, decide whether strong semantics engage;
+the protocol modules have no third-party dependencies.
 
 ## Automatic Textual semantics
 
@@ -243,12 +244,13 @@ python -m termwright_probe -- python app.py
 launcher puts a generated `sitecustomize.py` on `PYTHONPATH`; CPython imports
 it during startup, before the script's own directory reaches `sys.path`; the
 probe waits there until the application imports Textual and observes the
-certified `App._display` / driver enqueue / `post_display_hook` boundary. The
+capability-checked `App._display` / driver enqueue / `post_display_hook`
+boundary. The
 marker is appended without waiting to the same WriterThread FIFO, after the
 frame; a full queue fails the semantic channel instead of blocking Textual's
-event loop. Strong probing is certified only for the exact Textual versions listed in
-the compatibility registry and their built-in
-`LinuxDriver` and `WindowsDriver` with their exact `WriterThread`; custom
+event loop. No Textual version is allowlisted. Strong probing accepts only a
+live built-in `LinuxDriver` or `WindowsDriver` whose concrete WriterThread and
+bounded FIFO pass the runtime checks; custom
 `driver_class` values and inline mode fail the semantic channel explicitly
 rather than publishing an unprovable commit. A driver that already sets `TERMWRIGHT_ENDPOINT` and
 `TERMWRIGHT_TOKEN` can compose the same thing itself:
@@ -312,7 +314,9 @@ not listed here follows them.
   probe walks `app.screen`, so a pushed-over screen's widgets are not in the
   tree at all. A widget hidden on the _active_ screen (`display = False`) does
   publish `hidden: true`. Textual owns the screen stack; reaching into it would
-  mean publishing widgets that no longer receive events.
+  mean publishing widgets that no longer receive events. The handshake records
+  this narrower limitation as the machine-readable
+  `inactive-screen-tree` degradation.
 - **Ownership is process-local and one-shot.** The first application
   interpreter atomically owns the generated bootstrap. Before the
   application's first line, the probe captures its credentials privately and
@@ -323,7 +327,7 @@ not listed here follows them.
   Poetry's own console process.
 - **The probe does not report `frame-begin`** (probe capability). A frame is
   accepted only when the same `_display` attempt successfully enqueued output
-  through an exact certified non-headless built-in driver before
+  through a capability-checked non-headless built-in driver before
   `post_display_hook`. The writer is preflighted before snapshot publication,
   then its marker is appended to that same FIFO. A full or replaced writer
   fails closed without blocking on queue capacity. This exposes no instant the

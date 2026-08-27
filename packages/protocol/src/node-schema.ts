@@ -322,6 +322,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     textRanges: z.array(textRange).max(limits.maxRelationTargets).optional(),
     testId: text.optional(),
     frameworkType: text.optional(),
+    opaqueChildren: z.boolean().optional(),
     p: z.enum(PROVENANCE_SOURCES).optional(),
     px: z.record(text, z.enum(PROVENANCE_SOURCES)).optional(),
   } as const;

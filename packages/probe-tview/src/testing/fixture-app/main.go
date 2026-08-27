@@ -1,7 +1,6 @@
-// A plain tview application. It imports nothing of termwright's, has no
-// feature flag and no build tag: this is the "zero config" the probe has to
-// work against, and the file is deliberately what a user would have written
-// before they had ever heard of us.
+// A plain tview application with the doctrine's single public Attach line.
+// It has no build tag, wrapper widget, constructor replacement, or probe-only
+// lifecycle framework.
 package main
 
 import (
@@ -9,6 +8,7 @@ import (
 	"os"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/gorce-ai/termwright/clients/go/tviewprobe"
 	"github.com/rivo/tview"
 )
 
@@ -63,12 +63,18 @@ func main() {
 		}
 		switch event.Rune() {
 		case 'r':
-			// The visible counter is an application-owned causal boundary: a
-			// test observing it knows this exact input reached the event loop and
-			// the requested redraw was painted, independently of PTY revisions.
-			redraws++
-			status.SetText(fmt.Sprintf("status: ready redraw:%d", redraws))
-			app.Sync()
+			// The queued callback is one indivisible event-loop case. Both markers,
+			// the state mutation and ForceDraw therefore happen before the loop can
+			// accept an unrelated resize redraw. ForceDraw is tview's documented
+			// synchronous draw API for code already executing in a queued update.
+			go app.QueueUpdate(func() {
+				completed := redraws + 1
+				fmt.Fprintf(os.Stdout, "\x1b]8488;termwright-tview-fixture-sync:%d:begin\x07", completed)
+				redraws = completed
+				status.SetText(fmt.Sprintf("status: ready redraw:%d", completed))
+				app.ForceDraw()
+				fmt.Fprintf(os.Stdout, "\x1b]8488;termwright-tview-fixture-sync:%d:end\x07", completed)
+			})
 			return nil
 		case 'q':
 			app.Stop()
@@ -82,7 +88,9 @@ func main() {
 		return event
 	})
 
-	if err := app.SetRoot(pages, true).SetFocus(list).Run(); err != nil {
+	app.SetRoot(pages, true).SetFocus(list)
+	defer tviewprobe.Attach(app, pages)()
+	if err := app.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

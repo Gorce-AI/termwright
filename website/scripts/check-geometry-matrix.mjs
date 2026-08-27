@@ -22,7 +22,10 @@ function sessionAvailability(row, capability) {
 function producerAvailability(row, id) {
   if (id.startsWith('adapter.')) return row.probe.adapterCapabilities.includes(id.slice(8)) ? 'automatic' : 'unsupported';
   if (id.startsWith('probe.')) return row.probe.capabilities.includes(id.slice(6)) ? 'automatic' : 'unsupported';
-  if (id.startsWith('provider.')) return [...row.capabilityGraph.applicationIntegrated, ...row.capabilityGraph.input.flatMap((entry) => entry.providerAlternatives)].some((entry) => entry.providerCapabilities.includes(id.slice(9))) ? 'application-integrated' : 'unsupported';
+  if (id.startsWith('provider.'))
+    return [...row.capabilityGraph.applicationIntegrated, ...row.capabilityGraph.input.flatMap((entry) => entry.providerAlternatives)].some((entry) => entry.providerCapabilities.includes(id.slice(9)))
+      ? 'application-integrated'
+      : 'unsupported';
   if (id.startsWith('terminal.')) return 'automatic';
   return undefined;
 }
@@ -70,7 +73,15 @@ export function renderGeometryPage(page, registry, graph) {
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const evidenceRows = registry.frameworks.map((row) => `| ${row.name} | ${evidenceColumns.map(([, capability]) => sessionAvailability(row, capability)).join(' | ')} |`);
   const publicRows = registry.frameworks.map((row) => `| ${row.name} | ${publicColumns.map(([, id]) => availability(row, id, graph)).join(' | ')} |`);
-  const certificationRows = registry.frameworks.map((row) => `| ${row.name} | ${row.certification.ids.join('<br>')} | ${row.certification.strategy} | ${row.certification.checksumSources.length === 0 ? 'native hook' : row.certification.checksumSources.map((source) => `\`${source}\``).join('<br>')} |`);
+  const certificationRows = registry.frameworks.map((row) => {
+    const sources =
+      row.certification.checksumSources.length === 0
+        ? row.certification.strategy === 'native-hook'
+          ? 'native hook'
+          : 'not applicable (capability certification)'
+        : row.certification.checksumSources.map((source) => `\`${source}\``).join('<br>');
+    return `| ${row.name} | ${row.certification.ids.join('<br>')} | ${row.certification.strategy} | ${sources} |`;
+  });
   const providerRows = registry.frameworks.map((row) => {
     const integrations = [
       ...row.capabilityGraph.applicationIntegrated,
@@ -122,7 +133,7 @@ export function renderGeometryPage(page, registry, graph) {
     `| --- | ${publicColumns.map(() => '---').join(' | ')} |`,
     ...publicRows,
     '',
-    '## Exact certifications',
+    '## Certification contracts',
     '',
     '| Framework | Certification ID | Instrumentation policy | Checksum source of truth |',
     '| --- | --- | --- | --- |',

@@ -16,6 +16,7 @@ use crate::marker::MAX_SAFE_INTEGER;
 use crate::roles::{valid_capability, Capability, ADAPTER_CAPABILITIES};
 use crate::tree::Snapshot;
 use crate::validate::validate_snapshot;
+use crate::Violation;
 
 /// The wire protocol identifier both sides must agree on.
 pub const PROTOCOL_ID: &str = "termwright/2";
@@ -113,6 +114,80 @@ pub enum ProbeIdentityKind {
     FrameLocal,
 }
 
+/// Strongest injection tier that actually engaged for this probe run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProbeInjectionTier {
+    /// Public framework hook; no injection.
+    T0,
+    /// Add-only compilation unit.
+    T1,
+    /// Append-only source mutation.
+    T2,
+    /// Exact source/control-flow instrumentation.
+    T3,
+}
+
+/// Whether the semantic tree includes authoritative framework geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProbeSemanticClass {
+    /// Semantic tree with framework geometry.
+    A,
+    /// Semantic tree without authoritative framework geometry.
+    B,
+}
+
+/// Closed session-capability vocabulary used for named runtime degradation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DegradedSessionCapability {
+    /// Semantic tree publication.
+    SemanticTree,
+    /// Identity correlation across frames.
+    StableIdentity,
+    /// Framework-intended geometry.
+    IntendedGeometry,
+    /// Geometry clipped by framework ancestors.
+    ClippedGeometry,
+    /// Physically painted terminal region.
+    PaintedRegion,
+    /// Pointer target geometry.
+    PointerGeometry,
+    /// Authoritative pointer hit testing.
+    PointerHitTesting,
+    /// Framework focus state.
+    Focus,
+    /// Framework scroll state and actions.
+    Scroll,
+    /// Authoritative render ordering.
+    RenderOrder,
+    /// Semantic action strategies.
+    ActionStrategies,
+    /// Keyboard input transport.
+    KeyboardInput,
+    /// Pointer input transport.
+    PointerInput,
+    /// Focus input transport.
+    FocusInput,
+    /// Causally paired semantic and terminal revisions.
+    PairedRevisions,
+    /// Enumeration of screens other than the currently committed one.
+    InactiveScreenTree,
+    /// Children hidden behind an application-defined container abstraction.
+    CustomContainerEnumeration,
+}
+
+/// Runtime attachment facts declared in a first-party probe handshake.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeInstrumentation {
+    /// Strongest injection tier used by this concrete run.
+    pub highest_tier: ProbeInjectionTier,
+    /// Geometry completeness class of the emitted tree.
+    pub semantic_class: ProbeSemanticClass,
+    /// Named session capabilities intentionally unavailable in this integration.
+    pub degraded_capabilities: Vec<DegradedSessionCapability>,
+}
+
 /// What a probe says about itself when it attaches.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,6 +203,76 @@ pub struct ProbeInfo {
     pub identity_kind: ProbeIdentityKind,
     /// Optional abilities, from the protocol's closed set.
     pub capabilities: Vec<String>,
+    /// Runtime injection facts. Optional for older/custom protocol-v2 probes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instrumentation: Option<ProbeInstrumentation>,
+}
+
+impl ProbeInfo {
+    /// Validate the closed probe declaration before any hello reaches the wire.
+    pub fn validate(&self) -> Result<(), Violation> {
+        const CAPABILITIES: &[&str] = &[
+            "stable-identity",
+            "intended-rect",
+            "visible-rect",
+            "operations",
+            "annotations",
+            "frame-begin",
+            "paint-order",
+        ];
+        if self.framework.is_empty() || self.probe_version.is_empty() {
+            return Err(Violation::new(
+                "schema",
+                "probe framework and probeVersion must be non-empty",
+            ));
+        }
+        for (index, capability) in self.capabilities.iter().enumerate() {
+            if !CAPABILITIES.contains(&capability.as_str()) {
+                return Err(Violation::new(
+                    "schema",
+                    format!("unknown probe capability {capability}"),
+                ));
+            }
+            if self.capabilities[..index].contains(capability) {
+                return Err(Violation::new(
+                    "schema",
+                    format!("duplicate probe capability {capability}"),
+                ));
+            }
+        }
+        if self.identity_kind == ProbeIdentityKind::FrameLocal
+            && self
+                .capabilities
+                .iter()
+                .any(|capability| capability == "stable-identity")
+        {
+            return Err(Violation::new(
+                "schema",
+                "frame-local identity cannot advertise stable-identity",
+            ));
+        }
+        if let Some(instrumentation) = &self.instrumentation {
+            for (index, capability) in instrumentation.degraded_capabilities.iter().enumerate() {
+                if instrumentation.degraded_capabilities[..index].contains(capability) {
+                    return Err(Violation::new("schema", "duplicate degraded capability"));
+                }
+            }
+            if instrumentation.semantic_class == ProbeSemanticClass::B
+                && (!instrumentation
+                    .degraded_capabilities
+                    .contains(&DegradedSessionCapability::IntendedGeometry)
+                    || !instrumentation
+                        .degraded_capabilities
+                        .contains(&DegradedSessionCapability::ClippedGeometry))
+            {
+                return Err(Violation::new(
+                    "schema",
+                    "semantic class B requires intended-geometry and clipped-geometry degradations",
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Hello {

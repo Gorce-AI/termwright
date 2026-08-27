@@ -42,15 +42,20 @@ The normal launcher path is one call:
 import {prepareInstrumentedBuild} from '@termwright/probe-charm';
 
 const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
-// Use build.env for `go build`; it contains the generated GOWORK.
+// Pass both the generated environment and explicit compiler-wrapper arguments.
+await execFile('go', ['build', ...build.goArgs, '.'], {env: build.env});
 ```
 
-It detects the major and exact versions, materialises independently cached
-Bubble Tea and (when supported) Bubbles copies, then writes a generated
-workspace outside the application. `build.built` tells whether this call had a
-cold cache; `build.builtModules` names the copies that were created. Exact
-Bubble Tea and detected Bubbles versions without shipped patch sets are refused:
-one certified profile never changes semantic breadth with the dependency graph.
+It detects the major and resolved versions, materialises the independently cached
+Bubble Tea copy, and injects Bubbles' add-only units through Go's official
+`-toolexec` compiler seam. Bubbles remains in GOMODCACHE; no companion copy or
+workspace replacement is created. The generic compiler seam supports vendored
+packages, but this mixed integration still rejects vendor mode because Bubble
+Tea's T3 workspace replacement cannot compose with `-mod=vendor`.
+`build.built` tells whether the Bubble Tea cache was cold. Bubble Tea remains
+exact-version certified. Bubbles uses the owned accessor profile for its module
+line and preflight-compiles every injected package against the actually resolved
+candidate; compilation capability, not the advisory profile version, admits it.
 
 ## What it gives you
 
@@ -59,15 +64,29 @@ call site in v2's `Program.render`, three in v1. It commits that staged tree and
 writes the marker only after the exact renderer flush successfully sends the
 terminal bytes through the same writer. A failed or partial flush cannot publish
 a semantic revision. A successful no-output flush may still commit a staged
-semantic change and its marker when the terminal bytes are unchanged. From the staged model the probe walks the user's values
-by reflection and reports the components it recognises.
+semantic change and its marker when the terminal bytes are unchanged. Output
+commit admission uses an atomic compare-and-swap gate: concurrent or reentrant
+renderer flushes never wait in the render path, and the losing flush is deferred
+before output while the semantic session fails closed. Model observation and
+publication admission use the same non-blocking rule. From the staged model the
+probe walks the user's values by reflection, reports recognised components and
+preserves every other subtree as an `opaque-container`. Private, scalar, nil and
+depth-limited values carry the named `custom-container-enumeration` degradation;
+they are never silently omitted from an apparently complete tree.
+
+When the probe environment is absent, `Program.Run` caches that dormant state.
+Every later render and flush still executes its injected atomic guard, but it
+does not rebuild client options, reread the environment, lock lifecycle state,
+create a probe allocation, start a goroutine or attempt a socket connection.
 
 Recognition is by package path and type, and it reads **public accessors
 only**. Bubbles is a separate module from Bubble Tea, so patching Bubble Tea
 buys the frame hook and nothing about the widgets; the Bubbles patch set adds
 accessor files without editing upstream files, and the probe finds them by
-name. A detected Bubbles version without its exact certified add-only set is
-refused rather than silently changing semantic breadth.
+name. A candidate that cannot compile the complete owned accessor contract is
+refused rather than silently changing semantic breadth. Omitting `build.goArgs`
+also fails the semantic session as soon as a supported Bubbles component is
+recognised; it cannot produce a green run with a reduced tree.
 
 Those accessors exist because the public API answers a slightly different
 question than a test asks:
@@ -133,9 +152,10 @@ func (g gauge) TermwrightSemantics() annotate.Semantics {
 ```
 
 For a Bubbles type owned by another module, embed it in a local type and put
-`TermwrightSemantics` on that wrapper. A custom type no recognizer knows still
-reaches the tree, while a recognised embedded component gets both the author's
-wording and the probe's observed value/state. `Semantics` has no field for
+`TermwrightSemantics` on that wrapper. A custom type no recognizer knows already
+reaches the tree as a structural container; annotation is an optional accuracy
+upgrade for role and name. A recognised embedded component gets both the
+author's wording and the probe's observed value/state. `Semantics` has no field for
 bounds, focus, visibility, value, rendered text or framework state,
 structurally, so a declaration cannot go stale against the screen. Actions are
 closed descriptive hints, never callbacks; terminal input remains the only
@@ -161,6 +181,8 @@ utilities.
 - `-mod=vendor` in `GOFLAGS` is reported by name rather than overridden.
 - A Bubble Tea version with no patch set is named as such instead of failing
   somewhere inside a diff.
+- A resolved Bubbles candidate that cannot compile the complete owned accessor
+  profile is refused as `unsupported-capability`, independent of its version.
 - An application requiring both majors is refused rather than half-instrumented.
 
 ## Development

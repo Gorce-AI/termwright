@@ -124,7 +124,10 @@ interface NodeGeometryObservations {
 ```
 
 An unrecognised framework widget uses `role: 'generic'` and must include its
-native `frameworkType`.
+native `frameworkType`. When a probe cannot determine whether that widget owns
+additional framework children, it also sets `opaqueChildren: true`; consumers
+must treat the node as an explicitly incomplete container boundary, not as a
+known leaf.
 
 `p` records a node's primary provenance and `px` records per-field exceptions.
 The provenance vocabulary is closed: `annotation`, `recognizer`, `framework`,
@@ -157,6 +160,18 @@ The handshake supplies the active `ProtocolLimits`. A driver may tighten the
 published defaults but cannot widen the absolute ceilings. Limits cover frame
 and snapshot bytes, tree depth, node count, string bytes, relation targets,
 in-flight work, waits, and structured logs.
+
+The negotiated semantic in-flight ceiling defaults to 32 frames. Compatible
+probes may use it as their local publication budget; Ratatui does. If Ratatui
+exhausts it, the probe fails closed and reports both the active budget and the
+remediation. For applications that intentionally render larger synchronous
+bursts, raise it per launch (up to the protocol ceiling of 256):
+
+```ts
+const app = await terminal.launch({ semanticFrameQueueCapacity: 64 });
+```
+
+This is a memory/backpressure budget, not a retry or timing control.
 
 Driver messages are tolerant of unknown additive fields so a published client
 can continue talking to a newer driver. Adapter messages remain strict because

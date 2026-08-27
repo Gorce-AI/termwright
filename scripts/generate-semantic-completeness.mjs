@@ -16,8 +16,8 @@ const outputUrl = new URL('../compatibility/framework-semantic-completeness.json
  * CI red, while changing this generator cannot create a runtime guarantee.
  */
 export function buildSemanticCompletenessReport(registry) {
-  if (registry?.schemaVersion !== 5 || !Array.isArray(registry.frameworks)) {
-    throw new TypeError('semantic completeness requires compatibility registry schemaVersion 5');
+  if (registry?.schemaVersion !== 6 || !Array.isArray(registry.frameworks)) {
+    throw new TypeError('semantic completeness requires compatibility registry schemaVersion 6');
   }
 
   return {

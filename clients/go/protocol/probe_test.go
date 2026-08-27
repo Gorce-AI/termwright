@@ -8,11 +8,15 @@ import (
 
 func testProbeInfo() *ProbeInfo {
 	return &ProbeInfo{
-		Framework:        "tview",
-		FrameworkVersion: "v0.42.0",
+		Framework:        "example-go-tui",
+		FrameworkVersion: "v1.2.3",
 		ProbeVersion:     "0.1.0",
 		IdentityKind:     ProbeIdentityStable,
 		Capabilities:     []ProbeCapability{ProbeCapStableIdentity, ProbeCapAnnotations},
+		Instrumentation: &ProbeInstrumentation{
+			HighestTier: ProbeTierT3, SemanticClass: ProbeSemanticClassB,
+			DegradedCapabilities: []SessionCapabilityID{"intended-geometry", "clipped-geometry"},
+		},
 	}
 }
 
@@ -26,7 +30,7 @@ func TestProbeInfoUsesTheNormativeWireShape(t *testing.T) {
 		t.Fatalf("marshalling hello: %v", err)
 	}
 
-	want := `"probe":{"framework":"tview","frameworkVersion":"v0.42.0","probeVersion":"0.1.0","identityKind":"stable","capabilities":["stable-identity","annotations"]}`
+	want := `"probe":{"framework":"example-go-tui","frameworkVersion":"v1.2.3","probeVersion":"0.1.0","identityKind":"stable","capabilities":["stable-identity","annotations"],"instrumentation":{"highestTier":"T3","semanticClass":"B","degradedCapabilities":["intended-geometry","clipped-geometry"]}}`
 	if !strings.Contains(string(body), want) {
 		t.Fatalf("hello did not carry ProbeInfo in the normative shape:\n%s", body)
 	}
@@ -72,6 +76,9 @@ func TestProbeInfoIsValidatedBeforeItReachesTheWire(t *testing.T) {
 		{name: "unknown identity", probe: &ProbeInfo{Framework: "tview", ProbeVersion: "0.1.0", IdentityKind: "session-ish"}},
 		{name: "unknown capability", probe: &ProbeInfo{Framework: "tview", ProbeVersion: "0.1.0", IdentityKind: ProbeIdentityStable, Capabilities: []ProbeCapability{"telepathy"}}},
 		{name: "fabricated stability", probe: &ProbeInfo{Framework: "charm", ProbeVersion: "0.1.0", IdentityKind: ProbeIdentityFrameLocal, Capabilities: []ProbeCapability{ProbeCapStableIdentity}}},
+		{name: "unknown injection tier", probe: &ProbeInfo{Framework: "charm", ProbeVersion: "0.1.0", IdentityKind: ProbeIdentityFrameLocal, Instrumentation: &ProbeInstrumentation{HighestTier: "T4", SemanticClass: ProbeSemanticClassA}}},
+		{name: "class B missing geometry", probe: &ProbeInfo{Framework: "charm", ProbeVersion: "0.1.0", IdentityKind: ProbeIdentityFrameLocal, Instrumentation: &ProbeInstrumentation{HighestTier: ProbeTierT3, SemanticClass: ProbeSemanticClassB, DegradedCapabilities: []SessionCapabilityID{"intended-geometry"}}}},
+		{name: "duplicate degradation", probe: &ProbeInfo{Framework: "charm", ProbeVersion: "0.1.0", IdentityKind: ProbeIdentityFrameLocal, Instrumentation: &ProbeInstrumentation{HighestTier: ProbeTierT3, SemanticClass: ProbeSemanticClassA, DegradedCapabilities: []SessionCapabilityID{"scroll", "scroll"}}}},
 	}
 
 	for _, testCase := range tests {
@@ -90,8 +97,24 @@ func TestProbeInfoCapabilitiesAreCopiedIntoHello(t *testing.T) {
 		t.Fatalf("building hello: %v", err)
 	}
 	probe.Capabilities[0] = ProbeCapPaintOrder
+	probe.Instrumentation.DegradedCapabilities[0] = "scroll"
 	if hello.Probe.Capabilities[0] != ProbeCapStableIdentity {
 		t.Fatal("mutating Options.Probe changed a handshake already built")
+	}
+	if hello.Probe.Instrumentation.DegradedCapabilities[0] != "intended-geometry" {
+		t.Fatal("mutating Options.Probe instrumentation changed a handshake already built")
+	}
+}
+
+func TestProbeInfoAcceptsNarrowDegradationVocabulary(t *testing.T) {
+	probe := testProbeInfo()
+	probe.Instrumentation.SemanticClass = ProbeSemanticClassA
+	probe.Instrumentation.DegradedCapabilities = []SessionCapabilityID{
+		"inactive-screen-tree",
+		"custom-container-enumeration",
+	}
+	if _, err := newHello("token", "probe", "0.1.0", []Capability{CapTree}, probe); err != nil {
+		t.Fatalf("valid narrow degradation was rejected: %v", err)
 	}
 }
 
@@ -108,6 +131,10 @@ func TestParseAdapterMessageValidatesProbeInfo(t *testing.T) {
 			"probeVersion":     "0.1.0",
 			"identityKind":     "frame-local",
 			"capabilities":     []any{"annotations"},
+			"instrumentation": map[string]any{
+				"highestTier": "T3", "semanticClass": "B",
+				"degradedCapabilities": []any{"intended-geometry", "clipped-geometry"},
+			},
 		},
 	}
 	if _, err := ParseAdapterMessage(message, DefaultLimits); err != nil {

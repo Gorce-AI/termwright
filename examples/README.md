@@ -5,14 +5,14 @@ the way a user writes one — public API only, no imports from termwright's
 internals — so these directories double as the templates the documentation
 copies from.
 
-| Example | Application | What the tests show |
-|---|---|---|
-| [`ink-todo/`](ink-todo) | Ink 7 + TypeScript | end-to-end over a real PTY, component tests, and production-router pointer evidence |
-| [`opentui-form/`](opentui-form) | OpenTUI + TypeScript | focused input, semantic values, geometry, and exact pointer ownership |
-| [`textual-notes/`](textual-notes) | Textual + Python | a TypeScript test driving a Python program |
-| [`tview-menu/`](tview-menu) | tview + Go | a TypeScript test driving a Go binary |
-| [`bubbletea-login/`](bubbletea-login) | Bubble Tea + Go | component state, secret withholding, and provider-backed real mouse input |
-| [`ratatui-list/`](ratatui-list) | Ratatui + Rust | instrumented Cargo build and provider-backed real mouse input |
+| Example                               | Application          | What the tests show                                                                 |
+| ------------------------------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| [`ink-todo/`](ink-todo)               | Ink 7 + TypeScript   | end-to-end over a real PTY, component tests, and production-router pointer evidence |
+| [`opentui-form/`](opentui-form)       | OpenTUI + TypeScript | focused input, semantic values, geometry, and exact pointer ownership               |
+| [`textual-notes/`](textual-notes)     | Textual + Python     | a TypeScript test driving a Python program                                          |
+| [`tview-menu/`](tview-menu)           | tview + Go           | a TypeScript test driving a Go binary                                               |
+| [`bubbletea-login/`](bubbletea-login) | Bubble Tea + Go      | component state, secret withholding, and provider-backed real mouse input           |
+| [`ratatui-list/`](ratatui-list)       | Ratatui + Rust       | instrumented Cargo build and provider-backed real mouse input                       |
 
 The suites read almost identically, which is the point: the driver
 addresses an application by role and name over a language-neutral protocol, so
@@ -91,9 +91,9 @@ go run ./app                 # play with it
 pnpm test                    # builds the binary first
 ```
 
-The application imports only tview/tcell. The test build uses
-`prepareInstrumentedBuild()` to redirect tview to an ephemeral patched copy;
-the project module files remain byte-identical.
+The application uses the one-line `tviewprobe.Attach(app, root)` author seam.
+The test build adds Termwright-owned compilation units through Go's official
+`-toolexec` hook; no tview/tcell source file or project module file is edited.
 
 ## opentui-form
 
@@ -126,7 +126,7 @@ as evidence, while all actions still arrive as normal `crossterm` mouse events.
   uses the frozen result of `await app.settled()`.
 - **Scope destructive locators.** `dialog button#confirm` keeps working the day
   someone adds a second Delete button to the toolbar; `getByRole('button',
-  {name: 'Delete'})` starts failing as ambiguous.
+{name: 'Delete'})` starts failing as ambiguous.
 - **A pattern is partial; a file snapshot is a fence.** An inline pattern
   asserts only what it lists, and starts at the tree's root — scope it with
   `{ within: locator }` instead of spelling out the path. A snapshot stored in

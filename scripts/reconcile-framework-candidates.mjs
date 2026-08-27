@@ -8,12 +8,9 @@ import { canonicalJson, compareVersions, validateCandidateAssessments } from './
 import { renderSemanticCompletenessReport } from './generate-semantic-completeness.mjs';
 import { digestTree } from './prepare-framework-candidate.mjs';
 import { proposeCompatibilityUpdate, recordExecutableVariant } from './prepare-framework-candidate.mjs';
-import { renderCertifiedTextualPyproject, renderCertifiedTextualVersions } from './textual-certification.mjs';
 import { renderGeometryPage } from '../website/scripts/check-geometry-matrix.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-
-export { renderCertifiedTextualPyproject, renderCertifiedTextualVersions } from './textual-certification.mjs';
 
 async function verdictFiles(directory) {
   const found = [];
@@ -33,14 +30,20 @@ export async function generatedUpdateDirectories(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const target = join(directory, entry.name);
-    if (await access(join(target, 'bundle.json')).then(() => true, () => false)) found.set(entry.name, target);
+    if (
+      await access(join(target, 'bundle.json')).then(
+        () => true,
+        () => false,
+      )
+    )
+      found.set(entry.name, target);
   }
   return found;
 }
 
 export function generatedUpdateName(candidate) {
   const suffix = candidate.candidateDigest.slice('sha256:'.length, 'sha256:'.length + 16);
-  if (candidate.frameworkId === 'textual') return `candidate-update-textual-${suffix}`;
+  if (candidate.frameworkId === 'textual') return null;
   if (candidate.mode === 'hook' && candidate.hookStrategy === 'runtime') return `candidate-update-runtime-${suffix}`;
   if (candidate.mode === 'hook' && candidate.hookStrategy === 'exact-source') return `candidate-update-hook-${suffix}`;
   if (candidate.mode === 'patch' && candidate.patch.status === 'needs-patch') return `candidate-update-${suffix}`;
@@ -56,12 +59,18 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
     if (candidate === undefined || candidate.candidateDigest !== verdict.candidateDigest) throw new Error(`untrusted or stale verdict for ${verdict.candidateId}`);
     if (byCandidate.has(verdict.candidateId)) throw new Error(`duplicate verdict for ${verdict.candidateId}`);
     if (!['green', 'red'].includes(verdict.state)) throw new Error(`invalid verdict state for ${verdict.candidateId}`);
-    if (context.strictArtifacts === true && (
-      verdict.schemaVersion !== 1 || verdict.kind !== 'termwright-framework-candidate-verdict' ||
-      typeof context.sourceRevision !== 'string' || !/^[0-9a-f]{40}$/u.test(context.sourceRevision) ||
-      verdict.sourceRevision !== context.sourceRevision || typeof verdict.detail !== 'string' ||
-      verdict.detail.length === 0 || verdict.detail.length > 12_000
-    )) throw new Error(`invalid or stale typed verdict for ${verdict.candidateId}`);
+    if (
+      context.strictArtifacts === true &&
+      (verdict.schemaVersion !== 1 ||
+        verdict.kind !== 'termwright-framework-candidate-verdict' ||
+        typeof context.sourceRevision !== 'string' ||
+        !/^[0-9a-f]{40}$/u.test(context.sourceRevision) ||
+        verdict.sourceRevision !== context.sourceRevision ||
+        typeof verdict.detail !== 'string' ||
+        verdict.detail.length === 0 ||
+        verdict.detail.length > 12_000)
+    )
+      throw new Error(`invalid or stale typed verdict for ${verdict.candidateId}`);
     byCandidate.set(verdict.candidateId, verdict);
   }
   if (context.strictArtifacts === true && byCandidate.size !== candidates.size) {
@@ -77,7 +86,13 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
     const verdict = byCandidate.get(candidate.id);
     if (verdict?.state === 'green') {
       const entries = next.streams[candidate.streamId] ?? [];
-      const record = { version: candidate.version, publishedAt: candidate.publishedAt, source: candidate.source, patchManifestDigest: candidate.patch.manifestDigest, candidateDigest: candidate.candidateDigest };
+      const record = {
+        version: candidate.version,
+        publishedAt: candidate.publishedAt,
+        source: candidate.source,
+        patchManifestDigest: candidate.patch.manifestDigest,
+        candidateDigest: candidate.candidateDigest,
+      };
       const existing = entries.findIndex((entry) => entry.version === candidate.version);
       if (existing === -1) entries.push(record);
       else if (entries[existing].candidateDigest !== candidate.candidateDigest) entries[existing] = record;
@@ -102,10 +117,8 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
           `Published: ${candidate.publishedAt}`,
           `Integration mode: \`${candidate.mode}\``,
           ...(candidate.mode === 'hook' ? [`Hook strategy: \`${candidate.hookStrategy}\``] : []),
-          ...(candidate.mode === 'patch' ? [
-            `Patch status: \`${candidate.patch.status}\``,
-            `Expected manifest: \`${candidate.patch.path}\``,
-          ] : []),
+          ...(candidate.mode === 'capability' ? [`Capability: \`${candidate.capability}\``, `Capability strategy: \`${candidate.capabilityStrategy}\``] : []),
+          ...(candidate.mode === 'patch' ? [`Patch status: \`${candidate.patch.status}\``, `Expected manifest: \`${candidate.patch.path}\``] : []),
           '',
           `Certification result: ${verdict?.detail ?? 'No verdict artifact was produced.'}`,
           '',
@@ -113,11 +126,13 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
           '',
           candidate.source?.toolchainSupported === false
             ? `The compatibility registry is unchanged. Review and explicitly repin the trusted Go toolchain to >= ${candidate.source.requiredGoVersion}; automatic toolchain downloads remain disabled.`
-            : candidate.mode === 'hook'
-              ? `The compatibility registry is unchanged. Review the failed capability and behavioral evidence; ${candidate.hookStrategy === 'exact-source' ? 'do not add fuzzy support or bypass exact instrumentation where the framework still requires it' : 'do not allowlist the version until the public/runtime contract reaches full semantic parity'}. Rerun only after the adapter or certifier genuinely supports this artifact. A PR is created only after every gate passes without a missing conformance area.`
-              : candidate.patch.status === 'needs-patch'
-                ? 'The compatibility registry is unchanged. Prepare an exact checksummed structural patch, then rerun the workflow. A PR is created only after every gate passes without a missing conformance area.'
-                : 'The compatibility registry is unchanged. Review the existing exact patch and behavioral failure, then rerun only after the incompatibility is fixed. A PR is created only after every gate passes without a missing conformance area.',
+            : candidate.mode === 'capability'
+              ? 'The compatibility registry is unchanged. The owned add-only compilation unit must compile and pass candidate-specific behavioral conformance; do not create an exact-version patch profile or weaken the capability when it fails.'
+              : candidate.mode === 'hook'
+                ? `The compatibility registry is unchanged. Review the failed capability and behavioral evidence; ${candidate.hookStrategy === 'exact-source' ? 'do not add fuzzy support or bypass exact instrumentation where the framework still requires it' : 'do not allowlist the version until the public/runtime contract reaches full semantic parity'}. Rerun only after the adapter or certifier genuinely supports this artifact. A PR is created only after every gate passes without a missing conformance area.`
+                : candidate.patch.status === 'needs-patch'
+                  ? 'The compatibility registry is unchanged. Prepare an exact checksummed structural patch, then rerun the workflow. A PR is created only after every gate passes without a missing conformance area.'
+                  : 'The compatibility registry is unchanged. Review the existing exact patch and behavioral failure, then rerun only after the incompatibility is fixed. A PR is created only after every gate passes without a missing conformance area.',
           '',
           `This exact red candidate is recorded and will not be retried unchanged. If the adapter or certifier changes without changing the upstream source or patch digest, increment \`certificationRevision\` for stream \`${candidate.streamId}\` before starting a new first-attempt workflow run.`,
         ].join('\n'),
@@ -142,32 +157,43 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
       }
     }
   }
-  return { ledger: next, assessments: nextAssessments, plan: { schemaVersion: 1, green: registry.candidates.filter((entry) => byCandidate.get(entry.id)?.state === 'green').map((entry) => entry.id), issues } };
+  return {
+    ledger: next,
+    assessments: nextAssessments,
+    plan: {
+      schemaVersion: 1,
+      green: registry.candidates.filter((entry) => byCandidate.get(entry.id)?.state === 'green').map((entry) => entry.id),
+      issues,
+    },
+  };
 }
 
 export async function verifyGeneratedUpdate({ candidate, verdict, updateDirectory, expectedRevision }) {
   const metadata = JSON.parse(await readFile(join(updateDirectory, 'bundle.json'), 'utf8'));
-  if (verdict.state !== 'green' || metadata.candidateId !== candidate.id || metadata.candidateDigest !== candidate.candidateDigest) throw new Error(`${candidate.id}: generated update is not bound to the green candidate`);
+  if (verdict.state !== 'green' || metadata.candidateId !== candidate.id || metadata.candidateDigest !== candidate.candidateDigest)
+    throw new Error(`${candidate.id}: generated update is not bound to the green candidate`);
   if (verdict.sourceRevision !== expectedRevision || metadata.sourceRevision !== expectedRevision) throw new Error(`${candidate.id}: stale source revision in generated update`);
   const target = metadata.targetPath;
-  if (typeof target !== 'string' || isAbsolute(target) || target.includes('\\') || target.split('/').some((part) => part === '' || part === '.' || part === '..')) throw new Error(`${candidate.id}: unsafe generated update target path`);
-  if (await digestTree(join(updateDirectory, 'patch')) !== metadata.patchTreeDigest) throw new Error(`${candidate.id}: generated patch digest mismatch`);
+  if (typeof target !== 'string' || isAbsolute(target) || target.includes('\\') || target.split('/').some((part) => part === '' || part === '.' || part === '..'))
+    throw new Error(`${candidate.id}: unsafe generated update target path`);
+  if ((await digestTree(join(updateDirectory, 'patch'))) !== metadata.patchTreeDigest) throw new Error(`${candidate.id}: generated patch digest mismatch`);
   return metadata;
 }
 
 export async function verifyGeneratedHookProfile({ candidate, verdict, updateDirectory, expectedRevision }) {
   const metadata = JSON.parse(await readFile(join(updateDirectory, 'bundle.json'), 'utf8'));
   if (
-    metadata.schemaVersion !== 1
-    || metadata.kind !== 'termwright-generated-hook-profile'
-    || verdict.state !== 'green'
-    || metadata.candidateId !== candidate.id
-    || metadata.candidateDigest !== candidate.candidateDigest
-    || verdict.sourceRevision !== expectedRevision
-    || metadata.sourceRevision !== expectedRevision
-    || metadata.framework !== candidate.frameworkId
-    || metadata.profile?.version !== candidate.version
-  ) throw new Error(`${candidate.id}: generated hook profile is not bound to the green candidate`);
+    metadata.schemaVersion !== 1 ||
+    metadata.kind !== 'termwright-generated-hook-profile' ||
+    verdict.state !== 'green' ||
+    metadata.candidateId !== candidate.id ||
+    metadata.candidateDigest !== candidate.candidateDigest ||
+    verdict.sourceRevision !== expectedRevision ||
+    metadata.sourceRevision !== expectedRevision ||
+    metadata.framework !== candidate.frameworkId ||
+    metadata.profile?.version !== candidate.version
+  )
+    throw new Error(`${candidate.id}: generated hook profile is not bound to the green candidate`);
   const digest = `sha256:${createHash('sha256').update(canonicalJson(metadata.profile)).digest('hex')}`;
   if (metadata.profileDigest !== digest) throw new Error(`${candidate.id}: generated hook profile digest mismatch`);
   return metadata.profile;
@@ -176,48 +202,22 @@ export async function verifyGeneratedHookProfile({ candidate, verdict, updateDir
 export async function verifyGeneratedRuntimeProfile({ candidate, verdict, updateDirectory, expectedRevision }) {
   const metadata = JSON.parse(await readFile(join(updateDirectory, 'bundle.json'), 'utf8'));
   if (
-    metadata.schemaVersion !== 1
-    || metadata.kind !== 'termwright-generated-runtime-profile'
-    || candidate.hookStrategy !== 'runtime'
-    || verdict.state !== 'green'
-    || metadata.candidateId !== candidate.id
-    || metadata.candidateDigest !== candidate.candidateDigest
-    || verdict.sourceRevision !== expectedRevision
-    || metadata.sourceRevision !== expectedRevision
-    || metadata.framework !== candidate.frameworkId
-    || metadata.profile?.version !== candidate.version
-    || Object.keys(metadata.profile).sort().join(',') !== 'version'
-  ) throw new Error(`${candidate.id}: generated runtime profile is not bound to the green candidate`);
+    metadata.schemaVersion !== 1 ||
+    metadata.kind !== 'termwright-generated-runtime-profile' ||
+    candidate.hookStrategy !== 'runtime' ||
+    verdict.state !== 'green' ||
+    metadata.candidateId !== candidate.id ||
+    metadata.candidateDigest !== candidate.candidateDigest ||
+    verdict.sourceRevision !== expectedRevision ||
+    metadata.sourceRevision !== expectedRevision ||
+    metadata.framework !== candidate.frameworkId ||
+    metadata.profile?.version !== candidate.version ||
+    Object.keys(metadata.profile).sort().join(',') !== 'version'
+  )
+    throw new Error(`${candidate.id}: generated runtime profile is not bound to the green candidate`);
   const digest = `sha256:${createHash('sha256').update(canonicalJson(metadata.profile)).digest('hex')}`;
   if (metadata.profileDigest !== digest) throw new Error(`${candidate.id}: generated runtime profile digest mismatch`);
   return metadata.profile;
-}
-
-export async function verifyGeneratedTextualLock({ candidate, verdict, updateDirectory, expectedRevision, expectedPyproject }) {
-  const metadata = JSON.parse(await readFile(join(updateDirectory, 'bundle.json'), 'utf8'));
-  if (
-    metadata.schemaVersion !== 1
-    || metadata.kind !== 'termwright-generated-textual-lock'
-    || candidate.frameworkId !== 'textual'
-    || candidate.registry !== 'pypi'
-    || verdict.state !== 'green'
-    || metadata.candidateId !== candidate.id
-    || metadata.candidateDigest !== candidate.candidateDigest
-    || verdict.sourceRevision !== expectedRevision
-    || metadata.sourceRevision !== expectedRevision
-    || metadata.framework !== candidate.frameworkId
-    || metadata.version !== candidate.version
-  ) throw new Error(`${candidate.id}: generated Textual lock is not bound to the green candidate`);
-  const pyproject = await readFile(join(updateDirectory, 'pyproject.toml'), 'utf8');
-  const lock = await readFile(join(updateDirectory, 'uv.lock'));
-  if (pyproject !== expectedPyproject) throw new Error(`${candidate.id}: generated Textual pyproject does not match the trusted transformation`);
-  if (metadata.pyprojectSha256 !== `sha256:${createHash('sha256').update(pyproject).digest('hex')}`) {
-    throw new Error(`${candidate.id}: generated Textual pyproject digest mismatch`);
-  }
-  if (metadata.lockSha256 !== `sha256:${createHash('sha256').update(lock).digest('hex')}`) {
-    throw new Error(`${candidate.id}: generated Textual lock digest mismatch`);
-  }
-  return { pyproject, lock };
 }
 
 export function sameHookProfile(left, right) {
@@ -248,9 +248,7 @@ export function recordVerifiedFrameworkVersion(registry, candidate) {
   if (!next.versions.verified.includes(candidate.version)) next.versions.verified.push(candidate.version);
   next.versions.verified.sort(compareVersions);
   if (next.versions.policy === 'exact') next.versions.declared = next.versions.verified.join(' or ');
-  next.certification.ids = next.versions.verified.map(
-    (version) => `${next.id}@${version}/${next.certification.adapterVersion}`,
-  );
+  next.certification.ids = next.versions.verified.map((version) => `${next.id}@${version}/${next.certification.adapterVersion}`);
   if (next.certification.strategy !== 'native-hook') {
     const variants = next.instrumentation?.variants;
     if (!Array.isArray(variants)) throw new Error(`${candidate.id}: exact framework variants are missing`);
@@ -309,7 +307,10 @@ async function main(argv) {
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
   const assessments = JSON.parse(await readFile(assessmentsPath, 'utf8'));
   const config = JSON.parse(await readFile(join(root, 'compatibility/upstream-patches.json'), 'utf8'));
-  validateCandidateAssessments(assessments, config.streams.map((stream) => stream.id));
+  validateCandidateAssessments(
+    assessments,
+    config.streams.map((stream) => stream.id),
+  );
   const verdicts = await Promise.all((await verdictFiles(verdictDirectory)).map(async (path) => JSON.parse(await readFile(path, 'utf8'))));
   const expectedRevision = process.env.GITHUB_SHA ?? 'local-unpinned';
   const result = reconcile(registry, ledger, verdicts, {
@@ -329,25 +330,31 @@ async function main(argv) {
   if ([...updates.keys()].sort().join('\0') !== expectedUpdateNames.join('\0')) {
     throw new Error('generated candidate update artifact set does not match the exact green candidates');
   }
-  const textualUpdates = [];
   for (const candidate of registry.candidates) {
     const verdict = verdicts.find((entry) => entry.candidateId === candidate.id);
     if (verdict?.state !== 'green') continue;
+    if (candidate.mode === 'capability') {
+      if (candidate.capabilityStrategy !== 'compile-conformance' || verdict.executableResolution === null || typeof verdict.executableResolution !== 'object') {
+        throw new Error(`${candidate.id}: green capability verdict has no compile-conformance executable resolution`);
+      }
+      compatibility = recordExecutableVariant(compatibility, candidate, verdict.executableResolution);
+      continue;
+    }
     if (candidate.mode === 'hook') {
       if (candidate.frameworkId === 'textual') {
-        recordVerifiedFrameworkVersion(compatibility, candidate);
-        const matched = updates.get(generatedUpdateName(candidate));
-        if (matched === undefined) throw new Error(`${candidate.id}: green Textual verdict has no source-run-bound lock`);
-        textualUpdates.push({ candidate, verdict, path: matched });
+        if (candidate.registry !== 'pypi' || candidate.hookStrategy !== 'runtime') throw new Error(`${candidate.id}: green Textual verdict does not describe runtime capability certification`);
         continue;
       }
       if (candidate.hookStrategy === 'runtime') {
         const matched = updates.get(generatedUpdateName(candidate));
         if (matched === undefined) throw new Error(`${candidate.id}: green runtime-hook verdict has no generated capability profile`);
-        const profile = await verifyGeneratedRuntimeProfile({ candidate, verdict, updateDirectory: matched, expectedRevision });
-        const profilePath = candidate.frameworkId === 'opentui'
-          ? join(root, 'packages/probe-opentui/src/certified-runtime.json')
-          : undefined;
+        const profile = await verifyGeneratedRuntimeProfile({
+          candidate,
+          verdict,
+          updateDirectory: matched,
+          expectedRevision,
+        });
+        const profilePath = candidate.frameworkId === 'opentui' ? join(root, 'packages/probe-opentui/src/certified-runtime.json') : undefined;
         if (profilePath === undefined) throw new Error(`${candidate.id}: unsupported runtime-hook profile framework`);
         const document = JSON.parse(await readFile(profilePath, 'utf8'));
         addCertifiedRuntimeProfile(document, candidate, profile);
@@ -360,7 +367,12 @@ async function main(argv) {
       }
       const matched = updates.get(generatedUpdateName(candidate));
       if (matched === undefined) throw new Error(`${candidate.id}: green hook verdict has no generated instrumentation profile`);
-      const profile = await verifyGeneratedHookProfile({ candidate, verdict, updateDirectory: matched, expectedRevision });
+      const profile = await verifyGeneratedHookProfile({
+        candidate,
+        verdict,
+        updateDirectory: matched,
+        expectedRevision,
+      });
       const profilePath = join(root, 'packages/probe-ink/src/certified-instrumentation.json');
       const document = JSON.parse(await readFile(profilePath, 'utf8'));
       const existing = document.profiles.find((entry) => entry.version === candidate.version);
@@ -368,7 +380,10 @@ async function main(argv) {
       else if (!sameHookProfile(existing, profile)) throw new Error(`${candidate.id}: certified hook profile is immutable`);
       document.profiles.sort((left, right) => compareVersions(left.version, right.version));
       await writeFile(profilePath, canonicalJson(document));
-      await updateCertifiedHookPeerRanges(candidate.frameworkId, document.profiles.map((entry) => entry.version));
+      await updateCertifiedHookPeerRanges(
+        candidate.frameworkId,
+        document.profiles.map((entry) => entry.version),
+      );
       recordVerifiedFrameworkVersion(compatibility, candidate);
       continue;
     }
@@ -376,13 +391,27 @@ async function main(argv) {
     if (candidate.patch.status === 'needs-patch') {
       const matched = updates.get(generatedUpdateName(candidate));
       if (matched === undefined) throw new Error(`${candidate.id}: green verdict has no generated update bundle`);
-      const metadata = await verifyGeneratedUpdate({ candidate, verdict, updateDirectory: matched, expectedRevision });
+      const metadata = await verifyGeneratedUpdate({
+        candidate,
+        verdict,
+        updateDirectory: matched,
+        expectedRevision,
+      });
       const expectedTarget = candidate.patch.path.split('/').slice(0, -1).join('/');
       if (metadata.targetPath !== expectedTarget) throw new Error(`${candidate.id}: generated update targets a different patch directory`);
       const target = join(root, metadata.targetPath);
-      if (await access(target).then(() => true, () => false)) throw new Error(`${candidate.id}: refusing to overwrite an existing patch directory`);
+      if (
+        await access(target).then(
+          () => true,
+          () => false,
+        )
+      )
+        throw new Error(`${candidate.id}: refusing to overwrite an existing patch directory`);
       await mkdir(dirname(target), { recursive: true });
-      await cp(join(matched, 'patch'), target, { recursive: true, errorOnExist: true });
+      await cp(join(matched, 'patch'), target, {
+        recursive: true,
+        errorOnExist: true,
+      });
       manifest = JSON.parse(await readFile(join(target, 'manifest.json'), 'utf8'));
     } else if (candidate.patch.status === 'ready') {
       manifest = JSON.parse(await readFile(join(root, candidate.patch.path), 'utf8'));
@@ -391,43 +420,24 @@ async function main(argv) {
     compatibility = recordExecutableVariant(compatibility, candidate, verdict.executableResolution);
   }
   const geometryPagePath = join(root, 'website/src/content/docs/reference/geometry-visibility.md');
-  const geometryPage = renderGeometryPage(
-    await readFile(geometryPagePath, 'utf8'),
-    compatibility,
-    JSON.parse(await readFile(join(root, 'clients/test-vectors/capability-graph.json'), 'utf8')),
-  );
-  const textualPyprojectPath = join(root, 'clients/python/pyproject.toml');
-  const currentTextualPyproject = await readFile(textualPyprojectPath, 'utf8');
-  const expectedTextualPyproject = renderCertifiedTextualPyproject(currentTextualPyproject, compatibility);
-  const newestTextualUpdate = textualUpdates.sort((left, right) => compareVersions(left.candidate.version, right.candidate.version)).at(-1);
-  const textualProject = newestTextualUpdate === undefined
-    ? { pyproject: expectedTextualPyproject, lock: await readFile(join(root, 'clients/python/uv.lock')) }
-    : await verifyGeneratedTextualLock({
-      ...newestTextualUpdate,
-      updateDirectory: newestTextualUpdate.path,
-      expectedRevision,
-      expectedPyproject: expectedTextualPyproject,
-    });
+  const geometryPage = renderGeometryPage(await readFile(geometryPagePath, 'utf8'), compatibility, JSON.parse(await readFile(join(root, 'clients/test-vectors/capability-graph.json'), 'utf8')));
   await writeFile(join(root, 'compatibility/registry.json'), canonicalJson(compatibility));
-  await writeFile(
-    join(root, 'compatibility/framework-semantic-completeness.json'),
-    renderSemanticCompletenessReport(compatibility),
-  );
-  await writeFile(
-    join(root, 'clients/python/src/termwright_probe/certified_textual.py'),
-    renderCertifiedTextualVersions(compatibility),
-  );
+  await writeFile(join(root, 'compatibility/framework-semantic-completeness.json'), renderSemanticCompletenessReport(compatibility));
   await writeFile(geometryPagePath, geometryPage);
-  await writeFile(textualPyprojectPath, textualProject.pyproject);
-  await writeFile(join(root, 'clients/python/uv.lock'), textualProject.lock);
   if (result.plan.green.length > 0) {
     const packages = new Set();
     for (const candidate of registry.candidates.filter((entry) => result.plan.green.includes(entry.id))) {
-      packages.add(['textual', 'ratatui'].includes(candidate.frameworkId) ? 'termwright' : `@termwright/probe-${candidate.frameworkId}`);
+      if (candidate.frameworkId !== 'textual') {
+        packages.add(candidate.frameworkId === 'ratatui' ? 'termwright' : `@termwright/probe-${candidate.frameworkId}`);
+      }
       if (candidate.frameworkId === 'ink') packages.add('@termwright/ink');
     }
-    const frontmatter = [...packages].sort().map((name) => `"${name}": patch`).join('\n');
-    await writeFile(join(root, '.changeset/framework-compatibility-auto.md'), `---\n${frontmatter}\n---\n\nCertify upstream framework releases: ${result.plan.green.join(', ')}.\n`);
+    const frontmatter = [...packages]
+      .sort()
+      .map((name) => `"${name}": patch`)
+      .join('\n');
+    if (packages.size > 0)
+      await writeFile(join(root, '.changeset/framework-compatibility-auto.md'), `---\n${frontmatter}\n---\n\nCertify upstream framework releases: ${result.plan.green.join(', ')}.\n`);
   }
   await writeFile(ledgerPath, canonicalJson(result.ledger));
   await writeFile(assessmentsPath, canonicalJson(result.assessments));
@@ -435,5 +445,8 @@ async function main(argv) {
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main(process.argv.slice(2)).catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
+  main(process.argv.slice(2)).catch((error) => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
 }

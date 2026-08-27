@@ -32,6 +32,8 @@
     "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/evidence-provider --filter @termwright/probe-runtime --filter @termwright/probe-go --filter termwright... build",
     "test:compatibility": "node packages/termwright-cli/dist/bin.js test -- compatibility/registry.test.ts",
     "test:examples": "node scripts/run-required-examples.mjs",
+    "test:tview-race": "node scripts/certify-tview-screen-race.mjs",
+    "test:go-toolexec": "pnpm --filter @termwright/probe-go run build && node scripts/certify-go-toolexec.mjs",
     "test:watch": "node packages/termwright-cli/dist/bin.js watch",
     "typecheck": "pnpm -r --filter=./packages/* --fail-if-no-match run typecheck",
     "lint": "eslint ."

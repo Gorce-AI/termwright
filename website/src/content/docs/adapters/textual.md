@@ -61,8 +61,9 @@ geometry, or visibility.
 
 ## Supported behavior
 
-The Textual versions listed in the compatibility registry are verified exactly.
-The integration observes stable widget identity, intended
+Textual support is admitted by runtime capability detection and behavioral
+conformance; versions in the compatibility registry are measured examples,
+not an allowlist. The integration observes stable widget identity, intended
 and clipped geometry, ancestor display, focus, native widget state, and exact
 fresh-pointer ownership through `Screen.get_widget_at()`. Active mouse capture
 is outside that contract.

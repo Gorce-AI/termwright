@@ -12,10 +12,10 @@ import (
 
 // MarkerOSCCode is the private OSC number carrying render-commit markers.
 //
-// OSC rather than DCS because ConPTY rewrites the stream it forwards: a
-// passthrough probe showed it dropping DCS, APC and OSC 8 while passing
-// private OSC with either terminator, so a DCS marker could not reach the
-// driver on Windows at all. The number is chosen clear of everything in use
+// The legacy frame-based inbox ConPTY dropped DCS/APC/OSC 8 while private OSC
+// survived. Termwright's pinned passthrough ConPTY now forwards those families,
+// but OSC 8487 remains the one encoding certified across every supported host.
+// The number is chosen clear of everything in use
 // (xterm's allocations, OSC 8, 9, 99, 133, 633, 697, 777+): 84 and 87 are the
 // ASCII codes of `T` and `W`, for termwright.
 const MarkerOSCCode = 8487
@@ -25,8 +25,7 @@ const MarkerOSCCode = 8487
 // what it is rather than being mistaken for that feature's payload.
 const MarkerOSCPrefix = "twm;"
 
-// bel is the terminator this implementation emits — the one ConPTY was
-// observed to forward most reliably.
+// bel is the terminator this implementation emits; receivers also accept ST.
 const bel = "\x07"
 
 // st is the terminator a receiver must also accept.

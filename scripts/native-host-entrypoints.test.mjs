@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { execPath } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { certifiedProjectShards, projectSelectorArguments } from './ci-project-shards.mjs';
 
 async function collectVitestConfigs(directory, output) {
   const children = await readdir(new URL(`../${directory}/`, import.meta.url), { withFileTypes: true });
@@ -138,6 +139,42 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(ciJobs.opentui).toContain("bun-version: '1.4.0'");
     expect(ciJobs.opentui).not.toContain('bun-version: latest');
     expect(ciJobs['ui-browser']).toContain("compile-native-pty: 'true'");
+    expect(ciJobs.build).toContain('if [[ "${{ runner.os }}" == "Windows" ]]; then profile=windows-ci; fi');
+    const configuredProjectNames = rootConfig.test.projects.map((project) => project.test.name);
+    const selectedProjectNames = certifiedProjectShards.flat();
+    expect(new Set(selectedProjectNames).size).toBe(selectedProjectNames.length);
+    expect([...selectedProjectNames].sort()).toEqual([...configuredProjectNames].sort());
+    expect(
+      ciJobs.build.match(/^          pnpm test -- --resource-profile "\$profile" --json -- --project=.*$/gmu),
+    ).toEqual(certifiedProjectShards.map(
+      (projects) => `          pnpm test -- --resource-profile "$profile" --json -- ${projectSelectorArguments(projects)}`,
+    ));
+    expect(ciJobs.build).toMatch(
+      /^      - name: Certify the injected tview screen lifecycle under the race detector\n        if: runner\.os != 'Windows'\n        run: pnpm test:tview-race$/mu,
+    );
+    expect(manifest.scripts['test:tview-race']).toBe('node scripts/certify-tview-screen-race.mjs');
+    const tviewRaceCertification = await readFile(
+      new URL('./certify-tview-screen-race.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(tviewRaceCertification).toContain('prepareInstrumentedBuild({');
+    expect(tviewRaceCertification).toContain('["build", ...prepared.goArgs, "-o", binary, "."]');
+    expect(tviewRaceCertification).toContain('launchTerminal({');
+    expect(tviewRaceCertification).toContain('await waitForPairedSemanticRevision(terminal, 1)');
+    expect(tviewRaceCertification).toContain('terminal.getByRole("list", { name: "Files" }).count()');
+    expect(tviewRaceCertification).toContain('terminal.getByRole("button", { name: "Save" }).count()');
+    expect(tviewRaceCertification).toContain('!terminal.screen().text().includes("DATA RACE")');
+    for (const jobId of ['build', 'windows-driver-native']) {
+      expect(ciJobs[jobId]).toMatch(
+        /^      - name: Certify the Go compiler injection contract\n        run: pnpm test:go-toolexec$/mu,
+      );
+    }
+    expect(ciJobs.build).toContain('os: [ubuntu-22.04, macos-latest]');
+    expect(ciJobs.build).toContain("node: ['22', '24']");
+    expect(ciJobs['windows-driver-native']).toContain("node: ['22', '24']");
+    expect(ciJobs.clients).not.toContain('test:go-toolexec');
+    expect(manifest.scripts['test:go-toolexec'])
+      .toBe('pnpm --filter @termwright/probe-go run build && node scripts/certify-go-toolexec.mjs');
     const certificationNeeds = [...(ciJobs.certification ?? '').matchAll(/^      - ([a-z0-9-]+)$/gmu)]
       .map((match) => match[1]);
     expect(certificationNeeds).toEqual(Object.keys(ciJobs).filter((jobId) => jobId !== 'certification'));
@@ -170,6 +207,13 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(reliabilityJobs['nightly-soak-windows']).toContain('resource-profile windows-ci');
 
     const releaseJobs = Object.fromEntries(workflowJobBlocks(release).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
+    expect(
+      releaseJobs.verify.match(/^          pnpm test -- --resource-profile ci --json -- --project=.*$/gmu),
+    ).toEqual(certifiedProjectShards.map(
+      (projects) => `          pnpm test -- --resource-profile ci --json -- ${projectSelectorArguments(projects)}`,
+    ));
+    expect(releaseJobs.verify).toMatch(/^        run: pnpm test:tview-race$/mu);
+    expect(releaseJobs.verify).toMatch(/^        run: pnpm test:go-toolexec$/mu);
     expect(releaseJobs.prebuilds).toContain('node scripts/check-prebuild.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"');
     expect(releaseJobs.prebuilds).toContain('--nodedir="$node_root"');
     expect(releaseJobs.prebuilds).toContain('node scripts/check-installed-pty.mjs "$install_dir"');
@@ -232,7 +276,6 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'packages/probe-charm/src/launch.test.ts',
       'packages/probe-charm/src/patch-sets.test.ts',
       'packages/probe-charm/src/zero-config.pty.test.ts',
-      'packages/probe-go/src/patches.test.ts',
       'packages/probe-go/src/workspace.test.ts',
       'packages/probe-tview/src/zero-config.pty.test.ts',
     ]);
@@ -247,9 +290,20 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const goPolicy = await readFile(new URL('./test-support/go-toolchain.mjs', import.meta.url), 'utf8');
     expect(goPolicy).toContain("env['TERMWRIGHT_SKIP_GO'] === '1'");
     expect(goPolicy).toContain("env['TERMWRIGHT_REQUIRE_GO'] === '1'");
-    const goPatchTests = await readFile(new URL('../packages/probe-go/src/patches.test.ts', import.meta.url), 'utf8');
-    expect(goPatchTests, 'a complete Go run must not register an inverse sentinel skip')
-      .not.toContain('it.skipIf(upstream !== null)');
+    const goToolExecTests = await readFile(new URL('../packages/probe-go/src/toolexec.test.ts', import.meta.url), 'utf8');
+    expect(goToolExecTests).not.toContain('prepareGoToolExec');
+    expect(goToolExecTests).not.toMatch(/\b(?:execFile|spawnSync|run)\s*\(/u);
+    const goToolExecCertification = await readFile(
+      new URL('./certify-go-toolexec.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(goToolExecCertification).toContain('await prepareGoToolExec({');
+    expect(goToolExecCertification).toContain('warm-cache owned source tamper refusal');
+    expect(goToolExecCertification).toContain('vendor-mode dependency selection');
+    expect(goToolExecCertification).toContain('compiler identity includes imported archives');
+    expect(goToolExecCertification).toContain(
+      '["test", "-vet=off", "-count=1", "-run", "^TestProbe$", ...prepared.goArgs, "."]',
+    );
 
     const workflows = (await readdir(new URL('../.github/workflows/', import.meta.url)))
       .filter((file) => /\.ya?ml$/u.test(file));
@@ -353,7 +407,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
   it('requires Attempt admission for every repository-owned real PTY test', async () => {
     const testSources = [];
     await collectTestSources('packages', testSources);
-    const directNative = /\b(?:spawnPty|spawnWindowsPty|launchTerminal)\s*\(|createNativePtyBackend\s*\(\s*\)\s*\.\s*spawn\s*\(/u;
+    const directNative = /\b(?:spawnPty|spawnWindowsPty|launchTerminal|launchInkFixture)\s*\(|createNativePtyBackend\s*\(\s*\)\s*\.\s*spawn\s*\(/u;
     const indirectNative = new Set([
       'packages/conformance/src/suites/adversarial.test.ts',
       'packages/conformance/src/suites/driver-generic.test.ts',
@@ -375,9 +429,27 @@ describe('the native host is the only Termwright test entrypoint', () => {
     }
 
     const adapterSuite = await readFile(new URL('../packages/conformance/src/adapter-conformance.ts', import.meta.url), 'utf8');
-    expect(adapterSuite).toContain('beforeEach(');
-    expect(adapterSuite).toContain("resources({ terminals: 1, traceWriters: 0 })");
+    expect(adapterSuite).toMatch(
+      /resourceAwareIt\.resources\(\{\s*terminals:\s*1,\s*traceWriters:\s*0\s*\}\)/u,
+    );
+    expect(adapterSuite).not.toContain('requires?.prepare');
     expect(adapterSuite).not.toMatch(/beforeAll\s*\([\s\S]{0,500}AdapterProbe\.start/u);
+
+    const languageAdapters = await readFile(
+      new URL('../packages/conformance/src/suites/language-adapters.test.ts', import.meta.url),
+      'utf8',
+    );
+    expect(languageAdapters).toContain("probe: [process.execPath, GO_VERIFY, GO_CONTRACT, GO_BINARY, GO_BASELINE]");
+    expect(languageAdapters).not.toContain('build-tview-fixture.mjs');
+    const conformanceSource = await readFile(
+      new URL('../packages/conformance/scripts/conformance.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(conformanceSource.indexOf('await buildTviewFixture()')).toBeLessThan(
+      conformanceSource.indexOf('TermwrightTestHost.open'),
+    );
+    expect(conformanceSource).toContain('const teardownFailures = []');
+    expect(conformanceSource).toContain('await tviewFixture.cleanup()');
 
     const pressureSources = await Promise.all([
       readFile(new URL('../packages/pty/src/index.test.ts', import.meta.url), 'utf8'),

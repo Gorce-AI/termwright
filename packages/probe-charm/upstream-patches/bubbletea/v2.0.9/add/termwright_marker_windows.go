@@ -20,8 +20,8 @@ const termwrightMarkerOutputMode = uint32(0x0001 | 0x0004)
 const termwrightFileTypeDisk = uintptr(0x0001)
 const termwrightFileTypePipe = uintptr(0x0003)
 
-// The renderer lock and termwrightProbeState.publishMu are both held here.
-// Using the renderer's exact handle keeps FRAME -> MARKER on one console
+// Output-commit CAS admission owns FRAME -> MARKER for this writer. Using the
+// renderer's exact handle keeps both writes on one console
 // writer while temporarily restoring the VT mode a user application may have
 // disabled. Non-console writers remain ordinary byte streams.
 func termwrightWriteMarker(writer io.Writer, marker string) (int, error) {

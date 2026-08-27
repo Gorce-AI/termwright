@@ -44,8 +44,9 @@
       "package": "github.com/rivo/tview",
       "certificationRevision": 1,
       "minimumVersion": "v0.42.0",
-      "mode": "patch",
-      "patchRoot": "packages/probe-tview/upstream-patches/tview"
+      "mode": "capability",
+      "capabilityStrategy": "compile-conformance",
+      "capability": "tview-private-state"
     },
     {
       "id": "tcell-v2",
@@ -56,8 +57,9 @@
       "certificationRevision": 3,
       "minimumVersion": "v2.8.1",
       "major": 2,
-      "mode": "patch",
-      "patchRoot": "packages/probe-tview/upstream-patches/tcell"
+      "mode": "capability",
+      "capabilityStrategy": "compile-conformance",
+      "capability": "tcell-same-writer-marker"
     },
     {
       "id": "bubbletea-v3",
@@ -93,9 +95,10 @@
       "certificationRevision": 1,
       "minimumVersion": "v3.0.0",
       "major": 3,
-      "mode": "patch",
+      "mode": "capability",
+      "capabilityStrategy": "compile-conformance",
       "allowMissingPackage": true,
-      "patchRoot": "packages/probe-charm/upstream-patches/bubbles"
+      "capability": "bubbles-private-state"
     },
     {
       "id": "bubbletea-v2",
@@ -118,8 +121,9 @@
       "certificationRevision": 1,
       "minimumVersion": "v1.0.0",
       "major": 1,
-      "mode": "patch",
-      "patchRoot": "packages/probe-charm/upstream-patches/bubbles"
+      "mode": "capability",
+      "capabilityStrategy": "compile-conformance",
+      "capability": "bubbles-private-state"
     },
     {
       "id": "bubbles-v2",
@@ -130,8 +134,9 @@
       "certificationRevision": 1,
       "minimumVersion": "v2.1.1",
       "major": 2,
-      "mode": "patch",
-      "patchRoot": "packages/probe-charm/upstream-patches/bubbles"
+      "mode": "capability",
+      "capabilityStrategy": "compile-conformance",
+      "capability": "bubbles-private-state"
     },
     {
       "id": "ratatui-core",
@@ -154,6 +159,17 @@
       "minimumVersion": "0.3.2",
       "mode": "patch",
       "patchRoot": "clients/rust-probe/upstream-patches/ratatui-widgets"
+    },
+    {
+      "id": "ratatui-crossterm",
+      "frameworkId": "ratatui",
+      "ecosystem": "rust",
+      "registry": "crates.io",
+      "package": "ratatui-crossterm",
+      "certificationRevision": 1,
+      "minimumVersion": "0.1.2",
+      "mode": "patch",
+      "patchRoot": "clients/rust-probe/upstream-patches/ratatui-crossterm"
     }
   ]
 }

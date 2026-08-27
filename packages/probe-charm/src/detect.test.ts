@@ -11,7 +11,8 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import {
   BUBBLETEA_MODULES,
@@ -22,6 +23,7 @@ import {
 } from './detect.js';
 
 const run = promisify(execFile);
+const goIt = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 async function goAvailable(): Promise<boolean> {
   return goTestCapability(async () => {
@@ -33,8 +35,8 @@ async function goAvailable(): Promise<boolean> {
 const hasGo = await goAvailable();
 const roots: string[] = [];
 
-afterAll(async () => {
-  await Promise.all(roots.map((dir) => rm(dir, { recursive: true, force: true })));
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 /** A module that requires exactly what it is told to. */
@@ -76,7 +78,7 @@ describe('what each major can promise', () => {
 });
 
 describe.skipIf(!hasGo)('against a real toolchain', () => {
-  it('recognises a v1 project', async () => {
+  goIt('recognises a v1 project', async () => {
     const dir = await moduleRequiring([
       'github.com/charmbracelet/bubbletea v1.3.10',
       'github.com/charmbracelet/bubbles v1.0.0',
@@ -90,7 +92,7 @@ describe.skipIf(!hasGo)('against a real toolchain', () => {
     expect(flavour.companions['github.com/charmbracelet/bubbles']).toBe('v1.0.0');
   }, 300_000);
 
-  it('recognises a v2 project under its vanity path', async () => {
+  goIt('recognises a v2 project under its vanity path', async () => {
     const dir = await moduleRequiring([
       'charm.land/bubbletea/v2 v2.0.8',
       'charm.land/lipgloss/v2 v2.0.6',
@@ -103,14 +105,14 @@ describe.skipIf(!hasGo)('against a real toolchain', () => {
     expect(flavour.companions['charm.land/lipgloss/v2']).toBe('v2.0.6');
   }, 300_000);
 
-  it('says a project is not Charm rather than guessing a major', async () => {
+  goIt('says a project is not Charm rather than guessing a major', async () => {
     const dir = await moduleRequiring(['github.com/rivo/tview v0.42.0']);
 
     await expect(detectCharmFlavour(dir)).rejects.toThrow(CharmDetectionError);
     await expect(detectCharmFlavour(dir)).rejects.toThrow(/does not require Bubble Tea/u);
   }, 300_000);
 
-  it('refuses a project that pulls in both majors', async () => {
+  goIt('refuses a project that pulls in both majors', async () => {
     // Legal in Go, since the paths are unrelated modules, and hopeless here:
     // two event loops and no way to attribute a frame to one of them.
     const dir = await moduleRequiring([

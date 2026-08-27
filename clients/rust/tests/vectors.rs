@@ -11,9 +11,53 @@ use termwright_protocol::{
     encode_frame, encode_marker, marker::MARKER_MAC_BYTES, marker::MARKER_OSC_CODE,
     marker::MARKER_OSC_PREFIX, parse_adapter_message, parse_driver_message, roles::valid_action,
     roles::valid_capability, roles::valid_role, validate_snapshot, verify_marker_payload,
-    FrameDecoder, Limits, ABSOLUTE_LIMITS, DEFAULT_LIMITS, FRAME_HEADER_BYTES, PROTOCOL_ID,
-    PROTOCOL_VERSION,
+    DegradedSessionCapability, FrameDecoder, Limits, ProbeIdentityKind, ProbeInfo,
+    ProbeInjectionTier, ProbeInstrumentation, ProbeSemanticClass, ABSOLUTE_LIMITS, DEFAULT_LIMITS,
+    FRAME_HEADER_BYTES, PROTOCOL_ID, PROTOCOL_VERSION,
 };
+
+#[test]
+fn narrow_probe_degradations_use_the_normative_wire_names() {
+    let value = serde_json::to_value([
+        DegradedSessionCapability::InactiveScreenTree,
+        DegradedSessionCapability::CustomContainerEnumeration,
+    ])
+    .expect("serialize degradation vocabulary");
+    assert_eq!(
+        value,
+        serde_json::json!(["inactive-screen-tree", "custom-container-enumeration"])
+    );
+}
+
+#[test]
+fn probe_info_fails_before_the_wire_on_invalid_instrumentation() {
+    let mut probe = ProbeInfo {
+        framework: "ratatui".into(),
+        framework_version: Some("0.30.0".into()),
+        probe_version: "0.2.0".into(),
+        identity_kind: ProbeIdentityKind::FrameLocal,
+        capabilities: vec!["annotations".into()],
+        instrumentation: Some(ProbeInstrumentation {
+            highest_tier: ProbeInjectionTier::T3,
+            semantic_class: ProbeSemanticClass::B,
+            degraded_capabilities: vec![DegradedSessionCapability::IntendedGeometry],
+        }),
+    };
+    assert!(
+        probe.validate().is_err(),
+        "class B without both geometry degradations"
+    );
+
+    probe.instrumentation = Some(ProbeInstrumentation {
+        highest_tier: ProbeInjectionTier::T3,
+        semantic_class: ProbeSemanticClass::A,
+        degraded_capabilities: vec![
+            DegradedSessionCapability::InactiveScreenTree,
+            DegradedSessionCapability::InactiveScreenTree,
+        ],
+    });
+    assert!(probe.validate().is_err(), "duplicate degradation");
+}
 
 fn vectors(name: &str) -> Value {
     let path: PathBuf = [
@@ -618,6 +662,7 @@ fn the_node_struct_can_carry_every_field() {
     node.text_ranges = Some(vec![]);
     node.test_id = Some("t".into());
     node.framework_type = Some("Widget".into());
+    node.opaque_children = true;
     node.p = Some(Provenance::Framework);
     node.px = Some(BTreeMap::from([(
         "name".to_owned(),

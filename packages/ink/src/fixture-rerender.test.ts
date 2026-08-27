@@ -7,12 +7,14 @@
  * and that it leaves nothing behind.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
 import { launchInkFixture, type InkFixtureHarness } from './fixture.js';
 import { MAX_CONTROL_BYTES } from './control.js';
 
 const COMPONENT = new URL('./testing/counter-app.mjs', import.meta.url);
 const SIZE = { columns: 44, rows: 12 } as const;
+const it = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
 
 const open: InkFixtureHarness[] = [];
 

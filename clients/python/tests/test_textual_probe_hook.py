@@ -1,22 +1,25 @@
-"""The exact Textual display commit boundary."""
+"""The capability-certified Textual display commit boundary."""
 
-from types import SimpleNamespace
+from io import StringIO
 from queue import Full, Queue
+from types import SimpleNamespace
 
 import pytest
 
 from termwright_probe import textual_probe
 
+_real_writer_thread_check = textual_probe._is_supported_writer_thread
+
 
 class Driver:
     is_headless = False
 
-    def __init__(self, events, *, write_error=False, flush_error=False):
+    def __init__(self, events, *, write_error=False, flush_error=False, queue_size=2):
         self.events = events
         self.write_error = write_error
         self.flush_error = flush_error
         self._writer_thread = SimpleNamespace(
-            _queue=Queue(maxsize=30), is_alive=lambda: True
+            _queue=Queue(maxsize=queue_size), is_alive=lambda: True
         )
 
     def write(self, text):
@@ -80,15 +83,19 @@ def _base(events):
 def _isolated_probe(monkeypatch):
     textual_probe.reset()
     monkeypatch.setattr(
-        textual_probe, "_is_certified_builtin_driver", lambda driver: type(driver) is Driver
+        textual_probe, "_is_supported_builtin_driver", lambda driver: type(driver) is Driver
     )
     monkeypatch.setattr(
         textual_probe,
-        "_is_certified_writer_thread",
+        "_is_supported_writer_thread",
         lambda writer: (
             writer is not None
             and type(getattr(writer, "_queue", None)) is Queue
-            and writer._queue.maxsize == 30
+            and writer._queue.maxsize > 0
+            and callable(getattr(writer._queue, "full", None))
+            and callable(getattr(writer._queue, "put_nowait", None))
+            and callable(getattr(writer, "is_alive", None))
+            and writer.is_alive()
         ),
     )
     yield
@@ -122,17 +129,78 @@ def test_observes_only_after_successful_write_and_flush(monkeypatch):
     ]
 
 
-def test_marker_enqueue_is_bounded_and_never_waits_for_queue_capacity():
-    driver = Driver([])
+@pytest.mark.parametrize("capacity", [1, 2, 64])
+def test_writer_thread_accepts_any_positive_bounded_fifo(monkeypatch, capacity):
+    from textual.drivers._writer_thread import WriterThread
+
+    writer = WriterThread(StringIO())
+    writer._queue = Queue(maxsize=capacity)
+    monkeypatch.setattr(WriterThread, "is_alive", lambda _self: True)
+
+    assert _real_writer_thread_check(writer)
+
+
+def test_writer_thread_rejects_an_unbounded_fifo(monkeypatch):
+    from textual.drivers._writer_thread import WriterThread
+
+    writer = WriterThread(StringIO())
+    writer._queue = Queue(maxsize=0)
+    monkeypatch.setattr(WriterThread, "is_alive", lambda _self: True)
+
+    assert not _real_writer_thread_check(writer)
+
+
+@pytest.mark.parametrize("capacity", [1, 2, 64])
+def test_marker_enqueue_is_fifo_for_any_positive_capacity(capacity):
+    driver = Driver([], queue_size=capacity)
     marker_writer = textual_probe._marker_writer_for(driver)
     assert marker_writer is not None
-    for index in range(30):
+
+    queue = driver._writer_thread._queue
+    queue.put_nowait("frame")
+    if capacity == 1:
+        # The live WriterThread consumed the preceding frame before the marker
+        # producer acquired the sole free slot. Causal order is still FIFO.
+        assert queue.get_nowait() == "frame"
+    marker_writer.preflight()
+    marker_writer.enqueue("marker")
+
+    remaining = []
+    while not queue.empty():
+        remaining.append(queue.get_nowait())
+    assert remaining == (["marker"] if capacity == 1 else ["frame", "marker"])
+
+
+@pytest.mark.parametrize("capacity", [1, 2, 64])
+def test_marker_preflight_refuses_a_full_bounded_fifo(capacity):
+    driver = Driver([], queue_size=capacity)
+    marker_writer = textual_probe._marker_writer_for(driver)
+    assert marker_writer is not None
+    for index in range(capacity):
         driver._writer_thread._queue.put_nowait(str(index))
 
     with pytest.raises(RuntimeError, match="full before snapshot"):
         marker_writer.preflight()
     with pytest.raises(Full):
         marker_writer.enqueue("marker")
+
+
+def test_marker_enqueue_detects_writer_death_after_queue_admission(monkeypatch):
+    from textual.drivers._writer_thread import WriterThread
+
+    writer = WriterThread(StringIO())
+    writer._queue = Queue(maxsize=2)
+    alive = iter([True, True, True, True, False])
+    monkeypatch.setattr(WriterThread, "is_alive", lambda _self: next(alive))
+    driver = Driver([], queue_size=2)
+    driver._writer_thread = writer
+
+    marker_writer = textual_probe._marker_writer_for(driver)
+    assert marker_writer is not None
+    marker_writer.preflight()
+    with pytest.raises(RuntimeError, match="stopped after marker enqueue"):
+        marker_writer.enqueue("marker")
+    assert writer._queue.get_nowait() == "marker"
 
 
 @pytest.mark.parametrize("condition", ["custom", "inline", "missing", "stopped", "replaced"])
@@ -144,11 +212,11 @@ def test_write_confirmed_but_uncertified_writer_emits_typed_failure(monkeypatch,
     app = base()
     original_writer = app._driver._writer_thread
     if condition == "custom":
-        monkeypatch.setattr(textual_probe, "_is_certified_builtin_driver", lambda _driver: False)
+        monkeypatch.setattr(textual_probe, "_is_supported_builtin_driver", lambda _driver: False)
     elif condition == "inline":
         app._driver.is_inline = True
     elif condition == "missing":
-        monkeypatch.setattr(textual_probe, "_is_certified_writer_thread", lambda _writer: False)
+        monkeypatch.setattr(textual_probe, "_is_supported_writer_thread", lambda _writer: False)
     elif condition == "stopped":
         original_writer.is_alive = lambda: False
     else:
@@ -157,7 +225,7 @@ def test_write_confirmed_but_uncertified_writer_emits_typed_failure(monkeypatch,
         def replace_after_write():
             original_flush()
             app._driver._writer_thread = SimpleNamespace(
-                _queue=Queue(maxsize=30), is_alive=lambda: True
+                _queue=Queue(maxsize=2), is_alive=lambda: True
             )
         app._driver.flush = replace_after_write
         app._display(app.screen, "frame")
@@ -288,12 +356,20 @@ def test_commit_identity_change_is_a_typed_failure(monkeypatch, replacement, det
     assert detail in failure.detail
 
 
-def test_unknown_textual_version_never_gets_strong_instrumentation(monkeypatch):
+def test_unknown_textual_version_attaches_when_runtime_capabilities_match(monkeypatch):
     events = []
+    observations = []
     base = _base(events)
     textual_probe.reset()
     monkeypatch.setattr(textual_probe, "_textual_version", lambda: "99.1.0")
-    assert not textual_probe.attach_to_app_module(SimpleNamespace(App=base))
+    textual_probe.on_frame(observations.append)
+    assert textual_probe.attach_to_app_module(SimpleNamespace(App=base))
+
+    app = base()
+    app._display(app.screen, "frame")
+
+    assert len(observations) == 1
+    assert isinstance(observations[0], textual_probe.CommittedTextualFrame)
 
 
 def test_reset_restores_every_mutated_descriptor_by_identity(monkeypatch):
@@ -336,7 +412,7 @@ def test_reset_restores_real_textual_app_and_driver_descriptors(monkeypatch):
     monkeypatch.setattr(textual_probe, "_textual_version", lambda: "8.2.8")
     monkeypatch.setattr(
         textual_probe,
-        "_is_certified_builtin_driver",
+        "_is_supported_builtin_driver",
         lambda driver: type(driver) is LinuxDriver,
     )
     original_display = App.__dict__["_display"]
@@ -356,21 +432,14 @@ def test_reset_restores_real_textual_app_and_driver_descriptors(monkeypatch):
     assert LinuxDriver.__dict__["write"] is original_write
 
 
-def test_candidate_override_is_exact_digest_and_revision_bound():
-    digest = "sha256:" + "a" * 64
-    revision = "b" * 40
-    valid = {
-        "GITHUB_ACTIONS": "true",
-        "GITHUB_SHA": revision,
-        "TERMWRIGHT_CERTIFICATION_TEXTUAL_VERSION": "99.1.0",
-        "TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST": digest,
-        "TERMWRIGHT_CERTIFICATION_SOURCE_REVISION": revision,
-    }
-    assert textual_probe.is_textual_version_certified("99.1.0", valid)
-    assert not textual_probe.is_textual_version_certified(
-        "99.1.0", {**valid, "TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST": "sha256:tampered"}
-    )
-    assert not textual_probe.is_textual_version_certified(
-        "99.1.0", {**valid, "TERMWRIGHT_CERTIFICATION_SOURCE_REVISION": "c" * 40}
-    )
-    assert not textual_probe.is_textual_version_certified("99.1.1", valid)
+@pytest.mark.parametrize("broken", ["missing", "non-callable"])
+def test_missing_runtime_capability_refuses_attachment(monkeypatch, broken):
+    events = []
+    base = _base(events)
+    if broken == "missing":
+        delattr(base, "refresh")
+    else:
+        base.refresh = None
+    monkeypatch.setattr(textual_probe, "_textual_version", lambda: "99.1.0")
+
+    assert not textual_probe.attach_to_app_module(SimpleNamespace(App=base))

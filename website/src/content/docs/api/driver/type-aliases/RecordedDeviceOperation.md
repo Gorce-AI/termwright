@@ -13,4 +13,4 @@ editUrl: false
 
 > **RecordedDeviceOperation** = \{ `device`: `"keyboard"`; `kind`: `"press"` \| `"type"` \| `"paste"`; `value`: [`RecordedValue`](../recordedvalue/); \} \| `Exclude`\<[`ExecutableDeviceOperation`](../executabledeviceoperation/), \{ `device`: `"keyboard"`; \}\>
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:812
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:166

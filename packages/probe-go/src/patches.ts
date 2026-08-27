@@ -1,10 +1,10 @@
 /**
  * Turning a pristine framework into the instrumented copy, reproducibly.
  *
- * The patch set is deliberately tiny: one anchored insertion into
- * `application.go`, and one whole file added beside it. Everything that reads
- * private state lives in the added file, so a new framework release usually
- * moves the anchor rather than invalidating the instrumentation.
+ * Exact T3 integrations are copied and patched under a strict before/after
+ * byte contract. T1 add-only integrations use the Go toolchain executor in
+ * `toolexec.ts`; this module validates their doctrine metadata but never edits
+ * upstream source for them.
  *
  * Checksums are the point of the manifest. A patch applied to the wrong
  * version fails somewhere inside a diff context and reports a line number; a
@@ -38,9 +38,19 @@ export interface AddedFile {
 
 /** What a patch set declares about itself. */
 export interface PatchManifest {
+  readonly schemaVersion?: 2;
   readonly framework: string;
   readonly frameworkVersion: string;
   readonly patchSetVersion: number;
+  readonly tier?: 'T0' | 'T1' | 'T2' | 'T3';
+  readonly capability?: string;
+  readonly versionRange?: string;
+  readonly requiredSymbols?: readonly string[];
+  readonly verification?: {
+    readonly method: string;
+    readonly conformanceSuite: string;
+  };
+  readonly degradesTo?: string;
   readonly note?: string;
   readonly patched: readonly PatchedFile[];
   readonly added: readonly AddedFile[];
@@ -65,7 +75,9 @@ export class PatchError extends Error {
 
 /** `sha256:<hex>` of a file's bytes. */
 export async function digestFile(path: string): Promise<string> {
-  return `sha256:${createHash('sha256').update(await readFile(path)).digest('hex')}`;
+  return `sha256:${createHash('sha256')
+    .update(await readFile(path))
+    .digest('hex')}`;
 }
 
 /** Stable digest of the whole patch set, for the cache key. */
@@ -111,7 +123,79 @@ export async function readManifest(dir: string): Promise<PatchManifest> {
   ) {
     throw new PatchError('manifest-invalid', 'manifest is missing required fields');
   }
+  validateInterventionMetadata(manifest);
   return manifest;
+}
+
+function validateInterventionMetadata(manifest: PatchManifest): void {
+  const tier = manifest.tier;
+  const hasDoctrineMetadata =
+    manifest.schemaVersion !== undefined ||
+    manifest.capability !== undefined ||
+    manifest.versionRange !== undefined ||
+    manifest.requiredSymbols !== undefined ||
+    manifest.verification !== undefined ||
+    manifest.degradesTo !== undefined;
+  if (tier === undefined) {
+    if (hasDoctrineMetadata) {
+      throw new PatchError('manifest-invalid', 'schema-v2 intervention metadata must declare a tier');
+    }
+    return; // Current exact T3 manifests retain their exact byte contract.
+  }
+  if (!['T0', 'T1', 'T2', 'T3'].includes(tier)) {
+    throw new PatchError('manifest-invalid', `manifest declares unknown intervention tier ${String(tier)}`);
+  }
+  if (tier === 'T3') return; // T3 remains exact-version and content-addressed.
+  if (manifest.schemaVersion !== 2) {
+    throw new PatchError('manifest-invalid', `${tier} manifests must declare schemaVersion 2`);
+  }
+  if (typeof manifest.capability !== 'string' || !/^[a-z][a-z0-9-]*$/u.test(manifest.capability)) {
+    throw new PatchError('manifest-invalid', `${tier} manifests must name a normalized capability`);
+  }
+  if (typeof manifest.versionRange !== 'string' || manifest.versionRange.trim().length === 0) {
+    throw new PatchError('manifest-invalid', `${tier} manifests must declare an advisory versionRange`);
+  }
+  if (
+    !Array.isArray(manifest.requiredSymbols) ||
+    manifest.requiredSymbols.length === 0 ||
+    manifest.requiredSymbols.some((symbol) => typeof symbol !== 'string' || symbol.trim().length === 0) ||
+    new Set(manifest.requiredSymbols).size !== manifest.requiredSymbols.length
+  ) {
+    throw new PatchError('manifest-invalid', `${tier} manifests must declare unique requiredSymbols`);
+  }
+  if (
+    typeof manifest.verification?.method !== 'string' ||
+    manifest.verification.method.length === 0 ||
+    typeof manifest.verification.conformanceSuite !== 'string' ||
+    manifest.verification.conformanceSuite.length === 0
+  ) {
+    throw new PatchError(
+      'manifest-invalid',
+      `${tier} manifests must declare their verification method and conformance suite`,
+    );
+  }
+  const method = manifest.verification.method.toLowerCase();
+  if (!method.includes('conformance')) {
+    throw new PatchError('manifest-invalid', `${tier} verification must include behavioral conformance`);
+  }
+  if (tier !== 'T0' && !method.includes('compile')) {
+    throw new PatchError('manifest-invalid', `${tier} verification must include compiler verification`);
+  }
+  if (tier === 'T2' && !method.includes('idempot')) {
+    throw new PatchError('manifest-invalid', 'T2 verification must include an idempotency check');
+  }
+  if (typeof manifest.degradesTo !== 'string' || manifest.degradesTo.trim().length === 0) {
+    throw new PatchError('manifest-invalid', `${tier} manifests must declare an explicit degradation`);
+  }
+  if (tier === 'T0' && (manifest.patched.length !== 0 || manifest.added.length !== 0)) {
+    throw new PatchError('manifest-invalid', 'T0 cannot edit or add upstream compilation units');
+  }
+  if (tier === 'T1' && (manifest.patched.length !== 0 || manifest.added.length === 0)) {
+    throw new PatchError('manifest-invalid', 'T1 must be add-only and must not edit upstream bytes');
+  }
+  if (tier === 'T2' && manifest.added.length === 0) {
+    throw new PatchError('manifest-invalid', 'T2 must include an owned added compilation unit');
+  }
 }
 
 /**
@@ -163,7 +247,7 @@ export async function applyPatchSet(copyDir: string, patchSetDir: string): Promi
       // Measured: the CRLF run yields exactly the sha the Windows lane reported.
       await run(
         'git',
-        ['-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '-p1', '--whitespace=nowarn', patch],
+        ['-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '-p1', '--unidiff-zero', '--whitespace=nowarn', patch],
         { cwd: copyDir },
       );
     } catch (error) {
@@ -236,17 +320,16 @@ export async function ensureUpstreamModule(upstream: UpstreamModule): Promise<st
       `module termwright.local/fetch\n\ngo 1.22\n\nrequire ${upstream.module} ${upstream.version}\n`,
       'utf8',
     );
-    const { stdout } = await run(
-      'go',
-      ['mod', 'download', '-json', `${upstream.module}@${upstream.version}`],
-      {
+    const { stdout } = await run('go', ['mod', 'download', '-json', `${upstream.module}@${upstream.version}`], {
       cwd: scratch,
       // -mod=vendor is incompatible with a download into the cache, and the
       // user's flags are not this command's business.
-        env: { ...env, GOFLAGS: '' },
-      },
-    );
-    const result = JSON.parse(stdout) as { readonly Dir?: string; readonly Error?: string };
+      env: { ...env, GOFLAGS: '' },
+    });
+    const result = JSON.parse(stdout) as {
+      readonly Dir?: string;
+      readonly Error?: string;
+    };
     if (result.Error !== undefined || result.Dir === undefined || result.Dir.length === 0) {
       throw new Error(result.Error ?? 'go mod download did not report a module directory');
     }

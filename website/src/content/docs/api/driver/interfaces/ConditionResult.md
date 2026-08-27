@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ConditionResult
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:774
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:128
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:774
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:776
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:130
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:776
 
 > `readonly` **condition**: [`Condition`](../../type-aliases/condition/)
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:775
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:129
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:775
 
 > `readonly` **observation**: [`Observation`](../../type-aliases/observation/)\<`boolean`\>
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:777
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:131
 
 ***
 
@@ -43,4 +43,4 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:777
 
 > `readonly` **verdict**: `"satisfied"` \| `"unsatisfied"` \| `"inconclusive"`
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:778
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:132

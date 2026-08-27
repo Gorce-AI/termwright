@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LocatorCellSnapshot
 
-Defined in: [driver/src/api.ts:736](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L736)
+Defined in: [driver/src/api.ts:743](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L743)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **columns**: `number`
 
-Defined in: [driver/src/api.ts:739](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L739)
+Defined in: [driver/src/api.ts:746](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L746)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:739](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **origin**: `object`
 
-Defined in: [driver/src/api.ts:738](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L738)
+Defined in: [driver/src/api.ts:745](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L745)
 
 #### column
 
@@ -60,7 +60,7 @@ Defined in: [driver/src/api.ts:738](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **rows**: `number`
 
-Defined in: [driver/src/api.ts:740](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L740)
+Defined in: [driver/src/api.ts:747](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L747)
 
 ***
 
@@ -68,7 +68,7 @@ Defined in: [driver/src/api.ts:740](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **stamp**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: [driver/src/api.ts:737](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L737)
+Defined in: [driver/src/api.ts:744](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L744)
 
 ## Methods
 
@@ -76,7 +76,7 @@ Defined in: [driver/src/api.ts:737](https://github.com/Gorce-AI/termwright/blob/
 
 > **cell**(`row`, `column`): [`CellSnapshot`](../cellsnapshot/)
 
-Defined in: [driver/src/api.ts:743](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L743)
+Defined in: [driver/src/api.ts:750](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L750)
 
 #### Parameters
 
@@ -98,7 +98,7 @@ Defined in: [driver/src/api.ts:743](https://github.com/Gorce-AI/termwright/blob/
 
 > **line**(`row`): `string`
 
-Defined in: [driver/src/api.ts:742](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L742)
+Defined in: [driver/src/api.ts:749](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L749)
 
 #### Parameters
 
@@ -116,7 +116,7 @@ Defined in: [driver/src/api.ts:742](https://github.com/Gorce-AI/termwright/blob/
 
 > **text**(): `string`
 
-Defined in: [driver/src/api.ts:741](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L741)
+Defined in: [driver/src/api.ts:748](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L748)
 
 #### Returns
 

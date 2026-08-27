@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PhysicalRegion
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:781
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:135
 
 A disjoint physical region represented as canonical, non-overlapping row spans.
 
@@ -21,7 +21,7 @@ A disjoint physical region represented as canonical, non-overlapping row spans.
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:782
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:136
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:782
 
 > `readonly` **coordinateSpace**: `"viewport-cells"`
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:783
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:137
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:783
 
 > `readonly` **evidence**: [`EvidenceProvenance`](../evidenceprovenance/)
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:790
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:144
 
 ***
 
@@ -45,7 +45,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:790
 
 > `readonly` **intendedRect**: `Rect`
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:784
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:138
 
 ***
 
@@ -53,4 +53,4 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:784
 
 > `readonly` **spans**: readonly `object`[]
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:785
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:139

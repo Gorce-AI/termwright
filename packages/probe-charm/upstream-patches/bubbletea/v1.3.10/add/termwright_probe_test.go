@@ -1,14 +1,200 @@
 package tea
 
 import (
+	"bytes"
+	"io"
 	"reflect"
+	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/gorce-ai/termwright/clients/go/annotate"
 	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
+type termwrightWalkLeaf struct {
+	Value  string
+	hidden struct{ Secret string }
+}
+
+type termwrightWalkBranch struct {
+	Same termwrightWalkLeaf
+}
+
+type termwrightWalkDeep struct {
+	Next *termwrightWalkDeep
+}
+
+type termwrightWalkModel struct {
+	Left    termwrightWalkBranch
+	Right   termwrightWalkBranch
+	Scalar  int
+	Deep    *termwrightWalkDeep
+	private struct{ Child termwrightWalkLeaf }
+}
+
+type termwrightRenderModel struct{ Scalar int }
+
+func (termwrightRenderModel) Init() Cmd                 { return nil }
+func (m termwrightRenderModel) Update(Msg) (Model, Cmd) { return m, nil }
+func (termwrightRenderModel) View() string              { return "CONCURRENT-FRAME" }
+
+func TestTermwrightWalkerPreservesStructureAndDeclaresOpaqueGaps(t *testing.T) {
+	deep := &termwrightWalkDeep{}
+	cursor := deep
+	for index := 0; index < 10; index++ {
+		cursor.Next = &termwrightWalkDeep{}
+		cursor = cursor.Next
+	}
+	model := termwrightWalkModel{Scalar: 7, Deep: deep}
+	probe := &termwrightProbeState{ids: make(map[string]string)}
+	candidates := make([]termwrightCandidate, 0)
+	probe.walk(reflect.ValueOf(model), "root", "root", "", &candidates, 0)
+	rootID := probe.identity("root")
+	snapshot := &protocol.Snapshot{
+		RootIDs: []string{rootID},
+		Nodes:   []protocol.Node{{ID: rootID, Role: protocol.RoleApplication, Name: "app"}},
+	}
+	if duplicate := probe.appendCandidates(snapshot, rootID, candidates); duplicate != "" {
+		t.Fatalf("unexpected duplicate key %q", duplicate)
+	}
+	byID := make(map[string]protocol.Node, len(snapshot.Nodes))
+	for _, node := range snapshot.Nodes {
+		if _, exists := byID[node.ID]; exists {
+			t.Fatalf("duplicate session identity %q", node.ID)
+		}
+		byID[node.ID] = node
+	}
+	var leftID, rightID string
+	sameParents := make(map[string]struct{})
+	reasons := make(map[string]int)
+	for _, node := range snapshot.Nodes {
+		switch node.Name {
+		case "Left":
+			leftID = node.ID
+		case "Right":
+			rightID = node.ID
+		case "Same":
+			sameParents[node.ParentID] = struct{}{}
+		}
+		if reason, ok := node.Extended["opaqueReason"].(string); ok {
+			reasons[reason]++
+			if !node.OpaqueChildren || node.FrameworkType != "opaque-container" ||
+				node.Extended["degradedCapability"] != "custom-container-enumeration" {
+				t.Fatalf("opaque node did not declare its degradation: %+v", node)
+			}
+		}
+	}
+	if leftID == "" || rightID == "" || leftID == rightID {
+		t.Fatalf("nested containers lost identity: left=%q right=%q", leftID, rightID)
+	}
+	if len(sameParents) != 2 {
+		t.Fatalf("duplicate nested field names collapsed parents: %v", sameParents)
+	}
+	if _, ok := sameParents[leftID]; !ok {
+		t.Fatalf("left nested child lost parent: %v", sameParents)
+	}
+	if _, ok := sameParents[rightID]; !ok {
+		t.Fatalf("right nested child lost parent: %v", sameParents)
+	}
+	for _, reason := range []string{"non-struct", "private-field", "depth-limit"} {
+		if reasons[reason] == 0 {
+			t.Fatalf("walker silently omitted %s; reasons=%v", reason, reasons)
+		}
+	}
+}
+
+func TestTermwrightConcurrentModelObservationRefusesWithoutWaiting(t *testing.T) {
+	probe := &termwrightProbeState{}
+	probe.rendering.Store(true)
+	previous, previousMode := termwrightProbe, termwrightProbeMode.Load()
+	termwrightProbe = probe
+	termwrightProbeMode.Store(termwrightProbeModeActive)
+	t.Cleanup(func() {
+		termwrightProbe = previous
+		termwrightProbeMode.Store(previousMode)
+	})
+	writer := &termwrightCapturedWriter{}
+	renderer := newRenderer(writer, false, 60).(*standardRenderer)
+	program := &Program{renderer: renderer}
+	done := make(chan struct{})
+	go func() {
+		termwrightRenderAndObserve(program, termwrightRenderModel{})
+		close(done)
+	}()
+	<-done
+	if !bytes.Contains(renderer.buf.Bytes(), []byte("CONCURRENT-FRAME")) {
+		t.Fatalf("refused observation did not preserve visual render: %q", renderer.buf.String())
+	}
+	failure := probe.failure.Load()
+	if failure == nil || failure.code != "adapter-guarantee-violation" {
+		t.Fatalf("overlap did not fail closed: %+v", failure)
+	}
+	probe.rendering.Store(false)
+}
+
+func TestTermwrightFrameStagingContentionFailsClosedWithoutWaiting(t *testing.T) {
+	probe := &termwrightProbeState{ids: make(map[string]string), latest: make(map[*standardRenderer]*termwrightStagedFrame), queued: make(map[*standardRenderer]*termwrightStagedFrame), published: make(map[*standardRenderer]uint64)}
+	previous, previousMode := termwrightProbe, termwrightProbeMode.Load()
+	termwrightProbe = probe
+	termwrightProbeMode.Store(termwrightProbeModeActive)
+	t.Cleanup(func() {
+		termwrightProbe = previous
+		termwrightProbeMode.Store(previousMode)
+	})
+	writer := &termwrightCapturedWriter{}
+	renderer := newRenderer(writer, false, 60).(*standardRenderer)
+	renderer.width = 80
+	renderer.height = 24
+	program := &Program{renderer: renderer}
+	probe.frameMu.Lock()
+	done := make(chan struct{})
+	go func() {
+		termwrightRenderAndObserve(program, termwrightRenderModel{})
+		close(done)
+	}()
+	<-done
+	probe.frameMu.Unlock()
+	if !bytes.Contains(renderer.buf.Bytes(), []byte("CONCURRENT-FRAME")) {
+		t.Fatalf("contended staging did not preserve visual render: %q", renderer.buf.String())
+	}
+	if failure := probe.failure.Load(); failure == nil || failure.code != "adapter-guarantee-violation" {
+		t.Fatalf("contended staging did not fail closed: %+v", failure)
+	}
+}
+
 type termwrightShortWriter struct{}
+
+type termwrightCapturedWriter struct {
+	bytes.Buffer
+	writes  [][]byte
+	onWrite func()
+}
+
+func (w *termwrightCapturedWriter) Write(value []byte) (int, error) {
+	copyOfValue := append([]byte(nil), value...)
+	w.writes = append(w.writes, copyOfValue)
+	if callback := w.onWrite; callback != nil {
+		w.onWrite = nil
+		callback()
+	}
+	return w.Buffer.Write(value)
+}
+
+type termwrightBlockingWriter struct {
+	bytes.Buffer
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (w *termwrightBlockingWriter) Write(value []byte) (int, error) {
+	w.once.Do(func() {
+		close(w.entered)
+		<-w.release
+	})
+	return w.Buffer.Write(value)
+}
 
 func (termwrightShortWriter) Write(value []byte) (int, error) {
 	if len(value) == 0 {
@@ -20,13 +206,8 @@ func (termwrightShortWriter) Write(value []byte) (int, error) {
 func TestTermwrightRendererFailureClosesSemanticChannel(t *testing.T) {
 	renderer := &standardRenderer{}
 	frame := &termwrightStagedFrame{sequence: 1}
-	var code, detail string
 	probe := &termwrightProbeState{
 		queued: map[*standardRenderer]*termwrightStagedFrame{renderer: frame},
-		fail: func(gotCode, gotDetail string) error {
-			code, detail = gotCode, gotDetail
-			return nil
-		},
 	}
 	previous := termwrightProbe
 	termwrightProbe = probe
@@ -37,8 +218,9 @@ func TestTermwrightRendererFailureClosesSemanticChannel(t *testing.T) {
 	if probe.queued[renderer] != nil {
 		t.Fatal("failed renderer output left staged semantics for a later flush")
 	}
-	if code != "adapter-guarantee-violation" || detail != "Bubble Tea renderer did not commit the complete terminal frame" {
-		t.Fatalf("renderer failure was not terminal: code=%q detail=%q", code, detail)
+	failure := probe.failure.Load()
+	if failure == nil || failure.code != "adapter-guarantee-violation" || failure.message != "Bubble Tea renderer did not commit the complete terminal frame" {
+		t.Fatalf("renderer failure was not terminal: %+v", failure)
 	}
 	if probe.dropped.Load() != 1 {
 		t.Fatalf("dropped frames = %d, want 1", probe.dropped.Load())
@@ -46,16 +228,141 @@ func TestTermwrightRendererFailureClosesSemanticChannel(t *testing.T) {
 }
 
 func TestTermwrightShortMarkerWriteClosesSemanticChannel(t *testing.T) {
-	var code string
-	probe := &termwrightProbeState{fail: func(gotCode, _ string) error {
-		code = gotCode
-		return nil
-	}}
+	probe := &termwrightProbeState{}
 	if probe.writeMarker(termwrightShortWriter{}, "marker") {
 		t.Fatal("short marker write reported success")
 	}
-	if code != "adapter-guarantee-violation" || probe.frames.Load() != 0 || probe.dropped.Load() != 1 {
-		t.Fatalf("short write did not fail closed: code=%q frames=%d dropped=%d", code, probe.frames.Load(), probe.dropped.Load())
+	if failure := probe.failure.Load(); failure == nil || failure.code != "adapter-guarantee-violation" || probe.frames.Load() != 0 || probe.dropped.Load() != 1 {
+		t.Fatalf("short write did not fail closed: failure=%+v frames=%d dropped=%d", failure, probe.frames.Load(), probe.dropped.Load())
+	}
+}
+
+func TestTermwrightDormantRenderLookupIsConstantAndInert(t *testing.T) {
+	previousProbe := termwrightProbe
+	previousMode := termwrightProbeMode.Load()
+	termwrightProbe = nil
+	termwrightProbeMode.Store(termwrightProbeModeDormant)
+	t.Cleanup(func() {
+		termwrightProbe = previousProbe
+		termwrightProbeMode.Store(previousMode)
+	})
+
+	beforeGoroutines := runtime.NumGoroutine()
+	allocations := testing.AllocsPerRun(1000, func() {
+		if termwrightProbeForRender() != nil {
+			t.Fatal("dormant render lookup returned a probe")
+		}
+	})
+	if allocations != 0 {
+		t.Fatalf("dormant render lookup allocated %v times per call", allocations)
+	}
+	if after := runtime.NumGoroutine(); after > beforeGoroutines {
+		t.Fatalf("dormant render lookup started a goroutine: %d -> %d", beforeGoroutines, after)
+	}
+}
+
+func TestTermwrightRealRendererReentryFailsClosedBeforeLoserOutput(t *testing.T) {
+	probe := &termwrightProbeState{}
+	termwrightLifecycleMu.Lock()
+	previous := termwrightProbe
+	previousMode := termwrightProbeMode.Load()
+	termwrightProbe = probe
+	termwrightProbeMode.Store(termwrightProbeModeActive)
+	termwrightLifecycleMu.Unlock()
+	t.Cleanup(func() {
+		termwrightLifecycleMu.Lock()
+		termwrightProbe = previous
+		termwrightProbeMode.Store(previousMode)
+		termwrightLifecycleMu.Unlock()
+	})
+
+	writer := &termwrightCapturedWriter{}
+	outer := newRenderer(writer, false, 60).(*standardRenderer)
+	loser := newRenderer(writer, false, 60).(*standardRenderer)
+	_, _ = outer.buf.WriteString("FRAME-A")
+	_, _ = loser.buf.WriteString("FRAME-B")
+	writer.onWrite = loser.flush
+	outer.flush()
+
+	if len(writer.writes) != 1 || !bytes.Contains(writer.writes[0], []byte("FRAME-A")) {
+		t.Fatalf("outer renderer did not write exactly one complete frame: %q", writer.writes)
+	}
+	if bytes.Contains(writer.Bytes(), []byte("FRAME-B")) || loser.buf.String() != "FRAME-B" {
+		t.Fatalf("reentrant loser wrote or discarded its pending frame: output=%q pending=%q", writer.Bytes(), loser.buf.String())
+	}
+	if failure := probe.failure.Load(); failure == nil || failure.code != "adapter-guarantee-violation" {
+		t.Fatalf("real renderer reentry did not leave a typed fatal: %+v", failure)
+	}
+
+	loser.flush()
+	if len(writer.writes) != 2 || !bytes.Contains(writer.writes[1], []byte("FRAME-B")) {
+		t.Fatalf("pending loser frame was not retained after the outer commit: %q", writer.writes)
+	}
+}
+
+func TestTermwrightRealRendererPreservesRapidABA(t *testing.T) {
+	beforeGoroutines := runtime.NumGoroutine()
+	previousMode := termwrightProbeMode.Load()
+	termwrightProbeMode.Store(termwrightProbeModeDormant)
+	t.Cleanup(func() { termwrightProbeMode.Store(previousMode) })
+	writer := &termwrightCapturedWriter{}
+	renderer := newRenderer(writer, false, 60).(*standardRenderer)
+	for _, frame := range []string{"FRAME-A", "FRAME-B", "FRAME-A"} {
+		_, _ = renderer.buf.WriteString(frame)
+		renderer.flush()
+	}
+	if len(writer.writes) != 3 || !bytes.Contains(writer.writes[0], []byte("FRAME-A")) || !bytes.Contains(writer.writes[1], []byte("FRAME-B")) || !bytes.Contains(writer.writes[2], []byte("FRAME-A")) {
+		t.Fatalf("rapid A/B/A frames did not reach the captured writer in order: %q", writer.writes)
+	}
+	measurement := newRenderer(io.Discard, false, 60).(*standardRenderer)
+	toggle := false
+	allocations := testing.AllocsPerRun(100, func() {
+		toggle = !toggle
+		if toggle {
+			_, _ = measurement.buf.WriteString("FRAME-A")
+		} else {
+			_, _ = measurement.buf.WriteString("FRAME-B")
+		}
+		measurement.flush()
+	})
+	t.Logf("measured dormant full-renderer flush allocations/run: %.2f", allocations)
+	if after := runtime.NumGoroutine(); after > beforeGoroutines {
+		t.Fatalf("dormant full renderer changed goroutine count: %d -> %d", beforeGoroutines, after)
+	}
+}
+
+func TestTermwrightConcurrentRealRenderersNeverInterleave(t *testing.T) {
+	probe := &termwrightProbeState{}
+	previous, previousMode := termwrightProbe, termwrightProbeMode.Load()
+	termwrightProbe = probe
+	termwrightProbeMode.Store(termwrightProbeModeActive)
+	t.Cleanup(func() {
+		termwrightProbe = previous
+		termwrightProbeMode.Store(previousMode)
+	})
+
+	writer := &termwrightBlockingWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	outer := newRenderer(writer, false, 60).(*standardRenderer)
+	loser := newRenderer(writer, false, 60).(*standardRenderer)
+	_, _ = outer.buf.WriteString("FRAME-A")
+	_, _ = loser.buf.WriteString("FRAME-B")
+	done := make(chan struct{})
+	go func() {
+		outer.flush()
+		close(done)
+	}()
+	<-writer.entered
+	loser.flush()
+	if loser.buf.String() != "FRAME-B" || bytes.Contains(writer.Bytes(), []byte("FRAME-B")) {
+		t.Fatalf("concurrent loser wrote or discarded pending bytes: output=%q pending=%q", writer.Bytes(), loser.buf.String())
+	}
+	close(writer.release)
+	<-done
+	if !bytes.Contains(writer.Bytes(), []byte("FRAME-A")) {
+		t.Fatalf("outer frame was not completed: %q", writer.Bytes())
+	}
+	if failure := probe.failure.Load(); failure == nil || failure.code != "adapter-guarantee-violation" {
+		t.Fatalf("concurrent renderer did not fail semantics closed: %+v", failure)
 	}
 }
 
@@ -178,5 +485,28 @@ func TestTermwrightGeometryDoesNotInventComponentLayout(t *testing.T) {
 	if component.Geometry.Displayed.Status != "unsupported" ||
 		component.Geometry.IntendedRect.Status != "unsupported" || component.Geometry.VisibleRect.Status != "unsupported" {
 		t.Fatalf("component layout was overclaimed: %+v", component.Geometry)
+	}
+}
+
+func TestTermwrightConcurrentRunsDrainOnlyAfterLastOwner(t *testing.T) {
+	ready := make(chan struct{})
+	close(ready)
+	probe := &termwrightProbeState{ready: ready}
+	termwrightLifecycleMu.Lock()
+	previousProbe, previousRuns := termwrightProbe, termwrightActiveRuns
+	termwrightProbe, termwrightActiveRuns = probe, 2
+	termwrightLifecycleMu.Unlock()
+	t.Cleanup(func() {
+		termwrightLifecycleMu.Lock()
+		termwrightProbe, termwrightActiveRuns = previousProbe, previousRuns
+		termwrightLifecycleMu.Unlock()
+	})
+	termwrightShutdown(probe)
+	if probe.closed.Load() {
+		t.Fatal("first of two concurrent Program owners closed the shared publisher")
+	}
+	termwrightShutdown(probe)
+	if !probe.closed.Load() {
+		t.Fatal("last Program owner did not close publication admission")
 	}
 }

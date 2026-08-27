@@ -141,7 +141,7 @@ class DuplicateSemanticKeyError(ValueError):
 
 
 class TextualObservationError(RuntimeError):
-    """A certified Textual tree API broke its advertised contract."""
+    """A capability-checked Textual tree API broke its advertised contract."""
 
 
 def role_for(widget: Any, annotation: Optional[ResolvedAnnotation] = None) -> str:

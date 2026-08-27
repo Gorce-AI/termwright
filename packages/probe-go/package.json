@@ -1,7 +1,7 @@
 {
   "name": "@termwright/probe-go",
   "version": "0.2.0",
-  "description": "shared machinery for Go probes: ephemeral workspaces, copy cache, checksummed patch sets",
+  "description": "shared Go probe machinery: add-only compiler units and exact source-bound patch sets",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -16,5 +16,8 @@
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. test -- -- --run packages/probe-go"
+  },
+  "devDependencies": {
+    "@termwright/resource-broker": "workspace:*"
   }
 }

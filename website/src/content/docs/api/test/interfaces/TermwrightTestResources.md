@@ -15,6 +15,16 @@ Defined in: resource-broker/dist/vitest.d.ts:6
 
 ## Properties
 
+### hostPressure?
+
+> `readonly` `optional` **hostPressure?**: `"exclusive"`
+
+Defined in: resource-broker/dist/vitest.d.ts:14
+
+Exclusively reserves host-wide process/toolchain pressure without requiring a terminal.
+
+***
+
 ### nativeHost?
 
 > `readonly` `optional` **nativeHost?**: `"shared"` \| `"exclusive"`
