@@ -605,7 +605,12 @@ export async function certifyGoCandidateBehavior(candidate) {
     env,
   });
   const binary = join(scratch, candidateExecutableName());
-  await run('go', ['build', ...prepared.goArgs, '-o', binary, '.'], prepared.env, app);
+  await run(
+    'go',
+    ['build', ...prepared.goArgs, '-o', binary, '.'],
+    prepared.env,
+    prepared.moduleDir,
+  );
   const driver = await import(pathToFileURL(join(root, 'packages/driver/dist/index.js')).href);
   const session = await driver.launchTerminal({
     command: [binary],

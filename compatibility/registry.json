@@ -846,7 +846,7 @@
       "probe": {
         "package": "@termwright/probe-tview",
         "packageVersion": "0.2.0",
-        "launch": "prepareInstrumentedBuild({moduleDir}) and pass the returned -toolexec arguments to the controlled Go build/test command",
+        "launch": "prepareInstrumentedBuild({moduleDir}) and run the controlled Go build/test command from the returned moduleDir with the returned -toolexec arguments",
         "identityKind": "stable",
         "capabilities": ["stable-identity", "intended-rect", "annotations"],
         "adapterCapabilities": [
@@ -1418,7 +1418,7 @@
       "probe": {
         "package": "@termwright/probe-charm",
         "packageVersion": "0.2.0",
-        "launch": "prepareInstrumentedBuild({moduleDir}) and build with the returned GOWORK and goArgs",
+        "launch": "prepareInstrumentedBuild({moduleDir}) and build from the returned moduleDir with the returned GOWORK and goArgs",
         "identityKind": "frame-local",
         "capabilities": ["annotations"],
         "adapterCapabilities": [

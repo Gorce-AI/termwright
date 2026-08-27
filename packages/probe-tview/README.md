@@ -37,7 +37,7 @@ import { prepareInstrumentedBuild } from '@termwright/probe-tview';
 
 const build = await prepareInstrumentedBuild({ moduleDir: 'path/to/app' });
 await execFile('go', ['build', ...build.goArgs, '-o', 'app-binary', '.'], {
-  cwd: 'path/to/app',
+  cwd: build.moduleDir,
   env: build.env,
 });
 ```

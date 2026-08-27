@@ -43,7 +43,10 @@ import { prepareInstrumentedBuild } from '@termwright/probe-charm';
 
 const build = await prepareInstrumentedBuild({ moduleDir: 'path/to/app' });
 // Pass both the generated environment and explicit compiler-wrapper arguments.
-await execFile('go', ['build', ...build.goArgs, '.'], { env: build.env });
+await execFile('go', ['build', ...build.goArgs, '.'], {
+  cwd: build.moduleDir,
+  env: build.env,
+});
 ```
 
 It detects the major and resolved versions, materialises the independently cached

@@ -33,7 +33,7 @@ export async function buildTviewFixture() {
       outputDir: join(root, 'tool'),
     });
     await run('go', ['build', ...prepared.goArgs, '-o', instrumented, './examples/permission'], {
-      cwd: moduleDir,
+      cwd: prepared.moduleDir,
       env: prepared.env,
     });
     await run('go', ['build', '-o', baseline, './examples/permission'], {

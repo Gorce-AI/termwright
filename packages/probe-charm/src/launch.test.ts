@@ -1,7 +1,17 @@
 /** The public Charm launcher, including the parts a hand-assembled test misses. */
 
 import { execFile } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,13 +90,16 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     const app = join(dir, 'app');
     await mkdir(app, { recursive: true });
     await cp(FIXTURE, app, { recursive: true });
+    const appAlias = join(dir, 'app-alias');
+    await symlink(app, appAlias, process.platform === 'win32' ? 'junction' : 'dir');
     const before = await snapshot(app);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       TERMWRIGHT_CACHE_DIR: join(dir, 'cache'),
     };
 
-    const first = await prepareInstrumentedBuild({ moduleDir: app, env });
+    const first = await prepareInstrumentedBuild({ moduleDir: appAlias, env });
+    expect(first.moduleDir).toBe(await realpath(app));
     expect(first.flavour).toMatchObject({
       major: 'v2',
       module: 'charm.land/bubbletea/v2',
@@ -98,6 +111,7 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     expect(first.toolExecFile).toContain('bubbles-toolexec');
     expect(first.injectedModules).toEqual(['charm.land/bubbles/v2']);
     expect(first.workspaceFile.startsWith(app)).toBe(false);
+    expect(first.env['PWD']).toBe(first.moduleDir);
     expect(first.env['GOWORK']).toBe(first.workspaceFile);
     expect(env['GOWORK']).toBeUndefined();
 
@@ -117,11 +131,11 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     );
 
     await run('go', ['build', ...first.goArgs, '-o', join(dir, 'app-bin'), '.'], {
-      cwd: app,
+      cwd: first.moduleDir,
       env: first.env,
     });
 
-    const second = await prepareInstrumentedBuild({ moduleDir: app, env });
+    const second = await prepareInstrumentedBuild({ moduleDir: appAlias, env });
     expect(second.built).toBe(false);
     expect(second.builtModules).toEqual([]);
     expect(second.copyDir).toBe(first.copyDir);
@@ -161,7 +175,7 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
     expect(prepared.injectedModules).toEqual(['github.com/charmbracelet/bubbles']);
 
     await run('go', ['build', ...prepared.goArgs, '-o', join(dir, 'app-bin'), '.'], {
-      cwd: app,
+      cwd: prepared.moduleDir,
       env: prepared.env,
     });
     expect(await snapshot(app)).toEqual(before);
