@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -20,12 +21,15 @@ import {
   packageContentDigestForEntries,
   selectCharmCandidateComposition,
   verifyCandidateEvidence,
+  verifyDerivedInkTransforms,
   verifyInstalledNpmClosure,
   verifyPreparedUpdateInvariant,
 } from './certify-framework-candidate.mjs';
 import { digestTree } from './prepare-framework-candidate.mjs';
+import { instrumentInkCore, instrumentInkRenderer } from '../packages/probe-ink/src/instrumentation.ts';
 
 const exec = promisify(execFile);
+const requireInk = createRequire(new URL('../packages/probe-ink/package.json', import.meta.url));
 
 function tarEntry(name, contents) {
   const header = Buffer.alloc(512);
@@ -347,6 +351,19 @@ describe('framework candidate evidence binding', () => {
         'a'.repeat(40),
       ),
     ).rejects.toThrow(/no deterministic exact-source/u);
+  });
+
+  it('checks derived Ink transforms with canonical package paths', async () => {
+    const inkBuild = dirname(requireInk.resolve('ink'));
+    const profile = {
+      sources: {
+        renderer: await readFile(join(inkBuild, 'renderer.js'), 'utf8'),
+        core: await readFile(join(inkBuild, 'ink.js'), 'utf8'),
+      },
+    };
+    expect(() =>
+      verifyDerivedInkTransforms('ink@7.1.1', { instrumentInkCore, instrumentInkRenderer }, profile),
+    ).not.toThrow();
   });
 
   it('cryptographically binds the exact installed npm graph to every discovered tarball', async () => {
