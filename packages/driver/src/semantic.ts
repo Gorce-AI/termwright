@@ -289,7 +289,24 @@ export class SemanticChannel {
   async #close(): Promise<void> {
     this.#closed = true;
     this.#attached = null;
-    await this.#resources.close();
+    // Destroy admitted peers before waiting for server.close(). New peers that
+    // race with listener shutdown are rejected by #handleConnection because
+    // #closed was published first. Listener completion is therefore the
+    // causal transport barrier; no external connection probe is needed.
+    const failures: unknown[] = [];
+    try {
+      this.#destroySockets();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await this.#resources.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'semantic channel cleanup failed');
+    }
   }
 
   #handleConnection(socket: Socket): void {
@@ -650,8 +667,16 @@ export class SemanticChannel {
   #destroySockets(): void {
     for (const timer of this.#handshakeTimers.values()) clearTimeout(timer);
     this.#handshakeTimers.clear();
-    for (const socket of this.#sockets) socket.destroy();
+    const failures: unknown[] = [];
+    for (const socket of this.#sockets) {
+      try {
+        socket.destroy();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
     this.#sockets.clear();
+    if (failures.length > 0) throw new AggregateError(failures, 'failed to destroy semantic sockets');
   }
 }
 

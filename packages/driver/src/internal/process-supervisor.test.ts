@@ -393,8 +393,11 @@ describe('ProcessSupervisor', () => {
     process.observeExit(status);
 
     await expect(process.waitForOwnedTreeExit()).resolves.toBe(false);
-    await expect(process.shutdown({ deadline: clock.now + 100, gracefulMs: 10, observedExit: status }))
-      .rejects.toThrow('tree probe failed');
+    const failure = await process.shutdown({ deadline: clock.now + 100, gracefulMs: 10, observedExit: status })
+      .then(() => undefined, (error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('tree probe failed');
+    expect((failure as Error).message).not.toContain('remained alive');
   });
 
   it('fails closed when a tree-owning backend exposes no confirmation primitive', async () => {
