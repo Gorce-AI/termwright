@@ -436,6 +436,20 @@
       "required": true
     },
     {
+      "id": "linux-proc-stat-open-disappearance",
+      "file": "packages/pty/src/index.test.ts",
+      "fullName": "treats a disappearing proc stat entry during open as a vanished candidate",
+      "platforms": ["darwin", "win32"],
+      "required": true
+    },
+    {
+      "id": "linux-proc-stat-read-disappearance",
+      "file": "packages/pty/src/index.test.ts",
+      "fullName": "treats a disappearing proc stat entry during read as a vanished candidate",
+      "platforms": ["darwin", "win32"],
+      "required": true
+    },
+    {
       "id": "textual-example-qualified-geometry",
       "file": "examples/textual-notes/tests/app.e2e.test.ts",
       "fullName": "publishes qualified v2 geometry and exact pointer ownership",

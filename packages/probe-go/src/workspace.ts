@@ -19,7 +19,8 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { devNull } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -103,6 +104,96 @@ export function assertNoVendorMode(env: NodeJS.ProcessEnv): void {
   );
 }
 
+/** Refuses both explicitly configured and Go's automatic module vendor mode. */
+export async function assertNoEffectiveVendorMode(
+  dir: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  assertNoVendorMode(env);
+  let settings: { GOFLAGS?: string; GOMOD?: string; GOWORK?: string };
+  try {
+    const { stdout } = await run('go', ['env', '-json', 'GOFLAGS', 'GOMOD', 'GOWORK'], {
+      cwd: dir,
+      env,
+    });
+    settings = JSON.parse(stdout) as { GOFLAGS?: string; GOMOD?: string; GOWORK?: string };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/ENOENT/u.test(message)) {
+      throw new WorkspaceError('go-missing', 'the `go` toolchain is not on PATH');
+    }
+    throw new WorkspaceError('workspace-unreadable', `go env failed: ${message}`);
+  }
+  assertNoVendorMode({ GOFLAGS: settings.GOFLAGS });
+  if (/(^|\s)-mod=(?:mod|readonly)(\s|$)/u.test(settings.GOFLAGS ?? '')) return;
+
+  let workspaceFile = settings.GOWORK?.trim() ?? '';
+  if ((workspaceFile === '' || workspaceFile === 'off') && env['GOWORK'] !== 'off') {
+    workspaceFile = (await findWorkspaceFromEntryPath(dir)) ?? workspaceFile;
+  }
+  const workspaceMode = workspaceFile !== '' && workspaceFile !== 'off';
+  const sourceFile = workspaceMode ? workspaceFile : settings.GOMOD;
+  if (sourceFile === undefined || sourceFile === '' || sourceFile === devNull) return;
+  let source: string;
+  try {
+    source = await readFile(sourceFile, 'utf8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new WorkspaceError('workspace-unreadable', `cannot read ${sourceFile}: ${message}`);
+  }
+  // Module vendoring became automatic in Go 1.14. Workspace vendoring is a
+  // different mechanism and only became automatic in Go 1.22.
+  if (!goVersionAtLeast(source, workspaceMode ? 22 : 14)) return;
+  const vendorDir = join(dirname(sourceFile), 'vendor');
+  try {
+    if (!(await stat(vendorDir)).isDirectory()) return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new WorkspaceError('workspace-unreadable', `cannot inspect ${vendorDir}: ${message}`);
+  }
+  // In module mode the vendor directory is authoritative regardless of an
+  // incidental `## workspace` marker. Only workspace mode uses that marker to
+  // distinguish an active workspace vendor tree from an unrelated directory.
+  if (workspaceMode && !(await modulesTextIsForWorkspace(vendorDir))) return;
+  throw new WorkspaceError(
+    'vendor-mode',
+    `${workspaceMode ? 'this workspace' : 'this module'} has a vendor directory and its go ` +
+      'directive enables automatic vendor mode. ' +
+      'Termwright cannot combine that dependency graph with the generated instrumentation ' +
+      'workspace without changing what gets compiled. Build without vendoring, explicitly ' +
+      'select -mod=mod, or run the tests without the probe.',
+  );
+}
+
+async function modulesTextIsForWorkspace(vendorDir: string): Promise<boolean> {
+  try {
+    const source = await readFile(join(vendorDir, 'modules.txt'), 'utf8');
+    const firstLine = source.split(/\r?\n/u, 1)[0] ?? '';
+    if (!firstLine.startsWith('## ')) return false;
+    return firstLine
+      .slice(3)
+      .split(';')
+      .some((annotation) => annotation.trim() === 'workspace');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return false;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new WorkspaceError(
+      'workspace-unreadable',
+      `cannot inspect vendor/modules.txt: ${message}`,
+    );
+  }
+}
+
+function goVersionAtLeast(source: string, minimumMinor: number): boolean {
+  const version = /^go\s+(\d+)\.(\d+)/mu.exec(source);
+  if (version === null) return false;
+  const major = Number(version[1]);
+  const minor = Number(version[2]);
+  return major > 1 || (major === 1 && minor >= minimumMinor);
+}
+
 /**
  * Reads the workspace that already applies in `dir`, if any.
  *
@@ -111,7 +202,10 @@ export function assertNoVendorMode(env: NodeJS.ProcessEnv): void {
  * without a workspace is the common case and is not an error — it comes back
  * with no uses, and the caller adds the module itself.
  */
-export async function readWorkspace(dir: string): Promise<InheritedWorkspace> {
+export async function readWorkspace(
+  dir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<InheritedWorkspace> {
   // `go env GOWORK` answers both questions at once: whether a workspace applies
   // here, and where its file is. The second matters because `DiskPath` entries
   // are relative to the *workspace file*, not to the directory we ran in —
@@ -119,7 +213,7 @@ export async function readWorkspace(dir: string): Promise<InheritedWorkspace> {
   // find its own modules.
   let workspaceFile: string;
   try {
-    const { stdout } = await run('go', ['env', 'GOWORK'], { cwd: dir });
+    const { stdout } = await run('go', ['env', 'GOWORK'], { cwd: dir, env });
     workspaceFile = stdout.trim();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -129,6 +223,12 @@ export async function readWorkspace(dir: string): Promise<InheritedWorkspace> {
     throw new WorkspaceError('workspace-unreadable', `go env GOWORK failed: ${message}`);
   }
 
+  // `chdir` resolves symlinks before Go discovers parent workspaces. Preserve
+  // the caller's lexical entry path when it sits inside a go.work tree.
+  if ((workspaceFile === '' || workspaceFile === 'off') && env['GOWORK'] !== 'off') {
+    workspaceFile = (await findWorkspaceFromEntryPath(dir)) ?? workspaceFile;
+  }
+
   // A project without a workspace is the common case, not an error.
   if (workspaceFile === '' || workspaceFile === 'off') return { uses: [], replaces: [] };
 
@@ -136,7 +236,10 @@ export async function readWorkspace(dir: string): Promise<InheritedWorkspace> {
 
   let stdout: string;
   try {
-    ({ stdout } = await run('go', ['work', 'edit', '-json'], { cwd: dir }));
+    ({ stdout } = await run('go', ['work', 'edit', '-json'], {
+      cwd: dir,
+      env: { ...env, GOWORK: workspaceFile },
+    }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new WorkspaceError('workspace-unreadable', `go work edit -json failed: ${message}`);
@@ -151,10 +254,20 @@ export async function readWorkspace(dir: string): Promise<InheritedWorkspace> {
 
   // Resolved against the workspace file's directory, and absolute in the
   // output, because the generated file lives somewhere else entirely.
-  const uses = (parsed.Use ?? [])
+  const usePaths = (parsed.Use ?? [])
     .map((entry) => entry.DiskPath)
     .filter((path): path is string => path !== undefined)
-    .map((path) => ({ dir: isAbsolute(path) ? path : resolve(base, path) }));
+    .map((path) => (isAbsolute(path) ? path : resolve(base, path)));
+  let uses: WorkspaceUse[];
+  try {
+    uses = await Promise.all(usePaths.map(async (path) => ({ dir: await realpath(path) })));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new WorkspaceError(
+      'workspace-unreadable',
+      `go.work contains a use path that cannot be resolved: ${message}`,
+    );
+  }
 
   const replaces = (parsed.Replace ?? [])
     .map((entry) => ({ from: entry.Old?.Path, to: entry.New?.Path, version: entry.New?.Version }))
@@ -168,6 +281,29 @@ export async function readWorkspace(dir: string): Promise<InheritedWorkspace> {
     }));
 
   return { ...(parsed.Go === undefined ? {} : { goVersion: parsed.Go }), uses, replaces };
+}
+
+async function findWorkspaceFromEntryPath(dir: string): Promise<string | null> {
+  let current = resolve(dir);
+  for (;;) {
+    const candidate = join(current, 'go.work');
+    try {
+      await access(candidate);
+      return candidate;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new WorkspaceError(
+          'workspace-unreadable',
+          `cannot inspect lexical workspace candidate ${candidate}: ${message}`,
+        );
+      }
+      const parent = dirname(current);
+      if (parent === current) return null;
+      current = parent;
+    }
+  }
 }
 
 /** What the generated workspace must contain. */
