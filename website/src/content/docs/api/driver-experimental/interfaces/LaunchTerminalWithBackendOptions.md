@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LaunchTerminalWithBackendOptions
 
-Defined in: [session.ts:234](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L234)
+Defined in: [session.ts:220](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L220)
 
 Low-level integration options exported only from `@termwright/driver/experimental`.
 
@@ -39,7 +39,7 @@ Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit op
 
 > `readonly` **backend**: [`PtyBackend`](../ptybackend/)
 
-Defined in: [session.ts:235](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L235)
+Defined in: [session.ts:221](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L221)
 
 ***
 
@@ -140,7 +140,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **modesObservable?**: `boolean`
 
-Defined in: [session.ts:230](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L230)
+Defined in: [session.ts:216](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L216)
 
 Whether the child's input-mode requests are observable. Defaults to true
 for every certified backend, including pinned passthrough ConPTY. Set false
@@ -180,7 +180,7 @@ Defined in: [api.ts:132](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"focus"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"pointer-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: [api.ts:146](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L146)
+Defined in: [api.ts:145](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L145)
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`

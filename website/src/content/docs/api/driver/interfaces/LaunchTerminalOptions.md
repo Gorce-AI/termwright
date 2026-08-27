@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LaunchTerminalOptions
 
-Defined in: [driver/src/session.ts:224](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L224)
+Defined in: [driver/src/session.ts:210](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L210)
 
 Stable application-facing options accepted by [launchTerminal](../../functions/launchterminal/).
 
@@ -132,7 +132,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **modesObservable?**: `boolean`
 
-Defined in: [driver/src/session.ts:230](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L230)
+Defined in: [driver/src/session.ts:216](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L216)
 
 Whether the child's input-mode requests are observable. Defaults to true
 for every certified backend, including pinned passthrough ConPTY. Set false
@@ -168,7 +168,7 @@ Defined in: [driver/src/api.ts:132](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"focus"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"pointer-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: [driver/src/api.ts:146](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L146)
+Defined in: [driver/src/api.ts:145](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L145)
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`

@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: DuplicateSemanticKeyError
 
-Defined in: [driver/src/errors.ts:155](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L155)
+Defined in: [driver/src/errors.ts:159](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L159)
 
 An application-authored stable identity was not unique in one committed tree.
 
@@ -25,7 +25,7 @@ An application-authored stable identity was not unique in one committed tree.
 
 > **new DuplicateSemanticKeyError**(`message`, `diagnostics`): `DuplicateSemanticKeyError`
 
-Defined in: [driver/src/errors.ts:156](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L156)
+Defined in: [driver/src/errors.ts:160](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L160)
 
 #### Parameters
 

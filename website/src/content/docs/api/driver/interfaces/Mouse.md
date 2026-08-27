@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: Mouse
 
-Defined in: [driver/src/api.ts:290](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L290)
+Defined in: [driver/src/api.ts:281](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L281)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > **click**(`point`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:300](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L300)
+Defined in: [driver/src/api.ts:289](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L289)
 
 #### Parameters
 
@@ -54,7 +54,7 @@ Defined in: [driver/src/api.ts:300](https://github.com/Gorce-AI/termwright/blob/
 
 > **down**(`point`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:292](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L292)
+Defined in: [driver/src/api.ts:283](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L283)
 
 #### Parameters
 
@@ -72,7 +72,7 @@ Defined in: [driver/src/api.ts:292](https://github.com/Gorce-AI/termwright/blob/
 
 > **drag**(`options`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:314](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L314)
+Defined in: [driver/src/api.ts:303](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L303)
 
 #### Parameters
 
@@ -90,7 +90,7 @@ Defined in: [driver/src/api.ts:314](https://github.com/Gorce-AI/termwright/blob/
 
 > **move**(`point`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:291](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L291)
+Defined in: [driver/src/api.ts:282](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L282)
 
 #### Parameters
 
@@ -108,7 +108,7 @@ Defined in: [driver/src/api.ts:291](https://github.com/Gorce-AI/termwright/blob/
 
 > **up**(`point`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:296](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L296)
+Defined in: [driver/src/api.ts:286](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L286)
 
 #### Parameters
 
@@ -126,7 +126,7 @@ Defined in: [driver/src/api.ts:296](https://github.com/Gorce-AI/termwright/blob/
 
 > **wheel**(`options`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:307](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L307)
+Defined in: [driver/src/api.ts:296](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L296)
 
 #### Parameters
 

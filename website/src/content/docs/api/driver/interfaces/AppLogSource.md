@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: AppLogSource
 
-Defined in: [driver/src/api.ts:936](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L936)
+Defined in: [driver/src/api.ts:896](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L896)
 
 A log file the session follows.
 
@@ -21,7 +21,7 @@ A log file the session follows.
 
 > `readonly` `optional` **label?**: `string`
 
-Defined in: [driver/src/api.ts:939](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L939)
+Defined in: [driver/src/api.ts:899](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L899)
 
 Short name used in events and diagnostics; defaults to the path.
 
@@ -31,4 +31,4 @@ Short name used in events and diagnostics; defaults to the path.
 
 > `readonly` **path**: `string`
 
-Defined in: [driver/src/api.ts:937](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L937)
+Defined in: [driver/src/api.ts:897](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L897)

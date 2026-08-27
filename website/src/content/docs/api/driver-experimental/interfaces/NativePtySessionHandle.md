@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: NativePtySessionHandle
 
-Defined in: [native-pty-backend.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L18)
+Defined in: [native-pty-backend.ts:12](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L12)
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: [native-pty-backend.ts:18](https://github.com/Gorce-AI/termwright/bl
 
 > `readonly` **outputEnded**: `Promise`\<`void`\>
 
-Defined in: [native-pty-backend.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L20)
+Defined in: [native-pty-backend.ts:14](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L14)
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: [native-pty-backend.ts:20](https://github.com/Gorce-AI/termwright/bl
 
 > `readonly` **pid**: `number`
 
-Defined in: [native-pty-backend.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L19)
+Defined in: [native-pty-backend.ts:13](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L13)
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: [native-pty-backend.ts:19](https://github.com/Gorce-AI/termwright/bl
 
 > `readonly` **sawRealEof**: `boolean`
 
-Defined in: [native-pty-backend.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L21)
+Defined in: [native-pty-backend.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L15)
 
 ## Methods
 
@@ -43,7 +43,7 @@ Defined in: [native-pty-backend.ts:21](https://github.com/Gorce-AI/termwright/bl
 
 > **dispose**(): `void`
 
-Defined in: [native-pty-backend.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L30)
+Defined in: [native-pty-backend.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L24)
 
 #### Returns
 
@@ -55,7 +55,7 @@ Defined in: [native-pty-backend.ts:30](https://github.com/Gorce-AI/termwright/bl
 
 > **onData**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L26)
+Defined in: [native-pty-backend.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L20)
 
 #### Parameters
 
@@ -73,7 +73,7 @@ Defined in: [native-pty-backend.ts:26](https://github.com/Gorce-AI/termwright/bl
 
 > **onDrain**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L29)
+Defined in: [native-pty-backend.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L23)
 
 #### Parameters
 
@@ -91,7 +91,7 @@ Defined in: [native-pty-backend.ts:29](https://github.com/Gorce-AI/termwright/bl
 
 > **onError**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L28)
+Defined in: [native-pty-backend.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L22)
 
 #### Parameters
 
@@ -109,7 +109,7 @@ Defined in: [native-pty-backend.ts:28](https://github.com/Gorce-AI/termwright/bl
 
 > **onExit**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L27)
+Defined in: [native-pty-backend.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L21)
 
 #### Parameters
 
@@ -127,7 +127,7 @@ Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/bl
 
 > **resize**(`columns`, `rows`): `boolean`
 
-Defined in: [native-pty-backend.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L23)
+Defined in: [native-pty-backend.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L17)
 
 #### Parameters
 
@@ -149,7 +149,7 @@ Defined in: [native-pty-backend.ts:23](https://github.com/Gorce-AI/termwright/bl
 
 > **signal**(`signal`): `boolean`
 
-Defined in: [native-pty-backend.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L24)
+Defined in: [native-pty-backend.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L18)
 
 #### Parameters
 
@@ -167,7 +167,7 @@ Defined in: [native-pty-backend.ts:24](https://github.com/Gorce-AI/termwright/bl
 
 > **treeState**(): `"alive"` \| `"gone"` \| `"unsupported"`
 
-Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L25)
+Defined in: [native-pty-backend.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L19)
 
 #### Returns
 
@@ -179,7 +179,7 @@ Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/bl
 
 > **write**(`data`): `void`
 
-Defined in: [native-pty-backend.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L22)
+Defined in: [native-pty-backend.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L16)
 
 #### Parameters
 

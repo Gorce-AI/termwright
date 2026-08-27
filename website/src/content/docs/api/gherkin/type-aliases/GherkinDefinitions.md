@@ -13,7 +13,7 @@ editUrl: false
 
 > **GherkinDefinitions**\<`Fixtures`\> = readonly [`GherkinDefinition`](../gherkindefinition/)\<`Fixtures`\>[]
 
-Defined in: [definitions.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L87)
+Defined in: [definitions.ts:86](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L86)
 
 ## Type Parameters
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: ProtocolViolationError
 
-Defined in: [driver/src/errors.ts:174](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L174)
+Defined in: [driver/src/errors.ts:178](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L178)
 
 The adapter violated the semantic protocol; its channel was closed.
 
@@ -25,7 +25,7 @@ The adapter violated the semantic protocol; its channel was closed.
 
 > **new ProtocolViolationError**(`message`, `diagnostics`): `ProtocolViolationError`
 
-Defined in: [driver/src/errors.ts:175](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L175)
+Defined in: [driver/src/errors.ts:179](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L179)
 
 #### Parameters
 

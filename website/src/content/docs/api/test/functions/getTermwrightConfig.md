@@ -13,7 +13,7 @@ editUrl: false
 
 > **getTermwrightConfig**(): [`ResolvedTermwrightConfig`](../../interfaces/resolvedtermwrightconfig/)
 
-Defined in: [test/src/config.ts:360](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L360)
+Defined in: [test/src/config.ts:399](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L399)
 
 The active configuration, resolving defaults on first use.
 

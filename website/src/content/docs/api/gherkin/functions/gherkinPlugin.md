@@ -13,7 +13,7 @@ editUrl: false
 
 > **gherkinPlugin**\<`Fixtures`\>(`options?`): `Plugin`
 
-Defined in: [plugin.ts:483](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L483)
+Defined in: [plugin.ts:590](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L590)
 
 Public Vite/Vitest plugin. It transforms `.feature` modules before other loaders.
 

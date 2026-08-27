@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LogSource
 
-Defined in: [test/src/logs.ts:162](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L162)
+Defined in: [test/src/logs.ts:164](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L164)
 
 The slice of a harness [collectLogs](../../functions/collectlogs/) needs.
 
@@ -21,7 +21,7 @@ The slice of a harness [collectLogs](../../functions/collectlogs/) needs.
 
 > `readonly` **events**: `SessionEvents`
 
-Defined in: [test/src/logs.ts:164](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L164)
+Defined in: [test/src/logs.ts:166](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L166)
 
 ***
 
@@ -29,4 +29,4 @@ Defined in: [test/src/logs.ts:164](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` **sessionId**: `string`
 
-Defined in: [test/src/logs.ts:163](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L163)
+Defined in: [test/src/logs.ts:165](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L165)

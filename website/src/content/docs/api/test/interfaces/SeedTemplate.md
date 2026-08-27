@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SeedTemplate
 
-Defined in: [test/src/seed.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L22)
+Defined in: [test/src/seed.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L30)
 
 A directory to copy in before the files are written.
 
@@ -21,7 +21,7 @@ A directory to copy in before the files are written.
 
 > `readonly` **from**: `string`
 
-Defined in: [test/src/seed.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L24)
+Defined in: [test/src/seed.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L32)
 
 Directory to copy from; relative paths resolve against the test's cwd.
 
@@ -31,6 +31,6 @@ Directory to copy from; relative paths resolve against the test's cwd.
 
 > `readonly` `optional` **into?**: `string`
 
-Defined in: [test/src/seed.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L26)
+Defined in: [test/src/seed.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L34)
 
 Subdirectory of the test's directory to copy into. Default: the root.

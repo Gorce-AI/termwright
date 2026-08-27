@@ -13,7 +13,7 @@ editUrl: false
 
 > **StepDefinitionBody**\<`Fixtures`\> = (`context`, ...`captures`) => `unknown` \| `Promise`\<`unknown`\>
 
-Defined in: [definitions.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L37)
+Defined in: [definitions.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L38)
 
 Body of a Given/When/Then definition. Captures follow the context argument.
 

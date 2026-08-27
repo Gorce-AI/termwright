@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: AppLogEvent
 
-Defined in: [driver/src/api.ts:949](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L949)
+Defined in: [driver/src/api.ts:909](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L909)
 
 One entry of an application's own log, published on the session timeline.
 
@@ -25,7 +25,7 @@ file yields [line](#line), an instrumented adapter yields a structured
 
 > `readonly` `optional` **label?**: `string`
 
-Defined in: [driver/src/api.ts:951](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L951)
+Defined in: [driver/src/api.ts:911](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L911)
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: [driver/src/api.ts:951](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **line?**: `string`
 
-Defined in: [driver/src/api.ts:958](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L958)
+Defined in: [driver/src/api.ts:918](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L918)
 
 Raw line, for a followed file. Truncated lines end with an ellipsis.
 
@@ -43,7 +43,7 @@ Raw line, for a followed file. Truncated lines end with an ellipsis.
 
 > `readonly` `optional` **path?**: `string`
 
-Defined in: [driver/src/api.ts:956](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L956)
+Defined in: [driver/src/api.ts:916](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L916)
 
 Path of the followed file, for `source: 'file'`. A label can be short and
 shared between sources; the path is what a reader opens.
@@ -54,7 +54,7 @@ shared between sources; the path is what a reader opens.
 
 > `readonly` `optional` **record?**: `LogRecord`
 
-Defined in: [driver/src/api.ts:960](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L960)
+Defined in: [driver/src/api.ts:920](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L920)
 
 Structured record, for an adapter that negotiated the logs capability.
 
@@ -64,7 +64,7 @@ Structured record, for an adapter that negotiated the logs capability.
 
 > `readonly` **source**: `"file"` \| `"adapter"`
 
-Defined in: [driver/src/api.ts:950](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L950)
+Defined in: [driver/src/api.ts:910](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L910)
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: [driver/src/api.ts:950](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **timeMs**: `number`
 
-Defined in: [driver/src/api.ts:969](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L969)
+Defined in: [driver/src/api.ts:929](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L929)
 
 Milliseconds since session start, on the same clock as every other event.
 

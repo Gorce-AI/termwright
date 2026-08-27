@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: SemanticCapabilityUnavailableError
 
-Defined in: [driver/src/errors.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L87)
+Defined in: [driver/src/errors.ts:91](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L91)
 
 A semantic query was requested in a session with no semantic integration.
 
@@ -25,7 +25,7 @@ A semantic query was requested in a session with no semantic integration.
 
 > **new SemanticCapabilityUnavailableError**(`message`, `diagnostics`): `SemanticCapabilityUnavailableError`
 
-Defined in: [driver/src/errors.ts:88](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L88)
+Defined in: [driver/src/errors.ts:92](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L92)
 
 #### Parameters
 

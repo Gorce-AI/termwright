@@ -13,7 +13,7 @@ editUrl: false
 
 > **launchTerminalWithBackend**(`options`): `Promise`\<`TerminalHarness`\>
 
-Defined in: [session.ts:288](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L288)
+Defined in: [session.ts:269](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L269)
 
 Launches through an explicitly owned PTY backend for framework integrations.
 

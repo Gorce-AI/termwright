@@ -13,7 +13,7 @@ editUrl: false
 
 > **termwrightRetry**(`options?`): `number`
 
-Defined in: [test/src/config.ts:198](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L198)
+Defined in: [test/src/config.ts:230](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L230)
 
 Resolves the number for Vitest's native `test.retry` option.
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionEvent
 
-Defined in: [driver/src/api.ts:1020](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1020)
+Defined in: [driver/src/api.ts:980](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L980)
 
 One action the harness or a locator performed, reported after it finished —
 successfully or not.
@@ -26,7 +26,7 @@ whether it worked.
 
 > `readonly` `optional` **actionability?**: [`ActionabilityExplanation`](../actionabilityexplanation/)
 
-Defined in: [driver/src/api.ts:1037](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1037)
+Defined in: [driver/src/api.ts:997](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L997)
 
 Exact failed planner evaluation, bound to the checkpoint that rejected the action.
 
@@ -36,7 +36,7 @@ Exact failed planner evaluation, bound to the checkpoint that rejected the actio
 
 > `readonly` **actionId**: `string`
 
-Defined in: [driver/src/api.ts:1022](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1022)
+Defined in: [driver/src/api.ts:982](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L982)
 
 Correlates this completion with the preceding [ActionStartedEvent](../actionstartedevent/).
 
@@ -46,7 +46,7 @@ Correlates this completion with the preceding [ActionStartedEvent](../actionstar
 
 > `readonly` **api**: `string`
 
-Defined in: [driver/src/api.ts:1024](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1024)
+Defined in: [driver/src/api.ts:984](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L984)
 
 Method that ran, e.g. `'click'`, `'press'`, `'resize'`.
 
@@ -56,7 +56,7 @@ Method that ran, e.g. `'click'`, `'press'`, `'resize'`.
 
 > `readonly` `optional` **error?**: `string`
 
-Defined in: [driver/src/api.ts:1035](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1035)
+Defined in: [driver/src/api.ts:995](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L995)
 
 Failure reason: the [TermwrightErrorCode](../../type-aliases/termwrighterrorcode/) when the action failed with
 a driver error, otherwise the error's name. Never the full message — the
@@ -68,7 +68,7 @@ message belongs to the thrown error, this field is for grouping.
 
 > `readonly` `optional` **observation?**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: [driver/src/api.ts:1039](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1039)
+Defined in: [driver/src/api.ts:999](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L999)
 
 Atomic screen/tree identity at completion; trace consumers must not guess.
 
@@ -78,7 +78,7 @@ Atomic screen/tree identity at completion; trace consumers must not guess.
 
 > `readonly` **ok**: `boolean`
 
-Defined in: [driver/src/api.ts:1029](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1029)
+Defined in: [driver/src/api.ts:989](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L989)
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: [driver/src/api.ts:1029](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **receipt?**: [`ActionReceipt`](../actionreceipt/)
 
-Defined in: [driver/src/api.ts:1045](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1045)
+Defined in: [driver/src/api.ts:1005](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1005)
 
 The exact plan and physical operations executed for a successful semantic
 action. This is the same receipt returned to the caller, not a diagnostic
@@ -98,7 +98,7 @@ reconstruction performed after the action.
 
 > `readonly` `optional` **ref?**: [`LocatorRef`](../../type-aliases/locatorref/)
 
-Defined in: [driver/src/api.ts:1028](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1028)
+Defined in: [driver/src/api.ts:988](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L988)
 
 Ref of the target the action resolved, when it resolved one.
 
@@ -108,7 +108,7 @@ Ref of the target the action resolved, when it resolved one.
 
 > `readonly` `optional` **selector?**: `string`
 
-Defined in: [driver/src/api.ts:1026](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1026)
+Defined in: [driver/src/api.ts:986](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L986)
 
 The locator's description, for actions that had one.
 
@@ -118,4 +118,4 @@ The locator's description, for actions that had one.
 
 > `readonly` **timeMs**: `number`
 
-Defined in: [driver/src/api.ts:1046](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1046)
+Defined in: [driver/src/api.ts:1006](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1006)

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionStartedEvent
 
-Defined in: [driver/src/api.ts:1056](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1056)
+Defined in: [driver/src/api.ts:1016](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1016)
 
 An action that has begun but has not settled yet.
 
@@ -25,7 +25,7 @@ authoritative outcome.
 
 > `readonly` **actionId**: `string`
 
-Defined in: [driver/src/api.ts:1057](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1057)
+Defined in: [driver/src/api.ts:1017](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1017)
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: [driver/src/api.ts:1057](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` **api**: `string`
 
-Defined in: [driver/src/api.ts:1059](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1059)
+Defined in: [driver/src/api.ts:1019](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1019)
 
 Method that began, e.g. `'click'`, `'press'`, `'resize'`.
 
@@ -43,7 +43,7 @@ Method that began, e.g. `'click'`, `'press'`, `'resize'`.
 
 > `readonly` `optional` **selector?**: `string`
 
-Defined in: [driver/src/api.ts:1061](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1061)
+Defined in: [driver/src/api.ts:1021](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1021)
 
 Locator description when the action was initiated through a locator.
 
@@ -53,4 +53,4 @@ Locator description when the action was initiated through a locator.
 
 > `readonly` **timeMs**: `number`
 
-Defined in: [driver/src/api.ts:1062](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1062)
+Defined in: [driver/src/api.ts:1022](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1022)

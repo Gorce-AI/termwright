@@ -13,7 +13,7 @@ editUrl: false
 
 > **inheritedSpawnEnv**(): `Record`\<`string`, `string`\>
 
-Defined in: [session.ts:3334](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L3334)
+Defined in: [session.ts:3064](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L3064)
 
 The smallest environment a child can actually start in on this platform.
 

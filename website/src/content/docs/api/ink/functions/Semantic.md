@@ -13,7 +13,7 @@ editUrl: false
 
 > **Semantic**(`__namedParameters`): `ReactNode`
 
-Defined in: [ink/src/semantic.tsx:58](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/semantic.tsx#L58)
+Defined in: [ink/src/semantic.tsx:67](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/semantic.tsx#L67)
 
 Annotate the element a child renders, declaratively.
 

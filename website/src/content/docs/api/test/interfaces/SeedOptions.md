@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SeedOptions
 
-Defined in: [test/src/seed.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L30)
+Defined in: [test/src/seed.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L38)
 
 What [seedDirectory](../../functions/seeddirectory/) was asked to create.
 
@@ -21,7 +21,7 @@ What [seedDirectory](../../functions/seeddirectory/) was asked to create.
 
 > `readonly` `optional` **files?**: `Readonly`\<`Record`\<`string`, [`SeedFile`](../../type-aliases/seedfile/)\>\>
 
-Defined in: [test/src/seed.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L31)
+Defined in: [test/src/seed.ts:39](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L39)
 
 ***
 
@@ -29,4 +29,4 @@ Defined in: [test/src/seed.ts:31](https://github.com/Gorce-AI/termwright/blob/ma
 
 > `readonly` `optional` **template?**: `string` \| [`SeedTemplate`](../seedtemplate/)
 
-Defined in: [test/src/seed.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L32)
+Defined in: [test/src/seed.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L40)
