@@ -402,44 +402,52 @@ describe('the Termwright-owned native PTY flow control', () => {
           [
             "const fs = require('node:fs');",
             `const payload = Buffer.alloc(${framePayloadBytes}, 0x71);`,
+            'const parts = [];',
             `for (let index = 0; index < ${frameCount}; index += 1) {`,
-            "fs.writeSync(1, Buffer.from('\\x1b]8486;TW_PRESSURE;' + index.toString(16).padStart(8, '0') + ';'));",
-            'fs.writeSync(1, payload);',
-            "fs.writeSync(1, Buffer.from('\\x07'));",
+            "parts.push(Buffer.from('\\x1b]8486;TW_PRESSURE;' + index.toString(16).padStart(8, '0') + ';'), payload, Buffer.from('\\x07'));",
             '}',
-            "fs.writeSync(1, Buffer.from('PRESSURE_SENTINEL'));",
+            "parts.push(Buffer.from('PRESSURE_SENTINEL'));",
+            'const burst = Buffer.concat(parts);',
+            'for (let offset = 0; offset < burst.length;) {',
+            'const written = fs.writeSync(1, burst, offset);',
+            "if (written <= 0) throw new Error('pressure burst made no write progress');",
+            'offset += written;',
+            '}',
           ].join(''),
         ),
       );
-      await Promise.all([session.exit, session.handle.outputEnded]);
-      const output = Buffer.concat(session.chunks);
-      const prefix = Buffer.from('\x1b]8486;TW_PRESSURE;');
-      const sentinel = Buffer.from('PRESSURE_SENTINEL');
-      let cursor = 0;
-      for (let index = 0; index < frameCount; index += 1) {
-        const start = output.indexOf(prefix, cursor);
-        if (process.platform === 'win32') expect(start).toBeGreaterThanOrEqual(cursor);
-        else expect(start).toBe(cursor);
-        const end = output.indexOf(0x07, start + prefix.length);
-        expect(end).toBeGreaterThan(start);
-        const body = output.subarray(start + prefix.length, end);
-        expect(body.subarray(0, 9).toString('ascii')).toBe(
-          `${index.toString(16).padStart(8, '0')};`,
-        );
-        expect(body.length).toBe(9 + framePayloadBytes);
-        expect(body.subarray(9).every((byte) => byte === 0x71)).toBe(true);
-        cursor = end + 1;
+      try {
+        await Promise.all([session.exit, session.handle.outputEnded]);
+        const output = Buffer.concat(session.chunks);
+        const prefix = Buffer.from('\x1b]8486;TW_PRESSURE;');
+        const sentinel = Buffer.from('PRESSURE_SENTINEL');
+        let cursor = 0;
+        for (let index = 0; index < frameCount; index += 1) {
+          const start = output.indexOf(prefix, cursor);
+          if (process.platform === 'win32') expect(start).toBeGreaterThanOrEqual(cursor);
+          else expect(start).toBe(cursor);
+          const end = output.indexOf(0x07, start + prefix.length);
+          expect(end).toBeGreaterThan(start);
+          const body = output.subarray(start + prefix.length, end);
+          expect(body.subarray(0, 9).toString('ascii')).toBe(
+            `${index.toString(16).padStart(8, '0')};`,
+          );
+          expect(body.length).toBe(9 + framePayloadBytes);
+          expect(body.subarray(9).every((byte) => byte === 0x71)).toBe(true);
+          cursor = end + 1;
+        }
+        expect(output.indexOf(prefix, cursor)).toBe(-1);
+        const sentinelIndex = output.indexOf(sentinel, cursor);
+        if (process.platform === 'win32') expect(sentinelIndex).toBeGreaterThanOrEqual(cursor);
+        else {
+          expect(sentinelIndex).toBe(cursor);
+          expect(sentinelIndex + sentinel.length).toBe(output.length);
+        }
+        expect(sentinelIndex).toBe(output.lastIndexOf(sentinel));
+        expect(session.handle.sawRealEof).toBe(true);
+      } finally {
+        session.handle.dispose();
       }
-      expect(output.indexOf(prefix, cursor)).toBe(-1);
-      const sentinelIndex = output.indexOf(sentinel, cursor);
-      if (process.platform === 'win32') expect(sentinelIndex).toBeGreaterThanOrEqual(cursor);
-      else {
-        expect(sentinelIndex).toBe(cursor);
-        expect(sentinelIndex + sentinel.length).toBe(output.length);
-      }
-      expect(sentinelIndex).toBe(output.lastIndexOf(sentinel));
-      expect(session.handle.sawRealEof).toBe(true);
-      session.handle.dispose();
     },
   );
 
