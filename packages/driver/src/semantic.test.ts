@@ -606,10 +606,11 @@ describe('SemanticChannel', () => {
     const server = createServer();
     const close = vi.spyOn(server, 'close');
     const harness = await createChannel(true, undefined, { createServer: () => server });
-    let accepted: Socket | undefined;
-    server.once('connection', (socket) => { accepted = socket; });
-    const client = await connectClient(harness.channel);
-    const acceptedSocket = accepted!;
+    const admitted = new Promise<Socket>((resolve) => server.once('connection', resolve));
+    const [client, acceptedSocket] = await Promise.all([
+      connectClient(harness.channel),
+      admitted,
+    ]);
     const destroy = acceptedSocket.destroy.bind(acceptedSocket);
     vi.spyOn(acceptedSocket, 'destroy').mockImplementationOnce((error) => {
       destroy(error);
