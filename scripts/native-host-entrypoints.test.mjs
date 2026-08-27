@@ -212,6 +212,19 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const selectedProjectNames = certifiedProjectShards.flat();
     expect(new Set(selectedProjectNames).size).toBe(selectedProjectNames.length);
     expect([...selectedProjectNames].sort()).toEqual([...configuredProjectNames].sort());
+    expect(certifiedProjectShards).toContainEqual(['go-integration']);
+    const goIntegrationProject = rootConfig.test.projects.find(
+      (project) => project.test.name === 'go-integration',
+    );
+    expect(goIntegrationProject?.test.include).toEqual([
+      'packages/probe-charm/**/*.test.ts',
+      'packages/probe-go/**/*.test.ts',
+      'packages/probe-tview/**/*.test.ts',
+    ]);
+    const coreProject = rootConfig.test.projects.find((project) => project.test.name === 'core');
+    for (const packageName of ['probe-charm', 'probe-go', 'probe-tview']) {
+      expect(coreProject?.test.exclude).toContain(`packages/${packageName}/**`);
+    }
     expect(
       ciJobs.build.match(
         /^          pnpm test -- --resource-profile "\$profile" --json -- --project=.*$/gmu,

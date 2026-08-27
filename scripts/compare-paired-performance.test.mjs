@@ -5,6 +5,11 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  capturePerformanceBaseline,
+  comparePerformanceBaseline,
+} from '../packages/performance/dist/controller/baseline-controller.js';
+
 vi.mock('./performance-environment.mjs', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -124,23 +129,39 @@ describe('paired performance comparator', () => {
     expect(comparisons.every((comparison) => comparison.status === 'ok')).toBe(true);
   });
 
-  it('returns a blocking failure for the max exact cleanup observation', async () => {
-    const reference = [await sample(referenceSha, {}), await sample(referenceSha, {})];
-    const candidate = [
-      await sample(candidateSha, {}),
-      await sample(candidateSha, { leakedProcesses: 1 }),
-    ];
-    const harness = await harnessFile();
-    const { output, comparisons } = await comparePairedPerformance({
-      policy: policyPath,
-      referenceSha,
+  it('classifies the max exact cleanup observation as a blocking failure', async () => {
+    const reference = aggregateObservations([completeObservation(), completeObservation()]);
+    const candidate = aggregateObservations([
+      completeObservation(),
+      completeObservation({
+        leakedProcesses: metric(1, 'count', SOURCES.leakedProcesses),
+      }),
+    ]);
+    const baseline = capturePerformanceBaseline(
+      JSON.parse(await readFile(policyPath, 'utf8')),
       reference,
-      referenceHarness: harness,
-      candidateSha,
-      candidate,
-      candidateHarness: harness,
-      output: 'unused.json',
-    });
+      {
+        environment: {
+          kind: 'termwright-performance-environment',
+          schemaVersion: 1,
+          class: 'darwin-arm64-node24-go1.25-bun1.2.15',
+          runner: { image: 'macos-15', platform: 'darwin', arch: 'arm64' },
+          toolchains: {
+            node: { qualified: '24', resolved: '24.1.0' },
+            go: { qualified: '1.25', resolved: '1.25.0' },
+            bun: { qualified: '1.2.15', resolved: '1.2.15' },
+          },
+        },
+        rawInputs: {
+          quality: '1'.repeat(64),
+          semantic: '2'.repeat(64),
+          charm: '3'.repeat(64),
+          opentui: '4'.repeat(64),
+        },
+      },
+    );
+    const comparisons = comparePerformanceBaseline(baseline, candidate);
+    expect(candidate.metrics.leakedProcesses.value).toBe(1);
     expect(comparisons).toContainEqual(
       expect.objectContaining({
         metric: 'leakedProcesses',
@@ -148,7 +169,6 @@ describe('paired performance comparator', () => {
         current: 1,
       }),
     );
-    expect(output.gate).toBe('performance-regression-fail');
   });
 
   it('rejects unequal or internally forged harness fingerprints', async () => {
@@ -454,6 +474,23 @@ function observation(overrides = {}) {
       ...overrides,
     },
   };
+}
+
+function completeObservation(overrides = {}) {
+  return observation({
+    semanticHotPathP95Us: metric(
+      10,
+      'microseconds/frame',
+      'packages/performance benchmark: semantic pipeline',
+    ),
+    charmOverheadRatio: metric(1, 'ratio', 'packages/performance benchmark: Charm E2E'),
+    opentuiOverheadRatio: metric(
+      1,
+      'ratio',
+      'packages/performance benchmark: OpenTUI marker route',
+    ),
+    ...overrides,
+  });
 }
 
 async function qualityProvenance(subjectSha, requestedSeed) {

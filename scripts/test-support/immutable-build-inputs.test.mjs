@@ -33,44 +33,48 @@ describe('immutable workspace build inputs', () => {
     const runtimeDirectoryFile = join(packageRoot, 'runner', 'runner-entry.mjs');
     const exportedRuntimeFile = join(packageRoot, 'runtime-entry.mjs');
     const manifestPath = join(root, '.termwright', 'immutable-build-inputs.json');
-    await mkdir(join(packageRoot, 'dist'), { recursive: true });
-    await mkdir(join(packageRoot, 'src'), { recursive: true });
-    await mkdir(join(root, 'scripts'), { recursive: true });
-    await mkdir(join(packageRoot, 'runner'), { recursive: true });
-    await writeFile(
-      join(root, 'package.json'),
-      '{"private":true,"scripts":{"build":"node scripts/build-runtime.mjs"}}\n',
-    );
-    await writeFile(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
-    await writeFile(
-      join(packageRoot, 'package.json'),
-      JSON.stringify({
-        name: 'fixture',
-        files: ['dist', 'fixture.node', 'runner', ...(options.files ?? [])],
-        exports: {
-          './native': './fixture.node',
-          './runtime': './runtime-entry.mjs',
-        },
-        ...(options.optionalNative === true
-          ? {
-              os: [options.optionalPlatform ?? 'win32'],
-              cpu: ['x64'],
-              termwrightBuild: { optionalArtifacts: ['fixture.node'] },
-              scripts: {
-                build: `node ../../scripts/check-prebuild.mjs ${options.optionalPlatform ?? 'win32'} x64 --allow-missing`,
-              },
-            }
-          : {}),
-      }),
-    );
-    await writeFile(rootBuildScript, 'export const buildVersion = 1;\n');
-    await writeFile(bindingConfig, '{"targets":[]}\n');
-    await writeFile(applicationConfig, '{"compilerOptions":{"target":"ES2023"}}\n');
-    await writeFile(source, 'export const version = 1;\n');
-    await writeFile(entry, 'export const version = 1;\n');
-    if (options.optionalNative !== true) await writeFile(nativeArtifact, 'native-v1');
-    await writeFile(runtimeDirectoryFile, 'export const runnerVersion = 1;\n');
-    await writeFile(exportedRuntimeFile, 'export const runtimeVersion = 1;\n');
+    await Promise.all([
+      mkdir(join(packageRoot, 'dist'), { recursive: true }),
+      mkdir(join(packageRoot, 'src'), { recursive: true }),
+      mkdir(join(root, 'scripts'), { recursive: true }),
+      mkdir(join(packageRoot, 'runner'), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(
+        join(root, 'package.json'),
+        '{"private":true,"scripts":{"build":"node scripts/build-runtime.mjs"}}\n',
+      ),
+      writeFile(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n'),
+      writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({
+          name: 'fixture',
+          files: ['dist', 'fixture.node', 'runner', ...(options.files ?? [])],
+          exports: {
+            './native': './fixture.node',
+            './runtime': './runtime-entry.mjs',
+          },
+          ...(options.optionalNative === true
+            ? {
+                os: [options.optionalPlatform ?? 'win32'],
+                cpu: ['x64'],
+                termwrightBuild: { optionalArtifacts: ['fixture.node'] },
+                scripts: {
+                  build: `node ../../scripts/check-prebuild.mjs ${options.optionalPlatform ?? 'win32'} x64 --allow-missing`,
+                },
+              }
+            : {}),
+        }),
+      ),
+      writeFile(rootBuildScript, 'export const buildVersion = 1;\n'),
+      writeFile(bindingConfig, '{"targets":[]}\n'),
+      writeFile(applicationConfig, '{"compilerOptions":{"target":"ES2023"}}\n'),
+      writeFile(source, 'export const version = 1;\n'),
+      writeFile(entry, 'export const version = 1;\n'),
+      ...(options.optionalNative === true ? [] : [writeFile(nativeArtifact, 'native-v1')]),
+      writeFile(runtimeDirectoryFile, 'export const runnerVersion = 1;\n'),
+      writeFile(exportedRuntimeFile, 'export const runtimeVersion = 1;\n'),
+    ]);
     await writeImmutableBuildManifest({ root, manifestPath });
     return {
       root,

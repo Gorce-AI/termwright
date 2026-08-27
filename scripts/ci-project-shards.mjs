@@ -1,5 +1,6 @@
 export const certifiedProjectShards = Object.freeze([
   Object.freeze(['core']),
+  Object.freeze(['go-integration']),
   Object.freeze(['gherkin', 'mcp', 'screenshot', 'test', 'trace', 'ui']),
   Object.freeze([
     'conformance',

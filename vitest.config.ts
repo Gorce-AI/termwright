@@ -26,6 +26,8 @@ const configuredExamples = [
   'tview-menu',
 ] as const;
 
+const goIntegrationPackages = ['probe-charm', 'probe-go', 'probe-tview'] as const;
+
 // One Vitest engine owns the monorepo run, while projects preserve the actual
 // package contracts (timeouts, setup, aliases and file serialization). A root
 // catch-all project covers packages that need no special configuration plus
@@ -52,6 +54,15 @@ export default defineConfig({
       {
         root: repositoryRoot,
         test: {
+          name: 'go-integration',
+          runner: termwrightRunner,
+          include: goIntegrationPackages.map((name) => `packages/${name}/**/*.test.ts`),
+          exclude: ['**/__fixtures__/**', '**/node_modules/**', '**/dist/**'],
+        },
+      },
+      {
+        root: repositoryRoot,
+        test: {
           name: 'core',
           runner: termwrightRunner,
           include: ['packages/**/*.test.ts', 'compatibility/**/*.test.ts', 'scripts/**/*.test.mjs'],
@@ -59,6 +70,7 @@ export default defineConfig({
             '**/__fixtures__/**',
             '**/node_modules/**',
             '**/dist/**',
+            ...goIntegrationPackages.map((name) => `packages/${name}/**`),
             ...configuredPackages.map((name) => `packages/${name}/**`),
           ],
         },

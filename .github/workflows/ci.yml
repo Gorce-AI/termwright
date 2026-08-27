@@ -160,6 +160,7 @@ jobs:
           profile=ci
           if [[ "${{ runner.os }}" == "Windows" ]]; then profile=windows-ci; fi
           pnpm test -- --resource-profile "$profile" --json -- --project=core
+          pnpm test -- --resource-profile "$profile" --json -- --project=go-integration
           pnpm test -- --resource-profile "$profile" --json -- --project=gherkin --project=mcp --project=screenshot --project=test --project=trace --project=ui
           pnpm test -- --resource-profile "$profile" --json -- --project=conformance --project=ink --project=probe-ink --project=example-bubbletea-login --project=example-getting-started --project=example-ink-todo --project=example-opentui-form --project=example-ratatui-list --project=example-textual-notes --project=example-tview-menu
 
@@ -592,6 +593,7 @@ jobs:
           # independent fixed safety boundaries. The structural workflow test
           # proves every configured project occurs exactly once.
           pnpm test -- --resource-profile windows-ci --json -- --project=core
+          pnpm test -- --resource-profile windows-ci --json -- --project=go-integration
           pnpm test -- --resource-profile windows-ci --json -- --project=gherkin --project=mcp --project=screenshot --project=test --project=trace --project=ui
           pnpm test -- --resource-profile windows-ci --json -- --project=conformance --project=ink --project=probe-ink --project=example-bubbletea-login --project=example-getting-started --project=example-ink-todo --project=example-opentui-form --project=example-ratatui-list --project=example-textual-notes --project=example-tview-menu
 
