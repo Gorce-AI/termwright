@@ -7,17 +7,31 @@ current `main` SHA. The coordinator reproduces the complete Version PR tree
 from the trusted base, then merges and publishes only after the exact required
 CI suite succeeds.
 
+The unattended release path is fail-closed. Before automation may create,
+merge, or publish a Version PR, set the Actions repository variable
+`TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED` to the exact lowercase value `true`.
+An absent variable and every other value leave changesets queued. Disable or
+remove the variable again after the registry release is verified.
+
+This switch does not stop framework maintenance. Scheduled and manually
+dispatched candidate runs still certify candidates, merge compatibility
+allowlists, and close their issues after the allowlist merge. Manual candidate
+runs never start a release. With the switch disabled, scheduled runs also stop
+after compatibility reconciliation instead of preparing a Version PR.
+
 ## Release a version
 
 1. Observe the daily **Framework compatibility candidates** run.
-2. If reconciliation changes compatibility data, follow its generated
+2. Confirm `TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED` is exactly `true` only when
+   the repository and all three registries are ready for unattended release.
+3. If reconciliation changes compatibility data, follow its generated
    compatibility PR and exact dispatched CI run. If reconciliation produces no
    compatibility tree change, confirm the no-change reconciliation completed
    successfully.
-3. When pending changesets exist, follow the generated
+4. When pending changesets exist, follow the generated
    `chore(release): version packages (main)` PR and its
    exact dispatched CI run.
-4. Confirm that **Release publish** names the Version PR number and exact
+5. Confirm that **Release publish** names the Version PR number and exact
    current default-branch SHA.
 
 The trusted coordinator makes that merge only after every coded gate passes.
@@ -60,6 +74,11 @@ from `packages/protocol/package.json` to Python, all Rust crates, and the Go
 module tag by `scripts/sync-protocol-version.mjs`.
 
 If no changesets are pending, Release `prepare` is a successful no-op.
+If autonomous release is disabled, the coordinator does not dispatch
+`prepare`; any existing Version PR remains open and cannot be merged or
+published by automation. `release.yml` independently checks the same variable
+in both `prepare` and `publish` mode so a direct or stale dispatch cannot bypass
+the coordinator gate.
 
 ## Review the Version PR
 

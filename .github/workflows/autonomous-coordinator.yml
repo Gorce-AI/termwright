@@ -14,6 +14,11 @@ concurrency:
 
 permissions: {}
 
+env:
+  # Fail closed: only the exact repository-variable value `true` authorizes
+  # autonomous Version PR creation, merge and publication dispatch.
+  TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}
+
 jobs:
   notify-upstream-failure:
     name: notify compatibility workflow failure

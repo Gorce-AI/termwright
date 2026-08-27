@@ -4,7 +4,9 @@ import {
   CI_JOB_CONTRACT,
   CI_JOBS,
   REQUIRED_BRANCH_CHECKS,
+  autonomousReleaseDecision,
   assertReleaseStateQuiescent,
+  autonomousReleaseEnabled,
   compatibilityReleaseAllowed,
   compatibilitySourceRunId,
   nextHeartbeatRecord,
@@ -135,6 +137,23 @@ function expandedCheckNames(job) {
 }
 
 describe('trusted autonomous coordinator', () => {
+  it('fails closed unless autonomous release is enabled by the exact repository value', () => {
+    expect(autonomousReleaseEnabled('true')).toBe(true);
+    for (const value of [undefined, '', 'false', 'TRUE', '1', ' true', 'true ']) {
+      expect(autonomousReleaseEnabled(value)).toBe(false);
+    }
+  });
+
+  it('separates compatibility maintenance from autonomous release authority', () => {
+    expect(autonomousReleaseDecision('compatibility', false, true)).toBe('merge-only');
+    expect(autonomousReleaseDecision('compatibility', true, false)).toBe('merge-only');
+    expect(autonomousReleaseDecision('compatibility', true, true)).toBe('prepare');
+    expect(autonomousReleaseDecision('heartbeat', true)).toBe('merge-only');
+    expect(autonomousReleaseDecision('version', false)).toBe('hold');
+    expect(autonomousReleaseDecision('version', true)).toBe('publish');
+    expect(() => autonomousReleaseDecision('unknown', true)).toThrow(/unknown autonomous PR/u);
+  });
+
   it('allows releases only from scheduled compatibility certification', () => {
     expect(compatibilityReleaseAllowed({ event: 'schedule' })).toBe(true);
     expect(compatibilityReleaseAllowed({ event: 'workflow_dispatch' })).toBe(false);
