@@ -1,7 +1,7 @@
 /** Capability-driven, add-only compiler injection for tview. */
 
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -27,6 +27,8 @@ export interface PrepareOptions {
 }
 
 export interface PreparedBuild {
+  /** Canonical module directory that must be used as the build cwd. */
+  readonly moduleDir: string;
   /** Insert after `go build` or `go test`. */
   readonly goArgs: readonly [string, string];
   readonly env: NodeJS.ProcessEnv;
@@ -44,7 +46,9 @@ export interface PreparedBuild {
  */
 export async function prepareInstrumentedBuild(options: PrepareOptions): Promise<PreparedBuild> {
   const env = options.env ?? process.env;
-  const frameworkVersion = await moduleVersion(options.moduleDir, FRAMEWORK, env);
+  const moduleDir = await realpath(options.moduleDir);
+  const buildEnv = { ...env, PWD: moduleDir };
+  const frameworkVersion = await moduleVersion(moduleDir, FRAMEWORK, buildEnv);
   if (options.frameworkVersion !== undefined && options.frameworkVersion !== frameworkVersion) {
     throw new Error(
       `@termwright/probe-tview expected ${FRAMEWORK} ${options.frameworkVersion}, ` +
@@ -52,16 +56,17 @@ export async function prepareInstrumentedBuild(options: PrepareOptions): Promise
     );
   }
 
-  const goos = (await run('go', ['env', 'GOOS'], { cwd: options.moduleDir, env })).stdout.trim();
+  const goos = (await run('go', ['env', 'GOOS'], { cwd: moduleDir, env: buildEnv })).stdout.trim();
   const units = await compilationUnits(goos);
   const prepared = await prepareGoToolExec({
-    moduleDir: options.moduleDir,
-    outputDir: options.outputDir ?? join(options.moduleDir, '.termwright', 'go-toolexec'),
+    moduleDir,
+    outputDir: options.outputDir ?? join(moduleDir, '.termwright', 'go-toolexec'),
     units,
-    env,
+    env: buildEnv,
   });
   return {
     ...prepared,
+    moduleDir,
     frameworkVersion,
     sourceDigests: units.map((unit) => unit.sourceDigest),
   };

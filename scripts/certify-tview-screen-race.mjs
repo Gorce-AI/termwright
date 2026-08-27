@@ -117,7 +117,7 @@ try {
   });
   const binary = join(temporaryRoot, 'tview-race-fixture');
   await run('go', ['build', ...prepared.goArgs, '-o', binary, '.'], {
-    cwd: app,
+    cwd: prepared.moduleDir,
     env: prepared.env,
   });
 

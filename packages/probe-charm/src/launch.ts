@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
   applyPatchSet,
-  assertNoVendorMode,
+  assertNoEffectiveVendorMode,
   cacheRoot,
   copyDir,
   digestPatchSet,
@@ -78,6 +78,8 @@ export interface PrepareOptions {
 }
 
 export interface PreparedBuild {
+  /** Canonical module directory that must be used as the build cwd. */
+  readonly moduleDir: string;
   /** The exact detected major, module versions and companions. */
   readonly flavour: CharmFlavour;
   /** Hand this to the build as `GOWORK`. */
@@ -90,7 +92,7 @@ export interface PreparedBuild {
   readonly toolExecFile: string | null;
   /** Modules whose add-only units the wrapper injects. */
   readonly injectedModules: readonly string[];
-  /** Environment to build with: the caller's, plus the generated GOWORK. */
+  /** Environment to build with: the caller's, plus canonical PWD and generated GOWORK. */
   readonly env: NodeJS.ProcessEnv;
   /** True when the Bubble Tea copy was materialised rather than reused. */
   readonly built: boolean;
@@ -113,9 +115,10 @@ interface PreparedCopy {
  */
 export async function prepareInstrumentedBuild(options: PrepareOptions): Promise<PreparedBuild> {
   const env = options.env ?? process.env;
-  assertNoVendorMode(env);
+  const moduleDir = await realpath(options.moduleDir);
+  await assertNoEffectiveVendorMode(options.moduleDir, env);
 
-  const flavour = await detectCharmFlavour(options.moduleDir, env);
+  const flavour = await detectCharmFlavour(moduleDir, env);
   const teaPatchSet = requirePatchSet('bubbletea', flavour.module, flavour.version);
   const toolchainVersion = await toolchain(env);
   const tea = await prepareCopy({
@@ -134,28 +137,28 @@ export async function prepareInstrumentedBuild(options: PrepareOptions): Promise
   const clientDir = options.clientDir ?? (await defaultClientDir(env));
   const replaces = [
     { from: flavour.module, to: tea.dir },
-    ...(await clientVersionReplacements(options.moduleDir, clientDir, env)),
+    ...(await clientVersionReplacements(moduleDir, clientDir, env)),
   ];
-  const inherited = await readWorkspace(options.moduleDir);
+  const inherited = await readWorkspace(options.moduleDir, env);
   const requestedWorkspace =
     options.workspaceFile === undefined
-      ? await defaultWorkspaceFile({ moduleDir: options.moduleDir, inherited, replaces }, env)
+      ? await defaultWorkspaceFile({ moduleDir, inherited, replaces }, env)
       : resolve(options.workspaceFile);
   const workspaceFile = await writeWorkspace(requestedWorkspace, {
-    moduleDir: options.moduleDir,
+    moduleDir,
     inherited,
     suppliedUses:
-      (await modulePath(options.moduleDir, env)) === CLIENT_MODULE
+      (await modulePath(moduleDir, env)) === CLIENT_MODULE
         ? []
         : [{ dir: clientDir, module: CLIENT_MODULE }],
     replaces,
   });
-  const buildEnv = { ...env, GOWORK: workspaceFile };
+  const buildEnv = { ...env, PWD: moduleDir, GOWORK: workspaceFile };
   const bubblesToolExec =
     bubblesVersion === undefined
       ? null
       : await prepareBubblesToolExec({
-          moduleDir: options.moduleDir,
+          moduleDir,
           module: bubblesModule,
           version: bubblesVersion,
           patchSetDir: requireBubblesUnitProfile(flavour.major, bubblesModule),
@@ -164,6 +167,7 @@ export async function prepareInstrumentedBuild(options: PrepareOptions): Promise
         });
 
   return {
+    moduleDir,
     flavour,
     workspaceFile,
     copyDir: tea.dir,

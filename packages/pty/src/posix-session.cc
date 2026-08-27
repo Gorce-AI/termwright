@@ -195,12 +195,16 @@ bool DrainDarwinProcessGroup(pid_t group, int wake_descriptor, int* error) {
 #if defined(__linux__)
 enum class LinuxProcStatResult { kPresent, kGone, kError };
 
+bool LinuxProcEntryIsGone(int error) {
+  return error == ENOENT || error == ESRCH;
+}
+
 LinuxProcStatResult ReadLinuxProcStat(pid_t candidate, char* state,
                                       int* process_group, int* error) {
   const std::string path = "/proc/" + std::to_string(candidate) + "/stat";
   FILE* stat = std::fopen(path.c_str(), "r");
   if (stat == nullptr) {
-    if (errno == ENOENT) return LinuxProcStatResult::kGone;
+    if (LinuxProcEntryIsGone(errno)) return LinuxProcStatResult::kGone;
     *error = errno;
     return LinuxProcStatResult::kError;
   }
@@ -211,6 +215,7 @@ LinuxProcStatResult ReadLinuxProcStat(pid_t candidate, char* state,
   const int read_error = errno;
   std::fclose(stat);
   if (!read) {
+    if (LinuxProcEntryIsGone(read_error)) return LinuxProcStatResult::kGone;
     *error = read_error == 0 ? EIO : read_error;
     return LinuxProcStatResult::kError;
   }

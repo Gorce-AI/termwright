@@ -8,7 +8,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import {
+  assertNoEffectiveVendorMode,
   assertNoVendorMode,
   canaryCheck,
   readWorkspace,
@@ -218,6 +219,48 @@ describe('vendor mode', () => {
 });
 
 describe.skipIf(toolchain === null)('against a real toolchain', () => {
+  goIt('refuses automatic module vendor mode regardless of a workspace marker', async () => {
+    const dir = await scratch();
+    await mkdir(join(dir, 'vendor'), { recursive: true });
+    await writeFile(join(dir, 'vendor', 'modules.txt'), '## workspace\n', 'utf8');
+    await writeFile(join(dir, 'go.mod'), 'module example.com/vendor\n\ngo 1.22\n', 'utf8');
+
+    await expect(assertNoEffectiveVendorMode(dir, process.env)).rejects.toMatchObject({
+      code: 'vendor-mode',
+    });
+    await expect(
+      assertNoEffectiveVendorMode(dir, { ...process.env, GOFLAGS: '-mod=mod' }),
+    ).resolves.toBeUndefined();
+  });
+
+  goIt('uses the workspace vendor root and ignores a member-local vendor directory', async () => {
+    const dir = await scratch();
+    const app = join(dir, 'app');
+    await mkdir(join(app, 'vendor'), { recursive: true });
+    await writeFile(join(app, 'go.mod'), 'module example.com/app\n\ngo 1.22\n', 'utf8');
+    await writeFile(join(dir, 'go.work'), 'go 1.22\n\nuse ./app\n', 'utf8');
+
+    await expect(assertNoEffectiveVendorMode(app, process.env)).resolves.toBeUndefined();
+    await mkdir(join(dir, 'vendor'), { recursive: true });
+    await expect(assertNoEffectiveVendorMode(app, process.env)).resolves.toBeUndefined();
+    await writeFile(join(dir, 'vendor', 'modules.txt'), '## workspace\n', 'utf8');
+    await expect(assertNoEffectiveVendorMode(app, process.env)).rejects.toMatchObject({
+      code: 'vendor-mode',
+    });
+  });
+
+  goIt('does not activate workspace vendoring before Go 1.22', async () => {
+    const dir = await scratch();
+    const app = join(dir, 'app');
+    await mkdir(app, { recursive: true });
+    await mkdir(join(dir, 'vendor'), { recursive: true });
+    await writeFile(join(app, 'go.mod'), 'module example.com/app\n\ngo 1.18\n', 'utf8');
+    await writeFile(join(dir, 'go.work'), 'go 1.18\n\nuse ./app\n', 'utf8');
+    await writeFile(join(dir, 'vendor', 'modules.txt'), '## workspace\n', 'utf8');
+
+    await expect(assertNoEffectiveVendorMode(app, process.env)).resolves.toBeUndefined();
+  });
+
   goIt('reads no workspace from a plain module without calling it an error', async () => {
     const dir = await scratch();
     await writeFile(join(dir, 'go.mod'), 'module example.com/plain\n\ngo 1.22\n', 'utf8');
@@ -242,6 +285,44 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     expect(inherited.uses.map((entry) => entry.dir).sort()).toEqual(
       [join(dir, 'app'), join(dir, 'lib')].sort(),
     );
+  });
+
+  goIt('honours explicit GOWORK and preserves off', async () => {
+    const dir = await scratch();
+    const app = join(dir, 'app');
+    await mkdir(app, { recursive: true });
+    await writeFile(join(app, 'go.mod'), 'module example.com/app\n\ngo 1.22\n', 'utf8');
+    const workspace = join(dir, 'custom.work');
+    await writeFile(workspace, 'go 1.22\n\nuse ./app\n', 'utf8');
+
+    expect((await readWorkspace(app, { ...process.env, GOWORK: workspace })).uses).toEqual([
+      { dir: await realpath(app) },
+    ]);
+    expect(await readWorkspace(app, { ...process.env, GOWORK: 'off' })).toEqual({
+      uses: [],
+      replaces: [],
+    });
+  });
+
+  goIt('inherits a workspace from the lexical parent of a linked module entry', async () => {
+    const dir = await scratch();
+    const target = join(dir, 'target');
+    const workspace = join(dir, 'workspace');
+    const entry = join(workspace, 'app');
+    await mkdir(target, { recursive: true });
+    await mkdir(workspace, { recursive: true });
+    await writeFile(join(target, 'go.mod'), 'module example.com/app\n\ngo 1.22\n', 'utf8');
+    await symlink(target, entry, process.platform === 'win32' ? 'junction' : 'dir');
+    await writeFile(join(workspace, 'go.work'), 'go 1.18\n\nuse ./app\n', 'utf8');
+
+    const inherited = await readWorkspace(entry, { ...process.env, GOWORK: 'auto' });
+    expect(inherited.uses).toEqual([{ dir: await realpath(target) }]);
+
+    await mkdir(join(workspace, 'vendor'), { recursive: true });
+    await writeFile(join(workspace, 'vendor', 'modules.txt'), '## workspace\n', 'utf8');
+    await expect(
+      assertNoEffectiveVendorMode(entry, { ...process.env, GOWORK: 'auto' }),
+    ).resolves.toBeUndefined();
   });
 
   goIt(

@@ -66,10 +66,10 @@ import { prepareInstrumentedBuild } from '@termwright/probe-tview';
 
 const build = await prepareInstrumentedBuild({ moduleDir: 'path/to/app' });
 await execFile('go', ['build', ...build.goArgs, '-o', 'app-binary', '.'], {
-  cwd: 'path/to/app',
+  cwd: build.moduleDir,
   env: build.env,
 });
-await launchTerminal({ command: ['./app-binary'] });
+await launchTerminal({ command: ['./app-binary'], cwd: build.moduleDir });
 ```
 
 The prepared build uses Go's official `-toolexec` hook to compile Termwright's

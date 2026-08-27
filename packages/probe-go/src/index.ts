@@ -15,6 +15,7 @@
  */
 
 export {
+  assertNoEffectiveVendorMode,
   assertNoVendorMode,
   canaryCheck,
   readWorkspace,

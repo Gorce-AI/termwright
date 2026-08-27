@@ -1,11 +1,11 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect } from 'vitest';
+import { describe, expect, onTestFinished } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { candidatePaths, spawnPty } from './index.js';
 
@@ -567,6 +567,71 @@ describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', 
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  const proveDisappearingProcStatEntry = async (phase: 'open' | 'read'): Promise<void> => {
+    const directory = mkdtempSync(join(tmpdir(), 'termwright-proc-stat-esrch-'));
+    try {
+      const interposer = join(directory, 'proc-stat-esrch.so');
+      const marker = join(directory, 'armed');
+      const source = fileURLToPath(new URL('./fixtures/proc-stat-esrch.c', import.meta.url));
+      const fixture = fileURLToPath(new URL('./fixtures/proc-stat-esrch.mjs', import.meta.url));
+      const compiled = spawnSync(
+        'cc',
+        ['-shared', '-fPIC', '-pthread', source, '-o', interposer, '-ldl'],
+        { encoding: 'utf8' },
+      );
+      if (compiled.status !== 0) {
+        throw new Error(
+          `fixture compilation failed (${String(compiled.status)}): ${compiled.stderr}`,
+        );
+      }
+
+      const child = spawn(process.execPath, [fixture], {
+        cwd: process.cwd(),
+        env: {
+          ...environment(),
+          LD_PRELOAD: interposer,
+          TERMWRIGHT_PROCSTAT_ESRCH_MARKER: marker,
+          TERMWRIGHT_PROCSTAT_ESRCH_PHASE: phase,
+        },
+        stdio: ['ignore', 'ignore', 'pipe'],
+      });
+      const stderr: Buffer[] = [];
+      child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+      const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+      const stopAndReap = async (): Promise<void> => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        if (child.pid !== undefined) await closed;
+      };
+      onTestFinished(stopAndReap);
+      try {
+        const status = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+          (resolve, reject) => {
+            child.once('error', reject);
+            child.once('close', (code, signal) => resolve({ code, signal }));
+          },
+        );
+        expect(status, Buffer.concat(stderr).toString('utf8')).toEqual({
+          code: 0,
+          signal: null,
+        });
+      } finally {
+        await stopAndReap();
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+
+  it.runIf(process.platform === 'linux')(
+    'treats a disappearing proc stat entry during open as a vanished candidate',
+    async () => await proveDisappearingProcStatEntry('open'),
+  );
+
+  it.runIf(process.platform === 'linux')(
+    'treats a disappearing proc stat entry during read as a vanished candidate',
+    async () => await proveDisappearingProcStatEntry('read'),
+  );
 
   it.runIf(process.platform === 'linux')(
     'waits for worker threads after their process leader becomes a zombie',

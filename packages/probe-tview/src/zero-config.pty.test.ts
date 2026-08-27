@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -79,6 +79,7 @@ afterEach(async () => {
 
 async function fixture(options: {
   readonly instrumented: boolean;
+  readonly linkedModule?: boolean;
   readonly vendor?: boolean;
 }): Promise<string> {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-tview-t1-')));
@@ -94,6 +95,11 @@ async function fixture(options: {
   await run('go', ['mod', 'tidy'], { cwd: app });
   if (options.vendor) await run('go', ['mod', 'vendor'], { cwd: app });
 
+  const moduleDir = options.linkedModule ? join(dir, 'app-alias') : app;
+  if (options.linkedModule) {
+    await symlink(app, moduleDir, process.platform === 'win32' ? 'junction' : 'dir');
+  }
+
   const binary = join(dir, `app-binary${executableSuffix}`);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -104,10 +110,14 @@ async function fixture(options: {
       : {}),
   };
   const prepared = options.instrumented
-    ? await prepareInstrumentedBuild({ moduleDir: app, outputDir: join(dir, 'tool'), env })
+    ? await prepareInstrumentedBuild({ moduleDir, outputDir: join(dir, 'tool'), env })
     : null;
+  if (options.linkedModule) {
+    expect(prepared?.moduleDir).toBe(await realpath(app));
+    expect(prepared?.env.PWD).toBe(prepared?.moduleDir);
+  }
   const args = ['build', ...(prepared?.goArgs ?? []), '-o', binary, '.'];
-  await run('go', args, { cwd: app, env: prepared?.env ?? env });
+  await run('go', args, { cwd: prepared?.moduleDir ?? moduleDir, env: prepared?.env ?? env });
   return binary;
 }
 
@@ -208,7 +218,7 @@ function syncBoundary(redraw: number, phase: 'begin' | 'end'): string {
 
 describe.skipIf(!runnable)('tview T0+T1 injection', () => {
   it('applies the add-only unit and publishes the retained tree after Show', async () => {
-    const binary = await fixture({ instrumented: true });
+    const binary = await fixture({ instrumented: true, linkedModule: true });
     const app = await launchTerminal({ command: [binary], columns: 80, rows: 24 });
     sessions.push(app);
     await app.waitForText('readme.md');
