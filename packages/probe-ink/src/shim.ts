@@ -22,6 +22,15 @@ export function originalUrl(urlOrPath: string): string {
   return `${urlOrPath}${urlOrPath.includes('?') ? '&' : '?'}${ORIGINAL_MARKER}`;
 }
 
+/** Ink's renderer instance, resolved beside the intercepted public entry. */
+export function reconcilerUrl(urlOrPath: string): string {
+  const [path] = urlOrPath.split('?');
+  if (path === undefined || !INK_ENTRY_PATTERN.test(path)) {
+    throw new Error(`Cannot resolve Ink reconciler beside ${urlOrPath}`);
+  }
+  return path.replace(/index\.js$/u, 'reconciler.js');
+}
+
 /**
  * Forward the complete Ink namespace and shadow only `render`.
  *
@@ -30,11 +39,13 @@ export function originalUrl(urlOrPath: string): string {
  */
 export function buildShimSource(target: string, instrumentUrl = INSTRUMENT_URL): string {
   const original = JSON.stringify(originalUrl(target));
+  const reconciler = JSON.stringify(reconcilerUrl(target));
   const instrument = JSON.stringify(instrumentUrl);
   return `import * as __termwright_original from ${original};
+import __termwright_reconciler from ${reconciler};
 import {wrapInkRender as __termwright_wrap} from ${instrument};
 export * from ${original};
 
-export const render = __termwright_wrap(__termwright_original);
+export const render = __termwright_wrap(__termwright_original, {reconciler: __termwright_reconciler});
 `;
 }

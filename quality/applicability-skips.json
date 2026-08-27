@@ -11,7 +11,6 @@
     { "id": "opentui-zero-config-geometry", "file": "packages/probe-opentui/src/zero-config.test.ts", "fullName": "publishes qualified v2 geometry and the native exact hit grid", "required": false },
     { "id": "opentui-zero-config-render-state", "file": "packages/probe-opentui/src/zero-config.test.ts", "fullName": "records nested clips, overlap ownership, hidden nodes, render hooks and resize from real OpenTUI", "required": false },
     { "id": "charm-zero-config-opposing-arm", "file": "packages/probe-charm/src/zero-config.pty.test.ts", "fullName": "skip because no Go toolchain or no pseudo-terminal is reachable", "required": false },
-    { "id": "go-patches-opposing-arm", "file": "packages/probe-go/src/patches.test.ts", "fullName": "skips the Go arms because no go toolchain is reachable", "required": false },
     { "id": "charm-patch-set-opposing-arm", "file": "packages/probe-charm/src/patch-sets.test.ts", "fullName": "skips because no go toolchain is reachable", "required": false },
     { "id": "charm-launch-opposing-arm", "file": "packages/probe-charm/src/launch.test.ts", "fullName": "skips because no Go toolchain is reachable", "required": false },
     { "id": "charm-detect-opposing-arm", "file": "packages/probe-charm/src/detect.test.ts", "fullName": "skips because no go toolchain is reachable", "required": false },

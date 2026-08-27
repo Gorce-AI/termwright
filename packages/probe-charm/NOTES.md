@@ -43,9 +43,10 @@ Patching Bubble Tea buys the frame hook and nothing else. `charm.land/bubbles/v2
 is a different module, so a component's unexported fields are as far from `tea`
 as from an external adapter. The probe therefore:
 
-1. reflects over the **user's model** to find components, reading only
-   **exported** fields — a probe that reaches into someone's private
-   application state to guess at UI cannot justify itself;
+1. reflects over the **user's model** to find components; exported fields are
+   walked normally, while private, scalar, nil and depth-limited subtrees are
+   retained as `opaque-container` nodes with the named
+   `custom-container-enumeration` degradation rather than guessed or omitted;
 2. recognises components by **package path plus type name**, since every
    Bubbles component is called `Model`;
 3. reads them through **public getters**, and through the accessors the second
@@ -53,10 +54,14 @@ as from an external adapter. The probe therefore:
 
 ### What the Bubbles patch set unlocks
 
-It adds files and edits none, so there is no diff context to drift on a bump,
-and the probe finds the accessors by name through reflection — `tea` never
-imports `bubbles`, and an application built against unpatched Bubbles reports
-less rather than failing to compile.
+It adds compiler units and edits no upstream byte, so there is no diff context
+to drift on a bump. The launcher supplies those units through `-toolexec`, and
+the probe finds their accessors by name through reflection — `tea` never imports
+`bubbles`. The owned units are selected by module line and preflight-compiled
+against the resolved candidate; private-field drift is therefore a loud
+capability failure rather than a version guess. The runtime also refuses a
+recognised private-state component when the caller omitted the returned
+`goArgs`, so it never silently falls back to public-getter-only facts.
 
 | Component | Without the patch set | With it |
 |---|---|---|
@@ -90,25 +95,18 @@ screen region: `Style.Render` rebuilds the string rune by rune, joins pad with
 spaces indistinguishable from content, and truncation discards the tail without
 recording that it existed.
 
-v2 has two channels that could restore it — the layer compositor, which already
-keeps absolute bounds per identified layer, and per-cell OSC 8 hyperlinks,
-which travel with the character through wrapping and truncation. Until one is
-wired, the capability set says so: neither patch set claims `bounds`, and the
+v2's layer compositor keeps absolute bounds per identified layer, but its index
+is owned by an internal compositor instance that is not reachable from Bubble
+Tea's flattened public `View.Content` boundary. The verification spike found no
+stable handle from which an add-only unit could pull that map at publication
+time. Until such an in-process seam exists, neither major claims bounds: the
 probe reports component, name and value **without a position** rather than
 inventing coordinates.
 
-The hyperlink channel is narrower than the specification suggests, and the
-difference is measured rather than assumed. OSC 8 admits
-`key=value:key=value`, but `@xterm/headless` parses those parameters and keeps
-**only `id`** — impl-driver put four variants through the emulator (b79c62f)
-and `frag=btn7` disappears whether it travels beside an `id` or alone. This is
-not a field we decline to read; the parameter is absent from the buffer,
-because the emulator did not retain it. So a future emission design has exactly
-one carrier field: a single opaque string such as `id=twf:btn7`, with a
-separator we choose and parse ourselves, not several independent parameters.
-The reception side that landed is `CellSnapshot.link?: { uri, id?, truncated? }`
-— note `uri`, not `url`, and `truncated` set when the URI exceeded
-`maxStringBytes`, since a cut URI is a wrong URI rather than a shorter one.
+OSC 8 is deliberately not a fallback. Hyperlinks are application-owned visual
+state, collide with real links and travel through a host-dependent terminal
+path. Semantic provenance travels over the authenticated probe socket; the
+terminal's `CellSnapshot.link` remains visual evidence only.
 
 Cell attribution is not an alternative route: "which component painted this
 glyph" is unavailable in all six audited frameworks, so anything of that shape
@@ -132,8 +130,9 @@ func (g gauge) TermwrightSemantics() annotate.Semantics {
 ```
 
 The probe consults `TermwrightSemantics()` before deciding what to publish. A
-custom type that no recognizer knows would otherwise be walked past in silence;
-with a declaration it is reported as what its author says it is. A local type
+custom type that no recognizer knows is still retained structurally; with a
+declaration it gains the role and name its author intends. Annotation is never
+required for structure. A local type
 that embeds a recognised Bubbles component gets both — the author's wording
 and the native value/state — merged under D2 precedence, so a name from the
 annotation never displaces a focus the probe measured.
@@ -162,9 +161,9 @@ declared name follows the value without any invalidation step.
 
 - **`waitForQuiet()` is the wrong instrument for an animating UI.** The
   spinner fixture never stops redrawing, so waiting for a quiet screen waits
-  forever — "the screen never settled for 100 ms". Poll the tree instead. This
-  is not a probe limitation: a stability wait asks a question an animation
-  cannot answer.
+  forever — "the screen never settled for 100 ms". Observe committed checkpoint
+  changes instead of polling wall time. This is not a probe limitation: a
+  stability wait asks a question an animation cannot answer.
 
 - **The viewport size cannot be invented.** Validation requires positive
   columns and rows; a snapshot published with zeroes is refused whole, and the
@@ -177,7 +176,12 @@ declared name follows the value without any invalidation step.
   outright. The replace is the one that matters, since a `use` does not satisfy
   a versioned require.
 
-## Not covered yet
+## Remaining scope
 
 - Lip Gloss provenance. Both channels are identified and neither is wired.
-- Windows, and any Charm version other than the two pinned here.
+- Bubble Tea v1.3.10 and v2.0.8/v2.0.9 are the exact certified T3 profiles.
+  Other v1/v2 versions fail closed until certified. Future v3 module streams
+  may be discovered and monitored, but the current certifier does not
+  automatically admit them.
+- Windows is covered by the native marker path and the platform PTY matrix; it
+  is not an untested fallback.

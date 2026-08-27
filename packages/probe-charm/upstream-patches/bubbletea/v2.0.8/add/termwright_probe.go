@@ -44,22 +44,36 @@ const (
 	frameworkVersion = "v2.0.8"
 )
 
-type termwrightProbeState struct {
-	client *protocol.Client
+const (
+	termwrightProbeModeUnknown uint32 = iota
+	termwrightProbeModeDormant
+	termwrightProbeModeActive
+)
 
-	mu        sync.Mutex
+type termwrightProbeState struct {
+	client    *protocol.Client
+	publisher atomic.Pointer[protocol.PublicationQueue]
+
 	ids       map[string]string
 	nextID    int
-	renderMu  sync.Mutex
+	rendering atomic.Bool
 	frameMu   sync.Mutex
-	nextFrame uint64
+	nextFrame atomic.Uint64
 	latest    map[*cursedRenderer]*termwrightStagedFrame
 	queued    map[*cursedRenderer]*termwrightStagedFrame
 	published map[*cursedRenderer]uint64
-	publishMu sync.Mutex
-	fail      func(string, string) error
+	ready     chan struct{}
+	shutdown  sync.Once
+	closed    atomic.Bool
 	frames    atomic.Uint64
 	dropped   atomic.Uint64
+	failed    atomic.Bool
+	failure   atomic.Pointer[termwrightFailure]
+}
+
+type termwrightFailure struct {
+	code    string
+	message string
 }
 
 type termwrightStagedFrame struct {
@@ -69,12 +83,20 @@ type termwrightStagedFrame struct {
 }
 
 var (
-	termwrightProbeOnce sync.Once
-	termwrightProbe     *termwrightProbeState
+	termwrightLifecycleMu        sync.Mutex
+	termwrightProbeMode          atomic.Uint32
+	termwrightOutputCommitActive atomic.Bool
+	termwrightActiveRuns         int
+	termwrightProbe              *termwrightProbeState
 )
 
-func termwrightCurrentProbe() *termwrightProbeState {
-	termwrightProbeOnce.Do(func() { termwrightProbe = newTermwrightProbe() })
+// termwrightProbeForRender is the complete dormant render-path check. Once
+// Program.Run has found no configured probe, every later frame is one atomic
+// load: no environment reads, allocation, lifecycle lock, goroutine or socket.
+func termwrightProbeForRender() *termwrightProbeState {
+	if termwrightProbeMode.Load() != termwrightProbeModeActive {
+		return nil
+	}
 	return termwrightProbe
 }
 
@@ -92,6 +114,13 @@ func newTermwrightProbe() *termwrightProbeState {
 			Capabilities: []protocol.ProbeCapability{
 				protocol.ProbeCapAnnotations,
 			},
+			Instrumentation: &protocol.ProbeInstrumentation{
+				HighestTier:   protocol.ProbeTierT3,
+				SemanticClass: protocol.ProbeSemanticClassB,
+				DegradedCapabilities: []protocol.SessionCapabilityID{
+					"intended-geometry", "clipped-geometry", "custom-container-enumeration",
+				},
+			},
 		},
 		// Charm publishes a tree, observable component state, descriptive action
 		// hints and a marker for each accepted revision. Actions still execute
@@ -103,9 +132,8 @@ func newTermwrightProbe() *termwrightProbeState {
 			protocol.CapActions,
 			protocol.CapRenderRevisions,
 		},
-		// Publication happens inside the renderer's flush boundary, after its
-		// terminal write. The side channel remains bounded so a stalled driver
-		// cannot freeze future renders.
+		// Socket deadlines are worker watchdogs only. The renderer flush hook
+		// performs bounded non-blocking admission and no socket I/O.
 		WriteTimeout:      protocol.DefaultWriteTimeout,
 		EvidenceProviders: evidence.DefaultRegistry(),
 	})
@@ -118,10 +146,20 @@ func newTermwrightProbe() *termwrightProbeState {
 		latest:    make(map[*cursedRenderer]*termwrightStagedFrame),
 		queued:    make(map[*cursedRenderer]*termwrightStagedFrame),
 		published: make(map[*cursedRenderer]uint64),
-		fail:      client.Fail,
+		ready:     make(chan struct{}),
 	}
 	go func() {
+		defer close(p.ready)
 		if client.Start(protocol.DialTimeout) != nil {
+			return
+		}
+		publisher, err := protocol.NewPublicationQueue(client, 2)
+		if err != nil {
+			return
+		}
+		p.publisher.Store(publisher)
+		if p.failed.Load() {
+			p.flushSemanticFailure()
 			return
 		}
 		p.replayLatestFrames()
@@ -130,14 +168,60 @@ func newTermwrightProbe() *termwrightProbeState {
 }
 
 func (p *termwrightProbeState) publish(writer io.Writer, frame *termwrightStagedFrame) bool {
-	p.publishMu.Lock()
-	defer p.publishMu.Unlock()
-	marker, err := p.client.Publish(frame.snapshot)
+	if p.failed.Load() {
+		return false
+	}
+	publisher := p.publisher.Load()
+	if publisher == nil {
+		return false
+	}
+	marker, err := publisher.TryPublish(frame.snapshot)
 	if err != nil || marker == "" {
 		p.dropped.Add(1)
+		message := "Bubble Tea rendered a frame that semantic publication did not admit"
+		if err != nil {
+			message += ": " + err.Error()
+		}
+		p.failSemantic("semantic-publication-refused", message)
 		return false
 	}
 	return p.writeMarker(writer, marker)
+}
+
+// termwrightTryBeginOutputCommit makes FRAME -> MARKER atomic without ever
+// waiting in a renderer. Contention means two renderer outputs could otherwise
+// interleave on one PTY, so the losing flush is deferred and semantics fail
+// closed. Its renderer retains the pending view and can paint it on a later
+// tick; guessing a marker across the overlap would be worse than no tree.
+type termwrightOutputCommitGuard struct {
+	proceed  bool
+	admitted bool
+}
+
+func termwrightTryBeginOutputCommit() termwrightOutputCommitGuard {
+	p := termwrightProbeForRender()
+	if p == nil || p.closed.Load() {
+		return termwrightOutputCommitGuard{proceed: true}
+	}
+	if termwrightOutputCommitActive.CompareAndSwap(false, true) {
+		return termwrightOutputCommitGuard{proceed: true, admitted: true}
+	}
+	p.requestSemanticFailure(
+		"adapter-guarantee-violation",
+		"Bubble Tea semantic probe unavailable: concurrent renderer flushes cannot preserve one causal frame-to-marker order",
+	)
+	return termwrightOutputCommitGuard{}
+}
+
+func (guard termwrightOutputCommitGuard) end() {
+	if !guard.admitted {
+		return
+	}
+	p := termwrightProbe
+	if p != nil {
+		p.flushSemanticFailure()
+	}
+	termwrightOutputCommitActive.Store(false)
 }
 
 func (p *termwrightProbeState) writeMarker(writer io.Writer, marker string) bool {
@@ -151,10 +235,78 @@ func (p *termwrightProbeState) writeMarker(writer io.Writer, marker string) bool
 }
 
 func (p *termwrightProbeState) failOutput(message string) {
+	p.failSemantic("adapter-guarantee-violation", message)
 	p.dropped.Add(1)
-	if p.fail != nil {
-		_ = p.fail("adapter-guarantee-violation", message)
+}
+
+func (p *termwrightProbeState) failSemantic(code, message string) {
+	p.requestSemanticFailure(code, message)
+}
+
+func (p *termwrightProbeState) requestSemanticFailure(code, message string) {
+	first := p.failure.CompareAndSwap(nil, &termwrightFailure{code: code, message: message})
+	p.failed.Store(true)
+	if first {
+		go p.flushSemanticFailure()
 	}
+}
+
+func (p *termwrightProbeState) flushSemanticFailure() {
+	failure := p.failure.Load()
+	if failure == nil {
+		return
+	}
+	if publisher := p.publisher.Load(); publisher != nil {
+		publisher.Fail(failure.code, failure.message)
+	}
+}
+
+func termwrightShutdown(p *termwrightProbeState) {
+	if p == nil {
+		return
+	}
+	termwrightLifecycleMu.Lock()
+	if termwrightActiveRuns > 0 {
+		termwrightActiveRuns--
+	}
+	last := termwrightActiveRuns == 0
+	if last {
+		p.closed.Store(true)
+	}
+	termwrightLifecycleMu.Unlock()
+	if !last {
+		return
+	}
+	p.shutdown.Do(func() {
+		<-p.ready
+		if publisher := p.publisher.Swap(nil); publisher != nil {
+			publisher.Shutdown()
+		} else if p.client != nil {
+			_ = p.client.Close()
+		}
+	})
+}
+
+func termwrightBeforeRun() *termwrightProbeState {
+	if termwrightProbeMode.Load() == termwrightProbeModeDormant {
+		return nil
+	}
+	termwrightLifecycleMu.Lock()
+	p := termwrightProbe
+	if p == nil || p.closed.Load() {
+		p = newTermwrightProbe()
+		termwrightProbe = p
+	}
+	if p == nil {
+		termwrightProbeMode.Store(termwrightProbeModeDormant)
+		termwrightLifecycleMu.Unlock()
+		return nil
+	}
+	termwrightProbeMode.Store(termwrightProbeModeActive)
+	termwrightActiveRuns++
+	termwrightLifecycleMu.Unlock()
+	<-p.ready
+	return p
 }
 
 // termwrightAfterRendererFlush is injected into cursedRenderer.flush while it
@@ -164,7 +316,10 @@ func termwrightAfterRendererFlush(renderer *cursedRenderer, outputOK bool) {
 	if p == nil {
 		return
 	}
-	p.frameMu.Lock()
+	if !p.frameMu.TryLock() {
+		p.failOutput("Bubble Tea semantic frame state was contended during renderer commit")
+		return
+	}
 	frame := p.queued[renderer]
 	delete(p.queued, renderer)
 	p.frameMu.Unlock()
@@ -175,11 +330,11 @@ func termwrightAfterRendererFlush(renderer *cursedRenderer, outputOK bool) {
 		p.failOutput("Bubble Tea renderer did not commit the complete terminal frame")
 		return
 	}
-	if !p.client.Connected() {
-		return
-	}
 	if p.publish(renderer.w, frame) {
-		p.frameMu.Lock()
+		if !p.frameMu.TryLock() {
+			p.failSemantic("adapter-guarantee-violation", "Bubble Tea semantic publication committed while frame state was contended")
+			return
+		}
 		p.published[renderer] = frame.sequence
 		p.frameMu.Unlock()
 	}
@@ -188,7 +343,11 @@ func termwrightAfterRendererFlush(renderer *cursedRenderer, outputOK bool) {
 func (p *termwrightProbeState) queueFrame(renderer *cursedRenderer, frame *termwrightStagedFrame) {
 	renderer.mu.Lock()
 	renderer.view = frame.view
-	p.frameMu.Lock()
+	if !p.frameMu.TryLock() {
+		renderer.mu.Unlock()
+		p.failSemantic("adapter-guarantee-violation", "Bubble Tea semantic frame staging was contended")
+		return
+	}
 	p.latest[renderer] = frame
 	p.queued[renderer] = frame
 	p.frameMu.Unlock()
@@ -196,8 +355,11 @@ func (p *termwrightProbeState) queueFrame(renderer *cursedRenderer, frame *termw
 }
 
 func (p *termwrightProbeState) replayLatestFrames() {
-	p.renderMu.Lock()
-	defer p.renderMu.Unlock()
+	if !p.rendering.CompareAndSwap(false, true) {
+		p.requestSemanticFailure("adapter-guarantee-violation", "Bubble Tea semantic probe unavailable: handshake replay overlapped model observation")
+		return
+	}
+	defer p.rendering.Store(false)
 	p.frameMu.Lock()
 	renderers := make([]*cursedRenderer, 0, len(p.latest))
 	for renderer := range p.latest {
@@ -243,13 +405,17 @@ func (p *termwrightProbeState) snapshot(model Model, view View, columns, rows in
 	snapshot.Nodes = append(snapshot.Nodes, root)
 
 	candidates := make([]termwrightCandidate, 0)
-	p.walk(reflect.ValueOf(model), rootID, "", &candidates, 0)
+	p.walk(reflect.ValueOf(model), "root", "root", "", &candidates, 0)
+	if p.failed.Load() {
+		return nil, ""
+	}
 	duplicateKey := p.appendCandidates(snapshot, rootID, candidates)
 	return snapshot, duplicateKey
 }
 
 type termwrightCandidate struct {
 	identityKey string
+	parentKey   string
 	node        protocol.Node
 	meta        annotate.Semantics
 	annotated   bool
@@ -282,15 +448,26 @@ func (p *termwrightProbeState) appendCandidates(
 	}
 
 	keys := make(map[annotate.SemanticKey]string)
+	resolvedIDs := map[string]string{"root": rootID}
+	for _, candidate := range candidates {
+		id := p.identity(candidate.identityKey)
+		if candidate.annotated && candidate.meta.Key != "" && counts[candidate.meta.Key] == 1 {
+			id = "k:" + string(candidate.meta.Key)
+		}
+		resolvedIDs[candidate.identityKey] = id
+	}
 	pending := make([]termwrightRelations, 0)
 	for _, candidate := range candidates {
 		keyApplied := candidate.annotated && candidate.meta.Key != "" && counts[candidate.meta.Key] == 1
 		identityKey := candidate.identityKey
-		candidate.node.ID = p.identity(identityKey)
+		candidate.node.ID = resolvedIDs[identityKey]
 		if keyApplied {
 			candidate.node.ID = "k:" + string(candidate.meta.Key)
 		}
-		candidate.node.ParentID = rootID
+		candidate.node.ParentID = resolvedIDs[candidate.parentKey]
+		if candidate.node.ParentID == "" {
+			candidate.node.ParentID = rootID
+		}
 		if candidate.annotated {
 			termwrightApplyAnnotation(candidate.meta, &candidate.node)
 		}
@@ -394,21 +571,29 @@ func termwrightResolveRelations(
 // structure must cost a truncated tree, never the frame.
 func (p *termwrightProbeState) walk(
 	value reflect.Value,
-	parentID string,
+	parentKey string,
+	identityPath string,
 	fieldName string,
 	candidates *[]termwrightCandidate,
 	depth int,
 ) {
-	if depth > 8 || !value.IsValid() {
+	if !value.IsValid() {
+		p.appendOpaque(candidates, parentKey, identityPath, fieldName, "invalid-value")
+		return
+	}
+	if depth > 8 {
+		p.appendOpaque(candidates, parentKey, identityPath, fieldName, "depth-limit")
 		return
 	}
 	for value.Kind() == reflect.Pointer || value.Kind() == reflect.Interface {
 		if value.IsNil() {
+			p.appendOpaque(candidates, parentKey, identityPath, fieldName, "nil-reference")
 			return
 		}
 		value = value.Elem()
 	}
 	if value.Kind() != reflect.Struct {
+		p.appendOpaque(candidates, parentKey, identityPath, fieldName, "non-struct")
 		return
 	}
 
@@ -418,10 +603,15 @@ func (p *termwrightProbeState) walk(
 	declared, hasDeclared := termwrightDeclaredSemantics(value)
 
 	if component := termwrightRecognise(value, fieldName); component != nil {
+		if component.missingAccessor != "" {
+			p.failOutput("Bubbles semantic probe unavailable: recognised " + component.frameworkType + " without injected accessor " + component.missingAccessor + "; build with prepared.goArgs")
+			return
+		}
 		component.node.P = protocol.ProvenanceFramework
 		component.node.PX = map[string]string{"role": protocol.ProvenanceRecognizer}
 		*candidates = append(*candidates, termwrightCandidate{
-			identityKey: parentID + "/" + fieldName + "/" + component.frameworkType,
+			identityKey: identityPath + "/" + component.frameworkType,
+			parentKey:   parentKey,
 			node:        component.node,
 			meta:        declared,
 			annotated:   hasDeclared,
@@ -433,7 +623,8 @@ func (p *termwrightProbeState) walk(
 
 	// A declared custom component that contains no recognised Bubbles value
 	// still reaches the tree as what its author says it is.
-	if hasDeclared {
+	containerParent := parentKey
+	if depth > 0 {
 		node := protocol.Node{
 			Role:          protocol.RoleGeneric,
 			Name:          fieldName,
@@ -444,12 +635,12 @@ func (p *termwrightProbeState) walk(
 			},
 		}
 		*candidates = append(*candidates, termwrightCandidate{
-			identityKey: parentID + "/" + fieldName + "/declared",
-			node:        node,
-			meta:        declared,
-			annotated:   true,
+			identityKey: identityPath, parentKey: parentKey,
+			node:      node,
+			meta:      declared,
+			annotated: hasDeclared,
 		})
-		return
+		containerParent = identityPath
 	}
 
 	kind := value.Type()
@@ -459,16 +650,29 @@ func (p *termwrightProbeState) walk(
 		// unsafe, and a probe that reaches into a user's private state to
 		// guess at UI is doing something it cannot justify.
 		if !field.IsExported() {
+			p.appendOpaque(candidates, containerParent, termwrightChildPath(identityPath, field, index), field.Name, "private-field")
 			continue
 		}
-		p.walk(value.Field(index), parentID, field.Name, candidates, depth+1)
+		p.walk(value.Field(index), containerParent, termwrightChildPath(identityPath, field, index), field.Name, candidates, depth+1)
 	}
+}
+
+func (p *termwrightProbeState) appendOpaque(candidates *[]termwrightCandidate, parentKey, identityPath, fieldName, reason string) {
+	name := fieldName
+	if name == "" {
+		name = "opaque"
+	}
+	*candidates = append(*candidates, termwrightCandidate{identityKey: identityPath + "/opaque/" + reason, parentKey: parentKey, node: protocol.Node{Role: protocol.RoleGeneric, Name: name, FrameworkType: "opaque-container", OpaqueChildren: true, Extended: map[string]any{"degradedCapability": "custom-container-enumeration", "opaqueReason": reason}, P: protocol.ProvenanceFramework, PX: map[string]string{"role": protocol.ProvenanceRecognizer}}})
+}
+func termwrightChildPath(parent string, field reflect.StructField, index int) string {
+	return parent + "/" + field.Name + "#" + strconv.Itoa(index)
 }
 
 // recognised is one Bubbles component the probe understood.
 type recognised struct {
-	frameworkType string
-	node          protocol.Node
+	frameworkType   string
+	node            protocol.Node
+	missingAccessor string
 }
 
 // termwrightRecognise identifies a Bubbles component by its type.
@@ -510,7 +714,8 @@ func termwrightRecognise(value reflect.Value, fieldName string) *recognised {
 func termwrightRecogniseBubbles(value reflect.Value, fieldName string) *recognised {
 	kind := value.Type()
 	path := kind.PkgPath()
-	if !strings.Contains(path, "bubbles") {
+	const bubblesModulePath = "charm.land/bubbles/v2"
+	if !strings.HasPrefix(path, bubblesModulePath+"/") {
 		return nil
 	}
 	component := path[strings.LastIndex(path, "/")+1:]
@@ -549,12 +754,9 @@ func termwrightRecogniseBubbles(value reflect.Value, fieldName string) *recognis
 		// carrying the name Bubbles gave it.
 		node.Role = protocol.RoleGeneric
 	}
-	// Anything the Bubbles patch set exposes is layered on top; without that
-	// patch set these calls find nothing and the node keeps what the public
-	// getters gave it.
-	termwrightLibraryState(value, component, &node)
+	missingAccessor := termwrightLibraryState(value, component, &node)
 
-	return &recognised{frameworkType: component, node: node}
+	return &recognised{frameworkType: component, node: node, missingAccessor: missingAccessor}
 }
 
 // termwrightDeclaredSemantics asks a value for its own semantics.
@@ -633,14 +835,27 @@ func termwrightProvenance(node *protocol.Node, field, source string) {
 // termwrightLibraryState reads the accessors the Bubbles patch set adds.
 //
 // Found by name through reflection rather than by importing Bubbles, which
-// keeps the two patch sets independent: an application built with an
-// unpatched Bubbles simply reports less, instead of failing to compile.
+// keeps the two patch sets independent. Certified private-state component
+// packages require every owned accessor so a missing compiler wrapper fails
+// closed instead of publishing a reduced tree.
 //
 // These are the facts the audit found valuable and Bubbles keeps private: a
 // spinner is otherwise just a glyph, `Percent()` reports the animation's
 // target rather than what is drawn, and a file picker's highlighted entry has
 // no index anywhere in its public surface.
-func termwrightLibraryState(value reflect.Value, component string, node *protocol.Node) {
+func termwrightLibraryState(value reflect.Value, component string, node *protocol.Node) string {
+	required := map[string][]string{
+		"spinner":    {"TermwrightFrame", "TermwrightFrameCount"},
+		"progress":   {"TermwrightShownPercent", "TermwrightTargetPercent"},
+		"filepicker": {"TermwrightSelectedIndex", "TermwrightEntryCount", "TermwrightSelectedName"},
+		"list":       {"TermwrightStatusMessage"},
+		"table":      {"TermwrightWindow", "TermwrightRowCount"},
+	}
+	for _, name := range required[component] {
+		if !value.MethodByName(name).IsValid() {
+			return name
+		}
+	}
 	switch component {
 	case "spinner":
 		if frame, ok := termwrightCallInt(value, "TermwrightFrame"); ok {
@@ -668,6 +883,7 @@ func termwrightLibraryState(value reflect.Value, component string, node *protoco
 			node.State = termwrightWithSetSize(node.State, count)
 		}
 	}
+	return ""
 }
 
 func termwrightWithPosition(state *protocol.State, index, count int) *protocol.State {
@@ -778,8 +994,6 @@ func termwrightFocusState(value reflect.Value) *protocol.State {
 }
 
 func (p *termwrightProbeState) identity(key string) string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	if id, ok := p.ids[key]; ok {
 		return id
 	}
@@ -800,32 +1014,44 @@ func termwrightTypeName(value any) string {
 	return kind.Name()
 }
 
+func (p *termwrightProbeState) tryBeginModelObservation() bool {
+	if p.rendering.CompareAndSwap(false, true) {
+		return true
+	}
+	p.requestSemanticFailure("adapter-guarantee-violation", "Bubble Tea semantic probe unavailable: concurrent model observations cannot preserve a complete tree")
+	return false
+}
+
 // termwrightRenderAndObserve captures the model at the View call and queues it
 // together with the concrete renderer state. The ticker's successful flush is
 // the only place that can publish the revision and its in-band marker.
 func termwrightRenderAndObserve(program *Program, model Model) {
 	view := model.View()
-	probe := termwrightCurrentProbe()
+	probe := termwrightProbeForRender()
 	renderer, supported := program.renderer.(*cursedRenderer)
 	if probe == nil || !supported || renderer == nil {
 		program.renderer.render(view)
 		return
 	}
-	probe.renderMu.Lock()
-	defer probe.renderMu.Unlock()
+	if !probe.tryBeginModelObservation() {
+		renderer.render(view)
+		return
+	}
+	defer probe.rendering.Store(false)
 	if program.width <= 0 || program.height <= 0 {
 		renderer.render(view)
 		return
 	}
 	snapshot, duplicateKey := probe.snapshot(model, view, program.width, program.height)
-	if duplicateKey != "" {
-		_ = probe.client.Fail("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+	if snapshot == nil {
 		renderer.render(view)
 		return
 	}
-	probe.frameMu.Lock()
-	probe.nextFrame++
-	frame := &termwrightStagedFrame{sequence: probe.nextFrame, view: view, snapshot: snapshot}
-	probe.frameMu.Unlock()
+	if duplicateKey != "" {
+		probe.failSemantic("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+		renderer.render(view)
+		return
+	}
+	frame := &termwrightStagedFrame{sequence: probe.nextFrame.Add(1), view: view, snapshot: snapshot}
 	probe.queueFrame(renderer, frame)
 }

@@ -302,6 +302,45 @@ describe('TermwrightTestHost', () => {
     await host.close();
   });
 
+  it('maps terminal-free exclusive host pressure onto the broker capacity', async () => {
+    const engine = new FakeEngine();
+    const pressure = testCase('host-pressure', 'host pressure', 'passed', 0, true, [], {
+      termwright: {
+        provider: { id: '@termwright/test', version: 1 },
+        resources: { hostPressure: 'exclusive' },
+      },
+    });
+    engine.tests = [pressure];
+    engine.runResult = result([pressure]);
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    await host.requestRun().completed;
+    expect(engine.contexts.at(-1)?.tasks['host-pressure']?.resourceReservation).toEqual({
+      nativeHostPressure: 4,
+    });
+    await host.close();
+  });
+
+  it('composes exclusive host pressure with the declared terminal vector', async () => {
+    const engine = new FakeEngine();
+    const pressure = testCase('terminal-host-pressure', 'terminal host pressure', 'passed', 0, true, [], {
+      termwright: {
+        provider: { id: '@termwright/test', version: 1 },
+        resources: { terminals: 1, traceWriters: 0, hostPressure: 'exclusive' },
+      },
+    });
+    engine.tests = [pressure];
+    engine.runResult = result([pressure]);
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    await host.requestRun().completed;
+    expect(engine.contexts.at(-1)?.tasks['terminal-host-pressure']?.resourceReservation).toEqual({
+      ptySession: 1,
+      externalProcess: 1,
+      semanticEndpoint: 1,
+      nativeHostPressure: 4,
+    });
+    await host.close();
+  });
+
   it('collects without execution through the legal scheduled/finalizing lifecycle', async () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-discovery', 'discovered only')];

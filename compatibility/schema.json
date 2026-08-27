@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gorce-ai.github.io/termwright/compatibility/schema.json",
-  "title": "Termwright exact certification and capability graph bindings",
+  "title": "Termwright framework certification and capability graph bindings",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "frameworks"],
   "properties": {
     "$schema": { "type": "string" },
-    "schemaVersion": { "const": 5 },
+    "schemaVersion": { "const": 6 },
     "frameworks": {
       "type": "array",
       "minItems": 1,
@@ -20,7 +20,7 @@
       "additionalProperties": false,
       "required": ["policy", "declared", "verified"],
       "properties": {
-        "policy": { "const": "exact" },
+        "policy": { "enum": ["exact", "capability"] },
         "declared": { "type": "string", "minLength": 1 },
         "verified": {
           "type": "array",
@@ -74,6 +74,91 @@
         }
       }
     },
+    "injectionTier": {
+      "enum": ["T0", "T1", "T2", "T3"]
+    },
+    "addedUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "sourceDigest"],
+      "properties": {
+        "target": { "type": "string", "minLength": 1 },
+        "sourceDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "intervention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "tier",
+        "sourcePatching",
+        "requiredSymbols",
+        "addedUnits",
+        "conformanceSuites"
+      ],
+      "properties": {
+        "capability": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "tier": { "$ref": "#/$defs/injectionTier" },
+        "sourcePatching": { "type": "boolean" },
+        "versionRange": { "type": "string", "minLength": 1 },
+        "requiredSymbols": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "addedUnits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/addedUnit" },
+          "uniqueItems": true
+        },
+        "conformanceSuites": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(packages|clients)/.+(?:/tests/|(?:test|spec)[^/]*\\.)[^/]*$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "tier": { "const": "T0" } } },
+          "then": {
+            "properties": {
+              "sourcePatching": { "const": false },
+              "addedUnits": { "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "tier": { "const": "T1" } } },
+          "then": {
+            "properties": {
+              "sourcePatching": { "const": false },
+              "addedUnits": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "tier": { "const": "T2" } } },
+          "then": {
+            "properties": {
+              "sourcePatching": { "const": true },
+              "addedUnits": { "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
     "annotations": {
       "type": "object",
       "additionalProperties": false,
@@ -110,6 +195,7 @@
           "enum": [
             "native-hook",
             "runtime-capability-and-behavior",
+            "compile-and-behavioral-capability",
             "checksummed-instrumentation",
             "checksummed-replacement"
           ]
@@ -141,6 +227,27 @@
         "pointer-input",
         "focus-input",
         "paired-revisions"
+      ]
+    },
+    "probeDegradedCapability": {
+      "enum": [
+        "semantic-tree",
+        "stable-identity",
+        "intended-geometry",
+        "clipped-geometry",
+        "painted-region",
+        "pointer-geometry",
+        "pointer-hit-testing",
+        "focus",
+        "scroll",
+        "render-order",
+        "action-strategies",
+        "keyboard-input",
+        "pointer-input",
+        "focus-input",
+        "paired-revisions",
+        "inactive-screen-tree",
+        "custom-container-enumeration"
       ]
     },
     "probeCapability": {
@@ -423,7 +530,15 @@
         "instrumentation": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["strategy", "patchSets", "variants"],
+          "required": [
+            "strategy",
+            "patchSets",
+            "variants",
+            "interventions",
+            "semanticClass",
+            "degradedCapabilities",
+            "t3DebtCount"
+          ],
           "properties": {
             "strategy": { "type": "string", "minLength": 1 },
             "patchSets": {
@@ -433,7 +548,19 @@
             "variants": {
               "type": "array",
               "items": { "$ref": "#/$defs/variant" }
-            }
+            },
+            "interventions": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/intervention" }
+            },
+            "semanticClass": { "enum": ["A", "B"] },
+            "degradedCapabilities": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/probeDegradedCapability" },
+              "uniqueItems": true
+            },
+            "t3DebtCount": { "type": "integer", "minimum": 0 }
           }
         },
         "annotations": {

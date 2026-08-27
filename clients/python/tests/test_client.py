@@ -12,7 +12,6 @@ from conftest import geometry
 from termwright import (
     DEFAULT_LIMITS,
     MARKER_OSC_CODE,
-    NodeGeometryObservations,
     Observation,
     PROTOCOL_ID,
     SemanticClient,

@@ -11,17 +11,17 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 40,
-    "deadline-or-scheduler-regression-test": 59,
-    "deterministic-adversarial-fixture-schedule": 34,
+    "deadline-or-scheduler-regression-test": 58,
+    "deterministic-adversarial-fixture-schedule": 32,
     "display-or-persisted-wall-time-not-correctness-order": 90,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 190,
-    "explicit-test-selection-reviewed-with-platform-registry": 79,
-    "managed-or-diagnostic-background-task": 71,
+    "explicit-external-or-ui-source-polling": 164,
+    "explicit-test-selection-reviewed-with-platform-registry": 74,
+    "managed-or-diagnostic-background-task": 72,
     "production-polling-review": 1,
-    "production-process-isolation-review": 35,
+    "production-process-isolation-review": 39,
     "test-observer-or-intentional-background-task": 13,
-    "test-process-isolation-review": 37
+    "test-process-isolation-review": 39
   },
   "findings": [
     {
@@ -113,6 +113,24 @@
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
       "excerpt": "process.env.TERMWRIGHT_RETRIES = '0';"
+    },
+    {
+      "path": "packages/conformance/scripts/conformance.mjs",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "process.env.TERMWRIGHT_TVIEW_BASELINE = tviewFixture.baseline;"
+    },
+    {
+      "path": "packages/conformance/scripts/conformance.mjs",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "process.env.TERMWRIGHT_TVIEW_CONTRACT = tviewFixture.contract;"
+    },
+    {
+      "path": "packages/conformance/scripts/conformance.mjs",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "process.env.TERMWRIGHT_TVIEW_INSTRUMENTED = tviewFixture.instrumented;"
     },
     {
       "path": "packages/conformance/scripts/conformance.mjs",
@@ -1438,6 +1456,12 @@
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
+      "excerpt": "const forgedMarkerProbe = process.env['TERMWRIGHT_FIXTURE_FORGED_MARKER'] === '1';"
+    },
+    {
+      "path": "packages/driver/test-fixtures/semantic-app.mjs",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
       "excerpt": "const hoverTracking = process.env['TERMWRIGHT_FIXTURE_HOVER'] === '1';"
     },
     {
@@ -1754,78 +1778,6 @@
     },
     {
       "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll("
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll("
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll("
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => session.getByRole('progressbar', { name: 'Disk usage' }).count())"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => session.getByTestId('disk-gauge').extendedState())"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => session.getByTestId('server-host').textContent())"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await app.getByRole('status').semanticState())?.positionInSet)"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => session.getByTestId('disk-gauge').count()).toBe(1);"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => session.getByTestId('server-host').count()).toBe(1);"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () => {"
@@ -1849,36 +1801,6 @@
       "excerpt": "describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {"
     },
     {
-      "path": "packages/probe-go/src/patches.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "else process.env['GIT_CONFIG_GLOBAL'] = previous;"
-    },
-    {
-      "path": "packages/probe-go/src/patches.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "process.env['GIT_CONFIG_GLOBAL'] = globalConfig;"
-    },
-    {
-      "path": "packages/probe-go/src/patches.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!hasGo)('a cold module cache', () => {"
-    },
-    {
-      "path": "packages/probe-go/src/patches.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(upstream === null)('against the real framework', () => {"
-    },
-    {
-      "path": "packages/probe-go/src/patches.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skip('skips the Go arms because no go toolchain is reachable', () => {"
-    },
-    {
       "path": "packages/probe-go/src/workspace.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
@@ -1889,6 +1811,30 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(async () => {"
+    },
+    {
+      "path": "packages/probe-ink/src/instrument-transaction.test.ts",
+      "kind": "process-global-mutation",
+      "classification": "test-process-isolation-review",
+      "excerpt": "else process.env['DEV'] = originalDev;"
+    },
+    {
+      "path": "packages/probe-ink/src/instrument-transaction.test.ts",
+      "kind": "process-global-mutation",
+      "classification": "test-process-isolation-review",
+      "excerpt": "process.env['DEV'] = 'true';"
+    },
+    {
+      "path": "packages/probe-ink/src/instrument-transaction.test.ts",
+      "kind": "process-global-mutation",
+      "classification": "test-process-isolation-review",
+      "excerpt": "process.env['DEV'] = 'true';"
+    },
+    {
+      "path": "packages/probe-ink/src/instrument.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void connector({"
     },
     {
       "path": "packages/probe-ink/src/instrument.ts",
@@ -1907,6 +1853,12 @@
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
       "excerpt": "process.env['GITHUB_SHA'] = 'stale-sha';"
+    },
+    {
+      "path": "packages/probe-ink/src/react-commit-bridge.test.ts",
+      "kind": "process-global-mutation",
+      "classification": "test-process-isolation-review",
+      "excerpt": "else process.env[\"DEV\"] = previousDev;"
     },
     {
       "path": "packages/probe-ink/src/render-boundary.ts",
@@ -1967,18 +1919,6 @@
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "const timer = setTimeout(() => {"
-    },
-    {
-      "path": "packages/probe-opentui/src/testing/geometry-app.ts",
-      "kind": "timer",
-      "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "setTimeout(() => {"
-    },
-    {
-      "path": "packages/probe-opentui/src/testing/geometry-app.ts",
-      "kind": "timer",
-      "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "setTimeout(() => {"
     },
     {
       "path": "packages/probe-opentui/src/testing/runtime-conformance-app.ts",
@@ -2072,111 +2012,15 @@
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll("
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll("
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() =>"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => app.contract()?.capabilities[\"semantic-tree\"].status)"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => app.getByRole(\"button\", { name: \"Save\" }).count())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => app.getByRole(\"list\", { name: \"Files\" }).count())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => app.getByRole(\"listitem\", { name: \"readme.md\" }).count())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => app.getByRole(\"region\", { name: \"Settings\" }).count())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => app.getByRole(\"textbox\", { name: \"Name\" }).count())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => session.contract(), { timeout: 10_000 })"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => session.getByRole(\"button\", { name: \"Save changes\" }).count())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => session.getByTestId(\"unread-badge\").count())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => session.getByTestId(\"unread-badge\").extendedState())"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => session.semanticTree()?.v, { timeout: 10_000 })"
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "describe.skipIf(!runnable)('tview T0+T1 injection', () => {"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!hasGo)(\"the Windows tcell companion\", () => {"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!runnable)(\"a plain tview application under the probe\", () => {"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!runnable)(\"developer annotations\", () => {"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!runnable)(\"the launcher call\", () => {"
+      "excerpt": "it.skipIf(!hasGo)('fails closed when an active build omitted compiler injection', async () => {"
     },
     {
       "path": "packages/protocol/src/env.test.ts",
@@ -2255,12 +2099,6 @@
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "\"setTimeout(() => process.exit(0), 2000);\","
-    },
-    {
-      "path": "packages/pty/src/windows-native.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "\"setTimeout(() => process.exit(0), 300);\","
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",

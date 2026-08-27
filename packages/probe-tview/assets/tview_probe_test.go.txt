@@ -1,0 +1,483 @@
+package tview
+
+import (
+	"errors"
+	"reflect"
+	"runtime/debug"
+	"sync/atomic"
+	"testing"
+
+	"github.com/gdamore/tcell/v2"
+
+	"github.com/gorce-ai/termwright/clients/go/protocol"
+)
+
+type termwrightControlledPublicationSink struct {
+	ready    chan struct{}
+	failures atomic.Int32
+}
+
+func (s *termwrightControlledPublicationSink) TryPublish(*protocol.Snapshot) (string, error) {
+	return "", protocol.ErrPublicationQueueFull
+}
+
+func (s *termwrightControlledPublicationSink) ReadyAfterDrop() <-chan struct{} { return s.ready }
+func (s *termwrightControlledPublicationSink) Fail(string, string)             { s.failures.Add(1) }
+
+type termwrightTestScreen struct {
+	tcell.Screen
+	onShow    func()
+	onFini    func()
+	finalized atomic.Bool
+}
+
+func (s *termwrightTestScreen) Show() {
+	if s.onShow != nil {
+		s.onShow()
+		return
+	}
+	s.Screen.Show()
+}
+
+func (s *termwrightTestScreen) Fini() {
+	if !s.finalized.CompareAndSwap(false, true) {
+		return
+	}
+	if s.onFini != nil {
+		s.onFini()
+	}
+	s.Screen.Fini()
+}
+
+func termwrightNewTestScreen(t *testing.T) *termwrightTestScreen {
+	t.Helper()
+	simulation := tcell.NewSimulationScreen("UTF-8")
+	if err := simulation.Init(); err != nil {
+		t.Fatal(err)
+	}
+	screen := &termwrightTestScreen{Screen: simulation}
+	t.Cleanup(screen.Fini)
+	return screen
+}
+
+func termwrightDecorator(application *Application, screen tcell.Screen, commit func(Primitive, tcell.Screen)) *termwrightScreen {
+	decorated := &termwrightScreen{
+		Screen: screen, application: application, commit: commit,
+	}
+	decorated.previousBefore = application.beforeDraw
+	decorated.previousAfter = application.afterDraw
+	decorated.beforeHook = decorated.beforeDraw
+	decorated.afterHook = decorated.afterDraw
+	application.beforeDraw = decorated.beforeHook
+	application.afterDraw = decorated.afterHook
+	application.screen = decorated
+	return decorated
+}
+
+type termwrightIntermediateShowPrimitive struct{ *Box }
+
+func (p *termwrightIntermediateShowPrimitive) Draw(screen tcell.Screen) {
+	x, y, _, _ := p.GetRect()
+	screen.SetContent(x, y, 'a', nil, tcell.StyleDefault)
+	screen.Show()
+	screen.SetContent(x+1, y, 'b', nil, tcell.StyleDefault)
+}
+
+func TestTermwrightScreenIgnoresIntermediateCustomPrimitiveShow(t *testing.T) {
+	application := NewApplication()
+	root := &termwrightIntermediateShowPrimitive{Box: NewBox()}
+	application.SetRoot(root, true)
+	underlying := termwrightNewTestScreen(t)
+	shows := 0
+	underlying.onShow = func() { shows++ }
+	commits := 0
+	termwrightDecorator(application, underlying, func(Primitive, tcell.Screen) { commits++ })
+
+	application.draw()
+	if shows != 2 || commits != 1 {
+		t.Fatalf("custom draw shows/commits = %d/%d, want 2/1", shows, commits)
+	}
+}
+
+func TestTermwrightScreenIgnoresShowsInsideLifecycleHooks(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		set  func(*Application)
+	}{
+		{name: "before-short-circuit", set: func(application *Application) {
+			application.SetBeforeDrawFunc(func(screen tcell.Screen) bool { screen.Show(); return true })
+		}},
+		{name: "after", set: func(application *Application) {
+			application.SetAfterDrawFunc(func(screen tcell.Screen) { screen.Show() })
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			application := NewApplication()
+			application.SetRoot(NewBox(), true)
+			test.set(application)
+			underlying := termwrightNewTestScreen(t)
+			shows := 0
+			underlying.onShow = func() { shows++ }
+			commits := 0
+			termwrightDecorator(application, underlying, func(Primitive, tcell.Screen) { commits++ })
+			application.draw()
+			if shows != 2 || commits != 1 {
+				t.Fatalf("hook shows/commits = %d/%d, want 2/1", shows, commits)
+			}
+		})
+	}
+}
+
+func TestTermwrightScreenFailsClosedWhenLifecycleHookIsDisplaced(t *testing.T) {
+	application := NewApplication()
+	application.SetRoot(NewBox(), true)
+	underlying := termwrightNewTestScreen(t)
+	commits := 0
+	decorated := termwrightDecorator(application, underlying, func(Primitive, tcell.Screen) { commits++ })
+	failures := 0
+	decorated.fail = func(code, message string) {
+		if code != "adapter-guarantee-violation" || message == "" {
+			t.Fatalf("unexpected failure %q: %q", code, message)
+		}
+		failures++
+	}
+	application.SetAfterDrawFunc(func(tcell.Screen) {})
+
+	application.draw()
+	if failures != 1 || commits != 0 || !decorated.failed.Load() {
+		t.Fatalf("displaced hook failures/commits/failed = %d/%d/%v, want 1/0/true", failures, commits, decorated.failed.Load())
+	}
+}
+
+func TestTermwrightDependencyVersionAcceptsWorkspaceAndLocalReplacement(t *testing.T) {
+	for _, test := range []struct {
+		module *debug.Module
+		want   string
+	}{
+		{module: &debug.Module{Version: "v0.42.0", Replace: &debug.Module{Path: "/workspace/tview"}}, want: "v0.42.0"},
+		{module: &debug.Module{Version: "(devel)", Replace: &debug.Module{Path: "/workspace/tview"}}, want: "capability-local"},
+		{module: &debug.Module{Replace: &debug.Module{Path: "/workspace/tview"}}, want: "capability-local"},
+	} {
+		if got := termwrightDependencyVersion(test.module); got != test.want {
+			t.Fatalf("dependency version = %q, want %q", got, test.want)
+		}
+	}
+}
+
+func TestTermwrightScreenCommitsAfterTheOnlyUnderlyingShow(t *testing.T) {
+	application := NewApplication()
+	root := NewBox()
+	application.SetRoot(root, true)
+	events := make([]string, 0, 2)
+	underlying := termwrightNewTestScreen(t)
+	underlying.onShow = func() { events = append(events, "show") }
+	termwrightDecorator(application, underlying, func(got Primitive, screen tcell.Screen) {
+		if got != root || screen != underlying {
+			t.Fatalf("commit observed root/screen %T/%T", got, screen)
+		}
+		events = append(events, "commit-marker")
+	})
+
+	application.draw()
+	if want := []string{"show", "commit-marker"}; !reflect.DeepEqual(events, want) {
+		t.Fatalf("frame order = %v, want %v", events, want)
+	}
+}
+
+func TestTermwrightScreenObservesBeforeDrawShortCircuit(t *testing.T) {
+	application := NewApplication()
+	root := NewBox()
+	application.SetRoot(root, true)
+	events := make([]string, 0, 3)
+	application.SetBeforeDrawFunc(func(tcell.Screen) bool {
+		events = append(events, "before")
+		return true
+	})
+	underlying := termwrightNewTestScreen(t)
+	underlying.onShow = func() { events = append(events, "show") }
+	termwrightDecorator(application, underlying, func(got Primitive, _ tcell.Screen) {
+		if got != root {
+			t.Fatalf("commit root = %T, want initial root", got)
+		}
+		events = append(events, "commit-marker")
+	})
+
+	application.draw()
+	if want := []string{"before", "show", "commit-marker"}; !reflect.DeepEqual(events, want) {
+		t.Fatalf("short-circuit order = %v, want %v", events, want)
+	}
+}
+
+func TestTermwrightScreenReadsDynamicRootAfterEachShow(t *testing.T) {
+	application := NewApplication()
+	first := NewBox()
+	second := NewTextView().SetText("second")
+	application.SetRoot(first, true)
+	underlying := termwrightNewTestScreen(t)
+	roots := make([]Primitive, 0, 2)
+	termwrightDecorator(application, underlying, func(root Primitive, _ tcell.Screen) {
+		roots = append(roots, root)
+	})
+
+	application.draw()
+	application.SetRoot(second, true)
+	application.draw()
+	if want := []Primitive{first, second}; !reflect.DeepEqual(roots, want) {
+		t.Fatalf("committed roots = %v, want %v", roots, want)
+	}
+}
+
+func TestTermwrightScreensDoNotSerializeIndependentApplications(t *testing.T) {
+	firstApplication := NewApplication()
+	secondApplication := NewApplication()
+	firstApplication.root = NewBox()
+	secondApplication.root = NewBox()
+	firstUnderlying := termwrightNewTestScreen(t)
+	secondUnderlying := termwrightNewTestScreen(t)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstUnderlying.onShow = func() {
+		close(entered)
+		<-release
+	}
+	secondShown := false
+	secondUnderlying.onShow = func() { secondShown = true }
+	first := termwrightDecorator(firstApplication, firstUnderlying, nil)
+	second := termwrightDecorator(secondApplication, secondUnderlying, nil)
+	done := make(chan struct{})
+	go func() {
+		first.Show()
+		close(done)
+	}()
+	<-entered
+	second.Show()
+	if !secondShown {
+		t.Fatal("second application was serialized behind the first")
+	}
+	close(release)
+	<-done
+}
+
+func TestTermwrightIdleShowDoesNotReadHooksBeingConfigured(t *testing.T) {
+	application := NewApplication()
+	underlying := termwrightNewTestScreen(t)
+	underlying.onShow = func() {}
+	decorated := termwrightDecorator(application, underlying, nil)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for index := 0; index < 1000; index++ {
+			application.SetAfterDrawFunc(func(tcell.Screen) {})
+		}
+	}()
+	for index := 0; index < 1000; index++ {
+		decorated.Show()
+	}
+	<-done
+}
+
+func TestTermwrightScreenFailsClosedOnReentrantShow(t *testing.T) {
+	application := NewApplication()
+	application.root = NewBox()
+	underlying := termwrightNewTestScreen(t)
+	var decorated *termwrightScreen
+	var failures atomic.Int32
+	commits := 0
+	decorated = termwrightDecorator(application, underlying, func(Primitive, tcell.Screen) {
+		commits++
+	})
+	decorated.fail = func(code, message string) {
+		if code != "adapter-guarantee-violation" || message == "" {
+			t.Fatalf("unexpected failure %q: %q", code, message)
+		}
+		failures.Add(1)
+	}
+	underlying.onShow = func() { decorated.Show() }
+
+	decorated.Show()
+	if failures.Load() != 1 || commits != 0 {
+		t.Fatalf("reentrant Show failures/commits = %d/%d, want 1/0", failures.Load(), commits)
+	}
+}
+
+func TestTermwrightScreenCleanupRestoresOnlyItsOwnInstallation(t *testing.T) {
+	t.Run("restores", func(t *testing.T) {
+		application := NewApplication()
+		underlying := termwrightNewTestScreen(t)
+		decorated := termwrightDecorator(application, underlying, nil)
+		decorated.detach()
+		if application.screen != underlying {
+			t.Fatalf("cleanup restored %T, want underlying screen", application.screen)
+		}
+	})
+	t.Run("later replacement wins", func(t *testing.T) {
+		application := NewApplication()
+		underlying := termwrightNewTestScreen(t)
+		replacement := termwrightNewTestScreen(t)
+		decorated := termwrightDecorator(application, underlying, nil)
+		application.screen = replacement
+		decorated.detach()
+		if application.screen != replacement {
+			t.Fatalf("cleanup clobbered later screen with %T", application.screen)
+		}
+	})
+}
+
+func TestTermwrightScreenFailsClosedBeforeRuntimeReplacement(t *testing.T) {
+	application := NewApplication()
+	underlying := termwrightNewTestScreen(t)
+	replacement := termwrightNewTestScreen(t)
+	finalized := 0
+	underlying.onFini = func() { finalized++ }
+	decorated := termwrightDecorator(application, underlying, nil)
+	failures := 0
+	decorated.fail = func(code, message string) {
+		if code != "adapter-guarantee-violation" || message == "" {
+			t.Fatalf("unexpected failure %q: %q", code, message)
+		}
+		failures++
+	}
+
+	application.SetScreen(replacement)
+	if failures != 1 || finalized != 1 || !decorated.failed.Load() || !decorated.detached.Load() {
+		t.Fatalf("replacement failures/finalized/failed/detached = %d/%d/%v/%v", failures, finalized, decorated.failed.Load(), decorated.detached.Load())
+	}
+	decorated.Fini()
+	if finalized != 1 {
+		t.Fatalf("underlying screen finalized %d times, want once", finalized)
+	}
+}
+
+func TestTermwrightScreenStopDoesNotReenterApplicationLock(t *testing.T) {
+	application := NewApplication()
+	underlying := termwrightNewTestScreen(t)
+	finalized := 0
+	underlying.onFini = func() { finalized++ }
+	decorated := termwrightDecorator(application, underlying, nil)
+	failures := 0
+	decorated.fail = func(string, string) { failures++ }
+
+	// This is the real upstream lifecycle: Stop holds Application.Lock while it
+	// invokes the decorated screen's Fini method.
+	application.Stop()
+	if finalized != 1 || failures != 0 || !decorated.failed.Load() || !decorated.detached.Load() {
+		t.Fatalf("stop finalized/failures/failed/detached = %d/%d/%v/%v", finalized, failures, decorated.failed.Load(), decorated.detached.Load())
+	}
+	decorated.detach()
+	if application.beforeDraw != nil || application.afterDraw != nil {
+		t.Fatal("cleanup after Stop left the probe lifecycle hooks installed")
+	}
+}
+
+func TestTermwrightScreenFiniUnderUnrelatedWriterFailsClosedWithoutBlocking(t *testing.T) {
+	application := NewApplication()
+	underlying := termwrightNewTestScreen(t)
+	commits := 0
+	decorated := termwrightDecorator(application, underlying, func(Primitive, tcell.Screen) {
+		commits++
+	})
+	failures := make(chan string, 1)
+	decorated.fail = func(code, message string) {
+		if code != "adapter-guarantee-violation" || message == "" {
+			t.Errorf("unexpected failure %q: %q", code, message)
+		}
+		failures <- message
+	}
+
+	application.Lock()
+	decorated.Fini()
+	application.Unlock()
+	<-failures
+	underlying.onShow = func() {}
+	decorated.Show()
+	if commits != 0 || !decorated.failed.Load() || !decorated.detached.Load() {
+		t.Fatalf("writer collision commits/failed/detached = %d/%v/%v", commits, decorated.failed.Load(), decorated.detached.Load())
+	}
+	decorated.detach()
+	application.Lock()
+	application.screen = nil
+	application.Unlock()
+}
+
+func TestTermwrightQueuePressureRequestsOneFreshAuthoritativeDraw(t *testing.T) {
+	application := NewApplication()
+	root := NewTextView().SetText("latest")
+	application.SetRoot(root, true)
+	underlying := termwrightNewTestScreen(t)
+	underlying.onShow = func() {}
+	commits := 0
+	termwrightDecorator(application, underlying, func(got Primitive, _ tcell.Screen) {
+		if got != root {
+			t.Fatalf("recovery committed %T, want latest root", got)
+		}
+		commits++
+	})
+	probe := &termwrightProbeState{
+		application:  application,
+		recoveryStop: make(chan struct{}),
+	}
+	sink := &termwrightControlledPublicationSink{ready: make(chan struct{})}
+
+	probe.onPublishFailed(sink, protocol.ErrPublicationQueueFull)
+	probe.onPublishFailed(sink, protocol.ErrPublicationQueueFull)
+	if sink.failures.Load() != 0 || probe.dropped.Load() != 2 {
+		t.Fatalf("recoverable pressure failures/drops = %d/%d, want 0/2", sink.failures.Load(), probe.dropped.Load())
+	}
+	select {
+	case <-application.updates:
+		t.Fatal("redraw was queued before publication capacity returned")
+	default:
+	}
+
+	close(sink.ready)
+	update := <-application.updates
+	update.f()
+	if commits != 1 || probe.recoveryPending.Load() {
+		t.Fatalf("authoritative redraw commits/pending = %d/%v, want 1/false", commits, probe.recoveryPending.Load())
+	}
+	close(probe.recoveryStop)
+	probe.recoveryWorkers.Wait()
+}
+
+func TestTermwrightAdmissionContentionDefersOneFreshAuthoritativeDraw(t *testing.T) {
+	application := NewApplication()
+	root := NewTextView().SetText("after-contention")
+	application.SetRoot(root, true)
+	underlying := termwrightNewTestScreen(t)
+	underlying.onShow = func() {}
+	commits := 0
+	termwrightDecorator(application, underlying, func(got Primitive, _ tcell.Screen) {
+		if got != root {
+			t.Fatalf("deferred draw committed %T, want latest root", got)
+		}
+		commits++
+	})
+	probe := &termwrightProbeState{
+		application:  application,
+		recoveryStop: make(chan struct{}),
+	}
+	sink := &termwrightControlledPublicationSink{ready: make(chan struct{})}
+
+	probe.onPublishFailed(sink, protocol.ErrPublicationQueueBusy)
+	probe.onPublishFailed(sink, protocol.ErrPublicationQueueBusy)
+	update := <-application.updates
+	update.f()
+	if sink.failures.Load() != 0 || probe.dropped.Load() != 2 || commits != 1 || probe.recoveryPending.Load() {
+		t.Fatalf(
+			"contention failures/drops/commits/pending = %d/%d/%d/%v, want 0/2/1/false",
+			sink.failures.Load(), probe.dropped.Load(), commits, probe.recoveryPending.Load(),
+		)
+	}
+	close(probe.recoveryStop)
+	probe.recoveryWorkers.Wait()
+}
+
+func TestTermwrightNonPressurePublicationRefusalStillFailsClosed(t *testing.T) {
+	probe := &termwrightProbeState{recoveryStop: make(chan struct{})}
+	sink := &termwrightControlledPublicationSink{ready: make(chan struct{})}
+	probe.onPublishFailed(sink, errors.New("invalid snapshot"))
+	if sink.failures.Load() != 1 || probe.dropped.Load() != 1 {
+		t.Fatalf("hard refusal failures/drops = %d/%d, want 1/1", sink.failures.Load(), probe.dropped.Load())
+	}
+	close(probe.recoveryStop)
+}

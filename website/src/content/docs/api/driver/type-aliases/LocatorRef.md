@@ -13,4 +13,4 @@ editUrl: false
 
 > **LocatorRef** = [`SemanticLocatorRef`](../semanticlocatorref/) \| [`ScreenLocatorRef`](../screenlocatorref/)
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:686
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:40

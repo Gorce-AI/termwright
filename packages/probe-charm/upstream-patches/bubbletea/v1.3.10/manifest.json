@@ -1,20 +1,20 @@
 {
   "framework": "github.com/charmbracelet/bubbletea",
   "frameworkVersion": "v1.3.10",
-  "patchSetVersion": 18,
-  "note": "Three model-aware capture anchors stage observations; standardRenderer.flush commits them only after a complete same-writer terminal write, with Windows markers restoring VT output mode on the renderer's exact console handle, and closes the semantic channel on output failure.",
+  "patchSetVersion": 21,
+  "note": "Three model-aware T3 capture anchors stage observations. Dormant render/flush hooks execute only atomic guards and create no probe session, goroutine, socket, or probe allocation. Model observation, publication admission, and output commit use non-blocking CAS/try admission; contention fails semantic completeness closed. Unknown, private, scalar, nil, and depth-limited model subtrees remain structurally visible as opaque-container nodes with custom-container-enumeration degradation. Ref-counted Program ownership drains the bounded worker FIFO only after the last concurrent run exits.",
   "patched": [
     {
       "path": "standard_renderer.go",
       "patch": "patches/standard_renderer.go.patch",
       "sha256Before": "sha256:fe30321708716b962f78965cab407c4edccac2bc22f9dd5e72ac506420a1b4d6",
-      "sha256After": "sha256:91ee1e6dd7fa2f7278bac94665f22a7e335ce6005822af8e5a58fbed4885f57e"
+      "sha256After": "sha256:7ee5feadddafc9a4ce98f262a3e7bdab375fa5b347670c5ed2aa0ee71fc574ae"
     },
     {
       "path": "tea.go",
       "patch": "patches/tea.go.patch",
       "sha256Before": "sha256:93a3744362223921e3f82ded63c65bf8029ff77d2e4a46604b77fbd37f87162e",
-      "sha256After": "sha256:e3c39edf161a7c405730478d06ab8f95aae98b1b908d15956b5a6ff98b0bdd89"
+      "sha256After": "sha256:af31029345a529dbbe3458a36f708d58f39a1cfc694539ab73fc79674b87d6ef"
     },
     {
       "path": "go.mod",
@@ -27,7 +27,7 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:ceb7d5329358793e075a13c8b778f3ed188a4c0cb427fcb1a48469f3038743e3"
+      "sha256": "sha256:3b6c78b8572ef3d01b359c317bfa656ae01a5938a12fb029bc9ff6fa0346b2e6"
     },
     {
       "path": "termwright_marker_other.go",
@@ -42,7 +42,7 @@
     {
       "path": "termwright_probe_test.go",
       "source": "add/termwright_probe_test.go",
-      "sha256": "sha256:b69aeb1b63d8df61f8333b21d7f5ba1e3f9969995d7437c1aeed32fd225df030"
+      "sha256": "sha256:9e1c129683b766fd7781b468ca1cc3c2d7402755a31d684f772189016433bee7"
     }
   ]
 }

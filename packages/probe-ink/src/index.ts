@@ -8,11 +8,28 @@ export {
   buildShimSource,
   shouldShim,
   originalUrl,
+  reconcilerUrl,
   INK_ENTRY_PATTERN,
   INSTRUMENT_URL,
   ORIGINAL_MARKER,
 } from './shim.js';
+export {
+  ReactCommitBridge,
+  activateInkRendererObservation,
+  installReactCommitBridge,
+  requireCommittedInkRoot,
+} from './react-commit-bridge.js';
+export type {
+  InkCommitEvent,
+  InkReconcilerInstrumentation,
+  InkRendererRegistration,
+} from './react-commit-bridge.js';
 export { observeInkTree } from './observe.js';
-export type { InkDomElement, InkDomNode, InkObservation, MeasureElement } from './observe.js';
+export type {
+  InkDomElement,
+  InkDomNode,
+  InkObservation,
+  MeasureElement,
+} from './observe.js';
 export { createInkSession, probeInfo } from './session.js';
 export type { InkProbeSession, InkSessionOptions } from './session.js';

@@ -1,28 +1,30 @@
-"""Exact-certified Textual frame observation.
+"""Capability-certified Textual frame observation.
 
 ``post_display_hook`` alone is not a commit boundary: Textual invokes it from
 ``App._display``'s ``finally`` block even when no render was attempted or the
 render failed. The probe combines that hook with evidence that the exact
 driver enqueued the display attempt, then appends the marker non-blockingly to
-the same certified WriterThread FIFO.
+the same behaviorally verified WriterThread FIFO.
+
+The integration deliberately does not allowlist Textual versions. Public tree
+and geometry APIs are checked when a snapshot is built, while the private
+same-writer seam is checked structurally and behaviorally for every committed
+frame. A missing or changed capability fails the semantic channel closed.
 """
 
 from __future__ import annotations
 
-import os
-import re
 import sys
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, List, Mapping, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 from weakref import WeakKeyDictionary
-
-from .certified_textual import CERTIFIED_TEXTUAL_VERSIONS
 
 REQUIRED_APP_ATTRIBUTES = (
     "post_display_hook", "_display", "refresh", "screen", "focused",
     "size",
 )
+REQUIRED_APP_CALLABLES = frozenset({"post_display_hook", "_display", "refresh"})
 
 
 @dataclass(frozen=True)
@@ -112,7 +114,7 @@ def _evidence_for(driver: Any) -> Optional[_DriverEvidence]:
 
 
 def _wrap_driver_method(driver_type: Any, name: str) -> bool:
-    """Observe successful calls at the narrow, exact-certified driver seam."""
+    """Observe successful calls at the narrow runtime driver seam."""
     owner = next((cls for cls in driver_type.__mro__ if name in cls.__dict__), None)
     if owner is None:
         return False
@@ -137,15 +139,21 @@ def _wrap_driver_method(driver_type: Any, name: str) -> bool:
 
 
 def _prepare_driver(driver: Any) -> Optional[_DriverEvidence]:
-    if driver is None or not _is_certified_builtin_driver(driver):
+    if driver is None or not _is_supported_builtin_driver(driver):
         return None
     if not _wrap_driver_method(type(driver), "write"):
         return None
     return _evidence_for(driver)
 
 
-def _is_certified_builtin_driver(driver: Any) -> bool:
-    """Accept only the exact platform driver classes covered by certification."""
+def _is_supported_builtin_driver(driver: Any) -> bool:
+    """Accept a built-in driver with the behaviorally checked writer seam.
+
+    Exact type identity prevents a custom subclass from inheriting a private
+    contract it may replace. This is capability detection, not a version pin:
+    each Textual release is accepted when its live built-in driver still
+    exposes the required behavior.
+    """
     try:
         if sys.platform == "win32":
             from textual.drivers.windows_driver import WindowsDriver
@@ -158,33 +166,43 @@ def _is_certified_builtin_driver(driver: Any) -> bool:
         return False
 
 
-def _is_certified_writer_thread(writer_thread: Any) -> bool:
-    """Check the certified WriterThread and its bounded FIFO identity."""
+def _is_supported_writer_thread(writer_thread: Any) -> bool:
+    """Check the live WriterThread and its behaviorally bounded FIFO."""
     try:
         from queue import Queue
         from textual.drivers._writer_thread import WriterThread
     except ImportError:
         return False
     queue = getattr(writer_thread, "_queue", None)
+    maxsize = getattr(queue, "maxsize", None)
+    full = getattr(queue, "full", None)
+    put_nowait = getattr(queue, "put_nowait", None)
+    is_alive = getattr(writer_thread, "is_alive", None)
     return bool(
         type(writer_thread) is WriterThread
         and type(queue) is Queue
-        and getattr(queue, "maxsize", None) == 30
+        and isinstance(maxsize, int)
+        and maxsize > 0
+        and callable(full)
+        and callable(put_nowait)
+        and callable(is_alive)
+        and is_alive()
     )
 
 
 def _marker_writer_for(driver: Any) -> Optional[_MarkerWriter]:
-    """Return the exact-certified non-blocking same-writer enqueue operation.
+    """Return the capability-checked non-blocking same-writer enqueue operation.
 
     Textual's public ``Driver.write`` may block the event loop on
     ``WriterThread``'s bounded queue and ``Driver.flush`` is a no-op. The
-    certified Linux and Windows drivers expose their WriterThread instance;
-    its FIFO queue has the only operation that is both causal and non-blocking.
+    supported Linux and Windows drivers expose their WriterThread instance;
+    its FIFO queue is the only observed operation that is both causal and
+    non-blocking.
     """
-    if not _is_certified_builtin_driver(driver):
+    if not _is_supported_builtin_driver(driver):
         return None
     writer_thread = getattr(driver, "_writer_thread", None)
-    if not _is_certified_writer_thread(writer_thread):
+    if not _is_supported_writer_thread(writer_thread):
         return None
     queue = getattr(writer_thread, "_queue", None)
     put_nowait = getattr(queue, "put_nowait", None)
@@ -192,30 +210,42 @@ def _marker_writer_for(driver: Any) -> Optional[_MarkerWriter]:
     if not callable(put_nowait) or not callable(is_alive) or not is_alive():
         return None
 
-    def validate() -> None:
+    def validate(phase: str) -> None:
         if getattr(driver, "_writer_thread", None) is not writer_thread:
-            raise RuntimeError("Textual replaced the committed WriterThread")
+            raise RuntimeError(f"Textual replaced the committed WriterThread {phase}")
         if not writer_thread.is_alive():
-            raise RuntimeError("Textual WriterThread stopped before marker enqueue")
+            raise RuntimeError(f"Textual WriterThread stopped {phase}")
         if getattr(writer_thread, "_queue", None) is not queue:
-            raise RuntimeError("Textual replaced the committed WriterThread queue")
+            raise RuntimeError(f"Textual replaced the committed WriterThread queue {phase}")
 
     def preflight() -> None:
-        validate()
+        validate("before marker preflight")
         if queue.full():
             raise RuntimeError("Textual WriterThread queue is full before snapshot publication")
 
     def enqueue(marker: str) -> Any:
-        validate()
-        return put_nowait(marker)
+        validate("before marker enqueue")
+        result = put_nowait(marker)
+        # Queue admission is the causal point, but a producer can otherwise
+        # enqueue successfully into an orphaned FIFO if the consumer exits in
+        # the narrow interval after the preflight check. Catch every death we
+        # can observe synchronously and fail the semantic channel closed. A
+        # death after this check still cannot create a false green revision:
+        # the marker remains unconsumed, so the driver cannot pair it.
+        validate("after marker enqueue")
+        return result
 
     return _MarkerWriter(preflight, enqueue)
 
 
-def _wrap_display(owner: Any) -> None:
+def _wrap_display(owner: Any) -> bool:
     original = owner.__dict__.get("_display")
-    if original is None or getattr(original, "__termwright_display_observed__", False):
-        return
+    if original is None:
+        return bool(
+            getattr(getattr(owner, "_display", None), "__termwright_display_observed__", False)
+        )
+    if getattr(original, "__termwright_display_observed__", False):
+        return True
 
     @wraps(original)
     def observed(self: Any, screen: Any, renderable: Any) -> Any:
@@ -249,7 +279,7 @@ def _wrap_display(owner: Any) -> None:
                 _display_attempts.pop(self, None)
 
     observed.__termwright_display_observed__ = True  # type: ignore[attr-defined]
-    _install_patch(owner, "_display", observed)
+    return _install_patch(owner, "_display", observed)
 
 
 def _failure(app: Any, detail: str) -> TextualCommitFailure:
@@ -277,30 +307,38 @@ def _committed_event(app: Any, attempt: _DisplayAttempt) -> Optional[TextualFram
         or _current_exception() is not attempt.entry_exception
     ):
         return None
-    if not _is_certified_builtin_driver(driver):
+    if not _is_supported_builtin_driver(driver):
         return _failure(
             app,
-            f"Textual driver {type(driver).__module__}.{type(driver).__qualname__} is not an exact certified built-in driver",
+            f"Textual driver {type(driver).__module__}.{type(driver).__qualname__} does not expose the supported built-in same-writer capability",
         )
     evidence = _evidence_for(driver)
     if evidence is None or evidence.write_revision <= attempt.entry_write_revision:
-        return _failure(app, "Textual display completed without exact built-in driver write evidence")
+        return _failure(app, "Textual display completed without built-in driver write evidence")
     if bool(getattr(driver, "is_inline", False)):
         return _failure(app, "Textual inline driver commits are not certified for same-writer markers")
     if getattr(driver, "_writer_thread", None) is not evidence.writer_thread:
         return _failure(app, "Textual replaced the WriterThread after the committed display write")
     marker_writer = _marker_writer_for(driver)
     if marker_writer is None:
-        return _failure(app, "Textual committed display has no live exact certified WriterThread")
+        return _failure(app, "Textual committed display has no live supported WriterThread capability")
     return CommittedTextualFrame(
         app, attempt.screen, driver, marker_writer.preflight, marker_writer.enqueue
     )
 
 
-def _wrap_hook(owner: Any) -> None:
+def _wrap_hook(owner: Any) -> bool:
     original = owner.__dict__.get("post_display_hook")
-    if original is None or getattr(original, "__termwright_hook_observed__", False):
-        return
+    if original is None:
+        return bool(
+            getattr(
+                getattr(owner, "post_display_hook", None),
+                "__termwright_hook_observed__",
+                False,
+            )
+        )
+    if getattr(original, "__termwright_hook_observed__", False):
+        return True
 
     @wraps(original)
     def observed(self: Any) -> Any:
@@ -312,7 +350,7 @@ def _wrap_hook(owner: Any) -> None:
         return original(self)
 
     observed.__termwright_hook_observed__ = True  # type: ignore[attr-defined]
-    _install_patch(owner, "post_display_hook", observed)
+    return _install_patch(owner, "post_display_hook", observed)
 
 
 def on_frame(observer: FrameObserver) -> None:
@@ -320,19 +358,20 @@ def on_frame(observer: FrameObserver) -> None:
 
 
 def missing_assumptions(app_class: Any) -> List[str]:
-    return [name for name in REQUIRED_APP_ATTRIBUTES if not hasattr(app_class, name)]
+    missing = []
+    for name in REQUIRED_APP_ATTRIBUTES:
+        value = getattr(app_class, name, _MISSING)
+        if value is _MISSING or (name in REQUIRED_APP_CALLABLES and not callable(value)):
+            missing.append(name)
+    return missing
 
 
-def _wrap_app_class(owner: Any) -> None:
-    _wrap_display(owner)
-    _wrap_hook(owner)
+def _wrap_app_class(owner: Any) -> bool:
+    return _wrap_display(owner) and _wrap_hook(owner)
 
 
 def attach_to_app_module(module: Any) -> bool:
     version = _textual_version()
-    if not is_textual_version_certified(version):
-        _log("diag", f"not attaching: Textual {version} has no exact certification")
-        return False
     app_class = getattr(module, "App", None)
     if app_class is None:
         _log("diag", "textual.app has no App class; not attaching")
@@ -344,7 +383,9 @@ def attach_to_app_module(module: Any) -> bool:
         _log("diag", "not attaching: this Textual is missing " + ", ".join(absent))
         return False
 
-    _wrap_app_class(app_class)
+    if not _wrap_app_class(app_class):
+        _log("diag", "not attaching: Textual display lifecycle could not be observed")
+        return False
 
     def descendants(owner: Any):
         for child in owner.__subclasses__():
@@ -364,7 +405,7 @@ def attach_to_app_module(module: Any) -> bool:
 
         _install_patch(app_class, "__init_subclass__", classmethod(init_subclass))
     _attached_modules.append(id(module))
-    _log("sem", f"attached to Textual {version}")
+    _log("sem", f"attached to Textual {version} after runtime capability checks")
     _publish_frames()
     return True
 
@@ -423,19 +464,6 @@ def _textual_version() -> str:
         return version("textual")
     except Exception:
         return "unknown"
-
-
-def is_textual_version_certified(version: str, env: Optional[Mapping[str, str]] = None) -> bool:
-    if version in CERTIFIED_TEXTUAL_VERSIONS:
-        return True
-    source = os.environ if env is None else env
-    return bool(
-        source.get("GITHUB_ACTIONS") == "true"
-        and source.get("TERMWRIGHT_CERTIFICATION_TEXTUAL_VERSION") == version
-        and re.fullmatch(r"sha256:[0-9a-f]{64}", source.get("TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST", ""))
-        and re.fullmatch(r"[0-9a-f]{40}", source.get("GITHUB_SHA", ""))
-        and source.get("TERMWRIGHT_CERTIFICATION_SOURCE_REVISION") == source.get("GITHUB_SHA")
-    )
 
 
 _debug: Optional[Any] = None

@@ -11,8 +11,7 @@
  * Parameters (ready text, interaction, quit) come from `clients/README.md`,
  * which is where each adapter's example app documents itself.
  */
-import { delimiter, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { delimiter } from 'node:path';
 import { runAdapterConformance } from '../adapter-conformance.js';
 import { pythonWith, repositoryPath } from '../support/pty.js';
 
@@ -23,10 +22,11 @@ const PYTHON_ENV = Object.freeze({
 });
 /** `null` when no interpreter here can import the client; the row then skips. */
 const PYTHON = pythonWith(['termwright', 'textual'], PYTHON_ENV);
-/** Built once by the toolchain probe, so no `go run` wrapper outlives a test. */
-const GO_BINARY = join(tmpdir(), 'termwright-conformance-tview');
-const GO_BASELINE = join(tmpdir(), 'termwright-conformance-tview-plain');
-const GO_BUILD = repositoryPath('packages', 'conformance', 'scripts', 'build-tview-fixture.mjs');
+/** Unique binaries built asynchronously by the orchestrator before the native host opens. */
+const GO_BINARY = process.env['TERMWRIGHT_TVIEW_INSTRUMENTED'] ?? '';
+const GO_BASELINE = process.env['TERMWRIGHT_TVIEW_BASELINE'] ?? '';
+const GO_CONTRACT = process.env['TERMWRIGHT_TVIEW_CONTRACT'] ?? '';
+const GO_VERIFY = repositoryPath('packages', 'conformance', 'scripts', 'verify-tview-fixture.mjs');
 
 await runAdapterConformance({
   name: 'termwright (Textual)',
@@ -65,13 +65,12 @@ await runAdapterConformance({
 
 await runAdapterConformance({
   name: 'termwright (tview)',
-  // The probe doubles as the build: it proves the toolchain works *and*
-  // produces the binary `spawn` runs, so no test pays a compile and no
-  // `go run` parent process is left holding a child.
+  // Collection verifies an immutable, content-addressed build contract. It
+  // never starts Go: compilation belongs to the orchestrator, outside the
+  // native host, so a compiler descendant cannot retain a Vitest worker pipe.
   requires: {
-    probe: [process.execPath, GO_BUILD],
-    label: 'go toolchain able to build the tview example',
-    timeoutMs: 180_000,
+    probe: [process.execPath, GO_VERIFY, GO_CONTRACT, GO_BINARY, GO_BASELINE],
+    label: 'prebuilt tview conformance fixture',
   },
   // This row was skipped on win32 while the Go client dialled a unix socket
   // unconditionally: on Windows it reached a named pipe, failed the handshake,

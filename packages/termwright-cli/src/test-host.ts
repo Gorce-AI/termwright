@@ -1370,7 +1370,7 @@ function resourceReservationFromMetadata(
   }
   const record = resources as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (key !== 'terminals' && key !== 'traceWriters' && key !== 'nativeHost') {
+    if (key !== 'terminals' && key !== 'traceWriters' && key !== 'nativeHost' && key !== 'hostPressure') {
       throw new TypeError(`collected termwright.resources contains unknown key ${key}`);
     }
   }
@@ -1388,7 +1388,16 @@ function resourceReservationFromMetadata(
   if (nativeHost === 'exclusive' && terminals === 0) {
     throw new TypeError('collected termwright.resources.nativeHost exclusive requires a terminal');
   }
-  const nativeHostPressure = nativeHost === 'exclusive' ? exclusiveNativeHostPressure : terminals;
+  const hostPressure = record['hostPressure'];
+  if (hostPressure !== undefined && hostPressure !== 'exclusive') {
+    throw new TypeError('collected termwright.resources.hostPressure must be exclusive');
+  }
+  if (nativeHost !== undefined && hostPressure !== undefined) {
+    throw new TypeError('collected termwright.resources cannot combine nativeHost and hostPressure');
+  }
+  const nativeHostPressure = nativeHost === 'exclusive' || hostPressure === 'exclusive'
+    ? exclusiveNativeHostPressure
+    : terminals;
   if (terminals === 0 && traceWriters === 0 && nativeHostPressure === 0) {
     throw new TypeError('collected termwright.resources must reserve at least one resource');
   }

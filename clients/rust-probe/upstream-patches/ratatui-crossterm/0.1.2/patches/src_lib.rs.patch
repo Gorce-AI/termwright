@@ -1,0 +1,20 @@
+--- a/src/lib.rs	2026-08-17 01:17:39
++++ b/src/lib.rs	2026-08-17 01:17:39
+@@ -359,6 +359,16 @@
+         self.writer.flush()
+     }
+-
++
++    fn termwright_marker_sink_supported(&self) -> bool {
++        true
++    }
++
++    fn termwright_write_marker(&mut self, marker: &[u8]) -> io::Result<bool> {
++        self.writer.write_all(marker)?;
++        self.writer.flush()?;
++        Ok(true)
++    }
++
+     #[cfg(feature = "scrolling-regions")]
+     fn scroll_region_up(&mut self, region: std::ops::Range<u16>, amount: u16) -> io::Result<()> {
+         queue!(

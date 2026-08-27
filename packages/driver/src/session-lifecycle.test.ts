@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { connect } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_LIMITS, encodeFrame, ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { ExitStatus } from './api.js';
 import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
 import { installTerminalLaunchResourceProvider } from './launch-resources.js';
@@ -147,8 +148,46 @@ async function expectEndpointClosed(endpoint: string): Promise<void> {
   });
 }
 
+const terminalIt = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
+
 describe('terminal session resource lifecycle', () => {
-  it('keeps an admitted handshake pending after discovery closes', async () => {
+  terminalIt(
+    'negotiates the configured semantic frame queue capacity',
+    async () => {
+      const originalListen = SemanticChannel.listen.bind(SemanticChannel);
+      let negotiatedCapacity: number | undefined;
+      const listenSpy = vi.spyOn(SemanticChannel, 'listen').mockImplementation((options, dependencies) => {
+        negotiatedCapacity = options.limits.maxQueuedFrames;
+        return originalListen(options, dependencies);
+      });
+      const endpoint: { value: string | undefined } = { value: undefined };
+      let terminal: Awaited<ReturnType<typeof launchTerminalWithBackend>> | undefined;
+      try {
+        terminal = await launchTerminalWithBackend({
+          command: ['controlled-app'],
+          backend: backendFor(new ControlledPty(), endpoint),
+          semanticFrameQueueCapacity: 64,
+        });
+        expect(negotiatedCapacity).toBe(64);
+      } finally {
+        await terminal?.close();
+        listenSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each([0, 1.5, 257])('rejects invalid semantic frame queue capacity %s before spawning', async (capacity) => {
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const pty = new ControlledPty();
+    await expect(launchTerminalWithBackend({
+      command: ['controlled-app'],
+      backend: backendFor(pty, endpoint),
+      semanticFrameQueueCapacity: capacity,
+    })).rejects.toThrow('semanticFrameQueueCapacity must be an integer from 1 to 256');
+    expect(endpoint.value).toBeUndefined();
+  });
+
+  terminalIt('keeps an admitted handshake pending after discovery closes', async () => {
     vi.useFakeTimers();
     const originalListen = SemanticChannel.listen.bind(SemanticChannel);
     let markHandshakeAdmitted!: () => void;
@@ -210,7 +249,7 @@ describe('terminal session resource lifecycle', () => {
     }
   });
 
-  it('makes PowerShell publish readiness from its launch command without bootstrap input', async () => {
+  terminalIt('makes PowerShell publish readiness from its launch command without bootstrap input', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({
       initialData: Buffer.from('\u001b]133;A\u0007\u001b]133;B\u0007'),
@@ -244,7 +283,7 @@ describe('terminal session resource lifecycle', () => {
     await expectEndpointClosed(endpoint.value!);
   });
 
-  it('surfaces an asynchronous backend write failure and still tears down', async () => {
+  terminalIt('surfaces an asynchronous backend write failure and still tears down', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty();
     const terminal = await launchTerminalWithBackend({
@@ -264,7 +303,7 @@ describe('terminal session resource lifecycle', () => {
     await expectEndpointClosed(endpoint.value!);
   });
 
-  it('uses one total ready deadline for startup and required semantic negotiation', async () => {
+  terminalIt('uses one total ready deadline for startup and required semantic negotiation', async () => {
     vi.useFakeTimers();
     try {
       const endpoint: { value: string | undefined } = { value: undefined };
@@ -296,7 +335,7 @@ describe('terminal session resource lifecycle', () => {
     }
   });
 
-  it('rolls back the endpoint and PTY when startup fails after spawn', async () => {
+  terminalIt('rolls back the endpoint and PTY when startup fails after spawn', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ failExitRegistration: true });
 
@@ -434,7 +473,7 @@ describe('terminal session resource lifecycle', () => {
     }
   });
 
-  it('shares concurrent close and preserves only the backend exit status', async () => {
+  terminalIt('shares concurrent close and preserves only the backend exit status', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ status: { code: 17, signal: null } });
     const terminal = await launchTerminalWithBackend({
@@ -452,7 +491,7 @@ describe('terminal session resource lifecycle', () => {
     await expectEndpointClosed(endpoint.value!);
   });
 
-  it('attempts later cleanup after a PTY disposer fails', async () => {
+  terminalIt('attempts later cleanup after a PTY disposer fails', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ failDispose: true });
     const terminal = await launchTerminalWithBackend({
@@ -469,7 +508,7 @@ describe('terminal session resource lifecycle', () => {
     await expectEndpointClosed(endpoint.value!);
   });
 
-  it('does not invent an exit status when the backend never reports one', async () => {
+  terminalIt('does not invent an exit status when the backend never reports one', async () => {
     vi.useFakeTimers();
     try {
       const endpoint: { value: string | undefined } = { value: undefined };
@@ -502,7 +541,7 @@ describe('terminal session resource lifecycle', () => {
     }
   });
 
-  it('does not mark teardown requested when a signal was rejected', async () => {
+  terminalIt('does not mark teardown requested when a signal was rejected', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ failSignal: 'TERM', status: { code: 17, signal: null } });
     const terminal = await launchTerminalWithBackend({ command: ['controlled-app'], backend: backendFor(pty, endpoint) });

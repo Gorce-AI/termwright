@@ -1,0 +1,14 @@
+--- a/src/terminal.rs
++++ b/src/terminal.rs
+@@ -455,6 +455,10 @@
+     /// This increments after each successful [`Terminal::draw`] / [`Terminal::try_draw`] and wraps
+     /// at `usize::MAX`.
+     frame_count: usize,
++    /// Keeps the asynchronous semantic publisher alive until every cloned
++    /// Terminal has completed its lifecycle.
++    #[cfg(feature = "std")]
++    termwright_session: termwright_probe_ratatui::session::TerminalGuard,
+ }
+-
++
+ /// Options to pass to [`Terminal::with_options`]

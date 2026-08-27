@@ -3,13 +3,15 @@
  * line discipline, real raw mode.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, vi } from 'vitest';
+import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
 import type { TerminalHarness } from '@termwright/driver';
 import { ControlChannel } from './control.js';
 import { launchInkFixture } from './fixture.js';
 import type { JsonProps } from './payload.js';
 
 const COMPONENT = new URL('./testing/counter-app.mjs', import.meta.url);
+const it = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
 
 const open: TerminalHarness[] = [];
 
@@ -39,9 +41,13 @@ describe('launchInkFixture', () => {
     // wait in each test, because a test that forgets the wait fails somewhere
     // else entirely — as a component that "rendered nothing".
     const harness = await launch();
+    const ready = harness.checkpoint();
 
     expect(harness.semanticTree()).not.toBeNull();
     expect(harness.screen().text()).toContain('Approve');
+    expect(ready.semanticRevision).toBeGreaterThan(0);
+    expect(ready.pairedScreenRevision).not.toBeNull();
+    expect(ready.pairedScreenRevision).toBeLessThanOrEqual(ready.screenRevision);
   });
 
   it('reports the negotiated capabilities from settled()', async () => {

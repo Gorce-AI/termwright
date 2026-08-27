@@ -15,6 +15,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
+import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
 import type { TerminalHarness } from '@termwright/driver';
 import { launchInkFixture } from './fixture.js';
 import { mountInk } from './mount.js';
@@ -22,6 +23,7 @@ import EnvApp from './testing/env-app.mjs';
 
 const COMPONENT = new URL('./testing/env-app.mjs', import.meta.url);
 const SIZE = { columns: 60, rows: 6 } as const;
+const fixtureIt = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
 const PROBE = 'TW_PROBE';
 const INSTRUMENTATION_ENV = [
   'TERMWRIGHT_ENDPOINT',
@@ -43,7 +45,7 @@ function track<T extends TerminalHarness>(harness: T): T {
 }
 
 describe('launchInkFixture', () => {
-  it('does not leak the runner environment into the fixture by default', async () => {
+  fixtureIt('does not leak the runner environment into the fixture by default', async () => {
     process.env[PROBE] = 'from-the-runner';
 
     const harness = track(await launchInkFixture({ component: COMPONENT, ...SIZE }));
@@ -54,7 +56,7 @@ describe('launchInkFixture', () => {
     expect(harness.screen().text()).toContain('PATH=<set>');
   });
 
-  it('passes explicit variables through', async () => {
+  fixtureIt('passes explicit variables through', async () => {
     const harness = track(
       await launchInkFixture({ component: COMPONENT, env: { [PROBE]: 'explicit' }, ...SIZE }),
     );
@@ -62,7 +64,7 @@ describe('launchInkFixture', () => {
     expect(harness.screen().text()).toContain(`${PROBE}=explicit`);
   });
 
-  it('inherits the runner environment when asked to', async () => {
+  fixtureIt('inherits the runner environment when asked to', async () => {
     process.env[PROBE] = 'inherited';
 
     const harness = track(

@@ -107,6 +107,14 @@ export function buildSessionContract(input: SessionContractInput): EffectiveSess
       version: attachment.probe?.frameworkVersion ?? attachment.adapter.version,
       adapterVersion: attachment.adapter.version,
       certificationId: `${frameworkId}@${attachment.probe?.frameworkVersion ?? attachment.adapter.version}/${attachment.adapter.version}`,
+      ...(attachment.probe?.instrumentation === undefined ? {} : {
+        instrumentation: Object.freeze({
+          ...attachment.probe.instrumentation,
+          degradedCapabilities: Object.freeze([
+            ...attachment.probe.instrumentation.degradedCapabilities,
+          ]),
+        }),
+      }),
     }),
     providers: Object.freeze(providers),
     capabilities: Object.freeze(capabilities),

@@ -119,6 +119,9 @@ describe('what the probe says about itself', () => {
     expect(info.framework).toBe('opentui');
     expect(info.identityKind).toBe('stable');
     expect(info.frameworkVersion).toBe('0.5.3');
+    expect(info.instrumentation).toEqual({
+      highestTier: 'T3', semanticClass: 'A', degradedCapabilities: [],
+    });
   });
 
   it('claims paint-order, which is what makes occlusion answerable', () => {

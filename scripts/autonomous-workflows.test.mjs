@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { certifiedProjectShards, projectSelectorArguments } from './ci-project-shards.mjs';
 
 const readWorkflow = (name) => readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8');
 
@@ -197,15 +198,15 @@ describe('autonomous workflow security', () => {
     }
   });
 
-  it('partitions the Windows catalogue into an exact project and its complement', async () => {
+  it('partitions the Windows catalogue into explicit project groups', async () => {
     const workflow = await readWorkflow('ci.yml');
     const block = jobBlock(workflow, 'windows-driver-native');
     const invocations = block.match(/^          pnpm test -- --resource-profile windows-ci --json -- --project=.*$/gmu) ?? [];
 
-    expect(invocations).toEqual([
-      '          pnpm test -- --resource-profile windows-ci --json -- --project=core',
-      "          pnpm test -- --resource-profile windows-ci --json -- --project='!core'",
-    ]);
+    expect(invocations).toEqual(certifiedProjectShards.map(
+      (projects) => `          pnpm test -- --resource-profile windows-ci --json -- ${projectSelectorArguments(projects)}`,
+    ));
+    expect(invocations.join('\n')).not.toContain('--project=!');
     expect(block).not.toContain('--shard');
     expect(block).not.toContain('--retry');
   });

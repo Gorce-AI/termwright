@@ -37,6 +37,11 @@ export interface FakeDriver {
   readonly snapshots: readonly SemanticSnapshot[];
   readonly errors: readonly ProtocolErrorMessage[];
   waitForSnapshots(count: number, timeoutMs?: number): Promise<readonly SemanticSnapshot[]>;
+  waitForSnapshot(
+    predicate: (snapshot: SemanticSnapshot) => boolean,
+    description: string,
+    timeoutMs?: number,
+  ): Promise<SemanticSnapshot>;
   waitForHandshake(timeoutMs?: number): Promise<HelloMessage>;
   close(): Promise<void>;
 }
@@ -159,6 +164,14 @@ export async function startFakeDriver(): Promise<FakeDriver> {
     async waitForSnapshots(count, timeoutMs = DEFAULT_WAIT_MS) {
       await until(() => snapshots.length >= count, timeoutMs, `${count} snapshot(s)`);
       return snapshots;
+    },
+    async waitForSnapshot(predicate, description, timeoutMs = DEFAULT_WAIT_MS) {
+      let observed: SemanticSnapshot | undefined;
+      await until(() => {
+        observed = snapshots.find(predicate);
+        return observed !== undefined;
+      }, timeoutMs, description);
+      return observed as SemanticSnapshot;
     },
     async waitForHandshake(timeoutMs = DEFAULT_WAIT_MS) {
       await until(() => hello !== undefined, timeoutMs, 'handshake');

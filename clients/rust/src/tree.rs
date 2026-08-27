@@ -553,6 +553,9 @@ pub struct Node {
     /// type, so a reader can tell one unknown thing from another.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub framework_type: Option<String>,
+    /// This node may own children the framework cannot enumerate.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub opaque_children: bool,
     /// Where this node's facts came from, as a whole.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub p: Option<Provenance>,
@@ -620,6 +623,7 @@ impl Node {
             text_ranges: None,
             test_id: None,
             framework_type: None,
+            opaque_children: false,
             p: None,
             px: None,
             geometry: NodeGeometryObservations {
@@ -645,6 +649,13 @@ impl Node {
     /// for a [`Role::Generic`] node.
     pub fn with_framework_type(mut self, framework_type: impl Into<String>) -> Self {
         self.framework_type = Some(framework_type.into());
+        self
+    }
+
+    /// Declare that this node may own children the probe cannot enumerate.
+    #[must_use]
+    pub fn with_opaque_children(mut self) -> Self {
+        self.opaque_children = true;
         self
     }
 

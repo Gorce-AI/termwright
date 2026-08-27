@@ -702,7 +702,7 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
         'const note = (line) => { try { fs.appendFileSync(process.env.TW_PROBE_JOURNAL, line + "\\n"); } catch {} };',
         'note("up pid=" + process.pid);',
         'process.on("exit", (code) => note("exit " + code));',
-        'process.stdout.write("CHILD_UP\\r\\n");',
+        'process.stdout.write("CHILD_UP\\r\\n", () => { if (process.send) process.send("ready"); });',
         // Far enough out that the root is long gone first. Reaching it is what
         // survival would look like.
         'setTimeout(() => note("still here"), 2000);',
@@ -711,9 +711,13 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
     );
     const script = [
       'const { spawn } = require("node:child_process");',
-      'const child = spawn(process.execPath, [process.env.TW_PROBE_SCRIPT], { stdio: "inherit", detached: false });',
+      'const child = spawn(process.execPath, [process.env.TW_PROBE_SCRIPT], { stdio: ["inherit", "inherit", "inherit", "ipc"], detached: false });',
       'process.stdout.write("SPAWN_PID=" + child.pid + "\\r\\n");',
-      "setTimeout(() => process.exit(0), 300);",
+      'child.once("message", (message) => {',
+      '  if (message !== "ready") return;',
+      '  process.stdout.write("CHILD_UP_ACK\\r\\n", () => process.exit(0));',
+      '});',
+      'child.once("error", (error) => { process.stderr.write(String(error)); process.exit(1); });',
     ].join("");
     const handle = spawnWindowsPty({
       command: node(script),
@@ -730,8 +734,12 @@ describe.skipIf(!windows)("ConPTY backend", { timeout: 30_000 }, () => {
       handle.onExit(() => resolve());
     });
     expect(
-      await waitForMarker(handle, output, /CHILD_UP/u, 10_000),
+      await waitForMarker(handle, output, /CHILD_UP\r?\n/u, 10_000),
       `descendant never started; saw ${JSON.stringify(output.text())}`,
+    ).toBeDefined();
+    expect(
+      await waitForMarker(handle, output, /CHILD_UP_ACK/u, 10_000),
+      `root never acknowledged the descendant; saw ${JSON.stringify(output.text())}`,
     ).toBeDefined();
     await rootExit;
     // Given more than its pending deadline before asking. A descendant that

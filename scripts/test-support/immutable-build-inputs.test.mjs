@@ -214,7 +214,7 @@ describe('immutable workspace build inputs', () => {
     expect(Object.keys(manifest.artifacts)).toEqual(expect.arrayContaining([
       'packages/ink/runner/runner-entry.mjs',
       'packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json',
-      'packages/probe-tview/upstream-patches/tview/v0.42.0/manifest.json',
+      'packages/probe-tview/assets/tview_probe.go.txt',
     ]));
   });
 

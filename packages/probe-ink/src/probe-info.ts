@@ -12,5 +12,10 @@ export function probeInfo(
     probeVersion: PACKAGE_VERSION,
     identityKind: 'stable',
     capabilities: ['stable-identity', 'intended-rect', 'visible-rect', 'annotations'],
+    instrumentation: {
+      highestTier: 'T3',
+      semanticClass: 'A',
+      degradedCapabilities: [],
+    },
   };
 }

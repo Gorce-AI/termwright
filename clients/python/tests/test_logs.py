@@ -13,7 +13,7 @@ from termwright.client import CAPABILITIES_WITH_LOGS, ENV_ENDPOINT, ENV_TOKEN, S
 from termwright.logging_bridge import TermwrightLogHandler, install_log_handler, level_for
 from termwright.logs import LogRecord
 
-from test_client import SESSION, TOKEN, FakeDriver
+from test_client import TOKEN, FakeDriver
 
 CONSTANTS = load_vectors("constants")
 

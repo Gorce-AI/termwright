@@ -260,7 +260,43 @@ export interface ProbeFrame {
 /** Optional abilities a probe declares at handshake time. */
 export { PROBE_CAPABILITIES } from '../capability-graph.js';
 export type { ProbeCapability } from '../capability-graph.js';
-import type { ProbeCapability } from '../capability-graph.js';
+import {
+  SESSION_CAPABILITIES,
+  type ProbeCapability,
+  type SessionCapabilityId,
+} from '../capability-graph.js';
+
+/** Injection tiers used by the semantic-probe attachment doctrine. */
+export const PROBE_INJECTION_TIERS = ['T0', 'T1', 'T2', 'T3'] as const;
+export type ProbeInjectionTier = (typeof PROBE_INJECTION_TIERS)[number];
+
+/** Semantic class A has geometry; class B deliberately publishes a tree without it. */
+export const PROBE_SEMANTIC_CLASSES = ['A', 'B'] as const;
+export type ProbeSemanticClass = (typeof PROBE_SEMANTIC_CLASSES)[number];
+
+/**
+ * Named reductions a probe can report even when the broader session
+ * capability remains useful. These are deliberately more precise than the
+ * capability graph: omitting inactive screens must not disable the live
+ * semantic tree, and an opaque custom container must not disable known
+ * framework children.
+ */
+export const PROBE_DEGRADED_CAPABILITIES = Object.freeze([
+  ...SESSION_CAPABILITIES,
+  'inactive-screen-tree',
+  'custom-container-enumeration',
+] as const);
+export type ProbeDegradedCapabilityId =
+  | SessionCapabilityId
+  | 'inactive-screen-tree'
+  | 'custom-container-enumeration';
+
+/** Runtime record of the strongest attachment mechanism that actually engaged. */
+export interface ProbeInstrumentation {
+  readonly highestTier: ProbeInjectionTier;
+  readonly semanticClass: ProbeSemanticClass;
+  readonly degradedCapabilities: readonly ProbeDegradedCapabilityId[];
+}
 
 /**
  * What a probe says about itself when it attaches.
@@ -283,6 +319,11 @@ export interface ProbeInfo {
   /** The best identity this probe can offer for any object. */
   readonly identityKind: ProbeIdentityKind;
   readonly capabilities: readonly ProbeCapability[];
+  /**
+   * How this concrete run attached and what it could not observe.
+   * Optional on the wire so existing protocol-v2/custom adapters remain valid.
+   */
+  readonly instrumentation?: ProbeInstrumentation;
 }
 
 /**

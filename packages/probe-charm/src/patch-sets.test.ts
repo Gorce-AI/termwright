@@ -16,13 +16,17 @@ import {
   applyPatchSet,
   ensureUpstreamModule,
   materializeUpstream,
+  prepareGoToolExec,
+  readManifest,
   writeWorkspace,
 } from "@termwright/probe-go";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect } from "vitest";
+import { it as resourceAwareIt } from "@termwright/resource-broker/vitest";
 import { goTestCapability } from "../../../scripts/test-support/go-toolchain.mjs";
 import { BUBBLETEA_MODULES, type CharmMajor } from "./detect.js";
 
 const run = promisify(execFile);
+const it = resourceAwareIt.resources({ hostPressure: "exclusive" });
 
 async function runGo(
   args: readonly string[],
@@ -74,9 +78,9 @@ async function goAvailable(): Promise<boolean> {
 const hasGo = await goAvailable();
 const roots: string[] = [];
 
-afterAll(async () => {
+afterEach(async () => {
   await Promise.all(
-    roots.map((dir) => rm(dir, { recursive: true, force: true })),
+    roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -181,6 +185,9 @@ describe.skipIf(!hasGo)("the patch sets", () => {
         tea.match(/termwrightRenderAndObserve\(p, model\)/gu),
       ).toHaveLength(1);
       const renderer = await readFile(join(copy, "cursed_renderer.go"), "utf8");
+      expect(renderer).toContain("termwrightTryBeginOutputCommit()");
+      expect(renderer).toContain("if !termwrightCommit.proceed");
+      expect(renderer).not.toContain("termwrightOutputCommitMu");
       expect(renderer).toContain("termwrightAfterRendererFlush(s, false)");
       expect(renderer).toContain("termwrightAfterRendererFlush(s, true)");
       if (profile.version === "v2.0.9") {
@@ -198,7 +205,28 @@ describe.skipIf(!hasGo)("the patch sets", () => {
         renderer.indexOf("termwrightAfterRendererFlush(s, false)"),
       ).toBeGreaterThan(renderer.indexOf("s.scr.Flush()"));
       const probe = await readFile(join(copy, "termwright_probe.go"), "utf8");
+      expect(probe).toContain(
+        "termwrightOutputCommitActive.CompareAndSwap(false, true)",
+      );
+      expect(probe).not.toContain("termwrightOutputCommitMu");
+      expect(probe).toContain("termwrightProbeMode.Load() != termwrightProbeModeActive");
+      expect(probe).toContain("termwrightProbeMode.Store(termwrightProbeModeDormant)");
+      expect(probe).not.toContain("termwrightCurrentProbe");
+      const dormantLookup = probe.slice(
+        probe.indexOf("func termwrightProbeForRender()"),
+        probe.indexOf("func newTermwrightProbe()"),
+      );
+      expect(dormantLookup).toContain("termwrightProbeMode.Load()");
+      expect(dormantLookup).not.toMatch(/Lock\(|FromEnv|go func|Dial|Start\(/u);
       expect(probe).toContain("p.publish(renderer.w, frame)");
+      expect(probe).toContain("protocol.NewPublicationQueue(client, 2)");
+      expect(probe).toContain("publisher.TryPublish(frame.snapshot)");
+      expect(probe).not.toContain("p.client.Publish(frame.snapshot)");
+      expect(probe).toContain("p.rendering.CompareAndSwap(false, true)");
+      expect(probe).not.toContain("renderMu");
+      expect(probe).not.toContain("publishMu");
+      expect(probe).toContain('"custom-container-enumeration"');
+      expect(probe).toContain('FrameworkType: "opaque-container"');
       expect(probe).toContain(
         'p.failOutput("Bubble Tea renderer did not commit the complete terminal frame")',
       );
@@ -220,7 +248,7 @@ describe.skipIf(!hasGo)("the patch sets", () => {
         }),
       ).resolves.toBeDefined();
       const { stdout } = await runGo(
-        ["test", "-run", "Termwright", "-count=1", "-v", "."],
+        ["test", "-race", "-run", "Termwright", "-count=1", "-v", "."],
         {
           cwd: copy,
           env: { ...process.env, GOWORK: workspace },
@@ -273,12 +301,36 @@ describe.skipIf(!hasGo)("the patch sets", () => {
     );
     expect(tea).not.toContain("p.renderer.write(model.View())");
     const renderer = await readFile(join(copy, "standard_renderer.go"), "utf8");
+    expect(renderer).toContain("termwrightTryBeginOutputCommit()");
+    expect(renderer).toContain("if !termwrightCommit.proceed");
+    expect(renderer).not.toContain("termwrightOutputCommitMu");
     expect(
       renderer.indexOf("termwrightAfterRendererFlush(r, writeErr == nil"),
     ).toBeGreaterThan(renderer.indexOf("r.out.Write(buf.Bytes())"));
     expect(renderer).toContain("writeErr == nil && written == buf.Len()");
     const probe = await readFile(join(copy, "termwright_probe.go"), "utf8");
+    expect(probe).toContain(
+      "termwrightOutputCommitActive.CompareAndSwap(false, true)",
+    );
+    expect(probe).not.toContain("termwrightOutputCommitMu");
+    expect(probe).toContain("termwrightProbeMode.Load() != termwrightProbeModeActive");
+    expect(probe).toContain("termwrightProbeMode.Store(termwrightProbeModeDormant)");
+    expect(probe).not.toContain("termwrightCurrentProbe");
+    const dormantLookup = probe.slice(
+      probe.indexOf("func termwrightProbeForRender()"),
+      probe.indexOf("func newTermwrightProbe()"),
+    );
+    expect(dormantLookup).toContain("termwrightProbeMode.Load()");
+    expect(dormantLookup).not.toMatch(/Lock\(|FromEnv|go func|Dial|Start\(/u);
     expect(probe).toContain("p.publish(r.out, frame)");
+    expect(probe).toContain("protocol.NewPublicationQueue(client, 2)");
+    expect(probe).toContain("publisher.TryPublish(frame.snapshot)");
+    expect(probe).not.toContain("p.client.Publish(frame.snapshot)");
+    expect(probe).toContain("p.rendering.CompareAndSwap(false, true)");
+    expect(probe).not.toContain("renderMu");
+    expect(probe).not.toContain("publishMu");
+    expect(probe).toContain('"custom-container-enumeration"');
+    expect(probe).toContain('FrameworkType: "opaque-container"');
     expect(probe).toContain(
       'p.failOutput("Bubble Tea renderer did not commit the complete terminal frame")',
     );
@@ -300,7 +352,7 @@ describe.skipIf(!hasGo)("the patch sets", () => {
       }),
     ).resolves.toBeDefined();
     const { stdout } = await runGo(
-      ["test", "-run", "Termwright", "-count=1", "-v", "."],
+      ["test", "-race", "-run", "Termwright", "-count=1", "-v", "."],
       {
         cwd: copy,
         env: { ...process.env, GOWORK: workspace },
@@ -376,30 +428,28 @@ describe.skipIf(!hasGo)("the Bubbles patch sets", () => {
       );
       roots.push(dir);
 
-      const copy = join(dir, "bubbles");
-      await materializeUpstream(
-        await ensureUpstreamModule({
-          module: BUBBLES[major].module,
-          version: BUBBLES[major].version,
-          cachePath: BUBBLES[major].path,
-        }),
-        copy,
-      );
-      await applyPatchSet(
-        copy,
-        join(here, "..", "upstream-patches", "bubbles", BUBBLES[major].version),
-      );
-
-      const workspace = await writeWorkspace(join(dir, "bubbles.work"), {
-        moduleDir: copy,
-        inherited: { uses: [], replaces: [] },
-        replaces: [],
+      const upstream = await ensureUpstreamModule({
+        module: BUBBLES[major].module,
+        version: BUBBLES[major].version,
+        cachePath: BUBBLES[major].path,
+      });
+      const patchSet = join(here, "..", "upstream-patches", "bubbles", BUBBLES[major].version);
+      const manifest = await readManifest(patchSet);
+      const prepared = await prepareGoToolExec({
+        moduleDir: upstream,
+        outputDir: join(dir, "tool executor with spaces"),
+        units: await Promise.all(manifest.added.map(async (added) => ({
+          packagePath: `${BUBBLES[major].module}/${dirname(added.path)}`,
+          targetFile: "zz_termwright_probe.go",
+          source: await readFile(join(patchSet, added.source), "utf8"),
+          sourceDigest: added.sha256,
+        }))),
       });
 
       await expect(
-        run("go", ["build", "./..."], {
-          cwd: copy,
-          env: { ...process.env, GOWORK: workspace },
+        run("go", ["build", ...prepared.goArgs, "./..."], {
+          cwd: upstream,
+          env: prepared.env,
         }),
       ).resolves.toBeDefined();
     },

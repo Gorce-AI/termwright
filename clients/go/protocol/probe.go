@@ -21,6 +21,43 @@ const (
 // behind that traffic.
 type ProbeCapability string
 
+// ProbeInjectionTier is the strongest attachment mechanism engaged by a run.
+type ProbeInjectionTier string
+
+const (
+	ProbeTierT0 ProbeInjectionTier = "T0"
+	ProbeTierT1 ProbeInjectionTier = "T1"
+	ProbeTierT2 ProbeInjectionTier = "T2"
+	ProbeTierT3 ProbeInjectionTier = "T3"
+)
+
+// ProbeSemanticClass reports whether framework geometry is available.
+type ProbeSemanticClass string
+
+const (
+	ProbeSemanticClassA ProbeSemanticClass = "A"
+	ProbeSemanticClassB ProbeSemanticClass = "B"
+)
+
+// SessionCapabilityID is the closed vocabulary used for named degradation.
+type SessionCapabilityID string
+
+var validSessionCapabilities = map[SessionCapabilityID]struct{}{
+	"semantic-tree": {}, "stable-identity": {}, "intended-geometry": {},
+	"inactive-screen-tree": {}, "custom-container-enumeration": {},
+	"clipped-geometry": {}, "painted-region": {}, "pointer-geometry": {},
+	"pointer-hit-testing": {}, "focus": {}, "scroll": {}, "render-order": {},
+	"action-strategies": {}, "keyboard-input": {}, "pointer-input": {},
+	"focus-input": {}, "paired-revisions": {},
+}
+
+// ProbeInstrumentation describes the concrete runtime attachment, not a registry target.
+type ProbeInstrumentation struct {
+	HighestTier          ProbeInjectionTier    `json:"highestTier"`
+	SemanticClass        ProbeSemanticClass    `json:"semanticClass"`
+	DegradedCapabilities []SessionCapabilityID `json:"degradedCapabilities"`
+}
+
 const (
 	ProbeCapStableIdentity ProbeCapability = "stable-identity"
 	ProbeCapIntendedRect   ProbeCapability = "intended-rect"
@@ -46,11 +83,12 @@ var probeCapabilitySet = map[ProbeCapability]struct{}{
 // ProbeInfo is the optional self-description carried by a probe in hello.
 // Hand-written adapters leave it nil.
 type ProbeInfo struct {
-	Framework        string            `json:"framework"`
-	FrameworkVersion string            `json:"frameworkVersion,omitempty"`
-	ProbeVersion     string            `json:"probeVersion"`
-	IdentityKind     ProbeIdentityKind `json:"identityKind"`
-	Capabilities     []ProbeCapability `json:"capabilities"`
+	Framework        string                `json:"framework"`
+	FrameworkVersion string                `json:"frameworkVersion,omitempty"`
+	ProbeVersion     string                `json:"probeVersion"`
+	IdentityKind     ProbeIdentityKind     `json:"identityKind"`
+	Capabilities     []ProbeCapability     `json:"capabilities"`
+	Instrumentation  *ProbeInstrumentation `json:"instrumentation,omitempty"`
 }
 
 // ValidProbeCapability reports whether capability is part of the current probe
@@ -92,9 +130,42 @@ func checkedProbeInfo(info *ProbeInfo) (*ProbeInfo, error) {
 			return nil, fmt.Errorf("a frame-local probe cannot claim %q", ProbeCapStableIdentity)
 		}
 	}
+	var instrumentation *ProbeInstrumentation
+	if info.Instrumentation != nil {
+		declared := *info.Instrumentation
+		if declared.HighestTier != ProbeTierT0 && declared.HighestTier != ProbeTierT1 &&
+			declared.HighestTier != ProbeTierT2 && declared.HighestTier != ProbeTierT3 {
+			return nil, fmt.Errorf("instrumentation highestTier %q is not recognised", declared.HighestTier)
+		}
+		if declared.SemanticClass != ProbeSemanticClassA && declared.SemanticClass != ProbeSemanticClassB {
+			return nil, fmt.Errorf("instrumentation semanticClass %q is not recognised", declared.SemanticClass)
+		}
+		degraded := make([]SessionCapabilityID, len(declared.DegradedCapabilities))
+		copy(degraded, declared.DegradedCapabilities)
+		seen := make(map[SessionCapabilityID]struct{}, len(degraded))
+		for _, capability := range degraded {
+			if _, ok := validSessionCapabilities[capability]; !ok {
+				return nil, fmt.Errorf("instrumentation contains unknown degraded capability %q", capability)
+			}
+			if _, duplicate := seen[capability]; duplicate {
+				return nil, fmt.Errorf("instrumentation contains duplicate degraded capability %q", capability)
+			}
+			seen[capability] = struct{}{}
+		}
+		if declared.SemanticClass == ProbeSemanticClassB {
+			_, intended := seen["intended-geometry"]
+			_, clipped := seen["clipped-geometry"]
+			if !intended || !clipped {
+				return nil, fmt.Errorf("semantic class B requires intended-geometry and clipped-geometry degradation")
+			}
+		}
+		declared.DegradedCapabilities = degraded
+		instrumentation = &declared
+	}
 
 	checked := *info
 	checked.Capabilities = capabilities
+	checked.Instrumentation = instrumentation
 	return &checked, nil
 }
 
@@ -106,7 +177,7 @@ func checkProbeInfo(value any) *ParseError {
 	if problem := requireKeys(
 		object,
 		[]string{"framework", "probeVersion", "identityKind", "capabilities"},
-		[]string{"frameworkVersion"},
+		[]string{"frameworkVersion", "instrumentation"},
 	); problem != nil {
 		return malformed("probe: %s", problem.Detail)
 	}
@@ -142,6 +213,35 @@ func checkProbeInfo(value any) *ParseError {
 		}
 		capabilities = append(capabilities, ProbeCapability(name))
 	}
+	var instrumentation *ProbeInstrumentation
+	if raw, present := object["instrumentation"]; present {
+		declaration, ok := raw.(map[string]any)
+		if !ok {
+			return malformed("probe.instrumentation: expected an object")
+		}
+		if problem := requireKeys(declaration,
+			[]string{"highestTier", "semanticClass", "degradedCapabilities"}, nil); problem != nil {
+			return malformed("probe.instrumentation: %s", problem.Detail)
+		}
+		tier, tierOK := declaration["highestTier"].(string)
+		semanticClass, classOK := declaration["semanticClass"].(string)
+		degradedItems, degradedOK := declaration["degradedCapabilities"].([]any)
+		if !tierOK || !classOK || !degradedOK || len(degradedItems) > len(validSessionCapabilities) {
+			return malformed("probe.instrumentation: invalid runtime metadata shape")
+		}
+		degraded := make([]SessionCapabilityID, 0, len(degradedItems))
+		for _, item := range degradedItems {
+			name, ok := item.(string)
+			if !ok {
+				return malformed("probe.instrumentation.degradedCapabilities: expected strings")
+			}
+			degraded = append(degraded, SessionCapabilityID(name))
+		}
+		instrumentation = &ProbeInstrumentation{
+			HighestTier: ProbeInjectionTier(tier), SemanticClass: ProbeSemanticClass(semanticClass),
+			DegradedCapabilities: degraded,
+		}
+	}
 
 	_, err := checkedProbeInfo(&ProbeInfo{
 		Framework:        framework,
@@ -149,6 +249,7 @@ func checkProbeInfo(value any) *ParseError {
 		ProbeVersion:     probeVersion,
 		IdentityKind:     ProbeIdentityKind(identity),
 		Capabilities:     capabilities,
+		Instrumentation:  instrumentation,
 	})
 	if err != nil {
 		return malformed("probe: %v", err)

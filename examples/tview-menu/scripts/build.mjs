@@ -20,7 +20,7 @@ if (probe.status !== 0) {
 
 mkdirSync(fileURLToPath(new URL('../dist', import.meta.url)), { recursive: true });
 const prepared = await prepareInstrumentedBuild({ moduleDir: root });
-const build = spawnSync('go', ['build', '-o', 'dist/tview-menu', './app'], {
+const build = spawnSync('go', ['build', ...prepared.goArgs, '-o', 'dist/tview-menu', './app'], {
   cwd: root,
   env: prepared.env,
   stdio: 'inherit',

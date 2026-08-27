@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "generatedFrom": {
     "registry": "compatibility/registry.json",
-    "registrySchemaVersion": 5
+    "registrySchemaVersion": 6
   },
   "frameworks": [
     {
@@ -840,9 +840,10 @@
         "python -S and python -E bypass the sitecustomize/PYTHONPATH injection mechanism.",
         "Poetry launch is unverified; plain scripts, -m, -c, console scripts and uv run were measured.",
         "PYTHONPATH is inherited, so child processes are instrumented unless the application scrubs it.",
-        "Inactive screens are absent rather than represented as hidden nodes.",
+        "Inactive screens are absent rather than represented as hidden nodes; runtime metadata names this reduction as inactive-screen-tree.",
         "No frame-begin capability is advertised: the exact display attempt is staged internally and becomes semantic evidence only after its successful same-writer FIFO enqueue reaches post_display_hook.",
-        "For the exact Textual versions listed in this registry, certification proves causal WriterThread queue order rather than claiming a physical terminal flush. A full writer queue fails semantic publication immediately instead of blocking the application.",
+        "The private causal seam remains T3 debt: each live built-in driver and bounded WriterThread FIFO is structurally and behaviorally checked before publication; no Textual version is trusted merely by its version string.",
+        "Certification proves causal WriterThread queue order rather than claiming a physical terminal flush. A full writer queue fails semantic publication immediately instead of blocking the application.",
         "A Static subclass with custom render() is named from stored content, not the final rendered segments."
       ],
       "executableClaims": [
@@ -973,10 +974,12 @@
         "identityKind": "stable",
         "probeFacts": [
           "stable-identity",
+          "intended-rect",
           "annotations"
         ],
         "adapterFacts": [
           "tree",
+          "intended-geometry",
           "states",
           "focus-state",
           "actions",
@@ -987,6 +990,7 @@
       "capturedAutomatically": [
         "semantic-tree",
         "stable-identity",
+        "intended-geometry",
         "paired-revisions",
         "focus",
         "action-strategies"
@@ -995,6 +999,7 @@
         "automatic": [
           "semantic-tree",
           "stable-identity",
+          "intended-geometry",
           "paired-revisions",
           "focus",
           "action-strategies"
@@ -1094,7 +1099,6 @@
           }
         ],
         "unsupported": [
-          "intended-geometry",
           "clipped-geometry",
           "render-order"
         ]
@@ -1111,6 +1115,7 @@
         },
         "producerFactsNotPromotedToAutomaticSessionCapabilities": [
           "annotations",
+          "intended-geometry",
           "states",
           "focus-state",
           "actions",
@@ -1149,11 +1154,12 @@
         }
       ],
       "remainsUnknowableAutomatically": [
-        "Only exact versions with shipped patch manifests are instrumented.",
-        "GOFLAGS=-mod=vendor is refused because an ephemeral workspace and vendor mode are incompatible.",
-        "Grid hierarchy is available only because the exact-version patch reads tview's private item list; unsupported versions are refused.",
-        "Publication occurs only after tview's screen Show returns; the probe drops instead of blocking when the driver is slow.",
-        "Unix markers use tcell's public Tty writer. Windows requires an exact certified tcell add-only companion so the marker is written through cScreen's console handle; absence of either capability fails closed.",
+        "The build must be controlled by Termwright and carry the returned -toolexec argument; a prebuilt binary runs as explicitly reported raw PTY.",
+        "Normal module-cache, workspace/replacement and vendored dependency layouts are supported by exact import-path compiler injection.",
+        "Grid and Modal hierarchy is compiler-checked through an owned add-only tview unit; private-field drift fails the candidate build instead of silently reducing the tree.",
+        "Built-in primitives expose authoritative intended bounds after Show. Children hidden behind an application-defined Primitive remain an explicit generic node and custom-container-enumeration is reported as degraded.",
+        "The T1 unit composes the public before/after-draw contract by installing and identity-checking Application.beforeDraw/Application.afterDraw under tview's lock, arming only the final decorated Screen.Show. Intermediate Show calls flush normally without publishing partial semantics; hook or screen displacement, admission refusal and lifecycle divergence fail semantics closed.",
+        "Unix markers use tcell's public Tty writer. Windows compiles an owned add-only tcell unit so the marker uses cScreen's console handle; a missing or changed capability fails compilation or semantics closed.",
         "tview GetRect values do not prove pointer ownership; high-level pointer actions require an application provider exposing the production router."
       ],
       "executableClaims": [
@@ -1165,6 +1171,12 @@
         },
         {
           "id": "claim.stable-identity-authoritative",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.intended-geometry-authoritative",
           "files": [
             "packages/probe-tview/src/zero-config.pty.test.ts"
           ]
@@ -1244,6 +1256,10 @@
           "modules": [
             {
               "name": "ratatui-core",
+              "version": "0.1.2"
+            },
+            {
+              "name": "ratatui-crossterm",
               "version": "0.1.2"
             },
             {
@@ -1808,7 +1824,7 @@
         "Identity is frame-local by default because Update copies model values; a unique author SemanticKey stabilizes only its annotated node.",
         "Only the exact Bubble Tea versions above have frame-hook patch sets.",
         "A semantic revision is committed only after the exact renderer flush succeeds; failed or partial flushes cannot publish, while a successful no-output flush may commit a staged semantic change and marker when terminal bytes are unchanged.",
-        "A detected Bubbles companion must match its exact certified version; unknown companions are refused instead of changing semantic breadth.",
+        "A detected Bubbles companion must compile the owned accessor profile for its exact module line; a missing or changed private-state capability is refused instead of silently reducing semantic breadth.",
         "Masked text input values are intentionally withheld from trees, traces and reports.",
         "A project requiring both Bubble Tea majors is refused because frames cannot be attributed safely."
       ],

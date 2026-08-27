@@ -26,6 +26,18 @@ constructor that returns nothing — `client_from_env() -> None`,
 `protocol.FromEnv() == nil`, `Client::from_env() -> None`. Framework probes
 obey the same rule before installing any render hook.
 
+## Render-loop publication
+
+The Go and Rust clients expose a bounded `PublicationQueue` for framework
+probes. The render hook builds the snapshot while framework state is
+consistent, validates and encodes the complete snapshot plus commit, and then
+performs one non-blocking FIFO admission. Only the worker writes the semantic
+socket. A full queue returns no marker and consumes no revision. A framework
+adapter must then fail its semantic session because its visual frame is already
+observable and the previous tree is no longer authoritative; a worker
+transport failure permanently refuses later markers. Constructing the queue
+requires a connected client, so the dormant rule still starts no worker.
+
 ## Application logs
 
 A TUI cannot print diagnostics without corrupting the render, so the usual

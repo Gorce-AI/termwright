@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: EffectiveSessionContract
 
-Defined in: protocol/dist/contract.d.ts:51
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:724
 
 Immutable public contract negotiated once for one session epoch.
 
@@ -24,7 +24,7 @@ intentionally absent. Those are actionability observations, not capability.
 
 > `readonly` **capabilities**: `Readonly`\<`Record`\<[`SessionCapabilityId`](../../type-aliases/sessioncapabilityid/), `SessionCapabilityAvailability`\>\>
 
-Defined in: protocol/dist/contract.d.ts:63
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:738
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: protocol/dist/contract.d.ts:63
 
 > `readonly` **contractId**: `string`
 
-Defined in: protocol/dist/contract.d.ts:52
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:725
 
 ***
 
@@ -40,15 +40,47 @@ Defined in: protocol/dist/contract.d.ts:52
 
 > `readonly` **epoch**: `number`
 
-Defined in: protocol/dist/contract.d.ts:54
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:727
 
 ***
 
 ### framework
 
-> `readonly` **framework**: \{ `adapterVersion`: `string`; `certificationId`: `string`; `name`: `string`; `version`: `string`; \} \| `null`
+> `readonly` **framework**: \{ `adapterVersion`: `string`; `certificationId`: `string`; `instrumentation?`: `ProbeInstrumentation`; `name`: `string`; `version`: `string`; \} \| `null`
 
-Defined in: protocol/dist/contract.d.ts:56
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:729
+
+#### Union Members
+
+##### Type Literal
+
+\{ `adapterVersion`: `string`; `certificationId`: `string`; `instrumentation?`: `ProbeInstrumentation`; `name`: `string`; `version`: `string`; \}
+
+##### adapterVersion
+
+> `readonly` **adapterVersion**: `string`
+
+##### certificationId
+
+> `readonly` **certificationId**: `string`
+
+##### instrumentation?
+
+> `readonly` `optional` **instrumentation?**: `ProbeInstrumentation`
+
+Runtime attachment facts declared by a framework probe, when available.
+
+##### name
+
+> `readonly` **name**: `string`
+
+##### version
+
+> `readonly` **version**: `string`
+
+***
+
+`null`
 
 ***
 
@@ -56,7 +88,7 @@ Defined in: protocol/dist/contract.d.ts:56
 
 > `readonly` **protocol**: `"termwright/2"`
 
-Defined in: protocol/dist/contract.d.ts:55
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:728
 
 ***
 
@@ -64,7 +96,7 @@ Defined in: protocol/dist/contract.d.ts:55
 
 > `readonly` **providers**: readonly `ContractProvider`[]
 
-Defined in: protocol/dist/contract.d.ts:62
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:737
 
 ***
 
@@ -72,7 +104,7 @@ Defined in: protocol/dist/contract.d.ts:62
 
 > `readonly` **sessionId**: `string`
 
-Defined in: protocol/dist/contract.d.ts:53
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:726
 
 ***
 
@@ -80,7 +112,7 @@ Defined in: protocol/dist/contract.d.ts:53
 
 > `readonly` **terminal**: `object`
 
-Defined in: protocol/dist/contract.d.ts:64
+Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:739
 
 #### mouseModesObservable
 

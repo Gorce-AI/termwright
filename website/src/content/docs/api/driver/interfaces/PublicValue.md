@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PublicValue
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:661
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:15
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:661
 
 > `readonly` **sensitivity**: `"public"`
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:662
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:16
 
 ***
 
@@ -27,4 +27,4 @@ Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:662
 
 > `readonly` **value**: `string`
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:663
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:17

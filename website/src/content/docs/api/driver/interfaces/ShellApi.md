@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ShellApi
 
-Defined in: [driver/src/api.ts:370](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L370)
+Defined in: [driver/src/api.ts:377](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L377)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > **run**(`command`, `options?`): `Promise`\<[`ShellCommandResult`](../shellcommandresult/)\>
 
-Defined in: [driver/src/api.ts:373](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L373)
+Defined in: [driver/src/api.ts:380](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L380)
 
 #### Parameters
 
@@ -58,7 +58,7 @@ Defined in: [driver/src/api.ts:373](https://github.com/Gorce-AI/termwright/blob/
 
 > **status**(): [`ShellStatus`](../shellstatus/)
 
-Defined in: [driver/src/api.ts:371](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L371)
+Defined in: [driver/src/api.ts:378](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L378)
 
 #### Returns
 
@@ -70,7 +70,7 @@ Defined in: [driver/src/api.ts:371](https://github.com/Gorce-AI/termwright/blob/
 
 > **waitForPrompt**(`options?`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:372](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L372)
+Defined in: [driver/src/api.ts:379](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L379)
 
 #### Parameters
 

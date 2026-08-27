@@ -383,9 +383,58 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
   it('records nested clips, overlap ownership, hidden nodes, render hooks and resize from real OpenTUI', async () => {
     const driver = await startFakeDriver();
     open.push(driver);
-    await launchInstrumented({ driver, appPath: geometryApp });
-    const snapshots = await driver.waitForSnapshots(2);
-    const snapshot = snapshots.find((candidate) => candidate.nodes.some((node) => node.name === 'nested clipped target'))!;
+    let child: ChildProcess | undefined;
+    let destroySent = false;
+    const resultPromise = launchInstrumented({
+      driver,
+      appPath: geometryApp,
+      controlled: true,
+      onSpawn: (spawned) => { child = spawned; },
+    });
+    const control = child?.stdin;
+    if (control === undefined || control === null) {
+      child?.kill();
+      await resultPromise.catch(() => undefined);
+      throw new Error('controlled OpenTUI geometry fixture has no stdin');
+    }
+    let snapshot: FakeDriver['snapshots'][number] | undefined;
+    let resized: FakeDriver['snapshots'][number] | undefined;
+    let interactionFailure: unknown;
+    let result: Run | undefined;
+    try {
+      snapshot = await driver.waitForSnapshot(
+        (candidate) => candidate.nodes.some((node) => node.name === 'nested clipped target'),
+        'initial geometry snapshot',
+      );
+      expect({columns: snapshot.columns, rows: snapshot.rows}).not.toEqual({columns: 40, rows: 12});
+      control.write('resize\n');
+      resized = await driver.waitForSnapshot(
+        (candidate) => candidate.columns === 40 && candidate.rows === 12,
+        '40x12 resized geometry snapshot',
+      );
+      destroySent = true;
+      control.end('destroy\n');
+    } catch (error) {
+      interactionFailure = error;
+    } finally {
+      if (!destroySent) control.end('destroy\n');
+      try {
+        result = await resultPromise;
+      } catch (processFailure) {
+        if (interactionFailure !== undefined) {
+          throw new AggregateError(
+            [interactionFailure, processFailure],
+            'OpenTUI geometry interaction and fixture teardown both failed',
+          );
+        }
+        throw processFailure;
+      }
+    }
+    if (interactionFailure !== undefined) throw interactionFailure;
+    if (snapshot === undefined || resized === undefined || result === undefined) {
+      throw new Error('OpenTUI geometry fixture completed without causal snapshot evidence');
+    }
+    expect(result.stderr).toBe('');
     const clipped = snapshot.nodes.find((node) => node.name === 'nested clipped target')!;
     const hidden = snapshot.nodes.find((node) => node.name === 'hidden node')!;
     const moved = snapshot.nodes.find((node) => node.name === 'hook moved')!;
@@ -410,7 +459,8 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
         && column >= region.rect.column
         && column < region.rect.column + region.rect.width)).toBe(true);
     }
-    expect(new Set(snapshots.map((candidate) => `${candidate.columns}x${candidate.rows}`)).size).toBeGreaterThan(1);
+    expect({columns: resized.columns, rows: resized.rows}).toEqual({columns: 40, rows: 12});
+    expect(resized.revision).toBeGreaterThan(snapshot.revision);
   }, 60_000);
 
   it('runtime-observes custom, buffered, scrolling and dynamic frames', async () => {

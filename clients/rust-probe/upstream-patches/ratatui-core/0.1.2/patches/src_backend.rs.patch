@@ -1,0 +1,25 @@
+--- a/src/backend.rs	2026-08-17 01:17:39
++++ b/src/backend.rs	2026-08-17 01:17:39
+@@ -330,6 +330,21 @@
+     /// a diff between Ratatui's screen buffers and sends draw commands to the backend.
+     fn flush(&mut self) -> Result<(), Self::Error>;
+-
++
++    /// Whether this backend can append a Termwright commit marker to the
++    /// exact same sink as its render bytes.
++    #[doc(hidden)]
++    fn termwright_marker_sink_supported(&self) -> bool {
++        false
++    }
++
++    /// Append and flush a Termwright commit marker through the exact writer
++    /// used by this backend. The default refuses the capability; it must never
++    /// guess that process stdout is the backend's sink.
++    #[doc(hidden)]
++    fn termwright_write_marker(&mut self, _marker: &[u8]) -> Result<bool, Self::Error> {
++        Ok(false)
++    }
++
+     /// Scroll a region of the screen upwards, where a region is specified by a (half-open) range
+     /// of rows.
+     ///

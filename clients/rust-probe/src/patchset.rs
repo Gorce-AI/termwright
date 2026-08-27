@@ -38,6 +38,8 @@ pub struct PatchManifest {
     pub framework: String,
     pub framework_version: String,
     pub patch_set_version: u32,
+    /// Whether this patched crate declares a direct dependency on the probe.
+    pub requires_probe: bool,
     pub patched: Vec<PatchedFile>,
 }
 
@@ -159,6 +161,7 @@ pub fn read_manifest(path: &Path) -> Result<PatchManifest, PatchError> {
     let framework = value.string("framework")?;
     let framework_version = value.string("frameworkVersion")?;
     let patch_set_version = value.number("patchSetVersion")? as u32;
+    let requires_probe = !value.array("requires")?.is_empty();
     let mut patched = Vec::new();
     for entry in value.array("patched")? {
         patched.push(PatchedFile {
@@ -172,6 +175,7 @@ pub fn read_manifest(path: &Path) -> Result<PatchManifest, PatchError> {
         framework,
         framework_version,
         patch_set_version,
+        requires_probe,
         patched,
     })
 }
@@ -324,7 +328,10 @@ pub fn apply(
         }
     }
 
-    supply_probe_path(copy, probe_path)
+    if manifest.requires_probe {
+        supply_probe_path(copy, probe_path)?;
+    }
+    Ok(())
 }
 
 /// Apply the deliberately small subset of unified diff emitted by the patch

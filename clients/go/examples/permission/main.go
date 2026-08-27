@@ -19,6 +19,7 @@ import (
 	"os"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/gorce-ai/termwright/clients/go/tviewprobe"
 	"github.com/rivo/tview"
 )
 
@@ -56,7 +57,9 @@ func main() {
 		return event
 	})
 
-	if err := app.SetRoot(root, true).SetFocus(approve).Run(); err != nil {
+	app.SetRoot(root, true).SetFocus(approve)
+	defer tviewprobe.Attach(app, root)()
+	if err := app.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

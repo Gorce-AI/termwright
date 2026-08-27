@@ -118,8 +118,9 @@ export interface AdapterConformanceOptions {
   /** How long the handshake may take. Default 10 s. */
   readonly timeoutMs?: number;
   /**
-   * A command that must succeed before this adapter can be certified here —
-   * its interpreter, or a build step that produces the binary `spawn` runs.
+   * A cheap command that must succeed before this adapter can be certified here.
+   * Compilers and other descendant-producing preparation must run before the
+   * native host opens; this probe is collection-time capability validation only.
    * When it fails the whole suite skips and the reason is in the block's name,
    * exactly as a missing pseudo-terminal does.
    */

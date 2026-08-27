@@ -38,9 +38,8 @@ const exec = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = resolve(dirname(scriptPath), '..');
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
-const STATIC_FRAMEWORKS = new Set(['tview', 'ratatui', 'charm']);
+const STATIC_FRAMEWORKS = new Set(['ratatui', 'charm']);
 const PATCH_ROOTS = Object.freeze([
-  { ecosystem: 'go', path: 'packages/probe-tview/upstream-patches' },
   { ecosystem: 'go', path: 'packages/probe-charm/upstream-patches' },
   { ecosystem: 'rust', path: 'clients/rust-probe/upstream-patches' },
 ]);
@@ -207,8 +206,8 @@ function candidateKey(candidate) {
 export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(['go', 'rust'])) {
   const registryPath = join(root, 'compatibility/registry.json');
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
-  if (registry?.schemaVersion !== 5 || !Array.isArray(registry.frameworks)) {
-    throw new CertificationError('compatibility/registry.json is not schemaVersion 5');
+  if (registry?.schemaVersion !== 6 || !Array.isArray(registry.frameworks)) {
+    throw new CertificationError('compatibility/registry.json is not schemaVersion 6');
   }
   const declarations = new Map();
   for (const framework of registry.frameworks) {

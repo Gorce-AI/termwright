@@ -70,6 +70,19 @@ The client is blocking and single-threaded on purpose: a TUI renders on one
 thread, and the marker has to follow that render. `poll()` picks up driver
 requests without blocking — call it on each tick.
 
+Framework probes must not perform socket I/O under a framework render lock.
+After the handshake they move `Client` into `PublicationQueue`: the render
+boundary validates and encodes a complete snapshot+commit pair, then admits it
+to a bounded FIFO without waiting for transport. The returned marker proves
+queue admission, not socket completion; the driver independently pairs marker
+and semantic frames. Queue pressure returns `PublicationQueueFull` without a
+revision gap or marker, and a worker failure closes later admission.
+
+Framework lifecycle code must call `PublicationQueue::shutdown()` outside the
+render hook. It closes admission, drains the FIFO and joins the writer, which
+prevents a short-lived one-frame process from exiting ahead of semantic data
+that it already admitted.
+
 ## Application logs
 
 ```toml

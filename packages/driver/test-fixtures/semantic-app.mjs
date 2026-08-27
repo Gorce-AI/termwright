@@ -27,6 +27,10 @@ const helloDelay = Number(process.env['TERMWRIGHT_FIXTURE_HELLO_DELAY'] ?? '0');
 // Prints a plain-text receipt after each render marker. Opt-in, because the
 // extra line is visible and other packages snapshot this fixture's screen.
 const markProbe = process.env['TERMWRIGHT_FIXTURE_MARK_PROBE'] === '1';
+// Publishes a committed snapshot followed only by a marker signed with a
+// different key. The trailing receipt is a causal parser barrier for the E2E:
+// once visible, the preceding OSC has already been consumed by the emulator.
+const forgedMarkerProbe = process.env['TERMWRIGHT_FIXTURE_FORGED_MARKER'] === '1';
 const terminalMouseEnabled = process.env['TERMWRIGHT_FIXTURE_MOUSE_MODE'] !== '0';
 const firstTreeDelay = Number(process.env['TERMWRIGHT_FIXTURE_FIRST_TREE_DELAY'] ?? '0');
 const pendingFocusFrame = process.env['TERMWRIGHT_FIXTURE_PENDING_FOCUS_FRAME'] === '1';
@@ -382,17 +386,26 @@ function publish() {
   const publicationSocket = socket;
   const publicationSessionId = sessionId;
   enqueueOutput(async () => {
-    // ConPTY is an emulator and re-emitter, not a transparent byte pipe. Wait
-    // for the complete frame write to flush before the separate marker write,
-    // exactly as production adapters are required to do. Serializing this
-    // task also prevents frame N+1 from entering between frame N and marker N.
+    // Wait for the complete frame write before the marker write, exactly as
+    // production adapters are required to do. Serializing this task also
+    // prevents frame N+1 from entering between frame N and marker N.
     await writeAndFlush(frame);
     publicationSocket.write(encodeFrame({ type: 'snapshot', snapshot }, 1024 * 1024));
     publicationSocket.write(encodeFrame({ type: 'revision-commit', revision: publishedRevision }, 1024 * 1024));
-    const marker = encodeMarker(token, publicationSessionId, publishedRevision);
+    const marker = encodeMarker(
+      forgedMarkerProbe ? `${token}-forged` : token,
+      publicationSessionId,
+      publishedRevision,
+    );
     // A plain-text receipt for the marker, printed only when a test asks for
     // it. It follows the marker and therefore belongs to a later observation.
-    await writeAndFlush(`${marker}${markProbe ? `MARKED ${publishedRevision}\r\n` : ''}`);
+    await writeAndFlush(`${marker}${
+      forgedMarkerProbe
+        ? `FORGED ${publishedRevision}\r\n`
+        : markProbe
+          ? `MARKED ${publishedRevision}\r\n`
+          : ''
+    }`);
   });
 }
 

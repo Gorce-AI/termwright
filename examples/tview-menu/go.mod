@@ -1,13 +1,17 @@
 module github.com/gorce-ai/termwright/examples/tview-menu
 
-go 1.22
+go 1.24
+
+replace github.com/gorce-ai/termwright/clients/go => ../../clients/go
 
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
+	github.com/gorce-ai/termwright/clients/go v0.0.0
 	github.com/rivo/tview v0.42.0
 )
 
 require (
+	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect

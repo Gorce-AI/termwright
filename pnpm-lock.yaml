@@ -322,6 +322,9 @@ importers:
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
       '@termwright/test':
         specifier: workspace:*
         version: link:../test
@@ -432,7 +435,11 @@ importers:
         specifier: workspace:*
         version: link:../resource-broker
 
-  packages/probe-go: {}
+  packages/probe-go:
+    devDependencies:
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
 
   packages/probe-ink:
     dependencies:

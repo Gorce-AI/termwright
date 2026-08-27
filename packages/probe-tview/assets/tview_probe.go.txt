@@ -1,0 +1,1368 @@
+package tview
+
+// Add-only instrumentation injected by Go's compiler tool executor. Upstream
+// bytes are never copied or edited; this compilation unit joins package tview
+// only for a Termwright-owned build.
+//
+// Being inside the package is necessary only for sealed state with no public
+// accessor: Grid items/visibility, Modal content, disabled state that tview
+// does not expose, sensitive-value transforms, and indexed DropDown options.
+// Everything else below deliberately uses public getters.
+//
+// Three rules from the Phase 0 audit (docs/architecture/audit/tview.md §1–2)
+// are load-bearing, and breaking any of them turns a working application into
+// a hang or a lie:
+//
+//  1. Screen.Show runs inside Application.draw(), which holds the application's
+//     write lock for the whole frame. The decorator must never wait on or
+//     re-enter the event loop from that boundary.
+//  2. Reading primitive state is safe at this boundary and essentially nowhere else:
+//     rects are assigned by parents *during* the draw, so another goroutine
+//     reading GetRect races the layout.
+//  3. The marker must follow the frame's bytes on the screen's exact writer.
+//     Semantic socket delivery is independently ordered by a bounded worker;
+//     only complete pre-encoded revisions admitted to it receive a marker.
+
+import (
+	"errors"
+	"reflect"
+	"runtime/debug"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+
+	"github.com/gdamore/tcell/v2"
+
+	"github.com/gorce-ai/termwright/clients/go/annotate"
+	"github.com/gorce-ai/termwright/clients/go/evidence"
+	"github.com/gorce-ai/termwright/clients/go/probehost"
+	"github.com/gorce-ai/termwright/clients/go/protocol"
+)
+
+// probeName and probeVersion identify this probe in the handshake, distinctly
+// from the hand-written adapter so a session can be told apart in diagnostics.
+const (
+	probeName    = "termwright-probe-tview"
+	probeVersion = "0.2.0"
+)
+
+// termwrightProbeState is nil for an uninstrumented run, which is every run
+// that does not carry the handshake variables.
+type termwrightProbeState struct {
+	client           *protocol.Client
+	publisher        atomic.Pointer[protocol.PublicationQueue]
+	shutdown         sync.Once
+	application      *Application
+	recoveryStop     chan struct{}
+	recoveryStopOnce sync.Once
+	recoveryPending  atomic.Bool
+	recoveryWorkers  sync.WaitGroup
+
+	mu       sync.Mutex
+	ids      map[Primitive]string
+	nextID   int
+	dropped  atomic.Uint64
+	timedOut atomic.Uint64
+	frames   atomic.Uint64
+}
+
+type termwrightPublicationSink interface {
+	TryPublish(*protocol.Snapshot) (string, error)
+	ReadyAfterDrop() <-chan struct{}
+	Fail(string, string)
+}
+
+// TermwrightProbeStats reports what the probe did and failed to do.
+//
+// Exported because the conformance fixture asserts on it: a drop counter no
+// test can read is a drop counter nobody notices.
+type TermwrightProbeStats struct {
+	Frames   uint64
+	Dropped  uint64
+	TimedOut uint64
+}
+
+// TermwrightProbeStatistics returns the counters, or zeroes when dormant.
+func TermwrightProbeStatistics() TermwrightProbeStats {
+	p := termwrightLastProbe.Load()
+	if p == nil {
+		return TermwrightProbeStats{}
+	}
+	return TermwrightProbeStats{
+		Frames:   p.frames.Load(),
+		Dropped:  p.dropped.Load(),
+		TimedOut: p.timedOut.Load(),
+	}
+}
+
+var (
+	termwrightLastProbe atomic.Pointer[termwrightProbeState]
+)
+
+// termwrightScreen turns the public Screen.Show boundary into the causal
+// commit hook tview itself does not expose. Embedding preserves the complete
+// tcell.Screen surface; only Show is observed. The underlying screen remains
+// the sole owner of terminal output and marker delivery.
+type termwrightScreen struct {
+	tcell.Screen
+	application    *Application
+	commit         func(Primitive, tcell.Screen)
+	fail           func(string, string)
+	previousBefore func(tcell.Screen) bool
+	previousAfter  func(tcell.Screen)
+	beforeHook     func(tcell.Screen) bool
+	afterHook      func(tcell.Screen)
+	showing        atomic.Bool
+	failed         atomic.Bool
+	detached       atomic.Bool
+	cleaned        atomic.Bool
+	finalized      atomic.Bool
+	phase          atomic.Int32
+	diagnose       sync.Once
+	diagnosis      sync.WaitGroup
+	owned          bool
+}
+
+const (
+	termwrightPhaseIdle int32 = iota
+	termwrightPhaseCleared
+	termwrightPhaseDrawing
+	termwrightPhaseFinal
+)
+
+// Clear observes tview's public frame prelude without changing it. SetRoot may
+// also clear between frames, so only an idle screen starts a new candidate;
+// the before-draw hook remains the authoritative transition into drawing.
+func (s *termwrightScreen) Clear() {
+	s.phase.CompareAndSwap(termwrightPhaseIdle, termwrightPhaseCleared)
+	s.Screen.Clear()
+}
+
+func (s *termwrightScreen) beforeDraw(screen tcell.Screen) bool {
+	if !s.phase.CompareAndSwap(termwrightPhaseCleared, termwrightPhaseDrawing) {
+		s.failClosed("tview entered beforeDraw without completing the previous decorated frame")
+		s.phase.Store(termwrightPhaseDrawing)
+	}
+	shortCircuit := false
+	if s.previousBefore != nil {
+		shortCircuit = s.previousBefore(screen)
+	}
+	if shortCircuit {
+		s.phase.CompareAndSwap(termwrightPhaseDrawing, termwrightPhaseFinal)
+	}
+	return shortCircuit
+}
+
+func (s *termwrightScreen) afterDraw(screen tcell.Screen) {
+	// The application's callback may itself call Show. Keep that Show unarmed:
+	// only tview's own Show after this wrapper returns is the final boundary.
+	if s.previousAfter != nil {
+		s.previousAfter(screen)
+	}
+	if !s.phase.CompareAndSwap(termwrightPhaseDrawing, termwrightPhaseFinal) {
+		s.failClosed("tview entered afterDraw outside the decorated frame phase")
+	}
+}
+
+func termwrightSameHook(left, right any) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return reflect.ValueOf(left).Pointer() == reflect.ValueOf(right).Pointer()
+}
+
+func (s *termwrightScreen) hooksIntact() bool {
+	return termwrightSameHook(s.application.beforeDraw, s.beforeHook) &&
+		termwrightSameHook(s.application.afterDraw, s.afterHook)
+}
+
+func (s *termwrightScreen) failClosed(message string) {
+	if !s.failed.CompareAndSwap(false, true) {
+		return
+	}
+	if s.fail != nil {
+		s.fail("adapter-guarantee-violation", message)
+	}
+}
+
+func (s *termwrightScreen) Show() {
+	if !s.showing.CompareAndSwap(false, true) {
+		// A Screen implementation which re-enters its decorator cannot provide a
+		// single completed output boundary. Refuse semantics without taking a
+		// mutex (which would deadlock the application draw goroutine).
+		s.failClosed("tview screen re-entered Show before the previous frame committed")
+		return
+	}
+	defer s.showing.Store(false)
+
+	s.Screen.Show()
+	phase := s.phase.Load()
+	// Idle Show calls are outside Application.draw and carry no semantic frame.
+	// In particular, do not read the lock-free upstream hook fields there: an
+	// application may legally configure them before Run. Non-idle phases are
+	// entered only by Application.Clear/beforeDraw while draw holds its lock.
+	if phase != termwrightPhaseIdle && !s.hooksIntact() {
+		s.failClosed("tview replaced a decorated beforeDraw or afterDraw hook at runtime; final frame observation cannot continue")
+	}
+	if s.detached.Load() || s.failed.Load() {
+		return
+	}
+	// A custom Primitive or application hook may call Show while drawing. Those
+	// output flushes are real, but they are not complete Application frames. The
+	// composed lifecycle hooks arm exactly the Show issued by Application.draw.
+	if phase != termwrightPhaseFinal || !s.phase.CompareAndSwap(termwrightPhaseFinal, termwrightPhaseIdle) {
+		return
+	}
+	// Application.draw holds the application write lock across Screen.Show.
+	// Direct access is therefore the lock-safe T1 equivalent of a public root
+	// getter and follows SetRoot changes frame by frame.
+	if s.commit != nil {
+		s.commit(s.application.root, s.Screen)
+	}
+}
+
+// Fini distinguishes normal Application.Stop (which clears application.screen
+// first) from a runtime SetScreen replacement (which finalizes the current
+// screen while it is still installed). Replacements cannot silently continue
+// with an undecorated sink: semantic publication fails closed before the new
+// screen can render.
+func (s *termwrightScreen) Fini() {
+	// Stop calls Screen.Fini while holding Application's write lock. Waiting for
+	// an RLock here would therefore deadlock the application. SetScreen, in
+	// contrast, releases the lock before finalizing the old screen, so a
+	// successful TryRLock lets us diagnose that unsupported replacement exactly.
+	replaced := false
+	if s.application.TryRLock() {
+		replaced = s.application.screen == s
+		s.application.RUnlock()
+	} else {
+		// The normal case is Stop. Defer the distinction until the writer releases
+		// the lock: Stop has already cleared screen, whereas an unrelated writer
+		// leaves a live Application whose semantics must fail with a diagnostic.
+		// Add to the lifecycle group before publishing detached=true so cleanup
+		// can never race Wait against Add.
+		s.diagnose.Do(func() {
+			s.diagnosis.Add(1)
+			s.failed.Store(true)
+			s.detached.Store(true)
+			go func() {
+				defer s.diagnosis.Done()
+				s.application.RLock()
+				alive := s.application.screen != nil
+				s.application.RUnlock()
+				if alive && s.fail != nil {
+					s.fail("adapter-guarantee-violation", "tview screen finalized while the Application remained active; semantic observation cannot continue")
+				}
+			}()
+		})
+	}
+	if replaced {
+		s.failed.Store(true)
+		s.detached.Store(true)
+		if s.fail != nil {
+			s.fail("adapter-guarantee-violation", "tview replaced its decorated Screen at runtime; the new output sink is not semantically observed")
+		}
+	}
+	s.finishUnderlying()
+}
+
+func (s *termwrightScreen) finishUnderlying() {
+	if s.finalized.CompareAndSwap(false, true) {
+		s.Screen.Fini()
+	}
+}
+
+func init() {
+	probehost.Register("tview", func(application, root any) (func(), error) {
+		a, applicationOK := application.(*Application)
+		primitive, rootOK := root.(Primitive)
+		if !applicationOK || a == nil || !rootOK || primitive == nil {
+			return nil, errors.New("termwright tview probe requires a non-nil *tview.Application and tview.Primitive root")
+		}
+		return termwrightAttach(a, primitive)
+	})
+}
+
+// newTermwrightProbe honours the dormant rule: without an endpoint and a token
+// the compiler-injected build behaves exactly like upstream. `FromEnv` returns nil in that case,
+// so there is one branch and no second source of truth about what "dormant"
+// means.
+func newTermwrightProbe(frameworkVersion string) *termwrightProbeState {
+	client := protocol.FromEnv(protocol.Options{
+		AdapterName:    probeName,
+		AdapterVersion: probeVersion,
+		Probe: &protocol.ProbeInfo{
+			Framework:        "tview",
+			FrameworkVersion: frameworkVersion,
+			ProbeVersion:     probeVersion,
+			IdentityKind:     protocol.ProbeIdentityStable,
+			Capabilities: []protocol.ProbeCapability{
+				protocol.ProbeCapStableIdentity,
+				protocol.ProbeCapIntendedRect,
+				protocol.ProbeCapAnnotations,
+			},
+			Instrumentation: &protocol.ProbeInstrumentation{
+				HighestTier:   protocol.ProbeTierT1,
+				SemanticClass: protocol.ProbeSemanticClassA,
+				DegradedCapabilities: []protocol.SessionCapabilityID{
+					"clipped-geometry", "custom-container-enumeration",
+				},
+			},
+		},
+		Capabilities: []protocol.Capability{
+			protocol.CapTree,
+			protocol.CapIntendedGeometry,
+			protocol.CapStates,
+			protocol.CapFocusState,
+			protocol.CapActions,
+			protocol.CapActionRecipes,
+			protocol.CapRenderRevisions,
+		},
+		// Socket deadlines are worker watchdogs only. The render hook never
+		// performs a socket write; it uses bounded non-blocking admission.
+		WriteTimeout: protocol.DefaultWriteTimeout,
+		// Freeze the application's production evidence providers into the same
+		// hello as the certified tview adapter. Providers only contribute facts;
+		// all actions still enter through tcell's real terminal input path.
+		EvidenceProviders: evidence.DefaultRegistry(),
+	})
+	if client == nil {
+		return nil
+	}
+	return &termwrightProbeState{
+		client:       client,
+		ids:          make(map[Primitive]string),
+		recoveryStop: make(chan struct{}),
+	}
+}
+
+func (p *termwrightProbeState) connect() error {
+	if err := p.client.Start(protocol.DialTimeout); err != nil {
+		return err
+	}
+	publisher, err := protocol.NewPublicationQueue(p.client, 2)
+	if err != nil {
+		return err
+	}
+	p.publisher.Store(publisher)
+	return nil
+}
+
+// termwrightAttach is called by the public one-line adapter before Run. The
+// handshake, screen creation and allocations therefore happen outside
+// Application.draw's lock.
+func termwrightAttach(a *Application, root Primitive) (func(), error) {
+	frameworkVersion, versionErr := termwrightFrameworkVersion()
+	if versionErr != nil {
+		return nil, versionErr
+	}
+	p := newTermwrightProbe(frameworkVersion)
+	if p == nil {
+		return func() {}, nil
+	}
+	if err := p.connect(); err != nil {
+		_ = p.client.Close()
+		return nil, err
+	}
+	p.application = a
+
+	decorated, installErr := termwrightInstallScreen(a, p)
+	if installErr != nil {
+		p.close()
+		return nil, installErr
+	}
+	termwrightLastProbe.Store(p)
+	return func() {
+		decorated.detach()
+		p.close()
+	}, nil
+}
+
+// termwrightInstallScreen installs the decorator directly while Attach still
+// owns the pre-Run lifecycle. Application.SetScreen cannot replace an already
+// configured pre-Run screen: it finalizes it and queues an asynchronous runtime
+// replacement. T1 access avoids that behavior without touching upstream code.
+func termwrightInstallScreen(a *Application, p *termwrightProbeState) (*termwrightScreen, error) {
+	a.Lock()
+	defer a.Unlock()
+	if existing, ok := a.screen.(*termwrightScreen); ok && !existing.detached.Load() {
+		return nil, errors.New("termwright tview probe is already attached to this Application")
+	}
+
+	underlying := a.screen
+	owned := false
+	if underlying == nil {
+		var err error
+		underlying, err = tcell.NewScreen()
+		if err != nil {
+			return nil, err
+		}
+		if err = underlying.Init(); err != nil {
+			return nil, err
+		}
+		owned = true
+		if a.enableMouse {
+			underlying.EnableMouse()
+		} else {
+			underlying.DisableMouse()
+		}
+		if a.enablePaste {
+			underlying.EnablePaste()
+		} else {
+			underlying.DisablePaste()
+		}
+		if a.title != "" {
+			underlying.SetTitle(a.title)
+		}
+	}
+	decorated := &termwrightScreen{
+		Screen:      underlying,
+		application: a,
+		owned:       owned,
+		commit:      p.afterFrame,
+		fail: func(code, message string) {
+			if publisher := p.publisher.Load(); publisher != nil {
+				publisher.Fail(code, message)
+			}
+		},
+	}
+	decorated.previousBefore = a.beforeDraw
+	decorated.previousAfter = a.afterDraw
+	decorated.beforeHook = decorated.beforeDraw
+	decorated.afterHook = decorated.afterDraw
+	a.beforeDraw = decorated.beforeHook
+	a.afterDraw = decorated.afterHook
+	a.screen = decorated
+	return decorated, nil
+}
+
+// detach restores only the screen installation this decorator still owns. A
+// later application SetScreen wins and is never overwritten during cleanup.
+func (s *termwrightScreen) detach() {
+	if s.cleaned.CompareAndSwap(false, true) {
+		s.application.Lock()
+		if !s.hooksIntact() {
+			s.failClosed("tview lifecycle hooks were displaced before probe cleanup")
+		}
+		s.detached.Store(true)
+		owned := s.application.screen == s
+		if termwrightSameHook(s.application.beforeDraw, s.beforeHook) {
+			s.application.beforeDraw = s.previousBefore
+		}
+		if termwrightSameHook(s.application.afterDraw, s.afterHook) {
+			s.application.afterDraw = s.previousAfter
+		}
+		if owned {
+			if s.owned {
+				s.application.screen = nil
+			} else {
+				s.application.screen = s.Screen
+			}
+		}
+		s.application.Unlock()
+		if owned && s.owned {
+			s.finishUnderlying()
+		}
+	}
+	// The publication queue is closed immediately after detach. Do not let a
+	// deferred lifecycle diagnostic race that close or outlive probe cleanup.
+	s.diagnosis.Wait()
+}
+
+func termwrightFrameworkVersion() (string, error) {
+	build, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", errors.New("termwright tview probe cannot read the application build graph")
+	}
+	for _, dependency := range build.Deps {
+		if dependency.Path != "github.com/rivo/tview" {
+			continue
+		}
+		return termwrightDependencyVersion(dependency), nil
+	}
+	return "", errors.New("termwright tview probe did not find tview in the application build graph")
+}
+
+func termwrightDependencyVersion(dependency *debug.Module) string {
+	version := dependency.Version
+	if dependency.Replace != nil && dependency.Replace.Version != "" {
+		version = dependency.Replace.Version
+	}
+	if version == "" || version == "(devel)" {
+		// Version is advisory for a T1 integration. The compiler has already
+		// checked the actual private-symbol contract, so a workspace/local module
+		// must not be rejected merely because build metadata calls it devel.
+		return "capability-local"
+	}
+	return version
+}
+
+func (p *termwrightProbeState) close() {
+	p.shutdown.Do(func() {
+		p.recoveryStopOnce.Do(func() { close(p.recoveryStop) })
+		if publisher := p.publisher.Swap(nil); publisher != nil {
+			publisher.Shutdown()
+		} else {
+			_ = p.client.Close()
+		}
+		p.recoveryWorkers.Wait()
+	})
+}
+
+// afterFrame is the method form, so a test can drive an instance of its own
+// rather than the package-level probe a real run installs.
+func (p *termwrightProbeState) afterFrame(root Primitive, screen tcell.Screen) {
+	if screen == nil {
+		return
+	}
+	if !p.client.Connected() {
+		return
+	}
+	columns, rows := screen.Size()
+	if columns <= 0 || rows <= 0 {
+		return
+	}
+
+	snapshot, duplicateKey, snapshotErr := p.snapshot(root, columns, rows)
+	if snapshotErr != nil {
+		p.onPublishFailed(p.publisher.Load(), snapshotErr)
+		return
+	}
+	if duplicateKey != "" {
+		if publisher := p.publisher.Load(); publisher != nil {
+			publisher.Fail("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+		}
+		return
+	}
+	publisher := p.publisher.Load()
+	if publisher == nil {
+		return
+	}
+	p.publishFrame(publisher, snapshot, screen)
+}
+
+// publishFrame is the deterministic adapter boundary between a completed
+// framework snapshot and the same-writer marker. Keeping it separate lets the
+// adapter test inject a controlled refusal instead of relying on host socket
+// buffer saturation.
+func (p *termwrightProbeState) publishFrame(publisher termwrightPublicationSink, snapshot *protocol.Snapshot, screen tcell.Screen) {
+	marker, err := publisher.TryPublish(snapshot)
+	if err != nil || marker == "" {
+		p.onPublishFailed(publisher, err)
+		return
+	}
+	// Show and the marker use the same terminal writer. Publication is only a
+	// committed frame once all marker bytes have followed the screen bytes.
+	if writeErr := termwrightWriteMarker(screen, marker); writeErr != nil {
+		p.dropped.Add(1)
+		publisher.Fail("adapter-guarantee-violation", "tview could not write the complete render marker through the screen commit writer")
+		return
+	}
+	p.frames.Add(1)
+}
+
+type termwrightWindowsMarkerScreen interface {
+	TermwrightWriteMarker(string) error
+}
+
+func termwrightWriteMarker(screen tcell.Screen, marker string) error {
+	if terminal, ok := screen.Tty(); ok && terminal != nil {
+		written, err := terminal.Write([]byte(marker))
+		if err != nil {
+			return err
+		}
+		if written != len(marker) {
+			return errors.New("tcell terminal accepted a partial render marker")
+		}
+		return nil
+	}
+	if windows, ok := screen.(termwrightWindowsMarkerScreen); ok {
+		return windows.TermwrightWriteMarker(marker)
+	}
+	return errors.New("tcell screen exposes no writer used by Show")
+}
+
+// onPublishFailed records a frame the driver will never see.
+//
+// Two things have to happen together, and leaving out either one
+// produces a worse failure than dropping the frame did:
+//
+//  1. **No marker.** A marker names a revision; writing one for a tree that
+//     never arrived makes the driver wait for it and then report
+//     revision-pairing-watchdog — a diagnosis pointing at the adapter's timing rather
+//     than at the driver that stopped reading.
+//  2. **Keep rendering.** The application is mid-frame under its own lock;
+//     instrumentation failing is not the application failing.
+func (p *termwrightProbeState) onPublishFailed(publisher termwrightPublicationSink, err error) {
+	p.dropped.Add(1)
+	if errors.Is(err, protocol.ErrPublicationQueueFull) && publisher != nil {
+		p.requestAuthoritativeRedraw(publisher.ReadyAfterDrop())
+		return
+	}
+	if errors.Is(err, protocol.ErrPublicationQueueBusy) {
+		// Busy is a non-blocking admission refusal: a lifecycle or worker edge
+		// briefly owned one of the queue's locks. Defer a fresh draw to tview's
+		// event loop instead of turning that expected contention into a fatal or
+		// waiting in Screen.Show. The current snapshot receives no revision or
+		// marker and is never replayed.
+		ready := make(chan struct{})
+		close(ready)
+		p.requestAuthoritativeRedraw(ready)
+		return
+	}
+	message := "tview rendered a frame that semantic publication did not admit"
+	if err != nil {
+		message += ": " + err.Error()
+	}
+	if publisher != nil {
+		publisher.Fail("adapter-guarantee-violation", message)
+	}
+	if errors.Is(err, protocol.ErrPublicationWorkerFailed) {
+		// The worker closes an unrecoverable stream and admits no later marker.
+		// This counter retains its public name for probe statistics, but no
+		// transport deadline runs on the render thread anymore.
+		p.timedOut.Add(1)
+	}
+}
+
+// requestAuthoritativeRedraw turns bounded-queue loss into an explicit,
+// causal recovery. The render callback only records the drop and starts one
+// waiter. Once the publication worker has dequeued an item, that waiter queues
+// a fresh framework draw on tview's own event loop. The fresh draw re-reads the
+// retained widget tree and emits its own same-writer marker; the rejected
+// revision is never replayed or assigned a number.
+func (p *termwrightProbeState) requestAuthoritativeRedraw(ready <-chan struct{}) {
+	if p.application == nil || ready == nil || p.recoveryStop == nil {
+		return
+	}
+	if !p.recoveryPending.CompareAndSwap(false, true) {
+		return
+	}
+	p.recoveryWorkers.Add(1)
+	go func() {
+		defer p.recoveryWorkers.Done()
+		select {
+		case <-ready:
+		case <-p.recoveryStop:
+			p.recoveryPending.Store(false)
+			return
+		}
+
+		redraw := queuedUpdate{f: func() {
+			p.recoveryPending.Store(false)
+			select {
+			case <-p.recoveryStop:
+				return
+			default:
+				p.application.draw()
+			}
+		}}
+		select {
+		case p.application.updates <- redraw:
+		case <-p.recoveryStop:
+			p.recoveryPending.Store(false)
+		}
+	}()
+}
+
+// identity returns a stable id for a primitive.
+//
+// The pointer is the identity: tview retains its widget tree across frames, so
+// the same *Button is the same button, and that is what makes the IR's
+// `stable` identity kind honest here rather than a fabricated ordinal.
+func (p *termwrightProbeState) identity(primitive Primitive) (string, error) {
+	typeOf := reflect.TypeOf(primitive)
+	if typeOf == nil || !typeOf.Comparable() {
+		return "", errors.New("tview custom Primitive has no stable comparable session identity: " + termwrightTypeName(primitive))
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if id, ok := p.ids[primitive]; ok {
+		return id, nil
+	}
+	p.nextID++
+	id := "n" + strconv.Itoa(p.nextID)
+	p.ids[primitive] = id
+	return id, nil
+}
+
+// snapshot walks the retained tree into the wire form.
+func (p *termwrightProbeState) snapshot(root Primitive, columns, rows int) (*protocol.Snapshot, annotate.SemanticKey, error) {
+	snapshot := protocol.NewSnapshot("", 0, columns, rows)
+	snapshot.HitGrid = termwrightUnsupportedHitGrid()
+	if root == nil {
+		return snapshot, "", nil
+	}
+	keys := make(map[annotate.SemanticKey]string)
+	duplicates := make(map[annotate.SemanticKey]struct{})
+	pending := make([]termwrightRelations, 0)
+	if err := p.walk(root, "", false, columns, rows, snapshot, keys, duplicates, &pending); err != nil {
+		return snapshot, "", err
+	}
+	if len(duplicates) > 0 {
+		ordered := make([]string, 0, len(duplicates))
+		for key := range duplicates {
+			ordered = append(ordered, string(key))
+		}
+		sort.Strings(ordered)
+		return snapshot, annotate.SemanticKey(ordered[0]), nil
+	}
+	maxRelations := protocol.DefaultLimits.MaxRelationTargets
+	if p.client != nil {
+		maxRelations = p.client.Limits().MaxRelationTargets
+	}
+	termwrightResolveRelations(snapshot, keys, duplicates, pending, maxRelations)
+	return snapshot, "", nil
+}
+
+// termwrightRelations holds author references until every node has been
+// visited. A label may be drawn after the control it labels, so resolving in
+// walk order would make declaration order part of the API.
+type termwrightRelations struct {
+	nodeIndex   int
+	labelledBy  []annotate.SemanticKey
+	describedBy []annotate.SemanticKey
+}
+
+// walk appends one node and recurses.
+//
+// `hidden` is inherited: a widget on an unshown page is not merely unfocused,
+// it is not on screen, and every descendant of it is in the same position.
+func (p *termwrightProbeState) walk(
+	primitive Primitive,
+	parentID string,
+	hidden bool,
+	columns, rows int,
+	snapshot *protocol.Snapshot,
+	keys map[annotate.SemanticKey]string,
+	duplicates map[annotate.SemanticKey]struct{},
+	pending *[]termwrightRelations,
+) error {
+	if primitive == nil {
+		return nil
+	}
+
+	id, identityErr := p.identity(primitive)
+	if identityErr != nil {
+		return identityErr
+	}
+	children := termwrightChildren(primitive)
+
+	// HasFocus reports true for ancestors of the focused primitive as well, so
+	// the flag belongs to the deepest one that claims it.
+	focused := !hidden && primitive.HasFocus() && !termwrightAnyFocus(children)
+
+	role := termwrightRole(primitive)
+	node := protocol.Node{
+		ID:       id,
+		ParentID: parentID,
+		Role:     role,
+		Name:     termwrightName(primitive),
+		Value:    termwrightValue(primitive),
+		State:    termwrightState(primitive, focused, hidden),
+		P:        protocol.ProvenanceFramework,
+		PX: map[string]string{
+			"role": protocol.ProvenanceRecognizer,
+		},
+	}
+	node.Actions, node.InputRecipes = termwrightPhysicalSemantics(primitive)
+	if len(node.Actions) > 0 {
+		termwrightProvenance(&node, "actions", protocol.ProvenanceFramework)
+	}
+	if len(node.InputRecipes) > 0 {
+		termwrightProvenance(&node, "inputRecipes", protocol.ProvenanceFramework)
+	}
+	node.Geometry = termwrightGeometry(primitive, hidden)
+	// Required for a generic node, and useful on every other one: it is what
+	// keeps a widget this probe does not know about alive and identifiable
+	// rather than flattened into an anonymous region.
+	node.FrameworkType = termwrightTypeName(primitive)
+	node.OpaqueChildren = !termwrightKnownPrimitive(primitive)
+	// An author's annotation is merged on top of the observed facts, and only
+	// where the probe has nothing better: it may say what a widget *is*, never
+	// where it is or whether it has the focus. Those the probe measured.
+	meta, annotated := annotate.Lookup(primitive)
+	if annotated {
+		termwrightApplyAnnotation(meta, &node)
+		termwrightSortActions(node.Actions)
+		termwrightRegisterKey(meta.Key, id, keys, duplicates)
+	}
+	// Unknown primitives remain explicit generic nodes with their concrete
+	// framework type and typed opaqueChildren marker. Extended remains
+	// exclusively application-defined state.
+	if parentID == "" {
+		snapshot.RootIDs = append(snapshot.RootIDs, id)
+	}
+	snapshot.Nodes = append(snapshot.Nodes, node)
+	if annotated && (len(meta.LabelledBy) > 0 || len(meta.DescribedBy) > 0) {
+		*pending = append(*pending, termwrightRelations{
+			nodeIndex:   len(snapshot.Nodes) - 1,
+			labelledBy:  meta.LabelledBy,
+			describedBy: meta.DescribedBy,
+		})
+	}
+
+	for _, child := range children {
+		if err := p.walk(child.primitive, id, hidden || child.hidden, columns, rows, snapshot, keys, duplicates, pending); err != nil {
+			return err
+		}
+	}
+	p.appendSynthetic(primitive, id, hidden, snapshot)
+	return nil
+}
+
+// termwrightKnownPrimitive distinguishes built-in leaves from author-defined
+// primitives whose possible children tview does not expose. Unknown values are
+// retained as explicit opaque nodes instead of silently presenting them as
+// complete leaves.
+func termwrightKnownPrimitive(primitive Primitive) bool {
+	switch primitive.(type) {
+	case *Box, *Button, *Checkbox, *DropDown, *Flex, *Form, *Frame, *Grid,
+		*Image, *InputField, *List, *Modal, *Pages, *Table,
+		*TextArea, *TextView, *TreeView:
+		return true
+	default:
+		return false
+	}
+}
+
+func termwrightRegisterKey(
+	key annotate.SemanticKey,
+	id string,
+	keys map[annotate.SemanticKey]string,
+	duplicates map[annotate.SemanticKey]struct{},
+) {
+	if key == "" {
+		return
+	}
+	if _, duplicate := duplicates[key]; duplicate {
+		return
+	}
+	if previous, exists := keys[key]; exists && previous != id {
+		delete(keys, key)
+		duplicates[key] = struct{}{}
+		return
+	}
+	keys[key] = id
+}
+
+func termwrightResolveRelations(
+	snapshot *protocol.Snapshot,
+	keys map[annotate.SemanticKey]string,
+	duplicates map[annotate.SemanticKey]struct{},
+	pending []termwrightRelations,
+	maxRelations int,
+) {
+	resolve := func(references []annotate.SemanticKey) []string {
+		resolved := make([]string, 0, len(references))
+		seen := make(map[string]struct{}, len(references))
+		for _, key := range references {
+			if len(resolved) >= maxRelations {
+				break
+			}
+			if _, duplicate := duplicates[key]; duplicate {
+				continue
+			}
+			id, found := keys[key]
+			if !found {
+				continue
+			}
+			if _, repeated := seen[id]; repeated {
+				continue
+			}
+			seen[id] = struct{}{}
+			resolved = append(resolved, id)
+		}
+		return resolved
+	}
+
+	for _, relation := range pending {
+		node := &snapshot.Nodes[relation.nodeIndex]
+		if ids := resolve(relation.labelledBy); len(ids) > 0 {
+			node.LabelledBy = ids
+			termwrightProvenance(node, "labelledBy", protocol.ProvenanceAnnotation)
+		}
+		if ids := resolve(relation.describedBy); len(ids) > 0 {
+			node.DescribedBy = ids
+			termwrightProvenance(node, "describedBy", protocol.ProvenanceAnnotation)
+		}
+	}
+}
+
+func termwrightProvenance(node *protocol.Node, field, source string) {
+	if node.PX == nil {
+		node.PX = make(map[string]string)
+	}
+	node.PX[field] = source
+}
+
+// termwrightApplyAnnotation merges what the application declared.
+//
+// tview retains its widgets, so a registry keyed by the primitive's identity
+// works here — which is why tview annotates by registration while Charm, whose
+// components are copied values, annotates through an interface.
+func termwrightApplyAnnotation(meta annotate.Semantics, node *protocol.Node) {
+	if meta.Role != "" {
+		// Validated against the closed set and dropped when unknown, rather
+		// than guessed at: exhaustive switches downstream depend on that set
+		// staying closed, and a typo in an annotation is the author's to fix.
+		if role := protocol.Role(meta.Role); protocol.ValidRole(role) {
+			node.Role = role
+			termwrightProvenance(node, "role", protocol.ProvenanceAnnotation)
+		}
+	}
+	if meta.Name != "" {
+		node.Name = meta.Name
+		termwrightProvenance(node, "name", protocol.ProvenanceAnnotation)
+	}
+	if meta.TestID != "" {
+		node.TestID = meta.TestID
+		termwrightProvenance(node, "testId", protocol.ProvenanceAnnotation)
+	}
+	if meta.Description != "" {
+		node.Description = meta.Description
+		termwrightProvenance(node, "description", protocol.ProvenanceAnnotation)
+	}
+	// Domain state has its own namespace, so it cannot pollute the closed
+	// portable state vocabulary or masquerade as prose.
+	if len(meta.Domain) > 0 {
+		node.Extended = make(map[string]any, len(meta.Domain))
+		for key, value := range meta.Domain {
+			node.Extended[key] = value
+		}
+		termwrightProvenance(node, "extended", protocol.ProvenanceAnnotation)
+	}
+	seenActions := make(map[protocol.Action]struct{}, len(node.Actions)+len(meta.Actions))
+	for _, action := range node.Actions {
+		seenActions[action] = struct{}{}
+	}
+	annotationDeclaredAction := false
+	for _, action := range meta.Actions {
+		if !protocol.ValidAction(action) {
+			continue
+		}
+		annotationDeclaredAction = true
+		if _, duplicate := seenActions[action]; duplicate {
+			continue
+		}
+		seenActions[action] = struct{}{}
+		node.Actions = append(node.Actions, action)
+	}
+	if annotationDeclaredAction {
+		termwrightProvenance(node, "actions", protocol.ProvenanceAnnotation)
+	}
+}
+
+// termwrightPhysicalSemantics publishes only keybindings proven by the current
+// conformance profile's InputHandler implementations. Candidate certification
+// re-verifies these behaviors. They are data recipes executed later
+// through the real PTY; this instrumentation never invokes a handler.
+func termwrightPhysicalSemantics(p Primitive) ([]protocol.Action, []protocol.PhysicalInputRecipe) {
+	press := func(action protocol.Action, key string) ([]protocol.Action, []protocol.PhysicalInputRecipe) {
+		return []protocol.Action{action}, []protocol.PhysicalInputRecipe{{
+			Action: string(action), RequiresFocus: true,
+			Steps: []protocol.PhysicalInputRecipeStep{{Kind: "press", Key: key}},
+		}}
+	}
+	switch p.(type) {
+	case *Button:
+		return press(protocol.ActionActivate, "Enter")
+	case *Checkbox:
+		return press(protocol.ActionToggle, "Space")
+	default:
+		return nil, nil
+	}
+}
+
+func termwrightSortActions(actions []protocol.Action) {
+	order := map[protocol.Action]int{
+		protocol.ActionFocus: 0, protocol.ActionActivate: 1, protocol.ActionToggle: 2,
+		protocol.ActionSetValue: 3, protocol.ActionScroll: 4, protocol.ActionSelect: 5,
+		protocol.ActionExpand: 6,
+	}
+	sort.SliceStable(actions, func(left, right int) bool { return order[actions[left]] < order[actions[right]] })
+}
+
+// termwrightChild is a child plus whether its container is showing it.
+type termwrightChild struct {
+	primitive Primitive
+	hidden    bool
+}
+
+// termwrightChildren enumerates a container's children from inside the package.
+func termwrightChildren(p Primitive) []termwrightChild {
+	switch c := p.(type) {
+	case *Flex:
+		children := make([]termwrightChild, 0, c.GetItemCount())
+		for index := 0; index < c.GetItemCount(); index++ {
+			if item := c.GetItem(index); item != nil {
+				children = append(children, termwrightChild{primitive: item})
+			}
+		}
+		return children
+	case *Grid:
+		// The case an out-of-package adapter cannot serve at all. `visible`
+		// carries the last draw's decision, which is exactly what a test means
+		// by "is it on screen".
+		children := make([]termwrightChild, 0, len(c.items))
+		for _, item := range c.items {
+			if item.Item != nil {
+				children = append(children, termwrightChild{primitive: item.Item, hidden: !item.visible})
+			}
+		}
+		return children
+	case *Pages:
+		visible := make(map[string]struct{}, c.GetPageCount())
+		for _, name := range c.GetPageNames(true) {
+			visible[name] = struct{}{}
+		}
+		// GetPageNames returns front-to-back; reverse it to preserve Draw's
+		// public back-to-front paint order without reading Pages.pages.
+		names := c.GetPageNames(false)
+		children := make([]termwrightChild, 0, len(names))
+		for index := len(names) - 1; index >= 0; index-- {
+			name := names[index]
+			if item := c.GetPage(name); item != nil {
+				_, shown := visible[name]
+				children = append(children, termwrightChild{primitive: item, hidden: !shown})
+			}
+		}
+		return children
+	case *Frame:
+		if primitive := c.GetPrimitive(); primitive != nil {
+			return []termwrightChild{{primitive: primitive}}
+		}
+	case *Form:
+		children := make([]termwrightChild, 0, c.GetFormItemCount()+c.GetButtonCount())
+		for index := 0; index < c.GetFormItemCount(); index++ {
+			children = append(children, termwrightChild{primitive: c.GetFormItem(index)})
+		}
+		for index := 0; index < c.GetButtonCount(); index++ {
+			children = append(children, termwrightChild{primitive: c.GetButton(index)})
+		}
+		return children
+	case *Modal:
+		if c.frame != nil {
+			return []termwrightChild{{primitive: c.frame}}
+		}
+	}
+	return nil
+}
+
+func termwrightAnyFocus(children []termwrightChild) bool {
+	for _, child := range children {
+		if child.primitive != nil && child.primitive.HasFocus() {
+			return true
+		}
+	}
+	return false
+}
+
+// termwrightRole maps a widget type to the closed role set.
+//
+// Deliberately identical to the hand-written adapter's mapping: the two must
+// agree, or the same application would describe itself differently depending
+// on how it was instrumented, and every conformance snapshot would fork.
+func termwrightRole(p Primitive) protocol.Role {
+	switch p.(type) {
+	case *Button:
+		return protocol.RoleButton
+	case *Checkbox:
+		return protocol.RoleCheckbox
+	case *InputField, *TextArea:
+		return protocol.RoleTextbox
+	case *DropDown, *List, *TreeView:
+		return protocol.RoleList
+	case *Table:
+		return protocol.RoleTable
+	case *TextView:
+		return protocol.RoleText
+	case *Modal:
+		return protocol.RoleDialog
+	case *Form, *Flex, *Grid, *Pages, *Frame, *Box:
+		return protocol.RoleRegion
+	}
+	// Never dropped: an unrecognised widget keeps its geometry, its children and
+	// its own type name, which is what makes a new tview release degrade
+	// rather than disappear.
+	return protocol.RoleGeneric
+}
+
+// termwrightName derives the accessible name.
+func termwrightName(p Primitive) string {
+	switch widget := p.(type) {
+	case *Button:
+		return widget.GetLabel()
+	case *Checkbox:
+		return termwrightFirst(widget.GetLabel(), widget.GetTitle())
+	case *InputField:
+		return termwrightFirst(widget.GetLabel(), widget.GetTitle())
+	case *DropDown:
+		return termwrightFirst(widget.GetLabel(), widget.GetTitle())
+	case *TextArea:
+		return termwrightFirst(widget.GetLabel(), widget.GetTitle())
+	case *TextView:
+		return termwrightFirst(widget.GetTitle(), termwrightTrim(widget.GetText(true)))
+	case *Modal:
+		// Modal exposes no getter at all; the text is the only name it has.
+		return termwrightTrim(widget.text)
+	case *Box:
+		return widget.GetTitle()
+	}
+	if boxed, ok := p.(interface{ GetTitle() string }); ok {
+		return boxed.GetTitle()
+	}
+	return ""
+}
+
+// termwrightValue reports the current value of a value-bearing widget.
+//
+// The observation keeps an empty public value distinct from no value. A text
+// transform is production evidence that the displayed widget intentionally
+// withholds its source text (InputField passwords use this exact mechanism),
+// so the probe never exports that plaintext.
+func termwrightValue(p Primitive) *protocol.SemanticValueObservation {
+	switch widget := p.(type) {
+	case *InputField:
+		if widget.textArea != nil && widget.textArea.transform != nil {
+			return protocol.WithheldSensitiveValue()
+		}
+		return protocol.PublicValue(widget.GetText(), termwrightEvidence("native"))
+	case *TextArea:
+		if widget.transform != nil {
+			return protocol.WithheldSensitiveValue()
+		}
+		return protocol.PublicValue(widget.GetText(), termwrightEvidence("native"))
+	case *DropDown:
+		_, text := widget.GetCurrentOption()
+		return protocol.PublicValue(text, termwrightEvidence("native"))
+	}
+	return nil
+}
+
+// termwrightTypeName is the framework's own name for the widget, without the
+// package qualifier that would be identical on every node.
+func termwrightTypeName(p Primitive) string {
+	name := reflect.TypeOf(p).String()
+	if index := strings.LastIndex(name, "."); index >= 0 {
+		name = name[index+1:]
+	}
+	return name
+}
+
+// termwrightGeometry qualifies only facts the retained tview tree exposes.
+// GetRect is the parent's intended allocation. The framework exposes no
+// general nested clipping or paint ownership, so visibleRect and pointer hit
+// testing remain unavailable.
+func termwrightGeometry(p Primitive, hidden bool) protocol.NodeGeometryObservations {
+	displayed := !hidden
+	geometry := protocol.NodeGeometryObservations{
+		Displayed: protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: termwrightEvidence("instrumented")},
+	}
+	if hidden {
+		geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-displayed", Evidence: termwrightEvidence("instrumented")}
+		geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-displayed", Evidence: termwrightEvidence("instrumented")}
+		return geometry
+	}
+
+	x, y, width, height := p.GetRect()
+	if width <= 0 || height <= 0 {
+		geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-laid-out", Evidence: termwrightEvidence("measured")}
+		geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-laid-out", Evidence: termwrightEvidence("measured")}
+		return geometry
+	}
+	intended := protocol.Rect{Row: y, Column: x, Width: width, Height: height}
+	geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "known", Value: &intended, Evidence: termwrightEvidence("measured")}
+	geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapClippedGeometry), Reason: "framework-unobservable"}
+	return geometry
+}
+
+func termwrightEvidence(method string) *protocol.EvidenceProvenance {
+	return &protocol.EvidenceProvenance{
+		Source: "framework", Method: method, Strength: "authoritative", ProviderID: probeName,
+	}
+}
+
+func termwrightUnsupportedHitGrid() protocol.Observation[protocol.PointerHitGrid] {
+	return protocol.Observation[protocol.PointerHitGrid]{
+		Status: "unsupported", Capability: "pointer-hit-grid", Reason: "framework-unobservable",
+	}
+}
+
+// termwrightCount is the same guard for set sizes.
+func termwrightCount(count int) *int {
+	if count < 0 {
+		return nil
+	}
+	return protocol.Int(count)
+}
+
+// termwrightState reads the observable state of one widget.
+func termwrightState(p Primitive, focused, hidden bool) *protocol.State {
+	state := protocol.State{}
+	empty := true
+
+	if focused {
+		state.Focused = protocol.Bool(true)
+		empty = false
+	}
+	if hidden {
+		state.Hidden = protocol.Bool(true)
+		empty = false
+	}
+
+	switch widget := p.(type) {
+	case *Button:
+		if widget.IsDisabled() {
+			state.Disabled = protocol.Bool(true)
+			empty = false
+		}
+	case *Checkbox:
+		state.Checked = widget.IsChecked()
+		if widget.disabled {
+			state.Disabled = protocol.Bool(true)
+		}
+		empty = false
+	case *DropDown:
+		if widget.disabled {
+			state.Disabled = protocol.Bool(true)
+			empty = false
+		}
+		state.SetSize = termwrightCount(widget.GetOptionCount())
+		state.Expanded = protocol.Bool(widget.IsOpen())
+		empty = false
+	case *TextArea:
+		if widget.GetDisabled() {
+			state.Disabled = protocol.Bool(true)
+			empty = false
+		}
+	case *List:
+		state.SetSize = termwrightCount(widget.GetItemCount())
+		empty = false
+	case *Table:
+		state.SetSize = termwrightCount(widget.GetRowCount())
+		empty = false
+	case *TreeView:
+		state.SetSize = termwrightCount(widget.GetRowCount())
+		empty = false
+	case *Modal:
+		state.Modal = protocol.Bool(true)
+		empty = false
+	}
+
+	if empty {
+		return nil
+	}
+	return &state
+}
+
+// appendSynthetic emits nodes for entries that are not primitives of their own
+// — list items and dropdown options — so they are addressable by role and name.
+// Their geometry observations stay explicitly unknown because entries are not
+// primitives with framework-owned rectangles.
+func (p *termwrightProbeState) appendSynthetic(
+	primitive Primitive,
+	parentID string,
+	hidden bool,
+	snapshot *protocol.Snapshot,
+) {
+	switch widget := primitive.(type) {
+	case *List:
+		current := widget.GetCurrentItem()
+		count := widget.GetItemCount()
+		itemOffset, _ := widget.GetOffset()
+		x, y, width, height := widget.GetInnerRect()
+		for index := 0; index < count; index++ {
+			main, secondary := widget.GetItemText(index)
+			node := protocol.Node{
+				ID:       parentID + ":item" + strconv.Itoa(index),
+				ParentID: parentID,
+				Role:     protocol.RoleListItem,
+				Name:     termwrightFirst(main, secondary),
+				State:    termwrightItemState(index == current, index, count, hidden),
+				P:        protocol.ProvenanceFramework,
+				PX: map[string]string{
+					"role": protocol.ProvenanceRecognizer,
+				},
+			}
+			termwrightListItemGeometry(&node, x, y, width, height, index-itemOffset, hidden)
+			snapshot.Nodes = append(snapshot.Nodes, node)
+		}
+	case *DropDown:
+		current, _ := widget.GetCurrentOption()
+		count := widget.GetOptionCount()
+		x, y, width, height := widget.GetRect()
+		for index := 0; index < count; index++ {
+			node := protocol.Node{
+				ID:       parentID + ":option" + strconv.Itoa(index),
+				ParentID: parentID,
+				Role:     protocol.RoleListItem,
+				Name:     widget.options[index].Text,
+				State:    termwrightItemState(index == current, index, count, hidden),
+				P:        protocol.ProvenanceFramework,
+				PX: map[string]string{
+					"role": protocol.ProvenanceRecognizer,
+				},
+			}
+			termwrightOwnedControlGeometry(&node, x, y, width, height, hidden)
+			snapshot.Nodes = append(snapshot.Nodes, node)
+		}
+	}
+}
+
+func termwrightListItemGeometry(node *protocol.Node, x, y, width, height, row int, hidden bool) {
+	displayed := !hidden && row >= 0 && row < height && width > 0
+	rect := protocol.Rect{Row: y + row, Column: x, Width: width, Height: 1}
+	node.Geometry = protocol.NodeGeometryObservations{
+		Displayed:    protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: termwrightEvidence("derived")},
+		IntendedRect: protocol.Observation[protocol.Rect]{Status: "known", Value: &rect, Evidence: termwrightEvidence("derived")},
+		VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapClippedGeometry), Reason: "framework-unobservable"},
+	}
+}
+
+func termwrightOwnedControlGeometry(node *protocol.Node, x, y, width, height int, hidden bool) {
+	displayed := !hidden && width > 0 && height > 0
+	rect := protocol.Rect{Row: y, Column: x, Width: width, Height: height}
+	node.Geometry = protocol.NodeGeometryObservations{
+		Displayed:    protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: termwrightEvidence("derived")},
+		IntendedRect: protocol.Observation[protocol.Rect]{Status: "known", Value: &rect, Evidence: termwrightEvidence("derived")},
+		VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapClippedGeometry), Reason: "framework-unobservable"},
+	}
+}
+
+func termwrightItemState(selected bool, index, count int, hidden bool) *protocol.State {
+	state := protocol.State{
+		Selected:      protocol.Bool(selected),
+		PositionInSet: protocol.Int(index + 1),
+		SetSize:       protocol.Int(count),
+	}
+	if hidden {
+		state.Hidden = protocol.Bool(true)
+	}
+	return &state
+}
+
+func termwrightFirst(candidates ...string) string {
+	for _, candidate := range candidates {
+		if trimmed := termwrightTrim(candidate); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+// termwrightTrim collapses the padding widgets use for layout, so a name reads
+// the way it looks rather than the way it was spaced.
+func termwrightTrim(text string) string {
+	start := 0
+	end := len(text)
+	for start < end && (text[start] == ' ' || text[start] == '\t' || text[start] == '\n' || text[start] == '\r') {
+		start++
+	}
+	for end > start && (text[end-1] == ' ' || text[end-1] == '\t' || text[end-1] == '\n' || text[end-1] == '\r') {
+		end--
+	}
+	return text[start:end]
+}

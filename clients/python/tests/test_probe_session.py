@@ -104,6 +104,11 @@ def test_probe_info_claims_only_what_textual_gives():
     assert info["identityKind"] == "stable", "Textual has a retained DOM"
     assert info["frameworkVersion"] == "8.2.8"
     assert set(info["capabilities"]) == set(PROBE_CAPABILITIES)
+    assert info["instrumentation"] == {
+        "highestTier": "T3",
+        "semanticClass": "A",
+        "degradedCapabilities": ["inactive-screen-tree"],
+    }
 
 
 def test_frame_begin_is_not_claimed():
@@ -141,6 +146,11 @@ async def test_the_handshake_carries_the_probe_declaration(endpoint):
     assert declared is not None, "the driver cannot tell this is a probe"
     assert declared["framework"] == "textual"
     assert declared["identityKind"] == "stable"
+    assert declared["instrumentation"] == {
+        "highestTier": "T3",
+        "semanticClass": "A",
+        "degradedCapabilities": ["inactive-screen-tree"],
+    }
 
 
 # -- publishing -------------------------------------------------------------
@@ -348,8 +358,9 @@ def test_marker_preflight_failure_precedes_snapshot_publication(monkeypatch):
     ]
 
 
-def test_queue_full_race_after_publication_fails_channel_with_detail(monkeypatch):
-    from queue import Full
+@pytest.mark.parametrize("capacity", [1, 2, 64])
+def test_queue_full_race_after_publication_fails_channel_with_detail(monkeypatch, capacity):
+    from queue import Queue
 
     app = SimpleNamespace()
     client = UnitClient()
@@ -357,10 +368,19 @@ def test_queue_full_race_after_publication_fails_channel_with_detail(monkeypatch
     session._started = True
     monkeypatch.setattr(session, "_snapshot", lambda _commit: object())
 
-    def raced_full(_text):
-        raise Full
+    queue = Queue(maxsize=capacity)
 
-    commit = CommittedTextualFrame(app, object(), object(), lambda: None, raced_full)
+    def preflight():
+        assert not queue.full()
+
+    def raced_full(text):
+        # Deterministically model another producer claiming every remaining
+        # slot after preflight but before this marker's non-blocking enqueue.
+        for index in range(capacity):
+            queue.put_nowait(f"racer-{index}")
+        queue.put_nowait(text)
+
+    commit = CommittedTextualFrame(app, object(), object(), preflight, raced_full)
     session.on_frame(commit)
 
     assert len(client.published) == 1

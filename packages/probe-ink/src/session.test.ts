@@ -241,6 +241,7 @@ describe('Ink probe session', () => {
       probeVersion: PACKAGE_VERSION,
       identityKind: 'stable',
       capabilities: ['stable-identity', 'intended-rect', 'visible-rect', 'annotations'],
+      instrumentation: { highestTier: 'T3', semanticClass: 'A', degradedCapabilities: [] },
     });
   });
 
@@ -434,6 +435,7 @@ describe('Ink probe session', () => {
 
   it('rejects a causal publication boundary when the session stops', async () => {
     const tree = root();
+    const violation = vi.fn();
     const session = createTestInkSession({
       channel: channel([], []),
       resolveRoot: () => tree,
@@ -441,12 +443,14 @@ describe('Ink probe session', () => {
       waitForRenderFlush: flushedRender,
       stdout: stream([]),
       tracker: fakeTracker(),
+      onGuaranteeViolation: violation,
     });
 
     const causal = session.notifyRender({ awaitPublication: true });
     session.stop();
 
     await expect(causal).rejects.toThrow('Ink probe stopped');
+    expect(violation).not.toHaveBeenCalled();
   });
 
   it('rejects a causal publication boundary when the semantic channel closes', async () => {

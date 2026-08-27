@@ -1,8 +1,9 @@
 // Command tview-menu is a small tview application: a menu on the left, and a
 // settings form that appears when the menu asks for it.
 //
-// The application contains no Termwright integration. The test build redirects
-// tview to an ephemeral instrumented copy; a normal `go run` is untouched.
+// The application has the doctrine's single Attach opt-in. A Termwright-owned
+// build adds compiler-checked probe units without editing tview; an ordinary
+// `go run` has no endpoint and Attach is inert.
 //
 //	go run ./app        # just a menu
 package main
@@ -12,6 +13,7 @@ import (
 	"os"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/gorce-ai/termwright/clients/go/tviewprobe"
 	"github.com/rivo/tview"
 )
 
@@ -68,7 +70,9 @@ func main() {
 	// disabled refuses to click rather than sending bytes nothing will read.
 	app.EnableMouse(true)
 
-	if err := app.SetRoot(pages, true).SetFocus(menu).Run(); err != nil {
+	app.SetRoot(pages, true).SetFocus(menu)
+	defer tviewprobe.Attach(app, pages)()
+	if err := app.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

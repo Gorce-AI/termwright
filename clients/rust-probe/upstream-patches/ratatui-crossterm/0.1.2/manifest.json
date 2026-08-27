@@ -1,0 +1,16 @@
+{
+  "framework": "ratatui-crossterm",
+  "frameworkVersion": "0.1.2",
+  "patchSetVersion": 1,
+  "note": "One exact T3 capability override. CrosstermBackend certifies that its private W is the render sink, appends the Termwright marker through that same W, and flushes it. This patch intentionally remains exact-version and fail-closed; no other Backend inherits the capability.",
+  "requires": [],
+  "patched": [
+    {
+      "path": "src/lib.rs",
+      "patch": "patches/src_lib.rs.patch",
+      "sha256Before": "sha256:0d6ad3a95052036a161998a4411dd2921b528212155762efdfdde9cd335baa7d",
+      "sha256After": "sha256:b2dc8b8525b8dfadf4e3624506835e8b3b340427125e2427ea1df8d02b4e15e3"
+    }
+  ],
+  "added": []
+}

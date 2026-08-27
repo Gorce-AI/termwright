@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
+import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
 import type { AppLogEvent, TerminalHarness } from '@termwright/driver';
 import { launchInkFixture } from './fixture.js';
 import { mountInk } from './mount.js';
@@ -25,6 +26,7 @@ import CounterApp from './testing/counter-app.mjs';
 
 const COMPONENT = new URL('./testing/counter-app.mjs', import.meta.url);
 const SIZE = { columns: 40, rows: 10 } as const;
+const fixtureIt = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
 
 const open: TerminalHarness[] = [];
 const directories: string[] = [];
@@ -88,7 +90,7 @@ describe('logs passthrough', () => {
     expect(entry.label).toBe('app');
   });
 
-  it('follows a file for a fixture process', async () => {
+  fixtureIt('follows a file for a fixture process', async () => {
     const path = await logFile();
 
     const harness = await launchInkFixture({

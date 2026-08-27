@@ -142,6 +142,47 @@ describe('server messages', () => {
     }
   });
 
+  it('round-trips runtime injection metadata and preserves raw PTY as framework null', () => {
+    const capabilityAvailability = Object.fromEntries(SESSION_CAPABILITIES.map((id) => [
+      id,
+      { status: 'unsupported', reason: 'not-negotiated' },
+    ])) as EffectiveSessionContract['capabilities'];
+    const base = {
+      contractId: 's1:0', sessionId: 's1', epoch: 0, protocol: 'termwright/2' as const,
+      providers: [{ id: 'termwright-vt', kind: 'terminal' as const, version: '1' }],
+      capabilities: capabilityAvailability,
+      terminal: { profile: 'default', platform: 'linux', mouseModesObservable: true },
+    };
+    const instrumented: ServerMessage = {
+      v: 1, type: 'session', sessionId: 's1', testId: 't1', terminalProfile: 'default',
+      columns: 80, rows: 24,
+      contract: {
+        ...base,
+        framework: {
+          name: 'charm', version: '2.0.9', adapterVersion: '0.3.0',
+          certificationId: 'charm@2.0.9/0.3.0',
+          instrumentation: {
+            highestTier: 'T3', semanticClass: 'B',
+            degradedCapabilities: [
+              'intended-geometry',
+              'clipped-geometry',
+              'inactive-screen-tree',
+              'custom-container-enumeration',
+            ],
+          },
+        },
+      },
+    };
+    expect(parseServerMessage(encodeMessage(instrumented))).toEqual(instrumented);
+
+    const raw: ServerMessage = {
+      v: 1, type: 'session', sessionId: 's1', testId: 't1', terminalProfile: 'default',
+      columns: 80, rows: 24,
+      contract: { ...base, framework: null },
+    };
+    expect(parseServerMessage(encodeMessage(raw))).toEqual(raw);
+  });
+
   it('rejects an unknown type rather than ignoring it', () => {
     expect(() => parseServerMessage('{"v":1,"type":"reload"}')).toThrow(UiProtocolError);
   });

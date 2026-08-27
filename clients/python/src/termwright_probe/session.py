@@ -1,7 +1,7 @@
 """One instrumented Textual application: connect, publish, commit.
 
 The session lives between the frame hook and the protocol client. Each
-completed frame becomes a snapshot and its marker is appended to the exact
+completed frame becomes a snapshot and its marker is appended to the observed
 WriterThread FIFO after the frame. That causal order lets the driver match the
 tree to the terminal bytes without blocking Textual's event loop.
 
@@ -62,6 +62,11 @@ def probe_info(framework_version: Optional[str] = None) -> Dict[str, Any]:
         # and its identity can be correlated across frames.
         "identityKind": "stable",
         "capabilities": list(PROBE_CAPABILITIES),
+        "instrumentation": {
+            "highestTier": "T3",
+            "semanticClass": "A",
+            "degradedCapabilities": ["inactive-screen-tree"],
+        },
     }
     if framework_version:
         info["frameworkVersion"] = framework_version
@@ -181,7 +186,7 @@ class ProbeSession:
             self._starting = False
 
     def _write(self, commit: CommittedTextualFrame, text: str) -> None:
-        """Non-blockingly enqueue after the frame on its exact FIFO writer."""
+        """Non-blockingly enqueue after the frame on its verified FIFO writer."""
         try:
             commit.enqueue_marker(text)
         except Exception as error:

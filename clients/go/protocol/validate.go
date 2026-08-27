@@ -242,7 +242,7 @@ func checkState(value any, path []string) *issue {
 var nodeKeys = []string{
 	"id", "parentId", "role", "name", "description", "value", "geometry",
 	"state", "extended", "actions", "inputRecipes", "labelledBy", "describedBy", "textRanges", "testId",
-	"frameworkType", "p", "px",
+	"frameworkType", "opaqueChildren", "p", "px",
 	"scroll", "paintedRegion",
 }
 
@@ -645,6 +645,11 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 			if _, problem := checkText(present, at(path, key), limits); problem != nil {
 				return problem
 			}
+		}
+	}
+	if opaque, ok := object["opaqueChildren"]; ok {
+		if _, isBool := opaque.(bool); !isBool {
+			return fail(at(path, "opaqueChildren"), "expected boolean")
 		}
 	}
 	if present, ok := object["value"]; ok {

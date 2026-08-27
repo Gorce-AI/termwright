@@ -226,6 +226,7 @@ function probeInfo(overrides: Record<string, unknown> = {}): Record<string, unkn
     probeVersion: '0.1.0',
     identityKind: 'stable',
     capabilities: ['frame-begin'],
+    instrumentation: { highestTier: 'T3', semanticClass: 'A', degradedCapabilities: [] },
     ...overrides,
   };
 }
@@ -240,6 +241,11 @@ describe('the probe lifecycle', () => {
     await expect.poll(() => harness.attachments.length).toBe(1);
     expect(harness.attachments[0]?.probe?.framework).toBe('test-framework');
     expect(harness.attachments[0]?.probe?.identityKind).toBe('stable');
+    expect(harness.attachments[0]?.probe?.instrumentation).toEqual({
+      highestTier: 'T3', semanticClass: 'A', degradedCapabilities: [],
+    });
+    expect(Object.isFrozen(harness.attachments[0]?.probe?.instrumentation)).toBe(true);
+    expect(Object.isFrozen(harness.attachments[0]?.probe?.instrumentation?.degradedCapabilities)).toBe(true);
 
     client.send({ type: 'frame-begin', revision: 7 });
     await expect.poll(() => harness.frameBegins).toEqual([7]);

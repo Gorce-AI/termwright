@@ -1,8 +1,8 @@
 {
   "framework": "ratatui-core",
   "frameworkVersion": "0.1.2",
-  "patchSetVersion": 3,
-  "note": "Three anchors. Frame::render_widget and Frame::render_stateful_widget report each call; Terminal::apply_buffer_with_cursor reports the frame boundary immediately after Backend::flush, the only point at which the frame's bytes are on the terminal and a render-commit marker may be written. All behind #[cfg(feature = \"std\")]: ratatui-core is #![no_std] and gets std only because the ratatui facade enables it. A stateful render is reported here but its state is not: StatefulWidget::State is ?Sized, so it cannot even be downcast \u2014 see the ratatui-widgets patch set for where the concrete state is readable.",
+  "patchSetVersion": 6,
+  "note": "Six T3 anchors. Terminal::with_options performs the fallible semantic handshake during startup and installs a clone-aware lifecycle guard; final Terminal drop drains the bounded publisher so a short one-frame process cannot exit ahead of an admitted snapshot or fatal. Frame render calls report semantics; Backend supplies a fail-closed same-writer marker contract; and apply_buffer_with_cursor only validates, encodes and admits a revision after Backend::flush. The separately pinned ratatui-crossterm implementation writes the returned marker through its exact W. All probe calls remain behind #[cfg(feature = \"std\")].",
   "requires": [
     {
       "crate": "termwright-probe-ratatui",
@@ -24,10 +24,28 @@
       "sha256After": "sha256:f4992d0bab7fef4dcf7588563a792b1ad9e26f5584659abefee461535bdac700"
     },
     {
+      "path": "src/backend.rs",
+      "patch": "patches/src_backend.rs.patch",
+      "sha256Before": "sha256:906594933dd5cc18bcf1f9a4e5b6525905bf68653e3b0adc56944445557fa01e",
+      "sha256After": "sha256:df068a12030d8eb292b468d5809fd6404e5bed7070b42f044e8bf9290af2c01c"
+    },
+    {
       "path": "src/terminal/render.rs",
       "patch": "patches/src_terminal_render.rs.patch",
       "sha256Before": "sha256:56e9393898cba07c939fa5ad61a3608c1650d8f454c8f02a78d7680461ff034c",
-      "sha256After": "sha256:9449ebb2a1d4c91a5120496064dcd9ffdc5918a23515838dec300c991286bf3e"
+      "sha256After": "sha256:d27a70e2270c6ef33ab7ff5da2b06f2a67edd2569cc9e44471e1d8dbb1dd4f2f"
+    },
+    {
+      "path": "src/terminal/init.rs",
+      "patch": "patches/src_terminal_init.rs.patch",
+      "sha256Before": "sha256:061b6d648faed8230b671a70b24cbdd9850fc374bb475c5db15b6c29126b2a59",
+      "sha256After": "sha256:ba65829aabbc69ec1c2b90ebde805009332521fa9cc47795a87b521c8284a05d"
+    },
+    {
+      "path": "src/terminal.rs",
+      "patch": "patches/src_terminal.rs.patch",
+      "sha256Before": "sha256:2e2db1ee77aff2fb1962f0d24049c37e9b5d6236cf0bf31352ebd65f86f35409",
+      "sha256After": "sha256:1473a045b20be7d263c8a79a1e85edd23540243f7557e41eb9fea3cf73027d08"
     }
   ],
   "added": []

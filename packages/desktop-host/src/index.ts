@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { access, chmod, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
+import { channel } from 'node:diagnostics_channel';
 import { createRequire } from 'node:module';
 import { createServer, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -37,6 +38,17 @@ export interface DesktopHostLaunchOptions {
   /** Tests and packaged launchers can provide an Electron executable explicitly. */
   readonly executable?: string;
   readonly main?: string;
+}
+
+const desktopHostLifecycle = channel('termwright.desktop-host.lifecycle.v1');
+
+function publishSpawnedHost(main: string, child: ChildProcess): void {
+  if (!desktopHostLifecycle.hasSubscribers || child.pid === undefined) return;
+  // `spawn()` returning a pid is parent-side evidence that the OS process
+  // exists. Publishing it synchronously gives diagnostics and tests a causal
+  // handle even when the readiness deadline expires before the child gets its
+  // first JavaScript turn.
+  desktopHostLifecycle.publish({ type: 'spawned', main, pid: child.pid });
 }
 
 const UNSAFE_ELECTRON_ENV = new Set([
@@ -252,6 +264,7 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
       windowsHide: true,
       env: { ...desktopHostEnvironment(), [DESKTOP_CONTROL_ENV]: controlAddress },
     });
+    publishSpawnedHost(main, child);
     const spawned = child;
     const connected = createDeadlineDeferred<Socket>();
     acceptControl = (candidate): void => connected.resolve(candidate);

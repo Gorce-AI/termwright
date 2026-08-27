@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RenderBoundaryQueue } from './render-boundary.js';
 
 describe('Ink render boundary', () => {
-  it('does not let a trailing render acknowledge a later mutation', async () => {
+  it('does not let pending stdout or a trailing render acknowledge the next commit', async () => {
     const boundaries = new RenderBoundaryQueue();
     let releaseCurrentRender: (() => void) | undefined;
     const currentRender = new Promise<void>((resolve) => {
@@ -32,6 +32,32 @@ describe('Ink render boundary', () => {
     await expect(revision).resolves.toBe(7);
   });
 
+  it('does not arm a resize revision until pending stdout is causally flushed', async () => {
+    const boundaries = new RenderBoundaryQueue();
+    let releasePendingStdout: (() => void) | undefined;
+    const pendingStdout = new Promise<void>((resolve) => {
+      releasePendingStdout = resolve;
+    });
+    let resizeIssued: (() => void) | undefined;
+    const issued = new Promise<void>((resolve) => {
+      resizeIssued = resolve;
+    });
+    const resize = vi.fn((_generation: number) => resizeIssued?.());
+
+    const revision = boundaries.afterCurrentRender(() => pendingStdout, resize);
+    expect(resize).not.toHaveBeenCalled();
+    expect(boundaries.take(1)).toBeUndefined();
+
+    releasePendingStdout?.();
+    await issued;
+    expect(resize).toHaveBeenCalledOnce();
+    // A pre-resize callback cannot resolve generation 1. The callback caused
+    // by the issued resize is the first valid boundary.
+    expect(boundaries.take(0)).toBeUndefined();
+    boundaries.take(1)?.resolve(19);
+    await expect(revision).resolves.toBe(19);
+  });
+
   it('removes a boundary when its mutation throws', async () => {
     const boundaries = new RenderBoundaryQueue();
     const failure = boundaries.afterCurrentRender(
@@ -43,7 +69,7 @@ describe('Ink render boundary', () => {
     expect(boundaries.take(1)).toBeUndefined();
   });
 
-  it('does not arm or mutate after stopping during the preceding flush', async () => {
+  it('does not arm an unmount mutation after stopping during pending stdout', async () => {
     const boundaries = new RenderBoundaryQueue();
     let releaseCurrentRender: (() => void) | undefined;
     const currentRender = new Promise<void>((resolve) => {

@@ -31,6 +31,7 @@ const everyNodeField: Record<keyof SemanticNode, true> = {
   textRanges: true,
   testId: true,
   frameworkType: true,
+  opaqueChildren: true,
   p: true,
   px: true,
 };

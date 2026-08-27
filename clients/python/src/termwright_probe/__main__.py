@@ -10,7 +10,6 @@ the launcher safe to leave in a wrapper script that is also used outside tests.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from typing import List, Sequence

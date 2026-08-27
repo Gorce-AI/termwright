@@ -204,6 +204,8 @@ type Node struct {
 	// Role is RoleGeneric: an unrecognised widget must at least name its own
 	// type, so a reader can tell one unknown thing from another.
 	FrameworkType string `json:"frameworkType,omitempty"`
+	// OpaqueChildren marks a node whose possible children cannot be enumerated.
+	OpaqueChildren bool `json:"opaqueChildren,omitempty"`
 	// P is where this node's facts came from, as a whole.
 	P string `json:"p,omitempty"`
 	// PX is where individual fields came from, when they differ from P.

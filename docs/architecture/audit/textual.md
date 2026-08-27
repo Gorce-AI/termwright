@@ -9,8 +9,9 @@ Textual already knows about its own UI and how a probe could reach it without
 the application changing a line. It proposes no design; where a fact rules an
 approach in or out, it says so and stops.
 
-**Version audited:** Textual 8.2.8 on CPython 3.12.11, the exact version pinned
-in this repository's development environment and runtime certification.
+**Version audited:** Textual 8.2.8 on CPython 3.12.11. This is the measured
+baseline, not an executable allowlist: current support is decided by runtime
+capability checks plus behavioral conformance.
 
 Paths below are relative to the installed package root, i.e.
 `site-packages/textual/`. Line numbers are from 8.2.8 and will move.
@@ -254,10 +255,13 @@ Ordered by how much of the design would move if it broke.
 | `Compositor.visible_widgets` | **private** (`_compositor.py`) | the cheap bulk read is off the supported path |
 | `DOMNode._nodes` | **private** | `children` is the public equivalent; prefer it |
 
-The Python package pins Textual 8.2.8 exactly. Strong instrumentation is also
-allowlisted by exact version and shape-checked at attach time. Unknown versions
-fail closed until the daily exact candidate suite certifies them and regenerates
-the bundled allowlist.
+The Python extra declares Textual 8.2.8 as an advisory minimum. Strong
+instrumentation is not allowlisted by version: public tree APIs are validated
+when observed, and the private display/writer seam is shape- and
+behavior-checked on each committed frame. The daily candidate suite installs
+the checksum-bound candidate and runs the full Python and conformance suites;
+it records the outcome without generating a runtime allowlist or repinning the
+package.
 
 ## 8. Summary of findings that change the design
 
@@ -268,7 +272,7 @@ the bundled allowlist.
 3. `region` is the wrong rectangle. **`visible_region` (`clip ∩ region`)** is
    what the user sees, and the current adapter is wrong here.
 4. `post_display_hook` supplies fresh geometry, but causal commit additionally
-   requires the exact `_display` attempt and built-in WriterThread FIFO wrappers;
+   requires the observed `_display` attempt and built-in WriterThread FIFO wrappers;
    the hook alone does not prove terminal output.
 5. `sitecustomize` injection covers every invocation style measured except the
    two that opt out by flag (`-S`, `-E`), and **must chain to the

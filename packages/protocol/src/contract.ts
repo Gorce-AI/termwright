@@ -8,7 +8,13 @@ export type {
   EvidenceProviderCapability,
   SessionCapabilityId,
 } from './capability-graph.js';
+export {
+  PROBE_DEGRADED_CAPABILITIES,
+  PROBE_INJECTION_TIERS,
+  PROBE_SEMANTIC_CLASSES,
+} from './probe/ir.js';
 import type { EvidenceProviderCapability, SessionCapabilityId } from './capability-graph.js';
+import type { ProbeInstrumentation } from './probe/ir.js';
 
 /**
  * Stable application provider identity announced in the adapter hello.
@@ -85,6 +91,8 @@ export interface EffectiveSessionContract {
     readonly version: string;
     readonly adapterVersion: string;
     readonly certificationId: string;
+    /** Runtime attachment facts declared by a framework probe, when available. */
+    readonly instrumentation?: ProbeInstrumentation;
   } | null;
   readonly providers: readonly ContractProvider[];
   readonly capabilities: Readonly<Record<SessionCapabilityId, SessionCapabilityAvailability>>;

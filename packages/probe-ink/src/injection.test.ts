@@ -5,6 +5,7 @@ import { isInstrumented } from './runtime.js';
 import {
   buildShimSource,
   originalUrl,
+  reconcilerUrl,
   shouldShim,
   ORIGINAL_MARKER,
 } from './shim.js';
@@ -30,6 +31,14 @@ describe('Ink shim', () => {
     expect(source).toContain('export const render');
     expect(source).toContain('wrapInkRender');
     expect(source).toContain('file:///probe/instrument.js');
+    expect(source).toContain('/repo/node_modules/ink/build/reconciler.js');
+    expect(source).toContain('reconciler: __termwright_reconciler');
+  });
+
+  it('resolves the reconciler beside Node and Bun entry paths', () => {
+    expect(reconcilerUrl(entry)).toBe('/repo/node_modules/ink/build/reconciler.js');
+    expect(reconcilerUrl('file:///repo/node_modules/ink/build/index.js?x=1'))
+      .toBe('file:///repo/node_modules/ink/build/reconciler.js');
   });
 });
 

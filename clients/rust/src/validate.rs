@@ -247,7 +247,7 @@ fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
 }
 
 /// Every field a node may carry, as this client knows them.
-pub const NODE_KEYS: [&str; 20] = [
+pub const NODE_KEYS: [&str; 21] = [
     "id",
     "parentId",
     "role",
@@ -264,6 +264,7 @@ pub const NODE_KEYS: [&str; 20] = [
     "textRanges",
     "testId",
     "frameworkType",
+    "opaqueChildren",
     "p",
     "px",
     "scroll",
@@ -751,6 +752,15 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
         if object.contains_key(key) {
             text(object.get(key), path(at, &[key]), limits)?;
         }
+    }
+    if object
+        .get("opaqueChildren")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return Err(Issue::new(
+            path(at, &["opaqueChildren"]),
+            "expected boolean",
+        ));
     }
     if let Some(value) = object.get("value") {
         check_semantic_value(value, &path(at, &["value"]), limits)?;

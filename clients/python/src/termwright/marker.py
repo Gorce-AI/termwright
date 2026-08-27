@@ -10,11 +10,10 @@ with ``mac = base64url(HMAC-SHA256(token, f"{session_id}:{revision}"))[:16]``,
 unpadded. The token is an opaque UTF-8 string end to end: whatever arrives in
 ``TERMWRIGHT_TOKEN`` is fed to the HMAC as key bytes, never re-decoded.
 
-OSC rather than DCS because ConPTY rewrites the stream it forwards: a
-passthrough probe showed it dropping DCS, APC and OSC 8 while passing private
-OSC with either terminator, so a DCS marker could not reach the driver on
-Windows at all. One encoding everywhere beats negotiating per platform — the
-path used least is the one that rots unnoticed.
+The legacy frame-based inbox ConPTY dropped DCS, APC and OSC 8 while private
+OSC survived. Termwright's pinned passthrough ConPTY now forwards those
+families, but OSC 8487 remains the single encoding certified across every
+supported host. One encoding everywhere avoids a second causal protocol.
 """
 
 from __future__ import annotations

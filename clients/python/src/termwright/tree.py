@@ -218,6 +218,8 @@ class SemanticNode:
     #: ``generic``: an unrecognised widget must at least name its own type, so
     #: a reader can tell one unknown thing from another.
     frameworkType: Optional[str] = None
+    #: True when this node may own children the framework cannot enumerate.
+    opaqueChildren: bool = False
     #: Where this node's facts came from, as a whole.
     p: Optional[str] = None
     #: Where individual fields came from, when they differ from ``p``.
@@ -253,6 +255,8 @@ class SemanticNode:
             wire["testId"] = self.testId
         if self.frameworkType is not None:
             wire["frameworkType"] = self.frameworkType
+        if self.opaqueChildren:
+            wire["opaqueChildren"] = True
         if self.p is not None:
             wire["p"] = self.p
         if self.px:
@@ -377,6 +381,7 @@ def snapshot_from_wire(value: Dict[str, Any]) -> SemanticSnapshot:
                 else None,
                 testId=raw.get("testId"),
                 frameworkType=raw.get("frameworkType"),
+                opaqueChildren=raw.get("opaqueChildren", False),
                 p=raw.get("p"),
                 px=raw.get("px"),
                 geometry=NodeGeometryObservations(

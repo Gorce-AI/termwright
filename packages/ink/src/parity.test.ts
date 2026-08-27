@@ -8,7 +8,8 @@
  * by surprise when moving a test between modes.
  */
 
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect } from 'vitest';
+import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
 import { createElement } from 'react';
 import type { Rect, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type { SemanticLocator, TerminalHarness } from '@termwright/driver';
@@ -19,6 +20,9 @@ import CounterApp from './testing/counter-app.mjs';
 const COMPONENT = new URL('./testing/counter-app.mjs', import.meta.url);
 const SIZE = { columns: 44, rows: 14 } as const;
 const PROPS = { label: 'Approve', greeting: 'parity' } as const;
+// Each parity case keeps the in-process mount and the real PTY fixture alive
+// together while comparing them. Reserve the complete atomic live group.
+const it = resourceAwareIt.resources({terminals: 2, traceWriters: 0});
 
 const open: TerminalHarness[] = [];
 

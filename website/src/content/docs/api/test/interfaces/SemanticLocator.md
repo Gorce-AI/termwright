@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticLocator
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:501
+Defined in: driver/dist/session-uL1ytjek.d.ts:508
 
 ## Extends
 
@@ -23,7 +23,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:501
 
 > `readonly` **description**: `string`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:470
+Defined in: driver/dist/session-uL1ytjek.d.ts:477
 
 Human-readable form of the query, as it appears in error messages.
 
@@ -37,7 +37,7 @@ Human-readable form of the query, as it appears in error messages.
 
 > `readonly` **domain**: `"semantic"`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:468
+Defined in: driver/dist/session-uL1ytjek.d.ts:475
 
 #### Inherited from
 
@@ -49,7 +49,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:468
 
 > **actionability**(`action`, `opts?`): `Promise`\<`ActionabilityExplanation`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:515
+Defined in: driver/dist/session-uL1ytjek.d.ts:522
 
 #### Parameters
 
@@ -71,7 +71,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:515
 
 > **activate**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:522
+Defined in: driver/dist/session-uL1ytjek.d.ts:529
 
 #### Parameters
 
@@ -89,7 +89,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:522
 
 > **and**(`other`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:474
+Defined in: driver/dist/session-uL1ytjek.d.ts:481
 
 #### Parameters
 
@@ -111,7 +111,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:474
 
 > **cellSnapshot**(`opts?`): `Promise`\<`LocatorCellSnapshot`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:498
+Defined in: driver/dist/session-uL1ytjek.d.ts:505
 
 Atomic cells inside this locator's qualified rectangle.
 
@@ -135,7 +135,7 @@ Atomic cells inside this locator's qualified rectangle.
 
 > **check**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:523
+Defined in: driver/dist/session-uL1ytjek.d.ts:530
 
 #### Parameters
 
@@ -153,7 +153,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:523
 
 > **checkpoint**(): `ObservationStamp`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:479
+Defined in: driver/dist/session-uL1ytjek.d.ts:486
 
 Current committed observation used to arm race-free custom waits.
 
@@ -171,7 +171,7 @@ Current committed observation used to arm race-free custom waits.
 
 > **click**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:484
+Defined in: driver/dist/session-uL1ytjek.d.ts:491
 
 #### Parameters
 
@@ -193,7 +193,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:484
 
 > **count**(): `Promise`\<`number`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:477
+Defined in: driver/dist/session-uL1ytjek.d.ts:484
 
 #### Returns
 
@@ -209,7 +209,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:477
 
 > **doubleClick**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:485
+Defined in: driver/dist/session-uL1ytjek.d.ts:492
 
 #### Parameters
 
@@ -231,7 +231,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:485
 
 > **dragTo**(`target`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:487
+Defined in: driver/dist/session-uL1ytjek.d.ts:494
 
 #### Parameters
 
@@ -257,7 +257,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:487
 
 > **evaluateCondition**(`condition`, `opts?`): `Promise`\<`ConditionResult`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:514
+Defined in: driver/dist/session-uL1ytjek.d.ts:521
 
 #### Parameters
 
@@ -279,7 +279,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:514
 
 > **extendedState**(): `Promise`\<`SemanticExtendedObject` \| `null`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:531
+Defined in: driver/dist/session-uL1ytjek.d.ts:538
 
 #### Returns
 
@@ -291,7 +291,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:531
 
 > **fill**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:520
+Defined in: driver/dist/session-uL1ytjek.d.ts:527
 
 #### Parameters
 
@@ -313,7 +313,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:520
 
 > **filter**(`options`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:510
+Defined in: driver/dist/session-uL1ytjek.d.ts:517
 
 #### Parameters
 
@@ -331,7 +331,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:510
 
 > **first**(): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:471
+Defined in: driver/dist/session-uL1ytjek.d.ts:478
 
 #### Returns
 
@@ -347,7 +347,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:471
 
 > **focus**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:521
+Defined in: driver/dist/session-uL1ytjek.d.ts:528
 
 #### Parameters
 
@@ -365,7 +365,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:521
 
 > **geometry**(): `Promise`\<`LocatorGeometry`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:490
+Defined in: driver/dist/session-uL1ytjek.d.ts:497
 
 Atomic, evidence-qualified geometry. Never invents a rectangle.
 
@@ -383,7 +383,7 @@ Atomic, evidence-qualified geometry. Never invents a rectangle.
 
 > **getByLabel**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:504
+Defined in: driver/dist/session-uL1ytjek.d.ts:511
 
 #### Parameters
 
@@ -407,7 +407,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:504
 
 > **getByRole**(`role`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:503
+Defined in: driver/dist/session-uL1ytjek.d.ts:510
 
 #### Parameters
 
@@ -429,7 +429,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:503
 
 > **getByTestId**(`testId`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:508
+Defined in: driver/dist/session-uL1ytjek.d.ts:515
 
 #### Parameters
 
@@ -447,7 +447,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:508
 
 > **getByText**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:507
+Defined in: driver/dist/session-uL1ytjek.d.ts:514
 
 #### Parameters
 
@@ -469,7 +469,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:507
 
 > **hitTest**(`opts?`): `Promise`\<`PointerHitTest`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:494
+Defined in: driver/dist/session-uL1ytjek.d.ts:501
 
 Whether pointer input at the chosen cell reaches this exact target.
 
@@ -503,7 +503,7 @@ Whether pointer input at the chosen cell reaches this exact target.
 
 > **hover**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:486
+Defined in: driver/dist/session-uL1ytjek.d.ts:493
 
 #### Parameters
 
@@ -525,7 +525,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:486
 
 > **last**(): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:472
+Defined in: driver/dist/session-uL1ytjek.d.ts:479
 
 #### Returns
 
@@ -541,7 +541,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:472
 
 > **locator**(`selector`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:509
+Defined in: driver/dist/session-uL1ytjek.d.ts:516
 
 #### Parameters
 
@@ -559,7 +559,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:509
 
 > **nth**(`index`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:473
+Defined in: driver/dist/session-uL1ytjek.d.ts:480
 
 #### Parameters
 
@@ -581,7 +581,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:473
 
 > **or**(`other`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:475
+Defined in: driver/dist/session-uL1ytjek.d.ts:482
 
 #### Parameters
 
@@ -603,7 +603,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:475
 
 > **paintedRegion**(): `Promise`\<`Observation`\<`SemanticPaintedRegion`\>\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:529
+Defined in: driver/dist/session-uL1ytjek.d.ts:536
 
 Exact cells painted by this semantic recipient, never inferred from layout.
 
@@ -617,7 +617,7 @@ Exact cells painted by this semantic recipient, never inferred from layout.
 
 > **press**(`keys`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:518
+Defined in: driver/dist/session-uL1ytjek.d.ts:525
 
 #### Parameters
 
@@ -639,7 +639,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:518
 
 > **resolve**(`opts?`): `Promise`\<`ResolvedTarget`\<`"semantic"`\>\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:476
+Defined in: driver/dist/session-uL1ytjek.d.ts:483
 
 #### Parameters
 
@@ -661,7 +661,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:476
 
 > **semanticScroll**(): `Promise`\<`Observation`\<`SemanticScrollState`\>\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:527
+Defined in: driver/dist/session-uL1ytjek.d.ts:534
 
 Production application viewport state, never emulator scrollback position.
 
@@ -675,7 +675,7 @@ Production application viewport state, never emulator scrollback position.
 
 > **semanticState**(): `Promise`\<`SemanticState` \| `null`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:530
+Defined in: driver/dist/session-uL1ytjek.d.ts:537
 
 #### Returns
 
@@ -687,7 +687,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:530
 
 > **semanticValue**(): `Promise`\<`SemanticValueObservation`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:525
+Defined in: driver/dist/session-uL1ytjek.d.ts:532
 
 #### Returns
 
@@ -699,7 +699,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:525
 
 > **textContent**(): `Promise`\<`string`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:499
+Defined in: driver/dist/session-uL1ytjek.d.ts:506
 
 #### Returns
 
@@ -715,7 +715,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:499
 
 > **type**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:519
+Defined in: driver/dist/session-uL1ytjek.d.ts:526
 
 #### Parameters
 
@@ -737,7 +737,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:519
 
 > **uncheck**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:524
+Defined in: driver/dist/session-uL1ytjek.d.ts:531
 
 #### Parameters
 
@@ -755,7 +755,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:524
 
 > **visibility**(): `Promise`\<`LocatorVisibility`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:492
+Defined in: driver/dist/session-uL1ytjek.d.ts:499
 
 Attached/displayed/viewport facts without collapsing unknown to false.
 
@@ -773,7 +773,7 @@ Attached/displayed/viewport facts without collapsing unknown to false.
 
 > **waitFor**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:511
+Defined in: driver/dist/session-uL1ytjek.d.ts:518
 
 #### Parameters
 
@@ -791,7 +791,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:511
 
 > **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:481
+Defined in: driver/dist/session-uL1ytjek.d.ts:488
 
 Waits for a newer committed observation without a check/subscribe gap.
 
@@ -815,7 +815,7 @@ Waits for a newer committed observation without a check/subscribe gap.
 
 > **wheel**(`opts`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:488
+Defined in: driver/dist/session-uL1ytjek.d.ts:495
 
 #### Parameters
 
@@ -837,7 +837,7 @@ Defined in: driver/dist/session-Cb125kOH.d.ts:488
 
 > **within**(`parent`): `SemanticLocator`
 
-Defined in: driver/dist/session-Cb125kOH.d.ts:502
+Defined in: driver/dist/session-uL1ytjek.d.ts:509
 
 #### Parameters
 

@@ -356,3 +356,15 @@ boundary. It claims a matching `Frame::render_widget` observation without
 duplicating it and also observes direct nested `Widget::render` calls. RAII
 call boundaries preserve hierarchy only for actual nested `Annotated` calls;
 they do not invent a retained tree, stable identity, or any physical fact.
+
+**Injection-doctrine verification:** `ratatui-widgets` cannot be demoted to an
+append-only T2 reader without losing fidelity. The required fact is not merely
+`List::items`: rendering mutates and clamps `ListState.offset`, and the probe
+must correlate the item text/count with the state that was actually drawn.
+An appended getter can expose private state but cannot run after that mutation
+inside the existing render call. The current one-anchor rendering hook is
+therefore genuine T3 debt, exact-certified separately from `ratatui-core`.
+Backend wrapping remains invalid for widget semantics, while the causal marker
+hook is restricted to certified concrete backends that can write through the
+same sink; unsupported backends fail closed rather than falling back to
+process stdout.

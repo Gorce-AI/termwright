@@ -11,7 +11,7 @@
 //! while proving nothing.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use termwright_probe_ratatui::launch::{prepare_instrumented_build, PrepareOptions};
 use termwright_probe_ratatui::patchset::{apply, copy_out, digest_file, read_manifest};
@@ -24,16 +24,21 @@ fn widgets_version() -> String {
     std::env::var("TERMWRIGHT_CANDIDATE_RATATUI_WIDGETS").unwrap_or_else(|_| "0.3.2".into())
 }
 
+fn crossterm_version() -> String {
+    std::env::var("TERMWRIGHT_CANDIDATE_RATATUI_CROSSTERM").unwrap_or_else(|_| "0.1.2".into())
+}
+
 fn framework_version() -> String {
     std::env::var("TERMWRIGHT_CANDIDATE_RATATUI").unwrap_or_else(|_| "0.30.2".into())
 }
 
 fn app_dependencies() -> String {
     format!(
-        "ratatui = \"={}\"\nratatui-core = \"={}\"\nratatui-widgets = \"={}\"\n",
+        "ratatui = \"={}\"\nratatui-core = \"={}\"\nratatui-widgets = \"={}\"\nratatui-crossterm = \"={}\"\n",
         framework_version(),
         core_version(),
-        widgets_version()
+        widgets_version(),
+        crossterm_version()
     )
 }
 
@@ -47,6 +52,12 @@ fn widgets_patch_set_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("upstream-patches/ratatui-widgets")
         .join(widgets_version())
+}
+
+fn crossterm_patch_set_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("upstream-patches/ratatui-crossterm")
+        .join(crossterm_version())
 }
 
 fn probe_dir() -> PathBuf {
@@ -64,6 +75,10 @@ fn registry_source() -> Option<PathBuf> {
 
 fn widgets_source() -> Option<PathBuf> {
     unpacked(&format!("ratatui-widgets-{}", widgets_version()))
+}
+
+fn crossterm_source() -> Option<PathBuf> {
+    unpacked(&format!("ratatui-crossterm-{}", crossterm_version()))
 }
 
 fn unpacked(name: &str) -> Option<PathBuf> {
@@ -85,6 +100,14 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
+fn require_candidate_source(message: &str) {
+    assert_ne!(
+        std::env::var("TERMWRIGHT_REQUIRE_RATATUI").as_deref(),
+        Ok("1"),
+        "{message}"
+    );
+}
+
 fn cargo(args: &[&str], dir: &Path) -> std::process::Output {
     Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
         .args(args)
@@ -103,6 +126,7 @@ fn cargo(args: &[&str], dir: &Path) -> std::process::Output {
 #[test]
 fn the_manifest_pins_the_version_on_disk() {
     let Some(source) = registry_source() else {
+        require_candidate_source("CI requires the Ratatui core candidate source");
         eprintln!(
             "skipped: ratatui-core {} is not unpacked in this registry",
             core_version()
@@ -123,6 +147,7 @@ fn the_manifest_pins_the_version_on_disk() {
 #[test]
 fn applying_it_produces_exactly_the_pinned_result() {
     let Some(source) = registry_source() else {
+        require_candidate_source("CI requires the Ratatui core candidate source");
         eprintln!(
             "skipped: ratatui-core {} is not unpacked in this registry",
             core_version()
@@ -142,13 +167,58 @@ fn applying_it_produces_exactly_the_pinned_result() {
         text.contains(&format!("path = \"{}\"", probe_dir().display())),
         "the probe path was never supplied"
     );
+    let init = std::fs::read_to_string(copy.join("src/terminal/init.rs")).expect("init source");
+    assert!(
+        init.contains("termwright_probe_ratatui::session::initialize();"),
+        "the startup handshake was not installed before the render loop"
+    );
+    let render =
+        std::fs::read_to_string(copy.join("src/terminal/render.rs")).expect("render source");
+    assert!(
+        !render.contains("session::initialize()"),
+        "the blocking handshake leaked into the render hook"
+    );
     let _ = std::fs::remove_dir_all(&copy);
+}
+
+#[test]
+fn crossterm_same_sink_patch_is_exact_and_has_no_probe_dependency() {
+    let Some(source) = crossterm_source() else {
+        require_candidate_source("CI requires the Ratatui Crossterm candidate source");
+        eprintln!(
+            "skipped: ratatui-crossterm {} is not unpacked",
+            crossterm_version()
+        );
+        return;
+    };
+    let manifest =
+        read_manifest(&crossterm_patch_set_dir().join("manifest.json")).expect("manifest");
+    for file in &manifest.patched {
+        assert_eq!(
+            digest_file(&source.join(&file.path)).expect("digest"),
+            file.sha256_before,
+            "{} is not the pinned Crossterm source",
+            file.path
+        );
+    }
+    let copy = scratch("crossterm-apply");
+    copy_out(&source, &copy).expect("copy out");
+    apply(&manifest, &crossterm_patch_set_dir(), &copy, &probe_dir())
+        .expect("same-sink patch applies");
+    assert!(
+        !std::fs::read_to_string(copy.join("Cargo.toml"))
+            .expect("manifest text")
+            .contains("termwright-probe-ratatui"),
+        "Crossterm should implement the core trait without a direct probe dependency"
+    );
+    let _ = std::fs::remove_dir_all(copy);
 }
 
 /// A copy that is not the pinned version is refused before anything is edited.
 #[test]
 fn a_version_mismatch_is_refused_by_name() {
     let Some(source) = registry_source() else {
+        require_candidate_source("CI requires the Ratatui core candidate source");
         eprintln!(
             "skipped: ratatui-core {} is not unpacked in this registry",
             core_version()
@@ -184,6 +254,7 @@ fn a_version_mismatch_is_refused_by_name() {
 #[test]
 fn the_patched_copy_still_builds_without_std() {
     let Some(source) = registry_source() else {
+        require_candidate_source("CI requires the Ratatui core candidate source");
         eprintln!(
             "skipped: ratatui-core {} is not unpacked in this registry",
             core_version()
@@ -224,6 +295,7 @@ fn the_patched_copy_still_builds_without_std() {
 #[test]
 fn the_patched_widgets_still_build_without_std() {
     let Some(source) = widgets_source() else {
+        require_candidate_source("CI requires the Ratatui widgets candidate source");
         eprintln!(
             "skipped: ratatui-widgets {} is not unpacked in this registry",
             widgets_version()
@@ -260,6 +332,7 @@ fn the_patched_widgets_still_build_without_std() {
 #[test]
 fn a_vanilla_ratatui_app_reaches_the_probe() {
     let Some(source) = registry_source() else {
+        require_candidate_source("CI requires the Ratatui core candidate source");
         eprintln!(
             "skipped: ratatui-core {} is not unpacked in this registry",
             core_version()
@@ -289,6 +362,14 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
             frame.render_widget(ratatui::widgets::Paragraph::new("hello"), frame.area());
         })
         .expect("draw");
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    println!("screen={screen:?}");
     println!("drew a frame");
 }
 "#,
@@ -317,12 +398,12 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
 
     let text = std::fs::read_to_string(&log).expect("the probe wrote no diagnostics at all");
     assert!(
-        text.contains("first render intercepted"),
-        "the patched crate never called the probe:\n{text}"
+        text.contains("no session, publishing nothing"),
+        "the patched Terminal constructor never initialized the probe:\n{text}"
     );
     assert!(
-        text.contains("Paragraph"),
-        "type_name did not survive the hook:\n{text}"
+        !text.contains("first render intercepted") && !text.contains("Paragraph"),
+        "the render path performed synchronous diagnostic I/O:\n{text}"
     );
 
     // And the same application, uninstrumented, publishes nothing. It does say
@@ -352,6 +433,27 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
         "a dormant run did not say why it published nothing:\n{dormant_text}"
     );
 
+    // I1 non-interference golden: the patched crate with an inactive probe
+    // must leave both application output and the framework's complete
+    // TestBackend buffer byte-identical to an ordinary upstream build.
+    let upstream = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+        .args(["run", "--quiet"])
+        .current_dir(&app)
+        .env_remove("TERMWRIGHT_ENDPOINT")
+        .env_remove("TERMWRIGHT_TOKEN")
+        .env_remove("TERMWRIGHT_DEBUG_FILE")
+        .output()
+        .expect("upstream cargo runs");
+    assert!(
+        upstream.status.success(),
+        "the upstream golden app failed:\n{}",
+        String::from_utf8_lossy(&upstream.stderr)
+    );
+    assert_eq!(
+        dormant.stdout, upstream.stdout,
+        "dormant instrumentation changed terminal output or TestBackend state"
+    );
+
     let _ = std::fs::remove_dir_all(&copy);
     let _ = std::fs::remove_dir_all(&app);
 }
@@ -360,6 +462,15 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
 
 /// A driver end that completes the handshake and records what arrives.
 fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
+    start_driver_sessions(path, 1)
+}
+
+/// A driver that accepts an exact number of sequential semantic sessions.
+/// EOF from each completed Terminal lifecycle is the only restart barrier.
+fn start_driver_sessions(
+    path: &str,
+    sessions: usize,
+) -> std::sync::mpsc::Receiver<serde_json::Value> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixListener;
 
@@ -368,38 +479,41 @@ fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
     let listener = UnixListener::bind(path).expect("binding the driver socket");
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let Ok((mut stream, _)) = listener.accept() else {
-            return;
-        };
-        let mut decoder =
-            FrameDecoder::new(DEFAULT_LIMITS.max_frame_bytes, DEFAULT_LIMITS.max_depth);
-        let mut buffer = [0u8; 16384];
-        loop {
-            let Ok(count) = stream.read(&mut buffer) else {
+        for epoch in 1..=sessions {
+            let Ok((mut stream, _)) = listener.accept() else {
                 return;
             };
-            if count == 0 {
-                return;
-            }
-            let Ok(frames) = decoder.push(&buffer[..count]) else {
-                return;
-            };
-            for frame in frames {
-                if frame.value.get("type").and_then(serde_json::Value::as_str) == Some("hello") {
-                    let ack = serde_json::json!({
-                        "type": "hello-ack",
-                        "protocol": "termwright/2",
-                        "sessionId": "s-e2e",
-                        "limits": DEFAULT_LIMITS,
-                        "subscribe": "snapshots",
-                        "marker": { "enabled": true },
-                    });
-                    let encoded =
-                        encode_frame(&ack, DEFAULT_LIMITS.max_frame_bytes).expect("encoding");
-                    let _ = stream.write_all(&encoded);
-                }
-                if sender.send(frame.value).is_err() {
+            let mut decoder =
+                FrameDecoder::new(DEFAULT_LIMITS.max_frame_bytes, DEFAULT_LIMITS.max_depth);
+            let mut buffer = [0u8; 16384];
+            loop {
+                let Ok(count) = stream.read(&mut buffer) else {
                     return;
+                };
+                if count == 0 {
+                    break;
+                }
+                let Ok(frames) = decoder.push(&buffer[..count]) else {
+                    return;
+                };
+                for frame in frames {
+                    if frame.value.get("type").and_then(serde_json::Value::as_str) == Some("hello")
+                    {
+                        let ack = serde_json::json!({
+                            "type": "hello-ack",
+                            "protocol": "termwright/2",
+                            "sessionId": format!("s-e2e-{epoch}"),
+                            "limits": DEFAULT_LIMITS,
+                            "subscribe": "snapshots",
+                            "marker": { "enabled": true },
+                        });
+                        let encoded =
+                            encode_frame(&ack, DEFAULT_LIMITS.max_frame_bytes).expect("encoding");
+                        let _ = stream.write_all(&encoded);
+                    }
+                    if sender.send(frame.value).is_err() {
+                        return;
+                    }
                 }
             }
         }
@@ -407,16 +521,13 @@ fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
     receiver
 }
 
-/// Zero-config, end to end: an ordinary Ratatui application publishes a tree.
-///
-/// Everything above proves a piece. This proves the claim: an application that
-/// imports nothing of ours, launched with one flag and two variables, hands a
-/// real driver a validated semantic tree and commits it with a marker.
+/// TestBackend renders into memory, not process stdout. It must fail the
+/// semantic capability before publishing rather than fabricate a commit on an
+/// unrelated stream.
 #[test]
-fn a_vanilla_app_publishes_a_validated_tree() {
-    use std::time::{Duration, Instant};
-
+fn test_backend_fails_closed_without_a_false_stdout_marker() {
     let Some(source) = registry_source() else {
+        require_candidate_source("CI requires the Ratatui core candidate source");
         eprintln!(
             "skipped: ratatui-core {} is not unpacked in this registry",
             core_version()
@@ -479,17 +590,15 @@ fn main() {
         String::from_utf8_lossy(&run.stderr)
     );
 
-    let deadline = Instant::now() + Duration::from_secs(10);
     let mut hello = None;
     let mut snapshot = None;
-    while Instant::now() < deadline && (hello.is_none() || snapshot.is_none()) {
-        match received.recv_timeout(Duration::from_millis(200)) {
-            Ok(message) => match message.get("type").and_then(serde_json::Value::as_str) {
-                Some("hello") => hello = Some(message),
-                Some("snapshot") => snapshot = Some(message),
-                _ => {}
-            },
-            Err(_) => break,
+    let mut protocol_error = None;
+    for message in received {
+        match message.get("type").and_then(serde_json::Value::as_str) {
+            Some("hello") => hello = Some(message),
+            Some("snapshot") => snapshot = Some(message),
+            Some("error") => protocol_error = Some(message),
+            _ => {}
         }
     }
 
@@ -504,41 +613,803 @@ fn main() {
     );
     assert_eq!(declared["frameworkVersion"], framework_version());
     assert_eq!(hello["protocol"], "termwright/2");
-    let snapshot = snapshot.expect("no tree reached the driver");
-    let tree = &snapshot["snapshot"];
-    let result = termwright_protocol::validate_snapshot(tree, &termwright_protocol::DEFAULT_LIMITS);
-    assert!(result.is_ok(), "the published tree is invalid: {result:?}");
-
-    let nodes = tree["nodes"].as_array().expect("nodes");
-    assert!(!nodes.is_empty(), "the tree is empty: {tree}");
-    assert_eq!(tree["v"], 2);
-    assert_eq!(tree["hitGrid"]["status"], "unsupported");
-    assert!(nodes.iter().all(|node| node.get("bounds").is_none()));
-    assert!(nodes.iter().all(|node| node.get("occlusion").is_none()));
-    assert!(nodes.iter().all(|node| node.get("geometry").is_some()));
-    let roles: Vec<&str> = nodes
-        .iter()
-        .filter_map(|node| node["role"].as_str())
-        .collect();
     assert!(
-        roles.contains(&"region"),
-        "no Block became a region: {roles:?}"
+        snapshot.is_none(),
+        "unsupported backend published: {snapshot:?}"
+    );
+    let protocol_error = protocol_error.expect("unsupported backend did not fail the session");
+    assert_eq!(protocol_error["code"], "adapter-guarantee-violation");
+    assert!(
+        protocol_error["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("no certified render-commit marker sink")),
+        "diagnostic did not name the missing guarantee: {protocol_error}"
     );
     assert!(
-        roles.contains(&"text"),
-        "no Paragraph became text: {roles:?}"
-    );
-    assert!(roles.contains(&"list"), "no List became a list: {roles:?}");
-
-    // The marker commits the frame, and it must follow the frame's bytes.
-    let stdout = String::from_utf8_lossy(&run.stdout);
-    assert!(
-        stdout.contains("\u{1b}]8487;"),
-        "no render-commit marker was written"
+        !String::from_utf8_lossy(&run.stdout).contains("\u{1b}]8487;"),
+        "TestBackend leaked a false marker onto process stdout"
     );
 
     let _ = std::fs::remove_file(&socket);
     let _ = std::fs::remove_dir_all(&copy);
+    let _ = std::fs::remove_dir_all(&app);
+}
+
+/// Crossterm owns a concrete `W`, so its certified hook can prove the causal
+/// order directly: render bytes and marker are observed in one captured sink.
+#[test]
+fn crossterm_commits_after_frame_bytes_on_the_exact_same_writer() {
+    if registry_source().is_none() || crossterm_source().is_none() {
+        require_candidate_source("CI requires both Ratatui core and Crossterm candidate sources");
+        eprintln!("skipped: pinned Ratatui/Crossterm sources are not unpacked");
+        return;
+    }
+    let app = scratch("same-sink-app");
+    std::fs::create_dir_all(app.join("src")).expect("app dir");
+    std::fs::write(
+        app.join("Cargo.toml"),
+        format!("[package]\nname = \"same-sink-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{}", app_dependencies()),
+    )
+    .expect("manifest");
+    std::fs::write(
+        app.join("src/main.rs"),
+        r#"use std::io::{self, Write};
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone)]
+struct Capture(Arc<Mutex<Vec<u8>>>);
+
+impl Write for Capture {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+fn main() {
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let backend = ratatui::backend::CrosstermBackend::new(Capture(captured.clone()));
+    let options = ratatui::TerminalOptions {
+        viewport: ratatui::Viewport::Fixed(ratatui::layout::Rect::new(0, 0, 20, 5)),
+    };
+    let mut terminal = ratatui::Terminal::with_options(backend, options).expect("terminal");
+    terminal.draw(|frame| {
+        frame.render_widget(ratatui::widgets::Paragraph::new("FRAME-BYTES"), frame.area());
+    }).expect("draw");
+    std::fs::write(std::env::var_os("CAPTURE_PATH").unwrap(), captured.lock().unwrap().as_slice())
+        .expect("capture");
+}
+"#,
+    )
+    .expect("source");
+
+    let prepared = prepare_instrumented_build(&PrepareOptions {
+        project: app.clone(),
+        workspace: Some(scratch("same-sink-workspace")),
+        probe: Some(probe_dir()),
+    })
+    .expect("prepare all three pinned crates");
+    let socket = format!("/tmp/tw-ratatui-sink-{}.sock", std::process::id());
+    let _ = std::fs::remove_file(&socket);
+    let received = start_driver(&socket);
+    let capture = app.join("writer.bin");
+    let mut command = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
+    command.args(["run", "--quiet"]).current_dir(&app);
+    for config in &prepared.config_args {
+        command.arg("--config").arg(config);
+    }
+    for (key, value) in &prepared.env {
+        command.env(key, value);
+    }
+    let run = command
+        .env("TERMWRIGHT_ENDPOINT", &socket)
+        .env("TERMWRIGHT_TOKEN", "test-token")
+        .env("CAPTURE_PATH", &capture)
+        .output()
+        .expect("cargo run");
+    prepared.finish().expect("restore lock");
+    assert!(
+        run.status.success(),
+        "same-sink app failed:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let mut snapshot = None;
+    for message in received {
+        if message["type"] == "snapshot" {
+            snapshot = Some(message);
+        }
+    }
+    assert!(
+        snapshot.is_some(),
+        "Crossterm published no semantic snapshot"
+    );
+    let bytes = std::fs::read(&capture).expect("captured writer bytes");
+    let frame_at = bytes
+        .windows(b"FRAME-BYTES".len())
+        .position(|window| window == b"FRAME-BYTES")
+        .expect("render bytes absent from backend writer");
+    let marker_at = bytes
+        .windows(b"\x1b]8487;".len())
+        .position(|window| window == b"\x1b]8487;")
+        .expect("marker absent from backend writer");
+    assert!(
+        frame_at < marker_at,
+        "marker preceded frame bytes: {bytes:?}"
+    );
+    assert!(
+        !run.stdout
+            .windows(b"\x1b]8487;".len())
+            .any(|window| window == b"\x1b]8487;"),
+        "marker escaped through process stdout instead of Crossterm's writer"
+    );
+
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_dir_all(&app);
+}
+
+/// Terminal lifetimes, frame abortion and process shutdown are causal
+/// boundaries, not timing guesses. Two live Terminals share one ordered
+/// publisher; an aborted callback contributes nothing; final drop drains the
+/// last admitted frame; and a later lifecycle starts a fresh session.
+#[test]
+fn nested_and_multiple_terminals_preserve_order_and_restart_after_a_clean_final_drop() {
+    if registry_source().is_none() || crossterm_source().is_none() {
+        require_candidate_source("CI requires both Ratatui core and Crossterm candidate sources");
+        eprintln!("skipped: pinned Ratatui/Crossterm sources are not unpacked");
+        return;
+    }
+    let app = scratch("terminal-lifecycle-app");
+    std::fs::create_dir_all(app.join("src")).expect("app dir");
+    std::fs::write(
+        app.join("Cargo.toml"),
+        format!("[package]\nname = \"terminal-lifecycle-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{}", app_dependencies()),
+    )
+    .expect("manifest");
+    std::fs::write(
+        app.join("src/main.rs"),
+        r#"use std::io::{self, Write};
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone)]
+struct Capture(Arc<Mutex<Vec<u8>>>);
+
+impl Write for Capture {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+type CapturedTerminal = ratatui::Terminal<ratatui::backend::CrosstermBackend<Capture>>;
+
+fn terminal(captured: &Arc<Mutex<Vec<u8>>>) -> CapturedTerminal {
+    let backend = ratatui::backend::CrosstermBackend::new(Capture(captured.clone()));
+    let options = ratatui::TerminalOptions {
+        viewport: ratatui::Viewport::Fixed(ratatui::layout::Rect::new(0, 0, 20, 5)),
+    };
+    ratatui::Terminal::with_options(backend, options).expect("terminal")
+}
+
+fn draw(terminal: &mut CapturedTerminal, text: &'static str) {
+    terminal.draw(|frame| {
+        frame.render_widget(ratatui::widgets::Paragraph::new(text), frame.area());
+    }).expect("draw");
+}
+
+fn main() {
+    let captured = Arc::new(Mutex::new(Vec::new()));
+
+    let mut first = terminal(&captured);
+    let mut second = terminal(&captured);
+    let mut nested = terminal(&captured);
+    first.try_draw(|frame| -> Result<(), io::Error> {
+        frame.render_widget(ratatui::widgets::Paragraph::new("OUTER"), frame.area());
+        draw(&mut nested, "NESTED");
+        Ok(())
+    }).expect("nested draw");
+    draw(&mut first, "ONE");
+
+    let aborted = second.try_draw(|frame| -> Result<(), io::Error> {
+        frame.render_widget(ratatui::widgets::Paragraph::new("ABORTED"), frame.area());
+        Err(io::Error::other("abort before apply"))
+    });
+    assert!(aborted.is_err());
+
+    draw(&mut second, "TWO");
+    drop(first);
+    draw(&mut second, "LAST");
+    drop(second);
+    drop(nested); // final guard drains semantic session one, including LAST
+
+    let mut restarted = terminal(&captured);
+    draw(&mut restarted, "RESTART");
+    drop(restarted); // drains semantic session two
+
+    std::fs::write(std::env::var_os("CAPTURE_PATH").unwrap(), captured.lock().unwrap().as_slice())
+        .expect("capture");
+}
+"#,
+    )
+    .expect("source");
+
+    let prepared = prepare_instrumented_build(&PrepareOptions {
+        project: app.clone(),
+        workspace: Some(scratch("terminal-lifecycle-workspace")),
+        probe: Some(probe_dir()),
+    })
+    .expect("prepare instrumented build");
+    let socket = format!("/tmp/tw-ratatui-life-{}.sock", std::process::id());
+    let _ = std::fs::remove_file(&socket);
+    let received = start_driver_sessions(&socket, 2);
+    let capture = app.join("writer.bin");
+    let mut command = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
+    command.args(["run", "--quiet"]).current_dir(&app);
+    for config in &prepared.config_args {
+        command.arg("--config").arg(config);
+    }
+    for (key, value) in &prepared.env {
+        command.env(key, value);
+    }
+    let run = command
+        .env("TERMWRIGHT_ENDPOINT", &socket)
+        .env("TERMWRIGHT_TOKEN", "test-token")
+        .env("CAPTURE_PATH", &capture)
+        .output()
+        .expect("cargo run");
+    prepared.finish().expect("restore lock");
+    assert!(
+        run.status.success(),
+        "terminal lifecycle app failed:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    // The child has exited, so no legitimate semantic connection can still
+    // begin. A zero-message sentinel causally releases the driver's final
+    // accept if the expected restart never happened; the assertions below
+    // then report the missing session instead of leaving the test thread
+    // blocked forever. When both sessions completed, connect simply fails
+    // because the listener is already gone.
+    if let Ok(sentinel) = std::os::unix::net::UnixStream::connect(&socket) {
+        drop(sentinel);
+    }
+
+    // Channel closure follows EOF from the second lifecycle or the post-exit
+    // sentinel above; no polling window participates in the assertion.
+    let messages: Vec<_> = received.into_iter().collect();
+    let sessions: Vec<_> = messages
+        .iter()
+        .filter(|message| message["type"] == "hello")
+        .map(|message| message["probe"]["framework"].as_str())
+        .collect();
+    assert_eq!(sessions, [Some("ratatui"), Some("ratatui")]);
+    let snapshots: Vec<_> = messages
+        .iter()
+        .filter(|message| message["type"] == "snapshot")
+        .map(|message| message["snapshot"]["revision"].as_i64())
+        .collect();
+    assert_eq!(
+        snapshots,
+        [Some(1), Some(2), Some(3), Some(4), Some(5), Some(1)],
+        "aborted frame leaked, terminals did not share a session, or restart did not reset it: {messages:?}"
+    );
+    let commits: Vec<_> = messages
+        .iter()
+        .filter(|message| message["type"] == "revision-commit")
+        .map(|message| message["revision"].as_i64())
+        .collect();
+    assert_eq!(commits, snapshots, "snapshot/commit ordering diverged");
+
+    let bytes = std::fs::read(&capture).expect("captured writer bytes");
+    assert!(
+        !bytes
+            .windows(b"ABORTED".len())
+            .any(|window| window == b"ABORTED"),
+        "an aborted callback reached the backend"
+    );
+    let mut cursor = 0;
+    for needle in [
+        b"NESTED".as_slice(),
+        b"]8487;twm;1;".as_slice(),
+        b"OUTER".as_slice(),
+        b"]8487;twm;2;".as_slice(),
+        // ONE shares its leading O with OUTER, so Ratatui's diff correctly
+        // emits only "NE"; revision 3 is the unambiguous commit boundary.
+        b"]8487;twm;3;".as_slice(),
+        b"TWO".as_slice(),
+        b"]8487;twm;4;".as_slice(),
+        b"LAST".as_slice(),
+        b"]8487;twm;5;".as_slice(),
+        b"RESTART".as_slice(),
+        b"]8487;twm;1;".as_slice(),
+    ] {
+        let offset = bytes[cursor..]
+            .windows(needle.len())
+            .position(|window| window == needle)
+            .unwrap_or_else(|| panic!("ordered writer datum {needle:?} absent after {cursor}"));
+        cursor += offset + needle.len();
+    }
+
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_dir_all(&app);
+}
+
+/// One terminal is deliberately held inside its certified marker writer while
+/// a second terminal completes a frame. The second render must never wait for
+/// the first: it renders visually, semantic admission fails closed, and the
+/// only marker emitted remains after the bytes it actually commits.
+#[test]
+fn concurrent_terminals_do_not_block_or_overtake_marker_order() {
+    if registry_source().is_none() || crossterm_source().is_none() {
+        require_candidate_source("CI requires both Ratatui core and Crossterm candidate sources");
+        eprintln!("skipped: pinned Ratatui/Crossterm sources are not unpacked");
+        return;
+    }
+    let app = scratch("concurrent-terminal-app");
+    std::fs::create_dir_all(app.join("src")).expect("app dir");
+    std::fs::write(
+        app.join("Cargo.toml"),
+        format!("[package]\nname = \"concurrent-terminal-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{}", app_dependencies()),
+    )
+    .expect("manifest");
+    std::fs::write(
+        app.join("src/main.rs"),
+        r#"use std::io::{self, Read, Write};
+use std::sync::{mpsc, Arc, Mutex};
+
+struct GateCapture {
+    bytes: Arc<Mutex<Vec<u8>>>,
+    entered: Option<mpsc::SyncSender<()>>,
+    release: Arc<Mutex<mpsc::Receiver<()>>>,
+}
+
+impl Write for GateCapture {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.bytes.lock().unwrap().extend_from_slice(bytes);
+        if bytes.windows(b"\x1b]8487;".len()).any(|window| window == b"\x1b]8487;") {
+            if let Some(entered) = self.entered.take() {
+                entered.send(()).unwrap();
+                self.release.lock().unwrap().recv().unwrap();
+            }
+        }
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+#[derive(Clone)]
+struct Capture(Arc<Mutex<Vec<u8>>>);
+impl Write for Capture {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+fn options() -> ratatui::TerminalOptions {
+    ratatui::TerminalOptions {
+        viewport: ratatui::Viewport::Fixed(ratatui::layout::Rect::new(0, 0, 20, 5)),
+    }
+}
+
+fn main() {
+    let first_bytes = Arc::new(Mutex::new(Vec::new()));
+    let second_bytes = Arc::new(Mutex::new(Vec::new()));
+    let (entered_tx, entered_rx) = mpsc::sync_channel(0);
+    let (release_tx, release_rx) = mpsc::sync_channel(0);
+    let first_backend = ratatui::backend::CrosstermBackend::new(GateCapture {
+        bytes: first_bytes.clone(),
+        entered: Some(entered_tx),
+        release: Arc::new(Mutex::new(release_rx)),
+    });
+    let second_backend = ratatui::backend::CrosstermBackend::new(Capture(second_bytes.clone()));
+    let mut first = ratatui::Terminal::with_options(first_backend, options()).unwrap();
+    let mut second = ratatui::Terminal::with_options(second_backend, options()).unwrap();
+
+    let first_thread = std::thread::spawn(move || {
+        first.draw(|frame| frame.render_widget(
+            ratatui::widgets::Paragraph::new("FIRST"), frame.area()
+        )).unwrap();
+        first
+    });
+    entered_rx.recv().unwrap(); // first is holding the non-blocking publication permit
+    second.draw(|frame| frame.render_widget(
+        ratatui::widgets::Paragraph::new("SECOND"), frame.area()
+    )).unwrap(); // must complete while the first marker writer is still held
+    release_tx.send(()).unwrap();
+    let first = first_thread.join().unwrap();
+
+    std::fs::write(std::env::var_os("FIRST_CAPTURE").unwrap(), first_bytes.lock().unwrap().as_slice()).unwrap();
+    std::fs::write(std::env::var_os("SECOND_CAPTURE").unwrap(), second_bytes.lock().unwrap().as_slice()).unwrap();
+    let mut release = [0u8; 1];
+    std::io::stdin().read_exact(&mut release).unwrap(); // driver observed fatal while both live
+    drop(first);
+    drop(second);
+}
+"#,
+    )
+    .expect("source");
+
+    let prepared = prepare_instrumented_build(&PrepareOptions {
+        project: app.clone(),
+        workspace: Some(scratch("concurrent-terminal-workspace")),
+        probe: Some(probe_dir()),
+    })
+    .expect("prepare instrumented build");
+    let socket = format!("/tmp/tw-ratatui-concurrent-{}.sock", std::process::id());
+    let _ = std::fs::remove_file(&socket);
+    let received = start_driver(&socket);
+    let first_capture = app.join("first.bin");
+    let second_capture = app.join("second.bin");
+    let mut command = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
+    command.args(["run", "--quiet"]).current_dir(&app);
+    for config in &prepared.config_args {
+        command.arg("--config").arg(config);
+    }
+    for (key, value) in &prepared.env {
+        command.env(key, value);
+    }
+    let mut child = command
+        .env("TERMWRIGHT_ENDPOINT", &socket)
+        .env("TERMWRIGHT_TOKEN", "test-token")
+        .env("FIRST_CAPTURE", &first_capture)
+        .env("SECOND_CAPTURE", &second_capture)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn cargo run");
+
+    let mut messages = Vec::new();
+    loop {
+        let message = received
+            .recv()
+            .expect("semantic channel closed before the contention error");
+        let fatal = message["type"] == "error";
+        messages.push(message);
+        if fatal {
+            break;
+        }
+    }
+    std::io::Write::write_all(child.stdin.as_mut().expect("child stdin"), b"x")
+        .expect("release live terminals after fatal");
+    let run = child.wait_with_output().expect("cargo run completes");
+    prepared.finish().expect("restore lock");
+    assert!(
+        run.status.success(),
+        "concurrent terminal app failed:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let snapshots = messages
+        .iter()
+        .filter(|message| message["type"] == "snapshot")
+        .count();
+    assert_eq!(
+        snapshots, 1,
+        "concurrent frame escaped semantic admission: {messages:?}"
+    );
+    let fatal = messages
+        .iter()
+        .find(|message| message["type"] == "error")
+        .expect("concurrent render contention did not fail semantics");
+    assert_eq!(fatal["code"], "adapter-guarantee-violation");
+
+    let first = std::fs::read(&first_capture).expect("first capture");
+    let second = std::fs::read(&second_capture).expect("second capture");
+    let frame = first
+        .windows(b"FIRST".len())
+        .position(|bytes| bytes == b"FIRST")
+        .unwrap();
+    let marker = first
+        .windows(b"\x1b]8487;".len())
+        .position(|bytes| bytes == b"\x1b]8487;")
+        .unwrap();
+    assert!(frame < marker, "the admitted marker overtook its own frame");
+    assert!(second
+        .windows(b"SECOND".len())
+        .any(|bytes| bytes == b"SECOND"));
+    assert!(!second
+        .windows(b"\x1b]8487;".len())
+        .any(|bytes| bytes == b"\x1b]8487;"));
+
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_dir_all(&app);
+}
+
+/// A certified sink can still fail after the visual frame was flushed. That
+/// terminates semantics with a typed error; it must not fail the application's
+/// draw, retry on a later frame, or redirect the marker to stdout.
+#[test]
+fn crossterm_marker_write_failure_is_fatal_without_fallback_or_retry() {
+    if registry_source().is_none() || crossterm_source().is_none() {
+        require_candidate_source("CI requires both Ratatui core and Crossterm candidate sources");
+        eprintln!("skipped: pinned Ratatui/Crossterm sources are not unpacked");
+        return;
+    }
+    let app = scratch("marker-failure-app");
+    std::fs::create_dir_all(app.join("src")).expect("app dir");
+    std::fs::write(
+        app.join("Cargo.toml"),
+        format!("[package]\nname = \"marker-failure-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{}", app_dependencies()),
+    )
+    .expect("manifest");
+    std::fs::write(
+        app.join("src/main.rs"),
+        r#"use std::io::{self, Write};
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone)]
+struct RejectMarker(Arc<Mutex<Vec<u8>>>);
+
+impl Write for RejectMarker {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.starts_with(b"\x1b]8487;") {
+            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "marker rejected"));
+        }
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+fn main() {
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let backend = ratatui::backend::CrosstermBackend::new(RejectMarker(captured.clone()));
+    let options = ratatui::TerminalOptions {
+        viewport: ratatui::Viewport::Fixed(ratatui::layout::Rect::new(0, 0, 20, 5)),
+    };
+    let mut terminal = ratatui::Terminal::with_options(backend, options).expect("terminal");
+    terminal.draw(|frame| {
+        frame.render_widget(ratatui::widgets::Paragraph::new("FIRST-FRAME"), frame.area());
+    }).expect("first visual draw remains successful");
+    terminal.draw(|frame| {
+        frame.render_widget(ratatui::widgets::Paragraph::new("SECOND-FRAME"), frame.area());
+    }).expect("second visual draw remains successful");
+    std::fs::write(std::env::var_os("CAPTURE_PATH").unwrap(), captured.lock().unwrap().as_slice())
+        .expect("capture");
+}
+"#,
+    )
+    .expect("source");
+
+    let prepared = prepare_instrumented_build(&PrepareOptions {
+        project: app.clone(),
+        workspace: Some(scratch("marker-failure-workspace")),
+        probe: Some(probe_dir()),
+    })
+    .expect("prepare instrumented build");
+    let socket = format!("/tmp/tw-ratatui-fail-{}.sock", std::process::id());
+    let _ = std::fs::remove_file(&socket);
+    let received = start_driver(&socket);
+    let capture = app.join("writer.bin");
+    let mut command = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
+    command.args(["run", "--quiet"]).current_dir(&app);
+    for config in &prepared.config_args {
+        command.arg("--config").arg(config);
+    }
+    for (key, value) in &prepared.env {
+        command.env(key, value);
+    }
+    let run = command
+        .env("TERMWRIGHT_ENDPOINT", &socket)
+        .env("TERMWRIGHT_TOKEN", "test-token")
+        .env("CAPTURE_PATH", &capture)
+        .output()
+        .expect("cargo run");
+    prepared.finish().expect("restore lock");
+    assert!(
+        run.status.success(),
+        "semantic failure changed application success:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let mut snapshots = 0;
+    let mut fatal = None;
+    for message in received {
+        if message["type"] == "snapshot" {
+            snapshots += 1;
+        } else if message["type"] == "error" {
+            fatal = Some(message);
+        }
+    }
+    assert_eq!(
+        snapshots, 1,
+        "later frame was published after marker failure"
+    );
+    let fatal = fatal.expect("marker writer failure did not terminate semantics");
+    assert_eq!(fatal["code"], "adapter-guarantee-violation");
+    assert!(
+        fatal["message"].as_str().is_some_and(|message| {
+            message.contains("certified Ratatui marker sink failed")
+                && message.contains("marker rejected")
+        }),
+        "wrong marker failure diagnostic: {fatal}"
+    );
+    let bytes = std::fs::read(&capture).expect("captured writer bytes");
+    assert!(
+        bytes
+            .windows(b"FIRST-FRAME".len())
+            .any(|window| window == b"FIRST-FRAME"),
+        "first visual frame was not flushed"
+    );
+    assert!(
+        bytes
+            .windows(b"SECOND-FRAME".len())
+            .any(|window| window == b"SECOND-FRAME"),
+        "second visual frame was not allowed to render"
+    );
+    assert!(
+        !bytes
+            .windows(b"\x1b]8487;".len())
+            .any(|window| window == b"\x1b]8487;")
+            && !run
+                .stdout
+                .windows(b"\x1b]8487;".len())
+                .any(|window| window == b"\x1b]8487;"),
+        "failed marker was emitted or redirected to stdout"
+    );
+
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_dir_all(&app);
+}
+
+/// A backend that advertises the sink and then returns `Ok(false)` has broken
+/// the same contract as a writer error. Even when this is the process's last
+/// frame, final Terminal drop must drain the typed fatal after the invalidated
+/// snapshot, and no guessed stdout marker is allowed.
+#[test]
+fn a_backend_cannot_withdraw_its_marker_sink_after_publication() {
+    if registry_source().is_none() || crossterm_source().is_none() {
+        require_candidate_source("CI requires both Ratatui core and Crossterm candidate sources");
+        eprintln!("skipped: pinned Ratatui/Crossterm sources are not unpacked");
+        return;
+    }
+    let app = scratch("marker-withdrawal-app");
+    std::fs::create_dir_all(app.join("src")).expect("app dir");
+    std::fs::write(
+        app.join("Cargo.toml"),
+        format!("[package]\nname = \"marker-withdrawal-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{}", app_dependencies()),
+    )
+    .expect("manifest");
+    std::fs::write(
+        app.join("src/main.rs"),
+        r#"use std::io::{self, Write};
+use std::sync::{Arc, Mutex};
+
+use ratatui::backend::{Backend, ClearType, CrosstermBackend, WindowSize};
+use ratatui::buffer::Cell;
+use ratatui::layout::{Position, Size};
+
+#[derive(Clone)]
+struct Capture(Arc<Mutex<Vec<u8>>>);
+
+impl Write for Capture {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+struct Withdraw(Builtin);
+type Builtin = CrosstermBackend<Capture>;
+
+impl Backend for Withdraw {
+    type Error = io::Error;
+
+    fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
+    where
+        I: Iterator<Item = (u16, u16, &'a Cell)>,
+    {
+        self.0.draw(content)
+    }
+    fn hide_cursor(&mut self) -> io::Result<()> { self.0.hide_cursor() }
+    fn show_cursor(&mut self) -> io::Result<()> { self.0.show_cursor() }
+    fn get_cursor_position(&mut self) -> io::Result<Position> { self.0.get_cursor_position() }
+    fn set_cursor_position<P: Into<Position>>(&mut self, position: P) -> io::Result<()> {
+        self.0.set_cursor_position(position)
+    }
+    fn clear(&mut self) -> io::Result<()> { self.0.clear() }
+    fn clear_region(&mut self, clear_type: ClearType) -> io::Result<()> {
+        self.0.clear_region(clear_type)
+    }
+    fn size(&self) -> io::Result<Size> { self.0.size() }
+    fn window_size(&mut self) -> io::Result<WindowSize> { self.0.window_size() }
+    fn flush(&mut self) -> io::Result<()> { <Builtin as Backend>::flush(&mut self.0) }
+
+    fn termwright_marker_sink_supported(&self) -> bool { true }
+    fn termwright_write_marker(&mut self, _marker: &[u8]) -> io::Result<bool> { Ok(false) }
+}
+
+fn main() {
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let backend = Withdraw(CrosstermBackend::new(Capture(captured.clone())));
+    let options = ratatui::TerminalOptions {
+        viewport: ratatui::Viewport::Fixed(ratatui::layout::Rect::new(0, 0, 20, 5)),
+    };
+    let mut terminal = ratatui::Terminal::with_options(backend, options).expect("terminal");
+    terminal.draw(|frame| {
+        frame.render_widget(ratatui::widgets::Paragraph::new("FIRST-FRAME"), frame.area());
+    }).expect("last visual draw remains successful");
+    std::fs::write(std::env::var_os("CAPTURE_PATH").unwrap(), captured.lock().unwrap().as_slice())
+        .expect("capture");
+}
+"#,
+    )
+    .expect("source");
+
+    let prepared = prepare_instrumented_build(&PrepareOptions {
+        project: app.clone(),
+        workspace: Some(scratch("marker-withdrawal-workspace")),
+        probe: Some(probe_dir()),
+    })
+    .expect("prepare instrumented build");
+    let socket = format!("/tmp/tw-ratatui-withdrawal-{}.sock", std::process::id());
+    let _ = std::fs::remove_file(&socket);
+    let received = start_driver(&socket);
+    let capture = app.join("writer.bin");
+    let mut command = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
+    command.args(["run", "--quiet"]).current_dir(&app);
+    for config in &prepared.config_args {
+        command.arg("--config").arg(config);
+    }
+    for (key, value) in &prepared.env {
+        command.env(key, value);
+    }
+    let run = command
+        .env("TERMWRIGHT_ENDPOINT", &socket)
+        .env("TERMWRIGHT_TOKEN", "test-token")
+        .env("CAPTURE_PATH", &capture)
+        .output()
+        .expect("cargo run");
+    prepared.finish().expect("restore lock");
+    assert!(
+        run.status.success(),
+        "semantic withdrawal changed application success:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let mut snapshots = 0;
+    let mut fatal = None;
+    for message in received {
+        if message["type"] == "snapshot" {
+            snapshots += 1;
+        } else if message["type"] == "error" {
+            fatal = Some(message);
+        }
+    }
+    assert_eq!(snapshots, 1, "last frame was not admitted exactly once");
+    let fatal = fatal.expect("sink withdrawal did not terminate semantics");
+    assert_eq!(fatal["code"], "adapter-guarantee-violation");
+    assert!(
+        fatal["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("withdrew its certified marker sink")),
+        "wrong sink-withdrawal diagnostic: {fatal}"
+    );
+    let bytes = std::fs::read(&capture).expect("captured writer bytes");
+    assert!(
+        bytes
+            .windows(b"FIRST-FRAME".len())
+            .any(|window| window == b"FIRST-FRAME"),
+        "last visual frame was suppressed by semantic failure: {bytes:?}"
+    );
+    assert!(
+        !bytes
+            .windows(b"\x1b]8487;".len())
+            .any(|window| window == b"\x1b]8487;")
+            && !run
+                .stdout
+                .windows(b"\x1b]8487;".len())
+                .any(|window| window == b"\x1b]8487;"),
+        "withdrawn marker was emitted or redirected to stdout"
+    );
+
+    let _ = std::fs::remove_file(&socket);
     let _ = std::fs::remove_dir_all(&app);
 }
 
@@ -548,13 +1419,11 @@ fn main() {
 /// deliberate exception to frame-local identity.
 #[test]
 fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
-    use std::time::{Duration, Instant};
-
-    if registry_source().is_none() || widgets_source().is_none() {
+    if registry_source().is_none() || widgets_source().is_none() || crossterm_source().is_none() {
         assert_ne!(
             std::env::var("TERMWRIGHT_REQUIRE_RATATUI").as_deref(),
             Ok("1"),
-            "CI requires both Ratatui patch sources for the annotation fixture"
+            "CI requires all Ratatui candidate sources for the annotation fixture"
         );
         eprintln!("skipped: the Ratatui crates are not unpacked in this registry");
         return;
@@ -595,17 +1464,13 @@ fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
         String::from_utf8_lossy(&run.stderr)
     );
 
-    let deadline = Instant::now() + Duration::from_secs(10);
     let mut hello = None;
     let mut snapshot = None;
-    while Instant::now() < deadline && (hello.is_none() || snapshot.is_none()) {
-        match received.recv_timeout(Duration::from_millis(200)) {
-            Ok(message) => match message.get("type").and_then(serde_json::Value::as_str) {
-                Some("hello") => hello = Some(message),
-                Some("snapshot") => snapshot = Some(message),
-                _ => {}
-            },
-            Err(_) => break,
+    for message in received {
+        match message.get("type").and_then(serde_json::Value::as_str) {
+            Some("hello") => hello = Some(message),
+            Some("snapshot") => snapshot = Some(message),
+            _ => {}
         }
     }
 
@@ -705,9 +1570,14 @@ fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
 /// the item count come from there and nowhere else.
 #[test]
 fn a_list_publishes_its_items_and_the_selected_row() {
-    use std::time::{Duration, Instant};
-
-    let (Some(core_source), Some(widgets_source)) = (registry_source(), widgets_source()) else {
+    let (Some(core_source), Some(widgets_source), Some(crossterm_source)) =
+        (registry_source(), widgets_source(), crossterm_source())
+    else {
+        assert_ne!(
+            std::env::var("TERMWRIGHT_REQUIRE_RATATUI").as_deref(),
+            Ok("1"),
+            "CI requires all Ratatui candidate sources for the list fixture"
+        );
         eprintln!("skipped: the Ratatui crates are not unpacked in this registry");
         return;
     };
@@ -729,6 +1599,18 @@ fn a_list_publishes_its_items_and_the_selected_row() {
     )
     .expect("widgets applies");
 
+    let crossterm_copy = scratch("list-crossterm");
+    copy_out(&crossterm_source, &crossterm_copy).expect("copy out crossterm");
+    let crossterm_manifest = read_manifest(&crossterm_patch_set_dir().join("manifest.json"))
+        .expect("crossterm manifest");
+    apply(
+        &crossterm_manifest,
+        &crossterm_patch_set_dir(),
+        &crossterm_copy,
+        &probe_dir(),
+    )
+    .expect("crossterm applies");
+
     let app = scratch("list-app");
     std::fs::create_dir_all(app.join("src")).expect("app dir");
     std::fs::write(
@@ -741,8 +1623,11 @@ fn a_list_publishes_its_items_and_the_selected_row() {
         r#"use ratatui::widgets::{List, ListState};
 
 fn main() {
-    let backend = ratatui::backend::TestBackend::new(30, 6);
-    let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+    let backend = ratatui::backend::CrosstermBackend::new(std::io::stdout());
+    let options = ratatui::TerminalOptions {
+        viewport: ratatui::Viewport::Fixed(ratatui::layout::Rect::new(0, 0, 30, 6)),
+    };
+    let mut terminal = ratatui::Terminal::with_options(backend, options).expect("terminal");
     let mut state = ListState::default();
     state.select(Some(1));
     terminal
@@ -775,6 +1660,11 @@ fn main() {
                 "patch.crates-io.ratatui-widgets.path='{}'",
                 widgets_copy.display()
             ),
+            "--config",
+            &format!(
+                "patch.crates-io.ratatui-crossterm.path='{}'",
+                crossterm_copy.display()
+            ),
         ])
         .current_dir(&app)
         .env("TERMWRIGHT_ENDPOINT", &socket)
@@ -787,16 +1677,10 @@ fn main() {
         String::from_utf8_lossy(&run.stderr)
     );
 
-    let deadline = Instant::now() + Duration::from_secs(10);
     let mut snapshot = None;
-    while Instant::now() < deadline && snapshot.is_none() {
-        match received.recv_timeout(Duration::from_millis(200)) {
-            Ok(message) => {
-                if message.get("type").and_then(serde_json::Value::as_str) == Some("snapshot") {
-                    snapshot = Some(message);
-                }
-            }
-            Err(_) => break,
+    for message in received {
+        if message.get("type").and_then(serde_json::Value::as_str) == Some("snapshot") {
+            snapshot = Some(message);
         }
     }
     let snapshot = snapshot.expect("no tree reached the driver");
@@ -839,7 +1723,7 @@ fn main() {
     );
 
     let _ = std::fs::remove_file(&socket);
-    for path in [&core_copy, &widgets_copy, &app] {
+    for path in [&core_copy, &widgets_copy, &crossterm_copy, &app] {
         let _ = std::fs::remove_dir_all(path);
     }
 }

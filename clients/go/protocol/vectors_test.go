@@ -628,7 +628,7 @@ func TestClosedSetsStayClosedInBothDirections(t *testing.T) {
 // key list; this compares against it, so the next one is a red test on the day
 // it lands.
 func TestNodeKeysAreExactlyTheProtocols(t *testing.T) {
-	wantNodeKeys := []string{"id", "parentId", "role", "name", "description", "value", "geometry", "state", "extended", "actions", "inputRecipes", "labelledBy", "describedBy", "textRanges", "testId", "frameworkType", "p", "px", "scroll", "paintedRegion"}
+	wantNodeKeys := []string{"id", "parentId", "role", "name", "description", "value", "geometry", "state", "extended", "actions", "inputRecipes", "labelledBy", "describedBy", "textRanges", "testId", "frameworkType", "opaqueChildren", "p", "px", "scroll", "paintedRegion"}
 	assertSameSet(t, "node", wantNodeKeys, nodeKeys)
 }
 

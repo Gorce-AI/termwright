@@ -1,7 +1,28 @@
 {
+  "schemaVersion": 2,
   "framework": "charm.land/bubbles/v2",
   "frameworkVersion": "v2.1.1",
   "patchSetVersion": 1,
+  "tier": "T1",
+  "capability": "bubbles-private-state",
+  "versionRange": "* within charm.land/bubbles/v2 (advisory; compile preflight is authoritative)",
+  "requiredSymbols": [
+    "spinner.Model.frame",
+    "spinner.Model.Spinner.Frames",
+    "progress.Model.percentShown",
+    "progress.Model.targetPercent",
+    "filepicker.Model.selected",
+    "filepicker.Model.files",
+    "list.Model.statusMessage",
+    "table.Model.start",
+    "table.Model.end",
+    "table.Model.rows"
+  ],
+  "verification": {
+    "method": "toolexec-compile+behavioral-conformance",
+    "conformanceSuite": "packages/probe-charm/src/zero-config.pty.test.ts"
+  },
+  "degradesTo": "fatal-capability-error",
   "note": "Adds accessors only; no upstream file is edited. The probe finds them by name through reflection, so bubbletea needs no import of bubbles.",
   "patched": [],
   "added": [

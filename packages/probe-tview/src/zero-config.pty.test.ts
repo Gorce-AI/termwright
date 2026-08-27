@@ -1,148 +1,199 @@
-/**
- * The whole path, walked once: a plain tview application, built through the
- * generated workspace, launched under the real driver, addressed by role.
- *
- * Everything else in this package proves a piece — the copy compiles, the
- * canary confirms which copy compiled, the probe survives a stalled driver.
- * This is the test that says a user's application, with no imports of ours and
- * no configuration, becomes addressable.
- *
- * Skipped without a Go toolchain or a pseudo-terminal.
- */
-
-import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
-import { afterAll, afterEach, describe, expect } from "vitest";
-import { it as resourceAwareIt } from "@termwright/resource-broker/vitest";
-import { goTestCapability } from "../../../scripts/test-support/go-toolchain.mjs";
+import {execFile} from 'node:child_process';
+import {cp, mkdir, mkdtemp, readFile, realpath, rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {dirname, join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {promisify} from 'node:util';
+import {afterEach, describe, expect} from 'vitest';
+import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
 import {
   launchTerminal,
-  type SemanticLocator,
   type TerminalHarness,
-} from "@termwright/driver";
+} from '@termwright/driver';
 import {
   createNativePtyBackend,
   nativePtyAvailable,
   launchTerminalWithBackend,
   type PtyBackend,
   type PtyProcess,
-} from "@termwright/driver/experimental";
-import type { Rect } from "@termwright/protocol";
+} from '@termwright/driver/experimental';
+import {goTestCapability} from '../../../scripts/test-support/go-toolchain.mjs';
 import {
-  applyPatchSet,
-  canaryCheck,
-  ensureUpstreamModule,
-  materializeUpstream,
-  writeWorkspace,
-} from "@termwright/probe-go";
-import { prepareInstrumentedBuild, PROBE_VERSION } from "./launch.js";
+  compilerUnitTargetsForPlatform,
+  prepareInstrumentedBuild,
+} from './launch.js';
 
-const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
+const it = resourceAwareIt.resources({terminals: 1, traceWriters: 0, hostPressure: 'exclusive'});
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
-const PATCH_SET = join(here, "..", "upstream-patches", "tview", "v0.42.0");
-const TCELL_PATCH_SET = join(here, "..", "upstream-patches", "tcell", "v2.8.1");
-const FIXTURE = join(here, "testing", "fixture-app");
-const FIXTURE_ANNOTATED = join(here, "testing", "fixture-annotated");
-const CLIENT = join(here, "..", "..", "..", "clients", "go");
+const FIXTURE = join(here, 'testing', 'fixture-app');
+const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
+const PROBE_SOURCE = join(
+  here,
+  '..',
+  'assets',
+  'tview_probe.go.txt',
+);
 
-async function intendedRect(locator: SemanticLocator): Promise<Rect | null> {
-  const observation = (await locator.geometry()).intendedRect;
-  return observation.status === "known" ? observation.value : null;
-}
+const hasGo = await goTestCapability(
+  async () => {
+    await run('go', ['version']);
+    return true;
+  },
+  false,
+  'Go certification toolchain',
+);
+const runnable = hasGo && nativePtyAvailable();
+const roots: string[] = [];
+const sessions: TerminalHarness[] = [];
+const executableSuffix = process.platform === 'win32' ? '.exe' : '';
 
-/** Race-free semantic wait driven only by committed observation changes. */
-async function waitForSemanticState(
-  app: TerminalHarness,
-  predicate: () => Promise<boolean>,
+async function waitForPairedSemanticRevision(
+  terminal: TerminalHarness,
+  minimum: number,
 ): Promise<void> {
   const deadline = performance.now() + 5_000;
+  let checkpoint = terminal.checkpoint();
   for (;;) {
-    const checkpoint = app.checkpoint();
-    if (await predicate()) return;
-    await app.waitForCheckpointChange({
+    if (
+      checkpoint.semanticRevision !== null &&
+      checkpoint.semanticRevision >= minimum &&
+      checkpoint.pairedScreenRevision !== null
+    ) {
+      return;
+    }
+    checkpoint = await terminal.waitForCheckpointChange({
       after: checkpoint,
       timeout: Math.max(0, deadline - performance.now()),
     });
   }
 }
 
-async function goAvailable(): Promise<boolean> {
-  return goTestCapability(
-    async () => {
-      await run("go", ["version"]);
-      return true;
-    },
-    false,
-    "Go certification toolchain",
+afterEach(async () => {
+  const owned = sessions.splice(0);
+  const ownedRoots = roots.splice(0);
+  // Windows keeps a running executable locked. Reap the PTY process before
+  // deleting its build root; collect both phases so a close failure cannot
+  // suppress cleanup evidence.
+  const closed = await Promise.allSettled(owned.map((session) => session.close()));
+  const removed = await Promise.allSettled(
+    ownedRoots.map((dir) => rm(dir, {recursive: true, force: true})),
   );
-}
-
-function ptyAvailable(): boolean {
-  return nativePtyAvailable();
-}
-
-const hasGo = await goAvailable();
-const runnable = hasGo && ptyAvailable();
-const roots: string[] = [];
-const sessions: TerminalHarness[] = [];
-
-async function instrumentTcell(dir: string): Promise<string> {
-  const copy = join(dir, "tcell");
-  await materializeUpstream(
-    await ensureUpstreamModule({
-      module: "github.com/gdamore/tcell/v2",
-      version: "v2.8.1",
-      cachePath: ["github.com", "gdamore", "tcell", "v2@v2.8.1"],
-    }),
-    copy,
+  const results = [...closed, ...removed];
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
   );
-  await applyPatchSet(copy, TCELL_PATCH_SET);
-  return copy;
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'failed to clean test-owned tview resources');
+  }
+});
+
+async function fixture(options: {
+  readonly instrumented: boolean;
+  readonly vendor?: boolean;
+}): Promise<string> {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-tview-t1-')));
+  roots.push(dir);
+  const app = join(dir, 'app');
+  await mkdir(app, {recursive: true});
+  await cp(FIXTURE, app, {recursive: true});
+  await run(
+    'go',
+    ['mod', 'edit', `-replace=github.com/gorce-ai/termwright/clients/go=${await realpath(CLIENT)}`],
+    {cwd: app},
+  );
+  await run('go', ['mod', 'tidy'], {cwd: app});
+  if (options.vendor) await run('go', ['mod', 'vendor'], {cwd: app});
+
+  const binary = join(dir, `app-binary${executableSuffix}`);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(options.vendor
+      ? {
+          GOFLAGS: '-mod=vendor',
+        }
+      : {}),
+  };
+  const prepared = options.instrumented
+    ? await prepareInstrumentedBuild({moduleDir: app, outputDir: join(dir, 'tool'), env})
+    : null;
+  const args = [
+    'build',
+    ...(prepared?.goArgs ?? []),
+    '-o',
+    binary,
+    '.',
+  ];
+  await run('go', args, {cwd: app, env: prepared?.env ?? env});
+  return binary;
 }
 
-/**
- * Captures the real PTY byte stream without stealing startup chunks from the
- * driver. The production backend buffers only until its first subscriber, so
- * a naive tee would make the test itself race TerminalSession attachment.
- */
-function byteCapturingBackend(): {
+interface ByteCapture {
+  readonly allBytes: () => Buffer;
   readonly backend: PtyBackend;
-  readonly bytes: () => Buffer;
-} {
+  readonly transaction: (begin: string, end: string) => Buffer;
+  readonly waitFor: (boundary: string) => Promise<void>;
+}
+
+function byteCapturingBackend(): ByteCapture {
   const upstream = createNativePtyBackend();
   const chunks: Buffer[] = [];
+  let exitError: Error | undefined;
+  const waiters = new Set<{
+    readonly boundary: Buffer;
+    readonly reject: (error: Error) => void;
+    readonly resolve: () => void;
+  }>();
+  const captured = (): Buffer => Buffer.concat(chunks);
+  const settleBoundaries = (): void => {
+    const bytes = captured();
+    for (const waiter of waiters) {
+      if (bytes.indexOf(waiter.boundary) < 0) continue;
+      waiters.delete(waiter);
+      waiter.resolve();
+    }
+  };
+  const waitFor = async (boundary: string): Promise<void> => {
+    const encoded = Buffer.from(boundary);
+    if (captured().indexOf(encoded) >= 0) return;
+    if (exitError !== undefined) throw exitError;
+    await new Promise<void>((resolve, reject) => waiters.add({boundary: encoded, resolve, reject}));
+  };
   return {
-    bytes: () => Buffer.concat(chunks),
+    allBytes: captured,
+    waitFor,
+    transaction(begin, end): Buffer {
+      const bytes = captured();
+      const encodedBegin = Buffer.from(begin);
+      const encodedEnd = Buffer.from(end);
+      const start = bytes.indexOf(encodedBegin);
+      if (start < 0) throw new Error(`tview transaction begin was not observed: ${JSON.stringify(begin)}`);
+      const endOffset = bytes.indexOf(encodedEnd, start + encodedBegin.length);
+      if (endOffset < 0) throw new Error(`tview transaction end was not observed: ${JSON.stringify(end)}`);
+      return bytes.subarray(start + encodedBegin.length, endOffset);
+    },
     backend: {
-      name: `${upstream.name}+byte-capture`,
+      name: `${upstream.name}+capture`,
       spawn(options): PtyProcess {
-        // launchTerminal installs its private endpoint after merging the public
-        // env option. Remove it at the final spawn boundary: this test needs
-        // the driver's real VT/query responses, but the child itself must have
-        // no way to attach the probe.
         const process = upstream.spawn({
           ...options,
-          env: {
-            ...options.env,
-            TERMWRIGHT_ENDPOINT: "",
-            TERMWRIGHT_TOKEN: "",
-          },
+          env: {...options.env, TERMWRIGHT_ENDPOINT: '', TERMWRIGHT_TOKEN: ''},
         });
         const listeners = new Set<(data: Uint8Array) => void>();
         const pending: Uint8Array[] = [];
         process.onData((data) => {
           const copy = Buffer.from(data);
           chunks.push(copy);
-          if (listeners.size === 0) {
-            pending.push(copy);
-            return;
-          }
-          for (const listener of listeners) listener(copy);
+          settleBoundaries();
+          if (listeners.size === 0) pending.push(copy);
+          else for (const listener of listeners) listener(copy);
+        });
+        process.onExit((status) => {
+          exitError = new Error(
+            `tview fixture exited before its causal output boundary (code=${String(status.code)}, signal=${String(status.signal)})`,
+          );
+          for (const waiter of waiters) waiter.reject(exitError);
+          waiters.clear();
         });
         return {
           get pid() {
@@ -164,699 +215,106 @@ function byteCapturingBackend(): {
   };
 }
 
-afterEach(async () => {
-  const owned = sessions.splice(0);
-  const results = await Promise.allSettled(
-    owned.map((session) => session.close()),
-  );
-  const failures = results.flatMap((result) =>
-    result.status === "rejected" ? [result.reason] : [],
-  );
-  if (failures.length > 0)
-    throw new AggregateError(
-      failures,
-      "failed to close test-owned terminal sessions",
-    );
-});
-
-afterAll(async () => {
-  await Promise.all(
-    roots.map((dir) => rm(dir, { recursive: true, force: true })),
-  );
-});
-
-/** Builds the fixture, optionally through the instrumented copy. */
-async function buildFixture(options: {
-  readonly instrumented: boolean;
-}): Promise<string> {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "tw-zeroconfig-")));
-  roots.push(dir);
-
-  const app = join(dir, "app");
-  await mkdir(app, { recursive: true });
-  await cp(FIXTURE, app, { recursive: true });
-
-  const binary = join(dir, "app-binary");
-  const env: NodeJS.ProcessEnv = { ...process.env };
-
-  if (options.instrumented) {
-    const copy = join(dir, "tview");
-    await materializeUpstream(
-      await ensureUpstreamModule({
-        module: "github.com/rivo/tview",
-        version: "v0.42.0",
-        cachePath: ["github.com", "rivo", "tview@v0.42.0"],
-      }),
-      copy,
-    );
-    await applyPatchSet(copy, PATCH_SET);
-    const tcellCopy = await instrumentTcell(dir);
-
-    env["GOWORK"] = await writeWorkspace(join(dir, "generated.work"), {
-      moduleDir: app,
-      inherited: { uses: [], replaces: [] },
-      suppliedUses: [
-        {
-          dir: await realpath(CLIENT),
-          module: "github.com/gorce-ai/termwright/clients/go",
-        },
-      ],
-      replaces: [
-        { from: "github.com/rivo/tview", to: copy },
-        { from: "github.com/gdamore/tcell/v2", to: tcellCopy },
-        {
-          from: "github.com/gorce-ai/termwright/clients/go",
-          to: await realpath(CLIENT),
-          version: "v0.0.0",
-        },
-      ],
-    });
-  } else {
-    // The comparison arm: the same source, the untouched framework.
-    env["GOFLAGS"] = "-mod=mod";
-  }
-
-  await run("go", ["build", "-o", binary, "."], { cwd: app, env });
-  return binary;
+function syncBoundary(redraw: number, phase: 'begin' | 'end'): string {
+  return `\u001b]8488;termwright-tview-fixture-sync:${redraw}:${phase}\u0007`;
 }
 
-describe.skipIf(!runnable)("developer annotations", () => {
-  it("adds what the probe cannot observe, and nothing it can", async () => {
-    const dir = await realpath(await mkdtemp(join(tmpdir(), "tw-annotated-")));
-    roots.push(dir);
-    const app = join(dir, "app");
-    await mkdir(app, { recursive: true });
-    await cp(FIXTURE_ANNOTATED, app, { recursive: true });
-
-    const copy = join(dir, "tview");
-    await materializeUpstream(
-      await ensureUpstreamModule({
-        module: "github.com/rivo/tview",
-        version: "v0.42.0",
-        cachePath: ["github.com", "rivo", "tview@v0.42.0"],
-      }),
-      copy,
-    );
-    await applyPatchSet(copy, PATCH_SET);
-    const tcellCopy = await instrumentTcell(dir);
-
-    const client = await realpath(
-      join(here, "..", "..", "..", "clients", "go"),
-    );
-    const workspace = await writeWorkspace(join(dir, "generated.work"), {
-      moduleDir: app,
-      inherited: { uses: [], replaces: [] },
-      suppliedUses: [
-        { dir: client, module: "github.com/gorce-ai/termwright/clients/go" },
-      ],
-      replaces: [
-        { from: "github.com/rivo/tview", to: copy },
-        { from: "github.com/gdamore/tcell/v2", to: tcellCopy },
-        {
-          from: "github.com/gorce-ai/termwright/clients/go",
-          to: client,
-          version: "v0.0.0",
-        },
-      ],
-    });
-
-    const binary = join(dir, "app-binary");
-    await run("go", ["build", "-o", binary, "."], {
-      cwd: app,
-      env: { ...process.env, GOWORK: workspace },
-    });
-
-    const session = await launchTerminal({
-      command: [binary],
-      columns: 80,
-      rows: 24,
-    });
-    sessions.push(session);
-    await session.waitForText("unread");
-    await expect
-      .poll(() => session.contract(), { timeout: 10_000 })
-      .not.toBeNull();
-    expect(session.contract()?.providers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "fixture.pointer-regions",
-          kind: "application",
-          method: "declared",
-          capabilities: ["pointer-regions"],
-        }),
-      ]),
-    );
-    await expect
-      .poll(() => session.semanticTree()?.v, { timeout: 10_000 })
-      .toBe(2);
-
-    // A widget the probe has never heard of: without the annotation it would
-    // be a generic region named after its Go type. The annotation says what it
-    // is, and the probe's own facts stay underneath.
-    await expect
-      .poll(() => session.getByTestId("unread-badge").count())
-      .toBe(1);
-    await expect
-      .poll(() =>
-        session.getByRole("status", { name: "Unread messages" }).count(),
-      )
-      .toBe(1);
-
-    // Domain state the closed vocabulary has no room for, reported verbatim.
-    await expect
-      .poll(() => session.getByTestId("unread-badge").extendedState())
-      .toEqual({ mailbox: "inbox", unread: 3 });
-
-    // Merge, not replacement: the annotation sharpened the button's name while
-    // its role and its measured geometry came from the probe.
-    await expect
-      .poll(() => session.getByRole("button", { name: "Save changes" }).count())
-      .toBe(1);
-    const box = await intendedRect(
-      session.getByRole("button", { name: "Save changes" }),
-    );
-    expect(box?.width).toBeGreaterThan(0);
-    const tree = session.semanticTree();
-    const saveNode = tree?.nodes.find((node) => node.testId === "save");
-    const labelNode = tree?.nodes.find(
-      (node) => node.role === "text" && node.name === "Save changes",
-    );
-    const helpNode = tree?.nodes.find(
-      (node) => node.name === "Writes the current file",
-    );
-    expect(saveNode?.actions).toEqual(["focus", "activate"]);
-    expect(saveNode?.labelledBy).toEqual([labelNode?.id]);
-    expect(saveNode?.describedBy).toEqual([helpNode?.id]);
-    expect(saveNode?.p).toBe("framework");
-    expect(saveNode?.px).toEqual(
-      expect.objectContaining({
-        role: "recognizer",
-        name: "annotation",
-        actions: "annotation",
-        labelledBy: "annotation",
-        describedBy: "annotation",
-      }),
-    );
-
-    // The annotation declares the supported actions, but the locator still
-    // drives the real terminal. Starting focused makes this a deterministic
-    // activation check rather than a duplicate of the Tab-order test below.
-    await expect
-      .poll(
-        async () =>
-          (await session.getByTestId("save").semanticState())?.focused,
-      )
-      .toBe(true);
-    await session.getByTestId("save").activate();
-    await session.waitForText("status: saved");
-  }, 900_000);
-});
-
-describe.skipIf(!runnable)("the launcher call", () => {
-  it("prepares a build from one call, and caches the copy for the next", async () => {
-    const dir = await realpath(await mkdtemp(join(tmpdir(), "tw-launch-")));
-    roots.push(dir);
-    const app = join(dir, "app");
-    await mkdir(app, { recursive: true });
-    await cp(FIXTURE, app, { recursive: true });
-
-    // A cache of its own, so the assertion about building versus reusing is
-    // about this test rather than about whatever ran before it.
-    const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") };
-
-    const first = await prepareInstrumentedBuild({ moduleDir: app, env });
-    expect(first.built).toBe(true);
-    // The version was detected from the module, not passed in.
-    expect(first.copyDir).toContain("v0.42.0");
-
-    await run("go", ["build", "-o", join(dir, "bin"), "."], {
-      cwd: app,
-      env: first.env,
-    });
-
-    const second = await prepareInstrumentedBuild({ moduleDir: app, env });
-    expect(second.built).toBe(false);
-    expect(second.copyDir).toBe(first.copyDir);
-
-    // And the canary still proves it is our copy that compiles.
-    const canary = await canaryCheck({
-      copyDir: second.copyDir,
-      moduleDir: app,
-      workspaceFile: second.workspaceFile,
-      packageName: "tview",
-      env,
-    });
-    expect(canary.proved).toBe(true);
-  }, 600_000);
-
-  it("refuses a vendored build by name instead of overriding it", async () => {
-    const dir = await realpath(await mkdtemp(join(tmpdir(), "tw-launch-")));
-    roots.push(dir);
-    const app = join(dir, "app");
-    await mkdir(app, { recursive: true });
-    await cp(FIXTURE, app, { recursive: true });
-
-    await expect(
-      prepareInstrumentedBuild({
-        moduleDir: app,
-        env: { ...process.env, GOFLAGS: "-mod=vendor" },
-      }),
-    ).rejects.toThrow(/-mod=vendor/u);
-  }, 120_000);
-
-  it("fails closed when the resolved tcell version has no exact certified companion", async () => {
-    const dir = await realpath(await mkdtemp(join(tmpdir(), "tw-launch-tcell-")));
-    roots.push(dir);
-    const app = join(dir, "app");
-    await mkdir(app, { recursive: true });
-    await cp(FIXTURE, app, { recursive: true });
-    await run(
-      "go",
-      ["mod", "edit", "-require=github.com/gdamore/tcell/v2@v2.7.4"],
-      { cwd: app },
-    );
-    await run(
-      "go",
-      ["mod", "download", "github.com/gdamore/tcell/v2@v2.7.4"],
-      { cwd: app },
-    );
-
-    await expect(
-      prepareInstrumentedBuild({
-        moduleDir: app,
-        env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") },
-      }),
-    ).rejects.toThrow(
-      /no exact certified patch set for github\.com\/gdamore\/tcell\/v2 v2\.7\.4/u,
-    );
-  }, 120_000);
-
-  it.each([
-    {
-      module: "github.com/rivo/tview",
-      version: "v0.42.0",
-      cachePath: ["github.com", "rivo", "tview@v0.42.0"],
-    },
-    {
-      module: "github.com/gdamore/tcell/v2",
-      version: "v2.8.1",
-      cachePath: ["github.com", "gdamore", "tcell", "v2@v2.8.1"],
-    },
-  ])(
-    "refuses a local replacement masquerading as certified $module",
-    async ({ module, version, cachePath }) => {
-      const dir = await realpath(
-        await mkdtemp(join(tmpdir(), "tw-launch-replace-")),
-      );
-      roots.push(dir);
-      const app = join(dir, "app");
-      const fork = join(dir, "fork");
-      await mkdir(app, { recursive: true });
-      await cp(FIXTURE, app, { recursive: true });
-      await materializeUpstream(
-        await ensureUpstreamModule({ module, version, cachePath }),
-        fork,
-      );
-      await run("go", ["mod", "edit", `-replace=${module}=${fork}`], {
-        cwd: app,
-      });
-
-      await expect(
-        prepareInstrumentedBuild({
-          moduleDir: app,
-          env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") },
-        }),
-      ).rejects.toThrow(
-        new RegExp(`refuses replaced ${module.replaceAll("/", "\\/")}`, "u"),
-      );
-    },
-    120_000,
-  );
-
-  it("does not illegally replace the client when the app is inside that module", async () => {
-    const dir = await realpath(
-      await mkdtemp(join(tmpdir(), "tw-launch-client-")),
-    );
-    roots.push(dir);
-    const prepared = await prepareInstrumentedBuild({
-      moduleDir: CLIENT,
-      workspaceFile: join(dir, "generated.work"),
-      env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") },
-    });
-
-    const workspace = await readFile(prepared.workspaceFile, "utf8");
-    expect(workspace).not.toMatch(
-      /replace github\.com\/gorce-ai\/termwright\/clients\/go/u,
-    );
-    await run(
-      "go",
-      ["build", "-o", join(dir, "permission"), "./examples/permission"],
-      {
-        cwd: CLIENT,
-        env: prepared.env,
-      },
-    );
-  }, 600_000);
-});
-
-describe.skipIf(!runnable)("a plain tview application under the probe", () => {
-  it("publishes observed geometry without claiming pointer ownership", async () => {
-    const binary = await buildFixture({ instrumented: true });
-    const app = await launchTerminal({
-      command: [binary],
-      columns: 80,
-      rows: 24,
-    });
+describe.skipIf(!runnable)('tview T0+T1 injection', () => {
+  it('applies the add-only unit and publishes the retained tree after Show', async () => {
+    const binary = await fixture({instrumented: true});
+    const app = await launchTerminal({command: [binary], columns: 80, rows: 24});
     sessions.push(app);
-    await app.waitForText("readme.md");
-    await app.settled();
+    await app.waitForText('readme.md');
+    await waitForPairedSemanticRevision(app, 1);
     expect(app.semanticTree()?.v).toBe(2);
-
-    const tree = app.semanticTree();
-    expect(tree?.hitGrid).toEqual({
-      status: "unsupported",
-      capability: "pointer-hit-grid",
-      reason: "framework-unobservable",
-    });
-    const list = tree?.nodes.find(
-      (node) => node.role === "list" && node.name === "Files",
+    expect(await app.getByRole('list', {name: 'Files'}).count()).toBe(1);
+    expect(await app.getByRole('button', {name: 'Save'}).count()).toBe(1);
+    expect(app.contract()?.framework?.instrumentation).toEqual(
+      expect.objectContaining({highestTier: 'T1', semanticClass: 'A'}),
     );
-    expect(list?.geometry?.displayed).toMatchObject({
-      status: "known",
-      value: true,
-    });
-    expect(list?.geometry?.intendedRect).toMatchObject({ status: "known" });
-    expect(list?.geometry?.visibleRect).toEqual({
-      status: "unsupported",
-      capability: "clipped-geometry",
-      reason: "framework-unobservable",
-    });
-  }, 600_000);
+    expect(app.contract()?.framework?.version).toBe('v0.42.0');
+  }, 120_000);
 
-  it("exposes its widgets by role, with no import and no configuration", async () => {
-    const binary = await buildFixture({ instrumented: true });
-
-    const app = await launchTerminal({
-      command: [binary],
-      columns: 80,
-      rows: 24,
-    });
+  it('injects the same package unit in Go vendor mode', async () => {
+    const binary = await fixture({instrumented: true, vendor: true});
+    const app = await launchTerminal({command: [binary], columns: 80, rows: 24});
     sessions.push(app);
-    await app.waitForText("readme.md");
-    await app.settled();
+    await app.waitForText('readme.md');
+    await waitForPairedSemanticRevision(app, 1);
+    expect(await app.getByRole('list', {name: 'Files'}).count()).toBe(1);
+  }, 120_000);
 
-    // The claim of the whole phase: semantics from an application that was
-    // never told about us. Terminal output and the side-channel handshake are
-    // independent streams, so rendered text is not a semantic readiness
-    // barrier on a busy runner.
-    await expect
-      .poll(() => app.contract()?.capabilities["semantic-tree"].status)
-      .toBe("supported");
-    expect(app.contract()?.framework).toMatchObject({
-      name: "tview",
-      version: "v0.42.0",
-      adapterVersion: PROBE_VERSION,
-    });
-    expect(app.contract()?.capabilities["stable-identity"].status).toBe(
-      "supported",
-    );
-
-    // The driver's own API rather than the Native Host's matchers: a probe
-    // package should not depend on the host authoring surface to prove it works.
-    await expect
-      .poll(() => app.getByRole("list", { name: "Files" }).count())
-      .toBe(1);
-    await expect
-      .poll(() => app.getByRole("listitem", { name: "readme.md" }).count())
-      .toBe(1);
-    await expect
-      .poll(() => app.getByRole("button", { name: "Save" }).count())
-      .toBe(1);
-
-    // A widget on a page tview has not shown carries `hidden` rather than
-    // being absent — the in-package walk is what makes that knowable.
-    await expect
-      .poll(
-        async () =>
-          (await app.getByRole("textbox", { name: "Name" }).visibility())
-            .displayed,
-      )
-      .toMatchObject({ status: "known", value: false });
-
-    // Showing the page flips exactly that: the widget stops being hidden.
-    // Not asserted on the screen, because tview draws the shown page over the
-    // status line rather than beside it — the tree knows, the grid does not.
-    await app.press("s");
-    await expect
-      .poll(() => app.getByRole("textbox", { name: "Name" }).count())
-      .toBe(1);
-    await expect
-      .poll(() => app.getByRole("region", { name: "Settings" }).count())
-      .toBe(1);
-  }, 600_000);
-
-  it("reflects focus, selection, value and resize in the tree", async () => {
-    // The rest of the C list. Each of these is a fact the driver can only get
-    // from the probe: the screen shows a highlight, the tree says which widget
-    // holds the focus and which row is selected.
-    const binary = await buildFixture({ instrumented: true });
-    const app = await launchTerminal({
-      command: [binary],
-      columns: 80,
-      rows: 24,
-    });
-    sessions.push(app);
-    await app.waitForText("readme.md");
-    await app.settled();
-
-    const state = async (
-      role: "list" | "button" | "listitem" | "textbox",
-      name: string,
-    ) => app.getByRole(role, { name }).semanticState();
-
-    // focus: it starts on the list and Tab moves it to the button.
-    expect((await state("list", "Files"))?.focused).toBe(true);
-    await app.press("Tab");
-    await waitForSemanticState(
-      app,
-      async () => (await state("button", "Save"))?.focused === true,
-    );
-    expect((await state("button", "Save"))?.focused).toBe(true);
-    expect((await state("list", "Files"))?.focused).not.toBe(true);
-
-    // selection: moving through the list changes which item is selected, and
-    // the tree names it rather than leaving a highlight to be read off cells.
-    await app.press("Tab Tab");
-    await waitForSemanticState(
-      app,
-      async () => (await state("listitem", "readme.md"))?.selected === true,
-    );
-    expect((await state("listitem", "readme.md"))?.selected).toBe(true);
-    await app.press("ArrowDown");
-    await waitForSemanticState(
-      app,
-      async () => (await state("listitem", "main.go"))?.selected === true,
-    );
-    expect((await state("listitem", "main.go"))?.selected).toBe(true);
-    expect((await state("listitem", "readme.md"))?.selected).not.toBe(true);
-
-    // value: typing into the field on the settings page.
-    await app.press("s");
-    await waitForSemanticState(
-      app,
-      async () => (await app.getByRole("textbox", { name: "Name" }).count()) === 1,
-    );
-    expect(await app.getByRole("textbox", { name: "Name" }).count()).toBe(1);
-    await app.type("release");
-    await waitForSemanticState(
-      app,
-      async () =>
-        (await app.getByRole("textbox", { name: "Name" }).textContent()).includes(
-          "release",
-        ),
-    );
-
-    // resize: a real SIGWINCH, and geometry that follows it.
-    const before = await intendedRect(app.getByRole("list", { name: "Files" }));
-    await app.resize({ columns: 50, rows: 18 });
-    await waitForSemanticState(
-      app,
-      async () =>
-        (await intendedRect(app.getByRole("list", { name: "Files" })))?.width ===
-        50,
-    );
-    expect(before?.width).toBe(80);
-  }, 600_000);
-
-  resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })("is observably identical to the untouched framework when dormant", async () => {
-    // The dormancy claim, measured rather than asserted from the source: the
-    // instrumented binary run without the handshake variables must paint what
-    // the vanilla one paints.
-    const [vanilla, instrumented] = await Promise.all([
-      buildFixture({ instrumented: false }),
-      buildFixture({ instrumented: true }),
-    ]);
-
-    const terminalStates: unknown[] = [];
-    const marker = Buffer.from("\u001b]8487;twm;", "utf8");
-    for (const binary of [vanilla, instrumented]) {
-      // The capturing backend removes the driver's private handshake at the
-      // final spawn boundary. Doing this in `env` would be ineffective because
-      // launchTerminal authoritatively installs its endpoint afterwards.
-      const capture = byteCapturingBackend();
-      const session = await launchTerminalWithBackend({
+  it('is byte-for-byte non-interfering for a causally bounded dormant transaction', async () => {
+    const plain = await fixture({instrumented: false});
+    const injected = await fixture({instrumented: true});
+    const captures = [byteCapturingBackend(), byteCapturingBackend()];
+    for (const [index, binary] of [plain, injected].entries()) {
+      const app = await launchTerminalWithBackend({
+        backend: captures[index]!.backend,
         command: [binary],
         columns: 80,
-        // The fixture's fixed layout is exactly ten rows. Avoid importing
-        // irrelevant history of untouched rows into the parity verdict.
-        rows: 10,
-        env: { TERMWRIGHT_ENDPOINT: "", TERMWRIGHT_TOKEN: "" },
-        backend: capture.backend,
+        rows: 24,
       });
-      sessions.push(session);
-      // `readme.md` is painted near the start of tview's frame. The status
-      // line is the fixture's own readiness marker and is written only after
-      // the complete frame, so both arms are compared at the same observable
-      // application state rather than at an arbitrary PTY chunk boundary.
-      await session.waitForText("status: ready");
-      const contract = await session.settled();
-      expect(contract.framework).toBeNull();
-      expect(contract.capabilities["semantic-tree"].status).toBe("unsupported");
-
-      // Application-owned causal states prove both redraw and input paths. Raw
-      // escape streams are deliberately not compared: tcell's diff output is
-      // history-dependent across otherwise identical sessions.
-      await session.press("r");
-      await session.waitForText("status: ready redraw:1");
-      await session.press("Tab");
-      await session.waitForText("status: ready redraw:1 focus:1");
-
-      const screen = session.screen();
-      terminalStates.push({
-        columns: screen.columns,
-        rows: screen.rows,
-        buffer: screen.buffer,
-        modes: screen.modes,
-        cursor: screen.cursor.visible ? screen.cursor : { visible: false },
-        cells: Array.from({ length: screen.rows }, (_, row) =>
-          Array.from({ length: screen.columns }, (_, column) =>
-            screen.cell(row, column),
-          ),
-        ),
-      });
-      // No Termwright render marker may enter stdout at any point. Checking
-      // raw bytes catches a probe that attached even when VT consumes its OSC.
-      expect(capture.bytes().includes(marker)).toBe(false);
+      sessions.push(app);
+      await app.waitForText('readme.md');
+      expect(app.contract()?.framework ?? null).toBeNull();
+      expect(app.semanticTree()).toBeNull();
+      await app.press('r');
+      await captures[index]!.waitFor(syncBoundary(1, 'end'));
+      await app.press('r');
+      await captures[index]!.waitFor(syncBoundary(2, 'end'));
+      await app.press('q');
+      expect(await app.waitForExit()).toMatchObject({code: 0});
+      await app.close();
     }
-
-    expect(terminalStates[1]).toEqual(terminalStates[0]);
-  }, 900_000);
+    const reference = captures[0]!.transaction(syncBoundary(2, 'begin'), syncBoundary(2, 'end'));
+    expect(reference.includes(Buffer.from('redraw:2'))).toBe(true);
+    expect(reference.length).toBeGreaterThan(Buffer.byteLength('redraw:2'));
+    expect(captures[1]!.transaction(syncBoundary(2, 'begin'), syncBoundary(2, 'end'))).toEqual(reference);
+    for (const capture of captures) {
+      expect(capture.allBytes().includes(Buffer.from('\u001b]8487;'))).toBe(false);
+    }
+  }, 120_000);
 });
 
-it("uses a causal handshake redraw and the screen's own marker writer", async () => {
-  const source = await readFile(
-    join(PATCH_SET, "add", "termwright_probe.go"),
-    "utf8",
-  );
-  const windows = await readFile(
-    join(TCELL_PATCH_SET, "add", "termwright_marker_windows.go"),
-    "utf8",
-  );
-  const windowsTest = await readFile(
-    join(TCELL_PATCH_SET, "add", "termwright_marker_windows_test.go"),
-    "utf8",
-  );
-
-  expect(source).toContain("p.enqueueHandshakeRedraw()\n");
-  expect(source).toContain(
-    "if terminal, ok := screen.Tty(); ok && terminal != nil",
-  );
-  expect(source).toContain("windows.TermwrightWriteMarker(marker)");
-  expect(source).toContain("p.redrawQueued.Store(false)");
-  expect(source).not.toContain("time.Sleep(");
-  expect(source).not.toContain("time.Now().Add(");
-  expect(source).not.toContain("os.Stdout");
-  expect(windows).toContain(
-    "func (b *baseScreen) TermwrightWriteMarker(marker string) error",
-  );
-  expect(windows).toContain("b.screenImpl.(*cScreen)");
-  expect(windows).toContain("if !s.vten");
-  expect(windows).toContain("termwrightGetConsoleMode.Call(uintptr(s.out)");
-  expect(windows).toContain("termwrightSetConsoleMode.Call(uintptr(s.out)");
-  expect(windows).toContain("syscall.WriteConsole(s.out");
-  expect(windows).not.toContain("os.Stdout");
-  expect(windowsTest).toContain("screen, err := NewConsoleScreen()");
-  expect(windowsTest).toContain("screen.(termwrightMarkerCapability)");
-});
-
-describe.skipIf(!hasGo)("the Windows tcell companion", () => {
-  it("is pinned and enters the generated workspace", async () => {
-    const dir = await realpath(
-      await mkdtemp(join(tmpdir(), "tw-tcell-companion-")),
-    );
-    roots.push(dir);
-    const app = join(dir, "app");
-    await mkdir(app, { recursive: true });
-    await cp(FIXTURE, app, { recursive: true });
-
-    const prepared = await prepareInstrumentedBuild({
-      moduleDir: app,
-      workspaceFile: join(dir, "generated.work"),
-      env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") },
-    });
-    const workspace = await readFile(prepared.workspaceFile, "utf8");
-    const hook = await readFile(
-      join(prepared.tcellCopyDir, "termwright_marker_windows.go"),
-      "utf8",
-    );
-
-    expect(workspace).toContain("replace github.com/gdamore/tcell/v2 =>");
-    expect(prepared.tcellCopyDir).toContain("v2.8.1");
-    expect(hook).toContain("syscall.WriteConsole(s.out");
-    expect(hook).toContain("termwrightGetConsoleMode.Call(uintptr(s.out)");
-    expect(hook).toContain("termwrightSetConsoleMode.Call(uintptr(s.out)");
-    await run("go", ["build", "-o", join(dir, "fixture.exe"), "."], {
-      cwd: app,
+it.skipIf(!hasGo)('fails closed when an active build omitted compiler injection', async () => {
+  const binary = await fixture({instrumented: false});
+  await expect(
+    run(binary, [], {
       env: {
-        ...prepared.env,
-        GOOS: "windows",
-        GOARCH: "amd64",
-        CGO_ENABLED: "0",
+        ...process.env,
+        TERMWRIGHT_ENDPOINT: '/definitely/missing/termwright.sock',
+        TERMWRIGHT_TOKEN: 'active-but-not-injected',
       },
-    });
-    if (process.platform === "win32") {
-      const { stdout } = await run(
-        "go",
-        [
-          "test",
-          "-run",
-          "TestTermwrightConsoleScreenExposesReachableMarkerCapability",
-          "-count=1",
-          "-v",
-          ".",
-        ],
-        { cwd: prepared.tcellCopyDir, env: { ...process.env, GOWORK: "off" } },
-      );
-      expect(stdout).toContain(
-        "PASS: TestTermwrightConsoleScreenExposesReachableMarkerCapability",
-      );
-    }
-  }, 600_000);
+    }),
+  ).rejects.toMatchObject({code: 2});
+}, 120_000);
+
+it('uses one decorated Show boundary without a source mutation lifecycle seam', async () => {
+  const source = await readFile(PROBE_SOURCE, 'utf8');
+  expect(source).toContain('probehost.Register("tview"');
+  expect(source).toContain('type termwrightScreen struct');
+  expect(source).toContain('s.Screen.Show()\n\tphase := s.phase.Load()');
+  expect(source).toContain('phase != termwrightPhaseIdle && !s.hooksIntact()');
+  expect(source).toContain('s.phase.CompareAndSwap(termwrightPhaseFinal, termwrightPhaseIdle)');
+  expect(source).toContain('decorated.beforeHook = decorated.beforeDraw');
+  expect(source).toContain('decorated.afterHook = decorated.afterDraw');
+  expect(source).toContain('s.commit(s.application.root, s.Screen)');
+  expect(source).not.toContain('SetAfterDrawFunc');
+  expect(source).not.toContain('termwrightFrameOrder');
+  expect(source).not.toContain('termwrightBeforeRun');
+  expect(source).not.toContain('a.updates');
+  expect(source).toContain('underlying := a.screen');
+  expect(source).toContain('a.screen = decorated');
+  expect(source).not.toContain('time.Sleep(');
+  expect(source).not.toContain('os.Stdout');
 });
 
-/** Kept for the failure message when the fixture stops being zero-config. */
-it("the fixture imports nothing of ours", async () => {
-  const source = (
-    await Promise.all(
-      ["main.go", "screen_nonwindows.go", "screen_windows.go"].map((file) =>
-        readFile(join(FIXTURE, file), "utf8"),
-      ),
-    )
-  ).join("\n");
-  const imports = source.slice(source.indexOf("import ("), source.indexOf(")"));
-
-  expect(imports).not.toContain("termwright");
-  expect(imports).toContain("github.com/rivo/tview");
-  expect(source).toContain("tcell.NewConsoleScreen()");
-  expect(source).toContain("app.SetScreen(screen)");
+it('selects the Windows same-handle unit only for Windows compilers', () => {
+  expect(compilerUnitTargetsForPlatform('linux')).toEqual(['zz_termwright_probe.go']);
+  expect(compilerUnitTargetsForPlatform('darwin')).toEqual(['zz_termwright_probe.go']);
+  expect(compilerUnitTargetsForPlatform('windows')).toEqual([
+    'zz_termwright_probe.go',
+    'zz_termwright_marker.go',
+  ]);
 });

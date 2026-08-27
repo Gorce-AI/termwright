@@ -48,6 +48,7 @@ pub mod limits;
 pub mod logs;
 pub mod marker;
 pub mod messages;
+pub mod publication_queue;
 pub mod roles;
 /// Bridge from `tracing`, enabled by the `tracing` feature.
 #[cfg(feature = "tracing")]
@@ -67,9 +68,11 @@ pub use marker::{
     MARKER_OSC_CODE, MARKER_OSC_PREFIX,
 };
 pub use messages::{
-    parse_adapter_message, parse_driver_message, EvidenceProviderRegistration, ProbeIdentityKind,
-    ProbeInfo, PROTOCOL_ID, PROTOCOL_VERSION,
+    parse_adapter_message, parse_driver_message, DegradedSessionCapability,
+    EvidenceProviderRegistration, ProbeIdentityKind, ProbeInfo, ProbeInjectionTier,
+    ProbeInstrumentation, ProbeSemanticClass, PROTOCOL_ID, PROTOCOL_VERSION,
 };
+pub use publication_queue::PublicationQueue;
 pub use roles::{Action, Capability, Role};
 pub use tree::{
     Cursor, CursorShape, EvidenceMethod, EvidenceProvenance, EvidenceSource, EvidenceStrength,

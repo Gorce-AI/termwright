@@ -1,19 +1,46 @@
 --- a/src/terminal/render.rs	2026-08-17 01:17:39
 +++ b/src/terminal/render.rs	2026-08-17 01:17:39
-@@ -307,6 +307,17 @@
+@@ -190,7 +190,9 @@
+     where
+         F: FnOnce(&mut Frame) -> Result<(), E>,
+         E: Into<B::Error>,
+     {
++        #[cfg(feature = "std")]
++        let _termwright_frame = termwright_probe_ratatui::begin_frame();
+         // Autoresize - otherwise we get glitches if shrinking or potential desync between widgets
+         // and the terminal (if growing), which may OOB.
+         self.autoresize()?;
+@@ -307,6 +307,34 @@
          // Flush any buffered backend output.
          self.backend.flush()?;
  
-+        // termwright: the frame's bytes are on the terminal as of the line
-+        // above, which is the only point at which a render-commit marker may
-+        // be written. `frame_count` is still this frame's; it is incremented
-+        // below.
++        // termwright: only a backend that can append to its exact render sink
++        // may publish a semantic revision. Checking before publication avoids
++        // a snapshot that waits forever for a marker guessed onto stdout.
 +        #[cfg(feature = "std")]
-+        termwright_probe_ratatui::session::on_frame_end(
-+            self.frame_count as u64,
-+            self.last_known_area.width,
-+            self.last_known_area.height,
-+        );
++        if self.backend.termwright_marker_sink_supported() {
++            if let Some(marker) = termwright_probe_ratatui::session::on_frame_end(
++                self.frame_count as u64,
++                self.last_known_area.width,
++                self.last_known_area.height,
++            ) {
++                match self.backend.termwright_write_marker(marker.as_bytes()) {
++                    Ok(true) => {}
++                    Ok(false) => {
++                        termwright_probe_ratatui::session::on_marker_write_failed(
++                            "backend withdrew its certified marker sink",
++                        );
++                    }
++                    Err(error) => {
++                        termwright_probe_ratatui::session::on_marker_write_failed(&std::format!(
++                            "backend writer returned an error: {error}",
++                        ));
++                    }
++                }
++            }
++        } else {
++            termwright_probe_ratatui::session::on_marker_sink_unsupported();
++        }
 +
          let completed_frame = CompletedFrame {
              buffer: &self.buffers[1 - self.current],

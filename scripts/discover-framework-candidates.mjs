@@ -25,16 +25,17 @@ export function validateCandidateAssessments(document, streamIds) {
     const versions = new Set();
     for (const entry of entries) {
       if (
-        entry?.state !== 'red'
-        || parseVersion(entry.version) === null
-        || typeof entry.candidateDigest !== 'string'
-        || !/^sha256:[0-9a-f]{64}$/u.test(entry.candidateDigest)
-        || !Number.isSafeInteger(entry.certificationRevision)
-        || entry.certificationRevision < 1
-        || entry.source === null
-        || typeof entry.source !== 'object'
-        || Array.isArray(entry.source)
-      ) throw new Error(`${streamId}: malformed candidate assessment`);
+        entry?.state !== 'red' ||
+        parseVersion(entry.version) === null ||
+        typeof entry.candidateDigest !== 'string' ||
+        !/^sha256:[0-9a-f]{64}$/u.test(entry.candidateDigest) ||
+        !Number.isSafeInteger(entry.certificationRevision) ||
+        entry.certificationRevision < 1 ||
+        entry.source === null ||
+        typeof entry.source !== 'object' ||
+        Array.isArray(entry.source)
+      )
+        throw new Error(`${streamId}: malformed candidate assessment`);
       if (versions.has(entry.version)) throw new Error(`${streamId}: duplicate candidate assessment for ${entry.version}`);
       versions.add(entry.version);
     }
@@ -45,7 +46,11 @@ export function validateCandidateAssessments(document, streamIds) {
 function sortValue(value) {
   if (Array.isArray(value)) return value.map(sortValue);
   if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, sortValue(v)]));
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, sortValue(v)]),
+    );
   }
   return value;
 }
@@ -63,18 +68,20 @@ function matchesCatalogSource(catalogSource, storedSource) {
     return Object.is(catalogSource, storedSource);
   }
   if (Array.isArray(catalogSource)) {
-    return Array.isArray(storedSource)
-      && catalogSource.length === storedSource.length
-      && catalogSource.every((value, index) => matchesCatalogSource(value, storedSource[index]));
+    return Array.isArray(storedSource) && catalogSource.length === storedSource.length && catalogSource.every((value, index) => matchesCatalogSource(value, storedSource[index]));
   }
-  return !Array.isArray(storedSource)
-    && Object.entries(catalogSource).every(([key, value]) => matchesCatalogSource(value, storedSource[key]));
+  return !Array.isArray(storedSource) && Object.entries(catalogSource).every(([key, value]) => matchesCatalogSource(value, storedSource[key]));
 }
 
 export function parseVersion(value) {
   const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u.exec(value);
   if (match === null) return null;
-  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: match[4] ?? null };
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4] ?? null,
+  };
 }
 
 export function compareVersions(left, right) {
@@ -103,20 +110,30 @@ function validateSource(entry, stream) {
     if (typeof entry.source?.shasum !== 'string' || !SHA1.test(entry.source.shasum)) throw new Error(`${stream.id}@${entry.version}: missing npm shasum`);
     if (typeof entry.source?.tarballSha256 !== 'string' || !SHA256.test(entry.source.tarballSha256)) throw new Error(`${stream.id}@${entry.version}: missing npm tarball sha256`);
     if (stream.monitorDependencyClosure === true) {
-      if (entry.source?.closureComplete !== true || !Array.isArray(entry.source?.dependencyRoots) || !Array.isArray(entry.source?.dependencyClosure)) throw new Error(`${stream.id}@${entry.version}: npm dependency closure is incomplete`);
-      if (typeof entry.source?.closureDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(entry.source.closureDigest)) throw new Error(`${stream.id}@${entry.version}: npm dependency closure has no digest`);
-      if (entry.source.closureDigest !== digest({ dependencyRoots: entry.source.dependencyRoots, dependencyClosure: entry.source.dependencyClosure })) throw new Error(`${stream.id}@${entry.version}: npm dependency closure digest does not match the graph`);
+      if (entry.source?.closureComplete !== true || !Array.isArray(entry.source?.dependencyRoots) || !Array.isArray(entry.source?.dependencyClosure))
+        throw new Error(`${stream.id}@${entry.version}: npm dependency closure is incomplete`);
+      if (typeof entry.source?.closureDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(entry.source.closureDigest))
+        throw new Error(`${stream.id}@${entry.version}: npm dependency closure has no digest`);
+      if (
+        entry.source.closureDigest !==
+        digest({
+          dependencyRoots: entry.source.dependencyRoots,
+          dependencyClosure: entry.source.dependencyClosure,
+        })
+      )
+        throw new Error(`${stream.id}@${entry.version}: npm dependency closure digest does not match the graph`);
     }
     for (const dependency of entry.source?.dependencyClosure ?? []) {
       if (
-        typeof dependency.name !== 'string'
-        || parseVersion(dependency.version) === null
-        || typeof dependency.integrity !== 'string'
-        || !dependency.integrity.startsWith('sha512-')
-        || typeof dependency.tarball !== 'string'
-        || typeof dependency.tarballSha256 !== 'string'
-        || !SHA256.test(dependency.tarballSha256)
-      ) throw new Error(`${stream.id}@${entry.version}: dependency closure is not fully checksum-bound`);
+        typeof dependency.name !== 'string' ||
+        parseVersion(dependency.version) === null ||
+        typeof dependency.integrity !== 'string' ||
+        !dependency.integrity.startsWith('sha512-') ||
+        typeof dependency.tarball !== 'string' ||
+        typeof dependency.tarballSha256 !== 'string' ||
+        !SHA256.test(dependency.tarballSha256)
+      )
+        throw new Error(`${stream.id}@${entry.version}: dependency closure is not fully checksum-bound`);
     }
     if (stream.monitorDependencyClosure === true) {
       const nodes = new Set();
@@ -128,18 +145,20 @@ function validateSource(entry, stream) {
       }
       for (const edge of [...entry.source.dependencyRoots, ...entry.source.dependencyClosure.flatMap((dependency) => dependency.dependencies)]) {
         if (
-          typeof edge.name !== 'string'
-          || typeof edge.requested !== 'string'
-          || !['dependency', 'optional', 'peer'].includes(edge.type)
-          || typeof edge.packageName !== 'string'
-          || parseVersion(edge.version) === null
-          || !nodes.has(`${edge.packageName}@${edge.version}`)
-        ) throw new Error(`${stream.id}@${entry.version}: npm closure contains an unresolved edge`);
+          typeof edge.name !== 'string' ||
+          typeof edge.requested !== 'string' ||
+          !['dependency', 'optional', 'peer'].includes(edge.type) ||
+          typeof edge.packageName !== 'string' ||
+          parseVersion(edge.version) === null ||
+          !nodes.has(`${edge.packageName}@${edge.version}`)
+        )
+          throw new Error(`${stream.id}@${entry.version}: npm closure contains an unresolved edge`);
       }
     }
   } else if (stream.registry === 'pypi') {
     if (typeof entry.source?.sha256 !== 'string' || !SHA256.test(entry.source.sha256)) throw new Error(`${stream.id}@${entry.version}: missing PyPI file sha256`);
-    if (!Array.isArray(entry.source?.files) || entry.source.files.length === 0 || entry.source.files.some((file) => typeof file.sha256 !== 'string' || !SHA256.test(file.sha256))) throw new Error(`${stream.id}@${entry.version}: incomplete PyPI file hashes`);
+    if (!Array.isArray(entry.source?.files) || entry.source.files.length === 0 || entry.source.files.some((file) => typeof file.sha256 !== 'string' || !SHA256.test(file.sha256)))
+      throw new Error(`${stream.id}@${entry.version}: incomplete PyPI file hashes`);
   } else if (typeof entry.source?.checksum !== 'string' || !SHA256.test(entry.source.checksum)) {
     throw new Error(`${stream.id}@${entry.version}: missing crates.io checksum`);
   }
@@ -147,18 +166,28 @@ function validateSource(entry, stream) {
 
 export async function selectCandidates({ rootDir = root, config, ledger, assessments = { schemaVersion: 1, streams: {} }, catalogs, maximum = config.maxCandidatesPerRun, sourceResolver, streamId }) {
   if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 32) throw new Error('maximum must be between 1 and 32');
-  validateCandidateAssessments(assessments, config.streams.map((stream) => stream.id));
+  validateCandidateAssessments(
+    assessments,
+    config.streams.map((stream) => stream.id),
+  );
   if (streamId !== undefined && !config.streams.some((stream) => stream.id === streamId)) {
     throw new Error(`unknown candidate stream ${streamId}`);
   }
   const pending = [];
   const selectedStreams = config.streams.filter((stream) => streamId === undefined || stream.id === streamId);
   for (const stream of [...selectedStreams].sort((a, b) => a.id.localeCompare(b.id))) {
+    const integrationMode = stream.mode ?? 'patch';
     if (!Number.isSafeInteger(stream.certificationRevision) || stream.certificationRevision < 1) {
       throw new Error(`${stream.id}: certificationRevision must be a positive integer`);
     }
-    if (stream.mode === 'hook' && !['exact-source', 'runtime'].includes(stream.hookStrategy)) {
+    if (integrationMode === 'hook' && !['exact-source', 'runtime'].includes(stream.hookStrategy)) {
       throw new Error(`${stream.id}: hook mode requires an explicit exact-source or runtime strategy`);
+    }
+    if (integrationMode === 'capability' && (stream.capabilityStrategy !== 'compile-conformance' || typeof stream.capability !== 'string' || !/^[a-z][a-z0-9-]*$/u.test(stream.capability))) {
+      throw new Error(`${stream.id}: capability mode requires a normalized capability and compile-conformance strategy`);
+    }
+    if (!['patch', 'hook', 'capability'].includes(integrationMode)) {
+      throw new Error(`${stream.id}: unsupported candidate integration mode ${String(integrationMode)}`);
     }
     const seen = new Map((ledger.streams?.[stream.id] ?? []).map((entry) => [entry.version, entry]));
     const assessed = new Map((assessments.streams[stream.id] ?? []).map((entry) => [entry.version, entry]));
@@ -196,10 +225,19 @@ export async function selectCandidates({ rootDir = root, config, ledger, assessm
         }
       }
       if (!Number.isFinite(Date.parse(entry.publishedAt))) throw new Error(`${stream.id}@${entry.version}: invalid publishedAt`);
-      const patchMode = stream.mode !== 'hook';
+      const patchMode = integrationMode === 'patch';
       const manifestPath = patchMode ? join(rootDir, stream.patchRoot, entry.version, 'manifest.json') : null;
-      const ready = patchMode && await access(manifestPath).then(() => true, () => false);
-      const manifestDigest = ready ? `sha256:${createHash('sha256').update(await readFile(manifestPath)).digest('hex')}` : null;
+      const ready =
+        patchMode &&
+        (await access(manifestPath).then(
+          () => true,
+          () => false,
+        ));
+      const manifestDigest = ready
+        ? `sha256:${createHash('sha256')
+            .update(await readFile(manifestPath))
+            .digest('hex')}`
+        : null;
       const candidate = {
         id: `${stream.id}@${entry.version}`,
         streamId: stream.id,
@@ -212,17 +250,33 @@ export async function selectCandidates({ rootDir = root, config, ledger, assessm
         publishedAt: entry.publishedAt,
         source: resolvedSource,
         monitorDependencyClosure: stream.registry === 'npm' && stream.monitorDependencyClosure === true,
-        mode: patchMode ? 'patch' : 'hook',
-        ...(patchMode ? {} : { hookStrategy: stream.hookStrategy }),
+        mode: integrationMode,
+        ...(integrationMode === 'hook' ? { hookStrategy: stream.hookStrategy } : {}),
+        ...(integrationMode === 'capability'
+          ? {
+              capability: stream.capability,
+              capabilityStrategy: stream.capabilityStrategy,
+            }
+          : {}),
         patch: patchMode
-          ? { status: ready ? 'ready' : 'needs-patch', path: `${stream.patchRoot}/${entry.version}/manifest.json`, manifestDigest }
+          ? {
+              status: ready ? 'ready' : 'needs-patch',
+              path: `${stream.patchRoot}/${entry.version}/manifest.json`,
+              manifestDigest,
+            }
           : { status: 'not-applicable', path: null, manifestDigest: null },
       };
       if (assessment !== undefined && assessment.candidateDigest === digest(candidate)) continue;
-      pending.push({ candidate, stream, sourceResolved, reuseSource: assessment?.source });
+      pending.push({
+        candidate,
+        stream,
+        sourceResolved,
+        reuseSource: assessment?.source,
+      });
     }
   }
-  const comparePending = (a, b) => Date.parse(a.candidate.publishedAt) - Date.parse(b.candidate.publishedAt) || a.candidate.streamId.localeCompare(b.candidate.streamId) || compareVersions(a.candidate.version, b.candidate.version);
+  const comparePending = (a, b) =>
+    Date.parse(a.candidate.publishedAt) - Date.parse(b.candidate.publishedAt) || a.candidate.streamId.localeCompare(b.candidate.streamId) || compareVersions(a.candidate.version, b.candidate.version);
   pending.sort(comparePending);
   // A permanently red stream must not consume the whole bounded batch forever.
   // Preserve oldest-first order inside each stream, but take one candidate from
@@ -334,10 +388,12 @@ async function resolveSource(stream, version, source, recordedSource) {
     sum: downloaded.Sum,
     goModSum: downloaded.GoModSum,
     zipSha256: createHash('sha256').update(zip).digest('hex'),
-    ...(downloaded.RequiredGoVersion === undefined ? {} : {
-      requiredGoVersion: downloaded.RequiredGoVersion,
-      toolchainSupported: false,
-    }),
+    ...(downloaded.RequiredGoVersion === undefined
+      ? {}
+      : {
+          requiredGoVersion: downloaded.RequiredGoVersion,
+          toolchainSupported: false,
+        }),
   };
 }
 
@@ -386,21 +442,32 @@ export async function pypiCatalog(stream, fetchImpl = fetch) {
   if (!response.ok) throw new Error(`${stream.id}: PyPI failed with ${response.status}`);
   const body = await response.json();
   return Object.entries(body.releases ?? {}).flatMap(([version, releaseFiles]) => {
-    const usable = [...releaseFiles].filter((file) => file.yanked !== true && typeof file.url === 'string' && typeof file.digests?.sha256 === 'string')
+    const usable = [...releaseFiles]
+      .filter((file) => file.yanked !== true && typeof file.url === 'string' && typeof file.digests?.sha256 === 'string')
       .sort((a, b) => Number(b.packagetype === 'sdist') - Number(a.packagetype === 'sdist') || a.filename.localeCompare(b.filename));
     if (usable.length === 0) return [];
-    return [{
-      version,
-      publishedAt: usable.map((file) => file.upload_time_iso_8601).filter(Boolean).sort()[0],
-      source: {
-        registry: 'https://pypi.org',
-        url: usable[0].url,
-        filename: usable[0].filename,
-        packagetype: usable[0].packagetype,
-        sha256: usable[0].digests.sha256,
-        files: usable.map((file) => ({ filename: file.filename, packagetype: file.packagetype, sha256: file.digests.sha256, url: file.url })),
+    return [
+      {
+        version,
+        publishedAt: usable
+          .map((file) => file.upload_time_iso_8601)
+          .filter(Boolean)
+          .sort()[0],
+        source: {
+          registry: 'https://pypi.org',
+          url: usable[0].url,
+          filename: usable[0].filename,
+          packagetype: usable[0].packagetype,
+          sha256: usable[0].digests.sha256,
+          files: usable.map((file) => ({
+            filename: file.filename,
+            packagetype: file.packagetype,
+            sha256: file.digests.sha256,
+            url: file.url,
+          })),
+        },
       },
-    }];
+    ];
   });
 }
 
@@ -416,7 +483,9 @@ async function verifiedDownload(url, expected, algorithm, fetchImpl = fetch, cac
     cache?.set(key, promise);
   }
   const bytes = await promise;
-  const actual = createHash(algorithm).update(bytes).digest(algorithm === 'sha512' ? 'base64' : 'hex');
+  const actual = createHash(algorithm)
+    .update(bytes)
+    .digest(algorithm === 'sha512' ? 'base64' : 'hex');
   if (actual !== expected) throw new Error(`${url}: ${algorithm} did not match registry metadata`);
   return bytes;
 }
@@ -548,7 +617,12 @@ function dependencyDeclarations(metadata) {
     for (const [name, requested] of Object.entries(values)) {
       // npm's optionalDependencies entries override same-name dependencies.
       if (type === 'dependency' && Object.hasOwn(metadata.optionalDependencies ?? {}, name)) continue;
-      declarations.set(`${type}\0${name}`, { name, requested, type, optionalPeer: type === 'peer' && metadata.peerDependenciesMeta?.[name]?.optional === true });
+      declarations.set(`${type}\0${name}`, {
+        name,
+        requested,
+        type,
+        optionalPeer: type === 'peer' && metadata.peerDependenciesMeta?.[name]?.optional === true,
+      });
     }
   }
   return [...declarations.values()].sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type) || String(a.requested).localeCompare(String(b.requested)));
@@ -562,17 +636,23 @@ function parseNpmAlias(declaredName, requested) {
   return { packageName: match[1], range: match[2] };
 }
 
-export async function resolveNpmDependencyClosure(source, { fetchImpl = fetch, packuments = fetchImpl === fetch ? liveNpmPackuments : new Map(), artifacts = fetchImpl === fetch ? liveNpmArtifacts : new Map(), reuseClosure = [] } = {}) {
+export async function resolveNpmDependencyClosure(
+  source,
+  { fetchImpl = fetch, packuments = fetchImpl === fetch ? liveNpmPackuments : new Map(), artifacts = fetchImpl === fetch ? liveNpmArtifacts : new Map(), reuseClosure = [] } = {},
+) {
   const reusable = new Map((reuseClosure ?? []).map((node) => [`${node.name}@${node.version}`, node]));
   const nodes = new Map();
   const resolving = new Map();
   const getPackument = async (name) => {
     if (!packuments.has(name)) {
-      packuments.set(name, (async () => {
-        const response = await fetchImpl(npmPackageUrl(name));
-        if (!response.ok) throw new Error(`npm dependency ${name}: registry metadata failed with ${response.status}`);
-        return response.json();
-      })());
+      packuments.set(
+        name,
+        (async () => {
+          const response = await fetchImpl(npmPackageUrl(name));
+          if (!response.ok) throw new Error(`npm dependency ${name}: registry metadata failed with ${response.status}`);
+          return response.json();
+        })(),
+      );
     }
     return packuments.get(name);
   };
@@ -581,69 +661,107 @@ export async function resolveNpmDependencyClosure(source, { fetchImpl = fetch, p
     const packument = await getPackument(packageName);
     let version = packument['dist-tags']?.[range];
     if (version === undefined) {
-      const matches = Object.keys(packument.versions ?? {}).filter((candidate) => satisfiesNpmRange(candidate, range)).sort(compareNpmVersions);
+      const matches = Object.keys(packument.versions ?? {})
+        .filter((candidate) => satisfiesNpmRange(candidate, range))
+        .sort(compareNpmVersions);
       version = matches.at(-1);
     }
     if (version === undefined || packument.versions?.[version] === undefined) throw new Error(`npm dependency ${declaration.name}@${range}: no exact registry version satisfies the selector`);
     const key = `${packageName}@${version}`;
     if (nodes.has(key)) return nodes.get(key);
     if (!resolving.has(key)) {
-      resolving.set(key, (async () => {
-        const metadata = packument.versions[version];
-        if (metadata.name !== undefined && metadata.name !== packageName) throw new Error(`${key}: registry metadata returned another package name`);
-        const integrity = metadata.dist?.integrity;
-        const tarball = metadata.dist?.tarball;
-        if (typeof integrity !== 'string' || !integrity.startsWith('sha512-') || typeof tarball !== 'string') throw new Error(`${key}: dependency lacks sha512 integrity or tarball URL`);
-        const prior = reusable.get(key);
-        const canReuse = prior?.integrity === integrity
-          && prior?.tarball === tarball
-          && prior?.shasum === metadata.dist?.shasum
-          && typeof prior?.tarballSha256 === 'string'
-          && SHA256.test(prior.tarballSha256);
-        const bytes = canReuse ? null : await verifiedDownload(tarball, integrity.slice('sha512-'.length), 'sha512', fetchImpl, artifacts);
-        if (bytes !== null && typeof metadata.dist?.shasum === 'string' && createHash('sha1').update(bytes).digest('hex') !== metadata.dist.shasum) throw new Error(`${key}: dependency shasum does not match tarball`);
-        const node = {
-          name: packageName,
-          version,
-          integrity,
-          tarball,
-          tarballSha256: canReuse ? prior.tarballSha256 : createHash('sha256').update(bytes).digest('hex'),
-          ...(typeof metadata.dist?.shasum === 'string' ? { shasum: metadata.dist.shasum } : {}),
-          platform: { os: [...(metadata.os ?? [])].sort(), cpu: [...(metadata.cpu ?? [])].sort(), libc: [...(metadata.libc ?? [])].sort() },
-          dependencies: [],
-        };
-        nodes.set(key, node);
-        for (const child of dependencyDeclarations(metadata)) {
-          const resolved = await resolveDeclaration(child);
-          node.dependencies.push({ ...child, packageName: resolved.name, version: resolved.version });
-        }
-        node.dependencies.sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type) || a.packageName.localeCompare(b.packageName) || compareNpmVersions(a.version, b.version));
-        return node;
-      })());
+      resolving.set(
+        key,
+        (async () => {
+          const metadata = packument.versions[version];
+          if (metadata.name !== undefined && metadata.name !== packageName) throw new Error(`${key}: registry metadata returned another package name`);
+          const integrity = metadata.dist?.integrity;
+          const tarball = metadata.dist?.tarball;
+          if (typeof integrity !== 'string' || !integrity.startsWith('sha512-') || typeof tarball !== 'string') throw new Error(`${key}: dependency lacks sha512 integrity or tarball URL`);
+          const prior = reusable.get(key);
+          const canReuse =
+            prior?.integrity === integrity && prior?.tarball === tarball && prior?.shasum === metadata.dist?.shasum && typeof prior?.tarballSha256 === 'string' && SHA256.test(prior.tarballSha256);
+          const bytes = canReuse ? null : await verifiedDownload(tarball, integrity.slice('sha512-'.length), 'sha512', fetchImpl, artifacts);
+          if (bytes !== null && typeof metadata.dist?.shasum === 'string' && createHash('sha1').update(bytes).digest('hex') !== metadata.dist.shasum)
+            throw new Error(`${key}: dependency shasum does not match tarball`);
+          const node = {
+            name: packageName,
+            version,
+            integrity,
+            tarball,
+            tarballSha256: canReuse ? prior.tarballSha256 : createHash('sha256').update(bytes).digest('hex'),
+            ...(typeof metadata.dist?.shasum === 'string' ? { shasum: metadata.dist.shasum } : {}),
+            platform: {
+              os: [...(metadata.os ?? [])].sort(),
+              cpu: [...(metadata.cpu ?? [])].sort(),
+              libc: [...(metadata.libc ?? [])].sort(),
+            },
+            dependencies: [],
+          };
+          nodes.set(key, node);
+          for (const child of dependencyDeclarations(metadata)) {
+            const resolved = await resolveDeclaration(child);
+            node.dependencies.push({
+              ...child,
+              packageName: resolved.name,
+              version: resolved.version,
+            });
+          }
+          node.dependencies.sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type) || a.packageName.localeCompare(b.packageName) || compareNpmVersions(a.version, b.version));
+          return node;
+        })(),
+      );
     }
     return resolving.get(key);
   };
   const roots = [];
   for (const declaration of dependencyDeclarations(source)) {
     const resolved = await resolveDeclaration(declaration);
-    roots.push({ ...declaration, packageName: resolved.name, version: resolved.version });
+    roots.push({
+      ...declaration,
+      packageName: resolved.name,
+      version: resolved.version,
+    });
   }
   roots.sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type) || a.packageName.localeCompare(b.packageName) || compareNpmVersions(a.version, b.version));
   await Promise.all(resolving.values());
   const dependencyClosure = [...nodes.values()].sort((a, b) => a.name.localeCompare(b.name) || compareNpmVersions(a.version, b.version));
-  return { dependencyRoots: roots, dependencyClosure, closureDigest: digest({ dependencyRoots: roots, dependencyClosure }), closureComplete: true };
+  return {
+    dependencyRoots: roots,
+    dependencyClosure,
+    closureDigest: digest({ dependencyRoots: roots, dependencyClosure }),
+    closureComplete: true,
+  };
 }
 
 export async function resolveNpmSource(stream, source, { fetchImpl = fetch, reuseSource } = {}) {
   if (typeof source.tarball !== 'string' || typeof source.integrity !== 'string' || typeof source.shasum !== 'string') throw new Error(`${stream.id}: npm release lacks dist evidence`);
   const [algorithm, expectedIntegrity] = source.integrity.split('-', 2);
   if (algorithm !== 'sha512' || expectedIntegrity === undefined) throw new Error(`${stream.id}: npm release does not publish sha512 integrity`);
-  const canReuseRoot = reuseSource?.tarball === source.tarball && reuseSource?.integrity === source.integrity && reuseSource?.shasum === source.shasum && typeof reuseSource?.tarballSha256 === 'string' && SHA256.test(reuseSource.tarballSha256);
+  const canReuseRoot =
+    reuseSource?.tarball === source.tarball &&
+    reuseSource?.integrity === source.integrity &&
+    reuseSource?.shasum === source.shasum &&
+    typeof reuseSource?.tarballSha256 === 'string' &&
+    SHA256.test(reuseSource.tarballSha256);
   const bytes = canReuseRoot ? null : await downloadVerifiedNpmTarball(source, fetchImpl);
-  const closure = stream.monitorDependencyClosure === true
-    ? await resolveNpmDependencyClosure(source, { fetchImpl, reuseClosure: reuseSource?.dependencyClosure })
-    : { dependencyRoots: [], dependencyClosure: [], closureDigest: digest({ dependencyRoots: [], dependencyClosure: [] }), closureComplete: true };
-  return { ...source, tarballSha256: canReuseRoot ? reuseSource.tarballSha256 : createHash('sha256').update(bytes).digest('hex'), ...closure };
+  const closure =
+    stream.monitorDependencyClosure === true
+      ? await resolveNpmDependencyClosure(source, {
+          fetchImpl,
+          reuseClosure: reuseSource?.dependencyClosure,
+        })
+      : {
+          dependencyRoots: [],
+          dependencyClosure: [],
+          closureDigest: digest({ dependencyRoots: [], dependencyClosure: [] }),
+          closureComplete: true,
+        };
+  return {
+    ...source,
+    tarballSha256: canReuseRoot ? reuseSource.tarballSha256 : createHash('sha256').update(bytes).digest('hex'),
+    ...closure,
+  };
 }
 
 async function resolvePypiSource(stream, source) {
@@ -685,12 +803,23 @@ async function main(argv) {
   const assessments = JSON.parse(await readFile(assessmentsPath, 'utf8'));
   ledger.streams ??= {};
   const catalogs = catalogPath === undefined ? await liveCatalogs(config) : JSON.parse(await readFile(catalogPath, 'utf8')).streams;
-  const registry = await selectCandidates({ config, ledger, assessments, catalogs, maximum, streamId, ...(catalogPath === undefined ? { sourceResolver: resolveSource } : {}) });
+  const registry = await selectCandidates({
+    config,
+    ledger,
+    assessments,
+    catalogs,
+    maximum,
+    streamId,
+    ...(catalogPath === undefined ? { sourceResolver: resolveSource } : {}),
+  });
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, canonicalJson(registry));
   process.stdout.write(`${registry.candidates.length} selected, ${registry.backlog} queued\n`);
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main(process.argv.slice(2)).catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
+  main(process.argv.slice(2)).catch((error) => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
 }

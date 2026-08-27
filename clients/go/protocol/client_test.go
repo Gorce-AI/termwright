@@ -259,7 +259,7 @@ func TestHandshakeAndPublish(t *testing.T) {
 	if !ok {
 		t.Fatalf("raw hello carried no probe block: %#v", hello)
 	}
-	if probe["framework"] != "tview" || probe["frameworkVersion"] != "v0.42.0" {
+	if probe["framework"] != "example-go-tui" || probe["frameworkVersion"] != "v1.2.3" {
 		t.Errorf("raw hello carried the wrong framework identity: %#v", probe)
 	}
 	if probe["identityKind"] != "stable" {

@@ -63,6 +63,18 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
     options.channel.close();
   };
 
+  const stop = (): void => {
+    if (stopped) return;
+    stopped = true;
+    const failure = new Error('Ink probe stopped');
+    for (const waiter of publicationWaiters.splice(0)) waiter.reject(failure);
+    // A normal application exit or explicit cleanup is not a semantic
+    // guarantee violation. Keep the typed failure callback exclusively for
+    // capture/publication/marker faults, while graceful teardown simply
+    // closes the producer after rejecting its owned causal waiters.
+    options.channel.close();
+  };
+
   const resolvePublications = (frame: number, publishedRevision: number): void => {
     for (let index = publicationWaiters.length - 1; index >= 0; index -= 1) {
       const waiter = publicationWaiters[index];
@@ -172,7 +184,7 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
       }
     },
     async flush() { await queue.catch(() => undefined); },
-    stop() { fail(new Error('Ink probe stopped')); },
+    stop,
   };
 }
 

@@ -279,6 +279,9 @@ impl Client {
     /// side-channel must not take the application down: callers are expected
     /// to carry on rendering.
     pub fn connect(&mut self, timeout: Duration) -> Result<(), Error> {
+        if let Some(probe) = self.options.probe.as_ref() {
+            probe.validate()?;
+        }
         self.debug_line(
             Category::Sem,
             &format!(
@@ -655,7 +658,7 @@ impl Client {
         self.write_frame(&frame)
     }
 
-    fn write_frame(&mut self, frame: &[u8]) -> Result<(), Error> {
+    pub(crate) fn write_frame(&mut self, frame: &[u8]) -> Result<(), Error> {
         let Some(stream) = self.stream.as_mut() else {
             return Ok(());
         };
@@ -680,6 +683,37 @@ impl Client {
                 Err(Error::Io(error))
             }
         }
+    }
+
+    pub(crate) fn accept_queued_publication(&mut self, revision: i64, snapshot_sent: bool) {
+        self.revision = revision;
+        if snapshot_sent {
+            self.snapshots_sent += 1;
+        }
+    }
+
+    pub(crate) fn take_evidence_lease(&mut self) -> Option<EvidenceProviderLease> {
+        self.evidence_lease.take()
+    }
+
+    pub(crate) fn publication_config(&self) -> Option<(String, String, Limits, String, bool, i64)> {
+        Some((
+            self.token.clone(),
+            self.session_id.clone()?,
+            self.limits,
+            self.subscribe.clone(),
+            self.marker_enabled,
+            self.revision,
+        ))
+    }
+
+    #[cfg(all(test, unix))]
+    pub(crate) fn test_connected(stream: TransportStream) -> Self {
+        let mut client = Self::new("unused", "test-token", Options::new("queue-test", "1"));
+        client.stream = Some(stream);
+        client.session_id = Some("test-session".into());
+        client.marker_enabled = true;
+        client
     }
 }
 

@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
+	github.com/gorce-ai/termwright/clients/go v0.0.0
 	github.com/rivo/tview v0.42.0
 )
 

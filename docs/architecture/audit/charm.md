@@ -2,8 +2,10 @@
 
 > **Historical Phase 0 evidence.** The pinned-source measurements below are
 > retained as design evidence. Any current support or setup guidance is
-> superseded by the website Bubble Tea adapter guide and compatibility
-> reference.
+> superseded by the semantic probe injection doctrine, the website Bubble Tea
+> adapter guide and compatibility reference. In particular, the historical
+> OSC 8 recommendation below was rejected after platform and ownership
+> conformance; it is not an implementation plan.
 
 Phase 0 of the zero-config campaign. Where a frame is submitted, what state the
 components hold before that frame flattens them into one string, and whether
@@ -290,10 +292,23 @@ byte↔column mapping.
 
 ### Recommendation
 
-Option **(c)**, and it splits by major. For **v2**, ride the layer compositor
-where the app uses layers, and carry fragment ids in `uv.Cell.Link.Params` for
-everything else: the metadata then survives exactly the operations that destroy
-a string-offset table. For **v1**, and for v2 apps that compose purely with
+This was the Phase 0 recommendation, not the final design. Later conformance
+rejected the `uv.Cell.Link.Params` carrier: it is application-owned OSC 8
+hyperlink state, collides with real links, and leaves the process through a
+host-dependent terminal path. Semantic provenance must instead travel over the
+authenticated probe socket.
+
+The v2 compositor remains useful evidence but not a complete T1 seam. Its
+rectangle index is owned by an internal compositor instance and Bubble Tea's
+public model boundary retains only flattened `View.Content`; the zero-config
+probe has no stable reachable compositor handle at the causal publication
+boundary. An add-only compilation unit can read a reachable field, but cannot
+intercept the transient local/control flow that creates this mapping. Therefore
+the current v2 integration honestly remains class B and the Bubble Tea render
+boundary remains a narrow exact T3 hook. A future public reachable compositor
+handle would trigger a differential T1 spike, not an OSC transport fallback.
+
+For **v1**, and for v2 apps that compose purely with
 `JoinHorizontal`/`Place`, no mechanism preserves the mapping — option (b) as a
 per-line hash is the ceiling, and even that loses to truncation and wrapping.
 
@@ -301,22 +316,15 @@ That ceiling is not a defeat, because the spec already prescribes the honest
 degradation: **component known, fragment known, final position unknown.** The
 Bubbles audit above shows the first two are cheap — role, name, value and state
 are plain fields read before `View()` — while only the third depends on Lip
-Gloss cooperating. A v1 probe should publish the tree without bounds and
-declare it, exactly as the protocol allows a class-B adapter to do; a v2 probe
-can claim `absolute-bounds` where the compositor or the link channel provides
-them.
+Gloss cooperating. A v1 probe publishes the tree without bounds and declares
+it, exactly as the protocol allows a class-B adapter to do; v2 does the same
+until an in-process reachable compositor contract proves full coverage.
 
-## Open questions for Phase 1
+## Phase 1 decision record
 
-- Which major to target first. v2 is where provenance is achievable, but v1 is
-  what most projects still import; the probe must detect the major from the
-  module path (`charm.land/…` vs `github.com/charmbracelet/…`) and select a
-  different strategy, not a different parameter.
-- Whether hijacking `uv.Cell.Link` collides with an application's real
-  hyperlinks. `Params` is a free-form string, so a namespaced key is possible,
-  but an app that sets its own OSC 8 links on the same cells would overwrite it —
-  needs a decision on precedence and a conformance case.
-- Where the fragment id is minted. `Style.Render` has no notion of the component
-  calling it; the id has to come from the Bubbles wrapper (which knows it is, say,
-  the filter input of list #3), which means the two probes are coupled and cannot
-  ship independently.
+- Both majors are supported as distinct module profiles. Detection uses the
+  actual module path (`charm.land/…` vs `github.com/charmbracelet/…`) and never
+  derives one from the other.
+- OSC 8 is closed as a provenance option. Fragment identity must be minted and
+  delivered in-process; Bubbles and Lip Gloss must remain independently
+  certifiable.

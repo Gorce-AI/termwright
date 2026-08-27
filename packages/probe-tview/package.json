@@ -1,7 +1,7 @@
 {
   "name": "@termwright/probe-tview",
   "version": "0.2.0",
-  "description": "zero-config tview probe: an ephemeral Go workspace redirects the build to an instrumented copy, with no change to the project",
+  "description": "composable tview probe: one public Attach call plus add-only Go compiler injection, with no upstream mutation",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -20,7 +20,7 @@
   },
   "files": [
     "dist",
-    "upstream-patches"
+    "assets"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",

@@ -781,7 +781,13 @@ describe.skipIf(!ptyAvailable())(
     /** Launches a program that prints one box-drawing character. */
     async function printBoxChar(profile?: string): Promise<TerminalHarness> {
       const terminal = await launchTerminal({
-        command: [process.execPath, "-e", 'process.stdout.write("\u2502x")'],
+        command: [
+          process.execPath,
+          "-e",
+          // This suite measures width profiles, not exit/output-drain ordering.
+          // Keep the producer alive after its write callback until teardown.
+          'process.stdout.write("\u2502x", () => process.stdin.resume())',
+        ],
         columns: 20,
         rows: 4,
         ...(profile !== undefined ? { terminalProfile: profile } : {}),
@@ -2067,6 +2073,50 @@ describe.skipIf(!ptyAvailable())(
           .some((entry) => entry.code === "marker-unverified"),
         account,
       ).toBe(false);
+    });
+
+    it("rejects a forged marker after the real PTY transport without publishing its revision", async () => {
+      const terminal = await launch("semantic-app.mjs", {
+        semanticNegotiationMs: 5_000,
+        env: { TERMWRIGHT_FIXTURE_FORGED_MARKER: "1" },
+      });
+
+      const diagnostic = (code: SessionDiagnostic["code"]): Promise<SessionDiagnostic> => {
+        const existing = terminal.diagnostics().find((entry) => entry.code === code);
+        if (existing !== undefined) return Promise.resolve(existing);
+        return new Promise((resolve) => {
+          const off = terminal.events.on("diagnostic", (entry) => {
+            if (entry.code !== code) return;
+            off();
+            resolve(entry);
+          });
+          // Close the check/subscribe gap using the bounded diagnostic log.
+          const raced = terminal.diagnostics().find((entry) => entry.code === code);
+          if (raced !== undefined) {
+            off();
+            resolve(raced);
+          }
+        });
+      };
+      const socketCommit = diagnostic("revision-commit");
+      const rejectedMarker = diagnostic("marker-unverified");
+
+      // This receipt follows the forged OSC in the same ordered PTY write.
+      // Seeing it proves the emulator has already dispatched the marker; no
+      // timeout, quiet window or retry is used as evidence.
+      const [, commit, unverified] = await Promise.all([
+        terminal.waitForText("FORGED 1"),
+        socketCommit,
+        rejectedMarker,
+      ]);
+
+      expect(commit.revision).toBe(1);
+      // The untrusted payload must not be allowed to populate typed revision
+      // metadata; only the independently authenticated socket commit can.
+      expect(unverified.revision).toBeUndefined();
+      expect(terminal.semanticTree()).toBeNull();
+      expect(terminal.checkpoint().semanticRevision).toBeNull();
+      expect(terminal.checkpoint().pairedScreenRevision).toBeNull();
     });
 
     it("fails strictly on an ambiguous locator with bounded candidates", async () => {

@@ -1,3 +1,4 @@
+import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,37 @@ function processAlive(pid: number): boolean {
     return true;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+const DESKTOP_HOST_LIFECYCLE = 'termwright.desktop-host.lifecycle.v1';
+
+async function expectFailedLaunchReapsSpawnedChild(
+  main: string,
+  launch: () => Promise<unknown>,
+  expected: string | RegExp,
+): Promise<void> {
+  let spawnedPid: number | undefined;
+  const observe = (message: unknown): void => {
+    if (
+      typeof message === 'object' && message !== null &&
+      (message as {type?: unknown}).type === 'spawned' &&
+      (message as {main?: unknown}).main === main &&
+      typeof (message as {pid?: unknown}).pid === 'number'
+    ) {
+      spawnedPid = (message as {pid: number}).pid;
+    }
+  };
+  subscribe(DESKTOP_HOST_LIFECYCLE, observe);
+  try {
+    await expect(launch()).rejects.toThrow(expected);
+    // The lifecycle message is published synchronously from the parent after
+    // spawn returns. No child-side file or scheduling turn is needed to prove
+    // which concrete process startup rollback owned.
+    expect(spawnedPid).toEqual(expect.any(Number));
+    expect(processAlive(spawnedPid as number)).toBe(false);
+  } finally {
+    unsubscribe(DESKTOP_HOST_LIFECYCLE, observe);
   }
 }
 
@@ -73,11 +105,8 @@ describe('desktop host launcher', () => {
   it('uses one readiness deadline across connection and ready phases', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'termwright-desktop-host-'));
     const fake = join(cwd, 'slow-host.mjs');
-    const pidFile = join(cwd, 'pid');
     await writeFile(fake, [
-      "import { writeFileSync } from 'node:fs';",
       "import { connect } from 'node:net';",
-      `writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
       'setTimeout(() => {',
       '  const socket = connect(process.env.TERMWRIGHT_DESKTOP_CONTROL);',
       "  socket.setEncoding('utf8');",
@@ -86,14 +115,12 @@ describe('desktop host launcher', () => {
       'setInterval(() => undefined, 1_000);',
     ].join('\n'));
     try {
-      await expect(launchDesktopHost({
+      await expectFailedLaunchReapsSpawnedChild(fake, () => launchDesktopHost({
         url: 'http://127.0.0.1:4567/?token=private-value',
         executable: process.execPath,
         main: fake,
         readyTimeoutMs: 100,
-      })).rejects.toThrow(/did not become ready|did not connect/u);
-      const pid = Number(await readFile(pidFile, 'utf8'));
-      expect(processAlive(pid)).toBe(false);
+      }), /did not become ready|did not connect/u);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -135,21 +162,16 @@ describe('desktop host launcher', () => {
   it('reaps a child that never connects before rejecting startup', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'termwright-desktop-host-'));
     const fake = join(cwd, 'detached-host.mjs');
-    const pidFile = join(cwd, 'pid');
     await writeFile(fake, [
-      "import { writeFileSync } from 'node:fs';",
-      `writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
       'setInterval(() => undefined, 1_000);',
     ].join('\n'));
     try {
-      await expect(launchDesktopHost({
+      await expectFailedLaunchReapsSpawnedChild(fake, () => launchDesktopHost({
         url: 'http://127.0.0.1:4567/?token=private-value',
         executable: process.execPath,
         main: fake,
         readyTimeoutMs: 100,
-      })).rejects.toThrow('did not connect');
-      const pid = Number(await readFile(pidFile, 'utf8'));
-      expect(processAlive(pid)).toBe(false);
+      }), 'did not connect');
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

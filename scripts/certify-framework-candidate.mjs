@@ -28,24 +28,37 @@ export function candidateExecutableName(platform = certificationPlatform()) {
   return platform === 'windows' ? 'candidate-app.exe' : 'candidate-app';
 }
 
+export function assertRustTestDiscovered(stdout, test, candidateId) {
+  if (!String(stdout).split(/\r?\n/u).includes(`${test}: test`)) {
+    throw new Error(`${candidateId}: certification test ${test} was not discovered by the Rust test harness`);
+  }
+}
+
 async function writeVerdict(path, candidate, state, detail, sourceRevision, executableResolution) {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, canonicalJson({
-    schemaVersion: 1,
-    kind: 'termwright-framework-candidate-verdict',
-    candidateId: candidate.id,
-    candidateDigest: candidate.candidateDigest,
-    sourceRevision,
-    platform: certificationPlatform(),
-    state,
-    detail: String(detail).slice(-12_000),
-    ...(executableResolution === undefined ? {} : { executableResolution }),
-  }));
+  await writeFile(
+    path,
+    canonicalJson({
+      schemaVersion: 1,
+      kind: 'termwright-framework-candidate-verdict',
+      candidateId: candidate.id,
+      candidateDigest: candidate.candidateDigest,
+      sourceRevision,
+      platform: certificationPlatform(),
+      state,
+      detail: String(detail).slice(-12_000),
+      ...(executableResolution === undefined ? {} : { executableResolution }),
+    }),
+  );
 }
 
 async function run(command, args, env = process.env, cwd = root) {
   try {
-    const result = await exec(command, args, { cwd, env, maxBuffer: 64 * 1024 * 1024 });
+    const result = await exec(command, args, {
+      cwd,
+      env,
+      maxBuffer: 64 * 1024 * 1024,
+    });
     process.stdout.write(result.stdout);
     process.stderr.write(result.stderr);
     return result;
@@ -137,11 +150,12 @@ async function packageContentDigest(directory) {
       // and unexpected installed bytes remain part of the digest.
       if (entry.isDirectory() && relative(directory, path).split(sep).join('/') === 'node_modules/.bin') continue;
       if (entry.isDirectory()) await visit(path);
-      else if (entry.isFile()) files.push({
-        path: relative(directory, path).split(sep).join('/'),
-        executableMode: (await stat(path)).mode & 0o111,
-        sha256: `sha256:${sha256(await readFile(path))}`,
-      });
+      else if (entry.isFile())
+        files.push({
+          path: relative(directory, path).split(sep).join('/'),
+          executableMode: (await stat(path)).mode & 0o111,
+          sha256: `sha256:${sha256(await readFile(path))}`,
+        });
       else throw new Error(`installed npm package contains a non-regular entry: ${path}`);
     }
   };
@@ -186,12 +200,13 @@ async function verifyMaterializedBinLaunchers(packageDirectory, expectedNames, c
 
 async function verifiedNpmPackageDigest(source, fetchImpl) {
   if (
-    typeof source?.tarball !== 'string'
-    || typeof source.integrity !== 'string'
-    || !source.integrity.startsWith('sha512-')
-    || typeof source.tarballSha256 !== 'string'
-    || !/^[0-9a-f]{64}$/u.test(source.tarballSha256)
-  ) throw new Error('npm package source is not checksum-bound');
+    typeof source?.tarball !== 'string' ||
+    typeof source.integrity !== 'string' ||
+    !source.integrity.startsWith('sha512-') ||
+    typeof source.tarballSha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/u.test(source.tarballSha256)
+  )
+    throw new Error('npm package source is not checksum-bound');
   const response = await fetchImpl(source.tarball);
   if (!response.ok) throw new Error(`${source.tarball}: artifact download failed with ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
@@ -219,7 +234,7 @@ export async function verifyInstalledNpmClosure(candidate, probeDirectory, { fet
     throw new Error(`${candidate.id}: installed root is ${rootPackage.manifest.version}, expected ${candidate.version}`);
   }
   const rootExpectedDigest = await verifiedNpmPackageDigest(candidate.source, fetchImpl);
-  if (await packageContentDigest(rootPackage.directory) !== rootExpectedDigest) {
+  if ((await packageContentDigest(rootPackage.directory)) !== rootExpectedDigest) {
     throw new Error(`${candidate.id}: installed root content does not match the checksum-verified tarball`);
   }
   const reachableExpected = new Set();
@@ -267,7 +282,7 @@ export async function verifyInstalledNpmClosure(candidate, probeDirectory, { fet
       if (expected === undefined) throw new Error(`${candidate.id}: installed graph contains unbound ${key}`);
       if (!visitedNodes.has(key)) {
         const expectedDigest = await verifiedNpmPackageDigest(expected, fetchImpl);
-        if (await packageContentDigest(child.directory) !== expectedDigest) {
+        if ((await packageContentDigest(child.directory)) !== expectedDigest) {
           throw new Error(`${candidate.id}: installed ${key} content does not match the checksum-verified tarball`);
         }
         visitedNodes.add(key);
@@ -280,17 +295,34 @@ export async function verifyInstalledNpmClosure(candidate, probeDirectory, { fet
     await verifyMaterializedBinLaunchers(parent.directory, expectedBinNames, candidate.id);
   };
   await visit(rootPackage, candidate.source.dependencyRoots);
-  return { package: rootPackage.manifest.name, version: rootPackage.manifest.version, resolvedNodes: visitedNodes.size };
+  return {
+    package: rootPackage.manifest.name,
+    version: rootPackage.manifest.version,
+    resolvedNodes: visitedNodes.size,
+  };
 }
 
 export async function deriveHookInstrumentationProfile(candidate, archiveBytes, sourceRevision) {
   if (candidate.frameworkId !== 'ink' || candidate.hookStrategy !== 'exact-source') throw new Error(`${candidate.id}: no deterministic exact-source hook profile generator`);
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-hook-source-'));
   await safeExtractTarGz(archiveBytes, scratch, { stripComponents: 1 });
-  const binding = { framework: candidate.frameworkId, version: candidate.version, candidateDigest: candidate.candidateDigest, sourceRevision };
+  const binding = {
+    framework: candidate.frameworkId,
+    version: candidate.version,
+    candidateDigest: candidate.candidateDigest,
+    sourceRevision,
+  };
   const renderer = await readFile(join(scratch, 'build/renderer.js'));
   const core = await readFile(join(scratch, 'build/ink.js'));
-  return { ...binding, rendererSha256: sha256(renderer), coreSha256: sha256(core), sources: { renderer: renderer.toString('utf8'), core: core.toString('utf8') } };
+  return {
+    ...binding,
+    rendererSha256: sha256(renderer),
+    coreSha256: sha256(core),
+    sources: {
+      renderer: renderer.toString('utf8'),
+      core: core.toString('utf8'),
+    },
+  };
 }
 
 function withoutSha256Prefix(value) {
@@ -305,21 +337,20 @@ export function verifyCandidateEvidence(candidate, report, behavioralCertificati
   if (evidence === undefined) throw new Error(`${candidate.id}: patch certifier produced no exact candidate evidence`);
   if (candidate.registry === 'go') {
     if (
-      evidence.material?.sum !== candidate.source.sum
-      || evidence.material?.goModSum !== candidate.source.goModSum
-      || withoutSha256Prefix(evidence.material?.zipDigest) !== candidate.source.zipSha256
-    ) throw new Error(`${candidate.id}: certified Go source does not match the discovered checksums`);
-  } else if (
-    withoutSha256Prefix(evidence.material?.checksum) !== candidate.source.checksum
-    || withoutSha256Prefix(evidence.material?.archiveDigest) !== candidate.source.checksum
-  ) throw new Error(`${candidate.id}: certified crates.io source does not match the discovered checksum`);
+      evidence.material?.sum !== candidate.source.sum ||
+      evidence.material?.goModSum !== candidate.source.goModSum ||
+      withoutSha256Prefix(evidence.material?.zipDigest) !== candidate.source.zipSha256
+    )
+      throw new Error(`${candidate.id}: certified Go source does not match the discovered checksums`);
+  } else if (withoutSha256Prefix(evidence.material?.checksum) !== candidate.source.checksum || withoutSha256Prefix(evidence.material?.archiveDigest) !== candidate.source.checksum)
+    throw new Error(`${candidate.id}: certified crates.io source does not match the discovered checksum`);
 }
 
 export async function verifyPreparedUpdateInvariant({ directory, bundle, patchTreeDigest }) {
   if (!Buffer.from(await readFile(join(directory, 'bundle.json'))).equals(Buffer.from(bundle))) {
     throw new Error('generated patch bundle changed after trusted preparation');
   }
-  if (await digestTree(join(directory, 'patch')) !== patchTreeDigest) {
+  if ((await digestTree(join(directory, 'patch'))) !== patchTreeDigest) {
     throw new Error('generated patch tree changed after trusted preparation');
   }
 }
@@ -333,7 +364,7 @@ export function candidateToolchainBlock(candidate, approvedGoVersion) {
 export async function assertCandidateSemanticSession(session, candidateId) {
   const contract = await session.settled();
   if (contract.capabilities['semantic-tree'].status !== 'supported' || session.semanticTree()?.v !== 2) {
-    throw new Error(`${candidateId}: exact application produced no supported semantic tree`);
+    throw new Error(`${candidateId}: candidate application produced no supported semantic tree`);
   }
 }
 
@@ -341,13 +372,16 @@ export function selectCharmCandidateComposition(candidate, patchSets, tea, bubbl
   if (candidate.package !== tea && candidate.package !== bubbles) {
     throw new Error(`${candidate.id}: unsupported Charm module candidate`);
   }
-  if (!patchSets.some((entry) => entry.name === candidate.package && entry.version === candidate.version)) {
+  const capabilityCandidate =
+    candidate.mode === 'capability' && candidate.package === bubbles && candidate.capability === 'bubbles-private-state' && candidate.capabilityStrategy === 'compile-conformance';
+  if (!capabilityCandidate && !patchSets.some((entry) => entry.name === candidate.package && entry.version === candidate.version)) {
     throw new Error(`${candidate.id}: exact candidate patch declaration is missing`);
   }
-  const latest = (module) => patchSets
-    .filter((entry) => entry.name === module)
-    .map((entry) => entry.version)
-    .sort((left, right) => compareVersions(right, left))[0];
+  const latest = (module) =>
+    patchSets
+      .filter((entry) => entry.name === module)
+      .map((entry) => entry.version)
+      .sort((left, right) => compareVersions(right, left))[0];
   const teaVersion = candidate.package === tea ? candidate.version : latest(tea);
   const bubblesVersion = candidate.package === bubbles ? candidate.version : latest(bubbles);
   if (teaVersion === undefined || bubblesVersion === undefined) {
@@ -356,11 +390,26 @@ export function selectCharmCandidateComposition(candidate, patchSets, tea, bubbl
   return { teaVersion, bubblesVersion };
 }
 
+export function isSupportedCompileCapabilityCandidate(candidate) {
+  if (candidate.mode !== 'capability' || candidate.capabilityStrategy !== 'compile-conformance') return false;
+  if (candidate.frameworkId === 'tview') {
+    return (
+      (candidate.package === 'github.com/rivo/tview' && candidate.capability === 'tview-private-state') ||
+      (candidate.package === 'github.com/gdamore/tcell/v2' && candidate.capability === 'tcell-same-writer-marker')
+    );
+  }
+  return candidate.frameworkId === 'charm' && ['github.com/charmbracelet/bubbles', 'charm.land/bubbles/v2'].includes(candidate.package) && candidate.capability === 'bubbles-private-state';
+}
+
 export async function certifyGoCandidateBehavior(candidate) {
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-go-behavior-'));
   const app = join(scratch, 'app');
   await mkdir(app);
-  const env = trustedGoEnvironment({ GOWORK: 'off', GOFLAGS: '', TERMWRIGHT_CACHE_DIR: join(scratch, 'cache') });
+  const env = trustedGoEnvironment({
+    GOWORK: 'off',
+    GOFLAGS: '',
+    TERMWRIGHT_CACHE_DIR: join(scratch, 'cache'),
+  });
   let launcherPackage;
   let source;
   let frameworkVersion;
@@ -397,9 +446,12 @@ export async function certifyGoCandidateBehavior(candidate) {
     ];
   }
   const launcher = await import(pathToFileURL(launcherPackage).href);
-  const prepared = await launcher.prepareInstrumentedBuild({ moduleDir: app, env });
+  const prepared = await launcher.prepareInstrumentedBuild({
+    moduleDir: app,
+    env,
+  });
   const binary = join(scratch, candidateExecutableName());
-  await run('go', ['build', '-o', binary, '.'], prepared.env, app);
+  await run('go', ['build', ...prepared.goArgs, '-o', binary, '.'], prepared.env, app);
   const driver = await import(pathToFileURL(join(root, 'packages/driver/dist/index.js')).href);
   const session = await driver.launchTerminal({
     command: [binary],
@@ -427,41 +479,57 @@ export async function certifyGoCandidateBehavior(candidate) {
       await spinner.waitFor({ state: 'attached' });
       const state = await spinner.semanticState();
       if (!Number.isSafeInteger(state?.positionInSet) || !Number.isSafeInteger(state?.setSize)) {
-        throw new Error(`${candidate.id}: Bubbles private spinner state was not observed through the exact companion patch`);
+        throw new Error(`${candidate.id}: Bubbles private spinner state was not observed through the compiled owned accessor contract`);
       }
     }
   } finally {
     await session.close();
   }
-  const modules = candidate.frameworkId === 'tview'
-    ? tviewModules
-    : [
-      { name: prepared.flavour.module, version: prepared.flavour.version },
-      ...Object.keys(prepared.companionCopyDirs).sort().map((name) => ({ name, version: prepared.flavour.companions[name], optional: true })),
-    ];
+  const modules =
+    candidate.frameworkId === 'tview'
+      ? tviewModules
+      : [
+          { name: prepared.flavour.module, version: prepared.flavour.version },
+          ...prepared.injectedModules
+            .slice()
+            .sort()
+            .map((name) => ({
+              name,
+              version: prepared.flavour.companions[name],
+              optional: true,
+            })),
+        ];
   if (!Array.isArray(modules) || (candidate.frameworkId === 'tview' && typeof frameworkVersion !== 'string')) {
     throw new Error(`${candidate.id}: executable framework resolution is incomplete`);
   }
   if (!modules.some((module) => module.name === candidate.package && module.version === candidate.version)) {
     throw new Error(`${candidate.id}: exact candidate was not on the executed instrumented path`);
   }
-  return { passed: true, resolution: { frameworkVersion: candidate.frameworkId === 'tview' ? frameworkVersion : prepared.flavour.version, modules } };
+  return {
+    passed: true,
+    resolution: {
+      frameworkVersion: candidate.frameworkId === 'tview' ? frameworkVersion : prepared.flavour.version,
+      modules,
+    },
+  };
 }
 
 export async function certifyRustCandidateBehavior(candidate) {
-  if (candidate.frameworkId !== 'ratatui' || !['ratatui-core', 'ratatui-widgets'].includes(candidate.package)) throw new Error(`${candidate.id}: no candidate-specific Rust behavioral profile`);
+  if (candidate.frameworkId !== 'ratatui' || !['ratatui-core', 'ratatui-widgets', 'ratatui-crossterm'].includes(candidate.package))
+    throw new Error(`${candidate.id}: no candidate-specific Rust behavioral profile`);
   const compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
   const framework = compatibility.frameworks.find((entry) => entry.id === 'ratatui');
-  const currentVariant = framework?.instrumentation?.variants
-    ?.slice()
-    .sort((left, right) => compareVersions(right.frameworkVersion, left.frameworkVersion))[0];
+  const currentVariant = framework?.instrumentation?.variants?.slice().sort((left, right) => compareVersions(right.frameworkVersion, left.frameworkVersion))[0];
   if (currentVariant === undefined) throw new Error(`${candidate.id}: no certified Ratatui framework variant exists`);
   const versions = Object.fromEntries(currentVariant.modules.map((module) => [module.name, module.version]));
   versions[candidate.package] = candidate.version;
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-rust-behavior-'));
   await mkdir(join(scratch, 'src'));
   await writeFile(join(scratch, 'src/main.rs'), 'fn main() {}\n');
-  await writeFile(join(scratch, 'Cargo.toml'), `[package]\nname = "termwright-candidate-prefetch"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\nratatui = "=${currentVariant.frameworkVersion}"\nratatui-core = "=${versions['ratatui-core']}"\nratatui-widgets = "=${versions['ratatui-widgets']}"\n`);
+  await writeFile(
+    join(scratch, 'Cargo.toml'),
+    `[package]\nname = "termwright-candidate-prefetch"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\nratatui = "=${currentVariant.frameworkVersion}"\nratatui-core = "=${versions['ratatui-core']}"\nratatui-widgets = "=${versions['ratatui-widgets']}"\nratatui-crossterm = "=${versions['ratatui-crossterm']}"\n`,
+  );
   await run('cargo', ['fetch', '--manifest-path', join(scratch, 'Cargo.toml')]);
   const env = {
     ...process.env,
@@ -469,11 +537,18 @@ export async function certifyRustCandidateBehavior(candidate) {
     TERMWRIGHT_CANDIDATE_RATATUI: currentVariant.frameworkVersion,
     TERMWRIGHT_CANDIDATE_RATATUI_CORE: versions['ratatui-core'],
     TERMWRIGHT_CANDIDATE_RATATUI_WIDGETS: versions['ratatui-widgets'],
+    TERMWRIGHT_CANDIDATE_RATATUI_CROSSTERM: versions['ratatui-crossterm'],
   };
-  const test = candidate.package === 'ratatui-core'
-    ? 'a_vanilla_app_publishes_a_validated_tree'
-    : 'a_list_publishes_its_items_and_the_selected_row';
-  await run('cargo', ['test', '--manifest-path', 'clients/rust-probe/Cargo.toml', '--test', 'patchset', test, '--', '--nocapture'], env);
+  const test =
+    candidate.package === 'ratatui-widgets'
+      ? 'a_list_publishes_its_items_and_the_selected_row'
+      : candidate.package === 'ratatui-core'
+        ? 'an_annotated_custom_widget_merges_full_intent_without_physical_overrides'
+        : 'crossterm_commits_after_frame_bytes_on_the_exact_same_writer';
+  const testCommand = ['test', '--manifest-path', 'clients/rust-probe/Cargo.toml', '--test', 'patchset', test];
+  const listed = await run('cargo', [...testCommand, '--', '--list', '--format', 'terse'], env);
+  assertRustTestDiscovered(listed.stdout, test, candidate.id);
+  await run('cargo', [...testCommand, '--', '--exact', '--nocapture'], env);
   return {
     passed: true,
     resolution: {
@@ -481,6 +556,7 @@ export async function certifyRustCandidateBehavior(candidate) {
       modules: [
         { name: 'ratatui-core', version: versions['ratatui-core'] },
         { name: 'ratatui-widgets', version: versions['ratatui-widgets'] },
+        { name: 'ratatui-crossterm', version: versions['ratatui-crossterm'] },
       ],
     },
   };
@@ -518,10 +594,33 @@ async function main(argv) {
     await writeVerdict(output, candidate, 'red', toolchainBlock, revision);
     throw new Error(toolchainBlock);
   }
+  if (candidate.mode === 'capability') {
+    try {
+      if (candidate.registry !== 'go' || !isSupportedCompileCapabilityCandidate(candidate)) {
+        throw new Error(`${candidate.id}: unsupported capability/compile-conformance candidate`);
+      }
+      const behavioral = await certifyGoCandidateBehavior(candidate);
+      await runPnpm(['run', 'test:compatibility']);
+      await runPnpm(['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' });
+      await writeVerdict(
+        output,
+        candidate,
+        'green',
+        'Owned add-only units compiled against the candidate and candidate-specific real-process behavioral conformance passed.',
+        revision,
+        behavioral.resolution,
+      );
+      return;
+    } catch (error) {
+      await writeVerdict(output, candidate, 'red', error instanceof Error ? error.message : String(error), revision);
+      throw error;
+    }
+  }
   if (candidate.mode === 'hook') {
     try {
       if (candidate.registry === 'npm') {
-        if (candidate.source.closureComplete !== true) throw new Error(`${candidate.id}: production dependency closure is not fully pinned: ${JSON.stringify(candidate.source.unresolvedDependencyDeclarations ?? [])}`);
+        if (candidate.source.closureComplete !== true)
+          throw new Error(`${candidate.id}: production dependency closure is not fully pinned: ${JSON.stringify(candidate.source.unresolvedDependencyDeclarations ?? [])}`);
         if (candidate.monitorDependencyClosure === true) {
           const current = await resolveNpmSource({ id: candidate.streamId, monitorDependencyClosure: true }, candidate.source, { reuseSource: candidate.source });
           if (current.closureDigest !== candidate.source.closureDigest) throw new Error(`${candidate.id}: npm dependency closure changed after discovery`);
@@ -534,12 +633,26 @@ async function main(argv) {
         if (!['exact-source', 'runtime'].includes(candidate.hookStrategy)) {
           throw new Error(`${candidate.id}: hook candidate has no explicit certification strategy`);
         }
-        const profile = candidate.hookStrategy === 'exact-source'
-          ? await deriveHookInstrumentationProfile(candidate, archiveBytes, revision)
-          : { framework: candidate.frameworkId, version: candidate.version, candidateDigest: candidate.candidateDigest, sourceRevision: revision };
-        const runtimeProfile = candidate.hookStrategy === 'exact-source'
-          ? { framework: profile.framework, version: profile.version, candidateDigest: profile.candidateDigest, sourceRevision: profile.sourceRevision, rendererSha256: profile.rendererSha256, coreSha256: profile.coreSha256 }
-          : profile;
+        const profile =
+          candidate.hookStrategy === 'exact-source'
+            ? await deriveHookInstrumentationProfile(candidate, archiveBytes, revision)
+            : {
+                framework: candidate.frameworkId,
+                version: candidate.version,
+                candidateDigest: candidate.candidateDigest,
+                sourceRevision: revision,
+              };
+        const runtimeProfile =
+          candidate.hookStrategy === 'exact-source'
+            ? {
+                framework: profile.framework,
+                version: profile.version,
+                candidateDigest: profile.candidateDigest,
+                sourceRevision: profile.sourceRevision,
+                rendererSha256: profile.rendererSha256,
+                coreSha256: profile.coreSha256,
+              }
+            : profile;
         const certificationEnv = {
           ...process.env,
           GITHUB_ACTIONS: 'true',
@@ -554,7 +667,10 @@ async function main(argv) {
         try {
           if (candidate.hookStrategy === 'exact-source') {
             const instrumentation = await import(pathToFileURL(join(root, `packages/probe-${candidate.frameworkId}/dist/instrumentation.js`)).href);
-            if (instrumentation.instrumentInkRenderer('ink/build/renderer.js', profile.sources.renderer) === undefined || instrumentation.instrumentInkCore('ink/build/ink.js', profile.sources.core) === undefined) {
+            if (
+              instrumentation.instrumentInkRenderer('ink/build/renderer.js', profile.sources.renderer) === undefined ||
+              instrumentation.instrumentInkCore('ink/build/ink.js', profile.sources.core) === undefined
+            ) {
               throw new Error(`${candidate.id}: exact Ink transform anchors no longer apply`);
             }
           }
@@ -575,11 +691,6 @@ async function main(argv) {
         await run('python', ['-m', 'pip', 'install', `${candidate.source.url}#sha256=${candidate.source.sha256}`]);
         const certificationEnv = {
           ...process.env,
-          GITHUB_ACTIONS: 'true',
-          GITHUB_SHA: revision,
-          TERMWRIGHT_CERTIFICATION_TEXTUAL_VERSION: candidate.version,
-          TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: candidate.candidateDigest,
-          TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: revision,
           TERMWRIGHT_REQUIRE_RATATUI: '1',
         };
         await run('python', ['-m', 'pytest', 'clients/python/tests'], certificationEnv);
@@ -587,7 +698,13 @@ async function main(argv) {
       } else {
         throw new Error(`${candidate.id}: unsupported hook registry ${candidate.registry}`);
       }
-      await writeVerdict(output, candidate, 'green', `${candidate.hookStrategy === 'runtime' ? 'Runtime capability/behavior' : 'Exact source-hook'} framework artifact and full conformance passed.`, revision);
+      await writeVerdict(
+        output,
+        candidate,
+        'green',
+        `${candidate.hookStrategy === 'runtime' ? 'Runtime capability/behavior' : 'Exact source-hook'} framework artifact and full conformance passed.`,
+        revision,
+      );
       return;
     } catch (error) {
       await writeVerdict(output, candidate, 'red', error instanceof Error ? error.message : String(error), revision);
@@ -604,7 +721,13 @@ async function main(argv) {
       let hasPreparationError = false;
       let preparationError;
       try {
-        prepared = await preparePatchBundle({ rootDir: root, candidate, sourceRoot: sourceLease.sourceRoot, outputDirectory: updateDirectory, sourceRevision: revision });
+        prepared = await preparePatchBundle({
+          rootDir: root,
+          candidate,
+          sourceRoot: sourceLease.sourceRoot,
+          outputDirectory: updateDirectory,
+          sourceRevision: revision,
+        });
       } catch (error) {
         hasPreparationError = true;
         preparationError = error;
@@ -636,11 +759,8 @@ async function main(argv) {
     }
     const evidenceDirectory = await mkdtemp(join(tmpdir(), 'termwright-patch-evidence-'));
     await run('node', ['scripts/certify-upstream-patches.mjs', '--ecosystem', candidate.ecosystem, '--source-revision', revision, '--output', evidenceDirectory]);
-    const behavioral = candidate.registry === 'go'
-      ? await certifyGoCandidateBehavior(candidate)
-      : candidate.registry === 'crates.io'
-        ? await certifyRustCandidateBehavior(candidate)
-        : { passed: false };
+    const behavioral =
+      candidate.registry === 'go' ? await certifyGoCandidateBehavior(candidate) : candidate.registry === 'crates.io' ? await certifyRustCandidateBehavior(candidate) : { passed: false };
     verifyCandidateEvidence(candidate, JSON.parse(await readFile(join(evidenceDirectory, 'candidate-report.json'), 'utf8')), behavioral);
     proposedRegistry = recordExecutableVariant(proposedRegistry, candidate, behavioral.resolution);
     await writeFile(join(root, 'compatibility/registry.json'), canonicalJson(proposedRegistry));
@@ -655,5 +775,8 @@ async function main(argv) {
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main(process.argv.slice(2)).catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
+  main(process.argv.slice(2)).catch((error) => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
 }

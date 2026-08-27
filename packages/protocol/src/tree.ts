@@ -126,6 +126,8 @@ export interface SemanticNode {
    * here", which is barely better than the drop it replaced.
    */
   readonly frameworkType?: string;
+  /** True when this node may own children the framework probe cannot enumerate. */
+  readonly opaqueChildren?: boolean;
   /**
    * Provenance: where this node's facts came from.
    *

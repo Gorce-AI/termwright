@@ -13,4 +13,4 @@ editUrl: false
 
 > **ScreenLocatorRef** = `` `screen:${number},${number},${number},${number}@${number}` ``
 
-Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:685
+Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:39

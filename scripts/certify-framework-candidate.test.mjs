@@ -7,7 +7,21 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { assertCandidateSemanticSession, candidateExecutableName, candidateToolchainBlock, certificationPlatform, deriveHookInstrumentationProfile, installedDependencyFrom, packageContentDigestForEntries, selectCharmCandidateComposition, verifyCandidateEvidence, verifyInstalledNpmClosure, verifyPreparedUpdateInvariant } from './certify-framework-candidate.mjs';
+import {
+  assertCandidateSemanticSession,
+  assertRustTestDiscovered,
+  candidateExecutableName,
+  candidateToolchainBlock,
+  certificationPlatform,
+  deriveHookInstrumentationProfile,
+  installedDependencyFrom,
+  isSupportedCompileCapabilityCandidate,
+  packageContentDigestForEntries,
+  selectCharmCandidateComposition,
+  verifyCandidateEvidence,
+  verifyInstalledNpmClosure,
+  verifyPreparedUpdateInvariant,
+} from './certify-framework-candidate.mjs';
 import { digestTree } from './prepare-framework-candidate.mjs';
 
 const exec = promisify(execFile);
@@ -26,14 +40,18 @@ function tarEntry(name, contents) {
   let checksum = 0;
   for (const byte of header) checksum += byte;
   header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii');
-  return Buffer.concat([header, contents, Buffer.alloc((512 - contents.length % 512) % 512)]);
+  return Buffer.concat([header, contents, Buffer.alloc((512 - (contents.length % 512)) % 512)]);
 }
 
 function packageTar(files) {
-  return gzipSync(Buffer.concat([
-    ...Object.entries(files).sort(([a], [b]) => a.localeCompare(b)).map(([path, contents]) => tarEntry(`package/${path}`, Buffer.from(contents))),
-    Buffer.alloc(1024),
-  ]));
+  return gzipSync(
+    Buffer.concat([
+      ...Object.entries(files)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([path, contents]) => tarEntry(`package/${path}`, Buffer.from(contents))),
+      Buffer.alloc(1024),
+    ]),
+  );
 }
 
 function npmSource(url, bytes) {
@@ -50,13 +68,20 @@ async function npmClosureFixture() {
   const probe = join(directory, 'probe');
   const rootPackage = join(probe, 'node_modules', '@example', 'root');
   const dependency = join(probe, 'node_modules', 'dependency');
-  await Promise.all([
-    mkdir(rootPackage, { recursive: true }),
-    mkdir(dependency, { recursive: true }),
-  ]);
+  await Promise.all([mkdir(rootPackage, { recursive: true }), mkdir(dependency, { recursive: true })]);
   await writeFile(join(probe, 'package.json'), JSON.stringify({ name: 'probe' }));
-  const rootManifest = JSON.stringify({ name: '@example/root', version: '1.2.3', main: 'index.js', dependencies: { dependency: '^4.0.0' } });
-  const dependencyManifest = JSON.stringify({ name: 'dependency', version: '4.1.0', main: 'index.js', bin: { dependency: 'cli.js' } });
+  const rootManifest = JSON.stringify({
+    name: '@example/root',
+    version: '1.2.3',
+    main: 'index.js',
+    dependencies: { dependency: '^4.0.0' },
+  });
+  const dependencyManifest = JSON.stringify({
+    name: 'dependency',
+    version: '4.1.0',
+    main: 'index.js',
+    bin: { dependency: 'cli.js' },
+  });
   await writeFile(join(rootPackage, 'package.json'), rootManifest);
   await writeFile(join(rootPackage, 'index.js'), 'export {};\n');
   await mkdir(join(rootPackage, 'node_modules', '.bin'), { recursive: true });
@@ -64,19 +89,47 @@ async function npmClosureFixture() {
   await writeFile(join(dependency, 'package.json'), dependencyManifest);
   await writeFile(join(dependency, 'index.js'), 'export {};\n');
   await writeFile(join(dependency, 'cli.js'), '#!/usr/bin/env node\n');
-  const rootTar = packageTar({ 'index.js': 'export {};\n', 'package.json': rootManifest });
-  const dependencyTar = packageTar({ 'cli.js': '#!/usr/bin/env node\n', 'index.js': 'export {};\n', 'package.json': dependencyManifest });
-  const tarballs = new Map([['https://registry.invalid/root.tgz', rootTar], ['https://registry.invalid/dependency.tgz', dependencyTar]]);
-  const fetchImpl = async (url) => ({ ok: tarballs.has(url), status: tarballs.has(url) ? 200 : 404, arrayBuffer: async () => tarballs.get(url) });
+  const rootTar = packageTar({
+    'index.js': 'export {};\n',
+    'package.json': rootManifest,
+  });
+  const dependencyTar = packageTar({
+    'cli.js': '#!/usr/bin/env node\n',
+    'index.js': 'export {};\n',
+    'package.json': dependencyManifest,
+  });
+  const tarballs = new Map([
+    ['https://registry.invalid/root.tgz', rootTar],
+    ['https://registry.invalid/dependency.tgz', dependencyTar],
+  ]);
+  const fetchImpl = async (url) => ({
+    ok: tarballs.has(url),
+    status: tarballs.has(url) ? 200 : 404,
+    arrayBuffer: async () => tarballs.get(url),
+  });
   const dependencyNode = {
-    name: 'dependency', version: '4.1.0', ...npmSource('https://registry.invalid/dependency.tgz', dependencyTar), dependencies: [],
+    name: 'dependency',
+    version: '4.1.0',
+    ...npmSource('https://registry.invalid/dependency.tgz', dependencyTar),
+    dependencies: [],
   };
   const candidate = {
-    id: 'root@1.2.3', package: '@example/root', version: '1.2.3',
+    id: 'root@1.2.3',
+    package: '@example/root',
+    version: '1.2.3',
     source: {
       ...npmSource('https://registry.invalid/root.tgz', rootTar),
       closureComplete: true,
-      dependencyRoots: [{ name: 'dependency', requested: '^4.0.0', type: 'dependency', optionalPeer: false, packageName: 'dependency', version: '4.1.0' }],
+      dependencyRoots: [
+        {
+          name: 'dependency',
+          requested: '^4.0.0',
+          type: 'dependency',
+          optionalPeer: false,
+          packageName: 'dependency',
+          version: '4.1.0',
+        },
+      ],
       dependencyClosure: [dependencyNode],
     },
   };
@@ -84,6 +137,11 @@ async function npmClosureFixture() {
 }
 
 describe('framework candidate evidence binding', () => {
+  it('refuses a zero-test Rust certification filter', () => {
+    expect(() => assertRustTestDiscovered('running 0 tests\n\ntest result: ok. 0 passed; 0 failed\n', 'required_contract_test', 'ratatui-core@0.1.2')).toThrow(/was not discovered/u);
+    expect(() => assertRustTestDiscovered('required_contract_test: test\n', 'required_contract_test', 'ratatui-core@0.1.2')).not.toThrow();
+  });
+
   it('binds verdict provenance to the actual supported host platform', () => {
     expect(certificationPlatform('linux')).toBe('linux');
     expect(certificationPlatform('darwin')).toBe('macos');
@@ -118,27 +176,108 @@ describe('framework candidate evidence binding', () => {
       { name: tea, version: 'v2.0.9' },
       { name: bubbles, version: 'v2.1.1' },
     ];
-    expect(selectCharmCandidateComposition(
-      { id: 'bubbletea-v2@v2.0.9', package: tea, version: 'v2.0.9' }, patchSets, tea, bubbles,
-    )).toEqual({ teaVersion: 'v2.0.9', bubblesVersion: 'v2.1.1' });
-    expect(selectCharmCandidateComposition(
-      { id: 'bubbles-v2@v2.2.0', package: bubbles, version: 'v2.2.0' },
-      [...patchSets, { name: bubbles, version: 'v2.2.0' }], tea, bubbles,
-    )).toEqual({ teaVersion: 'v2.0.9', bubblesVersion: 'v2.2.0' });
+    expect(selectCharmCandidateComposition({ id: 'bubbletea-v2@v2.0.9', package: tea, version: 'v2.0.9' }, patchSets, tea, bubbles)).toEqual({ teaVersion: 'v2.0.9', bubblesVersion: 'v2.1.1' });
+    expect(
+      selectCharmCandidateComposition(
+        {
+          id: 'bubbles-v2@v2.2.0',
+          package: bubbles,
+          version: 'v2.2.0',
+          mode: 'capability',
+          capability: 'bubbles-private-state',
+          capabilityStrategy: 'compile-conformance',
+        },
+        patchSets,
+        tea,
+        bubbles,
+      ),
+    ).toEqual({ teaVersion: 'v2.0.9', bubblesVersion: 'v2.2.0' });
+  });
+
+  it('admits only the declared add-only Go capability streams', () => {
+    for (const candidate of [
+      { frameworkId: 'tview', package: 'github.com/rivo/tview', capability: 'tview-private-state' },
+      { frameworkId: 'tview', package: 'github.com/gdamore/tcell/v2', capability: 'tcell-same-writer-marker' },
+      { frameworkId: 'charm', package: 'github.com/charmbracelet/bubbles', capability: 'bubbles-private-state' },
+      { frameworkId: 'charm', package: 'charm.land/bubbles/v2', capability: 'bubbles-private-state' },
+    ]) {
+      expect(isSupportedCompileCapabilityCandidate({ ...candidate, mode: 'capability', capabilityStrategy: 'compile-conformance' })).toBe(true);
+    }
+    expect(
+      isSupportedCompileCapabilityCandidate({
+        frameworkId: 'tview',
+        package: 'github.com/rivo/tview',
+        capability: 'wrong-capability',
+        mode: 'capability',
+        capabilityStrategy: 'compile-conformance',
+      }),
+    ).toBe(false);
+    expect(
+      isSupportedCompileCapabilityCandidate({
+        frameworkId: 'tview',
+        package: 'github.com/rivo/tview',
+        capability: 'tview-private-state',
+        mode: 'patch',
+        capabilityStrategy: 'compile-conformance',
+      }),
+    ).toBe(false);
   });
 
   it('fails closed when a Charm candidate has no exact companion profile', () => {
-    expect(() => selectCharmCandidateComposition(
-      { id: 'bubbletea-v2@v2.0.9', package: 'tea', version: 'v2.0.9' },
-      [{ name: 'tea', version: 'v2.0.9' }], 'tea', 'bubbles',
-    )).toThrow(/no exact certified Charm companion/u);
+    expect(() => selectCharmCandidateComposition({ id: 'bubbletea-v2@v2.0.9', package: 'tea', version: 'v2.0.9' }, [{ name: 'tea', version: 'v2.0.9' }], 'tea', 'bubbles')).toThrow(
+      /no exact certified Charm companion/u,
+    );
+  });
+
+  it('rejects a Bubbles compile-capability candidate without an exact-certified Bubble Tea companion', () => {
+    expect(() =>
+      selectCharmCandidateComposition(
+        {
+          id: 'bubbles-v2@v2.2.0',
+          package: 'bubbles',
+          version: 'v2.2.0',
+          mode: 'capability',
+          capability: 'bubbles-private-state',
+          capabilityStrategy: 'compile-conformance',
+        },
+        [{ name: 'bubbles', version: 'v2.1.1' }],
+        'tea',
+        'bubbles',
+      ),
+    ).toThrow(/no exact certified Charm companion/u);
   });
 
   it('fails closed when the exact candidate patch declaration is missing', () => {
-    expect(() => selectCharmCandidateComposition(
-      { id: 'bubbletea-v2@v2.0.9', package: 'tea', version: 'v2.0.9' },
-      [{ name: 'tea', version: 'v2.0.8' }, { name: 'bubbles', version: 'v2.1.1' }], 'tea', 'bubbles',
-    )).toThrow(/exact candidate patch declaration is missing/u);
+    expect(() =>
+      selectCharmCandidateComposition(
+        { id: 'bubbletea-v2@v2.0.9', package: 'tea', version: 'v2.0.9' },
+        [
+          { name: 'tea', version: 'v2.0.8' },
+          { name: 'bubbles', version: 'v2.1.1' },
+        ],
+        'tea',
+        'bubbles',
+      ),
+    ).toThrow(/exact candidate patch declaration is missing/u);
+  });
+
+  it('does not let a patch candidate bypass exact admission by resembling Bubbles', () => {
+    expect(() =>
+      selectCharmCandidateComposition(
+        {
+          id: 'bubbles-v2@v2.2.0',
+          package: 'bubbles',
+          version: 'v2.2.0',
+          mode: 'patch',
+        },
+        [
+          { name: 'tea', version: 'v2.0.9' },
+          { name: 'bubbles', version: 'v2.1.1' },
+        ],
+        'tea',
+        'bubbles',
+      ),
+    ).toThrow(/exact candidate patch declaration is missing/u);
   });
   it('walks the real pnpm package location when dependency versions diverge', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-pnpm-closure-'));
@@ -172,11 +311,17 @@ describe('framework candidate evidence binding', () => {
   });
 
   it('never derives source instrumentation for an OpenTUI runtime-hook candidate', async () => {
-    await expect(deriveHookInstrumentationProfile({
-      id: 'opentui@0.5.4',
-      frameworkId: 'opentui',
-      hookStrategy: 'runtime',
-    }, Buffer.from('not an archive'), 'a'.repeat(40))).rejects.toThrow(/no deterministic exact-source/u);
+    await expect(
+      deriveHookInstrumentationProfile(
+        {
+          id: 'opentui@0.5.4',
+          frameworkId: 'opentui',
+          hookStrategy: 'runtime',
+        },
+        Buffer.from('not an archive'),
+        'a'.repeat(40),
+      ),
+    ).rejects.toThrow(/no deterministic exact-source/u);
   });
 
   it('cryptographically binds the exact installed npm graph to every discovered tarball', async () => {
@@ -212,7 +357,9 @@ describe('framework candidate evidence binding', () => {
   it('ignores only package-manager launchers materialized below node_modules/.bin', async () => {
     const { candidate, directory, fetchImpl, probe, rootPackage } = await npmClosureFixture();
     try {
-      await mkdir(join(rootPackage, 'node_modules', '.bin'), { recursive: true });
+      await mkdir(join(rootPackage, 'node_modules', '.bin'), {
+        recursive: true,
+      });
       await writeFile(join(rootPackage, 'node_modules', '.bin', 'dependency'), '#!/bin/sh\n');
       await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).resolves.toMatchObject({ version: '1.2.3', resolvedNodes: 1 });
     } finally {
@@ -223,7 +370,9 @@ describe('framework candidate evidence binding', () => {
   it('rejects undeclared package-manager launchers below node_modules/.bin', async () => {
     const { candidate, directory, fetchImpl, probe, rootPackage } = await npmClosureFixture();
     try {
-      await mkdir(join(rootPackage, 'node_modules', '.bin'), { recursive: true });
+      await mkdir(join(rootPackage, 'node_modules', '.bin'), {
+        recursive: true,
+      });
       await writeFile(join(rootPackage, 'node_modules', '.bin', 'unbound'), '#!/bin/sh\n');
       await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(/bin entry is undeclared/u);
     } finally {
@@ -232,7 +381,13 @@ describe('framework candidate evidence binding', () => {
   });
 
   it('binds executable mode even when file bytes are unchanged', () => {
-    const regular = [{ path: 'index.js', executableMode: 0, sha256: `sha256:${'a'.repeat(64)}` }];
+    const regular = [
+      {
+        path: 'index.js',
+        executableMode: 0,
+        sha256: `sha256:${'a'.repeat(64)}`,
+      },
+    ];
     const executable = [{ ...regular[0], executableMode: 0o111 }];
 
     expect(packageContentDigestForEntries(executable)).not.toBe(packageContentDigestForEntries(regular));
@@ -241,7 +396,11 @@ describe('framework candidate evidence binding', () => {
   it('rejects expected closure nodes that are unreachable from the installed root', async () => {
     const { candidate, directory, fetchImpl, probe } = await npmClosureFixture();
     try {
-      candidate.source.dependencyClosure.push({ ...candidate.source.dependencyClosure[0], name: 'orphan', version: '9.0.0' });
+      candidate.source.dependencyClosure.push({
+        ...candidate.source.dependencyClosure[0],
+        name: 'orphan',
+        version: '9.0.0',
+      });
       await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(/unreachable nodes: orphan@9\.0\.0/u);
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -250,7 +409,9 @@ describe('framework candidate evidence binding', () => {
 
   it('uses the frozen contract instead of the removed provisional capabilities API', async () => {
     const session = {
-      settled: async () => ({ capabilities: { 'semantic-tree': { status: 'supported' } } }),
+      settled: async () => ({
+        capabilities: { 'semantic-tree': { status: 'supported' } },
+      }),
       semanticTree: () => ({ v: 2 }),
     };
     await expect(assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9')).resolves.toBeUndefined();
@@ -258,38 +419,66 @@ describe('framework candidate evidence binding', () => {
 
   it('rejects a session whose frozen contract lacks semantic support', async () => {
     const session = {
-      settled: async () => ({ capabilities: { 'semantic-tree': { status: 'unsupported' } } }),
+      settled: async () => ({
+        capabilities: { 'semantic-tree': { status: 'unsupported' } },
+      }),
       semanticTree: () => ({ v: 2 }),
     };
     await expect(assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9')).rejects.toThrow(/no supported semantic tree/u);
   });
 
   it('classifies a newer upstream Go floor as a typed red candidate outcome', () => {
-    expect(candidateToolchainBlock({
-      id: 'bubbletea-v2@v2.1.0',
-      source: { requiredGoVersion: '1.26.0', toolchainSupported: false },
-    }, '1.25')).toBe('bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25');
+    expect(
+      candidateToolchainBlock(
+        {
+          id: 'bubbletea-v2@v2.1.0',
+          source: { requiredGoVersion: '1.26.0', toolchainSupported: false },
+        },
+        '1.25',
+      ),
+    ).toBe('bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25');
   });
 
   it('returns a failing process status after retaining a typed red verdict', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-red-candidate-'));
     const registry = join(directory, 'registry.json');
     const verdict = join(directory, 'verdict.json');
-    await writeFile(registry, JSON.stringify({ candidates: [{
-      id: 'bubbletea-v2@v2.1.0',
-      candidateDigest: `sha256:${'a'.repeat(64)}`,
-      source: { requiredGoVersion: '1.26.0', toolchainSupported: false },
-    }] }));
+    await writeFile(
+      registry,
+      JSON.stringify({
+        candidates: [
+          {
+            id: 'bubbletea-v2@v2.1.0',
+            candidateDigest: `sha256:${'a'.repeat(64)}`,
+            source: { requiredGoVersion: '1.26.0', toolchainSupported: false },
+          },
+        ],
+      }),
+    );
     try {
-      await expect(exec(process.execPath, [
-        fileURLToPath(new URL('./certify-framework-candidate.mjs', import.meta.url)),
-        '--registry', registry,
-        '--candidate', 'bubbletea-v2@v2.1.0',
-        '--platform', certificationPlatform(),
-        '--output', verdict,
-      ], {
-        env: { ...process.env, GITHUB_SHA: 'candidate-sha', TERMWRIGHT_UPSTREAM_GO_VERSION: '1.25' },
-      })).rejects.toMatchObject({ code: 1 });
+      await expect(
+        exec(
+          process.execPath,
+          [
+            fileURLToPath(new URL('./certify-framework-candidate.mjs', import.meta.url)),
+            '--registry',
+            registry,
+            '--candidate',
+            'bubbletea-v2@v2.1.0',
+            '--platform',
+            certificationPlatform(),
+            '--output',
+            verdict,
+          ],
+          {
+            env: {
+              ...process.env,
+              GITHUB_SHA: 'candidate-sha',
+              TERMWRIGHT_UPSTREAM_GO_VERSION: '1.25',
+            },
+          },
+        ),
+      ).rejects.toMatchObject({ code: 1 });
       expect(JSON.parse(await readFile(verdict, 'utf8'))).toMatchObject({
         candidateId: 'bubbletea-v2@v2.1.0',
         platform: certificationPlatform(),
@@ -302,44 +491,89 @@ describe('framework candidate evidence binding', () => {
   });
 
   it('accepts an exact Go source binding', () => {
-    expect(() => verifyCandidateEvidence({
-      id: 'tview@v0.42.0',
-      package: 'github.com/rivo/tview',
-      version: 'v0.42.0',
-      registry: 'go',
-      source: { sum: 'h1:module', goModSum: 'h1:gomod', zipSha256: 'a'.repeat(64) },
-    }, { behaviorallyCertified: true, stablePublishEligible: true, candidates: [{
-      module: 'github.com/rivo/tview',
-      upstreamVersion: 'v0.42.0',
-      material: { sum: 'h1:module', goModSum: 'h1:gomod', zipDigest: `sha256:${'a'.repeat(64)}` },
-    }] }, { passed: true })).not.toThrow();
+    expect(() =>
+      verifyCandidateEvidence(
+        {
+          id: 'tview@v0.42.0',
+          package: 'github.com/rivo/tview',
+          version: 'v0.42.0',
+          registry: 'go',
+          source: {
+            sum: 'h1:module',
+            goModSum: 'h1:gomod',
+            zipSha256: 'a'.repeat(64),
+          },
+        },
+        {
+          behaviorallyCertified: true,
+          stablePublishEligible: true,
+          candidates: [
+            {
+              module: 'github.com/rivo/tview',
+              upstreamVersion: 'v0.42.0',
+              material: {
+                sum: 'h1:module',
+                goModSum: 'h1:gomod',
+                zipDigest: `sha256:${'a'.repeat(64)}`,
+              },
+            },
+          ],
+        },
+        { passed: true },
+      ),
+    ).not.toThrow();
   });
 
   it('rejects evidence for another source archive', () => {
-    expect(() => verifyCandidateEvidence({
-      id: 'ratatui-core@0.1.2',
-      package: 'ratatui-core',
-      version: '0.1.2',
-      registry: 'crates.io',
-      source: { checksum: 'b'.repeat(64) },
-    }, { behaviorallyCertified: true, stablePublishEligible: true, candidates: [{
-      module: 'ratatui-core',
-      upstreamVersion: '0.1.2',
-      material: { checksum: `sha256:${'c'.repeat(64)}`, archiveDigest: `sha256:${'c'.repeat(64)}` },
-    }] }, { passed: true })).toThrow(/does not match/u);
+    expect(() =>
+      verifyCandidateEvidence(
+        {
+          id: 'ratatui-core@0.1.2',
+          package: 'ratatui-core',
+          version: '0.1.2',
+          registry: 'crates.io',
+          source: { checksum: 'b'.repeat(64) },
+        },
+        {
+          behaviorallyCertified: true,
+          stablePublishEligible: true,
+          candidates: [
+            {
+              module: 'ratatui-core',
+              upstreamVersion: '0.1.2',
+              material: {
+                checksum: `sha256:${'c'.repeat(64)}`,
+                archiveDigest: `sha256:${'c'.repeat(64)}`,
+              },
+            },
+          ],
+        },
+        { passed: true },
+      ),
+    ).toThrow(/does not match/u);
   });
 
   it('rejects deterministic patch application that lacks candidate-specific behavioral certification', () => {
-    expect(() => verifyCandidateEvidence({
-      id: 'tview@v0.43.0',
-      package: 'github.com/rivo/tview',
-      version: 'v0.43.0',
-      registry: 'go',
-      source: { sum: 'h1:module', goModSum: 'h1:gomod', zipSha256: 'a'.repeat(64) },
-    }, {
-      behaviorallyCertified: false,
-      stablePublishEligible: false,
-      candidates: [],
-    }, { passed: false })).toThrow(/not behaviorally certified/u);
+    expect(() =>
+      verifyCandidateEvidence(
+        {
+          id: 'tview@v0.43.0',
+          package: 'github.com/rivo/tview',
+          version: 'v0.43.0',
+          registry: 'go',
+          source: {
+            sum: 'h1:module',
+            goModSum: 'h1:gomod',
+            zipSha256: 'a'.repeat(64),
+          },
+        },
+        {
+          behaviorallyCertified: false,
+          stablePublishEligible: false,
+          candidates: [],
+        },
+        { passed: false },
+      ),
+    ).toThrow(/not behaviorally certified/u);
   });
 });
