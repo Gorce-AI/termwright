@@ -5,6 +5,7 @@ import {
   CI_JOBS,
   REQUIRED_BRANCH_CHECKS,
   assertReleaseStateQuiescent,
+  compatibilityReleaseAllowed,
   compatibilitySourceRunId,
   nextHeartbeatRecord,
   pendingChangesetFiles,
@@ -134,6 +135,14 @@ function expandedCheckNames(job) {
 }
 
 describe('trusted autonomous coordinator', () => {
+  it('allows releases only from scheduled compatibility certification', () => {
+    expect(compatibilityReleaseAllowed({ event: 'schedule' })).toBe(true);
+    expect(compatibilityReleaseAllowed({ event: 'workflow_dispatch' })).toBe(false);
+    expect(() => compatibilityReleaseAllowed({ event: 'pull_request' })).toThrow(
+      /untrusted compatibility event/u,
+    );
+  });
+
   it('requires an explicit stable issue owner instead of a scheduler/bot fallback', () => {
     expect(validateIssueOwner('SarukMyskam')).toBe('SarukMyskam');
     expect(() => validateIssueOwner('')).toThrow(/explicit valid GitHub user/u);
@@ -213,7 +222,12 @@ describe('trusted autonomous coordinator', () => {
   });
 
   it('refreshes a source-bound heartbeat only every 30 days and rejects time rollback', () => {
-    const run = { id: 123, head_sha: head, created_at: '2026-01-31T00:00:00.000Z' };
+    const run = {
+      id: 123,
+      event: 'schedule',
+      head_sha: head,
+      created_at: '2026-01-31T00:00:00.000Z',
+    };
     const first = nextHeartbeatRecord(run);
     expect(JSON.parse(first)).toEqual({
       schemaVersion: 1,
@@ -231,6 +245,9 @@ describe('trusted autonomous coordinator', () => {
     expect(() =>
       nextHeartbeatRecord({ ...run, id: 126, created_at: '2025-12-01T00:00:00.000Z' }, first),
     ).toThrow(/future/u);
+    expect(() => nextHeartbeatRecord({ ...run, event: 'workflow_dispatch' })).toThrow(
+      /requires a scheduled compatibility source run/u,
+    );
   });
 
   it('rejects symlinks and submodules hidden behind allowed changed paths', () => {

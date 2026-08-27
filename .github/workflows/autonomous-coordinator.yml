@@ -187,6 +187,10 @@ jobs:
           summary='Automated compatibility reconciliation. Green support records and red assessments are exact-candidate-bound; only green candidates enter the support allowlist.'
           mapfile -t changed < <(git ls-files --modified --deleted --others --exclude-standard | sort -u)
           if (( ${#changed[@]} == 0 )); then
+            if [ '${{ github.event.workflow_run.event }}' != schedule ]; then
+              echo 'Manual certification found no compatibility changes; heartbeat and release dispatch are intentionally suppressed.' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
             node scripts/autonomous-release-coordinator.mjs refresh-heartbeat \
               "$GITHUB_EVENT_PATH" compatibility/workflow-heartbeat.json
             mapfile -t changed < <(git ls-files --modified --deleted --others --exclude-standard | sort -u)

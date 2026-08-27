@@ -92,6 +92,19 @@ describe('autonomous workflow security', () => {
       "workflows: ['Framework compatibility candidates', 'CI', 'Release']",
     );
     expect(workflow).not.toContain('rerun-failed-jobs');
+    const reconciliation = workflow.slice(
+      workflow.indexOf('      - name: Commit only the compatibility allowlist'),
+      workflow.indexOf('\n  inspect:'),
+    );
+    const manualGuard = reconciliation.indexOf(
+      "if [ '${{ github.event.workflow_run.event }}' != schedule ]; then",
+    );
+    expect(manualGuard).toBeGreaterThan(-1);
+    expect(manualGuard).toBeLessThan(reconciliation.indexOf('refresh-heartbeat'));
+    expect(manualGuard).toBeLessThan(reconciliation.indexOf('dispatch-pending-changesets'));
+    expect(workflow).toContain(
+      'Manual certification found no compatibility changes; heartbeat and release dispatch are intentionally suppressed.',
+    );
     expect(workflow).not.toContain('astral-sh/setup-uv@');
     expect(workflow).not.toContain("--pattern 'framework-verdict-*'");
     expect(workflow.match(/--name framework-verdict-aggregate --dir/gu)).toHaveLength(2);
