@@ -596,12 +596,12 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const terminal = await arm('disconnect-mid-render');
     await fire(terminal);
     await terminal.waitForText('PEER SOCKET CLOSED');
+    await waitForDiagnosticCount(terminal, 'adapter-disconnected', 1);
 
     expect(terminal.semanticTree()?.revision).toBe(1);
     expect(semanticTreeSupported(terminal)).toBe(true);
     const error = (await rejection(terminal.getByRole('button').textContent())) as TermwrightError;
     expect(error.code).toBe('capability-provider-lost');
-    await expect.poll(() => codes(terminal)).toContain('adapter-disconnected');
     await expectSurvives(terminal);
   });
 
