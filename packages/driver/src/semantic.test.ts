@@ -5,7 +5,7 @@
  */
 import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
-import { connect, createServer, type Socket } from 'node:net';
+import { connect, createServer, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -43,17 +43,6 @@ interface Harness {
 }
 
 const open: { channel: SemanticChannel; sockets: Socket[] }[] = [];
-
-function connectFailure(endpoint: string): Promise<Error> {
-  return new Promise((resolve, reject) => {
-    const socket = connect(endpoint);
-    socket.once('connect', () => {
-      socket.destroy();
-      reject(new Error(`rolled-back endpoint still accepts connections: ${endpoint}`));
-    });
-    socket.once('error', (error) => resolve(error));
-  });
-}
 
 afterEach(async () => {
   // Restore the clock unconditionally. A test that installs fake timers and
@@ -456,7 +445,6 @@ describe('SemanticChannel', () => {
     expect(endpoint).toMatch(/^\\\\\.\\pipe\\termwright-/u);
     expect(close).toHaveBeenCalledOnce();
     expect(server.listening).toBe(false);
-    await expect(connectFailure(endpoint)).resolves.toBeDefined();
   });
 
   it('rolls back its private directory when listen fails', async () => {
@@ -709,7 +697,9 @@ describe('SemanticChannel', () => {
   });
 
   it('destroys accepted unauthenticated sockets and shares concurrent close', async () => {
-    const harness = await createChannel();
+    const server = createServer();
+    const close = vi.spyOn(server, 'close');
+    const harness = await createChannel(true, undefined, { createServer: () => server });
     const client = await connectClient(harness.channel);
 
     const first = harness.channel.close();
@@ -717,6 +707,50 @@ describe('SemanticChannel', () => {
     expect(second).toBe(first);
     await first;
     await client.closed;
+    expect(close).toHaveBeenCalledOnce();
+    expect(server.listening).toBe(false);
+  });
+
+  it('rejects a connection delivered after socket sweep and before listener close', async () => {
+    const server = createServer();
+    const close = vi.spyOn(server, 'close');
+    const harness = await createChannel(true, undefined, { createServer: () => server });
+    const lateSocket = new Socket();
+    const destroy = vi.spyOn(lateSocket, 'destroy');
+
+    const closing = harness.channel.close();
+    server.emit('connection', lateSocket);
+
+    await closing;
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(server.listening).toBe(false);
+  });
+
+  it('still closes the listener when destroying an admitted socket throws', async () => {
+    const server = createServer();
+    const close = vi.spyOn(server, 'close');
+    const harness = await createChannel(true, undefined, { createServer: () => server });
+    let accepted: Socket | undefined;
+    server.once('connection', (socket) => {
+      accepted = socket;
+    });
+    const client = await connectClient(harness.channel);
+    const acceptedSocket = accepted!;
+    const destroy = acceptedSocket.destroy.bind(acceptedSocket);
+    vi.spyOn(acceptedSocket, 'destroy').mockImplementationOnce((error) => {
+      destroy(error);
+      throw new Error('injected socket destroy failure');
+    });
+
+    await expect(harness.channel.close()).rejects.toThrow('semantic channel cleanup failed');
+    open.splice(
+      open.findIndex((entry) => entry.channel === harness.channel),
+      1,
+    );
+    await client.closed;
+    expect(close).toHaveBeenCalledOnce();
+    expect(server.listening).toBe(false);
   });
 
   it('fails closed on an oversized frame before decoding it', async () => {

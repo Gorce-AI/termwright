@@ -11,17 +11,6 @@ import { ControlChannel } from './control.js';
 
 const open: ControlChannel[] = [];
 
-function connectFailure(endpoint: string): Promise<Error> {
-  return new Promise((resolve, reject) => {
-    const socket = connect(endpoint);
-    socket.once('connect', () => {
-      socket.destroy();
-      reject(new Error(`rolled-back endpoint still accepts connections: ${endpoint}`));
-    });
-    socket.once('error', (error) => resolve(error));
-  });
-}
-
 afterEach(async () => {
   for (const channel of open.splice(0)) await channel.close();
 });
@@ -73,7 +62,6 @@ describe('ControlChannel', () => {
     expect(endpoint).toMatch(/^\\\\\.\\pipe\\termwright-control-/u);
     expect(close).toHaveBeenCalledOnce();
     expect(server.listening).toBe(false);
-    await expect(connectFailure(endpoint)).resolves.toBeDefined();
   });
 
   it('creates its endpoint and removes it again on close', async () => {

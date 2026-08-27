@@ -133,8 +133,14 @@ interface PendingClientRequest {
   readonly cleanup: () => void;
 }
 
+/** Fault-injection seam for listener lifecycle tests. */
+export interface ResourceBrokerServerDependencies {
+  readonly createServer?: () => ReturnType<typeof createServer>;
+}
+
 export async function startResourceBrokerServer(
   options: ResourceBrokerServerOptions,
+  dependencies: ResourceBrokerServerDependencies = {},
 ): Promise<ResourceBrokerServer> {
   options.signal?.throwIfAborted();
   const maxFrameBytes = positiveInteger(
@@ -164,7 +170,8 @@ export async function startResourceBrokerServer(
   let closing = false;
   let closePromise: Promise<void> | null = null;
 
-  const server = createServer((socket) => {
+  const server = (dependencies.createServer ?? createServer)();
+  server.on('connection', (socket) => {
     if (closing || sockets.size >= maxConnections) {
       sendAndEnd(
         socket,

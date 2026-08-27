@@ -69,6 +69,11 @@ export interface StartRunJournalServerOptions {
   readonly signal?: AbortSignal;
 }
 
+/** Fault-injection seam for listener lifecycle tests. */
+export interface RunJournalServerDependencies {
+  readonly createServer?: () => ReturnType<typeof createServer>;
+}
+
 interface Connection {
   readonly socket: Socket;
   readonly decoder: LocalJsonDecoder;
@@ -83,6 +88,7 @@ interface Connection {
 
 export async function startRunJournalServer(
   options: StartRunJournalServerOptions,
+  dependencies: RunJournalServerDependencies = {},
 ): Promise<RunJournalServer> {
   options.signal?.throwIfAborted();
   parseRunId('run', options.runId);
@@ -100,7 +106,8 @@ export async function startRunJournalServer(
   let closing = false;
   let closePromise: Promise<void> | undefined;
 
-  const server = createServer((socket) => {
+  const server = (dependencies.createServer ?? createServer)();
+  server.on('connection', (socket) => {
     if (closing || connections.size >= MAX_CONNECTIONS) {
       socket.destroy();
       return;
