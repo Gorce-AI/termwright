@@ -28,7 +28,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_V1 = join(here, 'testing', 'fixture-v1-bubbles');
 const FIXTURE = join(here, 'testing', 'fixture-v2');
 const roots: string[] = [];
-const moduleCaches: string[] = [];
 
 async function goAvailable(): Promise<boolean> {
   return goTestCapability(
@@ -44,20 +43,7 @@ async function goAvailable(): Promise<boolean> {
 const hasGo = await goAvailable();
 
 afterEach(async () => {
-  const cacheResults = await Promise.allSettled(
-    moduleCaches.splice(0).map((cache) =>
-      run('go', ['clean', '-modcache'], {
-        env: { ...process.env, GOMODCACHE: cache, GOWORK: 'off' },
-      }),
-    ),
-  );
-  const rootResults = await Promise.allSettled(
-    roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
-  );
-  const failures = [...cacheResults, ...rootResults]
-    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-    .map((result) => result.reason);
-  if (failures.length > 0) throw new AggregateError(failures, 'Charm test cleanup failed');
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 async function scratch(prefix: string): Promise<string> {
@@ -164,10 +150,12 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     const dir = await scratch('tw-charm-launch-v1-');
     const app = join(dir, 'app');
     await cp(FIXTURE_V1, app, { recursive: true });
-    const moduleCache = join(dir, 'gomodcache');
-    moduleCaches.push(moduleCache);
+    const moduleCache = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-modcache-')));
     const env = {
       ...process.env,
+      // Go otherwise makes unpacked module directories read-only; keeping this
+      // isolated cache writable lets Windows remove it atomically in `finally`.
+      GOFLAGS: '-modcacherw',
       GOMODCACHE: moduleCache,
       GONOSUMDB: '*',
       GONOPROXY: '',
@@ -176,59 +164,63 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
       GOTOOLCHAIN: 'local',
       TERMWRIGHT_CACHE_DIR: join(dir, 'prefetch-cache'),
     };
-    // Give the ordinary build everything it needs before the no-mutation
-    // snapshot. The checked-in complete go.sum remains the hash authority while
-    // GONOSUMDB removes the remote transparency service from the test path;
-    // `all` warms every transitive module before launcher assertions. This
-    // setup operation is not part of the launcher.
-    const before = await snapshot(app);
-    await run('go', ['mod', 'download', 'all'], {
-      cwd: app,
-      env: { ...env, GOWORK: 'off' },
-    });
-    const client = await realpath(join(here, '..', '..', '..', 'clients', 'go'));
-    const clientManifest = await readFile(join(client, 'go.mod'));
-    const clientSums = await readFile(join(client, 'go.sum'));
-    await run('go', ['mod', 'download', 'all'], {
-      cwd: client,
-      env: { ...env, GOWORK: 'off' },
-    });
-    // Resolve the exact generated workspace graph once while the pinned proxy
-    // is available. Go's lazy module loading can request historical go.mod
-    // files which `go mod download all` deliberately omits. The certification
-    // below uses a distinct Termwright cache with the proxy disabled.
-    await prepareInstrumentedBuild({ moduleDir: app, env });
-    const offlineEnv = {
-      ...env,
-      GOPROXY: 'off',
-      TERMWRIGHT_CACHE_DIR: join(dir, 'cache'),
-    };
-    expect(await snapshot(app)).toEqual(before);
-    await expect(readFile(join(client, 'go.mod'))).resolves.toEqual(clientManifest);
-    await expect(readFile(join(client, 'go.sum'))).resolves.toEqual(clientSums);
-    await run('go', ['mod', 'verify'], {
-      cwd: app,
-      env: { ...offlineEnv, GOWORK: 'off' },
-    });
-    await run('go', ['mod', 'verify'], {
-      cwd: client,
-      env: { ...offlineEnv, GOWORK: 'off' },
-    });
+    try {
+      // Give the ordinary build everything it needs before the no-mutation
+      // snapshot. The checked-in complete go.sum remains the hash authority while
+      // GONOSUMDB removes the remote transparency service from the test path;
+      // `all` warms every transitive module before launcher assertions. This
+      // setup operation is not part of the launcher.
+      const before = await snapshot(app);
+      await run('go', ['mod', 'download', 'all'], {
+        cwd: app,
+        env: { ...env, GOWORK: 'off' },
+      });
+      const client = await realpath(join(here, '..', '..', '..', 'clients', 'go'));
+      const clientManifest = await readFile(join(client, 'go.mod'));
+      const clientSums = await readFile(join(client, 'go.sum'));
+      await run('go', ['mod', 'download', 'all'], {
+        cwd: client,
+        env: { ...env, GOWORK: 'off' },
+      });
+      // Resolve the exact generated workspace graph once while the pinned proxy
+      // is available. Go's lazy module loading can request historical go.mod
+      // files which `go mod download all` deliberately omits. The certification
+      // below uses a distinct Termwright cache with the proxy disabled.
+      await prepareInstrumentedBuild({ moduleDir: app, env });
+      const offlineEnv = {
+        ...env,
+        GOPROXY: 'off',
+        TERMWRIGHT_CACHE_DIR: join(dir, 'cache'),
+      };
+      expect(await snapshot(app)).toEqual(before);
+      await expect(readFile(join(client, 'go.mod'))).resolves.toEqual(clientManifest);
+      await expect(readFile(join(client, 'go.sum'))).resolves.toEqual(clientSums);
+      await run('go', ['mod', 'verify'], {
+        cwd: app,
+        env: { ...offlineEnv, GOWORK: 'off' },
+      });
+      await run('go', ['mod', 'verify'], {
+        cwd: client,
+        env: { ...offlineEnv, GOWORK: 'off' },
+      });
 
-    const prepared = await prepareInstrumentedBuild({
-      moduleDir: app,
-      env: offlineEnv,
-    });
-    expect(prepared.flavour.major).toBe('v1');
-    expect(prepared.copyDir).toContain('v1.3.10');
-    expect(prepared.goArgs).toEqual(['-toolexec', expect.any(String)]);
-    expect(prepared.injectedModules).toEqual(['github.com/charmbracelet/bubbles']);
+      const prepared = await prepareInstrumentedBuild({
+        moduleDir: app,
+        env: offlineEnv,
+      });
+      expect(prepared.flavour.major).toBe('v1');
+      expect(prepared.copyDir).toContain('v1.3.10');
+      expect(prepared.goArgs).toEqual(['-toolexec', expect.any(String)]);
+      expect(prepared.injectedModules).toEqual(['github.com/charmbracelet/bubbles']);
 
-    await run('go', ['build', ...prepared.goArgs, '-o', join(dir, 'app-bin'), '.'], {
-      cwd: prepared.moduleDir,
-      env: prepared.env,
-    });
-    expect(await snapshot(app)).toEqual(before);
+      await run('go', ['build', ...prepared.goArgs, '-o', join(dir, 'app-bin'), '.'], {
+        cwd: prepared.moduleDir,
+        env: prepared.env,
+      });
+      expect(await snapshot(app)).toEqual(before);
+    } finally {
+      await rm(moduleCache, { recursive: true, force: true });
+    }
   }, 900_000);
 
   it('rejects an unsupported Bubble Tea version before selecting a near-enough patch', async () => {
