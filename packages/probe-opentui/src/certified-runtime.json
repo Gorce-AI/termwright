@@ -1,9 +1,12 @@
 {
-  "schemaVersion": 1,
   "framework": "opentui",
   "profiles": [
     {
       "version": "0.5.3"
+    },
+    {
+      "version": "0.5.4"
     }
-  ]
+  ],
+  "schemaVersion": 1
 }
