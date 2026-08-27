@@ -355,6 +355,16 @@
               "version": "0.5.3"
             }
           ]
+        },
+        {
+          "id": "opentui-0.5.4",
+          "frameworkVersion": "0.5.4",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.4"
+            }
+          ]
         }
       ],
       "upstreamTruth": {
@@ -1607,6 +1617,21 @@
               "name": "charm.land/bubbles/v2",
               "version": "v2.1.1",
               "optional": true
+            }
+          ]
+        },
+        {
+          "id": "charm-v1.3.10-668483feddee",
+          "frameworkVersion": "v1.3.10",
+          "modules": [
+            {
+              "name": "github.com/charmbracelet/bubbles",
+              "version": "v1.0.0",
+              "optional": true
+            },
+            {
+              "name": "github.com/charmbracelet/bubbletea",
+              "version": "v1.3.10"
             }
           ]
         },

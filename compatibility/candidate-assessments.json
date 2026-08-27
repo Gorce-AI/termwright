@@ -1,4 +1,142 @@
 {
   "schemaVersion": 1,
-  "streams": {}
+  "streams": {
+    "bubbles-v2": [
+      {
+        "candidateDigest": "sha256:be9627eb4d670064237a9716149007e2e67b972e5209ec8b7c12e262810ef8ed",
+        "certificationRevision": 1,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:wdMgn+sje1KNXdwFizIWjbf328fIUBxqEmJ/vYPo8yc=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:9GEMewcejrNtVIxZ9Y2wSsWJamsWNsXa8MpMLnH4yI4=",
+          "zipSha256": "ea1a4e6c72d5b5c7ed6eaf149b3ce1357d86be3478d6105661ae64f8923f768f"
+        },
+        "state": "red",
+        "version": "v2.2.0"
+      }
+    ],
+    "bubbletea-v2": [
+      {
+        "candidateDigest": "sha256:9c7b8e35ff01615275e17c8ab40de34b36cfaf367589e217b527358ae81407bb",
+        "certificationRevision": 1,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:2SkdgoTXluXJHOUwAoRlRXF/28vklb1rFl6GcgV1/ss=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:SxTJMhCAI3lbPmy4SgX5LWZ24AdINr4I6UEqzZvYJuY=",
+          "zipSha256": "5ce9c6662519a3cae6424c7d140bf61326f85591ba9c96b641a9606d1acd2b2a"
+        },
+        "state": "red",
+        "version": "v2.0.8"
+      }
+    ],
+    "ink": [
+      {
+        "candidateDigest": "sha256:fa0c5dea2ec678ae34d9888b38b59499cb0d7596b53f04af7ef2e99050e3ae2a",
+        "certificationRevision": 1,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:76327b91e14236c871d87b5d723cc0da2f5da6bf6523c968958123516e4bfdd8",
+          "cpu": [],
+          "dependencies": {
+            "@alcalzone/ansi-tokenize": "^0.3.0",
+            "ansi-escapes": "^7.3.0",
+            "ansi-styles": "^6.2.3",
+            "auto-bind": "^5.0.1",
+            "chalk": "^5.6.2",
+            "cli-boxes": "^4.0.1",
+            "cli-cursor": "^4.0.0",
+            "cli-truncate": "^6.0.0",
+            "code-excerpt": "^4.0.0",
+            "es-toolkit": "^1.45.1",
+            "indent-string": "^5.0.0",
+            "is-in-ci": "^2.0.0",
+            "patch-console": "^2.0.0",
+            "react-reconciler": "^0.33.0",
+            "scheduler": "^0.27.0",
+            "signal-exit": "^3.0.7",
+            "slice-ansi": "^9.0.0",
+            "stack-utils": "^2.0.6",
+            "string-width": "^8.2.0",
+            "terminal-size": "^4.0.1",
+            "type-fest": "^5.5.0",
+            "widest-line": "^6.0.0",
+            "wrap-ansi": "^10.0.0",
+            "ws": "^8.20.0",
+            "yoga-layout": "~3.2.1"
+          },
+          "dependencyClosure": [],
+          "dependencyRoots": [],
+          "integrity": "sha512-Y43xxa1ZSPvpmfLHcN5o+OdP8Rf8ykkNJEuKYOUNZKT8wXVNLFTtEm1nSDMQkfBH+YANF4Xuu0hhZ4ejqAtN2w==",
+          "libc": [],
+          "optionalDependencies": {},
+          "os": [],
+          "peerDependencies": {
+            "@types/react": ">=19.2.0",
+            "react": ">=19.2.0",
+            "react-devtools-core": ">=6.1.2"
+          },
+          "peerDependenciesMeta": {
+            "@types/react": {
+              "optional": true
+            },
+            "react-devtools-core": {
+              "optional": true
+            }
+          },
+          "registry": "https://registry.npmjs.org",
+          "shasum": "9f5acfdd6de553a20a3109efdcefe0afe763342f",
+          "tarball": "https://registry.npmjs.org/ink/-/ink-7.1.1.tgz",
+          "tarballSha256": "845b3147ec071c67aa2ba8f42825414231ac950500181b005e1677016c51b39a"
+        },
+        "state": "red",
+        "version": "7.1.1"
+      }
+    ],
+    "tcell-v2": [
+      {
+        "candidateDigest": "sha256:686eac640c5fcd1b017006e5a05cc68f0be501752e0f326043352ba236ae67a8",
+        "certificationRevision": 3,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:bj8ori1BG3OYMjmb3IklZVWfZUJ1UBQt9JXrOCOhGWw=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:KPNxyqclpWpWQlPLx6Xui1pMk8S+7+R37h3g07997NU=",
+          "zipSha256": "28ec9a195c369405a264531593e1d5c394ba3e1926792a2ba3069e17ffe7b7ac"
+        },
+        "state": "red",
+        "version": "v2.8.1"
+      },
+      {
+        "candidateDigest": "sha256:4302fdd4850ad522f2925af1e13ff40127676a40f593b058e80b42cc38f46605",
+        "certificationRevision": 3,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:8/ZoqM9rxzYphT9tH/9LnunhV9oPBqwS8WHGYm5nrmo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:N6t+eqK7/xwtRPwxzs1PXeRWnm0H9l02CrgJ7DLn1ys=",
+          "zipSha256": "e36d0cb01474c5456b4fd28dc6b0c1dc115d1788ed174885afd4bf5fa2b9af42"
+        },
+        "state": "red",
+        "version": "v2.9.0"
+      }
+    ],
+    "tview": [
+      {
+        "candidateDigest": "sha256:ece27d60e64f671ef7c73b8098144c611b8f5390bf349517fc497792922fdb5a",
+        "certificationRevision": 1,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:cSfIYfhpSGCjp3r/ECJb+GKS7cGJnqV8vfjQPwoXyfY=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:b/ftp+RxtDsHSaynXTbJb+/n/BxDEi+W3UfF5jILK6c=",
+          "zipSha256": "49acb1cd8fcda0bda8702e25283b6651e444fb5f21deca81157299be624b9b12"
+        },
+        "state": "red",
+        "version": "v0.42.0"
+      }
+    ]
+  }
 }

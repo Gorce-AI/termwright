@@ -64,11 +64,11 @@ Public availability is computed by traversing the same graph used by certificati
 | Framework | Certification ID | Instrumentation policy | Checksum source of truth |
 | --- | --- | --- | --- |
 | Ink | ink@7.1.1/0.2.0 | checksummed-instrumentation | `packages/probe-ink/src/certified-instrumentation.json` |
-| OpenTUI | opentui@0.5.3/0.2.0 | runtime-capability-and-behavior | `packages/probe-opentui/src/certified-runtime.json` |
+| OpenTUI | opentui@0.5.3/0.2.0<br>opentui@0.5.4/0.2.0 | runtime-capability-and-behavior | `packages/probe-opentui/src/certified-runtime.json` |
 | Textual | textual@runtime-capability/0.2.0 | runtime-capability-and-behavior | not applicable (capability certification) |
 | tview | tview@compile-capability/0.2.0 | compile-and-behavioral-capability | not applicable (capability certification) |
 | Ratatui | ratatui@0.30.2/0.2.0 | checksummed-replacement | `clients/rust-probe/upstream-patches/ratatui-core/0.1.2/manifest.json`<br>`clients/rust-probe/upstream-patches/ratatui-crossterm/0.1.2/manifest.json`<br>`clients/rust-probe/upstream-patches/ratatui-widgets/0.3.2/manifest.json` |
-| Bubble Tea / Bubbles | charm@v1.3.10/0.2.0<br>charm@v2.0.8/0.2.0<br>charm@v2.0.9/0.2.0 | checksummed-replacement | `packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.9/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json` |
+| Bubble Tea / Bubbles | charm@v1.3.10/0.2.0<br>charm@v2.0.8/0.2.0<br>charm@v2.0.9/0.2.0 | checksummed-replacement | `packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.9/manifest.json` |
 
 ## Application-integrated providers
 
