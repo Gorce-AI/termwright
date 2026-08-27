@@ -231,16 +231,20 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'utf8',
     );
     expect(tviewRaceCertification).toContain('prepareInstrumentedBuild({');
-    expect(tviewRaceCertification).toContain('["build", ...prepared.goArgs, "-o", binary, "."]');
+    expect(tviewRaceCertification).toMatch(
+      /\[\s*['"]build['"]\s*,\s*\.\.\.prepared\.goArgs\s*,\s*['"]-o['"]\s*,\s*binary\s*,\s*['"]\.['"]\s*,?\s*\]/u,
+    );
     expect(tviewRaceCertification).toContain('launchTerminal({');
     expect(tviewRaceCertification).toContain('await waitForPairedSemanticRevision(terminal, 1)');
-    expect(tviewRaceCertification).toContain(
-      'terminal.getByRole("list", { name: "Files" }).count()',
+    expect(tviewRaceCertification).toMatch(
+      /terminal\.getByRole\(['"]list['"]\s*,\s*\{\s*name:\s*['"]Files['"]\s*\}\)\.count\(\)/u,
     );
-    expect(tviewRaceCertification).toContain(
-      'terminal.getByRole("button", { name: "Save" }).count()',
+    expect(tviewRaceCertification).toMatch(
+      /terminal\.getByRole\(['"]button['"]\s*,\s*\{\s*name:\s*['"]Save['"]\s*\}\)\.count\(\)/u,
     );
-    expect(tviewRaceCertification).toContain('!terminal.screen().text().includes("DATA RACE")');
+    expect(tviewRaceCertification).toMatch(
+      /!terminal\.screen\(\)\.text\(\)\.includes\(['"]DATA RACE['"]\)/u,
+    );
     for (const jobId of ['build', 'windows-driver-native']) {
       expect(ciJobs[jobId]).toMatch(
         /^      - name: Certify the Go compiler injection contract\n        run: pnpm test:go-toolexec$/mu,
@@ -447,8 +451,8 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(goToolExecCertification).toContain('warm-cache owned source tamper refusal');
     expect(goToolExecCertification).toContain('vendor-mode dependency selection');
     expect(goToolExecCertification).toContain('compiler identity includes imported archives');
-    expect(goToolExecCertification).toContain(
-      '["test", "-vet=off", "-count=1", "-run", "^TestProbe$", ...prepared.goArgs, "."]',
+    expect(goToolExecCertification).toMatch(
+      /\[\s*['"]test['"]\s*,\s*['"]-vet=off['"]\s*,\s*['"]-count=1['"]\s*,\s*['"]-run['"]\s*,\s*['"]\^TestProbe\$['"]\s*,\s*\.\.\.prepared\.goArgs\s*,\s*['"]\.['"]\s*,?\s*\]/u,
     );
 
     const workflows = (await readdir(new URL('../.github/workflows/', import.meta.url))).filter(

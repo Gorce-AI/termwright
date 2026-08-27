@@ -122,7 +122,7 @@ describe('performance observation cadence', () => {
     expect(collector).toContain(
       'const resourceSoak = await observeResources(soakArgs, undefined, args.cycles)',
     );
-    expect(collector).toContain('stress = await observeResources([');
+    expect(collector).toMatch(/stress\s*=\s*await observeResources\(\s*\[/u);
     expect(collector).toContain('createQualityCheckpoint(16)');
     expect(collector).toContain('waitForQualityReady(checkpoint');
     expect(collector).toContain("publishQualityTerminal(checkpoint, { status: 'failure'");
@@ -161,7 +161,7 @@ describe('performance observation cadence', () => {
     );
     expect(checkpoint).toContain('await rename(temporary, staged)');
     expect(checkpoint).toContain('await link(staged, path)');
-    expect(stressFixture).toContain('await Promise.all(sessions.map');
+    expect(stressFixture).toMatch(/await Promise\.all\(\s*sessions\.map/u);
     expect(stressFixture).toContain('await publishQualityReady(checkpoint, processPids)');
     expect(stressFixture).toContain('await waitForQualityTerminal(checkpoint,');
     expect(stressFixture.indexOf('await waitForQualityTerminal(checkpoint,')).toBeLessThan(
