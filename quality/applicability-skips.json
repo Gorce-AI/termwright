@@ -429,6 +429,13 @@
       "required": true
     },
     {
+      "id": "linux-pidfd-owned-group-filter",
+      "file": "packages/pty/src/index.test.ts",
+      "fullName": "does not open pidfds for foreign process groups",
+      "platforms": ["darwin", "win32"],
+      "required": true
+    },
+    {
       "id": "textual-example-qualified-geometry",
       "file": "examples/textual-notes/tests/app.e2e.test.ts",
       "fullName": "publishes qualified v2 geometry and exact pointer ownership",
