@@ -183,3 +183,10 @@ T3 capabilities refuse versions outside their exact certification row. T0–T2
 capabilities use compile/capability admission and behavioral conformance; any
 missing capability is reported as an explicit degradation, never as a silent
 upgrade or a quietly incomplete semantic tree.
+
+Candidate certification also carries a per-stream revision. An unchanged red
+candidate stays suppressed at the revision that tested it. When a probe,
+runtime bridge, build injection, or certifier changes in a way that can change
+that result, maintainers increment only the affected stream revisions. This is
+an explicit request to certify those candidates against the new integration,
+not a generic retry mechanism.

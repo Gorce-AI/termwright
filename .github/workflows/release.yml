@@ -39,6 +39,7 @@ env:
   TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
   TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
   TERMWRIGHT_REQUIRE_GO: '1'
+  TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}
 
 jobs:
   prepare:
@@ -53,6 +54,13 @@ jobs:
       - name: Reject workflow reruns
         shell: bash
         run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - name: Require autonomous release authorization
+        shell: bash
+        run: |
+          test "$TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED" = true || {
+            echo '::error::Autonomous release is disabled. Set repository variable TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED to the exact value true to authorize Version PR preparation.'
+            exit 1
+          }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The SHA is verified after checkout; never let an input choose an
@@ -185,6 +193,13 @@ jobs:
       - name: Reject workflow reruns
         shell: bash
         run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - name: Require autonomous release authorization
+        shell: bash
+        run: |
+          test "$TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED" = true || {
+            echo '::error::Autonomous release is disabled. Set repository variable TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED to the exact value true to authorize Version PR publication.'
+            exit 1
+          }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.target }}

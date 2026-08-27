@@ -81,6 +81,9 @@ describe('autonomous workflow security', () => {
       'utf8',
     );
     expect(workflow).toContain('workflow_run:');
+    expect(workflow).toContain(
+      'TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}',
+    );
     expect(workflow).toContain('types: [completed]');
     expect(workflow).toContain('autonomous-coordinator-${{ github.event.repository.full_name }}');
     expect(workflow).not.toMatch(/ref:\s*\$\{\{\s*github\.event\.workflow_run\.head_sha\s*\}\}/u);
@@ -92,6 +95,19 @@ describe('autonomous workflow security', () => {
       "workflows: ['Framework compatibility candidates', 'CI', 'Release']",
     );
     expect(workflow).not.toContain('rerun-failed-jobs');
+    const reconciliation = workflow.slice(
+      workflow.indexOf('      - name: Commit only the compatibility allowlist'),
+      workflow.indexOf('\n  inspect:'),
+    );
+    const manualGuard = reconciliation.indexOf(
+      "if [ '${{ github.event.workflow_run.event }}' != schedule ]; then",
+    );
+    expect(manualGuard).toBeGreaterThan(-1);
+    expect(manualGuard).toBeLessThan(reconciliation.indexOf('refresh-heartbeat'));
+    expect(manualGuard).toBeLessThan(reconciliation.indexOf('dispatch-pending-changesets'));
+    expect(workflow).toContain(
+      'Manual certification found no compatibility changes; heartbeat and release dispatch are intentionally suppressed.',
+    );
     expect(workflow).not.toContain('astral-sh/setup-uv@');
     expect(workflow).not.toContain("--pattern 'framework-verdict-*'");
     expect(workflow.match(/--name framework-verdict-aggregate --dir/gu)).toHaveLength(2);
@@ -151,6 +167,14 @@ describe('autonomous workflow security', () => {
     expect(coordinator).toContain('probe-ink\\/src\\/certified-instrumentation');
     expect(coordinator).toContain('probe-opentui\\/src\\/certified-runtime');
     expect(coordinator).toContain('release dispatch intentionally suppressed');
+    expect(coordinator).toContain("releaseDecision === 'hold'");
+    expect(coordinator).toContain('exact Version PR ${pr.number} remains open');
+    expect(coordinator).toContain('pending changesets remain queued');
+    expect(coordinator).toContain("releaseDecision === 'prepare'");
+    expect(coordinator).toContain("releaseDecision === 'prepare' || releaseDecision === 'publish'");
+    expect(coordinator).not.toMatch(
+      /validateBranchProtection\([\s\S]*?\);\n  assertReleaseStateQuiescent\(/u,
+    );
     expect(workflow).toContain(
       '"https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"',
     );
@@ -165,6 +189,22 @@ describe('autonomous workflow security', () => {
 
   it('makes release prepare and publish explicit, SHA-bound dispatch modes with no push trigger', async () => {
     const workflow = await readWorkflow('release.yml');
+    expect(workflow).toContain(
+      'TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}',
+    );
+    expect(workflow.match(/- name: Require autonomous release authorization/gu)).toHaveLength(2);
+    expect(workflow.match(/test "\$TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED" = true/gu)).toHaveLength(
+      2,
+    );
+    expect(workflow).toContain(
+      'Set repository variable TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED to the exact value true',
+    );
+    for (const job of ['prepare', 'detect']) {
+      const block = jobBlock(workflow, job);
+      expect(block.indexOf('Require autonomous release authorization')).toBeLessThan(
+        block.indexOf('uses: actions/checkout@'),
+      );
+    }
     expect(workflow).toContain('mode:');
     expect(workflow).toContain('options: [prepare, publish]');
     expect(workflow).toContain('expected_sha:');

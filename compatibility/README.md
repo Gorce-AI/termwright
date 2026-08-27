@@ -86,6 +86,13 @@ the older revision then becomes eligible again. Red assessments remain visible
 as owned issues; a later green result removes the assessment and the issue
 closes only after the support allowlist PR merges.
 
+Treat a revision increment as part of the probe or certifier change that makes
+the old red result obsolete. Increment only the affected streams and review the
+old and new values explicitly; the revision is not a retry counter. A shared
+runtime or build-injection refactor may require a coordinated increment across
+several affected streams so discovery can reconsider each previously suppressed
+candidate under the new implementation.
+
 Each candidate records immutable source evidence:
 
 - Go module `Sum`, `GoModSum`, and the SHA-256 of the proxy zip;

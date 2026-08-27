@@ -268,6 +268,25 @@ export function validateTrustedUpstreamRun(run, { repository, defaultBranch, def
     throw new Error('stale compatibility workflow SHA');
 }
 
+export function compatibilityReleaseAllowed(run) {
+  if (run?.event === 'schedule') return true;
+  if (run?.event === 'workflow_dispatch') return false;
+  throw new Error(`untrusted compatibility event ${String(run?.event)}`);
+}
+
+export function autonomousReleaseEnabled(
+  value = process.env.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED,
+) {
+  return value === 'true';
+}
+
+export function autonomousReleaseDecision(kind, enabled, compatibilityAllowed = false) {
+  if (kind === 'version') return enabled ? 'publish' : 'hold';
+  if (kind === 'compatibility') return enabled && compatibilityAllowed ? 'prepare' : 'merge-only';
+  if (kind === 'heartbeat') return 'merge-only';
+  throw new Error(`unknown autonomous PR kind ${String(kind)}`);
+}
+
 export function validateFailedReleaseRun(run, { repository, defaultBranch }) {
   if (run?.name !== 'Release' || run?.status !== 'completed' || run?.event !== 'workflow_dispatch')
     throw new Error('unexpected release workflow_run source');
@@ -315,6 +334,9 @@ const prShape = {
 };
 
 export function nextHeartbeatRecord(workflowRun, currentText) {
+  if (!compatibilityReleaseAllowed(workflowRun)) {
+    throw new Error('schedule heartbeat requires a scheduled compatibility source run');
+  }
   if (
     !/^[1-9][0-9]*$/u.test(String(workflowRun?.id ?? '')) ||
     !SHA.test(workflowRun?.head_sha ?? '')
@@ -654,13 +676,34 @@ async function coordinateCi(event) {
   const run = event.workflow_run;
   const repository = event.repository.full_name;
   const branch = event.repository.default_branch;
+  const releaseEnabled = autonomousReleaseEnabled();
+  let releaseDecision = autonomousReleaseDecision(kind, releaseEnabled);
+  if (releaseDecision === 'hold') {
+    process.stdout.write(
+      `autonomous release is disabled; exact Version PR ${pr.number} remains open and publication was not dispatched\n`,
+    );
+    return;
+  }
   validateBranchProtection(
     await githubApi(`/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`),
   );
-  assertReleaseStateQuiescent(await recentReleaseRuns(repository, branch), {
-    repository,
-    defaultBranch: branch,
-  });
+  let releaseAllowed = false;
+  if (kind === 'compatibility') {
+    const sourceRun = await githubApi(`/repos/${repository}/actions/runs/${inspected.sourceRunId}`);
+    validateTrustedUpstreamRun(sourceRun, {
+      repository,
+      defaultBranch: branch,
+      defaultHead: inspected.baseSha,
+    });
+    releaseAllowed = compatibilityReleaseAllowed(sourceRun);
+    releaseDecision = autonomousReleaseDecision(kind, releaseEnabled, releaseAllowed);
+  }
+  if (releaseDecision === 'prepare' || releaseDecision === 'publish') {
+    assertReleaseStateQuiescent(await recentReleaseRuns(repository, branch), {
+      repository,
+      defaultBranch: branch,
+    });
+  }
   const merged = inspected.alreadyMerged
     ? { merged: true, sha: inspected.mergedSha }
     : await githubApi(`/repos/${repository}/pulls/${pr.number}/merge`, {
@@ -672,8 +715,17 @@ async function coordinateCi(event) {
   const after = await defaultHead(repository, branch);
   if (after !== merged.sha)
     throw new Error(`default branch did not advance to the exact merged ${kind} PR SHA`);
-  if (kind === 'compatibility') await dispatchRelease(repository, branch, 'prepare', merged.sha);
-  else if (kind === 'version')
+  if (releaseDecision === 'prepare')
+    await dispatchRelease(repository, branch, 'prepare', merged.sha);
+  else if (kind === 'compatibility' && !releaseAllowed)
+    process.stdout.write(
+      `merged exact manually certified compatibility ${merged.sha}; release dispatch intentionally suppressed\n`,
+    );
+  else if (kind === 'compatibility')
+    process.stdout.write(
+      `merged exact scheduled compatibility ${merged.sha}; autonomous release is disabled and prepare was not dispatched\n`,
+    );
+  else if (releaseDecision === 'publish')
     await dispatchRelease(repository, branch, 'publish', merged.sha, pr.number);
   else
     process.stdout.write(
@@ -689,6 +741,14 @@ async function dispatchPendingChangesets(event, expectedSha) {
     defaultBranch: branch,
     defaultHead: expectedSha,
   });
+  if (!compatibilityReleaseAllowed(event.workflow_run)) {
+    process.stdout.write('manual compatibility certification cannot dispatch pending changesets\n');
+    return;
+  }
+  if (!autonomousReleaseEnabled()) {
+    process.stdout.write('autonomous release is disabled; pending changesets remain queued\n');
+    return;
+  }
   if ((await defaultHead(repository, branch)) !== expectedSha)
     throw new Error('default branch advanced before pending changesets could be dispatched');
   const pending = pendingChangesetFiles(await readdir(resolve('.changeset')));

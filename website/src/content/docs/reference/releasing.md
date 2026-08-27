@@ -18,6 +18,13 @@ certified head. The coordinator then publishes crates.io, PyPI, npm and the
 GitHub Release from that merged commit. A failed or rerun workflow attempt is
 not accepted as release evidence.
 
+The unattended path is also protected by the fail-closed repository variable
+`TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED`. Only the exact value `true` lets
+automation prepare, merge, or publish a Version PR. If the variable is absent
+or disabled, framework certification, compatibility allowlist merges, and
+issue closure continue normally, while pending changesets remain queued. A
+manually started compatibility run never initiates a release.
+
 A version that exists was therefore proposed with explicit version and
 changelog changes, deterministically reproduced, and tested before publication.
 
