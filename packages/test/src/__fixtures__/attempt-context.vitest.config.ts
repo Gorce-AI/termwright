@@ -12,13 +12,21 @@ const brokerToken = process.env['TERMWRIGHT_TEST_BROKER_TOKEN'];
 const configuredRunId = process.env['TERMWRIGHT_TEST_RUN_ID'];
 const journalEndpoint = process.env['TERMWRIGHT_TEST_JOURNAL_ENDPOINT'];
 const journalToken = process.env['TERMWRIGHT_TEST_JOURNAL_TOKEN'];
-if (brokerEndpoint === undefined || brokerToken === undefined || configuredRunId === undefined ||
-    journalEndpoint === undefined || journalToken === undefined) {
+if (
+  brokerEndpoint === undefined ||
+  brokerToken === undefined ||
+  configuredRunId === undefined ||
+  journalEndpoint === undefined ||
+  journalToken === undefined
+) {
   throw new Error('runner fixture requires its authoritative broker context');
 }
 const task = () => ({
-  runnerTaskId: createRunId('runner-task'), projectId, specId: createRunId('spec'),
-  file: fixture, fullName: 'attempt context fixture',
+  runnerTaskId: createRunId('runner-task'),
+  projectId,
+  specId: createRunId('spec'),
+  file: fixture,
+  fullName: 'attempt context fixture',
 });
 
 export default defineConfig({

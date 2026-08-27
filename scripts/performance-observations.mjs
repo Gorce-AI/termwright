@@ -21,15 +21,25 @@ export async function loadPerformanceObservations(options, expectedSubjectSha) {
     arch: process.arch,
     nodeVersion: process.versions.node,
   });
-  const raw = { environment, ...Object.fromEntries(await Promise.all(
-    ['quality', 'semantic', 'charm', 'opentui'].map(async (name) => [name, await readFile(resolve(options[name]))]),
-  )) };
+  const raw = {
+    environment,
+    ...Object.fromEntries(
+      await Promise.all(
+        ['quality', 'semantic', 'charm', 'opentui'].map(async (name) => [
+          name,
+          await readFile(resolve(options[name])),
+        ]),
+      ),
+    ),
+  };
   const quality = JSON.parse(raw.quality.toString('utf8'));
   validateObservationSet(quality);
   const qualityProvenance = await validateQualityProvenance(quality.provenance, expectedSubjectSha);
   validateQualityResourceSnapshot(quality.resourceSnapshot, descriptor);
   if (quality.environment !== descriptor.class) {
-    throw new Error(`quality environment ${quality.environment} differs from descriptor ${descriptor.class}`);
+    throw new Error(
+      `quality environment ${quality.environment} differs from descriptor ${descriptor.class}`,
+    );
   }
   const semantic = report(raw.semantic, 'semantic', descriptor);
   const charm = report(raw.charm, 'charm', descriptor);
@@ -69,10 +79,12 @@ export async function loadPerformanceObservations(options, expectedSubjectSha) {
         opentui: opentui.runtime,
       },
       quality: qualityProvenance,
-      rawInputs: Object.fromEntries(Object.entries(raw).map(([name, bytes]) => [
-        name,
-        createHash('sha256').update(bytes).digest('hex'),
-      ])),
+      rawInputs: Object.fromEntries(
+        Object.entries(raw).map(([name, bytes]) => [
+          name,
+          createHash('sha256').update(bytes).digest('hex'),
+        ]),
+      ),
     },
   };
 }
@@ -86,7 +98,9 @@ async function validateQualityProvenance(value, expectedSubjectSha) {
   if (value.kind !== 'termwright-quality-provenance' || value.schemaVersion !== 1) {
     throw new Error('quality provenance kind or schema is unsupported');
   }
-  const collectorSha256 = createHash('sha256').update(await readFile(collectorUrl)).digest('hex');
+  const collectorSha256 = createHash('sha256')
+    .update(await readFile(collectorUrl))
+    .digest('hex');
   if (value.collectorSha256 !== collectorSha256) {
     throw new Error('quality provenance collector SHA-256 differs from the executing collector');
   }
@@ -98,9 +112,15 @@ async function validateQualityProvenance(value, expectedSubjectSha) {
   const timing = validateQualityRole(value.roles.timing, 'timing');
   const resourceSoak = validateQualityRole(value.roles.resourceSoak, 'resourceSoak');
   const stress = validateQualityRole(value.roles.stress, 'stress');
-  if (timing.runs.length < 2 || timing.runs.length > 100
-    || resourceSoak.runs.length !== timing.runs.length || stress.runs.length !== 1) {
-    throw new Error('quality provenance roles do not contain the certified timing/resource run counts');
+  if (
+    timing.runs.length < 2 ||
+    timing.runs.length > 100 ||
+    resourceSoak.runs.length !== timing.runs.length ||
+    stress.runs.length !== 1
+  ) {
+    throw new Error(
+      'quality provenance roles do not contain the certified timing/resource run counts',
+    );
   }
   if (new Set([timing.invocationId, resourceSoak.invocationId, stress.invocationId]).size !== 3) {
     throw new Error('quality provenance roles must use distinct host invocations');
@@ -114,14 +134,19 @@ async function validateQualityProvenance(value, expectedSubjectSha) {
 
 function validateQualityRole(value, role) {
   exactKeys(value, ['invocationId', 'runs'], `quality ${role} provenance`);
-  if (!/^invocation:[0-9a-f-]+$/u.test(value.invocationId ?? '')
-    || !Array.isArray(value.runs) || value.runs.length === 0) {
+  if (
+    !/^invocation:[0-9a-f-]+$/u.test(value.invocationId ?? '') ||
+    !Array.isArray(value.runs) ||
+    value.runs.length === 0
+  ) {
     throw new Error(`quality ${role} provenance has no valid invocation or runs`);
   }
   for (const run of value.runs) {
     exactKeys(run, ['runId', 'manifestSha256'], `quality ${role} run provenance`);
-    if (!/^run:[0-9a-f-]+$/u.test(run.runId ?? '')
-      || !/^[0-9a-f]{64}$/u.test(run.manifestSha256 ?? '')) {
+    if (
+      !/^run:[0-9a-f-]+$/u.test(run.runId ?? '') ||
+      !/^[0-9a-f]{64}$/u.test(run.manifestSha256 ?? '')
+    ) {
       throw new Error(`quality ${role} run provenance is invalid`);
     }
   }
@@ -139,31 +164,44 @@ function validateQualityCi(value, expectedSubjectSha) {
     return;
   }
   exactKeys(value, ['runId', 'runAttempt', 'sha'], 'quality GitHub Actions provenance');
-  if (!/^[1-9][0-9]*$/u.test(value.runId ?? '') || !/^[1-9][0-9]*$/u.test(value.runAttempt ?? '')
-    || value.sha !== expectedSubjectSha) {
+  if (
+    !/^[1-9][0-9]*$/u.test(value.runId ?? '') ||
+    !/^[1-9][0-9]*$/u.test(value.runAttempt ?? '') ||
+    value.sha !== expectedSubjectSha
+  ) {
     throw new Error('recorded quality GitHub Actions provenance is invalid');
   }
-  if (process.env.GITHUB_ACTIONS === 'true' && (value.runId !== process.env.GITHUB_RUN_ID
-    || value.runAttempt !== process.env.GITHUB_RUN_ATTEMPT)) {
+  if (
+    process.env.GITHUB_ACTIONS === 'true' &&
+    (value.runId !== process.env.GITHUB_RUN_ID ||
+      value.runAttempt !== process.env.GITHUB_RUN_ATTEMPT)
+  ) {
     throw new Error('quality GitHub Actions provenance is missing or differs from the current run');
   }
 }
 
 function validateQualityResourceSnapshot(value, descriptor) {
-  exactKeys(value, ['kind', 'schemaVersion', 'memoryMeasurement', 'stress'], 'quality resource snapshot');
+  exactKeys(
+    value,
+    ['kind', 'schemaVersion', 'memoryMeasurement', 'stress'],
+    'quality resource snapshot',
+  );
   if (value.kind !== 'termwright-quality-resource-snapshot' || value.schemaVersion !== 1) {
     throw new Error('quality resource snapshot kind or schema is unsupported');
   }
-  const expectedMeasurement = descriptor.runner.platform === 'darwin'
-    ? 'darwin-summary-footprint'
-    : 'linux-proportional-set-size';
+  const expectedMeasurement =
+    descriptor.runner.platform === 'darwin'
+      ? 'darwin-summary-footprint'
+      : 'linux-proportional-set-size';
   if (value.memoryMeasurement !== expectedMeasurement) {
     throw new Error(`quality memory measurement must be ${expectedMeasurement}`);
   }
   exactKeys(value.stress, ['expectedSessions', 'processCount'], 'quality stress snapshot');
-  if (value.stress.expectedSessions !== 16
-    || !Number.isSafeInteger(value.stress.processCount)
-    || value.stress.processCount < value.stress.expectedSessions + 2) {
+  if (
+    value.stress.expectedSessions !== 16 ||
+    !Number.isSafeInteger(value.stress.processCount) ||
+    value.stress.processCount < value.stress.expectedSessions + 2
+  ) {
     throw new Error('quality stress snapshot does not prove the complete 16-session process tree');
   }
 }
@@ -198,10 +236,11 @@ const REPORT_CONTRACTS = {
     id: 'opentui-threaded-marker-route',
     framework: 'opentui',
     renderingMode: 'retained',
-    runtime: (descriptor) => new RegExp(
-      `^bun ${escapeRegex(descriptor.toolchains.bun.resolved)}; @opentui/core \\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$`,
-      'u',
-    ),
+    runtime: (descriptor) =>
+      new RegExp(
+        `^bun ${escapeRegex(descriptor.toolchains.bun.resolved)}; @opentui/core \\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$`,
+        'u',
+      ),
   },
 };
 
@@ -214,9 +253,11 @@ function report(bytes, input, descriptor) {
     throw new Error(`${input} report must contain exactly one scenario ${contract.id}`);
   }
   const [scenario] = value.scenarios;
-  if (scenario.id !== contract.id
-    || scenario.framework !== contract.framework
-    || scenario.renderingMode !== contract.renderingMode) {
+  if (
+    scenario.id !== contract.id ||
+    scenario.framework !== contract.framework ||
+    scenario.renderingMode !== contract.renderingMode
+  ) {
     throw new Error(
       `${input} report scenario must be ${contract.id}/${contract.framework}/${contract.renderingMode}`,
     );
@@ -225,18 +266,24 @@ function report(bytes, input, descriptor) {
 }
 
 function correlateReportEnvironment(report, input, descriptor) {
-  if (report.environment.platform !== descriptor.runner.platform
-    || report.environment.architecture !== descriptor.runner.arch) {
-    throw new Error(`${input} report platform does not match the performance environment descriptor`);
+  if (
+    report.environment.platform !== descriptor.runner.platform ||
+    report.environment.architecture !== descriptor.runner.arch
+  ) {
+    throw new Error(
+      `${input} report platform does not match the performance environment descriptor`,
+    );
   }
   const runtime = report.environment.runtime;
   const expectedRuntime = REPORT_CONTRACTS[input].runtime(descriptor);
-  const matches = expectedRuntime instanceof RegExp
-    ? expectedRuntime.test(runtime)
-    : runtime === expectedRuntime;
+  const matches =
+    expectedRuntime instanceof RegExp ? expectedRuntime.test(runtime) : runtime === expectedRuntime;
   if (!matches) {
-    const runtimeName = input === 'semantic' ? 'Node' : input === 'charm' ? 'Node/Go' : 'Bun/package';
-    throw new Error(`${input} report ${runtimeName} runtime does not match the performance environment descriptor`);
+    const runtimeName =
+      input === 'semantic' ? 'Node' : input === 'charm' ? 'Node/Go' : 'Bun/package';
+    throw new Error(
+      `${input} report ${runtimeName} runtime does not match the performance environment descriptor`,
+    );
   }
 }
 

@@ -9,8 +9,8 @@ another. A **terminal profile** is a named set of answers to exactly those
 questions, recorded with the session so a replay counts the way the session did.
 
 ```ts
-import {fileURLToPath} from 'node:url';
-import {launchTerminal} from '@termwright/driver';
+import { fileURLToPath } from 'node:url';
+import { launchTerminal } from '@termwright/driver';
 
 const appPath = fileURLToPath(new URL('../app.js', import.meta.url));
 
@@ -24,19 +24,19 @@ terminal.terminalProfile; // what this session actually used
 
 ## What a profile switches
 
-| Switch | What it decides |
-|---|---|
-| `unicodeVersion` | which width tables apply |
-| `ambiguousWide` | whether East Asian Ambiguous characters take one column or two |
-| `variationSelectors` | whether `❤️` (VS16) is one column or two |
+| Switch                     | What it decides                                                       |
+| -------------------------- | --------------------------------------------------------------------- |
+| `unicodeVersion`           | which width tables apply                                              |
+| `ambiguousWide`            | whether East Asian Ambiguous characters take one column or two        |
+| `variationSelectors`       | whether `❤️` (VS16) is one column or two                              |
 | `reflowCursorLineOnResize` | whether the cursor's line reflows on resize (wrapped lines always do) |
 
 Three profiles cover the currently supported behaviors:
 
-| Profile | Answers |
-|---|---|
-| `default` | Unicode 11, narrow ambiguous, no VS16 promotion — what most terminals do |
-| `kitty` | VS16 promotes to an emoji-width cluster |
+| Profile                 | Answers                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| `default`               | Unicode 11, narrow ambiguous, no VS16 promotion — what most terminals do              |
+| `kitty`                 | VS16 promotes to an emoji-width cluster                                               |
 | `iterm2-ambiguous-wide` | ambiguous characters take two columns, the way iTerm2 answers when configured for CJK |
 
 ## Choose a profile
@@ -46,7 +46,7 @@ named terminal as a whole. Selecting `kitty` does not turn the run into a kitty
 integration test.
 
 That distinction matters when a test fails on a user's machine but not in CI:
-the profile tells you which *answers* your assertions assumed, which is a real
+the profile tells you which _answers_ your assertions assumed, which is a real
 lead. It cannot tell you that a specific terminal is or is not affected.
 
 ## Replay and screenshot consistency

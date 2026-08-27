@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SessionEvents
 
-Defined in: [driver/src/api.ts:832](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L832)
+Defined in: [driver/src/api.ts:792](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L792)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > **checkpoint**(): `number`
 
-Defined in: [driver/src/api.ts:839](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L839)
+Defined in: [driver/src/api.ts:799](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L799)
 
 Last sequence assigned by the source journal. Zero means no event yet.
 
@@ -50,7 +50,7 @@ Last sequence assigned by the source journal. Zero means no event yet.
 
 > **on**\<`E`\>(`event`, `cb`): () => `void`
 
-Defined in: [driver/src/api.ts:833](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L833)
+Defined in: [driver/src/api.ts:793](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L793)
 
 #### Type Parameters
 
@@ -78,7 +78,7 @@ Defined in: [driver/src/api.ts:833](https://github.com/Gorce-AI/termwright/blob/
 
 > **subscribe**(`options`, `cb`): () => `void`
 
-Defined in: [driver/src/api.ts:847](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L847)
+Defined in: [driver/src/api.ts:807](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L807)
 
 Subscribes to the single ordered session stream and replays retained
 events starting at `fromSequence` before switching to live delivery.

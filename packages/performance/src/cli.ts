@@ -46,7 +46,8 @@ function parseArgs(args: readonly string[]): CliOptions {
         break;
       case '--output':
         output = args[index + 1];
-        if (output === undefined || output.length === 0) throw new Error('--output requires a path');
+        if (output === undefined || output.length === 0)
+          throw new Error('--output requires a path');
         index += 1;
         break;
       case '--pretty':

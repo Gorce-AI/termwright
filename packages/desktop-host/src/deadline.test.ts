@@ -29,8 +29,9 @@ describe('withinDeadline', () => {
     // execution budget, and cancellation must stay owned by the caller.
     const seen = await unhandledDuring(async () => {
       const abandoned = createDeadlineDeferred<never>();
-      await expect(withinDeadline(abandoned, performance.now() - 1, 'budget already spent'))
-        .rejects.toThrow('budget already spent');
+      await expect(
+        withinDeadline(abandoned, performance.now() - 1, 'budget already spent'),
+      ).rejects.toThrow('budget already spent');
     });
     expect(seen).toEqual([]);
   });
@@ -38,8 +39,9 @@ describe('withinDeadline', () => {
   it('settles a never-finishing operation when the deadline wins', async () => {
     const seen = await unhandledDuring(async () => {
       const slow = createDeadlineDeferred<never>();
-      await expect(withinDeadline(slow, performance.now() + 5, 'deadline won the race'))
-        .rejects.toThrow('deadline won the race');
+      await expect(
+        withinDeadline(slow, performance.now() + 5, 'deadline won the race'),
+      ).rejects.toThrow('deadline won the race');
       await expect(slow.result).rejects.toMatchObject({ name: 'DeadlineOperationCancelledError' });
     });
     expect(seen).toEqual([]);
@@ -48,14 +50,17 @@ describe('withinDeadline', () => {
   it('returns the value when the promise settles first', async () => {
     const operation = createDeadlineDeferred<string>();
     operation.resolve('ready');
-    await expect(withinDeadline(operation, performance.now() + 1_000, 'unused')).resolves.toBe('ready');
+    await expect(withinDeadline(operation, performance.now() + 1_000, 'unused')).resolves.toBe(
+      'ready',
+    );
   });
 
   it('reports the failure the promise produced, not the deadline', async () => {
     const operation = createDeadlineDeferred<never>();
     operation.reject(new Error('bind refused'));
-    await expect(withinDeadline(operation, performance.now() + 1_000, 'unused'))
-      .rejects.toThrow('bind refused');
+    await expect(withinDeadline(operation, performance.now() + 1_000, 'unused')).rejects.toThrow(
+      'bind refused',
+    );
   });
 
   it('builds its detail lazily so it can name the phase reached', async () => {

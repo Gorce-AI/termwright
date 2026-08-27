@@ -25,7 +25,7 @@ A retained object tree of `Renderable` instances, rooted at the renderer.
 
 - `abstract class BaseRenderable extends EventEmitter` — `Renderable.d.ts:89`
   (impl. `chunk-node-kq7as74d.js:138`); `abstract class Renderable extends
-  BaseRenderable` — `Renderable.d.ts:116` (impl. `:192`).
+BaseRenderable` — `Renderable.d.ts:116` (impl. `:192`).
 - Root: `class RootRenderable extends Renderable` — `Renderable.d.ts:333`, id
   forced to `"__root__"` (`chunk-node-kq7as74d.js:1374`), reachable as
   `renderer.root` — `renderer.d.ts:236`.
@@ -36,7 +36,7 @@ A retained object tree of `Renderable` instances, rooted at the renderer.
   child at `:1012`), `insertBefore()` — `:263` (impl. `:1019-1080`), `remove()` —
   `:265` (impl. `:1084-1112`).
 - Text lives in a **separate subtree**: `TextNodeRenderable extends
-  BaseRenderable` — `renderables/TextNode.d.ts:17` — with its own children and no
+BaseRenderable` — `renderables/TextNode.d.ts:17` — with its own children and no
   Yoga node and no position.
 
 ## 2. Where layout is computed
@@ -49,7 +49,7 @@ Yoga, same as Ink, but native and driven from the root once per frame when dirty
 - Results land in `_x`, `_y`, `_screenX`, `_screenY`, `_widthValue`,
   `_heightValue` — `Renderable.d.ts:122-129` — inside `updateFromLayout()`
   (`chunk-node-kq7as74d.js:901-930`): `_x = layout.left` (`:911`), `_screenX =
-  parentScreenX + _x + _translateX` (`:915`). **Screen coordinates accumulate
+parentScreenX + _x + _translateX` (`:915`). **Screen coordinates accumulate
   from the parent, so a parent must be updated earlier in the same frame**; a
   per-frame guard sits at `:903-905`.
 - Public getters `screenX/screenY/x/y/width/height` — `Renderable.d.ts:193-210`.
@@ -112,7 +112,7 @@ registers the node in a hit grid: `_ctx.addToHitGrid(screenX, screenY, width,
 height, this.num)` (`:1196`). The tree stays alive after the frame; nothing about
 structure is destroyed.
 
-What *is* unavailable in JS is the **output**: see §9. The bytes are produced
+What _is_ unavailable in JS is the **output**: see §9. The bytes are produced
 natively.
 
 **Earliest useful points**, in order of preference, all public:
@@ -137,8 +137,8 @@ Two identifiers, both stable for the object's lifetime:
   (`chunk-node-kq7as74d.js:148`, verified). No setter. This is the reliable key,
   and it is what the hit grid uses (`:1196`).
 - `id: string` — `Renderable.d.ts:92, 106-107` — `options.id ?? \`renderable-${this.num}\``
-  (`chunk-node-kq7as74d.js:149`, verified). **Mutable at runtime**, and changing
-  it updates no index (lookup is a linear scan, `:1082`), so it is an
+(`chunk-node-kq7as74d.js:149`, verified). **Mutable at runtime**, and changing
+it updates no index (lookup is a linear scan, `:1082`), so it is an
   author-supplied label, not an identity.
 
 A process-wide registry exists: `static renderablesByNumber: Map<number,
@@ -148,7 +148,7 @@ index, so **every live node in the process is reachable without patching
 anything**.
 
 Identity survives re-render and even `remove()` (which does not destroy —
-`:1084-1112`). It does *not* survive a reactive layer above the core recreating
+`:1084-1112`). It does _not_ survive a reactive layer above the core recreating
 instances.
 
 ## 7. Observability of custom components
@@ -196,7 +196,7 @@ The legal ways to get output bytes in JS:
 
 - pass a custom `stdout` in the config, which allocates a `NativeSpanFeed` whose
   `onData` returns bytes to JS — `chunk-node-kq7as74d.js:7237, 7247-7254,
-  7280-7284`;
+7280-7284`;
 - `addPostProcessFn` and read the `OptimizedBuffer` before the native call;
 - the undocumented escape hatch `OTUI_NO_NATIVE_RENDER`
   (`chunk-node-kq7as74d.js:7417-7420`).
@@ -250,7 +250,7 @@ verified — and `selectedIndex` has a **setter with no getter**, `:120`),
 ### The point to wrap: `createCliRenderer`
 
 - Signature: `export declare function createCliRenderer(config?:
-  CliRendererConfig): Promise<CliRenderer>` — **`renderer.d.ts:186`** (verified);
+CliRendererConfig): Promise<CliRenderer>` — **`renderer.d.ts:186`** (verified);
   implementation `chunk-node-kq7as74d.js:6973-6993`, which constructs
   `new CliRenderer(...)` at `:6981` and awaits `setupTerminal()` at `:6983`.
 - It **returns a class instance**, not an object literal, so a wrapper can hand

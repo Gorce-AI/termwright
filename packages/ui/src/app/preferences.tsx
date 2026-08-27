@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import type { PlaybackSpeed } from '../playback.js';
 import type { EditorId } from '../editor-link.js';
 
@@ -44,8 +52,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   inspectorTab: 'tree',
   timelineCollapsed: false,
   reducedMotion: 'system',
-  railShare: .26,
-  inspectorShare: .23,
+  railShare: 0.26,
+  inspectorShare: 0.23,
   defaultReplaySpeed: 1,
   editor: 'vscode',
   specExpansion: null,
@@ -79,7 +87,11 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   useEffect(() => {
     const receive = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY || event.newValue === null) return;
-      try { setPreferences(normalizePreferences(JSON.parse(event.newValue))); } catch { /* Ignore a partial/corrupt write from another tab. */ }
+      try {
+        setPreferences(normalizePreferences(JSON.parse(event.newValue)));
+      } catch {
+        /* Ignore a partial/corrupt write from another tab. */
+      }
     };
     window.addEventListener('storage', receive);
     return () => window.removeEventListener('storage', receive);
@@ -90,7 +102,10 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
     else root.dataset['motion'] = preferences.reducedMotion;
   }, [preferences.reducedMotion]);
 
-  const value = useMemo<PreferencesContextValue>(() => ({ preferences, updatePreferences, resetLayout, resetAll }), [preferences, resetAll, resetLayout, updatePreferences]);
+  const value = useMemo<PreferencesContextValue>(
+    () => ({ preferences, updatePreferences, resetLayout, resetAll }),
+    [preferences, resetAll, resetLayout, updatePreferences],
+  );
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }
 
@@ -105,18 +120,52 @@ export function normalizePreferences(value: unknown): Preferences {
   if ('version' in input && input['version'] !== 1) return DEFAULT_PREFERENCES;
   return {
     version: 1,
-    navigationExpanded: boolean(input['navigationExpanded'], DEFAULT_PREFERENCES.navigationExpanded),
-    timelineDensity: oneOf(input['timelineDensity'], ['compact', 'comfortable'] as const, DEFAULT_PREFERENCES.timelineDensity),
-    autoFollowCurrentAction: boolean(input['autoFollowCurrentAction'], DEFAULT_PREFERENCES.autoFollowCurrentAction),
+    navigationExpanded: boolean(
+      input['navigationExpanded'],
+      DEFAULT_PREFERENCES.navigationExpanded,
+    ),
+    timelineDensity: oneOf(
+      input['timelineDensity'],
+      ['compact', 'comfortable'] as const,
+      DEFAULT_PREFERENCES.timelineDensity,
+    ),
+    autoFollowCurrentAction: boolean(
+      input['autoFollowCurrentAction'],
+      DEFAULT_PREFERENCES.autoFollowCurrentAction,
+    ),
     autoLiveReplay: boolean(input['autoLiveReplay'], DEFAULT_PREFERENCES.autoLiveReplay),
-    inspectorCollapsed: boolean(input['inspectorCollapsed'], DEFAULT_PREFERENCES.inspectorCollapsed),
-    inspectorTab: oneOf(input['inspectorTab'], ['tree', 'semantic', 'logs'] as const, DEFAULT_PREFERENCES.inspectorTab),
+    inspectorCollapsed: boolean(
+      input['inspectorCollapsed'],
+      DEFAULT_PREFERENCES.inspectorCollapsed,
+    ),
+    inspectorTab: oneOf(
+      input['inspectorTab'],
+      ['tree', 'semantic', 'logs'] as const,
+      DEFAULT_PREFERENCES.inspectorTab,
+    ),
     timelineCollapsed: boolean(input['timelineCollapsed'], DEFAULT_PREFERENCES.timelineCollapsed),
-    reducedMotion: oneOf(input['reducedMotion'], ['system', 'reduce', 'full'] as const, DEFAULT_PREFERENCES.reducedMotion),
-    railShare: boundedNumber(input['railShare'], .2, .42, DEFAULT_PREFERENCES.railShare),
-    inspectorShare: boundedNumber(input['inspectorShare'], .2, .34, DEFAULT_PREFERENCES.inspectorShare),
-    defaultReplaySpeed: oneOf(input['defaultReplaySpeed'], [.5, 1, 2, 4] as const, DEFAULT_PREFERENCES.defaultReplaySpeed),
-    editor: oneOf(input['editor'], ['vscode', 'vscode-insiders', 'cursor', 'webstorm', 'zed', 'none'] as const, DEFAULT_PREFERENCES.editor),
+    reducedMotion: oneOf(
+      input['reducedMotion'],
+      ['system', 'reduce', 'full'] as const,
+      DEFAULT_PREFERENCES.reducedMotion,
+    ),
+    railShare: boundedNumber(input['railShare'], 0.2, 0.42, DEFAULT_PREFERENCES.railShare),
+    inspectorShare: boundedNumber(
+      input['inspectorShare'],
+      0.2,
+      0.34,
+      DEFAULT_PREFERENCES.inspectorShare,
+    ),
+    defaultReplaySpeed: oneOf(
+      input['defaultReplaySpeed'],
+      [0.5, 1, 2, 4] as const,
+      DEFAULT_PREFERENCES.defaultReplaySpeed,
+    ),
+    editor: oneOf(
+      input['editor'],
+      ['vscode', 'vscode-insiders', 'cursor', 'webstorm', 'zed', 'none'] as const,
+      DEFAULT_PREFERENCES.editor,
+    ),
     specExpansion: stringArrayOrNull(input['specExpansion']),
   };
 }
@@ -134,28 +183,52 @@ function loadPreferences(): Preferences {
 }
 
 function safeStorageGet(key: string): string | null {
-  try { return localStorage.getItem(key); } catch { return null; }
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
 function safeStorageSet(key: string, value: string): boolean {
-  try { localStorage.setItem(key, value); return true; } catch { return false; }
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function safeCookieGet(key: string): string | null {
   try {
     const prefix = `${key}=`;
-    const item = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix));
+    const item = document.cookie
+      .split(';')
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(prefix));
     return item === undefined ? null : decodeURIComponent(item.slice(prefix.length));
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function safeCookieSet(key: string, value: string): void {
-  try { document.cookie = `${key}=${encodeURIComponent(value)}; Path=/; Max-Age=31536000; SameSite=Lax`; } catch { /* file:// reports stay in memory. */ }
+  try {
+    document.cookie = `${key}=${encodeURIComponent(value)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  } catch {
+    /* file:// reports stay in memory. */
+  }
 }
 
 export function preferenceStorageAvailable(): boolean {
   const key = 'termwright:preferences:probe';
-  try { localStorage.setItem(key, '1'); localStorage.removeItem(key); return true; } catch { return false; }
+  try {
+    localStorage.setItem(key, '1');
+    localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -167,15 +240,28 @@ function boolean(value: unknown, fallback: boolean): boolean {
 }
 
 function boundedNumber(value: unknown, minimum: number, maximum: number, fallback: number): number {
-  const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number.parseFloat(value) : Number.NaN;
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number.parseFloat(value)
+        : Number.NaN;
   return Number.isFinite(numeric) ? Math.max(minimum, Math.min(maximum, numeric)) : fallback;
 }
 
-function oneOf<const T extends readonly (string | number)[]>(value: unknown, values: T, fallback: T[number]): T[number] {
-  return values.includes(value as T[number]) ? value as T[number] : fallback;
+function oneOf<const T extends readonly (string | number)[]>(
+  value: unknown,
+  values: T,
+  fallback: T[number],
+): T[number] {
+  return values.includes(value as T[number]) ? (value as T[number]) : fallback;
 }
 
 function stringArrayOrNull(value: unknown): readonly string[] | null {
   if (!Array.isArray(value)) return null;
-  return [...new Set(value.filter((entry): entry is string => typeof entry === 'string' && entry.length <= 2_048))].slice(0, 2_000);
+  return [
+    ...new Set(
+      value.filter((entry): entry is string => typeof entry === 'string' && entry.length <= 2_048),
+    ),
+  ].slice(0, 2_000);
 }

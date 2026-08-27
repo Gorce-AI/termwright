@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { changedFiles, changesetDecision, isConsumableChangesetPath, isPublishablePackagePath } from './check-pr-changeset.mjs';
+import {
+  changedFiles,
+  changesetDecision,
+  isConsumableChangesetPath,
+  isPublishablePackagePath,
+} from './check-pr-changeset.mjs';
 
 describe('pull-request changeset policy', () => {
   it.each([
@@ -28,13 +33,20 @@ describe('pull-request changeset policy', () => {
 
   it('requires a changeset only when publishable package contents lack one', () => {
     const paths = ['packages/driver/src/session.ts', 'packages/driver/src/session.test.ts'];
-    expect(changesetDecision(paths, [])).toEqual({ publishable: ['packages/driver/src/session.ts'], needsChangeset: true });
+    expect(changesetDecision(paths, [])).toEqual({
+      publishable: ['packages/driver/src/session.ts'],
+      needsChangeset: true,
+    });
     expect(changesetDecision(paths, ['.changeset/session.md']).needsChangeset).toBe(false);
-    expect(changesetDecision(['packages/driver/src/session.test.ts'], []).needsChangeset).toBe(false);
-    expect(changesetDecision([
-      'packages/driver/src/session.ts',
-      'packages/driver/src/session.test.ts',
-    ], []).publishable).toEqual(['packages/driver/src/session.ts']);
+    expect(changesetDecision(['packages/driver/src/session.test.ts'], []).needsChangeset).toBe(
+      false,
+    );
+    expect(
+      changesetDecision(
+        ['packages/driver/src/session.ts', 'packages/driver/src/session.test.ts'],
+        [],
+      ).publishable,
+    ).toEqual(['packages/driver/src/session.ts']);
   });
 
   it('accepts only direct changeset files consumed by the release workflow', () => {
@@ -53,11 +65,13 @@ describe('pull-request changeset policy', () => {
 
     const paths = await changedFiles('BASE', 'HEAD', ['--diff-filter=AMD'], '/repo', runGit);
 
-    expect(invocations).toEqual([[
-      'git',
-      ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=AMD', 'BASE', 'HEAD', '--'],
-      { cwd: '/repo' },
-    ]]);
+    expect(invocations).toEqual([
+      [
+        'git',
+        ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=AMD', 'BASE', 'HEAD', '--'],
+        { cwd: '/repo' },
+      ],
+    ]);
     expect(paths).toEqual(['packages/example/src/api.test.ts', 'packages/example/src/api.ts']);
     expect(changesetDecision(paths, []).needsChangeset).toBe(true);
   });

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BoundedRateLimiter,
-  isLoopbackHost,
-  normalizeAllowedOrigins,
-} from './http-security.js';
+import { BoundedRateLimiter, isLoopbackHost, normalizeAllowedOrigins } from './http-security.js';
 
 describe('bounded HTTP rate limiting', () => {
   it('never grows past the configured identity ceiling', () => {
@@ -23,14 +19,23 @@ describe('bounded HTTP rate limiting', () => {
 
   it('rejects invalid or unbounded configurations', () => {
     expect(() => new BoundedRateLimiter({ maxClients: 0 })).toThrow(/positive safe integer/u);
-    expect(() => new BoundedRateLimiter({ maxRequests: Number.POSITIVE_INFINITY })).toThrow(/positive safe integer/u);
+    expect(() => new BoundedRateLimiter({ maxRequests: Number.POSITIVE_INFINITY })).toThrow(
+      /positive safe integer/u,
+    );
     expect(() => new BoundedRateLimiter({ windowMs: -1 })).toThrow(/positive safe integer/u);
   });
 });
 
 describe('HTTP bind and Origin policy', () => {
   it('recognizes explicit loopback hosts without treating wildcard binds as local', () => {
-    for (const host of ['localhost', '127.0.0.1', '127.99.1.2', '::1', '[::1]', '::ffff:127.0.0.1']) {
+    for (const host of [
+      'localhost',
+      '127.0.0.1',
+      '127.99.1.2',
+      '::1',
+      '[::1]',
+      '::ffff:127.0.0.1',
+    ]) {
       expect(isLoopbackHost(host), host).toBe(true);
     }
     for (const host of ['0.0.0.0', '::', '192.168.1.5', 'example.test', 'localhost.example']) {
@@ -39,7 +44,9 @@ describe('HTTP bind and Origin policy', () => {
   });
 
   it('canonicalizes exact HTTP origins and rejects URL-like overreach', () => {
-    expect([...normalizeAllowedOrigins(['HTTPS://Agent.Example:443'])]).toEqual(['https://agent.example']);
+    expect([...normalizeAllowedOrigins(['HTTPS://Agent.Example:443'])]).toEqual([
+      'https://agent.example',
+    ]);
     for (const invalid of [
       'not a URL',
       'file:///tmp/agent',

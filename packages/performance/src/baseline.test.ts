@@ -137,32 +137,40 @@ describe('performance baseline comparator', () => {
       current: 1_500,
       allowedMaximum: 1_200,
     });
-    expect(formatGitHubError(comparison[0]!, 'packages/performance/baselines/ubuntu.json'))
-      .toContain('::error file=packages/performance/baselines/ubuntu.json,title=Performance baseline failed::startupMs regressed%3A');
+    expect(
+      formatGitHubError(comparison[0]!, 'packages/performance/baselines/ubuntu.json'),
+    ).toContain(
+      '::error file=packages/performance/baselines/ubuntu.json,title=Performance baseline failed::startupMs regressed%3A',
+    );
   });
 
   it('refuses comparisons across runner classes', () => {
-    expect(() => comparePerformanceBaseline(baseline, {
-      ...observations(1_000),
-      environment: 'darwin-arm64-node24',
-    })).toThrow(/environments differ/u);
+    expect(() =>
+      comparePerformanceBaseline(baseline, {
+        ...observations(1_000),
+        environment: 'darwin-arm64-node24',
+      }),
+    ).toThrow(/environments differ/u);
   });
 
   it('refuses a changed measurement source even when name and unit still match', () => {
-    expect(() => comparePerformanceBaseline(baseline, {
-      ...observations(1_000),
-      metrics: {
-        ...observations(1_000).metrics,
-        startupMs: { value: 1_000, unit: 'milliseconds', source: 'different methodology' },
-      },
-    })).toThrow(/measurement source changed/u);
+    expect(() =>
+      comparePerformanceBaseline(baseline, {
+        ...observations(1_000),
+        metrics: {
+          ...observations(1_000).metrics,
+          startupMs: { value: 1_000, unit: 'milliseconds', source: 'different methodology' },
+        },
+      }),
+    ).toThrow(/measurement source changed/u);
   });
 
   it('refuses to go green when a baseline metric disappeared', () => {
     const metrics = { ...baseline.metrics };
     delete (metrics as Partial<typeof metrics>).startupMs;
-    expect(() => comparePerformanceBaseline({ ...baseline, metrics }, observations(1_000)))
-      .toThrow(/same metric set/u);
+    expect(() => comparePerformanceBaseline({ ...baseline, metrics }, observations(1_000))).toThrow(
+      /same metric set/u,
+    );
   });
 
   it('fails a violated exact cleanup invariant instead of hiding it as noise', () => {
@@ -183,20 +191,27 @@ describe('performance baseline comparator', () => {
       current: 1,
       allowedMaximum: 0,
     });
-    expect(formatGitHubError(comparison[1]!, 'packages/performance/baselines/ubuntu.json'))
-      .toContain('::error file=packages/performance/baselines/ubuntu.json,title=Performance baseline failed::');
+    expect(
+      formatGitHubError(comparison[1]!, 'packages/performance/baselines/ubuntu.json'),
+    ).toContain(
+      '::error file=packages/performance/baselines/ubuntu.json,title=Performance baseline failed::',
+    );
   });
 
   it('captures a new runner class entirely from measured values and retained policy', () => {
-    const captured = capturePerformanceBaseline(policy, {
-      generatedAt: '2026-08-25T02:00:00.000Z',
-      environment: policy.environment,
-      metrics: {
-        startupMs: { value: 777, unit: 'milliseconds', source: 'new measured run' },
-        leakedProcesses: { value: 0, unit: 'count', source: 'new measured cleanup' },
-        leakedFileDescriptors: { value: 0, unit: 'count', source: 'new measured cleanup' },
+    const captured = capturePerformanceBaseline(
+      policy,
+      {
+        generatedAt: '2026-08-25T02:00:00.000Z',
+        environment: policy.environment,
+        metrics: {
+          startupMs: { value: 777, unit: 'milliseconds', source: 'new measured run' },
+          leakedProcesses: { value: 0, unit: 'count', source: 'new measured cleanup' },
+          leakedFileDescriptors: { value: 0, unit: 'count', source: 'new measured cleanup' },
+        },
       },
-    }, captureProvenance);
+      captureProvenance,
+    );
     expect(captured).toMatchObject({
       recordedAt: '2026-08-25T02:00:00.000Z',
       environment: policy.environment,
@@ -214,57 +229,79 @@ describe('performance baseline comparator', () => {
   });
 
   it('refuses to bless non-zero exact cleanup as a baseline', () => {
-    expect(() => capturePerformanceBaseline(policy, {
-      generatedAt: '2026-08-25T02:00:00.000Z',
-      environment: policy.environment,
-      metrics: {
-        startupMs: { value: 777, unit: 'milliseconds', source: 'new measured run' },
-        leakedProcesses: { value: 1, unit: 'count', source: 'leaking capture' },
-        leakedFileDescriptors: { value: 0, unit: 'count', source: 'measured cleanup' },
-      },
-    }, captureProvenance)).toThrow(/exact cleanup invariant during baseline capture/u);
+    expect(() =>
+      capturePerformanceBaseline(
+        policy,
+        {
+          generatedAt: '2026-08-25T02:00:00.000Z',
+          environment: policy.environment,
+          metrics: {
+            startupMs: { value: 777, unit: 'milliseconds', source: 'new measured run' },
+            leakedProcesses: { value: 1, unit: 'count', source: 'leaking capture' },
+            leakedFileDescriptors: { value: 0, unit: 'count', source: 'measured cleanup' },
+          },
+        },
+        captureProvenance,
+      ),
+    ).toThrow(/exact cleanup invariant during baseline capture/u);
   });
 
   it('refuses capture when policy and observation metric sets differ', () => {
     const metrics = { ...policy.metrics };
     delete (metrics as Partial<typeof metrics>).startupMs;
-    expect(() => capturePerformanceBaseline({ ...policy, metrics }, {
-      generatedAt: '2026-08-25T02:00:00.000Z',
-      environment: policy.environment,
-      metrics: {
-        startupMs: { value: 777, unit: 'milliseconds', source: 'new measured run' },
-        leakedProcesses: { value: 0, unit: 'count', source: 'new measured cleanup' },
-        leakedFileDescriptors: { value: 0, unit: 'count', source: 'new measured cleanup' },
-      },
-    }, captureProvenance)).toThrow(/same metric set/u);
+    expect(() =>
+      capturePerformanceBaseline(
+        { ...policy, metrics },
+        {
+          generatedAt: '2026-08-25T02:00:00.000Z',
+          environment: policy.environment,
+          metrics: {
+            startupMs: { value: 777, unit: 'milliseconds', source: 'new measured run' },
+            leakedProcesses: { value: 0, unit: 'count', source: 'new measured cleanup' },
+            leakedFileDescriptors: { value: 0, unit: 'count', source: 'new measured cleanup' },
+          },
+        },
+        captureProvenance,
+      ),
+    ).toThrow(/same metric set/u);
   });
 
   it('requires both exact cleanup invariants independently of policy data', () => {
     const metrics = { ...policy.metrics };
     delete (metrics as Partial<typeof metrics>).leakedProcesses;
-    expect(() => validateBaselinePolicy({ ...policy, metrics })).toThrow(/leakedProcesses is a required/u);
-    expect(() => validateObservationSet({
-      ...observations(1_000),
-      metrics: { startupMs: observations(1_000).metrics.startupMs! },
-    })).toThrow(/required count cleanup observation/u);
+    expect(() => validateBaselinePolicy({ ...policy, metrics })).toThrow(
+      /leakedProcesses is a required/u,
+    );
+    expect(() =>
+      validateObservationSet({
+        ...observations(1_000),
+        metrics: { startupMs: observations(1_000).metrics.startupMs! },
+      }),
+    ).toThrow(/required count cleanup observation/u);
   });
 
   it('rejects legacy annotate-only history instead of accepting dead compatibility data', () => {
-    expect(() => validateBaseline({
-      ...baseline,
-      history: { samples: 1, blockingAfterSamples: 12, decision: 'annotate' },
-    })).toThrow(/must contain exactly/u);
-    expect(() => validateBaselinePolicy({
-      ...policy,
-      history: { samples: 1, blockingAfterSamples: 12, decision: 'annotate' },
-    })).toThrow(/must contain exactly/u);
+    expect(() =>
+      validateBaseline({
+        ...baseline,
+        history: { samples: 1, blockingAfterSamples: 12, decision: 'annotate' },
+      }),
+    ).toThrow(/must contain exactly/u);
+    expect(() =>
+      validateBaselinePolicy({
+        ...policy,
+        history: { samples: 1, blockingAfterSamples: 12, decision: 'annotate' },
+      }),
+    ).toThrow(/must contain exactly/u);
   });
 
   it('rejects the previous baseline and policy schema versions', () => {
-    expect(() => validateBaseline({ ...baseline, schemaVersion: 3 }))
-      .toThrow(/unsupported performance baseline kind or version/u);
-    expect(() => validateBaselinePolicy({ ...policy, schemaVersion: 2 }))
-      .toThrow(/unsupported performance baseline policy kind or version/u);
+    expect(() => validateBaseline({ ...baseline, schemaVersion: 3 })).toThrow(
+      /unsupported performance baseline kind or version/u,
+    );
+    expect(() => validateBaselinePolicy({ ...policy, schemaVersion: 2 })).toThrow(
+      /unsupported performance baseline policy kind or version/u,
+    );
   });
 
   it('keeps the checked-in capture policy complete, machine-readable and value-free', async () => {

@@ -30,7 +30,10 @@ export interface FakeScreenOptions {
 }
 
 /** Builds a screen whose rows are `lines`, padded to the viewport size. */
-export function fakeScreen(lines: readonly string[], options: FakeScreenOptions = {}): ScreenSnapshot {
+export function fakeScreen(
+  lines: readonly string[],
+  options: FakeScreenOptions = {},
+): ScreenSnapshot {
   const columns = options.columns ?? Math.max(...lines.map((line) => [...line].length), 1);
   const rows = options.rows ?? lines.length;
   const grid = Array.from({ length: rows }, (_, row) => [...(lines[row] ?? '')]);
@@ -38,7 +41,9 @@ export function fakeScreen(lines: readonly string[], options: FakeScreenOptions 
 
   const cell = (row: number, column: number): CellSnapshot => {
     const char = grid[row]?.[column] ?? ' ';
-    const run = runs.find((entry) => entry.row === row && column >= entry.from && column <= entry.to);
+    const run = runs.find(
+      (entry) => entry.row === row && column >= entry.from && column <= entry.to,
+    );
     return {
       char,
       width: 1,

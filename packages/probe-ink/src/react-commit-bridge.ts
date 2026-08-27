@@ -1,8 +1,8 @@
 /** Minimal React renderer instrumentation observer used by the Ink probe spike. */
 
-import type { InkDomElement } from "./observe.js";
+import type { InkDomElement } from './observe.js';
 
-const BRIDGE = Symbol.for("@termwright/probe-ink/react-commit-bridge.v1");
+const BRIDGE = Symbol.for('@termwright/probe-ink/react-commit-bridge.v1');
 
 interface RendererMetadata {
   readonly rendererPackageName?: unknown;
@@ -24,11 +24,7 @@ interface FiberLike {
 interface DevToolsHookLike {
   readonly supportsFiber?: boolean;
   inject?(renderer: RendererMetadata): unknown;
-  onCommitFiberRoot?(
-    rendererId: unknown,
-    root: FiberRootLike,
-    ...rest: readonly unknown[]
-  ): void;
+  onCommitFiberRoot?(rendererId: unknown, root: FiberRootLike, ...rest: readonly unknown[]): void;
   onCommitFiberUnmount?(rendererId: unknown, fiber: unknown): void;
   [BRIDGE]?: ReactCommitBridge;
   [key: PropertyKey]: unknown;
@@ -36,24 +32,24 @@ interface DevToolsHookLike {
 
 export interface InkRendererRegistration {
   readonly rendererId: unknown;
-  readonly packageName: "ink";
+  readonly packageName: 'ink';
   readonly version?: string;
 }
 
 export type InkCommitEvent =
   | {
-      readonly type: "commit";
+      readonly type: 'commit';
       readonly renderer: InkRendererRegistration;
       readonly fiberRoot: FiberRootLike;
       readonly root: InkDomElement;
     }
   | {
-      readonly type: "unmount";
+      readonly type: 'unmount';
       readonly renderer: InkRendererRegistration;
       readonly fiber: unknown;
     }
   | {
-      readonly type: "invalid-root";
+      readonly type: 'invalid-root';
       readonly renderer: InkRendererRegistration;
       readonly fiberRoot: FiberRootLike;
       readonly containerInfo: unknown;
@@ -93,16 +89,15 @@ export class ReactCommitBridge {
   #nextRendererId = 1;
 
   register(renderer: RendererMetadata, delegatedId?: unknown): unknown {
-    const rendererId =
-      delegatedId === undefined ? this.#nextRendererId++ : delegatedId;
-    if (typeof rendererId === "number" && Number.isInteger(rendererId)) {
+    const rendererId = delegatedId === undefined ? this.#nextRendererId++ : delegatedId;
+    if (typeof rendererId === 'number' && Number.isInteger(rendererId)) {
       this.#nextRendererId = Math.max(this.#nextRendererId, rendererId + 1);
     }
-    if (renderer.rendererPackageName === "ink") {
+    if (renderer.rendererPackageName === 'ink') {
       this.#renderers.set(rendererId, {
         rendererId,
-        packageName: "ink",
-        ...(typeof renderer.rendererVersion === "string"
+        packageName: 'ink',
+        ...(typeof renderer.rendererVersion === 'string'
           ? { version: renderer.rendererVersion }
           : {}),
       });
@@ -115,17 +110,16 @@ export class ReactCommitBridge {
     if (renderer === undefined) return;
     const containerInfo = fiberRoot.containerInfo;
     if (!isInkRoot(containerInfo)) {
-      this.#emit({ type: "invalid-root", renderer, fiberRoot, containerInfo });
+      this.#emit({ type: 'invalid-root', renderer, fiberRoot, containerInfo });
       return;
     }
     this.#roots.set(fiberRoot as object, containerInfo);
-    this.#emit({ type: "commit", renderer, fiberRoot, root: containerInfo });
+    this.#emit({ type: 'commit', renderer, fiberRoot, root: containerInfo });
   }
 
   unmount(rendererId: unknown, fiber: unknown): void {
     const renderer = this.#renderers.get(rendererId);
-    if (renderer !== undefined)
-      this.#emit({ type: "unmount", renderer, fiber });
+    if (renderer !== undefined) this.#emit({ type: 'unmount', renderer, fiber });
   }
 
   subscribe(listener: Listener): () => void {
@@ -176,18 +170,9 @@ export function installReactCommitBridge(
     },
     onCommitFiberRoot: {
       configurable: true,
-      value(
-        rendererId: unknown,
-        root: FiberRootLike,
-        ...rest: readonly unknown[]
-      ): void {
+      value(rendererId: unknown, root: FiberRootLike, ...rest: readonly unknown[]): void {
         try {
-          existing?.onCommitFiberRoot?.call(
-            existing,
-            rendererId,
-            root,
-            ...rest,
-          );
+          existing?.onCommitFiberRoot?.call(existing, rendererId, root, ...rest);
         } finally {
           bridge.commit(rendererId, root);
         }
@@ -206,14 +191,13 @@ export function installReactCommitBridge(
     [BRIDGE]: { value: bridge },
   });
   try {
-    const descriptor = Object.getOwnPropertyDescriptor(
-      holder,
-      "__REACT_DEVTOOLS_GLOBAL_HOOK__",
-    );
-    if (descriptor?.configurable === true &&
-      (("writable" in descriptor && descriptor.writable === false) ||
-        (!("writable" in descriptor) && descriptor.set === undefined))) {
-      Object.defineProperty(holder, "__REACT_DEVTOOLS_GLOBAL_HOOK__", {
+    const descriptor = Object.getOwnPropertyDescriptor(holder, '__REACT_DEVTOOLS_GLOBAL_HOOK__');
+    if (
+      descriptor?.configurable === true &&
+      (('writable' in descriptor && descriptor.writable === false) ||
+        (!('writable' in descriptor) && descriptor.set === undefined))
+    ) {
+      Object.defineProperty(holder, '__REACT_DEVTOOLS_GLOBAL_HOOK__', {
         value: hook,
         writable: true,
         enumerable: descriptor.enumerable ?? false,
@@ -224,7 +208,7 @@ export function installReactCommitBridge(
     }
   } catch (cause) {
     throw new Error(
-      "Ink semantic probe unavailable: the existing React renderer instrumentation hook cannot be composed.",
+      'Ink semantic probe unavailable: the existing React renderer instrumentation hook cannot be composed.',
       { cause },
     );
   }
@@ -252,24 +236,18 @@ export function acquireReactCommitBridge(
     __REACT_DEVTOOLS_GLOBAL_HOOK__?: DevToolsHookLike;
   };
   const currentRecord = bridgeLeases.get(target);
-  if (
-    currentRecord !== undefined &&
-    holder.__REACT_DEVTOOLS_GLOBAL_HOOK__ === currentRecord.hook
-  ) {
+  if (currentRecord !== undefined && holder.__REACT_DEVTOOLS_GLOBAL_HOOK__ === currentRecord.hook) {
     currentRecord.references += 1;
     return leaseFor(target, currentRecord);
   }
 
   const existingBridge = holder.__REACT_DEVTOOLS_GLOBAL_HOOK__?.[BRIDGE];
-  const priorDescriptor = Object.getOwnPropertyDescriptor(
-    holder,
-    "__REACT_DEVTOOLS_GLOBAL_HOOK__",
-  );
+  const priorDescriptor = Object.getOwnPropertyDescriptor(holder, '__REACT_DEVTOOLS_GLOBAL_HOOK__');
   const bridge = installReactCommitBridge(target);
   const hook = holder.__REACT_DEVTOOLS_GLOBAL_HOOK__;
   if (hook === undefined) {
     throw new Error(
-      "Ink semantic probe unavailable: React renderer instrumentation hook installation disappeared.",
+      'Ink semantic probe unavailable: React renderer instrumentation hook installation disappeared.',
     );
   }
   // If another subsystem installed this bridge, this adapter may subscribe to
@@ -285,10 +263,7 @@ export function acquireReactCommitBridge(
   return leaseFor(target, record);
 }
 
-function leaseFor(
-  target: typeof globalThis,
-  record: BridgeLeaseRecord,
-): ReactCommitBridgeLease {
+function leaseFor(target: typeof globalThis, record: BridgeLeaseRecord): ReactCommitBridgeLease {
   let released = false;
   return {
     bridge: record.bridge,
@@ -305,11 +280,7 @@ function leaseFor(
       if (record.priorDescriptor === undefined) {
         delete holder.__REACT_DEVTOOLS_GLOBAL_HOOK__;
       } else {
-        Object.defineProperty(
-          holder,
-          "__REACT_DEVTOOLS_GLOBAL_HOOK__",
-          record.priorDescriptor,
-        );
+        Object.defineProperty(holder, '__REACT_DEVTOOLS_GLOBAL_HOOK__', record.priorDescriptor);
       }
     },
   };
@@ -338,7 +309,7 @@ export function activateInkRendererObservation(
     reconciler.injectIntoDevTools();
     if (!bridge.hasInkRenderer())
       throw new Error(
-        "Ink semantic probe unavailable: React renderer instrumentation did not register Ink.",
+        'Ink semantic probe unavailable: React renderer instrumentation did not register Ink.',
       );
     bridges.add(bridge);
   }
@@ -371,22 +342,20 @@ export function correlateInkHostProps(
       visitedFibers += 1;
       if (visitedFibers > maxFibers) {
         throw new Error(
-          "Ink Fiber accessibility correlation exceeded its bounded traversal limit.",
+          'Ink Fiber accessibility correlation exceeded its bounded traversal limit.',
         );
       }
       const props = record(current.memoizedProps);
-      const sourceProps = hasAccessibilitySourceProps(props)
-        ? props
-        : candidateSourceProps;
+      const sourceProps = hasAccessibilitySourceProps(props) ? props : candidateSourceProps;
       if (isInkElement(current.stateNode)) {
         correlations.set(current.stateNode, {
           ...(props === undefined ? {} : { hostProps: props }),
           ...(sourceProps === undefined ? {} : { sourceProps }),
-          ...(typeof sourceProps?.["aria-label"] === "string"
-            ? { accessibleName: sourceProps["aria-label"] }
+          ...(typeof sourceProps?.['aria-label'] === 'string'
+            ? { accessibleName: sourceProps['aria-label'] }
             : {}),
-          ...(typeof sourceProps?.["aria-hidden"] === "boolean"
-            ? { ariaHidden: sourceProps["aria-hidden"] }
+          ...(typeof sourceProps?.['aria-hidden'] === 'boolean'
+            ? { ariaHidden: sourceProps['aria-hidden'] }
             : {}),
         });
         walk(current.child, undefined);
@@ -401,38 +370,36 @@ export function correlateInkHostProps(
 
 /** Fail closed instead of accepting a foreign or incomplete committed root. */
 export function requireCommittedInkRoot(event: InkCommitEvent): InkDomElement {
-  if (event.type !== "commit") {
+  if (event.type !== 'commit') {
     throw new Error(
-      "Ink semantic probe unavailable: React renderer instrumentation did not expose expected committed Ink root.",
+      'Ink semantic probe unavailable: React renderer instrumentation did not expose expected committed Ink root.',
     );
   }
   return event.root;
 }
 
 function isInkRoot(value: unknown): value is InkDomElement {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== 'object' || value === null) return false;
   const candidate = value as {
     readonly nodeName?: unknown;
     readonly childNodes?: unknown;
   };
-  return (
-    candidate.nodeName === "ink-root" && Array.isArray(candidate.childNodes)
-  );
+  return candidate.nodeName === 'ink-root' && Array.isArray(candidate.childNodes);
 }
 
 function isInkElement(value: unknown): value is InkDomElement {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== 'object' || value === null) return false;
   const nodeName = (value as { readonly nodeName?: unknown }).nodeName;
   return (
-    nodeName === "ink-root" ||
-    nodeName === "ink-box" ||
-    nodeName === "ink-text" ||
-    nodeName === "ink-virtual-text"
+    nodeName === 'ink-root' ||
+    nodeName === 'ink-box' ||
+    nodeName === 'ink-text' ||
+    nodeName === 'ink-virtual-text'
   );
 }
 
 function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
-  return typeof value === "object" && value !== null
+  return typeof value === 'object' && value !== null
     ? (value as Readonly<Record<string, unknown>>)
     : undefined;
 }
@@ -442,9 +409,9 @@ function hasAccessibilitySourceProps(
 ): boolean {
   return (
     props !== undefined &&
-    (Object.hasOwn(props, "aria-label") ||
-      Object.hasOwn(props, "aria-hidden") ||
-      Object.hasOwn(props, "aria-role") ||
-      Object.hasOwn(props, "aria-state"))
+    (Object.hasOwn(props, 'aria-label') ||
+      Object.hasOwn(props, 'aria-hidden') ||
+      Object.hasOwn(props, 'aria-role') ||
+      Object.hasOwn(props, 'aria-state'))
   );
 }

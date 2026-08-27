@@ -7,7 +7,13 @@
 import { useRef, useState } from 'react';
 import { Box, Text, useInput, type DOMElement } from 'ink';
 import { useSemantic } from '@termwright/ink';
-import { isMouseReport, parseMousePress, routePointer, useMouseReporting, usePointerTarget } from './mouse.js';
+import {
+  isMouseReport,
+  parseMousePress,
+  routePointer,
+  useMouseReporting,
+  usePointerTarget,
+} from './mouse.js';
 
 export interface ConfirmDialogProps {
   /** The question, rendered inside the dialog and used as its description. */

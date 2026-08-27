@@ -13,14 +13,14 @@ npm install --save-dev @termwright/probe-charm
 ```
 
 ```ts
-import {prepareInstrumentedBuild} from '@termwright/probe-charm';
+import { prepareInstrumentedBuild } from '@termwright/probe-charm';
 
-const build = await prepareInstrumentedBuild({moduleDir: appDirectory});
+const build = await prepareInstrumentedBuild({ moduleDir: appDirectory });
 await execFile('go', ['build', '-o', binaryPath, '.'], {
   cwd: appDirectory,
-  env: {...process.env, ...build.env},
+  env: { ...process.env, ...build.env },
 });
-const app = await terminal.launch({command: [binaryPath]});
+const app = await terminal.launch({ command: [binaryPath] });
 ```
 
 Supported Bubble Tea versions are verified and unknown versions are refused.

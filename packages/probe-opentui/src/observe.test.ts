@@ -32,7 +32,10 @@ function node(name: string, num: number, extra: Partial<ObservableNode> = {}): O
 describe('identity and structure', () => {
   it('reports num as a stable identity, never the mutable id', () => {
     const child = node('TextRenderable', 7);
-    const root = node('RootRenderable', 1, { id: 'renamed-at-runtime', getChildren: () => [child] });
+    const root = node('RootRenderable', 1, {
+      id: 'renamed-at-runtime',
+      getChildren: () => [child],
+    });
 
     const { frame } = observeTree(root, { frame: 1 });
 
@@ -140,7 +143,9 @@ describe('identity and structure', () => {
 describe('geometry', () => {
   it('reports screen coordinates as terminal cells', () => {
     const root = node('RootRenderable', 1, {
-      getChildren: () => [node('BoxRenderable', 2, { screenX: 4, screenY: 3, width: 20, height: 5 })],
+      getChildren: () => [
+        node('BoxRenderable', 2, { screenX: 4, screenY: 3, width: 20, height: 5 }),
+      ],
     });
 
     const { frame } = observeTree(root, { frame: 1 });

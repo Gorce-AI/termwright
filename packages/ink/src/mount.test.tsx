@@ -75,10 +75,10 @@ describe('mountInk', () => {
   it('refuses to click a node the component cannot receive a mouse event for', async () => {
     // A component that never enables mouse tracking has no way to observe a
     // click, so the driver reports it instead of sending bytes into the void.
-    const harness = await mountInk(
-      createElement(Box, null, createElement(Text, null, 'plain')),
-      { columns: 20, rows: 5 },
-    );
+    const harness = await mountInk(createElement(Box, null, createElement(Text, null, 'plain')), {
+      columns: 20,
+      rows: 5,
+    });
     open.push(harness);
 
     await expect(harness.getByText('plain').click()).rejects.toMatchObject({
@@ -105,7 +105,12 @@ describe('mountInk', () => {
       columns: 40,
       rows: 12,
       wrapper: ({ children }) =>
-        createElement(Box, { flexDirection: 'column' }, createElement(Text, null, 'wrapped'), children),
+        createElement(
+          Box,
+          { flexDirection: 'column' },
+          createElement(Text, null, 'wrapped'),
+          children,
+        ),
     });
     open.push(harness);
 

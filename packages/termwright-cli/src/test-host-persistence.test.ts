@@ -19,8 +19,12 @@ describe('test-host persistence seams', () => {
       invocationId,
       runId,
       gapProducer: new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 }),
-      sink: (events) => { flushed.push(...events); },
-      observer: () => { throw new Error('broken projection'); },
+      sink: (events) => {
+        flushed.push(...events);
+      },
+      observer: () => {
+        throw new Error('broken projection');
+      },
     });
     const event = producer.emit({
       eventClass: 'authoritative',
@@ -95,15 +99,31 @@ describe('test-host persistence seams', () => {
       git: null,
     };
     const manifest = createRunManifest(start, {
-      status: 'passed', specs: [], attempts: [], events: [], durationMs: 7, finishedAt: 20,
+      status: 'passed',
+      specs: [],
+      attempts: [],
+      events: [],
+      durationMs: 7,
+      finishedAt: 20,
     });
-    expect(manifest).toMatchObject({ v: 3, startedAt: 10, finishedAt: 20, durationMs: 7, status: 'passed' });
+    expect(manifest).toMatchObject({
+      v: 3,
+      startedAt: 10,
+      finishedAt: 20,
+      durationMs: 7,
+      status: 'passed',
+    });
     expect(Object.isFrozen(manifest)).toBe(true);
   });
 
   it('whitelists and bounds CI provenance', () => {
-    expect(captureCiProvenance({ GITHUB_RUN_ID: '123', SECRET_TOKEN: 'no', BUILD_ID: 'x'.repeat(20_000) }))
-      .toEqual({ GITHUB_RUN_ID: '123', BUILD_ID: 'x'.repeat(16_384) });
+    expect(
+      captureCiProvenance({
+        GITHUB_RUN_ID: '123',
+        SECRET_TOKEN: 'no',
+        BUILD_ID: 'x'.repeat(20_000),
+      }),
+    ).toEqual({ GITHUB_RUN_ID: '123', BUILD_ID: 'x'.repeat(16_384) });
   });
 
   it('reserves finalization time without starting a host', async () => {
@@ -114,7 +134,10 @@ describe('test-host persistence seams', () => {
       schedule: (delay, elapsed) => {
         const timer = { at: now + delay, elapsed };
         timers.push(timer);
-        return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); };
+        return () => {
+          const index = timers.indexOf(timer);
+          if (index >= 0) timers.splice(index, 1);
+        };
       },
     };
     const budget = new HostRunBudget(100, 25, runtime);
@@ -127,7 +150,10 @@ describe('test-host persistence seams', () => {
     expect(budget.executionRemainingMs()).toBe(0);
     expect(budget.finalizationRemainingMs()).toBe(25);
     for (const timer of [...timers]) if (timer.at <= now) timer.elapsed();
-    await expect(execution).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT', phase: 'unit execution' });
+    await expect(execution).rejects.toMatchObject({
+      code: 'TW_HOST_TIMEOUT',
+      phase: 'unit execution',
+    });
   });
 
   it('keeps the production finalization reserve available after execution expires', async () => {
@@ -138,7 +164,10 @@ describe('test-host persistence seams', () => {
       schedule: (delay, elapsed) => {
         const timer = { at: now + delay, elapsed };
         timers.push(timer);
-        return () => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1); };
+        return () => {
+          const index = timers.indexOf(timer);
+          if (index >= 0) timers.splice(index, 1);
+        };
       },
     };
     const budget = new HostRunBudget(10 * 60_000, 30_000, runtime);
@@ -146,7 +175,10 @@ describe('test-host persistence seams', () => {
 
     now = 9 * 60_000 + 30_000;
     for (const timer of [...timers]) if (timer.at <= now) timer.elapsed();
-    await expect(execution).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT', phase: 'native tests' });
+    await expect(execution).rejects.toMatchObject({
+      code: 'TW_HOST_TIMEOUT',
+      phase: 'native tests',
+    });
 
     const finalized = await budget.finalization('canonical run history', async () => 'committed');
     expect(finalized).toBe('committed');

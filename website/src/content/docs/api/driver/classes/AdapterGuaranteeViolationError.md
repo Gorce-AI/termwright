@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: AdapterGuaranteeViolationError
 
-Defined in: [driver/src/errors.ts:148](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L148)
+Defined in: [driver/src/errors.ts:152](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L152)
 
 Base class for every error the driver throws. Carries a stable [code](../termwrighterror/#code)
 plus Playwright-grade [diagnostics](../termwrighterror/#diagnostics) (what was observed, which
@@ -27,7 +27,7 @@ candidates existed, and a suggestion).
 
 > **new AdapterGuaranteeViolationError**(`message`, `diagnostics`): `AdapterGuaranteeViolationError`
 
-Defined in: [driver/src/errors.ts:149](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L149)
+Defined in: [driver/src/errors.ts:153](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L153)
 
 #### Parameters
 

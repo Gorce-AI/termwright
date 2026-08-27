@@ -8,13 +8,13 @@ artifacts that may contain sensitive data.
 
 ## What artifacts can contain
 
-| Source | Automatic handling |
-| --- | --- |
-| Semantic values | `known`, `absent`, `unknown`, `unsupported`, and `withheld` remain distinct. Sensitive known values become `withheld` before traces, Runner or MCP publication. |
-| Raw terminal output | Not redacted. Secrets printed by the application remain visible. |
-| Typed keys and raw input | `redacted` by default in receipts, traces, Runner and recorder output. `raw` is an explicit opt-in; `none` retains no value payload. Terminal output can still echo input. |
-| Application logs | Not redacted by Termwright. Configure redaction in the logger. |
-| File paths and process errors | May appear in reports and diagnostics. |
+| Source                        | Automatic handling                                                                                                                                                         |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Semantic values               | `known`, `absent`, `unknown`, `unsupported`, and `withheld` remain distinct. Sensitive known values become `withheld` before traces, Runner or MCP publication.            |
+| Raw terminal output           | Not redacted. Secrets printed by the application remain visible.                                                                                                           |
+| Typed keys and raw input      | `redacted` by default in receipts, traces, Runner and recorder output. `raw` is an explicit opt-in; `none` retains no value payload. Terminal output can still echo input. |
+| Application logs              | Not redacted by Termwright. Configure redaction in the logger.                                                                                                             |
+| File paths and process errors | May appear in reports and diagnostics.                                                                                                                                     |
 
 Do not upload an artifact publicly until you have inspected it. Prefer
 short-lived, access-controlled CI artifacts for failures involving credentials

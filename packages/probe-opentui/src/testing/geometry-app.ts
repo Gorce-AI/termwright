@@ -4,32 +4,70 @@ import { BoxRenderable, TextRenderable, createCliRenderer } from '@opentui/core'
 const renderer = await createCliRenderer({ exitOnCtrlC: false, targetFps: 30 });
 
 const outer = new BoxRenderable(renderer, {
-  id: 'outer-clip', width: 12, height: 5, overflow: 'hidden', position: 'absolute', left: 2, top: 1,
+  id: 'outer-clip',
+  width: 12,
+  height: 5,
+  overflow: 'hidden',
+  position: 'absolute',
+  left: 2,
+  top: 1,
 });
 const inner = new BoxRenderable(renderer, {
-  id: 'inner-clip', width: 9, height: 3, overflow: 'hidden', position: 'absolute', left: 5, top: 1,
+  id: 'inner-clip',
+  width: 9,
+  height: 3,
+  overflow: 'hidden',
+  position: 'absolute',
+  left: 5,
+  top: 1,
 });
 const clipped = new TextRenderable(renderer, {
-  id: 'nested-clipped', content: 'nested clipped target', width: 20, height: 1,
+  id: 'nested-clipped',
+  content: 'nested clipped target',
+  width: 20,
+  height: 1,
 });
 inner.add(clipped);
 outer.add(inner);
 
 const lower = new TextRenderable(renderer, {
-  id: 'lower-overlap', content: 'lower overlap', width: 8, height: 1,
-  position: 'absolute', left: 20, top: 2, zIndex: 1,
+  id: 'lower-overlap',
+  content: 'lower overlap',
+  width: 8,
+  height: 1,
+  position: 'absolute',
+  left: 20,
+  top: 2,
+  zIndex: 1,
 });
 const upper = new TextRenderable(renderer, {
-  id: 'upper-overlap', content: 'upper overlap', width: 8, height: 1,
-  position: 'absolute', left: 20, top: 2, zIndex: 2,
+  id: 'upper-overlap',
+  content: 'upper overlap',
+  width: 8,
+  height: 1,
+  position: 'absolute',
+  left: 20,
+  top: 2,
+  zIndex: 2,
 });
 const hidden = new TextRenderable(renderer, {
-  id: 'hidden-node', content: 'hidden node', width: 8, height: 1,
-  position: 'absolute', left: 1, top: 8, visible: false,
+  id: 'hidden-node',
+  content: 'hidden node',
+  width: 8,
+  height: 1,
+  position: 'absolute',
+  left: 1,
+  top: 8,
+  visible: false,
 });
 const movedByHook = new TextRenderable(renderer, {
-  id: 'hook-moved', content: 'hook moved', width: 8, height: 1,
-  position: 'absolute', left: 1, top: 10,
+  id: 'hook-moved',
+  content: 'hook moved',
+  width: 8,
+  height: 1,
+  position: 'absolute',
+  left: 1,
+  top: 10,
   renderBefore() {
     // Adversarial custom hook: OpenTUI itself samples _screenX after this hook
     // for native hit ownership. The instrumentation must sample at that same

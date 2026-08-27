@@ -13,7 +13,7 @@ editUrl: false
 
 > **collectLogs**(`harness`, `into?`): `object`
 
-Defined in: [test/src/logs.ts:179](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L179)
+Defined in: [test/src/logs.ts:181](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L181)
 
 Subscribes to a session's logs.
 

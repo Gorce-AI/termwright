@@ -179,8 +179,7 @@ export function renderSvg(frame: ScreenFrame, options: ScreenshotOptions = {}): 
         continue;
       }
 
-      const glyph =
-        fonts?.glyphFor(char, { bold: style.bold, italic: style.italic }) ?? null;
+      const glyph = fonts?.glyphFor(char, { bold: style.bold, italic: style.italic }) ?? null;
       if (glyph !== null) {
         flushText();
         // A real face already carries the style; only synthesise what the
@@ -432,9 +431,7 @@ function assemble(input: AssembleInput): string {
     const placement = use.italic
       ? `transform="translate(${n(use.x)},${n(use.y)}) skewX(-12)"`
       : `x="${n(use.x)}" y="${n(use.y)}"`;
-    parts.push(
-      `<use href="#${escapeXml(use.href)}" ${placement}${paint}${bold}${opacity}/>`,
-    );
+    parts.push(`<use href="#${escapeXml(use.href)}" ${placement}${paint}${bold}${opacity}/>`);
   }
 
   if (input.textRuns.length > 0) {
@@ -462,7 +459,8 @@ function assemble(input: AssembleInput): string {
 }
 
 function rectTag(rect: Rect): string {
-  const opacity = rect.opacity === undefined || rect.opacity === 1 ? '' : ` opacity="${n(rect.opacity, 2)}"`;
+  const opacity =
+    rect.opacity === undefined || rect.opacity === 1 ? '' : ` opacity="${n(rect.opacity, 2)}"`;
   return `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(
     rect.height,
   )}" fill="${rect.fill}"${opacity}/>`;

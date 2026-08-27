@@ -1,4 +1,4 @@
-import type { ExitStatus } from "../api.js";
+import type { ExitStatus } from '../api.js';
 
 /** Side effect performed atomically while the terminal exit becomes visible. */
 export type ExitPublisher = (status: ExitStatus, unexpected: boolean) => void;

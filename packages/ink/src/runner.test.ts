@@ -48,7 +48,13 @@ describe('runner-entry', () => {
 
   it('refuses an unknown payload version', async () => {
     const result = await runWith(
-      JSON.stringify({ v: 99, module: 'file:///x.mjs', exportName: 'default', props: {}, maxFps: 30 }),
+      JSON.stringify({
+        v: 99,
+        module: 'file:///x.mjs',
+        exportName: 'default',
+        props: {},
+        maxFps: 30,
+      }),
     );
 
     expect(result.code).toBe(2);
@@ -74,7 +80,13 @@ describe('runner-entry', () => {
 
   it('refuses props that are not an object', async () => {
     const result = await runWith(
-      JSON.stringify({ v: 1, module: 'file:///x.mjs', exportName: 'default', props: [1, 2], maxFps: 30 }),
+      JSON.stringify({
+        v: 1,
+        module: 'file:///x.mjs',
+        exportName: 'default',
+        props: [1, 2],
+        maxFps: 30,
+      }),
     );
 
     expect(result.code).toBe(2);

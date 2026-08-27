@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticProps
 
-Defined in: [ink/src/semantic.tsx:21](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/semantic.tsx#L21)
+Defined in: [ink/src/semantic.tsx:29](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/semantic.tsx#L29)
 
 [Semantic](../../functions/semantic/) props: the annotation, plus the element it describes.
 
@@ -25,7 +25,7 @@ Defined in: [ink/src/semantic.tsx:21](https://github.com/Gorce-AI/termwright/blo
 
 > `readonly` `optional` **actions?**: readonly (`"focus"` \| `"activate"` \| `"toggle"` \| `"setValue"` \| `"scroll"` \| `"select"` \| `"expand"`)[]
 
-Defined in: [ink/src/types.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L19)
+Defined in: [ink/src/types.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L15)
 
 Descriptive input intent. Actions still travel through the terminal.
 
@@ -39,7 +39,7 @@ Descriptive input intent. Actions still travel through the terminal.
 
 > `readonly` **children**: [`SemanticChild`](../../type-aliases/semanticchild/)
 
-Defined in: [ink/src/semantic.tsx:29](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/semantic.tsx#L29)
+Defined in: [ink/src/semantic.tsx:37](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/semantic.tsx#L37)
 
 Exactly one element that accepts a ref — in practice an Ink `<Box>`.
 
@@ -53,7 +53,7 @@ anyway.
 
 > `readonly` `optional` **describedBy?**: readonly `RefObject`\<`DOMElement` \| `null`\>[]
 
-Defined in: [ink/src/types.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L21)
+Defined in: [ink/src/types.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L17)
 
 #### Inherited from
 
@@ -65,7 +65,7 @@ Defined in: [ink/src/types.ts:21](https://github.com/Gorce-AI/termwright/blob/ma
 
 > `readonly` `optional` **description?**: `string`
 
-Defined in: [ink/src/types.ts:14](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L14)
+Defined in: [ink/src/types.ts:10](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L10)
 
 #### Inherited from
 
@@ -77,7 +77,7 @@ Defined in: [ink/src/types.ts:14](https://github.com/Gorce-AI/termwright/blob/ma
 
 > `readonly` `optional` **extended?**: `SemanticExtendedObject`
 
-Defined in: [ink/src/types.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L17)
+Defined in: [ink/src/types.ts:13](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L13)
 
 Application-domain JSON; never merged into portable framework state.
 
@@ -91,7 +91,7 @@ Application-domain JSON; never merged into portable framework state.
 
 > `readonly` `optional` **labelledBy?**: readonly `RefObject`\<`DOMElement` \| `null`\>[]
 
-Defined in: [ink/src/types.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L20)
+Defined in: [ink/src/types.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L16)
 
 #### Inherited from
 
@@ -103,7 +103,7 @@ Defined in: [ink/src/types.ts:20](https://github.com/Gorce-AI/termwright/blob/ma
 
 > `readonly` `optional` **name?**: `string`
 
-Defined in: [ink/src/types.ts:13](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L13)
+Defined in: [ink/src/types.ts:9](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L9)
 
 Accessible name used by `getByRole(role, { name })`.
 
@@ -117,7 +117,7 @@ Accessible name used by `getByRole(role, { name })`.
 
 > `readonly` `optional` **role?**: `"application"` \| `"region"` \| `"dialog"` \| `"alert"` \| `"status"` \| `"list"` \| `"listitem"` \| `"menu"` \| `"menuitem"` \| `"button"` \| `"checkbox"` \| `"radio"` \| `"tab"` \| `"textbox"` \| `"heading"` \| `"text"` \| `"progressbar"` \| `"separator"` \| `"scrollbar"` \| `"table"` \| `"row"` \| `"cell"` \| `"generic"`
 
-Defined in: [ink/src/types.ts:11](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L11)
+Defined in: [ink/src/types.ts:7](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L7)
 
 #### Inherited from
 
@@ -129,7 +129,7 @@ Defined in: [ink/src/types.ts:11](https://github.com/Gorce-AI/termwright/blob/ma
 
 > `readonly` `optional` **testId?**: `string`
 
-Defined in: [ink/src/types.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L15)
+Defined in: [ink/src/types.ts:11](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/types.ts#L11)
 
 #### Inherited from
 

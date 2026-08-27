@@ -145,7 +145,10 @@ const MOUNT_MAX_FPS = 1_000;
  * await harness.close();
  * ```
  */
-export async function mountInk(element: ReactNode, options: MountInkOptions = {}): Promise<InkHarness> {
+export async function mountInk(
+  element: ReactNode,
+  options: MountInkOptions = {},
+): Promise<InkHarness> {
   const columns = options.columns ?? 80;
   const rows = options.rows ?? 24;
   const settle: SettleOptions | undefined =
@@ -155,11 +158,14 @@ export async function mountInk(element: ReactNode, options: MountInkOptions = {}
   const tree = (node: ReactNode): ReactNode => wrapTree(node, state, options.wrapper);
 
   const backend = createInProcessBackend((io) => {
-    const instrumentedRender = wrapInkRender({
-      render,
-      Box: Box as never,
-      measureElement: measureElement as never,
-    }, { env: io.env, certifiedHarness: true });
+    const instrumentedRender = wrapInkRender(
+      {
+        render,
+        Box: Box as never,
+        measureElement: measureElement as never,
+      },
+      { env: io.env, certifiedHarness: true },
+    );
     const instance = instrumentedRender(tree(element), {
       stdout: io.stdout,
       stdin: io.stdin,
@@ -283,7 +289,11 @@ class InkHarnessImpl extends ForwardingHarness implements InkHarness {
     }
     this.#state.error = null;
     this.#state.generation += 1;
-    await commitFrame(this.session, () => instance.rerender(this.#tree(element)), opts ?? this.#settle);
+    await commitFrame(
+      this.session,
+      () => instance.rerender(this.#tree(element)),
+      opts ?? this.#settle,
+    );
   }
 
   renderError(): Error | null {

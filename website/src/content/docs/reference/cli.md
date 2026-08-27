@@ -70,17 +70,17 @@ termwright ui --record [--out-file <file>] -- <command>
 Starts the Runner and Vitest watch mode. Interactive use opens the Termwright
 desktop app by default.
 
-| Option | Behavior |
-| --- | --- |
-| `--browser` | Open the Runner in the system browser. |
-| `--no-open` | Start the server without opening a window. |
-| `--no-watch` | Do not start the Vitest watcher. |
-| `--trace <file>` | Open an existing `.twtrace` archive. |
+| Option                | Behavior                                                      |
+| --------------------- | ------------------------------------------------------------- |
+| `--browser`           | Open the Runner in the system browser.                        |
+| `--no-open`           | Start the server without opening a window.                    |
+| `--no-watch`          | Do not start the Vitest watcher.                              |
+| `--trace <file>`      | Open an existing `.twtrace` archive.                          |
 | `--tags <expression>` | Select physical Gherkin cases with a Cucumber tag expression. |
-| `--record` | Start recorder mode for the command after `--`. |
-| `--out-file <file>` | Set the generated test destination in recorder mode. |
-| `--host <host>` | Bind the Runner server to this host. |
-| `--port <port>` | Bind to this port; `0` selects an available port. |
+| `--record`            | Start recorder mode for the command after `--`.               |
+| `--out-file <file>`   | Set the generated test destination in recorder mode.          |
+| `--host <host>`       | Bind the Runner server to this host.                          |
+| `--port <port>`       | Bind to this port; `0` selects an available port.             |
 
 Arguments after `--` are passed to Vitest:
 
@@ -121,33 +121,33 @@ An alias for using `ui --record` when recording is the only task.
 
 ## Agent commands
 
-| Command | Result |
-| --- | --- |
-| `termwright mcp [args]` | Run the MCP server; remaining arguments are forwarded. |
-| `termwright agent-context` | Print versioned JSON for MCP tools and exit codes. |
-| `termwright usage` | Print the short command reference. |
-| `termwright skill [--out <dir>]` | Generate an agent skill package. |
+| Command                          | Result                                                 |
+| -------------------------------- | ------------------------------------------------------ |
+| `termwright mcp [args]`          | Run the MCP server; remaining arguments are forwarded. |
+| `termwright agent-context`       | Print versioned JSON for MCP tools and exit codes.     |
+| `termwright usage`               | Print the short command reference.                     |
+| `termwright skill [--out <dir>]` | Generate an agent skill package.                       |
 
 ## Global options
 
-| Option | Behavior |
-| --- | --- |
-| `--help`, `-h` | Print help for the selected command. |
-| `--version`, `-v` | Print the installed version. |
-| `--json` | Produce machine-readable output and errors. |
+| Option            | Behavior                                    |
+| ----------------- | ------------------------------------------- |
+| `--help`, `-h`    | Print help for the selected command.        |
+| `--version`, `-v` | Print the installed version.                |
+| `--json`          | Produce machine-readable output and errors. |
 
 JSON output, CI, and non-interactive stdout suppress automatic window opening.
 
 ## Exit codes
 
-| Code | Meaning |
-| --- | --- |
-| `0` | Success. |
-| `1` | Test or assertion failed. |
-| `2` | Invalid command-line usage. |
-| `3` | No active session. |
-| `4` | IPC or transport failure. |
-| `5` | Internal failure. |
+| Code | Meaning                     |
+| ---- | --------------------------- |
+| `0`  | Success.                    |
+| `1`  | Test or assertion failed.   |
+| `2`  | Invalid command-line usage. |
+| `3`  | No active session.          |
+| `4`  | IPC or transport failure.   |
+| `5`  | Internal failure.           |
 
 Machine-readable errors include a `kind`, message, and applicable suggestion or
 candidates. Library errors include stable kinds such as `timeout`,

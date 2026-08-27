@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: AttachFixtureOptions
 
-Defined in: [test/src/fixtures.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L87)
+Defined in: [test/src/fixtures.ts:96](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L96)
 
 Options for adopting a harness created by a framework component helper.
 
@@ -21,7 +21,7 @@ Options for adopting a harness created by a framework component helper.
 
 > `readonly` `optional` **command?**: readonly `string`[]
 
-Defined in: [test/src/fixtures.ts:91](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L91)
+Defined in: [test/src/fixtures.ts:100](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L100)
 
 Command label stored in the trace metadata.
 
@@ -31,6 +31,6 @@ Command label stored in the trace metadata.
 
 > `readonly` `optional` **trace?**: [`TraceMode`](../../type-aliases/tracemode/)
 
-Defined in: [test/src/fixtures.ts:89](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L89)
+Defined in: [test/src/fixtures.ts:98](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L98)
 
 Trace policy for this session, overriding the file's and project's.

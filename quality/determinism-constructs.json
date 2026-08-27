@@ -160,13 +160,13 @@
       "path": "packages/conformance/src/adapter-conformance.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(options.expectIntendedGeometry !== true)('publishes intended geometry in viewport cells', () => {"
+      "excerpt": "it.skipIf(options.expectIntendedGeometry !== true)("
     },
     {
       "path": "packages/conformance/src/adapter-conformance.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(options.logs === undefined)('carries a log record without printing it', async () => {"
+      "excerpt": "it.skipIf(options.logs === undefined)("
     },
     {
       "path": "packages/conformance/src/adapter-conformance.ts",
@@ -232,25 +232,49 @@
       "path": "packages/conformance/src/suites/adversarial.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => codes(terminal), { timeout: 10_000 })"
+    },
+    {
+      "path": "packages/conformance/src/suites/adversarial.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => codes(terminal), { timeout: 10_000 })"
+    },
+    {
+      "path": "packages/conformance/src/suites/adversarial.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => entriesFor(terminal, 'adapter-capability').at(-1)?.wireCode)"
+    },
+    {
+      "path": "packages/conformance/src/suites/adversarial.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode)"
+    },
+    {
+      "path": "packages/conformance/src/suites/adversarial.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode)"
+    },
+    {
+      "path": "packages/conformance/src/suites/adversarial.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode)"
+    },
+    {
+      "path": "packages/conformance/src/suites/adversarial.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => entriesFor(terminal, 'revision-dropped').map((entry) => entry.revision), {"
+    },
+    {
+      "path": "packages/conformance/src/suites/adversarial.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => ((await rejection(terminal.press('a'))) as TermwrightError | null)?.code)"
-    },
-    {
-      "path": "packages/conformance/src/suites/adversarial.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll("
-    },
-    {
-      "path": "packages/conformance/src/suites/adversarial.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');"
-    },
-    {
-      "path": "packages/conformance/src/suites/adversarial.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');"
     },
     {
       "path": "packages/conformance/src/suites/adversarial.test.ts",
@@ -287,30 +311,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => codes(terminal)).toContain('protocol-violation');"
-    },
-    {
-      "path": "packages/conformance/src/suites/adversarial.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => entriesFor(terminal, 'adapter-capability').at(-1)?.wireCode).toBe('internal');"
-    },
-    {
-      "path": "packages/conformance/src/suites/adversarial.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-token');"
-    },
-    {
-      "path": "packages/conformance/src/suites/adversarial.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-version');"
-    },
-    {
-      "path": "packages/conformance/src/suites/adversarial.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('malformed');"
     },
     {
       "path": "packages/conformance/src/suites/adversarial.test.ts",
@@ -376,7 +376,7 @@
       "path": "packages/conformance/src/suites/driver-generic.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(async () => (await rejection(terminal.getByRole('button').count())) instanceof SemanticCapabilityUnavailableError, {"
+      "excerpt": ".poll("
     },
     {
       "path": "packages/conformance/src/suites/driver-generic.test.ts",
@@ -502,13 +502,13 @@
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "if (Date.now() >= deadline) throw new Error('conformance: value never became available');"
+      "excerpt": "if (Date.now() >= deadline)"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "if (Date.now() >= deadline) throw new Error(`conformance: pid ${pid} outlived its owning session`);"
+      "excerpt": "if (Date.now() >= deadline) throw new Error('conformance: value never became available');"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
@@ -598,12 +598,6 @@
       "path": "packages/desktop-host/src/launch.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setInterval(() => undefined, 1_000);',"
-    },
-    {
-      "path": "packages/desktop-host/src/launch.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "'setTimeout(() => {',"
     },
     {
@@ -611,6 +605,12 @@
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "\"  socket.on('data', () => setTimeout(() => socket.write(JSON.stringify({ protocol: 1, type: 'ready' }) + '\\\\n'), 60));\","
+    },
+    {
+      "path": "packages/desktop-host/src/launch.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "await writeFile(fake, ['setInterval(() => undefined, 1_000);'].join('\\n'));"
     },
     {
       "path": "packages/desktop-host/src/main.ts",
@@ -670,13 +670,13 @@
       "path": "packages/driver/src/escapes.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_000 }, () => {"
+      "excerpt": "describe.skipIf(!ptyAvailable())("
     },
     {
       "path": "packages/driver/src/escapes.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())('application key modes through a real pty', { timeout: 30_000 }, () => {"
+      "excerpt": "describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_000 }, () => {"
     },
     {
       "path": "packages/driver/src/escapes.pty.test.ts",
@@ -826,7 +826,7 @@
       "path": "packages/driver/src/logs.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => logDiagnostics.some((entry) => entry.detail.includes('refused')), { timeout: 8_000 })"
+      "excerpt": ".poll(() => logDiagnostics.some((entry) => entry.detail.includes('refused')), {"
     },
     {
       "path": "packages/driver/src/logs.pty.test.ts",
@@ -964,7 +964,7 @@
       "path": "packages/driver/src/logs.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "const timer = setInterval(() => { void poll(); }, POLL_MS);"
+      "excerpt": "void poll();"
     },
     {
       "path": "packages/driver/src/logs.ts",
@@ -976,25 +976,25 @@
       "path": "packages/driver/src/logs.ts",
       "kind": "polling",
       "classification": "explicit-external-file-polling",
-      "excerpt": "const timer = setInterval(() => { void poll(); }, POLL_MS);"
+      "excerpt": "this.#polling = this.#poll()"
     },
     {
       "path": "packages/driver/src/logs.ts",
       "kind": "polling",
       "classification": "explicit-external-file-polling",
-      "excerpt": "this.#polling = this.#poll()"
+      "excerpt": "void poll();"
     },
     {
       "path": "packages/driver/src/logs.ts",
       "kind": "timer",
       "classification": "explicit-external-file-polling",
-      "excerpt": "const timer = setInterval(() => { void poll(); }, POLL_MS);"
+      "excerpt": "const timer = setInterval(() => {"
     },
     {
       "path": "packages/driver/src/native-pty-backend.ts",
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
-      "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_PTY\"] === \"1\") return \"TERMWRIGHT_SKIP_PTY=1\";"
+      "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return 'TERMWRIGHT_SKIP_PTY=1';"
     },
     {
       "path": "packages/driver/src/pairing.ts",
@@ -1012,13 +1012,13 @@
       "path": "packages/driver/src/process-lifecycle.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(process.platform !== 'win32')('Windows process lifecycle', { timeout: 20_000 }, () => {"
+      "excerpt": "describe.skipIf(process.platform !== 'win32')("
     },
     {
       "path": "packages/driver/src/process-lifecycle.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeout: 20_000 }, () => {"
+      "excerpt": "describe.skipIf(process.platform === 'win32')("
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
@@ -1072,12 +1072,6 @@
       "path": "packages/driver/src/semantic.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "client.send({ type: 'log', record: { ts: Date.now(), level: 'shouting', message: 'x', seq: 1 } });"
-    },
-    {
-      "path": "packages/driver/src/semantic.test.ts",
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "client.send({ type: 'log', record: { ts: Date.now(), level: 'warn', message: 'x', seq: 1 } });"
     },
     {
@@ -1085,6 +1079,12 @@
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "record: { ts: Date.now(), level: 'info', message: 'hello from the adapter', seq: 1 },"
+    },
+    {
+      "path": "packages/driver/src/semantic.test.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "record: { ts: Date.now(), level: 'shouting', message: 'x', seq: 1 },"
     },
     {
       "path": "packages/driver/src/semantic.ts",
@@ -1114,25 +1114,25 @@
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() =>"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() =>"
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => terminal.diagnostics().map((entry) => entry.code))"
+    },
+    {
+      "path": "packages/driver/src/session.pty.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => terminal.diagnostics().some((entry) => entry.code === 'adapter-disconnected'))"
+    },
+    {
+      "path": "packages/driver/src/session.pty.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout'))"
+    },
+    {
+      "path": "packages/driver/src/session.pty.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => terminal.diagnostics().some((entry) => entry.code === 'protocol-violation'), {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
@@ -1156,19 +1156,19 @@
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => input.textContent()).toBe(\"a\");"
+      "excerpt": "await expect.poll(() => input.textContent()).toBe('a');"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "process.env[\"TERMWRIGHT_FIXTURE_SECRET\"] = \"leaked\";"
+      "excerpt": "process.env['TERMWRIGHT_FIXTURE_SECRET'] = 'leaked';"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "process.env[\"TERMWRIGHT_FIXTURE_SECRET\"] = \"shared-on-purpose\";"
+      "excerpt": "process.env['TERMWRIGHT_FIXTURE_SECRET'] = 'shared-on-purpose';"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
@@ -1180,97 +1180,97 @@
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('a probe-backed session', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('crash reports', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('locatorForRef', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('prompt and quiet waits', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('session diagnostics', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())("
+      "excerpt": "describe.skipIf(!ptyAvailable())('settled()', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())(\"action events\", { timeout: 20_000 }, () => {"
+      "excerpt": "describe.skipIf(!ptyAvailable())('shell command integration', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())(\"crash reports\", { timeout: 20_000 }, () => {"
+      "excerpt": "describe.skipIf(!ptyAvailable())('terminal profiles', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())(\"locatorForRef\", { timeout: 20_000 }, () => {"
+      "excerpt": "describe.skipIf(!ptyAvailable())('the child environment', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())(\"settled()\", { timeout: 20_000 }, () => {"
+      "excerpt": "describe.skipIf(!ptyAvailable())('the debug log', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!ptyAvailable())(\"the debug log\", { timeout: 20_000 }, () => {"
+      "excerpt": "describe.skipIf(!ptyAvailable())('the production PTY backend', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === \"win32\")("
+      "excerpt": "it.skipIf(process.platform === 'win32')("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
@@ -1384,13 +1384,13 @@
       "path": "packages/driver/test-fixtures/mouse-app.mjs",
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
-      "excerpt": "if (text === 'l' && process.env['TERMWRIGHT_MOUSE_LATE_TARGET'] === '1') {"
+      "excerpt": "`${process.env['TERMWRIGHT_MOUSE_DRAG'] === '1' ? '\\x1b[?1002h' : '\\x1b[?1000h'}\\x1b[?1006h`,"
     },
     {
       "path": "packages/driver/test-fixtures/mouse-app.mjs",
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
-      "excerpt": "process.stdout.write(`${process.env['TERMWRIGHT_MOUSE_DRAG'] === '1' ? '\\x1b[?1002h' : '\\x1b[?1000h'}\\x1b[?1006h`);"
+      "excerpt": "if (text === 'l' && process.env['TERMWRIGHT_MOUSE_LATE_TARGET'] === '1') {"
     },
     {
       "path": "packages/driver/test-fixtures/process-tree-app.mjs",
@@ -1738,7 +1738,7 @@
       "path": "packages/mcp/src/sessions.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void task.catch((error) => this.#onBackgroundError?.(error)).finally(() => {"
+      "excerpt": "void task"
     },
     {
       "path": "packages/mcp/src/sessions.ts",
@@ -1762,13 +1762,13 @@
       "path": "packages/probe-charm/src/patch-sets.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!hasGo)(\"the Bubbles patch sets\", () => {"
+      "excerpt": "describe.skipIf(!hasGo)('the Bubbles patch sets', () => {"
     },
     {
       "path": "packages/probe-charm/src/patch-sets.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!hasGo)(\"the patch sets\", () => {"
+      "excerpt": "describe.skipIf(!hasGo)('the patch sets', () => {"
     },
     {
       "path": "packages/probe-charm/src/zero-config.pty.test.ts",
@@ -1804,7 +1804,7 @@
       "path": "packages/probe-ink/src/geometry.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(async () => {"
+      "excerpt": ".poll(async () => {"
     },
     {
       "path": "packages/probe-ink/src/instrument-transaction.test.ts",
@@ -1834,7 +1834,7 @@
       "path": "packages/probe-ink/src/instrument.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void instance.waitUntilExit()"
+      "excerpt": "void instance"
     },
     {
       "path": "packages/probe-ink/src/instrument.ts",
@@ -1852,13 +1852,13 @@
       "path": "packages/probe-ink/src/react-commit-bridge.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "else process.env[\"DEV\"] = previousDev;"
+      "excerpt": "else process.env['DEV'] = previousDev;"
     },
     {
       "path": "packages/probe-ink/src/render-boundary.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void flush.then(() => {"
+      "excerpt": "void flush.then("
     },
     {
       "path": "packages/probe-ink/src/testing/annotated-app.mjs",
@@ -1876,13 +1876,13 @@
       "path": "packages/probe-ink/src/testing/geometry-app.mjs",
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "? [setTimeout(() => setStep(1), 20), setTimeout(() => setStep(2), 21)]"
+      "excerpt": "mode === 'rapid' ? [setTimeout(() => setStep(1), 20), setTimeout(() => setStep(2), 21)] : [];"
     },
     {
       "path": "packages/probe-ink/src/testing/geometry-app.mjs",
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "? [setTimeout(() => setStep(1), 20), setTimeout(() => setStep(2), 21)]"
+      "excerpt": "mode === 'rapid' ? [setTimeout(() => setStep(1), 20), setTimeout(() => setStep(2), 21)] : [];"
     },
     {
       "path": "packages/probe-ink/src/testing/vanilla-app.mjs",
@@ -1900,7 +1900,7 @@
       "path": "packages/probe-opentui/src/certification.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "expect(certification?.source).toBe(process.env['TERMWRIGHT_CERTIFICATION_HOOK_PROFILE'] === undefined ? 'builtin' : 'candidate');"
+      "excerpt": "process.env['TERMWRIGHT_CERTIFICATION_HOOK_PROFILE'] === undefined ? 'builtin' : 'candidate',"
     },
     {
       "path": "packages/probe-opentui/src/testing/annotated-app.ts",
@@ -1936,12 +1936,6 @@
       "path": "packages/probe-opentui/src/testing/vanilla-app.ts",
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
-      "excerpt": "const applicationStdout = process.env['TW_CUSTOM_STDOUT'] === '1'"
-    },
-    {
-      "path": "packages/probe-opentui/src/testing/vanilla-app.ts",
-      "kind": "process-global-mutation",
-      "classification": "production-process-isolation-review",
       "excerpt": "if (process.env['TW_STDOUT_IDENTITY_ORACLE'] === '1') {"
     },
     {
@@ -1961,6 +1955,12 @@
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
       "excerpt": "if (process.env['TW_WRAP_STDOUT_WRITE'] === '1') {"
+    },
+    {
+      "path": "packages/probe-opentui/src/testing/vanilla-app.ts",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "process.env['TW_CUSTOM_STDOUT'] === '1'"
     },
     {
       "path": "packages/probe-opentui/src/testing/vanilla-app.ts",
@@ -2014,7 +2014,7 @@
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(!hasGo)('fails closed when an active build omitted compiler injection', async () => {"
+      "excerpt": "it.skipIf(!hasGo)("
     },
     {
       "path": "packages/protocol/src/env.test.ts",
@@ -2026,37 +2026,37 @@
       "path": "packages/pty/src/index.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(process.platform === \"win32\")(\"the Termwright-owned POSIX PTY\", () => {"
+      "excerpt": "describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', () => {"
     },
     {
       "path": "packages/pty/src/index.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(process.platform === \"win32\")(\"the Termwright-owned POSIX PTY\", () => {"
+      "excerpt": "describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', () => {"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!windows)(\"ConPTY backend\", { timeout: 30_000 }, () => {"
+      "excerpt": "describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(!bun)("
+      "excerpt": "it.skipIf(!bun)('preserves causal VT marker order for Bun applications', async () => {"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(!bun)(\"writes the same mode-safe console marker under Bun\", async () => {"
+      "excerpt": "it.skipIf(!bun)('writes the same mode-safe console marker under Bun', async () => {"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'setInterval(() => process.stdout.write(\"f\".repeat(8192)), 1);',"
+      "excerpt": "'const timer = setInterval(() => {',"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",
@@ -2086,19 +2086,13 @@
       "path": "packages/pty/src/windows-native.win.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "\"const timer = setInterval(() => {\","
+      "excerpt": "'setTimeout(() => process.exit(0), 2000);',"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "\"setTimeout(() => process.exit(0), 2000);\","
-    },
-    {
-      "path": "packages/pty/src/windows-native.win.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "\"setTimeout(() => process.exit(0), 300);\","
+      "excerpt": "'setTimeout(() => process.exit(0), 300);',"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",
@@ -2110,7 +2104,13 @@
       "path": "packages/pty/src/windows-native.win.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "command: node(\"setInterval(() => {}, 1000);\"),"
+      "excerpt": "command: node('setInterval(() => {}, 1000);'),"
+    },
+    {
+      "path": "packages/pty/src/windows-native.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "command: node('setInterval(() => process.stdout.write(\"f\".repeat(8192)), 1);'),"
     },
     {
       "path": "packages/pty/src/windows-native.win.test.ts",
@@ -2194,7 +2194,7 @@
       "path": "packages/run-history/src/index.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "invocationId: createRunId('invocation'), runId: createRunId('run'), startedAt: Date.now(),"
+      "excerpt": "startedAt: Date.now(),"
     },
     {
       "path": "packages/run-journal-transport/src/index.ts",
@@ -2218,7 +2218,7 @@
       "path": "packages/run-journal-transport/src/index.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "pendingRequest.timer = setTimeout(() => fail("
+      "excerpt": "pendingRequest.timer = setTimeout("
     },
     {
       "path": "packages/termwright-cli/src/cli.test.ts",
@@ -2278,7 +2278,7 @@
       "path": "packages/termwright-cli/src/test-host.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void handle.completed.then((completion) => onCompletion?.(completion)).finally(() => {"
+      "excerpt": "void handle.completed"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
@@ -2404,7 +2404,7 @@
       "path": "packages/test/src/logs.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "const text = formatLogEntry(record('error', 'save failed', { seq: 42, revision: 7, ts: Date.now() }));"
+      "excerpt": "record('error', 'save failed', { seq: 42, revision: 7, ts: Date.now() }),"
     },
     {
       "path": "packages/test/src/logs.ts",
@@ -2417,6 +2417,12 @@
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "setTimeout(() => collection.push(record('warn', 'late arrival')), 80);"
+    },
+    {
+      "path": "packages/test/src/matchers.test.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "() => ({ ref: Date.now() >= movesAt ? 'semantic:n1@1' : 'semantic:n3@1' }),"
     },
     {
       "path": "packages/test/src/matchers.test.ts",
@@ -2446,25 +2452,7 @@
       "path": "packages/test/src/matchers.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "const harness = fakeHarness(() => ({ tree: Date.now() >= arrivesAt ? permissionDialog() : null }));"
-    },
-    {
-      "path": "packages/test/src/matchers.test.ts",
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "const harness = fakeHarness(() => ({ tree: Date.now() >= arrivesAt ? permissionDialog() : null }));"
-    },
-    {
-      "path": "packages/test/src/matchers.test.ts",
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const movesAt = Date.now() + 80;"
-    },
-    {
-      "path": "packages/test/src/matchers.test.ts",
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "const moving = fakeLocator(() => ({ ref: Date.now() >= movesAt ? 'semantic:n1@1' : 'semantic:n3@1' }), 'getByTestId(\"scope\")');"
     },
     {
       "path": "packages/test/src/matchers.test.ts",
@@ -2482,13 +2470,25 @@
       "path": "packages/test/src/matchers.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "Date.now() >= settlesAt ? permissionDialog() : snapshot([node('n1', 'text', 'Loading')]),"
+    },
+    {
+      "path": "packages/test/src/matchers.test.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "expect(Date.now() - started).toBeLessThan(1_000);"
     },
     {
       "path": "packages/test/src/matchers.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "tree: Date.now() >= settlesAt ? permissionDialog() : snapshot([node('n1', 'text', 'Loading')]),"
+      "excerpt": "tree: Date.now() >= arrivesAt ? permissionDialog() : null,"
+    },
+    {
+      "path": "packages/test/src/matchers.test.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "tree: Date.now() >= arrivesAt ? permissionDialog() : null,"
     },
     {
       "path": "packages/test/src/obsolete-sweep.test.ts",
@@ -2620,13 +2620,13 @@
       "path": "packages/ui/src/app/browser-client.test.ts",
       "kind": "fire-and-forget",
       "classification": "test-observer-or-intentional-background-task",
-      "excerpt": "void first.then(() => { firstSettled = true; });"
+      "excerpt": "void first.then(() => {"
     },
     {
       "path": "packages/ui/src/app/browser-client.test.ts",
       "kind": "fire-and-forget",
       "classification": "test-observer-or-intentional-background-task",
-      "excerpt": "void second.then(() => { secondSettled = true; });"
+      "excerpt": "void second.then(() => {"
     },
     {
       "path": "packages/ui/src/app/browser-client.test.ts",
@@ -2656,13 +2656,13 @@
       "path": "packages/ui/src/app/components/InspectorPanel.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "return <Tooltip label={label}><button type=\"button\" className=\"tw-copy-field\" aria-label={label} onClick={() => { void navigator.clipboard.writeText(value); }}><Copy aria-hidden=\"true\" size={12} /></button></Tooltip>;"
+      "excerpt": "void navigator.clipboard.writeText(value);"
     },
     {
       "path": "packages/ui/src/app/components/InspectorPanel.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void onInspectActionability(session.sessionId, selectedNode.id).then((results) => {"
+      "excerpt": "void onInspectActionability(session.sessionId, selectedNode.id)"
     },
     {
       "path": "packages/ui/src/app/components/RunnerPage.tsx",
@@ -2680,25 +2680,37 @@
       "path": "packages/ui/src/app/components/RunsPage.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void source.run(selectedRunId).then((detail) => {"
+      "excerpt": "void source"
     },
     {
       "path": "packages/ui/src/app/components/RunsPage.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void source.runs().then((result) => { if (active) setRuns(result.runs); }).catch((cause: unknown) => {"
+      "excerpt": "void source"
     },
     {
       "path": "packages/ui/src/app/components/SettingsPage.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void navigator.clipboard.writeText(JSON.stringify(report, null, 2)).then(() => setCopyStatus('copied')).catch(() => setCopyStatus('failed'));"
+      "excerpt": "void navigator.clipboard"
     },
     {
       "path": "packages/ui/src/app/components/TerminalStage.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void document.fonts.ready.then(() => {"
+    },
+    {
+      "path": "packages/ui/src/app/docs-screenshots.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/docs-screenshots.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').innerText())"
     },
     {
       "path": "packages/ui/src/app/docs-screenshots.e2e.ts",
@@ -2734,12 +2746,6 @@
       "path": "packages/ui/src/app/docs-screenshots.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/docs-screenshots.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-semantic-node-row').count()).toBeGreaterThan(0);"
     },
     {
@@ -2747,12 +2753,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-spec-case').count()).toBe(4);"
-    },
-    {
-      "path": "packages/ui/src/app/docs-screenshots.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('Permission required');"
     },
     {
       "path": "packages/ui/src/app/docs-screenshots.e2e.ts",
@@ -2806,37 +2806,295 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => actionability.getByText('revision 12', { exact: true }).count()).toBe(4);"
+      "excerpt": ".poll(() =>"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => actionability.getByText(/input-mode-disabled: motion reporting is disabled/u).count()).toBe(1);"
+      "excerpt": ".poll(() =>"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => actionability.locator('li[data-actionable] header strong').allTextContents()).toEqual(["
+      "excerpt": ".poll(() =>"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => crashPage.getByText('No driver actions were recorded in this recording.', { exact: false }).count()).toBe(1);"
+      "excerpt": ".poll(() =>"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => crashPage.locator('.tw-terminal-viewport').innerText(), { timeout: 3_000 }).toContain('panic: runtime error');"
+      "excerpt": ".poll(() =>"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => empty.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
+      "excerpt": ".poll(() => actionability.getByText('revision 12', { exact: true }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => actionability.locator('li[data-actionable] header strong').allTextContents())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => crashPage.locator('.tw-terminal-viewport').innerText(), { timeout: 3_000 })"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => empty.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => first.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => first.locator('.tw-terminal-viewport').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label')))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.evaluate(() => document.activeElement?.getAttribute('placeholder')))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.evaluate(() => document.activeElement?.textContent))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.evaluate(() => document.activeElement?.textContent))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.evaluate(() => document.activeElement?.textContent))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.evaluate(() => document.activeElement?.textContent))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByRole('treeitem', { name: /First inspector/u }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByRole('treeitem', { name: /Second inspector/u }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByText('Passed after a retry', { exact: true }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByText('Recording discarded; no file was written.').count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByText('Recording unavailable:', { exact: false }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-run-skip-warning').textContent())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-highlight[data-target-ref=\"semantic:b1@1\"]').count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-toast').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('[data-node-id=\"action:rerun-session:a-live\"]').count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => scroller.evaluate((element) => Math.round(element.scrollTop)))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => tree.getByRole('treeitem', { name: /Root/u }).getAttribute('aria-expanded'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(async () =>"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(async () => Number(await crashPage.getByLabel('Replay position').inputValue()))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(async () => Number(await position.inputValue()))"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -2860,18 +3118,6 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => first.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity')).toContain('live:');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => first.locator('.tw-terminal-viewport').innerText()).toContain('LIVE ONLY');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => liveCommand.getAttribute('data-status')).toBe('passed');"
     },
     {
@@ -2890,109 +3136,13 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.evaluate(() => {"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('File a.test.ts');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('placeholder'))).toContain('node');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toContain('case A');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toContain('First child');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toContain('Last child');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toContain('Root');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(0);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(0);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.getByRole('dialog', { name: 'Generated test' }).count()).toBe(0);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByRole('treeitem', { name: /First inspector/u }).count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByRole('treeitem', { name: /Second inspector/u }).count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.getByText('attempt 3', { exact: true }).count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByText('No driver actions were recorded for this case.', { exact: false }).count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByText('Passed after a retry', { exact: true }).count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByText('Recording discarded; no file was written.').count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByText('Recording unavailable:', { exact: false }).count()).toBe(1);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3016,60 +3166,6 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-evidence-pill').innerText()).toContain('LIVE');"
     },
     {
@@ -3088,24 +3184,6 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-run-skip-warning').textContent()).toContain('not plain-green certification');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-section-row').filter({ hasText: 'Given the policy already permits the request' }).count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-semantic-node-row').count()).toBeGreaterThan(0);"
     },
     {
@@ -3118,61 +3196,7 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-terminal-highlight[data-target-ref=\"semantic:b1@1\"]').count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('FIRST SCREEN');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('LIVE rerun evidence');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('received hello');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('recorder ready');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('SECOND SCREEN');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-toast').innerText()).toContain(`Copied ${sourceFile}`);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('[data-node-id=\"action:rerun-session:a-live\"]').count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => review.innerText()).toContain('submit permission');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => scroller.evaluate((element) => Math.round(element.scrollTop))).toBe("
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3208,12 +3232,6 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => tree.getByRole('treeitem', { name: /Root/u }).getAttribute('aria-expanded')).toBe('false');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => tree.getByRole('treeitem').count()).toBe(1);"
     },
     {
@@ -3239,24 +3257,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => tree.locator('[role=\"treeitem\"][tabindex=\"0\"]').count()).toBe(1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(async () => Number(await crashPage.getByLabel('Replay position').inputValue())).toBeCloseTo(crashTime, -1);"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(async () => Number(await position.inputValue())).toBeLessThan(Number(maximum));"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(async () => page.evaluate(() => {"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3364,37 +3364,7 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "server.hub.publish({ v: 1, type: 'run-start', runId: 'run:yellow', mode: 'live', startedAt: Date.now() });"
-    },
-    {
-      "path": "packages/ui/src/app/TermwrightApp.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "onCopy={() => { void navigator.clipboard.writeText(recordReview.source).then(() => dispatch({ type: 'toast', tone: 'success', text: 'Generated test copied.' })); }}"
-    },
-    {
-      "path": "packages/ui/src/app/TermwrightApp.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "onDiscard={() => { void discardRecording(); }}"
-    },
-    {
-      "path": "packages/ui/src/app/TermwrightApp.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "onSave={() => { void saveRecording(); }}"
-    },
-    {
-      "path": "packages/ui/src/app/TermwrightApp.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "onStart={() => { void startRecording(); }}"
-    },
-    {
-      "path": "packages/ui/src/app/TermwrightApp.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "onStop: () => { void stopRecording(); },"
+      "excerpt": "startedAt: Date.now(),"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
@@ -3424,13 +3394,25 @@
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void copy"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void copy.catch(() => undefined);"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void copy.then(() => dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` }))"
+      "excerpt": "void discardRecording();"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void navigator.clipboard"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
@@ -3466,19 +3448,43 @@
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void operation().then(() => dispatch({ type: 'toast', tone: 'success', text: success }))"
+      "excerpt": "void operation()"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void source.traceState(replay.timeMs).then((traceState) => {"
+      "excerpt": "void saveRecording();"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void source"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void startRecording();"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void stopRecording();"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "const timer = window.setTimeout(() => {"
+    },
+    {
+      "path": "packages/ui/src/app/url-navigation.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
     },
     {
       "path": "packages/ui/src/app/url-navigation.e2e.ts",
@@ -3503,12 +3509,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.getByLabel('Replay position').inputValue()).toBe(String(desired));"
-    },
-    {
-      "path": "packages/ui/src/app/url-navigation.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
     },
     {
       "path": "packages/ui/src/app/url-navigation.e2e.ts",
@@ -3544,7 +3544,7 @@
       "path": "packages/ui/src/browser-client.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "if (this.#reconnect) this.#reconnectTimer = setTimeout(() => {"
+      "excerpt": "this.#reconnectTimer = setTimeout(() => {"
     },
     {
       "path": "packages/ui/src/hub.ts",
@@ -3580,7 +3580,7 @@
       "path": "packages/ui/src/live-client.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void inspectNodeActionability(source, message.nodeId).then((results) => {"
+      "excerpt": "void inspectNodeActionability(source, message.nodeId)"
     },
     {
       "path": "packages/ui/src/live-client.ts",
@@ -3694,7 +3694,7 @@
       "path": "packages/ui/src/server.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "while (Date.now() < deadline && harness.writtenText() !== \"ls\\r\") {"
+      "excerpt": "while (Date.now() < deadline && harness.writtenText() !== 'ls\\r') {"
     },
     {
       "path": "packages/ui/src/server.test.ts",
@@ -3760,13 +3760,13 @@
       "path": "packages/ui/src/server.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "hub.publish({ v: 1, type: 'run-start', runId: createRunId('run'), mode: 'live', startedAt: Date.now() });"
+      "excerpt": "startedAt: Date.now(),"
     },
     {
       "path": "packages/ui/src/server.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "hub.publish({ v: 1, type: 'run-start', runId: createRunId('run'), mode: 'record', startedAt: Date.now() });"
+      "excerpt": "startedAt: Date.now(),"
     },
     {
       "path": "packages/ui/src/server.ts",

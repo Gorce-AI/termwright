@@ -35,10 +35,14 @@ const FIXTURE_BUBBLES = join(here, 'testing', 'fixture-bubbles');
 const FIXTURE_ANNOTATED = join(here, 'testing', 'fixture-annotated');
 
 async function goAvailable(): Promise<boolean> {
-  return goTestCapability(async () => {
-    await run('go', ['version']);
-    return true;
-  }, false, 'Go certification toolchain');
+  return goTestCapability(
+    async () => {
+      await run('go', ['version']);
+      return true;
+    },
+    false,
+    'Go certification toolchain',
+  );
 }
 
 function ptyAvailable(): boolean {
@@ -60,8 +64,11 @@ afterEach(async () => {
     ownedRoots.map((dir) => rm(dir, { recursive: true, force: true })),
   );
   const results = [...closed, ...removed];
-  const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-  if (failures.length > 0) throw new AggregateError(failures, 'failed to clean test-owned Charm resources');
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'failed to clean test-owned Charm resources');
 });
 
 /**
@@ -162,15 +169,17 @@ function dormantBackend(output?: Uint8Array[]): PtyBackend {
           TERMWRIGHT_TOKEN: '',
         },
       });
-      return output === undefined ? process : {
-        ...process,
-        onData(listener) {
-          return process.onData((data) => {
-            output.push(Uint8Array.from(data));
-            listener(data);
-          });
-        },
-      };
+      return output === undefined
+        ? process
+        : {
+            ...process,
+            onData(listener) {
+              return process.onData((data) => {
+                output.push(Uint8Array.from(data));
+                listener(data);
+              });
+            },
+          };
     },
   };
 }
@@ -205,7 +214,9 @@ async function waitForSemanticCondition(
     if (await condition()) return;
     checkpoint = await app.waitForCheckpointChange({ after: checkpoint, timeout: 20_000 });
   }
-  throw new Error(`${description} did not occur within ${maximumCommittedChanges} causal checkpoint changes`);
+  throw new Error(
+    `${description} did not occur within ${maximumCommittedChanges} causal checkpoint changes`,
+  );
 }
 
 async function buildV1Fixture(): Promise<string> {
@@ -219,7 +230,10 @@ async function buildV1Fixture(): Promise<string> {
     env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') },
   });
   const binary = join(dir, 'app-binary');
-  await run('go', ['build', ...prepared.goArgs, '-o', binary, '.'], { cwd: app, env: prepared.env });
+  await run('go', ['build', ...prepared.goArgs, '-o', binary, '.'], {
+    cwd: app,
+    env: prepared.env,
+  });
   return binary;
 }
 
@@ -233,7 +247,9 @@ describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe',
     await app.settled();
     expect(app.semanticTree()?.v).toBe(2);
     expect(app.contract()?.framework).toMatchObject({
-      name: 'charm', version: 'v1.3.10', adapterVersion: PROBE_VERSION,
+      name: 'charm',
+      version: 'v1.3.10',
+      adapterVersion: PROBE_VERSION,
     });
     // ConPTY consumes startup terminal queries before Termwright's emulator
     // can observe and answer them. Semantics and ordinary PTY input remain
@@ -249,128 +265,156 @@ describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe',
 });
 
 describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () => {
-	resourceAwareIt.resources({ terminals: 2, traceWriters: 0, hostPressure: 'exclusive' })('is observably identical to untouched Bubble Tea when dormant', async () => {
-		const [vanilla, instrumented] = await Promise.all([
-			buildVanillaFixture(),
-			buildFixture(),
-		]);
-		const states: unknown[] = [];
-		const outputs: Uint8Array[][] = [[], []];
-		for (const [index, binary] of [vanilla, instrumented].entries()) {
-			const app = await launchTerminalWithBackend({
-				command: [binary],
-				columns: 60,
-				rows: 10,
-				backend: dormantBackend(outputs[index]),
-			});
-			sessions.push(app);
-			await app.waitForText('status: ready');
-			expect(app.contract()?.framework ?? null).toBeNull();
-			expect(app.semanticTree()).toBeNull();
-			const beforeFocusChange = app.checkpoint();
-			await app.press('tab');
-			// Bubble Tea may legitimately coalesce two inputs into one render.
-			// Comparing independent byte streams before both programs have crossed
-			// the same render boundary measures scheduler timing, not dormant
-			// instrumentation. Observe the tab frame before sending the next input,
-			// so both captures contain the same causally complete transactions.
-			await app.waitForCheckpointChange({ after: beforeFocusChange, timeout: 20_000 });
-			await app.type('x');
-			await app.waitForText('batch-complete:1');
-			const screen = app.screen();
-			states.push({
-				buffer: screen.buffer,
-				modes: screen.modes,
-				cursor: screen.cursor,
-				cells: Array.from({ length: screen.rows }, (_, row) =>
-					Array.from({ length: screen.columns }, (_, column) => screen.cell(row, column))),
-			});
-		}
-		expect(states[1]).toEqual(states[0]);
-		expect(Buffer.concat(outputs[1]!.map((part) => Buffer.from(part)))).toEqual(
-			Buffer.concat(outputs[0]!.map((part) => Buffer.from(part))),
-		);
-		for (const output of outputs) {
-			expect(Buffer.concat(output.map((part) => Buffer.from(part))).includes(Buffer.from('\u001b]8487;'))).toBe(false);
-		}
-	}, 900_000);
+  resourceAwareIt.resources({ terminals: 2, traceWriters: 0, hostPressure: 'exclusive' })(
+    'is observably identical to untouched Bubble Tea when dormant',
+    async () => {
+      const [vanilla, instrumented] = await Promise.all([buildVanillaFixture(), buildFixture()]);
+      const states: unknown[] = [];
+      const outputs: Uint8Array[][] = [[], []];
+      for (const [index, binary] of [vanilla, instrumented].entries()) {
+        const app = await launchTerminalWithBackend({
+          command: [binary],
+          columns: 60,
+          rows: 10,
+          backend: dormantBackend(outputs[index]),
+        });
+        sessions.push(app);
+        await app.waitForText('status: ready');
+        expect(app.contract()?.framework ?? null).toBeNull();
+        expect(app.semanticTree()).toBeNull();
+        const beforeFocusChange = app.checkpoint();
+        await app.press('tab');
+        // Bubble Tea may legitimately coalesce two inputs into one render.
+        // Comparing independent byte streams before both programs have crossed
+        // the same render boundary measures scheduler timing, not dormant
+        // instrumentation. Observe the tab frame before sending the next input,
+        // so both captures contain the same causally complete transactions.
+        await app.waitForCheckpointChange({ after: beforeFocusChange, timeout: 20_000 });
+        await app.type('x');
+        await app.waitForText('batch-complete:1');
+        const screen = app.screen();
+        states.push({
+          buffer: screen.buffer,
+          modes: screen.modes,
+          cursor: screen.cursor,
+          cells: Array.from({ length: screen.rows }, (_, row) =>
+            Array.from({ length: screen.columns }, (_, column) => screen.cell(row, column)),
+          ),
+        });
+      }
+      expect(states[1]).toEqual(states[0]);
+      expect(Buffer.concat(outputs[1]!.map((part) => Buffer.from(part)))).toEqual(
+        Buffer.concat(outputs[0]!.map((part) => Buffer.from(part))),
+      );
+      for (const output of outputs) {
+        expect(
+          Buffer.concat(output.map((part) => Buffer.from(part))).includes(
+            Buffer.from('\u001b]8487;'),
+          ),
+        ).toBe(false);
+      }
+    },
+    900_000,
+  );
 
-	it('fails closed when a recognised Bubbles component was built without the returned compiler arguments', async () => {
-		const binary = await buildBubblesFixture('v2.0.8', false);
-		const app = await launchTerminal({ command: [binary], columns: 60, rows: 10 });
-		sessions.push(app);
-		await app.waitForText('Loading');
-		await expect(app.settled()).rejects.toMatchObject({
-			code: 'adapter-guarantee-violation',
-			message: expect.stringContaining('without injected accessor TermwrightFrame'),
-		});
-		expect(app.semanticTree()).toBeNull();
-	}, 900_000);
+  it('fails closed when a recognised Bubbles component was built without the returned compiler arguments', async () => {
+    const binary = await buildBubblesFixture('v2.0.8', false);
+    const app = await launchTerminal({ command: [binary], columns: 60, rows: 10 });
+    sessions.push(app);
+    await app.waitForText('Loading');
+    await expect(app.settled()).rejects.toMatchObject({
+      code: 'adapter-guarantee-violation',
+      message: expect.stringContaining('without injected accessor TermwrightFrame'),
+    });
+    expect(app.semanticTree()).toBeNull();
+  }, 900_000);
 
-	it('keeps the captured marker stream ordered across consecutive A/B/A commits', async () => {
-		const binary = await buildFixture();
-		const output: Uint8Array[] = [];
-		const app = await launchTerminalWithBackend({
-			command: [binary],
-			columns: 60,
-			rows: 10,
-			backend: capturingBackend(output),
-		});
-		sessions.push(app);
-		await app.waitForText('status: ready');
-		await app.settled();
+  it('keeps the captured marker stream ordered across consecutive A/B/A commits', async () => {
+    const binary = await buildFixture();
+    const output: Uint8Array[] = [];
+    const app = await launchTerminalWithBackend({
+      command: [binary],
+      columns: 60,
+      rows: 10,
+      backend: capturingBackend(output),
+    });
+    sessions.push(app);
+    await app.waitForText('status: ready');
+    await app.settled();
 
-		let rawOffset = Buffer.concat(output.map((part) => Buffer.from(part))).length;
-		const commit = async (input: () => Promise<void>, expected: string) => {
-			await input();
-			await waitForSemanticCondition(
-				app,
-				() => app.getByRole('textbox', { name: 'Name' }).textContent().then((text) => text === expected),
-				`textbox commit ${JSON.stringify(expected)}`,
-			);
-			const raw = Buffer.concat(output.map((part) => Buffer.from(part)));
-			const commitBytes = raw.subarray(rawOffset);
-			rawOffset = raw.length;
-			const markerAt = commitBytes.indexOf(Buffer.from('\u001b]8487;'));
-			expect(markerAt, `captured writer emitted no marker: ${commitBytes.toString('hex')}`).toBeGreaterThanOrEqual(0);
-			// Bubble Tea may legally produce a semantic-only commit after an
-			// earlier flush already made the same cells authoritative. Whenever
-			// this commit carries terminal bytes, they must precede its marker.
-			if (markerAt > 0) {
-				expect(commitBytes.subarray(0, markerAt).length, 'marker preceded its frame bytes').toBeGreaterThan(0);
-			}
-		};
+    let rawOffset = Buffer.concat(output.map((part) => Buffer.from(part))).length;
+    const commit = async (input: () => Promise<void>, expected: string) => {
+      await input();
+      await waitForSemanticCondition(
+        app,
+        () =>
+          app
+            .getByRole('textbox', { name: 'Name' })
+            .textContent()
+            .then((text) => text === expected),
+        `textbox commit ${JSON.stringify(expected)}`,
+      );
+      const raw = Buffer.concat(output.map((part) => Buffer.from(part)));
+      const commitBytes = raw.subarray(rawOffset);
+      rawOffset = raw.length;
+      const markerAt = commitBytes.indexOf(Buffer.from('\u001b]8487;'));
+      expect(
+        markerAt,
+        `captured writer emitted no marker: ${commitBytes.toString('hex')}`,
+      ).toBeGreaterThanOrEqual(0);
+      // Bubble Tea may legally produce a semantic-only commit after an
+      // earlier flush already made the same cells authoritative. Whenever
+      // this commit carries terminal bytes, they must precede its marker.
+      if (markerAt > 0) {
+        expect(
+          commitBytes.subarray(0, markerAt).length,
+          'marker preceded its frame bytes',
+        ).toBeGreaterThan(0);
+      }
+    };
 
-		await commit(() => app.type('a'), 'a');
-		await commit(() => app.press('backspace'), '');
-		await commit(() => app.type('a'), 'a');
-	}, 900_000);
+    await commit(() => app.type('a'), 'a');
+    await commit(() => app.press('backspace'), '');
+    await commit(() => app.type('a'), 'a');
+  }, 900_000);
 
-	it('reports unobservable component geometry instead of inventing it', async () => {
-		const binary = await buildFixture();
-		const app = await launchTerminal({
-			command: [binary],
-			columns: 80,
-			rows: 12,
-		});
-		sessions.push(app);
-		await app.waitForText('Sign in');
-		await app.settled();
-		expect(app.semanticTree()?.v).toBe(2);
+  it('reports unobservable component geometry instead of inventing it', async () => {
+    const binary = await buildFixture();
+    const app = await launchTerminal({
+      command: [binary],
+      columns: 80,
+      rows: 12,
+    });
+    sessions.push(app);
+    await app.waitForText('Sign in');
+    await app.settled();
+    expect(app.semanticTree()?.v).toBe(2);
 
-		const tree = app.semanticTree();
-		expect(tree?.hitGrid).toEqual({
-			status: 'unsupported',
-			capability: 'pointer-hit-grid',
-			reason: 'framework-unobservable',
-		});
-		const textbox = tree?.nodes.find((node) => node.role === 'textbox' && node.name === 'Name');
-		expect(textbox?.geometry).toEqual({
-			displayed: { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' },
-			intendedRect: { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' },
-			visibleRect: { status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' },
-		});
-	}, 900_000);
+    const tree = app.semanticTree();
+    expect(tree?.hitGrid).toEqual({
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    });
+    const textbox = tree?.nodes.find((node) => node.role === 'textbox' && node.name === 'Name');
+    expect(textbox?.geometry).toEqual({
+      displayed: {
+        status: 'unsupported',
+        capability: 'displayed',
+        reason: 'framework-unobservable',
+      },
+      intendedRect: {
+        status: 'unsupported',
+        capability: 'intended-geometry',
+        reason: 'framework-unobservable',
+      },
+      visibleRect: {
+        status: 'unsupported',
+        capability: 'clipped-geometry',
+        reason: 'framework-unobservable',
+      },
+    });
+  }, 900_000);
 
   it.each(['v2.0.8', 'v2.0.9'])(
     'composes exact Bubble Tea %s with Bubbles v2.1.1 private state',
@@ -382,13 +426,17 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
       await app.settled();
       expect(app.semanticTree()?.v).toBe(2);
       expect(app.contract()?.framework).toMatchObject({
-        name: 'charm', version, adapterVersion: PROBE_VERSION,
+        name: 'charm',
+        version,
+        adapterVersion: PROBE_VERSION,
       });
 
       // The frame index has no public Bubbles getter. A numeric value proves
       // the exact add-only companion accessor executed, not merely that Bubble
       // Tea recognised the component type from its public View output.
-      expect((await app.getByRole('status').semanticState())?.positionInSet).toEqual(expect.any(Number));
+      expect((await app.getByRole('status').semanticState())?.positionInSet).toEqual(
+        expect.any(Number),
+      );
     },
     900_000,
   );
@@ -456,11 +504,17 @@ describe.skipIf(!runnable)('developer annotations', () => {
     await session.waitForText('disk 82%');
     await waitForSemanticCondition(
       session,
-      () => session.getByTestId('disk-gauge').extendedState()
-        .then((state) => state?.['level'] === 82 && state?.['status'] === 'warning'),
+      () =>
+        session
+          .getByTestId('disk-gauge')
+          .extendedState()
+          .then((state) => state?.['level'] === 82 && state?.['status'] === 'warning'),
       'annotated domain state update',
     );
-    expect(await session.getByTestId('disk-gauge').extendedState()).toEqual({ level: 82, status: 'warning' });
+    expect(await session.getByTestId('disk-gauge').extendedState()).toEqual({
+      level: 82,
+      status: 'warning',
+    });
 
     // The annotated wrapper around a native Bubbles textinput keeps all three
     // layers: the author's name/test id, plus the recognizer's role, focus and
@@ -489,11 +543,17 @@ describe.skipIf(!runnable)('developer annotations', () => {
     const help = session.semanticTree()?.nodes.find((node) => node.name === 'DNS host name');
     expect(annotatedNode()?.labelledBy).toEqual([label?.id]);
     expect(annotatedNode()?.describedBy).toEqual([help?.id]);
-    expect((await session.getByRole('textbox', { name: 'Server host' }).semanticState())?.focused).toBe(true);
+    expect(
+      (await session.getByRole('textbox', { name: 'Server host' }).semanticState())?.focused,
+    ).toBe(true);
     await session.type('prod-01');
     await waitForSemanticCondition(
       session,
-      () => session.getByTestId('server-host').textContent().then((text) => text.includes('prod-01')),
+      () =>
+        session
+          .getByTestId('server-host')
+          .textContent()
+          .then((text) => text.includes('prod-01')),
       'annotated textbox value update',
     );
     expect(await session.getByTestId('server-host').textContent()).toContain('prod-01');
@@ -519,10 +579,14 @@ describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {
     // Observe actual committed checkpoints. This application animates forever,
     // so neither quiet windows nor wall-clock polling are causal evidence.
     const frames = new Set<number | undefined>();
-    await waitForSemanticCondition(app, async () => {
-      frames.add((await app.getByRole('status').semanticState())?.positionInSet);
-      return frames.size > 1;
-    }, 'two distinct committed spinner frames');
+    await waitForSemanticCondition(
+      app,
+      async () => {
+        frames.add((await app.getByRole('status').semanticState())?.positionInSet);
+        return frames.size > 1;
+      },
+      'two distinct committed spinner frames',
+    );
 
     // progress.Percent() returns the target of the animation, not the
     // fraction being drawn. The accessor reports the drawn one, and the

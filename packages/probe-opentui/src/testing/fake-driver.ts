@@ -97,7 +97,7 @@ export async function startFakeDriver(): Promise<FakeDriver> {
               encodeFrame(
                 {
                   type: 'hello-ack',
-              protocol: PROTOCOL_ID,
+                  protocol: PROTOCOL_ID,
                   sessionId,
                   limits,
                   subscribe: 'snapshots',
@@ -129,11 +129,16 @@ export async function startFakeDriver(): Promise<FakeDriver> {
     });
   });
 
-  const until = async (predicate: () => boolean, timeoutMs: number, what: string): Promise<void> => {
+  const until = async (
+    predicate: () => boolean,
+    timeoutMs: number,
+    what: string,
+  ): Promise<void> => {
     if (predicate()) return;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        const because = rejection === undefined ? '' : `; the driver refused a frame — ${rejection}`;
+        const because =
+          rejection === undefined ? '' : `; the driver refused a frame — ${rejection}`;
         reject(new Error(`fake driver: timed out waiting for ${what}${because}`));
       }, timeoutMs);
       const check = (): void => {
@@ -167,10 +172,14 @@ export async function startFakeDriver(): Promise<FakeDriver> {
     },
     async waitForSnapshot(predicate, description, timeoutMs = DEFAULT_WAIT_MS) {
       let observed: SemanticSnapshot | undefined;
-      await until(() => {
-        observed = snapshots.find(predicate);
-        return observed !== undefined;
-      }, timeoutMs, description);
+      await until(
+        () => {
+          observed = snapshots.find(predicate);
+          return observed !== undefined;
+        },
+        timeoutMs,
+        description,
+      );
       return observed as SemanticSnapshot;
     },
     async waitForHandshake(timeoutMs = DEFAULT_WAIT_MS) {

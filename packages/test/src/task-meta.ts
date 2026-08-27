@@ -102,4 +102,4 @@ declare module 'vitest' {
   interface TaskMeta {
     termwright?: TermwrightTaskMeta;
   }
-};
+}

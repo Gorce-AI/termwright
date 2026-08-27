@@ -1,7 +1,4 @@
-import type {
-  ProbeAnnotations,
-  ProtocolLimits,
-} from '@termwright/protocol';
+import type { ProbeAnnotations, ProtocolLimits } from '@termwright/protocol';
 import { validateProbeAnnotations } from '@termwright/protocol';
 
 const REGISTRY = Symbol.for('termwright.annotation.opentui.v1');

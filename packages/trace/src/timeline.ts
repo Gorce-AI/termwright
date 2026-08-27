@@ -24,11 +24,7 @@ export interface TimelineOptions {
 }
 
 /** Total length of `[from, to)` covered by `windows`, in milliseconds. */
-export function hiddenOverlap(
-  from: number,
-  to: number,
-  windows: readonly HiddenWindow[],
-): number {
+export function hiddenOverlap(from: number, to: number, windows: readonly HiddenWindow[]): number {
   if (to <= from || windows.length === 0) return 0;
   const sorted = [...windows].sort((a, b) => a.start - b.start);
   let covered = 0;

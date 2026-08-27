@@ -47,10 +47,7 @@ const identity: RunEventIdentity = Object.freeze({
   attemptId,
 });
 
-function event(
-  seq: number,
-  overrides: Partial<RunEvent> = {},
-): RunEvent {
+function event(seq: number, overrides: Partial<RunEvent> = {}): RunEvent {
   return createRunEvent({
     producerId,
     epoch: 0,
@@ -60,15 +57,19 @@ function event(
     monotonicTime: seq * 10,
     identity,
     payload: { retry: 0 },
-    randomUUID: () => UUIDS[8 + seq] ?? `00000000-0000-4000-8000-${String(seq + 1).padStart(12, '0')}`,
+    randomUUID: () =>
+      UUIDS[8 + seq] ?? `00000000-0000-4000-8000-${String(seq + 1).padStart(12, '0')}`,
     ...overrides,
   });
 }
 
 describe('formal run identity', () => {
   it('uses disjoint canonical prefixes for every identity domain', () => {
-    expect(new Set(RUN_ID_KINDS.map((kind, index) => createRunId(kind, () => UUIDS[index % UUIDS.length]!))).size)
-      .toBe(RUN_ID_KINDS.length);
+    expect(
+      new Set(
+        RUN_ID_KINDS.map((kind, index) => createRunId(kind, () => UUIDS[index % UUIDS.length]!)),
+      ).size,
+    ).toBe(RUN_ID_KINDS.length);
     expect(() => parseRunId('attempt', executionId)).toThrow(/attempt:<uuid-v4>/u);
     expect(parseRunId('execution', executionId)).toBe(executionId);
   });
@@ -120,8 +121,10 @@ describe('RunEvent v2 envelope', () => {
 
     expect(failedAction.payload).toEqual({ api: 'press', ok: false, error: 'the key was refused' });
     expect(event(2, { payload: { ok: false } }).payload).toEqual({ ok: false });
-    expect(event(3, { payload: { nested: { ok: false, code: 'invalid-payload', detail: 'x' } } }).payload)
-      .toEqual({ nested: { ok: false, code: 'invalid-payload', detail: 'x' } });
+    expect(
+      event(3, { payload: { nested: { ok: false, code: 'invalid-payload', detail: 'x' } } })
+        .payload,
+    ).toEqual({ nested: { ok: false, code: 'invalid-payload', detail: 'x' } });
   });
 
   it('enforces identity ancestry rather than accepting detached attempt ids', () => {
@@ -134,43 +137,101 @@ describe('RunEvent v2 envelope', () => {
   });
 
   it('rejects unknown envelope fields and unsupported versions', () => {
-    expect(validateRunEvent({ ...event(0), v: 1 })).toMatchObject({ ok: false, code: 'invalid-envelope' });
-    expect(validateRunEvent({ ...event(0), surprise: true })).toMatchObject({ ok: false, code: 'invalid-envelope' });
+    expect(validateRunEvent({ ...event(0), v: 1 })).toMatchObject({
+      ok: false,
+      code: 'invalid-envelope',
+    });
+    expect(validateRunEvent({ ...event(0), surprise: true })).toMatchObject({
+      ok: false,
+      code: 'invalid-envelope',
+    });
   });
 
   it('rejects a self cause, duplicate causes and excessive causal fan-in', () => {
     const current = event(0);
-    expect(validateRunEvent({ ...current, causedBy: [current.eventId] })).toMatchObject({ ok: false, code: 'causal-cycle' });
+    expect(validateRunEvent({ ...current, causedBy: [current.eventId] })).toMatchObject({
+      ok: false,
+      code: 'causal-cycle',
+    });
     const cause = createRunId('event', () => UUIDS[10]);
-    expect(validateRunEvent({ ...current, causedBy: [cause, cause] })).toMatchObject({ ok: false, code: 'invalid-envelope' });
-    expect(validateRunEvent({ ...current, causedBy: Array.from({ length: 65 }, () => cause) })).toMatchObject({ ok: false, code: 'invalid-envelope' });
+    expect(validateRunEvent({ ...current, causedBy: [cause, cause] })).toMatchObject({
+      ok: false,
+      code: 'invalid-envelope',
+    });
+    expect(
+      validateRunEvent({ ...current, causedBy: Array.from({ length: 65 }, () => cause) }),
+    ).toMatchObject({ ok: false, code: 'invalid-envelope' });
   });
 
   it('bounds hostile payload bytes, depth, entries, strings and non-JSON values', () => {
     const base = event(0);
-    expect(validateRunEvent({ ...base, payload: { text: 'x'.repeat(20) } }, { ...DEFAULT_RUN_EVENT_LIMITS, maxStringBytes: 8 })).toMatchObject({ ok: false, code: 'invalid-payload' });
-    expect(validateRunEvent({ ...base, payload: { a: { b: { c: true } } } }, { ...DEFAULT_RUN_EVENT_LIMITS, maxPayloadDepth: 2 })).toMatchObject({ ok: false, code: 'invalid-payload' });
-    expect(validateRunEvent({ ...base, payload: [1, 2, 3] }, { ...DEFAULT_RUN_EVENT_LIMITS, maxPayloadEntries: 10 })).toMatchObject({ ok: false, code: 'invalid-payload' });
-    expect(validateRunEvent({ ...base, payload: Number.NaN })).toMatchObject({ ok: false, code: 'invalid-payload' });
-    expect(validateRunEvent({ ...base, payload: { x: 1 } }, { ...DEFAULT_RUN_EVENT_LIMITS, maxEventBytes: 32 })).toMatchObject({ ok: false, code: 'event-oversized' });
+    expect(
+      validateRunEvent(
+        { ...base, payload: { text: 'x'.repeat(20) } },
+        { ...DEFAULT_RUN_EVENT_LIMITS, maxStringBytes: 8 },
+      ),
+    ).toMatchObject({ ok: false, code: 'invalid-payload' });
+    expect(
+      validateRunEvent(
+        { ...base, payload: { a: { b: { c: true } } } },
+        { ...DEFAULT_RUN_EVENT_LIMITS, maxPayloadDepth: 2 },
+      ),
+    ).toMatchObject({ ok: false, code: 'invalid-payload' });
+    expect(
+      validateRunEvent(
+        { ...base, payload: [1, 2, 3] },
+        { ...DEFAULT_RUN_EVENT_LIMITS, maxPayloadEntries: 10 },
+      ),
+    ).toMatchObject({ ok: false, code: 'invalid-payload' });
+    expect(validateRunEvent({ ...base, payload: Number.NaN })).toMatchObject({
+      ok: false,
+      code: 'invalid-payload',
+    });
+    expect(
+      validateRunEvent(
+        { ...base, payload: { x: 1 } },
+        { ...DEFAULT_RUN_EVENT_LIMITS, maxEventBytes: 32 },
+      ),
+    ).toMatchObject({ ok: false, code: 'event-oversized' });
   });
 
   it('rejects accessors, aliases, cycles, sparse arrays and reserved keys without invoking getters', () => {
     let invoked = false;
-    const accessor = Object.defineProperty({}, 'secret', { enumerable: true, get: () => { invoked = true; return 'no'; } });
-    expect(validateRunEvent({ ...event(0), payload: accessor })).toMatchObject({ ok: false, code: 'invalid-payload' });
+    const accessor = Object.defineProperty({}, 'secret', {
+      enumerable: true,
+      get: () => {
+        invoked = true;
+        return 'no';
+      },
+    });
+    expect(validateRunEvent({ ...event(0), payload: accessor })).toMatchObject({
+      ok: false,
+      code: 'invalid-payload',
+    });
     expect(invoked).toBe(false);
     const shared = { x: 1 };
-    expect(validateRunEvent({ ...event(0), payload: [shared, shared] })).toMatchObject({ ok: false, code: 'invalid-payload' });
+    expect(validateRunEvent({ ...event(0), payload: [shared, shared] })).toMatchObject({
+      ok: false,
+      code: 'invalid-payload',
+    });
     const cycle: { self?: unknown } = {};
     cycle.self = cycle;
-    expect(validateRunEvent({ ...event(0), payload: cycle })).toMatchObject({ ok: false, code: 'invalid-payload' });
+    expect(validateRunEvent({ ...event(0), payload: cycle })).toMatchObject({
+      ok: false,
+      code: 'invalid-payload',
+    });
     const sparse = new Array(2);
     sparse[1] = true;
-    expect(validateRunEvent({ ...event(0), payload: sparse })).toMatchObject({ ok: false, code: 'invalid-payload' });
+    expect(validateRunEvent({ ...event(0), payload: sparse })).toMatchObject({
+      ok: false,
+      code: 'invalid-payload',
+    });
     const reserved = Object.create(null) as Record<string, unknown>;
     reserved['__proto__'] = true;
-    expect(validateRunEvent({ ...event(0), payload: reserved })).toMatchObject({ ok: false, code: 'invalid-payload' });
+    expect(validateRunEvent({ ...event(0), payload: reserved })).toMatchObject({
+      ok: false,
+      code: 'invalid-payload',
+    });
   });
 });
 
@@ -185,8 +246,18 @@ describe('merged RunEvent stream validation', () => {
       monotonicNow: () => now++,
       wallNow: () => 1_800_000_000_000,
     });
-    const first = producer.emit({ eventClass: 'authoritative', type: 'attempt.started', identity, payload: {} });
-    const second = producer.emit({ eventClass: 'state', type: 'attempt.running', identity, payload: {} });
+    const first = producer.emit({
+      eventClass: 'authoritative',
+      type: 'attempt.started',
+      identity,
+      payload: {},
+    });
+    const second = producer.emit({
+      eventClass: 'state',
+      type: 'attempt.running',
+      identity,
+      payload: {},
+    });
     expect([first.seq, second.seq]).toEqual([0, 1]);
     expect([first.monotonicTime, second.monotonicTime]).toEqual([10, 11]);
     expect(first.eventId).not.toBe(second.eventId);
@@ -202,8 +273,9 @@ describe('merged RunEvent stream validation', () => {
       monotonicNow: () => times.shift() ?? 0,
     });
     producer.emit({ eventClass: 'state', type: 'attempt.running', identity, payload: {} });
-    expect(() => producer.emit({ eventClass: 'state', type: 'attempt.running', identity, payload: {} }))
-      .toThrow(/clock moved backwards/u);
+    expect(() =>
+      producer.emit({ eventClass: 'state', type: 'attempt.running', identity, payload: {} }),
+    ).toThrow(/clock moved backwards/u);
   });
 
   it('accepts increasing producer sequence and monotonic time', () => {
@@ -216,11 +288,17 @@ describe('merged RunEvent stream validation', () => {
     const duplicateId = new RunEventStreamValidator();
     const first = event(0);
     expect(duplicateId.accept(first).ok).toBe(true);
-    expect(duplicateId.accept({ ...event(1), eventId: first.eventId })).toMatchObject({ ok: false, code: 'event-collision' });
+    expect(duplicateId.accept({ ...event(1), eventId: first.eventId })).toMatchObject({
+      ok: false,
+      code: 'event-collision',
+    });
 
     const duplicateSeq = new RunEventStreamValidator();
     expect(duplicateSeq.accept(first).ok).toBe(true);
-    expect(duplicateSeq.accept({ ...event(1), seq: 0 })).toMatchObject({ ok: false, code: 'event-collision' });
+    expect(duplicateSeq.accept({ ...event(1), seq: 0 })).toMatchObject({
+      ok: false,
+      code: 'event-collision',
+    });
 
     const sequence = new RunEventStreamValidator();
     expect(sequence.accept(event(1)).ok).toBe(true);
@@ -228,11 +306,17 @@ describe('merged RunEvent stream validation', () => {
 
     const clock = new RunEventStreamValidator();
     expect(clock.accept(event(0, { monotonicTime: 10 })).ok).toBe(true);
-    expect(clock.accept(event(1, { monotonicTime: 9 }))).toMatchObject({ ok: false, code: 'monotonic-time-regression' });
+    expect(clock.accept(event(1, { monotonicTime: 9 }))).toMatchObject({
+      ok: false,
+      code: 'monotonic-time-regression',
+    });
 
     const epoch = new RunEventStreamValidator();
     expect(epoch.accept(event(0, { epoch: 2 })).ok).toBe(true);
-    expect(epoch.accept(event(1, { epoch: 1 }))).toMatchObject({ ok: false, code: 'epoch-regression' });
+    expect(epoch.accept(event(1, { epoch: 1 }))).toMatchObject({
+      ok: false,
+      code: 'epoch-regression',
+    });
   });
 
   it('detects a causal cycle even when its first edge referenced a future event', () => {
@@ -240,6 +324,9 @@ describe('merged RunEvent stream validation', () => {
     const first = event(0);
     const second = event(1);
     expect(stream.accept({ ...first, causedBy: [second.eventId] }).ok).toBe(true);
-    expect(stream.accept({ ...second, causedBy: [first.eventId] })).toMatchObject({ ok: false, code: 'causal-cycle' });
+    expect(stream.accept({ ...second, causedBy: [first.eventId] })).toMatchObject({
+      ok: false,
+      code: 'causal-cycle',
+    });
   });
 });

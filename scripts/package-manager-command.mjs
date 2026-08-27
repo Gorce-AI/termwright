@@ -2,8 +2,11 @@ import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 
 const pnpmJavaScriptExtensions = new Set(['.cjs', '.js', '.mjs']);
-const expectedPnpmVersion = readJson(new URL('../package.json', import.meta.url))?.packageManager?.match(/^pnpm@([^+]+)(?:\+.*)?$/u)?.[1];
-if (expectedPnpmVersion === undefined) throw new Error('root package.json must pin an exact pnpm packageManager version');
+const expectedPnpmVersion = readJson(
+  new URL('../package.json', import.meta.url),
+)?.packageManager?.match(/^pnpm@([^+]+)(?:\+.*)?$/u)?.[1];
+if (expectedPnpmVersion === undefined)
+  throw new Error('root package.json must pin an exact pnpm packageManager version');
 
 function readJson(path) {
   try {
@@ -22,7 +25,11 @@ function regularFile(path) {
 }
 
 function validatedPnpmCli(path) {
-  if (typeof path !== 'string' || path.length === 0 || !pnpmJavaScriptExtensions.has(extname(path))) {
+  if (
+    typeof path !== 'string' ||
+    path.length === 0 ||
+    !pnpmJavaScriptExtensions.has(extname(path))
+  ) {
     return undefined;
   }
   let entry;

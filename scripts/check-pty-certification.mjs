@@ -33,8 +33,10 @@ try {
   }
   const sentinelOffset = output.lastIndexOf(sentinel);
   const payloadOffset = sentinelOffset - payloadBytes;
-  if (sentinelOffset < payloadBytes ||
-      !output.subarray(payloadOffset, sentinelOffset).equals(Buffer.alloc(payloadBytes, 0x78))) {
+  if (
+    sentinelOffset < payloadBytes ||
+    !output.subarray(payloadOffset, sentinelOffset).equals(Buffer.alloc(payloadBytes, 0x78))
+  ) {
     throw new Error(`native PTY lost its final output: received ${output.length} bytes`);
   }
   if (processHandle.treeState?.() !== 'gone') {

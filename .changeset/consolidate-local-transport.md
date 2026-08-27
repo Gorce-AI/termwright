@@ -1,6 +1,6 @@
 ---
-"@termwright/resource-broker": patch
-"@termwright/run-journal-transport": patch
+'@termwright/resource-broker': patch
+'@termwright/run-journal-transport': patch
 ---
 
 Consolidate authenticated local IPC framing, hostile-input decoding, typed

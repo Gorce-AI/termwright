@@ -8,9 +8,21 @@ import { generateHtmlReport } from './report.js';
 import { TRACE_FILES, type ActionEvent, type TraceEvent } from './types.js';
 import { rewriteCommittedMember } from './__fixtures__/committed.js';
 import { createTraceWriter } from './writer.js';
-import { SESSION_CAPABILITIES, type ActionabilityExplanation, type EffectiveSessionContract } from '@termwright/protocol';
+import {
+  SESSION_CAPABILITIES,
+  type ActionabilityExplanation,
+  type EffectiveSessionContract,
+} from '@termwright/protocol';
 
-const stamp = { sessionId: 't1', contractId: 't1:0', epoch: 0, sequence: 42, screenRevision: 7, semanticRevision: 42, pairedScreenRevision: 7 } as const;
+const stamp = {
+  sessionId: 't1',
+  contractId: 't1:0',
+  epoch: 0,
+  sequence: 42,
+  screenRevision: 7,
+  semanticRevision: 42,
+  pairedScreenRevision: 7,
+} as const;
 
 const temporaries: string[] = [];
 
@@ -37,13 +49,27 @@ describe('actions from the driver', () => {
     const root = await workspace();
     const dir = join(root, 'contract.twtrace');
     const session = new FakeSession();
-    const evidence = { source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'terminal' } as const;
+    const evidence = {
+      source: 'terminal',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'terminal',
+    } as const;
     const contract: EffectiveSessionContract = {
-      contractId: 't1:0', sessionId: 't1', epoch: 0, protocol: 'termwright/2', framework: null,
+      contractId: 't1:0',
+      sessionId: 't1',
+      epoch: 0,
+      protocol: 'termwright/2',
+      framework: null,
       providers: [{ id: 'terminal', kind: 'terminal', version: '1' }],
-      capabilities: Object.fromEntries(SESSION_CAPABILITIES.map((id) => [id, id === 'keyboard-input'
-        ? { status: 'supported', evidence }
-        : { status: 'unsupported', reason: 'not-negotiated' }])) as unknown as EffectiveSessionContract['capabilities'],
+      capabilities: Object.fromEntries(
+        SESSION_CAPABILITIES.map((id) => [
+          id,
+          id === 'keyboard-input'
+            ? { status: 'supported', evidence }
+            : { status: 'unsupported', reason: 'not-negotiated' },
+        ]),
+      ) as unknown as EffectiveSessionContract['capabilities'],
       terminal: { profile: 'default', platform: 'linux', mouseModesObservable: true },
     };
     session.negotiatedContract = contract;
@@ -68,14 +94,58 @@ describe('actions from the driver', () => {
       ref: 'semantic:n8@42',
       observation: stamp,
       receipt: {
-        intent: { kind: 'click', selector: "getByRole('button', { name: 'Submit' })", targetRef: 'semantic:n8@42' },
-        plan: {
-          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click', targetRef: 'semantic:n8@42' },
-          checkpoint: stamp, requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted',
-          operations: [{ device: 'mouse', kind: 'down', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }, { device: 'mouse', kind: 'up', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }],
+        intent: {
+          kind: 'click',
+          selector: "getByRole('button', { name: 'Submit' })",
+          targetRef: 'semantic:n8@42',
         },
-        before: stamp, after: { ...stamp, sequence: 43, screenRevision: 8, pairedScreenRevision: 8 },
-        executed: [{ device: 'mouse', kind: 'down', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }, { device: 'mouse', kind: 'up', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }],
+        plan: {
+          actionId: 'a1',
+          contractId: 't1:0',
+          intent: { kind: 'click', targetRef: 'semantic:n8@42' },
+          checkpoint: stamp,
+          requirements: [],
+          strategy: 'authoritative-pointer-region',
+          valuePolicy: 'redacted',
+          operations: [
+            {
+              device: 'mouse',
+              kind: 'down',
+              row: 3,
+              column: 9,
+              button: 'left',
+              modifiers: ['shift', 'control'],
+            },
+            {
+              device: 'mouse',
+              kind: 'up',
+              row: 3,
+              column: 9,
+              button: 'left',
+              modifiers: ['shift', 'control'],
+            },
+          ],
+        },
+        before: stamp,
+        after: { ...stamp, sequence: 43, screenRevision: 8, pairedScreenRevision: 8 },
+        executed: [
+          {
+            device: 'mouse',
+            kind: 'down',
+            row: 3,
+            column: 9,
+            button: 'left',
+            modifiers: ['shift', 'control'],
+          },
+          {
+            device: 'mouse',
+            kind: 'up',
+            row: 3,
+            column: 9,
+            button: 'left',
+            modifiers: ['shift', 'control'],
+          },
+        ],
         outcome: 'completed',
       },
     });
@@ -91,13 +161,25 @@ describe('actions from the driver', () => {
       ok: true,
       t: 50,
       castOffset: 50,
-      observation: { sessionId: 't1', contractId: 't1:0', epoch: 0, sequence: 42, screenRevision: 7, semanticRevision: 42, pairedScreenRevision: 7 },
+      observation: {
+        sessionId: 't1',
+        contractId: 't1:0',
+        epoch: 0,
+        sequence: 42,
+        screenRevision: 7,
+        semanticRevision: 42,
+        pairedScreenRevision: 7,
+      },
     });
     expect((events[0] as ActionEvent).error).toBeUndefined();
     const receipt = (events[0] as ActionEvent).receipt;
     expect(receipt).toMatchObject({ plan: { strategy: 'authoritative-pointer-region' } });
     expect(receipt?.executed[0]).toMatchObject({
-      device: 'mouse', kind: 'down', row: 3, column: 9, modifiers: ['shift', 'control'],
+      device: 'mouse',
+      kind: 'down',
+      row: 3,
+      column: 9,
+      modifiers: ['shift', 'control'],
     });
     expect(receipt?.executed).toEqual(receipt?.plan.operations);
   });
@@ -112,11 +194,17 @@ describe('actions from the driver', () => {
       receipt: {
         intent: { kind: 'click' },
         plan: {
-          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' }, checkpoint: stamp,
-          requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted',
+          actionId: 'a1',
+          contractId: 't1:0',
+          intent: { kind: 'click' },
+          checkpoint: stamp,
+          requirements: [],
+          strategy: 'authoritative-pointer-region',
+          valuePolicy: 'redacted',
           operations: [{ device: 'mouse', kind: 'down', row: 3, column: 9, button: 'left' }],
         },
-        before: stamp, after: { ...stamp, sequence: 43 },
+        before: stamp,
+        after: { ...stamp, sequence: 43 },
         executed: [{ device: 'mouse', kind: 'down', row: 99, column: 99, button: 'left' }],
         outcome: 'completed',
       },
@@ -125,7 +213,9 @@ describe('actions from the driver', () => {
 
     const trace = await openTrace(dir);
     const drain = async (): Promise<void> => {
-      for await (const _event of trace.events()) { /* consume */ }
+      for await (const _event of trace.events()) {
+        /* consume */
+      }
     };
     await expect(drain()).rejects.toThrow(/executed input differs/);
     await trace.close();
@@ -137,24 +227,39 @@ describe('actions from the driver', () => {
     const session = new FakeSession();
     const writer = createTraceWriter(session, { dir, now: session.now });
     const operation = {
-      device: 'mouse' as const, kind: 'down' as const, row: 3, column: 9,
-      button: 'left' as const, modifiers: ['meta'] as never,
+      device: 'mouse' as const,
+      kind: 'down' as const,
+      row: 3,
+      column: 9,
+      button: 'left' as const,
+      modifiers: ['meta'] as never,
     };
     session.action('click', {
       ok: true,
       receipt: {
         intent: { kind: 'click' },
         plan: {
-          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' }, checkpoint: stamp,
-          requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted', operations: [operation],
+          actionId: 'a1',
+          contractId: 't1:0',
+          intent: { kind: 'click' },
+          checkpoint: stamp,
+          requirements: [],
+          strategy: 'authoritative-pointer-region',
+          valuePolicy: 'redacted',
+          operations: [operation],
         },
-        before: stamp, after: stamp, executed: [operation], outcome: 'completed',
+        before: stamp,
+        after: stamp,
+        executed: [operation],
+        outcome: 'completed',
       },
     });
     await writer.finalize();
     const trace = await openTrace(dir);
     const drain = async (): Promise<void> => {
-      for await (const _event of trace.events()) { /* consume */ }
+      for await (const _event of trace.events()) {
+        /* consume */
+      }
     };
     await expect(drain()).rejects.toThrow(/modifiers is invalid/);
     await trace.close();
@@ -170,16 +275,27 @@ describe('actions from the driver', () => {
       receipt: {
         intent: { kind: 'click' },
         plan: {
-          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' },
-          checkpoint: { ...stamp, sequence: 41 }, requirements: [], strategy: 'pointer', valuePolicy: 'redacted', operations: [],
+          actionId: 'a1',
+          contractId: 't1:0',
+          intent: { kind: 'click' },
+          checkpoint: { ...stamp, sequence: 41 },
+          requirements: [],
+          strategy: 'pointer',
+          valuePolicy: 'redacted',
+          operations: [],
         },
-        before: stamp, after: stamp, executed: [], outcome: 'completed',
+        before: stamp,
+        after: stamp,
+        executed: [],
+        outcome: 'completed',
       },
     });
     await writer.finalize();
     const trace = await openTrace(dir);
     const drain = async (): Promise<void> => {
-      for await (const _event of trace.events()) { /* consume */ }
+      for await (const _event of trace.events()) {
+        /* consume */
+      }
     };
     await expect(drain()).rejects.toThrow(/not bound to its before checkpoint/);
     await trace.close();
@@ -207,16 +323,35 @@ describe('actions from the driver', () => {
     const dir = join(root, 'failed-plan.twtrace');
     const session = new FakeSession();
     const writer = createTraceWriter(session, { dir, now: session.now });
-    const evidence = { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } as const;
+    const evidence = {
+      source: 'application',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'app.router',
+    } as const;
     const actionability: ActionabilityExplanation = {
       actionable: false,
       intent: { kind: 'drag' as const, selector: 'button', targetRef: 'semantic:save@42' },
       checkpoint: stamp,
       requirements: [
-        { condition: { kind: 'pointer-input' as const, target: 'save@42' }, checkpoint: stamp, observation: { status: 'known' as const, value: true, evidence }, verdict: 'satisfied' as const },
-        { condition: { kind: 'mouse-input-enabled' as const, target: 'save@42' }, checkpoint: stamp, observation: { status: 'known' as const, value: false, evidence }, verdict: 'unsatisfied' as const },
+        {
+          condition: { kind: 'pointer-input' as const, target: 'save@42' },
+          checkpoint: stamp,
+          observation: { status: 'known' as const, value: true, evidence },
+          verdict: 'satisfied' as const,
+        },
+        {
+          condition: { kind: 'mouse-input-enabled' as const, target: 'save@42' },
+          checkpoint: stamp,
+          observation: { status: 'known' as const, value: false, evidence },
+          verdict: 'unsatisfied' as const,
+        },
       ],
-      reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'semantic:save@42' },
+      reason: {
+        code: 'input-mode-disabled',
+        message: 'Mouse reporting is disabled',
+        targetRef: 'semantic:save@42',
+      },
     };
     session.action('drag', { ok: false, error: 'input-mode-disabled', actionability });
     await writer.finalize();
@@ -240,24 +375,44 @@ describe('actions from the driver', () => {
         actionable: false,
         intent: { kind: 'click' },
         checkpoint: stamp,
-        requirements: [{
-          condition: { kind: 'receives-pointer', target: 'save@42' },
-          checkpoint: stamp,
-          observation: { status: 'known', value: false, evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } },
-          verdict: 'unsatisfied',
-        }],
+        requirements: [
+          {
+            condition: { kind: 'receives-pointer', target: 'save@42' },
+            checkpoint: stamp,
+            observation: {
+              status: 'known',
+              value: false,
+              evidence: {
+                source: 'application',
+                method: 'native',
+                strength: 'authoritative',
+                providerId: 'app.router',
+              },
+            },
+            verdict: 'unsatisfied',
+          },
+        ],
         reason: { code: 'covered-by', message: 'covered' },
       },
     });
     await writer.finalize();
     const eventsPath = join(dir, TRACE_FILES.events);
-    const event = JSON.parse((await readFile(eventsPath, 'utf8')).trim()) as Record<string, unknown>;
-    const explanation = event['actionability'] as { requirements: Array<{ observation: { evidence: { strength: string } } }> };
+    const event = JSON.parse((await readFile(eventsPath, 'utf8')).trim()) as Record<
+      string,
+      unknown
+    >;
+    const explanation = event['actionability'] as {
+      requirements: Array<{ observation: { evidence: { strength: string } } }>;
+    };
     explanation.requirements[0]!.observation.evidence.strength = 'guessed';
     await rewriteCommittedMember(dir, TRACE_FILES.events, `${JSON.stringify(event)}\n`);
 
     const trace = await openTrace(dir);
-    const drain = async (): Promise<void> => { for await (const _event of trace.events()) { /* consume */ } };
+    const drain = async (): Promise<void> => {
+      for await (const _event of trace.events()) {
+        /* consume */
+      }
+    };
     await expect(drain()).rejects.toThrow(/invalid evidence/);
     await trace.close();
   });

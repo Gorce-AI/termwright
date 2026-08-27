@@ -13,12 +13,12 @@ This is an adapter-author guide. Application tests should start with
 
 ## Choose an integration strategy
 
-| Framework design | Normal strategy |
-| --- | --- |
-| Retained widget tree with public hooks | Runtime preload or lifecycle hook |
-| Retained tree with private layout state | Exact-version build instrumentation |
-| Immediate-mode rendering | Observe frame render calls in an instrumented build |
-| Rendered string with a structured model | Observe the model and publish frame-local nodes |
+| Framework design                        | Normal strategy                                     |
+| --------------------------------------- | --------------------------------------------------- |
+| Retained widget tree with public hooks  | Runtime preload or lifecycle hook                   |
+| Retained tree with private layout state | Exact-version build instrumentation                 |
+| Immediate-mode rendering                | Observe frame render calls in an instrumented build |
+| Rendered string with a structured model | Observe the model and publish frame-local nodes     |
 
 Do not infer component geometry from paint order or rendered text. Publish a
 fact only when the framework exposes evidence for it.
@@ -115,15 +115,15 @@ The conformance suite drives a real subprocess and compares observable bytes,
 snapshots, actions, and teardown:
 
 ```ts
-import {runAdapterConformance} from '@termwright/conformance';
+import { runAdapterConformance } from '@termwright/conformance';
 
 await runAdapterConformance({
   name: 'my-framework',
-  spawn: () => ({command: ['my-app']}),
-  baseline: () => ({command: ['my-app'], env: {DISABLE_PROBE: '1'}}),
+  spawn: () => ({ command: ['my-app'] }),
+  baseline: () => ({ command: ['my-app'], env: { DISABLE_PROBE: '1' } }),
   ready: 'Ready',
-  interaction: {input: '\t', expect: '[Save]'},
-  quit: {input: '', exitCode: 0},
+  interaction: { input: '\t', expect: '[Save]' },
+  quit: { input: '', exitCode: 0 },
   columns: 80,
   rows: 24,
 });

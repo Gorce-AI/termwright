@@ -37,12 +37,17 @@ function codeForIssue(issue: z.core.$ZodIssue): ValidationErrorCode {
   const path = issue.path.map(String);
   if (path.includes('role')) return 'unknown-role';
   if (path.includes('revision')) return 'revision';
-  if (path.includes('bounds') || ['row', 'column', 'width', 'height'].includes(path.at(-1) ?? '')) return 'bad-rect';
+  if (path.includes('bounds') || ['row', 'column', 'width', 'height'].includes(path.at(-1) ?? ''))
+    return 'bad-rect';
   if (issue.code === 'custom' && issue.message?.includes('hit regions')) return 'bad-rect';
   if (issue.code === 'too_big' && (path.includes('nodes') || path.includes('rootIds'))) {
     return 'count';
   }
-  if (issue.code === 'custom' && typeof issue.message === 'string' && issue.message.includes('UTF-8 bytes')) {
+  if (
+    issue.code === 'custom' &&
+    typeof issue.message === 'string' &&
+    issue.message.includes('UTF-8 bytes')
+  ) {
     return 'string-bytes';
   }
   return 'schema';
@@ -81,7 +86,10 @@ function rectContains(
 
 function regionProblem(
   owner: string,
-  region: { readonly regionBounds: { row: number; column: number; width: number; height: number }; readonly spans: readonly { row: number; from: number; to: number }[] },
+  region: {
+    readonly regionBounds: { row: number; column: number; width: number; height: number };
+    readonly spans: readonly { row: number; from: number; to: number }[];
+  },
   columns: number,
   rows: number,
 ): ValidationResult | null {
@@ -150,7 +158,6 @@ function checkNodeShape(
     if (problem !== null) return problem;
   }
 
-
   const intended = node.geometry.intendedRect;
   const visible = node.geometry.visibleRect;
   if (visible.status === 'known' && visible.value.width > 0 && visible.value.height > 0) {
@@ -181,11 +188,17 @@ function checkNodeShape(
   ] as const) {
     if (targets === undefined) continue;
     if (targets.length > limits.maxRelationTargets) {
-      return fail('count', `node ${node.id}: ${field} exceeds ${limits.maxRelationTargets} targets`);
+      return fail(
+        'count',
+        `node ${node.id}: ${field} exceeds ${limits.maxRelationTargets} targets`,
+      );
     }
     for (const target of targets) {
       if (!ids.has(target)) {
-        return fail('missing-parent', `node ${node.id}: ${field} references unknown node ${target}`);
+        return fail(
+          'missing-parent',
+          `node ${node.id}: ${field} references unknown node ${target}`,
+        );
       }
     }
   }
@@ -272,7 +285,10 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
   const snapshot = projected as SemanticSnapshot;
 
   if (snapshot.nodes.length > limits.maxNodes) {
-    return fail('count', `snapshot carries ${snapshot.nodes.length} nodes, ceiling is ${limits.maxNodes}`);
+    return fail(
+      'count',
+      `snapshot carries ${snapshot.nodes.length} nodes, ceiling is ${limits.maxNodes}`,
+    );
   }
 
   const byId = new Map<string, SemanticNode>();
@@ -300,7 +316,10 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
 
   const ids: ReadonlySet<string> = new Set(byId.keys());
 
-  if (snapshot.coordinateSpace.status === 'known' && snapshot.coordinateSpace.value !== 'viewport-cells') {
+  if (
+    snapshot.coordinateSpace.status === 'known' &&
+    snapshot.coordinateSpace.value !== 'viewport-cells'
+  ) {
     // Framework-local geometry is inspectable, but it cannot be addressed by
     // terminal input. Pointer ownership is independently qualified by the hit grid.
   }
@@ -310,7 +329,10 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
         return fail('missing-parent', `hitGrid references unknown recipient ${region.recipientId}`);
       }
       if (!rectIntersectsViewport(region.rect, snapshot.columns, snapshot.rows)) {
-        return fail('bad-rect', `hitGrid region for ${region.recipientId} does not intersect the viewport`);
+        return fail(
+          'bad-rect',
+          `hitGrid region for ${region.recipientId} does not intersect the viewport`,
+        );
       }
     }
   }
@@ -340,10 +362,7 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
         `provider ${provider.providerId} evidence provenance names ${provider.evidence.providerId}`,
       );
     }
-    if (
-      provider.focusState?.status === 'focused' &&
-      !ids.has(provider.focusState.recipientId)
-    ) {
+    if (provider.focusState?.status === 'focused' && !ids.has(provider.focusState.recipientId)) {
       return fail(
         'missing-parent',
         `provider ${provider.providerId} focus references unknown recipient ${provider.focusState.recipientId}`,

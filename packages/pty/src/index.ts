@@ -6,8 +6,8 @@
  * stream, private node-pty field, quiet window, or retry decides that output
  * has ended.
  */
-import { createRequire } from "node:module";
-import { getSystemErrorName } from "node:util";
+import { createRequire } from 'node:module';
+import { getSystemErrorName } from 'node:util';
 import {
   spawnWindowsPty,
   writeWindowsConsoleMarker as writeNativeWindowsConsoleMarker,
@@ -15,19 +15,19 @@ import {
   windowsPtyAvailable,
   windowsPtyUnavailableReason,
   type WindowsConPtyRuntimeInfo,
-} from "./windows.js";
-import { NativeWriteDrainEpoch } from "./write-drain-epoch.js";
+} from './windows.js';
+import { NativeWriteDrainEpoch } from './write-drain-epoch.js';
 
 type NativeEvent =
-  | { readonly type: "data"; readonly data: Buffer }
+  | { readonly type: 'data'; readonly data: Buffer }
   | {
-      readonly type: "exit";
+      readonly type: 'exit';
       readonly exitCode: number;
       readonly signal: number;
     }
-  | { readonly type: "eof"; readonly code: number }
-  | { readonly type: "drain"; readonly generation: bigint }
-  | { readonly type: "error"; readonly message: string; readonly code: number };
+  | { readonly type: 'eof'; readonly code: number }
+  | { readonly type: 'drain'; readonly generation: bigint }
+  | { readonly type: 'error'; readonly message: string; readonly code: number };
 
 interface NativeSession {
   readonly pid: number;
@@ -59,20 +59,18 @@ export function candidatePaths(
   architecture: string = process.arch,
 ): readonly string[] {
   return [
-    "../build/Release/termwright_pty.node",
+    '../build/Release/termwright_pty.node',
     `@termwright/pty-${platform}-${architecture}/termwright_pty.node`,
   ];
 }
 
 export function loadPtyBinding(): { readonly PosixPtySession: NativeBinding } {
   if (cachedBinding !== undefined) return cachedBinding;
-  if (process.platform === "win32") {
-    throw new Error("the POSIX @termwright/pty binding cannot load on Windows");
+  if (process.platform === 'win32') {
+    throw new Error('the POSIX @termwright/pty binding cannot load on Windows');
   }
-  if (process.platform !== "darwin" && process.platform !== "linux") {
-    throw new Error(
-      `@termwright/pty does not support ${process.platform}-${process.arch}`,
-    );
+  if (process.platform !== 'darwin' && process.platform !== 'linux') {
+    throw new Error(`@termwright/pty does not support ${process.platform}-${process.arch}`);
   }
   const require = createRequire(import.meta.url);
   const attempts: string[] = [];
@@ -84,19 +82,19 @@ export function loadPtyBinding(): { readonly PosixPtySession: NativeBinding } {
       return cachedBinding;
     } catch (error) {
       attempts.push(
-        `${candidate}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+        `${candidate}: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
       );
     }
   }
   throw new Error(
-    `no Termwright PTY addon could be loaded for ${process.platform}-${process.arch}. Tried:\n  ${attempts.join("\n  ")}`,
+    `no Termwright PTY addon could be loaded for ${process.platform}-${process.arch}. Tried:\n  ${attempts.join('\n  ')}`,
   );
 }
 
 let unavailableReason: string | undefined;
 
 export function ptyAvailable(): boolean {
-  if (process.platform === "win32") return windowsPtyAvailable();
+  if (process.platform === 'win32') return windowsPtyAvailable();
   try {
     loadPtyBinding();
     unavailableReason = undefined;
@@ -108,9 +106,7 @@ export function ptyAvailable(): boolean {
 }
 
 export function ptyUnavailableReason(): string | undefined {
-  return process.platform === "win32"
-    ? windowsPtyUnavailableReason()
-    : unavailableReason;
+  return process.platform === 'win32' ? windowsPtyUnavailableReason() : unavailableReason;
 }
 
 export interface PtySpawnOptions {
@@ -126,13 +122,13 @@ export interface PtyExit {
   readonly signal: string | null;
 }
 
-export type PtySignal = "INT" | "TERM" | "KILL" | "HUP";
+export type PtySignal = 'INT' | 'TERM' | 'KILL' | 'HUP';
 export type { WindowsConPtyRuntimeInfo };
 
 /** Runtime provenance and strict initialization status for the Windows backend. */
 export function conPtyRuntimeInfo(): WindowsConPtyRuntimeInfo {
-  if (process.platform !== "win32") {
-    throw new Error("ConPTY runtime information is only available on Windows");
+  if (process.platform !== 'win32') {
+    throw new Error('ConPTY runtime information is only available on Windows');
   }
   return windowsConPtyRuntimeInfo();
 }
@@ -143,8 +139,8 @@ export function conPtyRuntimeInfo(): WindowsConPtyRuntimeInfo {
  * instead of duplicating mode mutation and restoration logic.
  */
 export function writeWindowsConsoleMarker(fd: number, marker: string): void {
-  if (process.platform !== "win32") {
-    throw new Error("Windows console markers are only available on Windows");
+  if (process.platform !== 'win32') {
+    throw new Error('Windows console markers are only available on Windows');
   }
   writeNativeWindowsConsoleMarker(fd, marker);
 }
@@ -157,7 +153,7 @@ export interface PtyHandle {
   write(data: Uint8Array): void;
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
-  treeState(): "alive" | "gone" | "unsupported";
+  treeState(): 'alive' | 'gone' | 'unsupported';
   onData(listener: (data: Uint8Array) => void): () => void;
   onExit(listener: (status: PtyExit) => void): () => void;
   onError(listener: (error: Error) => void): () => void;
@@ -173,48 +169,42 @@ const signalNumbers: Readonly<Record<PtySignal, number>> = Object.freeze({
 });
 
 const signalNames: Readonly<Record<number, string>> = Object.freeze({
-  1: "SIGHUP",
-  2: "SIGINT",
-  3: "SIGQUIT",
-  6: "SIGABRT",
-  9: "SIGKILL",
-  13: "SIGPIPE",
-  15: "SIGTERM",
+  1: 'SIGHUP',
+  2: 'SIGINT',
+  3: 'SIGQUIT',
+  6: 'SIGABRT',
+  9: 'SIGKILL',
+  13: 'SIGPIPE',
+  15: 'SIGTERM',
 });
 
 function validateOptions(options: PtySpawnOptions): void {
   if (
     options.command.length === 0 ||
-    options.command.some(
-      (part) => typeof part !== "string" || part.includes("\0"),
-    )
+    options.command.some((part) => typeof part !== 'string' || part.includes('\0'))
   ) {
-    throw new TypeError(
-      "command must be a non-empty array of NUL-free strings",
-    );
+    throw new TypeError('command must be a non-empty array of NUL-free strings');
   }
   if (
     options.cwd !== undefined &&
-    (typeof options.cwd !== "string" || options.cwd.includes("\0"))
+    (typeof options.cwd !== 'string' || options.cwd.includes('\0'))
   ) {
-    throw new TypeError("cwd must be a NUL-free string");
+    throw new TypeError('cwd must be a NUL-free string');
   }
   for (const [key, value] of Object.entries(options.env)) {
     if (
       key.length === 0 ||
-      key.includes("=") ||
-      key.includes("\0") ||
-      typeof value !== "string" ||
-      value.includes("\0")
+      key.includes('=') ||
+      key.includes('\0') ||
+      typeof value !== 'string' ||
+      value.includes('\0')
     ) {
-      throw new TypeError(
-        "environment keys and values must be valid execve strings",
-      );
+      throw new TypeError('environment keys and values must be valid execve strings');
     }
   }
   for (const [field, value] of [
-    ["columns", options.columns],
-    ["rows", options.rows],
+    ['columns', options.columns],
+    ['rows', options.rows],
   ] as const) {
     if (!Number.isInteger(value) || value < 1 || value > 32_767) {
       throw new RangeError(`${field} must be an integer from 1 through 32767`);
@@ -224,7 +214,7 @@ function validateOptions(options: PtySpawnOptions): void {
 
 export function spawnPty(options: PtySpawnOptions): PtyHandle {
   validateOptions(options);
-  if (process.platform === "win32") {
+  if (process.platform === 'win32') {
     const session = spawnWindowsPty(options);
     return {
       get pid(): number {
@@ -244,13 +234,13 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
         return session.resize(columns, rows);
       },
       signal(signal): boolean {
-        if (signal !== "KILL") return false;
+        if (signal !== 'KILL') return false;
         session.terminateTree();
         return true;
       },
-      treeState(): "alive" | "gone" | "unsupported" {
+      treeState(): 'alive' | 'gone' | 'unsupported' {
         const members = session.activeProcesses();
-        return members < 0 ? "unsupported" : members === 0 ? "gone" : "alive";
+        return members < 0 ? 'unsupported' : members === 0 ? 'gone' : 'alive';
       },
       onData(listener): () => void {
         return session.onData(listener);
@@ -294,10 +284,10 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
     },
     (event) => {
       switch (event.type) {
-        case "data":
+        case 'data':
           for (const listener of [...dataListeners]) listener(event.data);
           return;
-        case "exit": {
+        case 'exit': {
           exitStatus =
             event.signal === 0
               ? { code: event.exitCode, signal: null }
@@ -308,22 +298,23 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
           for (const listener of [...exitListeners]) listener(exitStatus);
           return;
         }
-        case "eof":
+        case 'eof':
           endReason = event.code;
           ended = event.code === 0;
           resolveEnded?.();
           return;
-        case "drain":
+        case 'drain':
           if (!writeEpoch.isCurrent(event.generation)) return;
           for (const listener of [...drainListeners]) listener();
           return;
-        case "error": {
+        case 'error': {
           const code = getSystemErrorName(-event.code);
-          const guidance = code === "EMFILE"
-            ? " Raise this process's open-file limit (for example with `ulimit -n`) and retry."
-            : code === "ENFILE"
-              ? " The host-wide open-file table is exhausted; raise the system limit or reduce concurrent processes."
-              : "";
+          const guidance =
+            code === 'EMFILE'
+              ? " Raise this process's open-file limit (for example with `ulimit -n`) and retry."
+              : code === 'ENFILE'
+                ? ' The host-wide open-file table is exhausted; raise the system limit or reduce concurrent processes.'
+                : '';
           fatalError ??= Object.assign(new Error(`${event.message}${guidance}`), {
             code,
             errno: event.code,
@@ -347,7 +338,7 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
     },
     outputEnded,
     write(data): void {
-      if (disposed) throw new Error("PTY input is closed");
+      if (disposed) throw new Error('PTY input is closed');
       const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
       writeEpoch.admit(bytes, (admitted) => session.write(admitted));
     },
@@ -367,14 +358,14 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
       if (disposed) return false;
       const code = session.signal(signalNumbers[signal]);
       if (code === 0) return true;
-      throw Object.assign(
-        new Error(`kill(PTY process group) failed with errno ${code}`),
-        { code: getSystemErrorName(-code), errno: code },
-      );
+      throw Object.assign(new Error(`kill(PTY process group) failed with errno ${code}`), {
+        code: getSystemErrorName(-code),
+        errno: code,
+      });
     },
-    treeState(): "alive" | "gone" | "unsupported" {
+    treeState(): 'alive' | 'gone' | 'unsupported' {
       const state = disposed ? -1 : session.treeState();
-      return state > 0 ? "alive" : state === 0 ? "gone" : "unsupported";
+      return state > 0 ? 'alive' : state === 0 ? 'gone' : 'unsupported';
     },
     onData(listener): () => void {
       dataListeners.add(listener);

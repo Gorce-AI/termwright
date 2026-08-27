@@ -8,7 +8,10 @@ const DEFAULT_MAX_FILES = 20_000;
 
 function field(buffer, start, length) {
   const end = buffer.indexOf(0, start);
-  return buffer.subarray(start, end >= start && end < start + length ? end : start + length).toString('utf8').trim();
+  return buffer
+    .subarray(start, end >= start && end < start + length ? end : start + length)
+    .toString('utf8')
+    .trim();
 }
 
 function octal(buffer, start, length, label) {
@@ -16,16 +19,23 @@ function octal(buffer, start, length, label) {
   if (value === '') return 0;
   if (!/^[0-7]+$/u.test(value)) throw new Error(`unsafe tar archive: invalid ${label}`);
   const parsed = Number.parseInt(value, 8);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(`unsafe tar archive: invalid ${label}`);
+  if (!Number.isSafeInteger(parsed) || parsed < 0)
+    throw new Error(`unsafe tar archive: invalid ${label}`);
   return parsed;
 }
 
 function normalizedPath(value, stripComponents) {
-  if (typeof value !== 'string' || value.includes('\\') || value.includes('\0') || isAbsolute(value)) {
+  if (
+    typeof value !== 'string' ||
+    value.includes('\\') ||
+    value.includes('\0') ||
+    isAbsolute(value)
+  ) {
     throw new Error('unsafe tar archive path');
   }
   const parts = value.split('/').filter((part) => part !== '');
-  if (parts.some((part) => part === '.' || part === '..')) throw new Error('unsafe tar archive path traversal');
+  if (parts.some((part) => part === '.' || part === '..'))
+    throw new Error('unsafe tar archive path traversal');
   const stripped = parts.slice(stripComponents);
   if (stripped.length === 0) return null;
   const result = stripped.join('/');
@@ -40,9 +50,14 @@ function parsePax(payload) {
     const space = payload.indexOf(0x20, offset);
     if (space < 0) throw new Error('unsafe tar archive: malformed PAX record');
     const lengthText = payload.subarray(offset, space).toString('ascii');
-    if (!/^[1-9][0-9]*$/u.test(lengthText)) throw new Error('unsafe tar archive: malformed PAX length');
+    if (!/^[1-9][0-9]*$/u.test(lengthText))
+      throw new Error('unsafe tar archive: malformed PAX length');
     const length = Number(lengthText);
-    if (!Number.isSafeInteger(length) || offset + length > payload.length || payload[offset + length - 1] !== 0x0a) {
+    if (
+      !Number.isSafeInteger(length) ||
+      offset + length > payload.length ||
+      payload[offset + length - 1] !== 0x0a
+    ) {
       throw new Error('unsafe tar archive: malformed PAX record');
     }
     const record = payload.subarray(space + 1, offset + length - 1).toString('utf8');
@@ -57,7 +72,8 @@ function parsePax(payload) {
 function verifyHeaderChecksum(header) {
   const expected = octal(header, 148, 8, 'checksum');
   let actual = 0;
-  for (let index = 0; index < BLOCK; index += 1) actual += index >= 148 && index < 156 ? 0x20 : header[index];
+  for (let index = 0; index < BLOCK; index += 1)
+    actual += index >= 148 && index < 156 ? 0x20 : header[index];
   if (actual !== expected) throw new Error('unsafe tar archive: header checksum mismatch');
 }
 
@@ -71,13 +87,16 @@ export async function safeExtractTarGz(bytes, destination, options = {}) {
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
   const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
   const stripComponents = options.stripComponents ?? 0;
-  if (!Buffer.isBuffer(bytes) || !Number.isSafeInteger(stripComponents) || stripComponents < 0) throw new Error('invalid safe tar extraction options');
+  if (!Buffer.isBuffer(bytes) || !Number.isSafeInteger(stripComponents) || stripComponents < 0)
+    throw new Error('invalid safe tar extraction options');
 
   let archive;
   try {
     archive = gunzipSync(bytes, { maxOutputLength: maxBytes });
   } catch (error) {
-    throw new Error(`unsafe tar archive: decompression failed or exceeded ${maxBytes} bytes`, { cause: error });
+    throw new Error(`unsafe tar archive: decompression failed or exceeded ${maxBytes} bytes`, {
+      cause: error,
+    });
   }
 
   const entries = [];
@@ -94,7 +113,8 @@ export async function safeExtractTarGz(bytes, destination, options = {}) {
     const storedSize = octal(header, 124, 12, 'entry size');
     const dataStart = offset + BLOCK;
     const dataEnd = dataStart + storedSize;
-    if (!Number.isSafeInteger(dataEnd) || dataEnd > archive.length) throw new Error('unsafe tar archive: truncated entry');
+    if (!Number.isSafeInteger(dataEnd) || dataEnd > archive.length)
+      throw new Error('unsafe tar archive: truncated entry');
     const payload = archive.subarray(dataStart, dataEnd);
     const type = String.fromCharCode(header[156] || 0x30);
     const headerName = [field(header, 345, 155), field(header, 0, 100)].filter(Boolean).join('/');
@@ -104,23 +124,37 @@ export async function safeExtractTarGz(bytes, destination, options = {}) {
       if (type === 'x') localPax = parsed;
       else globalPax = { ...globalPax, ...parsed };
     } else if (type === 'L') {
-      longName = payload.subarray(0, payload.indexOf(0) >= 0 ? payload.indexOf(0) : payload.length).toString('utf8');
+      longName = payload
+        .subarray(0, payload.indexOf(0) >= 0 ? payload.indexOf(0) : payload.length)
+        .toString('utf8');
     } else {
-      if (type !== '0' && type !== '5') throw new Error(`unsafe tar archive: entry type ${JSON.stringify(type)} is not a regular file or directory`);
+      if (type !== '0' && type !== '5')
+        throw new Error(
+          `unsafe tar archive: entry type ${JSON.stringify(type)} is not a regular file or directory`,
+        );
       const metadata = { ...globalPax, ...localPax };
       const rawName = metadata.path ?? longName ?? headerName;
-      if (metadata.linkpath !== undefined) throw new Error('unsafe tar archive: links are forbidden');
-      if (metadata.size !== undefined && Number(metadata.size) !== storedSize) throw new Error('unsafe tar archive: inconsistent PAX entry size');
+      if (metadata.linkpath !== undefined)
+        throw new Error('unsafe tar archive: links are forbidden');
+      if (metadata.size !== undefined && Number(metadata.size) !== storedSize)
+        throw new Error('unsafe tar archive: inconsistent PAX entry size');
       const path = normalizedPath(rawName, stripComponents);
       if (path !== null) {
         if (paths.has(path)) throw new Error(`unsafe tar archive: duplicate path ${path}`);
         paths.add(path);
-        if (entries.length >= maxFiles) throw new Error(`unsafe tar archive: exceeds ${maxFiles} entries`);
+        if (entries.length >= maxFiles)
+          throw new Error(`unsafe tar archive: exceeds ${maxFiles} entries`);
         if (type === '0') {
           totalFileBytes += storedSize;
-          if (!Number.isSafeInteger(totalFileBytes) || totalFileBytes > maxBytes) throw new Error(`unsafe tar archive: exceeds ${maxBytes} file bytes`);
+          if (!Number.isSafeInteger(totalFileBytes) || totalFileBytes > maxBytes)
+            throw new Error(`unsafe tar archive: exceeds ${maxBytes} file bytes`);
         }
-        entries.push({ path, type, mode: octal(header, 100, 8, 'mode') & 0o777, payload: type === '0' ? Buffer.from(payload) : undefined });
+        entries.push({
+          path,
+          type,
+          mode: octal(header, 100, 8, 'mode') & 0o777,
+          payload: type === '0' ? Buffer.from(payload) : undefined,
+        });
       }
       localPax = {};
       longName = undefined;
@@ -141,10 +175,14 @@ export async function safeExtractTarGz(bytes, destination, options = {}) {
     }
   }
 
-  for (const entry of entries.filter((item) => item.type === '5').sort((a, b) => a.path.localeCompare(b.path))) {
+  for (const entry of entries
+    .filter((item) => item.type === '5')
+    .sort((a, b) => a.path.localeCompare(b.path))) {
     await mkdir(join(destination, entry.path), { recursive: true, mode: entry.mode });
   }
-  for (const entry of entries.filter((item) => item.type === '0').sort((a, b) => a.path.localeCompare(b.path))) {
+  for (const entry of entries
+    .filter((item) => item.type === '0')
+    .sort((a, b) => a.path.localeCompare(b.path))) {
     await mkdir(join(destination, posix.dirname(entry.path)), { recursive: true });
     await writeFile(join(destination, entry.path), entry.payload, { mode: entry.mode });
   }

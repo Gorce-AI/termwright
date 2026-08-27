@@ -150,7 +150,11 @@ function tree(revision, nodes, overrides = {}) {
       value: 'viewport-cells',
       evidence: evidence('adversarial-peer'),
     },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
     ...overrides,
   };
 }
@@ -177,7 +181,12 @@ function unknownGeometry() {
 
 function validNodes(label) {
   return [
-    { id: 'n1', role: 'region', name: 'Peer', geometry: geometry({ row: 0, column: 0, width: 20, height: 2 }) },
+    {
+      id: 'n1',
+      role: 'region',
+      name: 'Peer',
+      geometry: geometry({ row: 0, column: 0, width: 20, height: 2 }),
+    },
     {
       id: 'n2',
       parentId: 'n1',
@@ -243,7 +252,13 @@ const SCENARIOS = {
     send(
       tree(2, [
         { id: 'n1', role: 'region', name: 'Peer', geometry: unknownGeometry() },
-        { id: 'n2', parentId: 'ghost', role: 'button', name: 'Orphan', geometry: unknownGeometry() },
+        {
+          id: 'n2',
+          parentId: 'ghost',
+          role: 'button',
+          name: 'Orphan',
+          geometry: unknownGeometry(),
+        },
       ]),
     );
   },
@@ -278,7 +293,9 @@ const SCENARIOS = {
     for (let chunk = 0; chunk < 512; chunk += 1) process.stdout.write(noise);
     say('PEER FLOOD OUTPUT COMPLETE');
     for (let revision = 2; revision <= 100; revision += 1) {
-      socket.write(frame({ type: 'snapshot', snapshot: tree(revision, validNodes(`Flood${revision}`)) }));
+      socket.write(
+        frame({ type: 'snapshot', snapshot: tree(revision, validNodes(`Flood${revision}`)) }),
+      );
     }
   },
   'disconnect-mid-render': () => {
@@ -287,7 +304,11 @@ const SCENARIOS = {
   'hostile-unicode': () => {
     // A lone high surrogate survives JSON.stringify as an escape, so the bytes
     // on the wire are ASCII and the receiver is the one that has to fail closed.
-    send(tree(2, [{ id: 'n1', role: 'region', name: 'lone \ud800 surrogate', geometry: unknownGeometry() }]));
+    send(
+      tree(2, [
+        { id: 'n1', role: 'region', name: 'lone \ud800 surrogate', geometry: unknownGeometry() },
+      ]),
+    );
   },
   'foreign-session': () => {
     send(tree(2, validNodes('Foreign'), { sessionId: 'someone-elses-session' }));
@@ -309,7 +330,13 @@ const SCENARIOS = {
   'too-many-nodes': () => {
     const nodes = [{ id: 'n1', role: 'region', name: 'Peer', geometry: unknownGeometry() }];
     for (let index = 2; index <= MAX_NODES + 1_000; index += 1) {
-      nodes.push({ id: `n${index}`, parentId: 'n1', role: 'text', name: `t${index}`, geometry: unknownGeometry() });
+      nodes.push({
+        id: `n${index}`,
+        parentId: 'n1',
+        role: 'text',
+        name: `t${index}`,
+        geometry: unknownGeometry(),
+      });
     }
     send(tree(2, nodes));
   },
@@ -490,7 +517,9 @@ if (endpoint === undefined || token === undefined) {
       if (message.type === 'hello-ack') {
         sessionId = message.sessionId;
         logBudget = message.logs ?? null;
-        say(`PEER LOGS ${logBudget === null ? 'denied' : `enabled ${logBudget.maxRecordsPerSecond}/s`}`);
+        say(
+          `PEER LOGS ${logBudget === null ? 'denied' : `enabled ${logBudget.maxRecordsPerSecond}/s`}`,
+        );
         publish(1);
         say(`PEER READY ${scenario}`);
       }

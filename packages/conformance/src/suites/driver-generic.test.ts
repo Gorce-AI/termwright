@@ -8,7 +8,11 @@
  */
 import { afterEach, describe, expect } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
-import { SemanticCapabilityUnavailableError, TermwrightError, type AnyLocator } from '@termwright/driver';
+import {
+  SemanticCapabilityUnavailableError,
+  TermwrightError,
+  type AnyLocator,
+} from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import {
   CONFORMANCE_FIXTURES,
@@ -50,9 +54,14 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     // Negotiation produces one immutable contract. Semantic queries do not
     // keep an implicit compatibility window open after that decision.
     await expect
-      .poll(async () => (await rejection(terminal.getByRole('button').count())) instanceof SemanticCapabilityUnavailableError, {
-        timeout: 15_000,
-      })
+      .poll(
+        async () =>
+          (await rejection(terminal.getByRole('button').count())) instanceof
+          SemanticCapabilityUnavailableError,
+        {
+          timeout: 15_000,
+        },
+      )
       .toBe(true);
 
     const contract = await terminal.settled();
@@ -87,15 +96,21 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     });
     expect(await terminal.getByScreenText(/G[a-z]+ma/u).textContent()).toBe('Gamma');
     expect(await terminal.getByScreenText(/ev: /u).count()).toBe(4);
-    expect(await intendedRect(terminal.getByScreenText(/ev: /u, { occurrence: 1 }))).toMatchObject({ row: 8 });
+    expect(await intendedRect(terminal.getByScreenText(/ev: /u, { occurrence: 1 }))).toMatchObject({
+      row: 8,
+    });
 
     // The selected row is the only bold green one, so a style predicate is what
     // separates it from the two plain rows.
-    expect(await terminal.getByScreenText('Alpha', { fg: 'green', attributes: { bold: true } }).count()).toBe(1);
+    expect(
+      await terminal.getByScreenText('Alpha', { fg: 'green', attributes: { bold: true } }).count(),
+    ).toBe(1);
     expect(await terminal.getByScreenText('Beta', { fg: 'green' }).count()).toBe(0);
     expect(await terminal.getByScreenText('RED', { fg: 'red' }).count()).toBe(1);
     expect(await terminal.getByScreenText('ONBLUE', { bg: 'blue' }).count()).toBe(1);
-    expect(await terminal.getByScreenText('UNDER', { attributes: { underline: true } }).count()).toBe(1);
+    expect(
+      await terminal.getByScreenText('UNDER', { attributes: { underline: true } }).count(),
+    ).toBe(1);
 
     const cell = terminal.cell({ row: 4, column: 0 });
     expect(cell.char).toBe('R');
@@ -213,7 +228,9 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
   it('reports a typed timeout carrying the screen the program actually drew', async () => {
     const terminal = await launch();
 
-    const error = (await rejection(terminal.waitForText('never printed', { timeout: 300 }))) as TermwrightError;
+    const error = (await rejection(
+      terminal.waitForText('never printed', { timeout: 300 }),
+    )) as TermwrightError;
     expect(error.code).toBe('timeout');
     expect(error.diagnostics.semanticTree).toBe(false);
     expect(error.diagnostics.screenExcerpt).toContain('GENERIC READY');

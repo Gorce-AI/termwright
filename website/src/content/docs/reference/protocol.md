@@ -20,10 +20,10 @@ named pipe on Windows. The semantic channel never listens on TCP.
 
 The child receives two variables:
 
-| Variable | Meaning |
-| --- | --- |
+| Variable              | Meaning                        |
+| --------------------- | ------------------------------ |
 | `TERMWRIGHT_ENDPOINT` | Unix socket or named-pipe path |
-| `TERMWRIGHT_TOKEN` | Opaque 256-bit session secret |
+| `TERMWRIGHT_TOKEN`    | Opaque 256-bit session secret  |
 
 Without both values, a probe stays dormant: it opens no connection, writes no
 marker, and does not change the application's terminal output.
@@ -87,7 +87,7 @@ Register an OSC handler for code `8487` and pass the remaining payload to
 `verifyMarkerPayload`:
 
 ```ts
-import {MARKER_OSC_CODE, verifyMarkerPayload} from '@termwright/protocol';
+import { MARKER_OSC_CODE, verifyMarkerPayload } from '@termwright/protocol';
 
 terminal.parser.registerOscHandler(MARKER_OSC_CODE, (data) => {
   const marker = verifyMarkerPayload(data, token, sessionId);

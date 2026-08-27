@@ -31,7 +31,9 @@ afterEach(() => {
 
 function channelFailure() {
   let resolveFailure: (value: [string, string]) => void = () => undefined;
-  const failed = new Promise<[string, string]>((resolve) => { resolveFailure = resolve; });
+  const failed = new Promise<[string, string]>((resolve) => {
+    resolveFailure = resolve;
+  });
   const channel = {
     session: { sessionId: 'session', limits: {} },
     publish: vi.fn(),
@@ -45,7 +47,11 @@ function channelFailure() {
 function start() {
   const instance = bootstrap({
     env: { TERMWRIGHT_ENDPOINT: '/tmp/endpoint', TERMWRIGHT_TOKEN: 'token' },
-    stdout: Object.assign(new PassThrough(), { isTTY: true, columns: 80, rows: 24 }) as unknown as NodeJS.WriteStream,
+    stdout: Object.assign(new PassThrough(), {
+      isTTY: true,
+      columns: 80,
+      rows: 24,
+    }) as unknown as NodeJS.WriteStream,
   });
   instances.push(instance);
   return instance;
@@ -53,7 +59,9 @@ function start() {
 
 function hooks() {
   return {
-    config: (globalThis as Record<string, unknown>)[CONFIG_HOOK] as (config: Record<string, unknown>) => Record<string, unknown> | undefined,
+    config: (globalThis as Record<string, unknown>)[CONFIG_HOOK] as (
+      config: Record<string, unknown>,
+    ) => Record<string, unknown> | undefined,
     renderer: (globalThis as Record<string, unknown>)[RENDERER_HOOK] as (
       renderer: object,
       certification: { version: string; source: 'builtin' },
@@ -75,9 +83,10 @@ function validRenderer(stdout: unknown) {
     getChildren: () => [],
   };
   return {
-    stdout: stdout !== null && typeof stdout === 'object'
-      ? (stdout as Record<PropertyKey, unknown>)[MARKER_SINK_TARGET_SYMBOL] ?? stdout
-      : stdout,
+    stdout:
+      stdout !== null && typeof stdout === 'object'
+        ? ((stdout as Record<PropertyKey, unknown>)[MARKER_SINK_TARGET_SYMBOL] ?? stdout)
+        : stdout,
     _feed: {},
     _usesProcessStdout: true,
     root,
@@ -117,7 +126,8 @@ function validRenderer(stdout: unknown) {
     emit: (event: string) => {
       for (const handler of [...(handlers.get(event) ?? [])]) handler();
     },
-    listenerCount: () => [...handlers.values()].reduce((total, listeners) => total + listeners.length, 0),
+    listenerCount: () =>
+      [...handlers.values()].reduce((total, listeners) => total + listeners.length, 0),
   };
 }
 
@@ -208,7 +218,11 @@ describe('OpenTUI bootstrap fail-closed lifecycle', () => {
     const applicationConfig = { bufferedOutput: 'memory', remote: true };
 
     expect(config(applicationConfig)).toBeUndefined();
-    renderer(validRenderer(process.stdout), { version: '0.5.3', source: 'builtin' }, applicationConfig);
+    renderer(
+      validRenderer(process.stdout),
+      { version: '0.5.3', source: 'builtin' },
+      applicationConfig,
+    );
 
     await expect(failed).resolves.toEqual([
       'adapter-guarantee-violation',
@@ -259,9 +273,11 @@ describe('OpenTUI bootstrap fail-closed lifecycle', () => {
     expect(target.listenerCount('error')).toBe(baseline + 1);
     rendererFailure(effective ?? {});
     const sink = effective?.['stdout'] as NodeJS.WritableStream;
-    await new Promise<void>((resolve) => (sink as { writableFinished?: boolean }).writableFinished
-      ? resolve()
-      : sink.once('finish', resolve));
+    await new Promise<void>((resolve) =>
+      (sink as { writableFinished?: boolean }).writableFinished
+        ? resolve()
+        : sink.once('finish', resolve),
+    );
     expect(target.listenerCount('error')).toBe(baseline);
   });
 
@@ -281,7 +297,9 @@ describe('OpenTUI bootstrap fail-closed lifecycle', () => {
 
     instance.stop();
     expect((globalThis as Record<string, unknown>)[RENDERER_FAILURE_HOOK]).toBe(rendererFailure);
-    const finished = sinks.map((sink) => new Promise<void>((resolve) => sink.once('finish', resolve)));
+    const finished = sinks.map(
+      (sink) => new Promise<void>((resolve) => sink.once('finish', resolve)),
+    );
     rendererFailure(first);
     rendererFailure(second);
     await Promise.all(finished);
@@ -317,7 +335,9 @@ describe('OpenTUI bootstrap fail-closed lifecycle', () => {
     const target = Object.assign(new PassThrough(), { isTTY: true, columns: 80, rows: 24 });
     let bytes = '';
     target.setEncoding('utf8');
-    target.on('data', (chunk: string) => { bytes += chunk; });
+    target.on('data', (chunk: string) => {
+      bytes += chunk;
+    });
     const instance = bootstrap({
       env: { TERMWRIGHT_ENDPOINT: '/tmp/endpoint', TERMWRIGHT_TOKEN: 'token' },
       stdout: target as unknown as NodeJS.WriteStream,

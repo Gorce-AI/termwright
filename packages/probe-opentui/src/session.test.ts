@@ -15,7 +15,11 @@ import { probeInfo, startSession, type ObservableRenderer } from './session.js';
 import type { ObservableNode } from './observe.js';
 import type { CommittedFrameGeometry, FrameGeometryProvider } from './geometry.js';
 
-function renderable(name: string, num: number, extra: Partial<ObservableNode> = {}): ObservableNode {
+function renderable(
+  name: string,
+  num: number,
+  extra: Partial<ObservableNode> = {},
+): ObservableNode {
   const base = {
     num,
     screenX: 0,
@@ -41,7 +45,7 @@ function fakeRenderer(root: ObservableNode): ObservableRenderer & {
   const provider: FrameGeometryProvider = {
     version: 1,
     frameworkVersion: 'runtime-observer',
-    getCommitted: (requested: number) => committed?.frameId === requested ? committed : undefined,
+    getCommitted: (requested: number) => (committed?.frameId === requested ? committed : undefined),
   };
   const renderer: ObservableRenderer & {
     emit(geometry?: Partial<CommittedFrameGeometry>): void;
@@ -53,7 +57,9 @@ function fakeRenderer(root: ObservableNode): ObservableRenderer & {
     height: 24,
     terminalWidth: 80,
     terminalHeight: 24,
-    get frameId() { return frameId; },
+    get frameId() {
+      return frameId;
+    },
     hitTest: () => root.num,
     on: (_event, handler) => handlers.push(handler),
     off: (_event, handler) => {
@@ -64,16 +70,28 @@ function fakeRenderer(root: ObservableNode): ObservableRenderer & {
     listenerCount: () => handlers.length,
     emit: (overrides = {}) => {
       frameId += 1;
-      const intended = new Map<string, { row: number; column: number; width: number; height: number }>();
-      const visible = new Map<string, { row: number; column: number; width: number; height: number }>();
+      const intended = new Map<
+        string,
+        { row: number; column: number; width: number; height: number }
+      >();
+      const visible = new Map<
+        string,
+        { row: number; column: number; width: number; height: number }
+      >();
       const visit = (node: ObservableNode, ancestorsDisplayed: boolean): void => {
         const displayed = ancestorsDisplayed && node.visible !== false;
         if (displayed) {
-          const rect = { row: node.screenY ?? 0, column: node.screenX ?? 0, width: node.width ?? 0, height: node.height ?? 0 };
+          const rect = {
+            row: node.screenY ?? 0,
+            column: node.screenX ?? 0,
+            width: node.width ?? 0,
+            height: node.height ?? 0,
+          };
           intended.set(String(node.num), rect);
           visible.set(String(node.num), { ...rect });
         }
-        for (const child of node._childrenInZIndexOrder ?? node.getChildren?.() ?? []) visit(child, displayed);
+        for (const child of node._childrenInZIndexOrder ?? node.getChildren?.() ?? [])
+          visit(child, displayed);
       };
       try {
         visit(root, true);
@@ -120,7 +138,9 @@ describe('what the probe says about itself', () => {
     expect(info.identityKind).toBe('stable');
     expect(info.frameworkVersion).toBe('0.5.3');
     expect(info.instrumentation).toEqual({
-      highestTier: 'T3', semanticClass: 'A', degradedCapabilities: [],
+      highestTier: 'T3',
+      semanticClass: 'A',
+      degradedCapabilities: [],
     });
   });
 
@@ -144,7 +164,12 @@ describe('the publication cycle', () => {
   it('publishes a tree per frame, with strictly increasing revisions', () => {
     const renderer = fakeRenderer(renderable('RootRenderable', 1));
     const { publisher, snapshots } = recorder();
-    const session = startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    const session = startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
 
     renderer.emit();
     renderer.emit();
@@ -167,7 +192,13 @@ describe('the publication cycle', () => {
     const root = renderable('RootRenderable', 1);
     const renderer = fakeRenderer(root);
     const { publisher } = recorder((revision) => `MARK:${revision}`);
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sink, sessionId: 's1' });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sink,
+      sessionId: 's1',
+    });
 
     // A frame's bytes reach the sink first; the session appends afterwards.
     sink.write('FRAME-1');
@@ -205,7 +236,13 @@ describe('the publication cycle', () => {
     const sink = createMarkerSink(target as unknown as NodeJS.WriteStream, 'test-token');
     const renderer = fakeRenderer(renderable('RootRenderable', 1));
     const { publisher } = recorder(() => undefined);
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sink, sessionId: 's1' });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sink,
+      sessionId: 's1',
+    });
 
     renderer.emit();
     await drained(sink);
@@ -217,8 +254,20 @@ describe('the publication cycle', () => {
     const renderer = fakeRenderer(renderable('RootRenderable', 1));
     const violation = vi.fn();
     const { publisher } = recorder((revision) => `MARK:${revision}`);
-    const sink = { writeMarker: () => { throw new Error('marker stream closed'); }, onFailure: () => () => undefined } as unknown as MarkerSink;
-    const session = startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sink, sessionId: 's1', onGuaranteeViolation: violation });
+    const sink = {
+      writeMarker: () => {
+        throw new Error('marker stream closed');
+      },
+      onFailure: () => () => undefined,
+    } as unknown as MarkerSink;
+    const session = startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sink,
+      sessionId: 's1',
+      onGuaranteeViolation: violation,
+    });
 
     expect(() => renderer.emit()).not.toThrow();
 
@@ -239,7 +288,9 @@ describe('the publication cycle', () => {
     const sink = createMarkerSink(target as unknown as NodeJS.WriteStream, 'test-token');
     const renderer = fakeRenderer(renderable('RootRenderable', 1));
     let resolveFailure: (error: Error) => void = () => undefined;
-    const failed = new Promise<Error>((resolve) => { resolveFailure = resolve; });
+    const failed = new Promise<Error>((resolve) => {
+      resolveFailure = resolve;
+    });
     const violation = vi.fn((error: Error) => resolveFailure(error));
     const { publisher } = recorder((revision) => `MARK:${revision}`);
     startSession({
@@ -298,7 +349,12 @@ describe('the application survives the probe', () => {
 
     const renderer = fakeRenderer(exploding);
     const { publisher, snapshots } = recorder();
-    const session = startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    const session = startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
 
     expect(() => renderer.emit()).not.toThrow();
     expect(snapshots).toHaveLength(0);
@@ -314,7 +370,12 @@ describe('the application survives the probe', () => {
         throw new Error('socket gone');
       }),
     };
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
 
     expect(() => renderer.emit()).not.toThrow();
     expect(publisher.publish).toHaveBeenCalledOnce();
@@ -323,7 +384,12 @@ describe('the application survives the probe', () => {
   it('stops publishing once stopped', () => {
     const renderer = fakeRenderer(renderable('RootRenderable', 1));
     const { publisher, snapshots } = recorder();
-    const session = startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    const session = startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
 
     renderer.emit();
     expect(renderer.listenerCount()).toBe(1);
@@ -340,15 +406,26 @@ describe('what reaches the driver', () => {
     const child = renderable('InputRenderable', 2, { screenX: 2, screenY: 1, width: 4, height: 1 });
     const root = renderable('RootRenderable', 1, { _childrenInZIndexOrder: [child] });
     const renderer = fakeRenderer(root);
-    renderer.hitTest = (x, y) => y === 1 && x >= 2 && x < 6 ? 2 : 1;
+    renderer.hitTest = (x, y) => (y === 1 && x >= 2 && x < 6 ? 2 : 1);
     const { publisher, snapshots } = recorder(() => undefined);
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
     renderer.emit();
 
     const snapshot = snapshots[0]!;
     expect(snapshot.v).toBe(2);
-    expect(snapshot.nodes[1]?.geometry?.intendedRect).toMatchObject({ status: 'known', value: { row: 1, column: 2, width: 4, height: 1 } });
-    expect(snapshot.nodes[1]?.geometry?.visibleRect).toMatchObject({ status: 'known', value: { row: 1, column: 2, width: 4, height: 1 } });
+    expect(snapshot.nodes[1]?.geometry?.intendedRect).toMatchObject({
+      status: 'known',
+      value: { row: 1, column: 2, width: 4, height: 1 },
+    });
+    expect(snapshot.nodes[1]?.geometry?.visibleRect).toMatchObject({
+      status: 'known',
+      value: { row: 1, column: 2, width: 4, height: 1 },
+    });
     expect(snapshot.hitGrid).toMatchObject({ status: 'known' });
     const validation = validateSnapshot(snapshot, DEFAULT_LIMITS);
     if (!validation.ok) throw new Error(validation.detail);
@@ -363,7 +440,12 @@ describe('what reaches the driver', () => {
     });
     const renderer = fakeRenderer(root);
     const { publisher, snapshots } = recorder();
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
 
     renderer.emit();
 
@@ -376,7 +458,10 @@ describe('what reaches the driver', () => {
       value: 'draft',
       sensitivity: 'sensitive',
       evidence: {
-        source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'opentui',
+        source: 'framework',
+        method: 'instrumented',
+        strength: 'authoritative',
+        providerId: 'opentui',
       },
     });
   });
@@ -388,9 +473,15 @@ describe('authoritative geometry and hit-grid guarantees', () => {
     const upper = renderable('BoxRenderable', 3, { screenX: 4, screenY: 3, width: 8, height: 5 });
     const root = renderable('RootRenderable', 1, { _childrenInZIndexOrder: [lower, upper] });
     const renderer = fakeRenderer(root);
-    renderer.hitTest = (x, y) => x >= 4 && x < 8 && y >= 3 && y < 6 ? 3 : x >= 2 && x < 8 && y >= 2 && y < 6 ? 2 : 1;
+    renderer.hitTest = (x, y) =>
+      x >= 4 && x < 8 && y >= 3 && y < 6 ? 3 : x >= 2 && x < 8 && y >= 2 && y < 6 ? 2 : 1;
     const { publisher, snapshots } = recorder();
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
 
     const intended = new Map([
       ['1', { row: 0, column: 0, width: 80, height: 24 }],
@@ -404,10 +495,17 @@ describe('authoritative geometry and hit-grid guarantees', () => {
     ]);
     renderer.emit({ intended, visible });
 
-    expect(snapshots[0]?.nodes[1]?.geometry.visibleRect).toMatchObject({ status: 'known', value: visible.get('2') });
-    expect(snapshots[0]?.nodes[2]?.geometry.visibleRect).toMatchObject({ status: 'known', value: visible.get('3') });
+    expect(snapshots[0]?.nodes[1]?.geometry.visibleRect).toMatchObject({
+      status: 'known',
+      value: visible.get('2'),
+    });
+    expect(snapshots[0]?.nodes[2]?.geometry.visibleRect).toMatchObject({
+      status: 'known',
+      value: visible.get('3'),
+    });
     expect(snapshots[0]?.hitGrid).toMatchObject({ status: 'known' });
-    const regions = snapshots[0]?.hitGrid.status === 'known' ? snapshots[0].hitGrid.value.regions : [];
+    const regions =
+      snapshots[0]?.hitGrid.status === 'known' ? snapshots[0].hitGrid.value.regions : [];
     expect(regions.some((region) => region.recipientId === 'n3')).toBe(true);
     expect(regions.some((region) => region.recipientId === 'n2')).toBe(true);
   });
@@ -417,7 +515,12 @@ describe('authoritative geometry and hit-grid guarantees', () => {
     const root = renderable('RootRenderable', 1, { _childrenInZIndexOrder: [child] });
     const renderer = fakeRenderer(root);
     const { publisher, snapshots } = recorder();
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
     renderer.emit();
     expect(snapshots[0]?.nodes[1]?.geometry).toMatchObject({
       displayed: { status: 'known', value: false },
@@ -431,7 +534,12 @@ describe('authoritative geometry and hit-grid guarantees', () => {
     const hitTest = vi.fn(() => 1);
     renderer.hitTest = hitTest;
     const { publisher, snapshots } = recorder();
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1' });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+    });
     renderer.emit({
       columns: 20,
       rows: 10,
@@ -452,7 +560,13 @@ describe('authoritative geometry and hit-grid guarantees', () => {
     provider.getCommitted = () => undefined;
     const violation = vi.fn();
     const { publisher, snapshots } = recorder();
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1', onGuaranteeViolation: violation });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+      onGuaranteeViolation: violation,
+    });
     renderer.emit();
     renderer.emit();
     expect(snapshots).toHaveLength(0);
@@ -466,7 +580,13 @@ describe('authoritative geometry and hit-grid guarantees', () => {
     const renderer = fakeRenderer(root);
     const violation = vi.fn();
     const { publisher, snapshots } = recorder();
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1', onGuaranteeViolation: violation });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+      onGuaranteeViolation: violation,
+    });
     renderer.emit();
     expect(snapshots).toHaveLength(0);
     expect(violation.mock.calls[0]?.[0]).toMatchObject({
@@ -479,9 +599,17 @@ describe('authoritative geometry and hit-grid guarantees', () => {
     renderer.hitTest = () => 999;
     const violation = vi.fn();
     const { publisher, snapshots } = recorder();
-    startSession({ renderer, authoritativeProvider: renderer.provider, publisher, sessionId: 's1', onGuaranteeViolation: violation });
+    startSession({
+      renderer,
+      authoritativeProvider: renderer.provider,
+      publisher,
+      sessionId: 's1',
+      onGuaranteeViolation: violation,
+    });
     renderer.emit();
     expect(snapshots).toHaveLength(0);
-    expect(violation.mock.calls[0]?.[0]).toMatchObject({ message: expect.stringContaining('unknown renderable 999') });
+    expect(violation.mock.calls[0]?.[0]).toMatchObject({
+      message: expect.stringContaining('unknown renderable 999'),
+    });
   });
 });

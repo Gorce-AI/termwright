@@ -55,45 +55,61 @@ function scope(name: string, writers: TraceWriter[] = []): TermwrightScope {
 }
 
 function attempt<T>(name: string, body: () => T): T {
-  return runWithAttemptContext(createAttemptContext({
-    invocationId: createRunId('invocation'), runId: createRunId('run'), projectId: createRunId('project'),
-    specId: createRunId('spec'), runnerTaskId: createRunId('runner-task'), nativeTaskId: name,
-    file: '/repo/a.test.ts', fullName: name,
-  }, 0, 0, unitAttemptOptions()), () => {
-    installAttemptEventRecorder({ record: () => undefined, flush: async () => undefined });
-    return body();
-  });
+  return runWithAttemptContext(
+    createAttemptContext(
+      {
+        invocationId: createRunId('invocation'),
+        runId: createRunId('run'),
+        projectId: createRunId('project'),
+        specId: createRunId('spec'),
+        runnerTaskId: createRunId('runner-task'),
+        nativeTaskId: name,
+        file: '/repo/a.test.ts',
+        fullName: name,
+      },
+      0,
+      0,
+      unitAttemptOptions(),
+    ),
+    () => {
+      installAttemptEventRecorder({ record: () => undefined, flush: async () => undefined });
+      return body();
+    },
+  );
 }
 
 describe('the attempt-local scope', () => {
-  it('finds only the scope bound to the current attempt', () => attempt('one', () => {
-    const first = scope('one');
-    const exit = enterScope(first);
-    expect(currentScope()).toBe(first);
-    exit();
-  }));
+  it('finds only the scope bound to the current attempt', () =>
+    attempt('one', () => {
+      const first = scope('one');
+      const exit = enterScope(first);
+      expect(currentScope()).toBe(first);
+      exit();
+    }));
 
-  it('restores the outer concurrent async context instead of using a last-active fallback', () => attempt('one', () => {
-    const first = scope('one');
-    const second = scope('two');
-    const exitFirst = enterScope(first);
-    attempt('two', () => {
-      const exitSecond = enterScope(second);
-      expect(currentScope()).toBe(second);
-      exitSecond();
-    });
-    expect(currentScope()).toBe(first);
-    exitFirst();
-  }));
+  it('restores the outer concurrent async context instead of using a last-active fallback', () =>
+    attempt('one', () => {
+      const first = scope('one');
+      const second = scope('two');
+      const exitFirst = enterScope(first);
+      attempt('two', () => {
+        const exitSecond = enterScope(second);
+        expect(currentScope()).toBe(second);
+        exitSecond();
+      });
+      expect(currentScope()).toBe(first);
+      exitFirst();
+    }));
 
-  it('forgets a scope once it exits, and tolerates a double exit', () => attempt('one', () => {
-    const only = scope('one');
-    const exit = enterScope(only);
-    expect(currentScope()).toBe(only);
-    exit();
-    exit();
-    expect(currentScope()).toBeUndefined();
-  }));
+  it('forgets a scope once it exits, and tolerates a double exit', () =>
+    attempt('one', () => {
+      const only = scope('one');
+      const exit = enterScope(only);
+      expect(currentScope()).toBe(only);
+      exit();
+      exit();
+      expect(currentScope()).toBeUndefined();
+    }));
 
   it('fails closed outside a certified native attempt', () => {
     runWithoutAttemptContextForTesting(() => {
@@ -103,25 +119,27 @@ describe('the attempt-local scope', () => {
 });
 
 describe('recording', () => {
-  it('writes assertions to every writer of the current scope', () => attempt('one', () => {
-    const a = fakeWriter();
-    const b = fakeWriter();
-    const exit = enterScope(scope('one', [a.writer, b.writer]));
-    recordAssert({ api: 'toBeVisible', ok: false, selector: 'button', error: 'hidden' });
-    expect(a.recorded.asserts).toEqual([
-      { api: 'toBeVisible', ok: false, selector: 'button', error: 'hidden' },
-    ]);
-    expect(b.recorded.asserts).toHaveLength(1);
-    exit();
-  }));
+  it('writes assertions to every writer of the current scope', () =>
+    attempt('one', () => {
+      const a = fakeWriter();
+      const b = fakeWriter();
+      const exit = enterScope(scope('one', [a.writer, b.writer]));
+      recordAssert({ api: 'toBeVisible', ok: false, selector: 'button', error: 'hidden' });
+      expect(a.recorded.asserts).toEqual([
+        { api: 'toBeVisible', ok: false, selector: 'button', error: 'hidden' },
+      ]);
+      expect(b.recorded.asserts).toHaveLength(1);
+      exit();
+    }));
 
-  it('omits absent fields rather than sending undefined', () => attempt('one', () => {
-    const a = fakeWriter();
-    const exit = enterScope(scope('one', [a.writer]));
-    recordAssert({ api: 'toHaveText', ok: true });
-    expect(a.recorded.asserts).toEqual([{ api: 'toHaveText', ok: true }]);
-    exit();
-  }));
+  it('omits absent fields rather than sending undefined', () =>
+    attempt('one', () => {
+      const a = fakeWriter();
+      const exit = enterScope(scope('one', [a.writer]));
+      recordAssert({ api: 'toHaveText', ok: true });
+      expect(a.recorded.asserts).toEqual([{ api: 'toHaveText', ok: true }]);
+      exit();
+    }));
 
   it('rejects recording outside a test', () => {
     runWithoutAttemptContextForTesting(() => {
@@ -130,32 +148,41 @@ describe('recording', () => {
     });
   });
 
-  it('opens one step handle per writer', () => attempt('one', () => {
-    const a = fakeWriter();
-    const b = fakeWriter();
-    const only = scope('one', [a.writer, b.writer]);
-    const exit = enterScope(only);
-    const handles = openStep('log in', only);
-    expect(handles).toHaveLength(2);
-    for (const handle of handles) handle.end('failed', 'boom');
-    expect(a.recorded.steps).toEqual([{ title: 'log in', status: 'failed' }]);
-    exit();
-  }));
+  it('opens one step handle per writer', () =>
+    attempt('one', () => {
+      const a = fakeWriter();
+      const b = fakeWriter();
+      const only = scope('one', [a.writer, b.writer]);
+      const exit = enterScope(only);
+      const handles = openStep('log in', only);
+      expect(handles).toHaveLength(2);
+      for (const handle of handles) handle.end('failed', 'boom');
+      expect(a.recorded.steps).toEqual([{ title: 'log in', status: 'failed' }]);
+      exit();
+    }));
 
-  it('re-opens an active authored step on a trace writer launched inside it', () => attempt('gherkin', () => {
-    const only = scope('gherkin');
-    const exit = enterScope(only);
-    const active = beginStep('Given a terminal is running', {
-      gherkin: {
-        keyword: 'Given', text: 'a terminal is running',
-        source: { file: '/repo/demo.feature', line: 4, column: 5 },
-      },
-    }, only);
-    const late = fakeWriter();
-    attachWriter(only, late.writer);
-    active.end('passed');
-    expect(active.stepId).toMatch(/^step:[0-9a-f-]+$/u);
-    expect(late.recorded.steps).toEqual([{ title: 'Given a terminal is running', status: 'passed' }]);
-    exit();
-  }));
+  it('re-opens an active authored step on a trace writer launched inside it', () =>
+    attempt('gherkin', () => {
+      const only = scope('gherkin');
+      const exit = enterScope(only);
+      const active = beginStep(
+        'Given a terminal is running',
+        {
+          gherkin: {
+            keyword: 'Given',
+            text: 'a terminal is running',
+            source: { file: '/repo/demo.feature', line: 4, column: 5 },
+          },
+        },
+        only,
+      );
+      const late = fakeWriter();
+      attachWriter(only, late.writer);
+      active.end('passed');
+      expect(active.stepId).toMatch(/^step:[0-9a-f-]+$/u);
+      expect(late.recorded.steps).toEqual([
+        { title: 'Given a terminal is running', status: 'passed' },
+      ]);
+      exit();
+    }));
 });

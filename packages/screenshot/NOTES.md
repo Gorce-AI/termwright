@@ -43,7 +43,7 @@ per character keeps the rest of the screen self-contained, and
 `ScreenshotSvg.selfContained` plus `fallbackCharacters` tell the caller exactly
 which characters carry the caveat, instead of silently degrading.
 
-A font that maps a character to `.notdef` (glyph 0) counts as *not covering* it.
+A font that maps a character to `.notdef` (glyph 0) counts as _not covering_ it.
 Without that check, CJK on a Latin font renders as a row of identical empty
 boxes — which looks like a rendering bug rather than a missing font.
 
@@ -83,7 +83,7 @@ Faces matching the requested style are tried first, but a character only the
 regular face covers still beats no glyph at all — coverage wins over style.
 
 Note the placement quirk that remains for synthesised italics: `<use>` applies
-its own `transform` *and* its `x`/`y`, and the order is easy to get wrong.
+its own `transform` _and_ its `x`/`y`, and the order is easy to get wrong.
 Those glyphs fold the translation into the transform and omit `x`/`y`.
 
 ## Colour glyphs
@@ -113,7 +113,7 @@ first component and silently drops the rest, so multi-code-point clusters go
 through `font.layout()`, which applies the font's own substitutions. The family
 resolves to one glyph rather than to a man.
 
-A variation selector also steers *which font* answers. Several monochrome
+A variation selector also steers _which font_ answers. Several monochrome
 symbol fonts cover U+26A0, and one of them sits earlier in the fallback chain
 than the emoji font, so `⚠️` came out as a thin black outline. When the cluster
 carries U+FE0F the author asked for the emoji presentation, so an outline is
@@ -144,13 +144,13 @@ Measured, after the CLI reported it could not trigger a fallback at all — a
 capture of `日本語 テスト ✓` and one of `build 🚀 done 🎉 ⚗️` both came back with
 `fallbackCharacters` empty on macOS. That is real, and it is local:
 
-| character | full macOS chain | Latin-only chain |
-|---|---|---|
-| `a`, `✓`, `│` | outline | outline |
-| `日`, `本` | outline | **fallback** |
-| `🚀` | image | **fallback** |
-| `⚗️` (U+2697 VS16) | image | outline (monochrome) |
-| `U+F0000`, `U+E000` | **fallback** | **fallback** |
+| character           | full macOS chain | Latin-only chain     |
+| ------------------- | ---------------- | -------------------- |
+| `a`, `✓`, `│`       | outline          | outline              |
+| `日`, `本`          | outline          | **fallback**         |
+| `🚀`                | image            | **fallback**         |
+| `⚗️` (U+2697 VS16)  | image            | outline (monochrome) |
+| `U+F0000`, `U+E000` | **fallback**     | **fallback**         |
 
 So coverage — and therefore the cost — is a property of the installed fonts,
 not of the content. macOS supplies CJK and colour emoji, so almost nothing
@@ -184,7 +184,7 @@ This took two CI failures to get right, and the second one is the instructive
 part.
 
 The first version asserted `elapsed < 500 ms` and failed on a macOS runner at
-506 ms — a build broken by six milliseconds. Replacing it with a *relative*
+506 ms — a build broken by six milliseconds. Replacing it with a _relative_
 comparison (declined at least 3× faster than paid, same machine, moments apart)
 looked robust and was not: a starved runner took **2.7 s to do 60 ms of work**,
 hitting the fast path far harder than the slow one and inverting the ratio.
@@ -197,7 +197,7 @@ measured.
 So the property is asserted where it actually lives. The scan is resvg's
 reaction to one boolean this package hands it, and `png-options.test.ts` mocks
 the rasteriser to assert that boolean — deterministic, no render at all, and
-*stronger* than the timing ever was: `systemFontsLoaded` only reports what this
+_stronger_ than the timing ever was: `systemFontsLoaded` only reports what this
 package decided, while those tests prove the decision reached resvg. One real
 render survives in `png.test.ts` to prove the whole path still produces an
 image.

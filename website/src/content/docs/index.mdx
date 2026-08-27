@@ -17,18 +17,18 @@ hero:
       variant: minimal
 ---
 
-import {Card, CardGrid} from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## A terminal test
 
 ```ts
-import {fileURLToPath} from 'node:url';
-import {expect, test} from 'termwright/test';
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'termwright/test';
 
 const agent = fileURLToPath(new URL('../agent.js', import.meta.url));
 
-test('approves a command', async ({terminal}) => {
-  const app = await terminal.launch({command: [process.execPath, agent]});
+test('approves a command', async ({ terminal }) => {
+  const app = await terminal.launch({ command: [process.execPath, agent] });
 
   await app.waitForText('Permission required');
   await app.press('Enter');
@@ -55,27 +55,30 @@ semantic, log, and retry evidence.
 
 <CardGrid>
   <Card title="Write tests" icon="document">
-    Start a process, interact with it, and use retrying assertions. [Follow the tutorial →](getting-started/)
+    Start a process, interact with it, and use retrying assertions. [Follow the tutorial
+    →](getting-started/)
   </Card>
   <Card title="Debug in the Runner" icon="laptop">
-    Run a file or case, inspect the terminal and semantic tree, and replay retained traces. [Use the Runner UI →](tools/runner-ui/)
+    Run a file or case, inspect the terminal and semantic tree, and replay retained traces. [Use the
+    Runner UI →](tools/runner-ui/)
   </Card>
   <Card title="Integrate a framework" icon="puzzle">
-    Add roles, state, geometry, and pointer ownership where the framework can observe them. [Choose an integration →](adapters/)
+    Add roles, state, geometry, and pointer ownership where the framework can observe them. [Choose
+    an integration →](adapters/)
   </Card>
 </CardGrid>
 
 ## Core workflows
 
-| Need | Recommended API |
-| --- | --- |
-| Wait for rendered output | `await app.waitForText('Ready')` |
-| Send keyboard input | `await app.press('Enter')` or `await app.type('text')` |
-| Find a semantic element | `app.getByRole('button', {name: 'Save'})` |
-| Assert a changing UI | `await expect(locator).toBeFocused()` |
-| Protect terminal rendering | `await expect(app).toMatchCellSnapshot()` |
-| Protect application meaning | `await expect(app).toMatchSemanticSnapshot()` |
-| Investigate a failure | Runner replay or a self-contained HTML report |
+| Need                        | Recommended API                                        |
+| --------------------------- | ------------------------------------------------------ |
+| Wait for rendered output    | `await app.waitForText('Ready')`                       |
+| Send keyboard input         | `await app.press('Enter')` or `await app.type('text')` |
+| Find a semantic element     | `app.getByRole('button', {name: 'Save'})`              |
+| Assert a changing UI        | `await expect(locator).toBeFocused()`                  |
+| Protect terminal rendering  | `await expect(app).toMatchCellSnapshot()`              |
+| Protect application meaning | `await expect(app).toMatchSemanticSnapshot()`          |
+| Investigate a failure       | Runner replay or a self-contained HTML report          |
 
 ## Start with the normal workflow
 

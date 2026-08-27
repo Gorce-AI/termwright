@@ -13,7 +13,7 @@ editUrl: false
 
 > **seedDirectory**(`directory`, `options`): readonly `string`[]
 
-Defined in: [test/src/seed.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L46)
+Defined in: [test/src/seed.ts:54](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L54)
 
 Creates the declared files inside `directory`.
 

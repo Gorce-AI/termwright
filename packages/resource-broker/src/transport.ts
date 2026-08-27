@@ -30,7 +30,8 @@ const DEFAULT_MAX_FRAME_BYTES = 64 * 1024;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_CONNECTIONS = 1_000;
 const DEFAULT_MAX_REQUESTS_PER_CONNECTION = 100_000;
-const ID_PATTERN = /^(run|attempt):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const ID_PATTERN =
+  /^(run|attempt):[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 export type ResourceBrokerTransportErrorCode =
   | 'authentication-failed'
@@ -108,13 +109,19 @@ interface ServerConnection {
   readonly socket: Socket;
   readonly decoder: LocalJsonDecoder;
   readonly seenRequests: Set<string>;
-  readonly pendingAcquires: Map<string, { readonly controller: AbortController; cancelled: boolean }>;
+  readonly pendingAcquires: Map<
+    string,
+    { readonly controller: AbortController; cancelled: boolean }
+  >;
   readonly acquireLeases: Map<string, string>;
-  readonly leases: Map<string, {
-    readonly lease: ResourceLease;
-    readonly attemptId: AttemptId;
-    readonly acquireRequestId: string;
-  }>;
+  readonly leases: Map<
+    string,
+    {
+      readonly lease: ResourceLease;
+      readonly attemptId: AttemptId;
+      readonly acquireRequestId: string;
+    }
+  >;
   identity: WorkerIdentity | null;
   handshakeTimer: ReturnType<typeof setTimeout> | undefined;
   closed: boolean;
@@ -136,19 +143,28 @@ export async function startResourceBrokerServer(
   dependencies: ResourceBrokerServerDependencies = {},
 ): Promise<ResourceBrokerServer> {
   options.signal?.throwIfAborted();
-  const maxFrameBytes = positiveInteger(options.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES, 'maxFrameBytes');
+  const maxFrameBytes = positiveInteger(
+    options.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES,
+    'maxFrameBytes',
+  );
   const handshakeTimeoutMs = positiveInteger(
     options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS,
     'handshakeTimeoutMs',
   );
-  const maxConnections = positiveInteger(options.maxConnections ?? DEFAULT_MAX_CONNECTIONS, 'maxConnections');
+  const maxConnections = positiveInteger(
+    options.maxConnections ?? DEFAULT_MAX_CONNECTIONS,
+    'maxConnections',
+  );
   const maxRequestsPerConnection = positiveInteger(
     options.maxRequestsPerConnection ?? DEFAULT_MAX_REQUESTS_PER_CONNECTION,
     'maxRequestsPerConnection',
   );
   let token: string;
-  try { token = createLocalToken(options.token, options.randomToken); }
-  catch (error) { throw protocolError('broker token must contain 32..512 characters', error); }
+  try {
+    token = createLocalToken(options.token, options.randomToken);
+  } catch (error) {
+    throw protocolError('broker token must contain 32..512 characters', error);
+  }
   const sockets = new Set<ServerConnection>();
   const workers = new Map<string, ServerConnection>();
   let closing = false;
@@ -157,7 +173,11 @@ export async function startResourceBrokerServer(
   const server = (dependencies.createServer ?? createServer)();
   server.on('connection', (socket) => {
     if (closing || sockets.size >= maxConnections) {
-      sendAndEnd(socket, failure('connection-limit', 'broker connection limit reached'), maxFrameBytes);
+      sendAndEnd(
+        socket,
+        failure('connection-limit', 'broker connection limit reached'),
+        maxFrameBytes,
+      );
       return;
     }
     socket.setNoDelay(true);
@@ -174,7 +194,11 @@ export async function startResourceBrokerServer(
     };
     sockets.add(connection);
     connection.handshakeTimer = setTimeout(() => {
-      sendAndEnd(socket, failure('handshake-timeout', 'broker hello deadline expired'), maxFrameBytes);
+      sendAndEnd(
+        socket,
+        failure('handshake-timeout', 'broker hello deadline expired'),
+        maxFrameBytes,
+      );
     }, handshakeTimeoutMs);
     connection.handshakeTimer.unref();
     socket.on('data', (chunk) => {
@@ -193,7 +217,8 @@ export async function startResourceBrokerServer(
     try {
       const message = parseRequestEnvelope(value, PROTOCOL_VERSION);
       const { type, requestId } = message;
-      if (connection.seenRequests.has(requestId)) throw protocolError(`duplicate requestId ${requestId}`);
+      if (connection.seenRequests.has(requestId))
+        throw protocolError(`duplicate requestId ${requestId}`);
       if (connection.seenRequests.size >= maxRequestsPerConnection) {
         throw protocolError(`connection exceeded ${maxRequestsPerConnection} requests`);
       }
@@ -214,12 +239,20 @@ export async function startResourceBrokerServer(
   function handleHello(connection: ServerConnection, requestId: string, message: JsonObject): void {
     const presentedToken = string(message.token, 'hello.token', 512);
     if (!sameLocalSecret(token, presentedToken)) {
-      sendAndEnd(connection.socket, responseFailure(requestId, 'authentication-failed', 'broker token rejected'), maxFrameBytes);
+      sendAndEnd(
+        connection.socket,
+        responseFailure(requestId, 'authentication-failed', 'broker token rejected'),
+        maxFrameBytes,
+      );
       return;
     }
     const runId = wireId(message.runId, 'run') as RunId;
     if (runId !== options.runId) {
-      sendAndEnd(connection.socket, responseFailure(requestId, 'stale-run', 'broker run rejected'), maxFrameBytes);
+      sendAndEnd(
+        connection.socket,
+        responseFailure(requestId, 'stale-run', 'broker run rejected'),
+        maxFrameBytes,
+      );
       return;
     }
     const identity: WorkerIdentity = {
@@ -238,7 +271,11 @@ export async function startResourceBrokerServer(
     workers.set(identity.workerId, connection);
     if (connection.handshakeTimer !== undefined) clearTimeout(connection.handshakeTimer);
     connection.handshakeTimer = undefined;
-    writeFrame(connection.socket, success(requestId, { protocolVersion: PROTOCOL_VERSION }), maxFrameBytes);
+    writeFrame(
+      connection.socket,
+      success(requestId, { protocolVersion: PROTOCOL_VERSION }),
+      maxFrameBytes,
+    );
     if (previous !== undefined && previous !== connection) previous.socket.destroy();
   }
 
@@ -257,7 +294,13 @@ export async function startResourceBrokerServer(
       const controller = new AbortController();
       const pendingAcquire = { controller, cancelled: false };
       connection.pendingAcquires.set(requestId, pendingAcquire);
-      const acquire: AcquireResourcesOptions = { ...identity, attemptId, resources, deadline, signal: controller.signal };
+      const acquire: AcquireResourcesOptions = {
+        ...identity,
+        attemptId,
+        resources,
+        deadline,
+        signal: controller.signal,
+      };
       void options.broker.acquire(acquire).then(
         (lease) => {
           connection.pendingAcquires.delete(requestId);
@@ -271,7 +314,8 @@ export async function startResourceBrokerServer(
         },
         (error: unknown) => {
           connection.pendingAcquires.delete(requestId);
-          if (!connection.closed) writeFrame(connection.socket, responseFromError(requestId, error), maxFrameBytes);
+          if (!connection.closed)
+            writeFrame(connection.socket, responseFromError(requestId, error), maxFrameBytes);
         },
       );
       return;
@@ -282,8 +326,7 @@ export async function startResourceBrokerServer(
       if (pending !== undefined) {
         pending.cancelled = true;
         pending.controller.abort();
-      }
-      else {
+      } else {
         const leaseId = connection.acquireLeases.get(targetRequestId);
         const granted = leaseId === undefined ? undefined : connection.leases.get(leaseId);
         if (granted !== undefined) {
@@ -300,18 +343,24 @@ export async function startResourceBrokerServer(
       const leaseToken = string(message.leaseToken, `${type}.leaseToken`, 512);
       const attemptId = wireId(message.attemptId, 'attempt') as AttemptId;
       const owned = connection.leases.get(leaseId);
-      if (owned === undefined || owned.attemptId !== attemptId || owned.lease.token !== leaseToken) {
+      if (
+        owned === undefined ||
+        owned.attemptId !== attemptId ||
+        owned.lease.token !== leaseToken
+      ) {
         throw new ResourceBrokerError('stale-lease', 'lease token or owner is stale');
       }
-      const operation = type === 'attach'
-        ? owned.lease.attach(attachments(message.attachments))
-        : owned.lease.release().then(() => {
-          connection.acquireLeases.delete(owned.acquireRequestId);
-          connection.leases.delete(leaseId);
-        });
+      const operation =
+        type === 'attach'
+          ? owned.lease.attach(attachments(message.attachments))
+          : owned.lease.release().then(() => {
+              connection.acquireLeases.delete(owned.acquireRequestId);
+              connection.leases.delete(leaseId);
+            });
       void operation.then(
         () => writeFrame(connection.socket, success(requestId, null), maxFrameBytes),
-        (error: unknown) => writeFrame(connection.socket, responseFromError(requestId, error), maxFrameBytes),
+        (error: unknown) =>
+          writeFrame(connection.socket, responseFromError(requestId, error), maxFrameBytes),
       );
       return;
     }
@@ -359,8 +408,11 @@ export async function startResourceBrokerServer(
           connection.socket.destroy();
           closeConnection(connection);
         }
-        try { await endpoint.close(); }
-        catch (error) { throw new AggregateError([error], 'resource broker server cleanup failed'); }
+        try {
+          await endpoint.close();
+        } catch (error) {
+          throw new AggregateError([error], 'resource broker server cleanup failed');
+        }
       })();
       return closePromise;
     },
@@ -370,7 +422,10 @@ export async function startResourceBrokerServer(
 export async function connectResourceBrokerWorker(
   options: ConnectResourceBrokerWorkerOptions,
 ): Promise<ResourceBrokerClient> {
-  const maxFrameBytes = positiveInteger(options.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES, 'maxFrameBytes');
+  const maxFrameBytes = positiveInteger(
+    options.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES,
+    'maxFrameBytes',
+  );
   const now = options.monotonicNow ?? monotonicEpochNow;
   if (!Number.isFinite(options.handshakeDeadline) || options.handshakeDeadline <= now()) {
     throw new ResourceBrokerTransportError('request-timeout', 'broker handshake deadline expired');
@@ -407,8 +462,14 @@ export async function connectResourceBrokerWorker(
       failClient(brokerTransportError(error, 'invalid broker frame'));
     }
   });
-  socket.once('error', (error) => failClient(new ResourceBrokerTransportError('connection-closed', error.message, { cause: error })));
-  socket.once('close', () => failClient(new ResourceBrokerTransportError('connection-closed', 'broker connection closed')));
+  socket.once('error', (error) =>
+    failClient(
+      new ResourceBrokerTransportError('connection-closed', error.message, { cause: error }),
+    ),
+  );
+  socket.once('close', () =>
+    failClient(new ResourceBrokerTransportError('connection-closed', 'broker connection closed')),
+  );
 
   function failClient(error: Error): void {
     if (closed) return;
@@ -427,7 +488,10 @@ export async function connectResourceBrokerWorker(
     deadline?: number,
     signal?: AbortSignal,
   ): Promise<unknown> {
-    if (closed) return Promise.reject(new ResourceBrokerTransportError('connection-closed', 'broker connection closed'));
+    if (closed)
+      return Promise.reject(
+        new ResourceBrokerTransportError('connection-closed', 'broker connection closed'),
+      );
     const requestId = `request:${++requestSequence}`;
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -439,7 +503,16 @@ export async function connectResourceBrokerWorker(
         cleanup();
         reject(error);
         try {
-          writeFrame(socket, { v: PROTOCOL_VERSION, type: 'cancel', requestId: `request:${++requestSequence}`, targetRequestId: requestId }, maxFrameBytes);
+          writeFrame(
+            socket,
+            {
+              v: PROTOCOL_VERSION,
+              type: 'cancel',
+              requestId: `request:${++requestSequence}`,
+              targetRequestId: requestId,
+            },
+            maxFrameBytes,
+          );
         } catch {
           socket.destroy();
         }
@@ -478,11 +551,19 @@ export async function connectResourceBrokerWorker(
     const remaining = options.handshakeDeadline - now();
     const timer = setTimeout(() => {
       cleanup();
-      reject(new ResourceBrokerTransportError('request-timeout', 'broker connect deadline expired'));
+      reject(
+        new ResourceBrokerTransportError('request-timeout', 'broker connect deadline expired'),
+      );
     }, remaining);
     timer.unref();
-    const onConnect = (): void => { cleanup(); resolve(); };
-    const onError = (error: Error): void => { cleanup(); reject(error); };
+    const onConnect = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
     const onAbort = (): void => {
       cleanup();
       reject(new ResourceBrokerError('aborted', 'broker handshake was aborted'));
@@ -499,12 +580,17 @@ export async function connectResourceBrokerWorker(
   });
   try {
     await connected;
-    await request('hello', {
-      token: options.token,
-      runId: options.runId,
-      workerId: options.workerId,
-      workerEpoch: options.workerEpoch,
-    }, options.handshakeDeadline, options.signal);
+    await request(
+      'hello',
+      {
+        token: options.token,
+        runId: options.runId,
+        workerId: options.workerId,
+        workerEpoch: options.workerEpoch,
+      },
+      options.handshakeDeadline,
+      options.signal,
+    );
   } catch (error) {
     socket.destroy();
     throw error;
@@ -518,11 +604,19 @@ export async function connectResourceBrokerWorker(
   return Object.freeze({
     identity,
     async acquire(acquireOptions: RemoteAcquireResourcesOptions): Promise<RemoteResourceLease> {
-      const result = object(await request('acquire', {
-        attemptId: acquireOptions.attemptId,
-        resources: acquireOptions.resources,
-        deadline: acquireOptions.deadline,
-      }, acquireOptions.deadline, acquireOptions.signal), 'acquire result');
+      const result = object(
+        await request(
+          'acquire',
+          {
+            attemptId: acquireOptions.attemptId,
+            resources: acquireOptions.resources,
+            deadline: acquireOptions.deadline,
+          },
+          acquireOptions.deadline,
+          acquireOptions.signal,
+        ),
+        'acquire result',
+      );
       const snapshot = leaseSnapshot(result);
       const leaseToken = string(result.token, 'lease.token', 512);
       let releasePromise: Promise<void> | null = null;
@@ -547,11 +641,15 @@ export async function connectResourceBrokerWorker(
       });
     },
     async snapshot(): Promise<ResourceBrokerSnapshot> {
-      return await request('snapshot', {}) as ResourceBrokerSnapshot;
+      return (await request('snapshot', {})) as ResourceBrokerSnapshot;
     },
     close(): Promise<void> {
       closePromise ??= new Promise<void>((resolve) => {
-        if (socket.destroyed) { failClient(new ResourceBrokerTransportError('connection-closed', 'broker client closed')); resolve(); return; }
+        if (socket.destroyed) {
+          failClient(new ResourceBrokerTransportError('connection-closed', 'broker client closed'));
+          resolve();
+          return;
+        }
         socket.once('close', () => resolve());
         failClient(new ResourceBrokerTransportError('connection-closed', 'broker client closed'));
       });
@@ -561,8 +659,11 @@ export async function connectResourceBrokerWorker(
 }
 
 function writeFrame(socket: Socket, message: unknown, maxFrameBytes: number): void {
-  try { writeLocalFrame(socket, message, maxFrameBytes); }
-  catch (error) { throw brokerTransportError(error, 'broker frame could not be written'); }
+  try {
+    writeLocalFrame(socket, message, maxFrameBytes);
+  } catch (error) {
+    throw brokerTransportError(error, 'broker frame could not be written');
+  }
 }
 
 function success(requestId: string, result: unknown): JsonObject {
@@ -584,9 +685,14 @@ function responseFromError(requestId: string, error: unknown): JsonObject {
 }
 
 function wireFailure(error: unknown): JsonObject {
-  const code = error instanceof ResourceBrokerTransportError ? error.code
-    : error instanceof LocalTransportError && error.code === 'frame-oversized' ? 'frame-too-large'
-    : error instanceof ResourceBrokerError ? error.code : 'protocol-error';
+  const code =
+    error instanceof ResourceBrokerTransportError
+      ? error.code
+      : error instanceof LocalTransportError && error.code === 'frame-oversized'
+        ? 'frame-too-large'
+        : error instanceof ResourceBrokerError
+          ? error.code
+          : 'protocol-error';
   const message = error instanceof Error ? error.message : 'unknown broker failure';
   return failure(code, message);
 }
@@ -595,22 +701,46 @@ function errorFromWire(value: unknown): Error {
   const error = object(value, 'response.error');
   const code = string(error.code, 'response.error.code', 128);
   const message = string(error.message, 'response.error.message', 2_048);
-  if (['aborted', 'attempt-owner-mismatch', 'deadline-exceeded', 'invalid-request', 'queue-full',
-    'resource-unavailable', 'stale-lease', 'stale-run', 'stale-worker'].includes(code)) {
+  if (
+    [
+      'aborted',
+      'attempt-owner-mismatch',
+      'deadline-exceeded',
+      'invalid-request',
+      'queue-full',
+      'resource-unavailable',
+      'stale-lease',
+      'stale-run',
+      'stale-worker',
+    ].includes(code)
+  ) {
     return new ResourceBrokerError(code as ResourceBrokerError['code'], message);
   }
-  const transportCode: ResourceBrokerTransportErrorCode =
-    ['authentication-failed', 'connection-closed', 'connection-limit', 'frame-too-large',
-      'handshake-timeout', 'protocol-error', 'request-timeout'].includes(code)
-      ? code as ResourceBrokerTransportErrorCode
-      : 'protocol-error';
+  const transportCode: ResourceBrokerTransportErrorCode = [
+    'authentication-failed',
+    'connection-closed',
+    'connection-limit',
+    'frame-too-large',
+    'handshake-timeout',
+    'protocol-error',
+    'request-timeout',
+  ].includes(code)
+    ? (code as ResourceBrokerTransportErrorCode)
+    : 'protocol-error';
   return new ResourceBrokerTransportError(transportCode, message);
 }
 
 function leaseWire(lease: ResourceLease): JsonObject {
-  return { runId: lease.runId, workerId: lease.workerId, workerEpoch: lease.workerEpoch,
-    attemptId: lease.attemptId, leaseId: lease.leaseId, resources: lease.resources,
-    attachments: lease.attachments, token: lease.token };
+  return {
+    runId: lease.runId,
+    workerId: lease.workerId,
+    workerEpoch: lease.workerEpoch,
+    attemptId: lease.attemptId,
+    leaseId: lease.leaseId,
+    resources: lease.resources,
+    attachments: lease.attachments,
+    token: lease.token,
+  };
 }
 
 function leaseSnapshot(value: JsonObject): ResourceLeaseSnapshot {
@@ -627,8 +757,15 @@ function leaseSnapshot(value: JsonObject): ResourceLeaseSnapshot {
 
 function resourceVector(value: unknown): ResourceVector {
   const input = object(value, 'resources');
-  const allowed = new Set(['ptySession', 'externalProcess', 'semanticEndpoint', 'nativeHostPressure', 'traceWriter']);
-  for (const key of Object.keys(input)) if (!allowed.has(key)) throw protocolError(`unknown resource class ${key}`);
+  const allowed = new Set([
+    'ptySession',
+    'externalProcess',
+    'semanticEndpoint',
+    'nativeHostPressure',
+    'traceWriter',
+  ]);
+  for (const key of Object.keys(input))
+    if (!allowed.has(key)) throw protocolError(`unknown resource class ${key}`);
   const output: Record<string, number> = {};
   for (const key of allowed) {
     if (input[key] !== undefined) output[key] = nonNegativeInteger(input[key], `resources.${key}`);
@@ -637,23 +774,43 @@ function resourceVector(value: unknown): ResourceVector {
 }
 
 function attachments(value: unknown): readonly ResourceAttachment[] {
-  if (!Array.isArray(value) || value.length > 1_000) throw protocolError('attachments must be a bounded array');
-  return Object.freeze(value.map((entry, index) => {
-    const attachment = object(entry, `attachments[${index}]`);
-    const resource = string(attachment.resource, `attachments[${index}].resource`, 64);
-    if (!['ptySession', 'externalProcess', 'semanticEndpoint', 'nativeHostPressure', 'traceWriter'].includes(resource)) {
-      throw protocolError(`unknown attachment resource ${resource}`);
-    }
-    const pid = attachment.pid === undefined ? undefined : positiveInteger(attachment.pid, `attachments[${index}].pid`);
-    const sessionId = attachment.sessionId === undefined
-      ? undefined : string(attachment.sessionId, `attachments[${index}].sessionId`, 512);
-    return Object.freeze({ resource, ...(pid === undefined ? {} : { pid }),
-      ...(sessionId === undefined ? {} : { sessionId }) }) as ResourceAttachment;
-  }));
+  if (!Array.isArray(value) || value.length > 1_000)
+    throw protocolError('attachments must be a bounded array');
+  return Object.freeze(
+    value.map((entry, index) => {
+      const attachment = object(entry, `attachments[${index}]`);
+      const resource = string(attachment.resource, `attachments[${index}].resource`, 64);
+      if (
+        ![
+          'ptySession',
+          'externalProcess',
+          'semanticEndpoint',
+          'nativeHostPressure',
+          'traceWriter',
+        ].includes(resource)
+      ) {
+        throw protocolError(`unknown attachment resource ${resource}`);
+      }
+      const pid =
+        attachment.pid === undefined
+          ? undefined
+          : positiveInteger(attachment.pid, `attachments[${index}].pid`);
+      const sessionId =
+        attachment.sessionId === undefined
+          ? undefined
+          : string(attachment.sessionId, `attachments[${index}].sessionId`, 512);
+      return Object.freeze({
+        resource,
+        ...(pid === undefined ? {} : { pid }),
+        ...(sessionId === undefined ? {} : { sessionId }),
+      }) as ResourceAttachment;
+    }),
+  );
 }
 
 function object(value: unknown, name: string): JsonObject {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw protocolError(`${name} must be an object`);
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw protocolError(`${name} must be an object`);
   return value as JsonObject;
 }
 
@@ -665,7 +822,8 @@ function string(value: unknown, name: string, max = 4_096): string {
 }
 
 function finiteNumber(value: unknown, name: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw protocolError(`${name} must be finite`);
+  if (typeof value !== 'number' || !Number.isFinite(value))
+    throw protocolError(`${name} must be finite`);
   return value;
 }
 
@@ -690,7 +848,11 @@ function wireId(value: unknown, kind: 'run' | 'attempt'): string {
 }
 
 function protocolError(message: string, cause?: unknown): ResourceBrokerTransportError {
-  return new ResourceBrokerTransportError('protocol-error', message, cause === undefined ? undefined : { cause });
+  return new ResourceBrokerTransportError(
+    'protocol-error',
+    message,
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 function brokerTransportError(error: unknown, fallback: string): ResourceBrokerTransportError {

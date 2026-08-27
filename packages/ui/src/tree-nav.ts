@@ -52,12 +52,16 @@ export function navigateTree(
     case 'end':
       return { ...state, selectedId: rows.at(-1)?.id ?? state.selectedId };
     case 'down':
-      return { ...state, selectedId: rows[Math.min(index + 1, rows.length - 1)]?.id ?? state.selectedId };
+      return {
+        ...state,
+        selectedId: rows[Math.min(index + 1, rows.length - 1)]?.id ?? state.selectedId,
+      };
     case 'up':
       return { ...state, selectedId: rows[Math.max(index - 1, 0)]?.id ?? state.selectedId };
     case 'right': {
       if (!current.hasChildren) return state;
-      if (state.collapsed.has(current.id)) return { ...state, collapsed: without(state.collapsed, current.id) };
+      if (state.collapsed.has(current.id))
+        return { ...state, collapsed: without(state.collapsed, current.id) };
       return { ...state, selectedId: rows[index + 1]?.id ?? state.selectedId };
     }
     case 'left': {

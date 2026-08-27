@@ -3,7 +3,10 @@ import { it as resourceIt } from './vitest.js';
 
 const sentinel = 'resource-aware collector sentinel';
 const suite = TestRunner.getCurrentSuite();
-resourceIt.resources({ terminals: 1, traceWriters: 0, nativeHost: 'exclusive' })(sentinel, () => {});
+resourceIt.resources({ terminals: 1, traceWriters: 0, nativeHost: 'exclusive' })(
+  sentinel,
+  () => {},
+);
 const collected = suite.tasks.find((task) => task.type === 'test' && task.name === sentinel);
 const collectedMeta = collected !== undefined && 'meta' in collected ? collected.meta : undefined;
 const hostPressureSentinel = 'resource-aware host pressure sentinel';
@@ -11,9 +14,8 @@ resourceIt.resources({ hostPressure: 'exclusive' })(hostPressureSentinel, () => 
 const hostPressureTask = suite.tasks.find(
   (task) => task.type === 'test' && task.name === hostPressureSentinel,
 );
-const hostPressureMeta = hostPressureTask !== undefined && 'meta' in hostPressureTask
-  ? hostPressureTask.meta
-  : undefined;
+const hostPressureMeta =
+  hostPressureTask !== undefined && 'meta' in hostPressureTask ? hostPressureTask.meta : undefined;
 
 describe('resource-aware Vitest declaration', () => {
   vitestIt('marks the task owned by the active Vitest collector', () => {
@@ -37,12 +39,15 @@ describe('resource-aware Vitest declaration', () => {
   });
 
   vitestIt('rejects ambiguous or non-exclusive host pressure declarations', () => {
-    expect(() => resourceIt.resources({ hostPressure: 'shared' as 'exclusive' }))
-      .toThrow(/hostPressure must be exclusive/u);
-    expect(() => resourceIt.resources({
-      terminals: 1,
-      nativeHost: 'shared',
-      hostPressure: 'exclusive',
-    })).toThrow(/cannot combine nativeHost and hostPressure/u);
+    expect(() => resourceIt.resources({ hostPressure: 'shared' as 'exclusive' })).toThrow(
+      /hostPressure must be exclusive/u,
+    );
+    expect(() =>
+      resourceIt.resources({
+        terminals: 1,
+        nativeHost: 'shared',
+        hostPressure: 'exclusive',
+      }),
+    ).toThrow(/cannot combine nativeHost and hostPressure/u);
   });
 });

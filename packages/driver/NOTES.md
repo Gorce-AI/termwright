@@ -143,7 +143,7 @@ a heavier flood the window closes, and the driver reports `revision-pairing-watc
 for a marker it is already holding, unread.
 
 There is a second shape of the same problem, and it needs a second question.
-The conformance matrix reproduces a flood where the *terminal* is the slow
+The conformance matrix reproduces a flood where the _terminal_ is the slow
 part (a pty re-encoding every byte); there the marker's bytes are not in the
 driver's hands at all, the parse queue is empty, and a drain barrier sees
 nothing to wait for. Measured with the throttled probe: 1.7 s median from
@@ -158,7 +158,7 @@ race is platform-neutral and a budget only moves the flood size at which the
 diagnostic appears.
 
 Note the boundary, which is deliberate: the quiet condition only extends the
-window while output is *flowing*. A silent session whose marker turns up two
+window while output is _flowing_. A silent session whose marker turns up two
 seconds later is reported on time — nothing was in transit to wait for.
 Retention stays bounded by `maxPending`: an endless animation can postpone the
 watchdog, but the store still evicts at 32 halves.
@@ -201,14 +201,14 @@ contradict each other before provenance is added. Whatever encoding is chosen,
 one of the two ceilings has to move, or trees have to get smaller. Worth
 stating plainly rather than discovering it when a real app hits it.
 
-| Variant | Per node | Node +% | 5 000 nodes | Notes |
-|---|---|---|---|---|
-| Verbose strings (`provenance: {role: 'component-recognizer', …}`) | +169 B | +91 % | 1887 KiB | Self-describing on the wire, and unaffordable. Rejected by arithmetic, not by taste |
-| Per-field enum ints (`p: {r: 2, n: 3}`) | +36 B | +19 % | 1238 KiB | Readable in a debugger; still nearly doubles the overrun |
-| Packed bitfield (3 bits × 8 properties in one int) | +12 B | +6 % | 1121 KiB | Cheapest that keeps provenance in the tree; unreadable without a decoder, so every consumer needs one |
-| Uniform default (`p: 2`, one source for the whole node) | +6 B | +3 % | 1091 KiB | Fits the common case: most nodes get every fact from one recognizer |
-| Uniform + exceptions (`p: 2, px: {name: 4}`) | +22 B | +12 % | — | The realistic shape of the one above: the exception is the interesting node, and it pays only where it occurs |
-| Side channel, read lazily | 0 B | 0 % | 1062 KiB | Costs nothing in the tree and buys a different problem — see below |
+| Variant                                                           | Per node | Node +% | 5 000 nodes | Notes                                                                                                         |
+| ----------------------------------------------------------------- | -------- | ------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| Verbose strings (`provenance: {role: 'component-recognizer', …}`) | +169 B   | +91 %   | 1887 KiB    | Self-describing on the wire, and unaffordable. Rejected by arithmetic, not by taste                           |
+| Per-field enum ints (`p: {r: 2, n: 3}`)                           | +36 B    | +19 %   | 1238 KiB    | Readable in a debugger; still nearly doubles the overrun                                                      |
+| Packed bitfield (3 bits × 8 properties in one int)                | +12 B    | +6 %    | 1121 KiB    | Cheapest that keeps provenance in the tree; unreadable without a decoder, so every consumer needs one         |
+| Uniform default (`p: 2`, one source for the whole node)           | +6 B     | +3 %    | 1091 KiB    | Fits the common case: most nodes get every fact from one recognizer                                           |
+| Uniform + exceptions (`p: 2, px: {name: 4}`)                      | +22 B    | +12 %   | —           | The realistic shape of the one above: the exception is the interesting node, and it pays only where it occurs |
+| Side channel, read lazily                                         | 0 B      | 0 %     | 1062 KiB    | Costs nothing in the tree and buys a different problem — see below                                            |
 
 The uniform-plus-exceptions row is the one worth taking seriously if provenance
 stays in the tree. It matches what the adapters already do: a node's facts
@@ -217,7 +217,7 @@ exactly the ones where they do not. It also degrades honestly — a node with
 mixed provenance costs more, which is the node someone is about to ask about.
 
 The lazy side channel is not free, it relocates the cost. Provenance for
-revision N has to be answerable *after* N is superseded, or the inspector shows
+revision N has to be answerable _after_ N is superseded, or the inspector shows
 "unknown" for everything the user is looking at, so the probe has to retain
 history. There is precedent: the Python client already keeps
 `_SNAPSHOT_HISTORY = 8` for `get-tree`. The open question is what the retention
@@ -225,7 +225,7 @@ contract is and what an inspector shows when it falls off the end — and
 "unknown" there means something different from `'unknown'` in `TerminalModes`,
 which is a distinction worth not blurring.
 
-One thing measured elsewhere argues for keeping *something* in the tree:
+One thing measured elsewhere argues for keeping _something_ in the tree:
 `TerminalModes` reports `'unknown'` inline rather than making a caller ask, and
 that is what makes the refusal logic honest at the point of decision. A gate
 that has to make a round trip to learn how much to trust a fact will not make
@@ -248,7 +248,7 @@ number 8 mean anything in this frame?", and the honest answer is no.
 Proposed: `ResolvedTarget` gains `identity: 'stable' | 'frame-local'`, and
 `locatorForRef` refuses with `capability-unavailable` for a frame-local ref,
 suggesting role/name/testId instead. The failure this prevents is the worst
-kind: a ref that silently resolves to a *different widget* between frames, so
+kind: a ref that silently resolves to a _different widget_ between frames, so
 a passing test asserts about something it never targeted.
 
 Note the precedent this follows: `'unknown'` in `TerminalModes` exists because
@@ -260,7 +260,7 @@ right. Same shape, different subject.
 IR separates `intendedRect` (where the object asked to draw — all Ratatui has)
 from `visibleRect` (after clipping — only Textual computes it). Our
 `ResolvedTarget.rect` is one unnamed rectangle used for two different jobs:
-reporting bounds, and deciding *where to click*.
+reporting bounds, and deciding _where to click_.
 
 Those jobs have different requirements. Clicking needs the cells the user can
 actually reach; `intendedRect` is not a claim to cells, because a modal, popup
@@ -279,7 +279,7 @@ shape: the input lands somewhere real and may land on the wrong thing.
 D1 keeps the closed role vocabulary and lets unknown widgets survive as
 `generic` + required `frameworkType`. If the driver drops `frameworkType`,
 every previously-invisible widget becomes an indistinguishable `generic` node
-and the tree gets *harder* to read, not easier. It belongs on the exposed node
+and the tree gets _harder_ to read, not easier. It belongs on the exposed node
 and in `ResolvedTarget`, and it wants a locator filter
 (`getByRole('generic', { frameworkType: … })`) or the role is unusable for
 selection.

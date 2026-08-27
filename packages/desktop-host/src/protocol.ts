@@ -8,16 +8,26 @@ export interface DesktopBootstrap {
   readonly url: string;
 }
 
-export type DesktopControl = DesktopBootstrap | {
-  readonly protocol: typeof DESKTOP_HOST_PROTOCOL;
-  readonly type: 'shutdown';
-};
+export type DesktopControl =
+  | DesktopBootstrap
+  | {
+      readonly protocol: typeof DESKTOP_HOST_PROTOCOL;
+      readonly type: 'shutdown';
+    };
 
 export type DesktopHostMessage =
-  | { readonly protocol: typeof DESKTOP_HOST_PROTOCOL; readonly type: 'stage'; readonly stage: 'connected' | 'app-ready' | 'window-created' | 'loaded' }
+  | {
+      readonly protocol: typeof DESKTOP_HOST_PROTOCOL;
+      readonly type: 'stage';
+      readonly stage: 'connected' | 'app-ready' | 'window-created' | 'loaded';
+    }
   | { readonly protocol: typeof DESKTOP_HOST_PROTOCOL; readonly type: 'ready' }
   | { readonly protocol: typeof DESKTOP_HOST_PROTOCOL; readonly type: 'closed' }
-  | { readonly protocol: typeof DESKTOP_HOST_PROTOCOL; readonly type: 'error'; readonly message: string };
+  | {
+      readonly protocol: typeof DESKTOP_HOST_PROTOCOL;
+      readonly type: 'error';
+      readonly message: string;
+    };
 
 export interface ValidatedRunnerUrl {
   readonly href: string;
@@ -40,9 +50,11 @@ export function validateRunnerUrl(input: string): ValidatedRunnerUrl {
   if (url.hostname !== '127.0.0.1' && url.hostname !== '[::1]') {
     throw new Error('desktop runner URL must use a loopback address');
   }
-  if (url.username !== '' || url.password !== '') throw new Error('desktop runner URL cannot contain credentials');
+  if (url.username !== '' || url.password !== '')
+    throw new Error('desktop runner URL cannot contain credentials');
   const tokens = url.searchParams.getAll('token');
-  if (tokens.length !== 1 || tokens[0] === '') throw new Error('desktop runner URL needs one token');
+  if (tokens.length !== 1 || tokens[0] === '')
+    throw new Error('desktop runner URL needs one token');
   url.hash = '';
   const websocket = new URL(url.origin);
   websocket.protocol = 'ws:';
@@ -54,33 +66,43 @@ export function encodeControlMessage(message: DesktopControl | DesktopHostMessag
 }
 
 export function parseControlMessage(line: string): DesktopControl | DesktopHostMessage {
-  if (Buffer.byteLength(line, 'utf8') > MAX_CONTROL_MESSAGE_BYTES) throw new Error('desktop control message is too large');
+  if (Buffer.byteLength(line, 'utf8') > MAX_CONTROL_MESSAGE_BYTES)
+    throw new Error('desktop control message is too large');
   const value: unknown = JSON.parse(line);
-  if (value === null || typeof value !== 'object') throw new Error('desktop control message must be an object');
+  if (value === null || typeof value !== 'object')
+    throw new Error('desktop control message must be an object');
   const message = value as { protocol?: unknown; type?: unknown; url?: unknown; message?: unknown };
-  if (message.protocol !== DESKTOP_HOST_PROTOCOL) throw new Error('incompatible desktop host protocol');
-  if (message.type === 'bootstrap' && typeof message.url === 'string') return {
-    protocol: DESKTOP_HOST_PROTOCOL,
-    type: 'bootstrap',
-    url: message.url,
-  };
+  if (message.protocol !== DESKTOP_HOST_PROTOCOL)
+    throw new Error('incompatible desktop host protocol');
+  if (message.type === 'bootstrap' && typeof message.url === 'string')
+    return {
+      protocol: DESKTOP_HOST_PROTOCOL,
+      type: 'bootstrap',
+      url: message.url,
+    };
   if (message.type === 'shutdown') return { protocol: DESKTOP_HOST_PROTOCOL, type: 'shutdown' };
-  if (message.type === 'ready' || message.type === 'closed') return {
-    protocol: DESKTOP_HOST_PROTOCOL,
-    type: message.type,
-  };
-  if (message.type === 'stage' && (
+  if (message.type === 'ready' || message.type === 'closed')
+    return {
+      protocol: DESKTOP_HOST_PROTOCOL,
+      type: message.type,
+    };
+  if (
+    message.type === 'stage' &&
     message.message === undefined &&
-    ['connected', 'app-ready', 'window-created', 'loaded'].includes((value as { stage?: string }).stage ?? '')
-  )) return {
-    protocol: DESKTOP_HOST_PROTOCOL,
-    type: 'stage',
-    stage: (value as { stage: 'connected' | 'app-ready' | 'window-created' | 'loaded' }).stage,
-  };
-  if (message.type === 'error' && typeof message.message === 'string') return {
-    protocol: DESKTOP_HOST_PROTOCOL,
-    type: 'error',
-    message: message.message,
-  };
+    ['connected', 'app-ready', 'window-created', 'loaded'].includes(
+      (value as { stage?: string }).stage ?? '',
+    )
+  )
+    return {
+      protocol: DESKTOP_HOST_PROTOCOL,
+      type: 'stage',
+      stage: (value as { stage: 'connected' | 'app-ready' | 'window-created' | 'loaded' }).stage,
+    };
+  if (message.type === 'error' && typeof message.message === 'string')
+    return {
+      protocol: DESKTOP_HOST_PROTOCOL,
+      type: 'error',
+      message: message.message,
+    };
   throw new Error('unknown desktop control message');
 }

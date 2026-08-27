@@ -24,7 +24,10 @@ describe('buildChildEnv', () => {
   it('gives a replaced environment everything the platform needs to start a process', () => {
     const env = buildChildEnv('replace', undefined);
     for (const name of REQUIRED) {
-      expect(lookup(env, name), `${name} must survive envMode 'replace' on ${process.platform}`).toBeDefined();
+      expect(
+        lookup(env, name),
+        `${name} must survive envMode 'replace' on ${process.platform}`,
+      ).toBeDefined();
     }
   });
 

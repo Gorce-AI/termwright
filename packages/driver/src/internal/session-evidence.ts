@@ -5,8 +5,8 @@ import type {
   DiagnosticCode,
   ExitStatus,
   SessionDiagnostic,
-} from "../api.js";
-import type { ArtifactValuePolicy, SemanticSnapshot } from "@termwright/protocol";
+} from '../api.js';
+import type { ArtifactValuePolicy, SemanticSnapshot } from '@termwright/protocol';
 
 const MAX_DIAGNOSTICS = 200;
 const MAX_APP_LOGS = 1_000;
@@ -20,10 +20,10 @@ const CRASH_INPUT_PREVIEW = 40;
 export interface SessionDiagnosticContext {
   readonly revision?: number | undefined;
   readonly actionId?: string | undefined;
-  readonly observationState?: SessionDiagnostic["observationState"];
-  readonly wireCode?: SessionDiagnostic["wireCode"];
+  readonly observationState?: SessionDiagnostic['observationState'];
+  readonly wireCode?: SessionDiagnostic['wireCode'];
   readonly count?: number | undefined;
-  readonly mode?: SessionDiagnostic["mode"];
+  readonly mode?: SessionDiagnostic['mode'];
 }
 
 /** Observable boundary of the bounded evidence journal. */
@@ -90,7 +90,7 @@ export class SessionEvidenceJournal {
 
   rememberInput(
     data: Uint8Array,
-    kind: CrashInput["kind"],
+    kind: CrashInput['kind'],
     timeMs: number,
     artifactValuePolicy: ArtifactValuePolicy,
   ): void {
@@ -98,9 +98,7 @@ export class SessionEvidenceJournal {
       timeMs,
       kind,
       bytes: data.length,
-      ...(kind === "mouse" || artifactValuePolicy === "raw"
-        ? { preview: previewBytes(data) }
-        : {}),
+      ...(kind === 'mouse' || artifactValuePolicy === 'raw' ? { preview: previewBytes(data) } : {}),
     });
     this.#recentInputs.push(entry);
     if (this.#recentInputs.length > CRASH_INPUTS) this.#recentInputs.shift();
@@ -126,13 +124,13 @@ function previewBytes(data: Uint8Array): string {
 
 function crashTail(lines: readonly string[]): readonly string[] {
   let end = lines.length;
-  while (end > 0 && (lines[end - 1] ?? "").trim() === "") end -= 1;
+  while (end > 0 && (lines[end - 1] ?? '').trim() === '') end -= 1;
   const tail = lines.slice(Math.max(0, end - CRASH_TAIL_LINES), end);
   let bytes = 0;
   const kept: string[] = [];
   for (let index = tail.length - 1; index >= 0; index -= 1) {
-    const line = tail[index] ?? "";
-    bytes += Buffer.byteLength(line, "utf8") + 1;
+    const line = tail[index] ?? '';
+    bytes += Buffer.byteLength(line, 'utf8') + 1;
     if (bytes > CRASH_TAIL_BYTES) break;
     kept.push(line);
   }

@@ -3,7 +3,15 @@
  * Not exported from `src/index.ts` — it never ships.
  */
 
-import type { ActionReceipt, ActionabilityExplanation, EffectiveSessionContract, LogRecord, ObservationStamp, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type {
+  ActionReceipt,
+  ActionabilityExplanation,
+  EffectiveSessionContract,
+  LogRecord,
+  ObservationStamp,
+  SemanticNode,
+  SemanticSnapshot,
+} from '@termwright/protocol';
 import type {
   CrashReport,
   ExitStatus,
@@ -115,7 +123,15 @@ export class FakeSession implements TraceSource {
    */
   action(
     api: string,
-    outcome: { ok?: boolean; selector?: string; ref?: import('@termwright/driver').LocatorRef; error?: string; observation?: ObservationStamp; receipt?: ActionReceipt; actionability?: ActionabilityExplanation } = {},
+    outcome: {
+      ok?: boolean;
+      selector?: string;
+      ref?: import('@termwright/driver').LocatorRef;
+      error?: string;
+      observation?: ObservationStamp;
+      receipt?: ActionReceipt;
+      actionability?: ActionabilityExplanation;
+    } = {},
   ): void {
     this.#emit('action', {
       actionId: `a${++this.#actionCounter}`,
@@ -196,11 +212,25 @@ export function snapshot(
     rootIds: nodes.filter((node) => node.parentId === undefined).map((node) => node.id),
     nodes,
     coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }
 
 /** Builds a semantic node with sane defaults. */
-export function node(partial: Partial<SemanticNode> & Pick<SemanticNode, 'id' | 'role'>): SemanticNode {
-  return { name: '', geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } }, ...partial };
+export function node(
+  partial: Partial<SemanticNode> & Pick<SemanticNode, 'id' | 'role'>,
+): SemanticNode {
+  return {
+    name: '',
+    geometry: {
+      displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    },
+    ...partial,
+  };
 }

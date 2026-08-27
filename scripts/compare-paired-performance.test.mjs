@@ -5,6 +5,11 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  capturePerformanceBaseline,
+  comparePerformanceBaseline,
+} from '../packages/performance/dist/controller/baseline-controller.js';
+
 vi.mock('./performance-environment.mjs', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -39,12 +44,32 @@ afterEach(async () => {
 describe('paired performance comparator', () => {
   it('aggregates two fixed samples and emits a hard paired comparison with raw provenance', async () => {
     const reference = [
-      await sample(referenceSha, { firstRun: 100, orchestration: 200, memory: 300, descriptors: 40 }),
-      await sample(referenceSha, { firstRun: 120, orchestration: 220, memory: 350, descriptors: 42 }),
+      await sample(referenceSha, {
+        firstRun: 100,
+        orchestration: 200,
+        memory: 300,
+        descriptors: 40,
+      }),
+      await sample(referenceSha, {
+        firstRun: 120,
+        orchestration: 220,
+        memory: 350,
+        descriptors: 42,
+      }),
     ];
     const candidate = [
-      await sample(candidateSha, { firstRun: 110, orchestration: 210, memory: 340, descriptors: 41 }),
-      await sample(candidateSha, { firstRun: 130, orchestration: 230, memory: 360, descriptors: 43 }),
+      await sample(candidateSha, {
+        firstRun: 110,
+        orchestration: 210,
+        memory: 340,
+        descriptors: 41,
+      }),
+      await sample(candidateSha, {
+        firstRun: 130,
+        orchestration: 230,
+        memory: 360,
+        descriptors: 43,
+      }),
     ];
     const harness = await harnessFile();
     const { output, comparisons } = await comparePairedPerformance({
@@ -95,24 +120,55 @@ describe('paired performance comparator', () => {
       const entry = output.provenance.controller.files.find((file) => file.path === path);
       expect(entry?.sha256).toMatch(/^[a-f0-9]{64}$/u);
     }
-    expect(output.provenance.controller.sha256).toBe(createHash('sha256')
-      .update(JSON.stringify(output.provenance.controller.files)).digest('hex'));
-    expect(output.provenance.harness.reference.sha256).toBe(output.provenance.harness.candidate.sha256);
+    expect(output.provenance.controller.sha256).toBe(
+      createHash('sha256').update(JSON.stringify(output.provenance.controller.files)).digest('hex'),
+    );
+    expect(output.provenance.harness.reference.sha256).toBe(
+      output.provenance.harness.candidate.sha256,
+    );
     expect(comparisons.every((comparison) => comparison.status === 'ok')).toBe(true);
   });
 
-  it('returns a blocking failure for the max exact cleanup observation', async () => {
-    const reference = [await sample(referenceSha, {}), await sample(referenceSha, {})];
-    const candidate = [await sample(candidateSha, {}), await sample(candidateSha, { leakedProcesses: 1 })];
-    const harness = await harnessFile();
-    const { output, comparisons } = await comparePairedPerformance({
-      policy: policyPath, referenceSha, reference, referenceHarness: harness,
-      candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
-    });
-    expect(comparisons).toContainEqual(expect.objectContaining({
-      metric: 'leakedProcesses', status: 'failure', current: 1,
-    }));
-    expect(output.gate).toBe('performance-regression-fail');
+  it('classifies the max exact cleanup observation as a blocking failure', async () => {
+    const reference = aggregateObservations([completeObservation(), completeObservation()]);
+    const candidate = aggregateObservations([
+      completeObservation(),
+      completeObservation({
+        leakedProcesses: metric(1, 'count', SOURCES.leakedProcesses),
+      }),
+    ]);
+    const baseline = capturePerformanceBaseline(
+      JSON.parse(await readFile(policyPath, 'utf8')),
+      reference,
+      {
+        environment: {
+          kind: 'termwright-performance-environment',
+          schemaVersion: 1,
+          class: 'darwin-arm64-node24-go1.25-bun1.2.15',
+          runner: { image: 'macos-15', platform: 'darwin', arch: 'arm64' },
+          toolchains: {
+            node: { qualified: '24', resolved: '24.1.0' },
+            go: { qualified: '1.25', resolved: '1.25.0' },
+            bun: { qualified: '1.2.15', resolved: '1.2.15' },
+          },
+        },
+        rawInputs: {
+          quality: '1'.repeat(64),
+          semantic: '2'.repeat(64),
+          charm: '3'.repeat(64),
+          opentui: '4'.repeat(64),
+        },
+      },
+    );
+    const comparisons = comparePerformanceBaseline(baseline, candidate);
+    expect(candidate.metrics.leakedProcesses.value).toBe(1);
+    expect(comparisons).toContainEqual(
+      expect.objectContaining({
+        metric: 'leakedProcesses',
+        status: 'failure',
+        current: 1,
+      }),
+    );
   });
 
   it('rejects unequal or internally forged harness fingerprints', async () => {
@@ -120,10 +176,18 @@ describe('paired performance comparator', () => {
     const forgedPath = await harnessFile((value) => ({ ...value, sha256: '0'.repeat(64) }));
     const reference = [await sample(referenceSha, {}), await sample(referenceSha, {})];
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
-    await expect(comparePairedPerformance({
-      policy: policyPath, referenceSha, reference, referenceHarness: validPath,
-      candidateSha, candidate, candidateHarness: forgedPath, output: 'unused.json',
-    })).rejects.toThrow(/canonical digest is invalid/u);
+    await expect(
+      comparePairedPerformance({
+        policy: policyPath,
+        referenceSha,
+        reference,
+        referenceHarness: validPath,
+        candidateSha,
+        candidate,
+        candidateHarness: forgedPath,
+        output: 'unused.json',
+      }),
+    ).rejects.toThrow(/canonical digest is invalid/u);
   });
 
   it('requires byte-identical canonical harness evidence', async () => {
@@ -131,10 +195,18 @@ describe('paired performance comparator', () => {
     const candidateHarness = await harnessFile((value) => value, true);
     const reference = [await sample(referenceSha, {}), await sample(referenceSha, {})];
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
-    await expect(comparePairedPerformance({
-      policy: policyPath, referenceSha, reference, referenceHarness,
-      candidateSha, candidate, candidateHarness, output: 'unused.json',
-    })).rejects.toThrow(/fingerprints differ/u);
+    await expect(
+      comparePairedPerformance({
+        policy: policyPath,
+        referenceSha,
+        reference,
+        referenceHarness,
+        candidateSha,
+        candidate,
+        candidateHarness,
+        output: 'unused.json',
+      }),
+    ).rejects.toThrow(/fingerprints differ/u);
   });
 
   it('binds the exact policy bytes to the policy entry in the harness fingerprint', async () => {
@@ -148,10 +220,18 @@ describe('paired performance comparator', () => {
     }));
     const reference = [await sample(referenceSha, {}), await sample(referenceSha, {})];
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
-    await expect(comparePairedPerformance({
-      policy: changedPolicy, referenceSha, reference, referenceHarness: harness,
-      candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
-    })).rejects.toThrow(/policy bytes differ/u);
+    await expect(
+      comparePairedPerformance({
+        policy: changedPolicy,
+        referenceSha,
+        reference,
+        referenceHarness: harness,
+        candidateSha,
+        candidate,
+        candidateHarness: harness,
+        output: 'unused.json',
+      }),
+    ).rejects.toThrow(/policy bytes differ/u);
   });
 
   it('rejects duplicate raw samples and reused host evidence globally', async () => {
@@ -161,35 +241,59 @@ describe('paired performance comparator', () => {
     roots.push(duplicatedDirectory);
     await cp(repeated, duplicatedDirectory, { recursive: true });
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
-    await expect(comparePairedPerformance({
-      policy: policyPath,
-      referenceSha,
-      reference: [repeated, duplicatedDirectory],
-      referenceHarness: harness,
-      candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
-    })).rejects.toThrow(/globally distinct raw input sets/u);
+    await expect(
+      comparePairedPerformance({
+        policy: policyPath,
+        referenceSha,
+        reference: [repeated, duplicatedDirectory],
+        referenceHarness: harness,
+        candidateSha,
+        candidate,
+        candidateHarness: harness,
+        output: 'unused.json',
+      }),
+    ).rejects.toThrow(/globally distinct raw input sets/u);
 
     const reusedIdentity = '000000000001';
     const reference = [
       await sample(referenceSha, { provenanceSeed: reusedIdentity }),
       await sample(referenceSha, { firstRun: 101, provenanceSeed: reusedIdentity }),
     ];
-    await expect(comparePairedPerformance({
-      policy: policyPath, referenceSha, reference, referenceHarness: harness,
-      candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
-    })).rejects.toThrow(/globally distinct host invocations/u);
+    await expect(
+      comparePairedPerformance({
+        policy: policyPath,
+        referenceSha,
+        reference,
+        referenceHarness: harness,
+        candidateSha,
+        candidate,
+        candidateHarness: harness,
+        output: 'unused.json',
+      }),
+    ).rejects.toThrow(/globally distinct host invocations/u);
 
-    const runReference = [await sample(referenceSha, {}), await sample(referenceSha, { firstRun: 102 })];
+    const runReference = [
+      await sample(referenceSha, {}),
+      await sample(referenceSha, { firstRun: 102 }),
+    ];
     const firstQuality = JSON.parse(await readFile(join(runReference[0], 'quality.json'), 'utf8'));
     const secondQualityPath = join(runReference[1], 'quality.json');
     const secondQuality = JSON.parse(await readFile(secondQualityPath, 'utf8'));
     secondQuality.provenance.roles.timing.runs[0].runId =
       firstQuality.provenance.roles.timing.runs[0].runId;
     await writeFile(secondQualityPath, JSON.stringify(secondQuality));
-    await expect(comparePairedPerformance({
-      policy: policyPath, referenceSha, reference: runReference, referenceHarness: harness,
-      candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
-    })).rejects.toThrow(/globally distinct certified runs/u);
+    await expect(
+      comparePairedPerformance({
+        policy: policyPath,
+        referenceSha,
+        reference: runReference,
+        referenceHarness: harness,
+        candidateSha,
+        candidate,
+        candidateHarness: harness,
+        output: 'unused.json',
+      }),
+    ).rejects.toThrow(/globally distinct certified runs/u);
   });
 
   it('rejects a benchmark report swapped after its subject/round seal', async () => {
@@ -215,23 +319,36 @@ describe('paired performance comparator', () => {
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
     for (const directory of candidate) await replaceOpenTuiVersion(directory, '0.5.4');
     const options = {
-      policy: policyPath, referenceSha, reference, referenceHarness: harness,
-      candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
+      policy: policyPath,
+      referenceSha,
+      reference,
+      referenceHarness: harness,
+      candidateSha,
+      candidate,
+      candidateHarness: harness,
+      output: 'unused.json',
     };
     const { output } = await comparePairedPerformance(options);
     expect(output.provenance.reference[0].reportRuntimes.opentui).toContain('@opentui/core 0.5.3');
     expect(output.provenance.candidate[0].reportRuntimes.opentui).toContain('@opentui/core 0.5.4');
 
     await replaceOpenTuiVersion(candidate[1], '0.5.5');
-    await expect(comparePairedPerformance(options)).rejects.toThrow(/different benchmark runtimes/u);
+    await expect(comparePairedPerformance(options)).rejects.toThrow(
+      /different benchmark runtimes/u,
+    );
   });
 
   it('requires two compatible samples with reviewed aggregation rules', () => {
     const first = observation({ custom: metric(1, 'count', 'same') });
     expect(() => aggregateObservations([first, first])).toThrow(/no reviewed aggregation rule/u);
-    expect(() => aggregateObservations([observation(), observation({
-      firstRunPreAttemptMs: metric(1, 'milliseconds', 'different'),
-    })])).toThrow(/unit or source differs/u);
+    expect(() =>
+      aggregateObservations([
+        observation(),
+        observation({
+          firstRunPreAttemptMs: metric(1, 'milliseconds', 'different'),
+        }),
+      ]),
+    ).toThrow(/unit or source differs/u);
     expect(() => aggregateObservations([observation()])).toThrow(/exactly two/u);
   });
 
@@ -243,15 +360,18 @@ describe('paired performance comparator', () => {
     await writeFile(join(directory, 'dynamic.mjs'), 'export const dynamic = true;\n');
     await writeFile(entry, "import './side-effect.mjs';\nawait import('./dynamic.mjs');\n");
     const closure = await hashControllerClosure([pathToFileURL(entry)]);
-    expect(closure.files.map((file) => file.path).sort()).toEqual(expect.arrayContaining([
-      expect.stringMatching(/entry\.mjs$/u),
-      expect.stringMatching(/side-effect\.mjs$/u),
-      expect.stringMatching(/dynamic\.mjs$/u),
-    ]));
+    expect(closure.files.map((file) => file.path).sort()).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/entry\.mjs$/u),
+        expect.stringMatching(/side-effect\.mjs$/u),
+        expect.stringMatching(/dynamic\.mjs$/u),
+      ]),
+    );
 
     await writeFile(entry, "import 'unresolved-controller-package';\n");
-    await expect(hashControllerClosure([pathToFileURL(entry)]))
-      .rejects.toThrow(/unresolved bare import/u);
+    await expect(hashControllerClosure([pathToFileURL(entry)])).rejects.toThrow(
+      /unresolved bare import/u,
+    );
   });
 });
 
@@ -263,44 +383,76 @@ async function sample(subjectSha, values = {}) {
     cp(new URL('charm-immediate.json', reports), join(directory, 'charm-immediate.json')),
     cp(new URL('opentui-marker-route.json', reports), join(directory, 'opentui-marker-route.json')),
   ]);
-  await writeFile(join(directory, 'environment.json'), JSON.stringify({
-    kind: 'termwright-performance-environment',
-    schemaVersion: 1,
-    class: 'darwin-arm64-node24-go1.25-bun1.2.15',
-    runner: { image: 'macos-15', platform: 'darwin', arch: 'arm64' },
-    toolchains: {
-      node: { qualified: '24', resolved: '24.1.0' },
-      go: { qualified: '1.25', resolved: '1.25.0' },
-      bun: { qualified: '1.2.15', resolved: '1.2.15' },
-    },
-  }));
-  await writeFile(join(directory, 'quality.json'), JSON.stringify({
-    ...observation({
-      firstRunPreAttemptMs: metric(values.firstRun ?? 100, 'milliseconds', SOURCES.firstRunPreAttemptMs),
-      postStartupRunOrchestrationMs: metric(values.orchestration ?? 200, 'milliseconds', SOURCES.postStartupRunOrchestrationMs),
-      peakMemoryFootprintBytes: metric(values.memory ?? 300, 'bytes', SOURCES.peakMemoryFootprintBytes),
-      peakOpenFileDescriptors: metric(values.descriptors ?? 40, 'count', SOURCES.peakOpenFileDescriptors),
-      leakedFileDescriptors: metric(values.leakedDescriptors ?? 0, 'count', SOURCES.leakedFileDescriptors),
-      leakedProcesses: metric(values.leakedProcesses ?? 0, 'count', SOURCES.leakedProcesses),
+  await writeFile(
+    join(directory, 'environment.json'),
+    JSON.stringify({
+      kind: 'termwright-performance-environment',
+      schemaVersion: 1,
+      class: 'darwin-arm64-node24-go1.25-bun1.2.15',
+      runner: { image: 'macos-15', platform: 'darwin', arch: 'arm64' },
+      toolchains: {
+        node: { qualified: '24', resolved: '24.1.0' },
+        go: { qualified: '1.25', resolved: '1.25.0' },
+        bun: { qualified: '1.2.15', resolved: '1.2.15' },
+      },
     }),
-    provenance: await qualityProvenance(subjectSha, values.provenanceSeed),
-    resourceSnapshot: {
-      kind: 'termwright-quality-resource-snapshot', schemaVersion: 1,
-      memoryMeasurement: 'darwin-summary-footprint',
-      stress: { expectedSessions: 16, processCount: 18 },
-    },
-  }));
+  );
+  await writeFile(
+    join(directory, 'quality.json'),
+    JSON.stringify({
+      ...observation({
+        firstRunPreAttemptMs: metric(
+          values.firstRun ?? 100,
+          'milliseconds',
+          SOURCES.firstRunPreAttemptMs,
+        ),
+        postStartupRunOrchestrationMs: metric(
+          values.orchestration ?? 200,
+          'milliseconds',
+          SOURCES.postStartupRunOrchestrationMs,
+        ),
+        peakMemoryFootprintBytes: metric(
+          values.memory ?? 300,
+          'bytes',
+          SOURCES.peakMemoryFootprintBytes,
+        ),
+        peakOpenFileDescriptors: metric(
+          values.descriptors ?? 40,
+          'count',
+          SOURCES.peakOpenFileDescriptors,
+        ),
+        leakedFileDescriptors: metric(
+          values.leakedDescriptors ?? 0,
+          'count',
+          SOURCES.leakedFileDescriptors,
+        ),
+        leakedProcesses: metric(values.leakedProcesses ?? 0, 'count', SOURCES.leakedProcesses),
+      }),
+      provenance: await qualityProvenance(subjectSha, values.provenanceSeed),
+      resourceSnapshot: {
+        kind: 'termwright-quality-resource-snapshot',
+        schemaVersion: 1,
+        memoryMeasurement: 'darwin-summary-footprint',
+        stress: { expectedSessions: 16, processCount: 18 },
+      },
+    }),
+  );
   return directory;
 }
 
 async function harnessFile(transform = (value) => value, compact = false) {
   const directory = await mkdtemp(join(tmpdir(), 'termwright-paired-harness-'));
   roots.push(directory);
-  const fingerprint = await fingerprintPerformanceHarness({ root: fileURLToPath(new URL('..', import.meta.url)) });
+  const fingerprint = await fingerprintPerformanceHarness({
+    root: fileURLToPath(new URL('..', import.meta.url)),
+  });
   const path = join(directory, 'harness.json');
-  await writeFile(path, compact
-    ? JSON.stringify(transform(fingerprint))
-    : `${JSON.stringify(transform(fingerprint), null, 2)}\n`);
+  await writeFile(
+    path,
+    compact
+      ? JSON.stringify(transform(fingerprint))
+      : `${JSON.stringify(transform(fingerprint), null, 2)}\n`,
+  );
   return path;
 }
 
@@ -310,7 +462,11 @@ function observation(overrides = {}) {
     environment: 'darwin-arm64-node24-go1.25-bun1.2.15',
     metrics: {
       firstRunPreAttemptMs: metric(100, 'milliseconds', SOURCES.firstRunPreAttemptMs),
-      postStartupRunOrchestrationMs: metric(200, 'milliseconds', SOURCES.postStartupRunOrchestrationMs),
+      postStartupRunOrchestrationMs: metric(
+        200,
+        'milliseconds',
+        SOURCES.postStartupRunOrchestrationMs,
+      ),
       peakMemoryFootprintBytes: metric(300, 'bytes', SOURCES.peakMemoryFootprintBytes),
       peakOpenFileDescriptors: metric(40, 'count', SOURCES.peakOpenFileDescriptors),
       leakedFileDescriptors: metric(0, 'count', SOURCES.leakedFileDescriptors),
@@ -320,8 +476,27 @@ function observation(overrides = {}) {
   };
 }
 
+function completeObservation(overrides = {}) {
+  return observation({
+    semanticHotPathP95Us: metric(
+      10,
+      'microseconds/frame',
+      'packages/performance benchmark: semantic pipeline',
+    ),
+    charmOverheadRatio: metric(1, 'ratio', 'packages/performance benchmark: Charm E2E'),
+    opentuiOverheadRatio: metric(
+      1,
+      'ratio',
+      'packages/performance benchmark: OpenTUI marker route',
+    ),
+    ...overrides,
+  });
+}
+
 async function qualityProvenance(subjectSha, requestedSeed) {
-  const collectorSha256 = createHash('sha256').update(await readFile(collector)).digest('hex');
+  const collectorSha256 = createHash('sha256')
+    .update(await readFile(collector))
+    .digest('hex');
   const seed = requestedSeed ?? (++sampleSequence).toString(16).padStart(12, '0');
   const role = (prefix, count) => ({
     invocationId: `invocation:${prefix.repeat(8)}-${prefix.repeat(4)}-4${prefix.repeat(3)}-8${prefix.repeat(3)}-${seed}`,
@@ -331,15 +506,18 @@ async function qualityProvenance(subjectSha, requestedSeed) {
     })),
   });
   return {
-    kind: 'termwright-quality-provenance', schemaVersion: 1, collectorSha256,
+    kind: 'termwright-quality-provenance',
+    schemaVersion: 1,
+    collectorSha256,
     gitCommit: subjectSha,
-    ci: process.env.GITHUB_ACTIONS === 'true'
-      ? {
-          runId: process.env.GITHUB_RUN_ID,
-          runAttempt: process.env.GITHUB_RUN_ATTEMPT,
-          sha: subjectSha,
-        }
-      : null,
+    ci:
+      process.env.GITHUB_ACTIONS === 'true'
+        ? {
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            sha: subjectSha,
+          }
+        : null,
     roles: {
       timing: role('a', 2),
       resourceSoak: role('b', 2),
@@ -359,7 +537,10 @@ async function policyFile(transform) {
 async function replaceOpenTuiVersion(directory, version) {
   const path = join(directory, 'opentui-marker-route.json');
   const value = JSON.parse(await readFile(path, 'utf8'));
-  value.environment.runtime = value.environment.runtime.replace(/@opentui\/core \S+$/u, `@opentui/core ${version}`);
+  value.environment.runtime = value.environment.runtime.replace(
+    /@opentui\/core \S+$/u,
+    `@opentui/core ${version}`,
+  );
   await writeFile(path, JSON.stringify(value));
 }
 
@@ -371,11 +552,17 @@ async function comparePairedPerformance(options) {
 async function sealOptions(options) {
   const matrix = [
     ...options.reference.map((directory, index) => ({
-      directory, subject: 'reference', round: index + 1, sequence: index === 0 ? 1 : 4,
+      directory,
+      subject: 'reference',
+      round: index + 1,
+      sequence: index === 0 ? 1 : 4,
       subjectSha: options.referenceSha,
     })),
     ...options.candidate.map((directory, index) => ({
-      directory, subject: 'candidate', round: index + 1, sequence: index + 2,
+      directory,
+      subject: 'candidate',
+      round: index + 1,
+      sequence: index + 2,
       subjectSha: options.candidateSha,
     })),
   ];
@@ -388,13 +575,19 @@ async function sealOptions(options) {
   }
 }
 
-function metric(value, unit, source) { return { value, unit, source }; }
+function metric(value, unit, source) {
+  return { value, unit, source };
+}
 
 const SOURCES = {
   firstRunPreAttemptMs: 'quality/soak first run: host-monotonic run start to first attempt',
-  postStartupRunOrchestrationMs: 'quality/soak 1 post-startup runs: host-monotonic collection, scheduling and finalization outside the test attempt',
-  peakMemoryFootprintBytes: 'maximum sampled aggregate physical footprint across the separately instrumented lifecycle soak and certified 16-session stress tree',
-  peakOpenFileDescriptors: 'maximum open descriptors across the separately instrumented lifecycle soak and certified stress tree',
-  leakedFileDescriptors: 'descriptors owned by observed lifecycle or stress descendants still alive after certified host exit',
+  postStartupRunOrchestrationMs:
+    'quality/soak 1 post-startup runs: host-monotonic collection, scheduling and finalization outside the test attempt',
+  peakMemoryFootprintBytes:
+    'maximum sampled aggregate physical footprint across the separately instrumented lifecycle soak and certified 16-session stress tree',
+  peakOpenFileDescriptors:
+    'maximum open descriptors across the separately instrumented lifecycle soak and certified stress tree',
+  leakedFileDescriptors:
+    'descriptors owned by observed lifecycle or stress descendants still alive after certified host exit',
   leakedProcesses: 'observed lifecycle or stress descendants still alive after certified host exit',
 };

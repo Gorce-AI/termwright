@@ -38,7 +38,13 @@ export function TerminalStage(props: TerminalStageProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const inputRef = useRef(props.onInput);
   const fitRef = useRef<() => void>(() => undefined);
-  const appliedRef = useRef({ identity: '', live: 0, replayCursor: 0, replayTime: 0, generation: 0 });
+  const appliedRef = useRef({
+    identity: '',
+    live: 0,
+    replayCursor: 0,
+    replayTime: 0,
+    generation: 0,
+  });
   const [scale, setScale] = useState(1);
   const [overlayMetrics, setOverlayMetrics] = useState<OverlayMetrics | null>(null);
 
@@ -197,21 +203,40 @@ export function TerminalStage(props: TerminalStageProps) {
       applied.replayTime = props.replayTimeMs;
     }
     terminal.write('', () => requestAnimationFrame(() => fitRef.current()));
-  }, [props.columns, props.identity, props.liveChunks, props.mode, props.replayFrames, props.replayTimeMs, props.rows, props.writable]);
+  }, [
+    props.columns,
+    props.identity,
+    props.liveChunks,
+    props.mode,
+    props.replayFrames,
+    props.replayTimeMs,
+    props.rows,
+    props.writable,
+  ]);
 
   return (
     <section ref={machineRef} className="tw-terminal-machine" aria-label="Terminal screen">
       <header className="tw-machine-bar">
         <div className="tw-machine-identity">
-          <span className="tw-machine-lights" aria-hidden="true"><i /><i /><i /></span>
+          <span className="tw-machine-lights" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
           <strong>Terminal</strong>
           <span className="tw-evidence-pill" data-mode={props.mode}>
-            {props.mode === 'live' ? <Radio aria-hidden="true" size={12} /> : <ScanLine aria-hidden="true" size={12} />}
+            {props.mode === 'live' ? (
+              <Radio aria-hidden="true" size={12} />
+            ) : (
+              <ScanLine aria-hidden="true" size={12} />
+            )}
             {props.mode === 'empty' ? 'NO SESSION' : props.mode.toUpperCase()}
           </span>
         </div>
         <div className="tw-machine-facts">
-          <span>{props.columns} × {props.rows}</span>
+          <span>
+            {props.columns} × {props.rows}
+          </span>
           <span>{props.profile}</span>
           <button type="button" className="tw-fit-button" onClick={() => fitRef.current()}>
             Fit · {Math.round(scale * 100)}%
@@ -230,7 +255,12 @@ export function TerminalStage(props: TerminalStageProps) {
         }}
       >
         <div className="tw-terminal-surface" ref={surfaceRef} />
-        <TerminalHighlightOverlay highlight={props.highlight} metrics={overlayMetrics} columns={props.columns} rows={props.rows} />
+        <TerminalHighlightOverlay
+          highlight={props.highlight}
+          metrics={overlayMetrics}
+          columns={props.columns}
+          rows={props.rows}
+        />
         {props.mode === 'empty' ? (
           <div className="tw-terminal-empty">
             <ScanLine aria-hidden="true" />
@@ -242,7 +272,12 @@ export function TerminalStage(props: TerminalStageProps) {
   );
 }
 
-function TerminalHighlightOverlay({ highlight, metrics, columns, rows }: {
+function TerminalHighlightOverlay({
+  highlight,
+  metrics,
+  columns,
+  rows,
+}: {
   readonly highlight: TerminalHighlight | null;
   readonly metrics: OverlayMetrics | null;
   readonly columns: number;
@@ -250,7 +285,11 @@ function TerminalHighlightOverlay({ highlight, metrics, columns, rows }: {
 }) {
   if (highlight === null) return null;
   if (highlight.bounds === undefined) {
-    return <div className="tw-terminal-highlight-reason" role="status" data-pinned={highlight.pinned}>{highlight.reason ?? 'Target geometry is unavailable.'}</div>;
+    return (
+      <div className="tw-terminal-highlight-reason" role="status" data-pinned={highlight.pinned}>
+        {highlight.reason ?? 'Target geometry is unavailable.'}
+      </div>
+    );
   }
   if (metrics === null) return null;
   const layerStyle = {
@@ -262,22 +301,45 @@ function TerminalHighlightOverlay({ highlight, metrics, columns, rows }: {
   } as CSSProperties;
   const leftCell = Math.max(0, Math.min(columns, highlight.bounds.column));
   const topCell = Math.max(0, Math.min(rows, highlight.bounds.row));
-  const rightCell = Math.max(leftCell, Math.min(columns, highlight.bounds.column + highlight.bounds.width));
-  const bottomCell = Math.max(topCell, Math.min(rows, highlight.bounds.row + highlight.bounds.height));
+  const rightCell = Math.max(
+    leftCell,
+    Math.min(columns, highlight.bounds.column + highlight.bounds.width),
+  );
+  const bottomCell = Math.max(
+    topCell,
+    Math.min(rows, highlight.bounds.row + highlight.bounds.height),
+  );
   if (rightCell <= leftCell || bottomCell <= topCell) {
-    return <div className="tw-terminal-highlight-reason" role="status" data-pinned={highlight.pinned}>Target bounds do not intersect the terminal grid.</div>;
+    return (
+      <div className="tw-terminal-highlight-reason" role="status" data-pinned={highlight.pinned}>
+        Target bounds do not intersect the terminal grid.
+      </div>
+    );
   }
   const boxStyle = {
-    left: metrics.screenLeft + leftCell / columns * metrics.screenWidth,
-    top: metrics.screenTop + topCell / rows * metrics.screenHeight,
-    width: (rightCell - leftCell) / columns * metrics.screenWidth,
-    height: (bottomCell - topCell) / rows * metrics.screenHeight,
+    left: metrics.screenLeft + (leftCell / columns) * metrics.screenWidth,
+    top: metrics.screenTop + (topCell / rows) * metrics.screenHeight,
+    width: ((rightCell - leftCell) / columns) * metrics.screenWidth,
+    height: ((bottomCell - topCell) / rows) * metrics.screenHeight,
   } as CSSProperties;
-  return <div className="tw-terminal-highlight-layer" style={layerStyle} data-testid="terminal-highlight-layer">
-    <div className="tw-terminal-highlight" style={boxStyle} data-pinned={highlight.pinned} data-target-ref={highlight.targetRef ?? undefined}>
-      <span>{[highlight.role, highlight.name, highlight.targetRef].filter(Boolean).join(' · ')}</span>
+  return (
+    <div
+      className="tw-terminal-highlight-layer"
+      style={layerStyle}
+      data-testid="terminal-highlight-layer"
+    >
+      <div
+        className="tw-terminal-highlight"
+        style={boxStyle}
+        data-pinned={highlight.pinned}
+        data-target-ref={highlight.targetRef ?? undefined}
+      >
+        <span>
+          {[highlight.role, highlight.name, highlight.targetRef].filter(Boolean).join(' · ')}
+        </span>
+      </div>
     </div>
-  </div>;
+  );
 }
 
 function decode(value: string): Uint8Array {

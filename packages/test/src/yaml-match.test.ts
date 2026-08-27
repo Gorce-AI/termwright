@@ -4,7 +4,10 @@ import { parseSemanticSnapshot } from './yaml-pattern.js';
 import { matchSemanticSnapshot } from './yaml-match.js';
 import type { SemanticSnapshot } from '@termwright/protocol';
 
-function match(expected: string, tree: SemanticSnapshot = permissionDialog()): ReturnType<typeof matchSemanticSnapshot> {
+function match(
+  expected: string,
+  tree: SemanticSnapshot = permissionDialog(),
+): ReturnType<typeof matchSemanticSnapshot> {
   return matchSemanticSnapshot(parseSemanticSnapshot(expected), tree);
 }
 
@@ -19,15 +22,17 @@ describe('matchSemanticSnapshot', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('treats omitted children as don\'t-care', () => {
+  it("treats omitted children as don't-care", () => {
     expect(match('- dialog "Permission"').ok).toBe(true);
   });
 
   it('allows unlisted siblings, in any position', () => {
-    expect(match(`
+    expect(
+      match(`
       - dialog "Permission":
           - button "Reject"
-    `).ok).toBe(true);
+    `).ok,
+    ).toBe(true);
   });
 
   it('requires the listed children to keep their relative order', () => {
@@ -42,9 +47,12 @@ describe('matchSemanticSnapshot', () => {
   });
 
   it('asserts only the flags that are listed', () => {
-    expect(match('- button "Approve" [focused]', snapshot([
-      node('n1', 'button', 'Approve', { state: { focused: true, disabled: true } }),
-    ])).ok).toBe(true);
+    expect(
+      match(
+        '- button "Approve" [focused]',
+        snapshot([node('n1', 'button', 'Approve', { state: { focused: true, disabled: true } })]),
+      ).ok,
+    ).toBe(true);
   });
 
   it('fails when a listed flag is not set', () => {
@@ -57,14 +65,18 @@ describe('matchSemanticSnapshot', () => {
   });
 
   it('supports negated flags', () => {
-    expect(match(`
+    expect(
+      match(`
       - dialog "Permission":
           - button "Reject" [!focused]
-    `).ok).toBe(true);
-    expect(match(`
+    `).ok,
+    ).toBe(true);
+    expect(
+      match(`
       - dialog "Permission":
           - button "Approve" [!focused]
-    `).ok).toBe(false);
+    `).ok,
+    ).toBe(false);
   });
 
   it('compares valued flags as text', () => {
@@ -121,7 +133,9 @@ describe('matchSemanticSnapshot', () => {
   });
 
   it('scopes matching to the inside of a node, excluding the node itself', () => {
-    const patterns = parseSemanticSnapshot(['- button "Approve" [focused]', '- button "Reject"'].join('\n'));
+    const patterns = parseSemanticSnapshot(
+      ['- button "Approve" [focused]', '- button "Reject"'].join('\n'),
+    );
     expect(
       matchSemanticSnapshot(patterns, permissionDialog(), { rootId: 'n1', includeRoot: false }).ok,
     ).toBe(true);
@@ -132,15 +146,22 @@ describe('matchSemanticSnapshot', () => {
 
   it('reports an empty level when scoping into a node with no children', () => {
     const patterns = parseSemanticSnapshot('- button "Approve"');
-    const result = matchSemanticSnapshot(patterns, permissionDialog(), { rootId: 'n3', includeRoot: false });
+    const result = matchSemanticSnapshot(patterns, permissionDialog(), {
+      rootId: 'n3',
+      includeRoot: false,
+    });
     expect(result.ok).toBe(false);
     expect(result.mismatch?.reason).toMatch(/no nodes exist at this level/u);
   });
 
   it('scopes matching to a subtree', () => {
-    const result = matchSemanticSnapshot(parseSemanticSnapshot('- button "Approve" [focused]'), permissionDialog(), {
-      rootId: 'n3',
-    });
+    const result = matchSemanticSnapshot(
+      parseSemanticSnapshot('- button "Approve" [focused]'),
+      permissionDialog(),
+      {
+        rootId: 'n3',
+      },
+    );
     expect(result.ok).toBe(true);
   });
 
@@ -151,10 +172,18 @@ describe('matchSemanticSnapshot', () => {
   it('gives up rather than hang on a pathological pattern', () => {
     const wide = snapshot([
       node('root', 'list', 'L'),
-      ...Array.from({ length: 40 }, (_, index) => node(`n${index}`, 'listitem', 'same', { parentId: 'root' })),
+      ...Array.from({ length: 40 }, (_, index) =>
+        node(`n${index}`, 'listitem', 'same', { parentId: 'root' }),
+      ),
     ]);
-    const expected = ['- list "L":', ...Array.from({ length: 30 }, () => '    - listitem "same"'), '    - listitem "missing"'].join('\n');
-    const result = matchSemanticSnapshot(parseSemanticSnapshot(expected), wide, { maxComparisons: 500 });
+    const expected = [
+      '- list "L":',
+      ...Array.from({ length: 30 }, () => '    - listitem "same"'),
+      '    - listitem "missing"',
+    ].join('\n');
+    const result = matchSemanticSnapshot(parseSemanticSnapshot(expected), wide, {
+      maxComparisons: 500,
+    });
     expect(result.ok).toBe(false);
   });
 });

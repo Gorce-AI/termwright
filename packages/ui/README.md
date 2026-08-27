@@ -7,12 +7,12 @@ turns what you do in it into a test.
 
 One app, four views and three data sources:
 
-| View | What it shows |
-|---|---|
-| Specs | the project tree, history dots, duration, filtering and Run/Stop controls |
-| Runner | one execution rail on the left; terminal, inspector, semantic view, logs and timeline on the right |
-| Runs | retained run manifests and per-test trace replay |
-| Settings | local workspace, replay, motion and source-editor preferences plus sanitized diagnostics |
+| View     | What it shows                                                                                      |
+| -------- | -------------------------------------------------------------------------------------------------- |
+| Specs    | the project tree, history dots, duration, filtering and Run/Stop controls                          |
+| Runner   | one execution rail on the left; terminal, inspector, semantic view, logs and timeline on the right |
+| Runs     | retained run manifests and per-test trace replay                                                   |
+| Settings | local workspace, replay, motion and source-editor preferences plus sanitized diagnostics           |
 
 **Live** mode combines lifecycle from the Native Host journal with terminal
 events from the worker-side live bridge. **Post-mortem** mode opens a `.twtrace`
@@ -116,9 +116,9 @@ application logs, then closes the bridge before fixture teardown. A custom
 session owner can use that public Node-only boundary directly:
 
 ```ts
-import {connectLiveSession} from '@termwright/ui/live-client';
+import { connectLiveSession } from '@termwright/ui/live-client';
 
-const live = connectLiveSession(harness, {testId});
+const live = connectLiveSession(harness, { testId });
 try {
   // Drive the TerminalHarness normally.
 } finally {
@@ -164,7 +164,7 @@ than as a picture of it. The inspector is a real `role="tree"`: rows are
 rows, Right opens a node and steps in, Left closes it and steps out, Enter hands
 focus back to the terminal.
 
-The **Semantic view** tab goes further: it renders the *application's* tree as
+The **Semantic view** tab goes further: it renders the _application's_ tree as
 accessible HTML. A terminal `button` becomes a `<button>`, a modal `dialog`
 becomes `role="dialog" aria-modal="true"`, a `list` becomes `<ul role="list">`,
 and state becomes the matching attributes — `aria-disabled`, `aria-checked`
@@ -280,7 +280,7 @@ two hundred.
 Warn, error and fatal records also mark the timeline. Clicking a mark jumps
 there — in a replay it moves the terminal, the inspector and the log panel to
 that moment; the strip always shows the whole recording, because "jump to the
-error" is what you want *before* you have scrubbed near it.
+error" is what you want _before_ you have scrubbed near it.
 
 A followed file line carries **no level**: severity is never inferred from the
 text of a line, so a log that happens to contain the word `ERROR` produces no

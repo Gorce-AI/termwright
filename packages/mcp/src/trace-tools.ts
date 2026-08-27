@@ -102,7 +102,9 @@ function projectMeta(meta: TraceMeta): z.output<typeof metaSchema> {
     semanticTree: meta.semanticTree,
     ...(meta.durationMs === undefined ? {} : { durationMs: meta.durationMs }),
     ...(meta.truncated === undefined ? {} : { truncated: meta.truncated }),
-    ...(meta.exit === undefined ? {} : { exit: { code: meta.exit.code, signal: meta.exit.signal } }),
+    ...(meta.exit === undefined
+      ? {}
+      : { exit: { code: meta.exit.code, signal: meta.exit.signal } }),
   };
 }
 
@@ -131,7 +133,9 @@ function projectStep(step: StepSummary, index: number): z.output<typeof stepSche
 }
 
 /** Cast markers, which the writer emits one per step. */
-async function markersOf(reader: TraceReader): Promise<readonly { timeMs: number; label: string }[]> {
+async function markersOf(
+  reader: TraceReader,
+): Promise<readonly { timeMs: number; label: string }[]> {
   const markers: { timeMs: number; label: string }[] = [];
   for await (const event of reader.castEvents()) {
     if (event.code === 'm') markers.push({ timeMs: event.timeMs, label: event.data });
@@ -231,7 +235,11 @@ async function frameAt(trace: OpenTrace, timeMs: number, logWindow = 20): Promis
  */
 async function resolveTime(
   trace: OpenTrace,
-  args: { timeMs?: number | undefined; stepIndex?: number | undefined; marker?: string | undefined },
+  args: {
+    timeMs?: number | undefined;
+    stepIndex?: number | undefined;
+    marker?: string | undefined;
+  },
 ): Promise<number> {
   const given = [args.timeMs, args.stepIndex, args.marker].filter((value) => value !== undefined);
   if (given.length !== 1) {
@@ -315,7 +323,9 @@ const open = defineTool({
           ? 'exit: not recorded'
           : `exit: code=${String(exit.code)} signal=${String(exit.signal)}`,
         ...(meta.truncated === true ? ['warning: recording was truncated at a size limit'] : []),
-        ...(evicted === null ? [] : [`note: closed ${evicted} to stay within the open-trace ceiling`]),
+        ...(evicted === null
+          ? []
+          : [`note: closed ${evicted} to stay within the open-trace ceiling`]),
       ].join('\n'),
       data: {
         traceId: trace.id,
@@ -375,7 +385,9 @@ const overview = defineTool({
       );
     }
     if (markers.length > 0) {
-      lines.push(`markers: ${markers.map((marker) => `${marker.timeMs}ms ${marker.label}`).join(', ')}`);
+      lines.push(
+        `markers: ${markers.map((marker) => `${marker.timeMs}ms ${marker.label}`).join(', ')}`,
+      );
     }
     const crash = crashOfMeta(meta);
     if (crash !== undefined) lines.push(renderCrash(crash));
@@ -459,12 +471,16 @@ const frame = defineTool({
         columns: reconstructed.columns,
         rows: reconstructed.rows,
         semanticRevision: reconstructed.semanticRevision,
-        semanticTree: reconstructed.semantic === null ? ('unavailable' as const) : ('available' as const),
+        semanticTree:
+          reconstructed.semantic === null ? ('unavailable' as const) : ('available' as const),
         step: step === null ? null : projectStep(step, 0),
         refs:
           reconstructed.semantic === null
             ? []
-            : refEntries(reconstructed.semantic).map((entry) => ({ ...entry, flags: [...entry.flags] })),
+            : refEntries(reconstructed.semantic).map((entry) => ({
+                ...entry,
+                flags: [...entry.flags],
+              })),
         logs: reconstructed.logs.map((entry) => ({ ...entry })),
         compact,
         ...(image === undefined ? {} : { screenshot: describeImage(image) }),
@@ -491,7 +507,9 @@ const diff = defineTool({
       .min(0)
       .max(500)
       .optional()
-      .describe(`application log entries between the two moments; default ${LOG_LIMITS.maxPerResponse}, 0 to skip`),
+      .describe(
+        `application log entries between the two moments; default ${LOG_LIMITS.maxPerResponse}, 0 to skip`,
+      ),
   },
   outputSchema: {
     traceId: z.string(),
@@ -515,7 +533,10 @@ const diff = defineTool({
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
     if (args.toMs < args.fromMs) {
-      throw usageError('toMs must not precede fromMs', 'swap the two, or read trace.overview for the timeline');
+      throw usageError(
+        'toMs must not precede fromMs',
+        'swap the two, or read trace.overview for the timeline',
+      );
     }
     const trace = context.traces.get(args.traceId);
     const before = await frameAt(trace, args.fromMs, 0);

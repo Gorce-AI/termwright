@@ -1,9 +1,9 @@
 ---
-"termwright": patch
-"@termwright/run-history": patch
-"@termwright/run-journal-transport": patch
-"@termwright/test": patch
-"@termwright/probe-ink": patch
+'termwright': patch
+'@termwright/run-history': patch
+'@termwright/run-journal-transport': patch
+'@termwright/test': patch
+'@termwright/probe-ink': patch
 ---
 
 Keep the local Native Host profile at two Vitest forks while retaining capacity

@@ -42,7 +42,14 @@ describe('UiHub', () => {
   it('replays the backlog to a client that connects late', () => {
     const hub = new UiHub();
     hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
-    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
+    hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 't1',
+      title: 'login',
+      file: '/repo/a.test.ts',
+      startedAt: 1,
+    });
     const client = new RecordingClient();
     hub.addClient(client);
     expect(client.received.map((message) => message.type)).toEqual(['run-start', 'test-start']);
@@ -91,11 +98,22 @@ describe('UiHub', () => {
   it('drops output before lifecycle messages when the backlog fills', () => {
     const hub = new UiHub({ maxMessages: 3 });
     hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
-    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
+    hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 't1',
+      title: 'login',
+      file: '/repo/a.test.ts',
+      startedAt: 1,
+    });
     hub.publish(output('a'));
     hub.publish(output('b'));
     hub.publish(output('c'));
-    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'test-start', 'diagnostic-gap']);
+    expect(hub.backlog.map((message) => message.type)).toEqual([
+      'run-start',
+      'test-start',
+      'diagnostic-gap',
+    ]);
     expect(hub.backlog.at(-1)).toMatchObject({
       source: 'ui-hub',
       droppedMessages: 3,
@@ -107,7 +125,10 @@ describe('UiHub', () => {
     for (let index = 0; index < 10; index += 1) hub.publish(output('0123456789'));
     const bytes = hub.backlog
       .filter((message) => message.type === 'output')
-      .reduce((total, message) => total + (message.type === 'output' ? message.dataB64.length : 0), 0);
+      .reduce(
+        (total, message) => total + (message.type === 'output' ? message.dataB64.length : 0),
+        0,
+      );
     expect(bytes).toBeLessThanOrEqual(16);
     expect(hub.backlog.find((message) => message.type === 'diagnostic-gap')).toMatchObject({
       source: 'ui-hub',
@@ -129,7 +150,10 @@ describe('UiHub', () => {
         label: 'app.log',
       });
     }
-    const encodedBytes = hub.backlog.reduce((total, message) => total + encodeMessage(message).length, 0);
+    const encodedBytes = hub.backlog.reduce(
+      (total, message) => total + encodeMessage(message).length,
+      0,
+    );
     expect(encodedBytes).toBeLessThanOrEqual(512);
     expect(hub.backlog.some((message) => message.type === 'diagnostic-gap')).toBe(true);
   });
@@ -173,7 +197,10 @@ describe('UiHub', () => {
       columns: 80,
       rows: 24,
     });
-    const encodedBytes = hub.backlog.reduce((total, message) => total + encodeMessage(message).length, 0);
+    const encodedBytes = hub.backlog.reduce(
+      (total, message) => total + encodeMessage(message).length,
+      0,
+    );
     expect(encodedBytes).toBeLessThanOrEqual(512);
     expect(hub.backlog).toEqual([expect.objectContaining({ type: 'diagnostic-gap' })]);
   });
@@ -182,7 +209,19 @@ describe('UiHub', () => {
     const hub = new UiHub({ maxMessages: 3, maxBacklogBytes: 256 });
     hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
     expect(hub.runBusy).toBe(true);
-    hub.publish({ v: 1, type: 'run-end', summary: { verdict: 'skipped', total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } });
+    hub.publish({
+      v: 1,
+      type: 'run-end',
+      summary: {
+        verdict: 'skipped',
+        total: 0,
+        passed: 0,
+        failed: 0,
+        skipped: 0,
+        flaky: 0,
+        durationMs: 1,
+      },
+    });
     for (let index = 0; index < 10; index += 1) hub.publish(output(`flood-${index}`));
     expect(hub.runBusy).toBe(false);
   });
@@ -198,7 +237,9 @@ describe('UiHub', () => {
         buffered = 9;
       },
       bufferedBytes: () => buffered,
-      close: (found) => { reason = found; },
+      close: (found) => {
+        reason = found;
+      },
     });
     const healthy = new RecordingClient();
     hub.addClient(healthy);
@@ -234,7 +275,11 @@ describe('UiHub', () => {
     hub.publish(output('evict me'));
     hub.publish(output('evict me too'));
 
-    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session', 'diagnostic-gap']);
+    expect(hub.backlog.map((message) => message.type)).toEqual([
+      'run-start',
+      'session',
+      'diagnostic-gap',
+    ]);
     expect(hub.backlog[1]).toMatchObject({
       type: 'session',
       terminalProfile: 'default',
@@ -289,10 +334,26 @@ describe('attachSession', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
     attachSession(hub, session);
-    session.semantic(snapshot(1, [node({
-      id: 'password', role: 'textbox', name: 'Password',
-      value: { status: 'known', value: secret, sensitivity: 'sensitive', evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app' } },
-    })]));
+    session.semantic(
+      snapshot(1, [
+        node({
+          id: 'password',
+          role: 'textbox',
+          name: 'Password',
+          value: {
+            status: 'known',
+            value: secret,
+            sensitivity: 'sensitive',
+            evidence: {
+              source: 'application',
+              method: 'native',
+              strength: 'authoritative',
+              providerId: 'app',
+            },
+          },
+        }),
+      ]),
+    );
     const published = JSON.stringify(hub.backlog);
     expect(published).not.toContain(secret);
     expect(published).toContain('withheld');
@@ -376,7 +437,13 @@ describe('attachSession', () => {
     session.clock = 42;
     session.output('ready');
     expect(afterAnnouncement(hub)).toEqual([
-      { v: 1, type: 'output', sessionId: 's1', dataB64: toBase64(new TextEncoder().encode('ready')), t: 42 },
+      {
+        v: 1,
+        type: 'output',
+        sessionId: 's1',
+        dataB64: toBase64(new TextEncoder().encode('ready')),
+        t: 42,
+      },
     ]);
   });
 
@@ -429,7 +496,12 @@ describe('application logs', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
     attachSession(hub, session);
-    session.logRecord({ level: 'warn', message: 'pool exhausted', logger: 'db.pool', attrs: { size: 10 } });
+    session.logRecord({
+      level: 'warn',
+      message: 'pool exhausted',
+      logger: 'db.pool',
+      attrs: { size: 10 },
+    });
 
     const message = afterAnnouncement(hub)[0];
     expect(message?.type === 'app-log' && message.level).toBe('warn');
@@ -448,11 +520,30 @@ describe('application logs', () => {
   it('evicts logs before lifecycle messages, and never run-start', () => {
     const hub = new UiHub({ maxMessages: 3 });
     hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
-    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
+    hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 't1',
+      title: 'login',
+      file: '/repo/a.test.ts',
+      startedAt: 1,
+    });
     for (let index = 0; index < 20; index += 1) {
-      hub.publish({ v: 1, type: 'app-log', sessionId: 's1', t: index, source: 'file', level: null, message: 'noise' });
+      hub.publish({
+        v: 1,
+        type: 'app-log',
+        sessionId: 's1',
+        t: index,
+        source: 'file',
+        level: null,
+        message: 'noise',
+      });
     }
-    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'test-start', 'diagnostic-gap']);
+    expect(hub.backlog.map((message) => message.type)).toEqual([
+      'run-start',
+      'test-start',
+      'diagnostic-gap',
+    ]);
     expect(hub.backlog.at(-1)).toMatchObject({
       source: 'ui-hub',
       droppedMessages: 20,
@@ -466,7 +557,12 @@ describe('driver actions', () => {
     const session = new FakeSession('s1');
     attachSession(hub, session);
     session.clock = 120;
-    session.action({ api: 'click', ok: true, selector: 'getByRole("button")', ref: 'semantic:n8@42' });
+    session.action({
+      api: 'click',
+      ok: true,
+      selector: 'getByRole("button")',
+      ref: 'semantic:n8@42',
+    });
 
     expect(afterAnnouncement(hub)).toEqual([
       {
@@ -527,29 +623,80 @@ describe('driver actions', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
     attachSession(hub, session);
-    const checkpoint = { sessionId: 's1', contractId: 's1:0', epoch: 0, sequence: 7, screenRevision: 3, semanticRevision: 7, pairedScreenRevision: 3 };
-    const evidence = { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } as const;
+    const checkpoint = {
+      sessionId: 's1',
+      contractId: 's1:0',
+      epoch: 0,
+      sequence: 7,
+      screenRevision: 3,
+      semanticRevision: 7,
+      pairedScreenRevision: 3,
+    };
+    const evidence = {
+      source: 'application',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'app.router',
+    } as const;
     session.action({
-      api: 'drag', ok: false, error: 'input-mode-disabled',
+      api: 'drag',
+      ok: false,
+      error: 'input-mode-disabled',
       actionability: {
-        actionable: false, intent: { kind: 'drag', targetRef: 'semantic:save@7' }, checkpoint,
+        actionable: false,
+        intent: { kind: 'drag', targetRef: 'semantic:save@7' },
+        checkpoint,
         requirements: [
-          { condition: { kind: 'pointer-input', target: 'save@7' }, checkpoint, observation: { status: 'known', value: true, evidence }, verdict: 'satisfied' },
-          { condition: { kind: 'mouse-input-enabled', target: 'save@7' }, checkpoint, observation: { status: 'known', value: false, evidence }, verdict: 'unsatisfied' },
+          {
+            condition: { kind: 'pointer-input', target: 'save@7' },
+            checkpoint,
+            observation: { status: 'known', value: true, evidence },
+            verdict: 'satisfied',
+          },
+          {
+            condition: { kind: 'mouse-input-enabled', target: 'save@7' },
+            checkpoint,
+            observation: { status: 'known', value: false, evidence },
+            verdict: 'unsatisfied',
+          },
         ],
-        reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'semantic:save@7' },
+        reason: {
+          code: 'input-mode-disabled',
+          message: 'Mouse reporting is disabled',
+          targetRef: 'semantic:save@7',
+        },
       },
     });
 
     expect(afterAnnouncement(hub)[0]).toMatchObject({
-      type: 'action', ok: false,
+      type: 'action',
+      ok: false,
       actionability: {
-        actionable: false, kind: 'drag', contractId: 's1:0', sequence: 7,
+        actionable: false,
+        kind: 'drag',
+        contractId: 's1:0',
+        sequence: 7,
         requirements: [
-          { kind: 'pointer-input', target: 'save@7', verdict: 'satisfied', observation: 'known', evidence },
-          { kind: 'mouse-input-enabled', target: 'save@7', verdict: 'unsatisfied', observation: 'known', evidence },
+          {
+            kind: 'pointer-input',
+            target: 'save@7',
+            verdict: 'satisfied',
+            observation: 'known',
+            evidence,
+          },
+          {
+            kind: 'mouse-input-enabled',
+            target: 'save@7',
+            verdict: 'unsatisfied',
+            observation: 'known',
+            evidence,
+          },
         ],
-        reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'semantic:save@7' },
+        reason: {
+          code: 'input-mode-disabled',
+          message: 'Mouse reporting is disabled',
+          targetRef: 'semantic:save@7',
+        },
       },
     });
   });
@@ -583,7 +730,15 @@ describe('what survives a new run', () => {
       type: 'tests-discovered',
       tests: [{ id: '/repo/a.test.ts::logs in', title: 'logs in', file: '/repo/a.test.ts' }],
     });
-    hub.publish({ v: 1, type: 'test-end', id: 't1', status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 });
+    hub.publish({
+      v: 1,
+      type: 'test-end',
+      id: 't1',
+      status: 'passed',
+      durationMs: 1,
+      flaky: false,
+      lostLogRecords: 0,
+    });
 
     hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 });
 
@@ -677,9 +832,10 @@ describe('what survives a new run', () => {
     }
     expect(hub.backlog).toHaveLength(3);
     expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session', 'session']);
-    expect(hub.backlog.filter((message) => message.type === 'session').map((message) => message.sessionId)).toEqual([
-      's8',
-      's9',
-    ]);
+    expect(
+      hub.backlog
+        .filter((message) => message.type === 'session')
+        .map((message) => message.sessionId),
+    ).toEqual(['s8', 's9']);
   });
 });

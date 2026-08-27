@@ -12,7 +12,7 @@ an instrumented application.
 ```ts
 const app = await terminal.launch({
   command: [process.execPath, appFile],
-  logs: [{path: 'var/editor.log', label: 'editor'}],
+  logs: [{ path: 'var/editor.log', label: 'editor' }],
 });
 ```
 
@@ -28,7 +28,7 @@ await expect(app).toHaveLogged({
   message: /saved in \d+ms/,
 });
 
-expect(app.logs.filter({minLevel: 'warn'})).toEqual([]);
+expect(app.logs.filter({ minLevel: 'warn' })).toEqual([]);
 ```
 
 Queries can filter by level, source, label, logger, message, or session id.
@@ -45,12 +45,12 @@ Applications can use the public diagnostics channel without a Termwright
 dependency:
 
 ```ts
-import {channel} from 'node:diagnostics_channel';
+import { channel } from 'node:diagnostics_channel';
 
 channel('termwright:log').publish({
   level: 'error',
   message: 'save failed',
-  attrs: {documentId: '42'},
+  attrs: { documentId: '42' },
 });
 ```
 

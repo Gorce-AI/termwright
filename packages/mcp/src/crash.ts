@@ -68,7 +68,11 @@ export type CrashProjection = z.output<typeof crashSchema>;
 function boundLines(lines: readonly string[]): { lines: string[]; truncated: boolean } {
   const kept = lines.slice(-CRASH_LIMITS.maxScreenTailLines);
   return {
-    lines: kept.map((line) => (line.length > CRASH_LIMITS.maxLineChars ? `${line.slice(0, CRASH_LIMITS.maxLineChars)}…` : line)),
+    lines: kept.map((line) =>
+      line.length > CRASH_LIMITS.maxLineChars
+        ? `${line.slice(0, CRASH_LIMITS.maxLineChars)}…`
+        : line,
+    ),
     truncated: kept.length < lines.length,
   };
 }
@@ -108,7 +112,9 @@ export function renderCrash(crash: CrashProjection): string {
   ];
   if (crash.recentInputs.length > 0) {
     const inputs = crash.recentInputs.map((input) =>
-      input.preview === undefined ? `${input.kind}(${input.bytes}B)` : `${input.kind} ${JSON.stringify(input.preview)}`,
+      input.preview === undefined
+        ? `${input.kind}(${input.bytes}B)`
+        : `${input.kind} ${JSON.stringify(input.preview)}`,
     );
     lines.push(`last input: ${inputs.join(' ')}`);
   }

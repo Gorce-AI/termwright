@@ -41,21 +41,23 @@ describe('ControlChannel', () => {
     const close = vi.spyOn(server, 'close');
     let endpoint = '';
 
-    await expect(ControlChannel.listen({
-      platform: 'win32',
-      createServer: () => server,
-      listen: async (listener, candidateEndpoint) => {
-        endpoint = candidateEndpoint;
-        await new Promise<void>((resolve, reject) => {
-          listener.once('error', reject);
-          listener.listen(candidateEndpoint, () => {
-            listener.removeListener('error', reject);
-            resolve();
+    await expect(
+      ControlChannel.listen({
+        platform: 'win32',
+        createServer: () => server,
+        listen: async (listener, candidateEndpoint) => {
+          endpoint = candidateEndpoint;
+          await new Promise<void>((resolve, reject) => {
+            listener.once('error', reject);
+            listener.listen(candidateEndpoint, () => {
+              listener.removeListener('error', reject);
+              resolve();
+            });
           });
-        });
-        throw new Error('injected named-pipe listen failure');
-      },
-    })).rejects.toThrow('injected named-pipe listen failure');
+          throw new Error('injected named-pipe listen failure');
+        },
+      }),
+    ).rejects.toThrow('injected named-pipe listen failure');
 
     expect(endpoint).toMatch(/^\\\\\.\\pipe\\termwright-control-/u);
     expect(close).toHaveBeenCalledOnce();
@@ -125,16 +127,18 @@ describe('ControlChannel', () => {
   it('bounds silent authentication candidates without locking out the fixture', async () => {
     const channel = await ControlChannel.listen();
     open.push(channel);
-    const strangers = await Promise.all(Array.from({ length: 9 }, async () => {
-      const socket = connect(channel.endpoint);
-      const closed = new Promise<void>((resolve) => socket.once('close', resolve));
-      // Server-side candidate eviction can surface as ECONNRESET on named
-      // pipes. It is the expected lifecycle under test, never an unhandled
-      // process error.
-      socket.on('error', () => undefined);
-      await once(socket, 'connect');
-      return { socket, closed };
-    }));
+    const strangers = await Promise.all(
+      Array.from({ length: 9 }, async () => {
+        const socket = connect(channel.endpoint);
+        const closed = new Promise<void>((resolve) => socket.once('close', resolve));
+        // Server-side candidate eviction can surface as ECONNRESET on named
+        // pipes. It is the expected lifecycle under test, never an unhandled
+        // process error.
+        socket.on('error', () => undefined);
+        await once(socket, 'connect');
+        return { socket, closed };
+      }),
+    );
 
     const fixture = await attachFixture(channel);
     expect(channel.connected).toBe(true);
@@ -251,7 +255,9 @@ describe('ControlChannel', () => {
 
     const rerender = channel.rerender({ label: 'paired' }, 1_000);
     const { commandId } = await command;
-    fixture.write(`${JSON.stringify({ v: 1, commandId: commandId + 1, type: 'ok', semanticRevision: 3 })}\n`);
+    fixture.write(
+      `${JSON.stringify({ v: 1, commandId: commandId + 1, type: 'ok', semanticRevision: 3 })}\n`,
+    );
     fixture.write(`${JSON.stringify({ v: 1, commandId, type: 'ok', semanticRevision: 17 })}\n`);
 
     await expect(rerender).resolves.toBe(17);

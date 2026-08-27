@@ -15,7 +15,15 @@ interface FakeRenderable extends ObservableNode {
 
 type FakeCommand =
   | { action: 'render'; renderable: FakeRenderable }
-  | { action: 'pushScissorRect'; x: number; y: number; width: number; height: number; screenX: number; screenY: number }
+  | {
+      action: 'pushScissorRect';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      screenX: number;
+      screenY: number;
+    }
   | { action: 'popScissorRect' };
 
 function node(name: string, num: number, extra: Partial<FakeRenderable> = {}): FakeRenderable {
@@ -80,7 +88,12 @@ function fakeRuntime(children: FakeRenderable[], commands: FakeCommand[]) {
         root.currentRenderable = undefined;
       } else if (command.action === 'pushScissorRect') {
         buffer.pushScissorRect(command.x, command.y, command.width, command.height);
-        renderer.pushHitGridScissorRect(command.screenX, command.screenY, command.width, command.height);
+        renderer.pushHitGridScissorRect(
+          command.screenX,
+          command.screenY,
+          command.width,
+          command.height,
+        );
       } else {
         buffer.popScissorRect();
         renderer.popHitGridScissorRect();
@@ -114,22 +127,35 @@ describe('OpenTUI runtime observer', () => {
     runtime.render();
 
     expect(observer.provider.getCommitted(1)?.intended.get('2')).toEqual({
-      row: 3, column: 4, width: 12, height: 2,
+      row: 3,
+      column: 4,
+      width: 12,
+      height: 2,
     });
     expect(observer.provider.getCommitted(1)?.visible.get('2')).toEqual({
-      row: 3, column: 4, width: 12, height: 2,
+      row: 3,
+      column: 4,
+      width: 12,
+      height: 2,
     });
     expect(observer.violation).toBeUndefined();
   });
 
   it('samples geometry after render hooks and before a later sibling mutates it', () => {
     const first = node('CustomRenderable', 2, { screenX: 1 });
-    first.render = () => { (first as { screenX?: number }).screenX = 5; };
+    first.render = () => {
+      (first as { screenX?: number }).screenX = 5;
+    };
     const second = node('CustomRenderable', 3);
-    second.render = () => { (first as { screenX?: number }).screenX = 20; };
+    second.render = () => {
+      (first as { screenX?: number }).screenX = 20;
+    };
     const runtime = fakeRuntime(
       [first, second],
-      [{ action: 'render', renderable: first }, { action: 'render', renderable: second }],
+      [
+        { action: 'render', renderable: first },
+        { action: 'render', renderable: second },
+      ],
     );
     const observer = installRuntimeObserver(runtime.renderer);
 
@@ -140,19 +166,25 @@ describe('OpenTUI runtime observer', () => {
 
   it('uses output-buffer coordinates for nested clipping', () => {
     const child = node('CustomRenderable', 2, { screenX: 5, screenY: 2, width: 10, height: 4 });
-    const runtime = fakeRuntime([child], [
-      { action: 'pushScissorRect', x: 2, y: 1, screenX: 22, screenY: 11, width: 6, height: 3 },
-      { action: 'pushScissorRect', x: 4, y: 2, screenX: 24, screenY: 12, width: 3, height: 2 },
-      { action: 'render', renderable: child },
-      { action: 'popScissorRect' },
-      { action: 'popScissorRect' },
-    ]);
+    const runtime = fakeRuntime(
+      [child],
+      [
+        { action: 'pushScissorRect', x: 2, y: 1, screenX: 22, screenY: 11, width: 6, height: 3 },
+        { action: 'pushScissorRect', x: 4, y: 2, screenX: 24, screenY: 12, width: 3, height: 2 },
+        { action: 'render', renderable: child },
+        { action: 'popScissorRect' },
+        { action: 'popScissorRect' },
+      ],
+    );
     const observer = installRuntimeObserver(runtime.renderer);
 
     runtime.render();
 
     expect(observer.provider.getCommitted(1)?.visible.get('2')).toEqual({
-      row: 2, column: 5, width: 2, height: 2,
+      row: 2,
+      column: 5,
+      width: 2,
+      height: 2,
     });
   });
 
@@ -179,10 +211,16 @@ describe('OpenTUI runtime observer', () => {
     runtime.render();
 
     expect(observer.provider.getCommitted(1)?.intended.get('2')).toEqual({
-      row: 2, column: 90, width: 5, height: 1,
+      row: 2,
+      column: 90,
+      width: 5,
+      height: 1,
     });
     expect(observer.provider.getCommitted(1)?.visible.get('2')).toEqual({
-      row: 2, column: 80, width: 0, height: 0,
+      row: 2,
+      column: 80,
+      width: 0,
+      height: 0,
     });
   });
 
@@ -261,7 +299,9 @@ describe('OpenTUI runtime observer', () => {
     const custom = node('CustomRenderable', 2);
     custom.render = vi.fn();
     const runtime = fakeRuntime([custom], [{ action: 'render', renderable: custom }]);
-    const violation = vi.fn(() => { throw new Error('diagnostic consumer failed'); });
+    const violation = vi.fn(() => {
+      throw new Error('diagnostic consumer failed');
+    });
     const observer = installRuntimeObserver(runtime.renderer, violation);
     (runtime.renderer as unknown as { width: number }).width = Number.NaN;
 
@@ -291,13 +331,17 @@ describe('OpenTUI runtime observer', () => {
     const custom = node('CustomRenderable', 2);
     const runtime = fakeRuntime([custom], [{ action: 'render', renderable: custom }]);
     const rootRender = runtime.root.render;
-    const clear = (runtime.renderer as unknown as { clearHitGridScissorRects(): void }).clearHitGridScissorRects;
+    const clear = (runtime.renderer as unknown as { clearHitGridScissorRects(): void })
+      .clearHitGridScissorRects;
     const observer = installRuntimeObserver(runtime.renderer);
 
     observer.dispose();
 
     expect(runtime.root.render).toBe(rootRender);
-    expect((runtime.renderer as unknown as { clearHitGridScissorRects(): void }).clearHitGridScissorRects).toBe(clear);
+    expect(
+      (runtime.renderer as unknown as { clearHitGridScissorRects(): void })
+        .clearHitGridScissorRects,
+    ).toBe(clear);
     expect(runtime.listenerCount()).toBe(0);
   });
 

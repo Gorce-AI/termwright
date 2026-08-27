@@ -14,7 +14,10 @@ describe('@termwright/opentui annotations', () => {
       actions: ['activate'],
       labelledBy: [label],
     });
-    const entries = (globalThis as Record<PropertyKey, unknown>)[SYMBOL] as WeakMap<object, { name?: string }>;
+    const entries = (globalThis as Record<PropertyKey, unknown>)[SYMBOL] as WeakMap<
+      object,
+      { name?: string }
+    >;
     expect(entries.get(renderable)).toMatchObject({ name: 'Deploy' });
 
     const disposeLatest = describeRenderable(renderable, { role: 'button', name: 'Redeploy' });
@@ -53,7 +56,10 @@ describe('@termwright/opentui annotations', () => {
       value: 'forged',
       bounds: { row: 0, column: 0, width: 99, height: 99 },
     } as unknown as OpenTuiSemanticAnnotation);
-    const entries = (globalThis as Record<PropertyKey, unknown>)[SYMBOL] as WeakMap<object, Record<string, unknown>>;
+    const entries = (globalThis as Record<PropertyKey, unknown>)[SYMBOL] as WeakMap<
+      object,
+      Record<string, unknown>
+    >;
     const stored = entries.get(renderable);
     expect(stored).toMatchObject({ role: 'textbox', name: 'Message' });
     expect(stored).not.toHaveProperty('state');

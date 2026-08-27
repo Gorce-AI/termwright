@@ -66,12 +66,7 @@ describe('logs.jsonl', () => {
     await recordWithLogs(dir);
 
     const entries = await readLogFile(dir);
-    expect(entries.map((entry) => entry.source)).toEqual([
-      'adapter',
-      'adapter',
-      'file',
-      'adapter',
-    ]);
+    expect(entries.map((entry) => entry.source)).toEqual(['adapter', 'adapter', 'file', 'adapter']);
 
     const warn = entries[1];
     expect(warn).toMatchObject({
@@ -113,11 +108,7 @@ describe('logs.jsonl', () => {
       expect(trace.meta.logs).toEqual({
         count: 4,
         dropped: 0,
-        sources: [
-          { label: 'http' },
-          { label: 'db.log', path: '/var/log/db.log' },
-          { label: 'db' },
-        ],
+        sources: [{ label: 'http' }, { label: 'db.log', path: '/var/log/db.log' }, { label: 'db' }],
         levels: { info: 1, warn: 1, error: 1 },
       });
     } finally {
@@ -163,11 +154,7 @@ describe('logs.jsonl', () => {
       expect(trace.meta.logs).toMatchObject({ count: 3, dropped: 7 });
       const entries = await readLogFile(dir);
       // The end is what survives — that is where the failure lives.
-      expect(entries.map((entry) => entry.message)).toEqual([
-        'entry 7',
-        'entry 8',
-        'entry 9',
-      ]);
+      expect(entries.map((entry) => entry.message)).toEqual(['entry 7', 'entry 8', 'entry 9']);
     } finally {
       await trace.close();
     }
@@ -237,10 +224,7 @@ describe('logs.jsonl', () => {
         { label: 'app', path: '/srv/b/app.log' },
       ]);
       const entries = await readLogFile(dir);
-      expect(entries.map((entry) => entry.path)).toEqual([
-        '/srv/a/app.log',
-        '/srv/b/app.log',
-      ]);
+      expect(entries.map((entry) => entry.path)).toEqual(['/srv/a/app.log', '/srv/b/app.log']);
     } finally {
       await trace.close();
     }

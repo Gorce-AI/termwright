@@ -167,9 +167,9 @@ describe('terminal profile', () => {
     // The profile is a string read off disk, so a prototype key must not
     // resolve to anything — `resolveProfileId` checks own properties.
     for (const hostile of ['__proto__', 'constructor', 'toString']) {
-      await expect(
-        frameFromAnsi('x', { columns: 4, rows: 1, profile: hostile }),
-      ).rejects.toThrow(/does not know/);
+      await expect(frameFromAnsi('x', { columns: 4, rows: 1, profile: hostile })).rejects.toThrow(
+        /does not know/,
+      );
     }
   });
 

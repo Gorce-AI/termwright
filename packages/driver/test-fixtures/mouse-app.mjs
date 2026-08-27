@@ -3,7 +3,9 @@
  * decoded mouse report. Used to prove that a `click()` reaches the child as the
  * bytes a real terminal would send.
  */
-process.stdout.write(`${process.env['TERMWRIGHT_MOUSE_DRAG'] === '1' ? '\x1b[?1002h' : '\x1b[?1000h'}\x1b[?1006h`);
+process.stdout.write(
+  `${process.env['TERMWRIGHT_MOUSE_DRAG'] === '1' ? '\x1b[?1002h' : '\x1b[?1000h'}\x1b[?1006h`,
+);
 process.stdout.write('MOUSE ON\r\nDRAG DESTINATION\r\n');
 
 process.stdin.setRawMode?.(true);

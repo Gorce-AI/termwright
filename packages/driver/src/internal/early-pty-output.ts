@@ -8,7 +8,7 @@ export class EarlyPtyOutputOverflowError extends Error {
   constructor(readonly observedBytes: number) {
     super(
       `PTY emitted more than ${MAX_EARLY_PTY_OUTPUT_BYTES} bytes before its output journal was attached ` +
-      `(observed at least ${observedBytes}); session startup was aborted without dropping bytes`,
+        `(observed at least ${observedBytes}); session startup was aborted without dropping bytes`,
     );
   }
 }

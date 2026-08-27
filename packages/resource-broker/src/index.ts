@@ -204,13 +204,17 @@ export class ResourceBroker {
     this.#assertIdentity(options);
     const resources = normalizeVector(options.resources, this.#capacities);
     if (!Number.isFinite(options.deadline)) {
-      return Promise.reject(new ResourceBrokerError('invalid-request', 'resource deadline must be finite'));
+      return Promise.reject(
+        new ResourceBrokerError('invalid-request', 'resource deadline must be finite'),
+      );
     }
     if (options.signal?.aborted === true) {
       return Promise.reject(new ResourceBrokerError('aborted', 'resource acquisition was aborted'));
     }
     if (options.deadline <= this.#now()) {
-      return Promise.reject(new ResourceBrokerError('deadline-exceeded', 'resource deadline already expired'));
+      return Promise.reject(
+        new ResourceBrokerError('deadline-exceeded', 'resource deadline already expired'),
+      );
     }
 
     const attempt = this.#attempt(options);
@@ -219,7 +223,9 @@ export class ResourceBroker {
     }
     if (this.#queue.length >= this.#maxQueued) {
       this.#deleteAttemptIfEmpty(attempt);
-      return Promise.reject(new ResourceBrokerError('queue-full', `resource queue reached ${this.#maxQueued}`));
+      return Promise.reject(
+        new ResourceBrokerError('queue-full', `resource queue reached ${this.#maxQueued}`),
+      );
     }
 
     return new Promise<ResourceLease>((resolve, reject) => {
@@ -231,18 +237,31 @@ export class ResourceBroker {
         resolve,
         reject,
         signal: options.signal,
-        onAbort: options.signal === undefined ? undefined : () => {
-          this.#cancel(pending, new ResourceBrokerError('aborted', 'resource acquisition was aborted'));
-        },
+        onAbort:
+          options.signal === undefined
+            ? undefined
+            : () => {
+                this.#cancel(
+                  pending,
+                  new ResourceBrokerError('aborted', 'resource acquisition was aborted'),
+                );
+              },
         timer: undefined,
         settled: false,
       };
       attempt.queued += 1;
       this.#queue.push(pending);
-      if (pending.onAbort !== undefined) options.signal?.addEventListener('abort', pending.onAbort, { once: true });
-      pending.timer = this.#timers.set(() => {
-        this.#cancel(pending, new ResourceBrokerError('deadline-exceeded', 'resource acquisition deadline expired'));
-      }, Math.max(0, options.deadline - this.#now()));
+      if (pending.onAbort !== undefined)
+        options.signal?.addEventListener('abort', pending.onAbort, { once: true });
+      pending.timer = this.#timers.set(
+        () => {
+          this.#cancel(
+            pending,
+            new ResourceBrokerError('deadline-exceeded', 'resource acquisition deadline expired'),
+          );
+        },
+        Math.max(0, options.deadline - this.#now()),
+      );
       this.#drain();
     });
   }
@@ -253,12 +272,16 @@ export class ResourceBroker {
       capacities: this.#capacities,
       used: Object.freeze({ ...this.#used }),
       active: Object.freeze([...this.#leases.values()].map((lease) => freezeLeaseSnapshot(lease))),
-      queue: Object.freeze(this.#queue.map((pending, index) => Object.freeze({
-        ...pending.identity,
-        position: index + 1,
-        resources: Object.freeze({ ...pending.resources }),
-        deadline: pending.deadline,
-      }))),
+      queue: Object.freeze(
+        this.#queue.map((pending, index) =>
+          Object.freeze({
+            ...pending.identity,
+            position: index + 1,
+            resources: Object.freeze({ ...pending.resources }),
+            deadline: pending.deadline,
+          }),
+        ),
+      ),
     });
   }
 
@@ -308,7 +331,10 @@ export class ResourceBroker {
       const leaseId = `lease:${this.#randomUUID()}`;
       if (!this.#leases.has(leaseId)) return leaseId;
     }
-    throw new ResourceBrokerError('invalid-request', 'resource lease id source repeatedly collided');
+    throw new ResourceBrokerError(
+      'invalid-request',
+      'resource lease id source repeatedly collided',
+    );
   }
 
   #publicLease(record: LeaseRecord): ResourceLease {
@@ -333,21 +359,35 @@ export class ResourceBroker {
     attachments: readonly ResourceAttachment[],
   ): Promise<void> {
     const lease = this.#authenticatedLease(identity, leaseId, token);
-    lease.attachments = Object.freeze(attachments.map((attachment) => {
-      if (!RESOURCE_CLASSES.includes(attachment.resource)) {
-        throw new ResourceBrokerError('invalid-request', `unknown attachment resource ${String(attachment.resource)}`);
-      }
-      if (lease.resources[attachment.resource] === 0) {
-        throw new ResourceBrokerError('invalid-request', `lease ${leaseId} does not own ${attachment.resource}`);
-      }
-      if (attachment.pid !== undefined && (!Number.isInteger(attachment.pid) || attachment.pid <= 0)) {
-        throw new ResourceBrokerError('invalid-request', 'attachment pid must be a positive integer');
-      }
-      if (attachment.sessionId !== undefined && attachment.sessionId.length === 0) {
-        throw new ResourceBrokerError('invalid-request', 'attachment sessionId cannot be empty');
-      }
-      return Object.freeze({ ...attachment });
-    }));
+    lease.attachments = Object.freeze(
+      attachments.map((attachment) => {
+        if (!RESOURCE_CLASSES.includes(attachment.resource)) {
+          throw new ResourceBrokerError(
+            'invalid-request',
+            `unknown attachment resource ${String(attachment.resource)}`,
+          );
+        }
+        if (lease.resources[attachment.resource] === 0) {
+          throw new ResourceBrokerError(
+            'invalid-request',
+            `lease ${leaseId} does not own ${attachment.resource}`,
+          );
+        }
+        if (
+          attachment.pid !== undefined &&
+          (!Number.isInteger(attachment.pid) || attachment.pid <= 0)
+        ) {
+          throw new ResourceBrokerError(
+            'invalid-request',
+            'attachment pid must be a positive integer',
+          );
+        }
+        if (attachment.sessionId !== undefined && attachment.sessionId.length === 0) {
+          throw new ResourceBrokerError('invalid-request', 'attachment sessionId cannot be empty');
+        }
+        return Object.freeze({ ...attachment });
+      }),
+    );
   }
 
   async #release(identity: AttemptIdentity, leaseId: string, token: string): Promise<void> {
@@ -376,7 +416,10 @@ export class ResourceBroker {
       const pending = this.#queue[0];
       if (pending === undefined) return;
       if (pending.deadline <= this.#now()) {
-        this.#cancel(pending, new ResourceBrokerError('deadline-exceeded', 'resource acquisition deadline expired'));
+        this.#cancel(
+          pending,
+          new ResourceBrokerError('deadline-exceeded', 'resource acquisition deadline expired'),
+        );
         continue;
       }
       const attempt = this.#attempts.get(pending.identity.attemptId);
@@ -396,7 +439,8 @@ export class ResourceBroker {
     pending.settled = true;
     attempt.queued -= 1;
     this.#timers.clear(pending.timer);
-    if (pending.onAbort !== undefined) pending.signal?.removeEventListener('abort', pending.onAbort);
+    if (pending.onAbort !== undefined)
+      pending.signal?.removeEventListener('abort', pending.onAbort);
   }
 
   #cancel(pending: PendingAcquire, error: ResourceBrokerError): void {
@@ -416,19 +460,23 @@ export class ResourceBroker {
     for (const lease of attempt.leases.values()) {
       for (const resource of RESOURCE_CLASSES) next[resource] += lease.resources[resource];
     }
-    for (const resource of RESOURCE_CLASSES) this.#used[resource] += next[resource] - attempt.reservation[resource];
+    for (const resource of RESOURCE_CLASSES)
+      this.#used[resource] += next[resource] - attempt.reservation[resource];
     attempt.reservation = next;
   }
 
   #reclaimWorker(workerId: string, epoch: number): void {
-    const pending = this.#queue.filter((entry) =>
-      entry.identity.workerId === workerId && entry.identity.workerEpoch === epoch,
+    const pending = this.#queue.filter(
+      (entry) => entry.identity.workerId === workerId && entry.identity.workerEpoch === epoch,
     );
     for (const entry of pending) {
-      this.#cancel(entry, new ResourceBrokerError('stale-worker', 'worker disconnected while waiting for resources'));
+      this.#cancel(
+        entry,
+        new ResourceBrokerError('stale-worker', 'worker disconnected while waiting for resources'),
+      );
     }
-    const attempts = [...this.#attempts.values()].filter((attempt) =>
-      attempt.identity.workerId === workerId && attempt.identity.workerEpoch === epoch,
+    const attempts = [...this.#attempts.values()].filter(
+      (attempt) => attempt.identity.workerId === workerId && attempt.identity.workerEpoch === epoch,
     );
     for (const attempt of attempts) {
       for (const lease of [...attempt.leases.values()]) {
@@ -448,8 +496,8 @@ export class ResourceBroker {
   }
 
   #fits(additional: Record<ResourceClass, number>): boolean {
-    return RESOURCE_CLASSES.every((resource) =>
-      this.#used[resource] + additional[resource] <= this.#capacities[resource],
+    return RESOURCE_CLASSES.every(
+      (resource) => this.#used[resource] + additional[resource] <= this.#capacities[resource],
     );
   }
 
@@ -458,18 +506,23 @@ export class ResourceBroker {
     assertWorker(identity.workerId, identity.workerEpoch);
     const current = this.#workers.get(identity.workerId);
     if (current?.epoch !== identity.workerEpoch) {
-      throw new ResourceBrokerError('stale-worker', `worker ${identity.workerId} epoch ${identity.workerEpoch} is not active`);
+      throw new ResourceBrokerError(
+        'stale-worker',
+        `worker ${identity.workerId} epoch ${identity.workerEpoch} is not active`,
+      );
     }
   }
 
   #assertRun(runId: RunId): void {
-    if (runId !== this.#runId) throw new ResourceBrokerError('stale-run', `run ${runId} is not active`);
+    if (runId !== this.#runId)
+      throw new ResourceBrokerError('stale-run', `run ${runId} is not active`);
   }
 }
 
 function normalizeCapacities(capacities: ResourceCapacities): Record<ResourceClass, number> {
   const normalized = ZERO();
-  for (const resource of RESOURCE_CLASSES) normalized[resource] = positiveInteger(capacities[resource], resource, true);
+  for (const resource of RESOURCE_CLASSES)
+    normalized[resource] = positiveInteger(capacities[resource], resource, true);
   return normalized;
 }
 
@@ -490,7 +543,8 @@ function normalizeVector(
     normalized[resource] = units;
     total += units;
   }
-  if (total === 0) throw new ResourceBrokerError('invalid-request', 'resource request cannot be empty');
+  if (total === 0)
+    throw new ResourceBrokerError('invalid-request', 'resource request cannot be empty');
   for (const key of Object.keys(vector)) {
     if (!(RESOURCE_CLASSES as readonly string[]).includes(key)) {
       throw new ResourceBrokerError('invalid-request', `unknown resource class ${key}`);
@@ -501,7 +555,10 @@ function normalizeVector(
 
 function positiveInteger(value: number, name: string, allowZero = false): number {
   if (!Number.isSafeInteger(value) || value < (allowZero ? 0 : 1)) {
-    throw new ResourceBrokerError('invalid-request', `${name} must be a ${allowZero ? 'non-negative' : 'positive'} integer`);
+    throw new ResourceBrokerError(
+      'invalid-request',
+      `${name} must be a ${allowZero ? 'non-negative' : 'positive'} integer`,
+    );
   }
   return value;
 }
@@ -516,9 +573,11 @@ function assertWorker(workerId: string, epoch: number): void {
 }
 
 function sameWorker(left: WorkerIdentity, right: WorkerIdentity): boolean {
-  return left.runId === right.runId
-    && left.workerId === right.workerId
-    && left.workerEpoch === right.workerEpoch;
+  return (
+    left.runId === right.runId &&
+    left.workerId === right.workerId &&
+    left.workerEpoch === right.workerEpoch
+  );
 }
 
 function sameAttempt(left: AttemptIdentity, right: AttemptIdentity): boolean {

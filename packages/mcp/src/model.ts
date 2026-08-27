@@ -9,7 +9,13 @@
  */
 import type { TerminalHarness } from '@termwright/driver';
 import { SEMANTIC_ROLES } from '@termwright/protocol';
-import type { Rect, SemanticNode, SemanticRole, SemanticSnapshot, SemanticState } from '@termwright/protocol';
+import type {
+  Rect,
+  SemanticNode,
+  SemanticRole,
+  SemanticSnapshot,
+  SemanticState,
+} from '@termwright/protocol';
 
 export { SEMANTIC_ROLES };
 export type { Rect, SemanticNode, SemanticRole, SemanticSnapshot, SemanticState };
@@ -29,11 +35,8 @@ type RoleDrift = Exclude<DriverRole, SemanticRole> | Exclude<SemanticRole, Drive
  * the protocol's list, so a silent drift would let an agent ask for a role the
  * driver can never match.
  */
-export const ROLES_ARE_COMPLETE: [RoleDrift] extends [never] ? true : ['role drift', RoleDrift] = true as [
-  RoleDrift,
-] extends [never]
-  ? true
-  : ['role drift', RoleDrift];
+export const ROLES_ARE_COMPLETE: [RoleDrift] extends [never] ? true : ['role drift', RoleDrift] =
+  true as [RoleDrift] extends [never] ? true : ['role drift', RoleDrift];
 
 /** State flags an agent may filter on; the value type follows {@link SemanticState}. */
 export const FILTERABLE_STATES = [

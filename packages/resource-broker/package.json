@@ -9,13 +9,26 @@
     "directory": "packages/resource-broker"
   },
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./transport": { "types": "./dist/transport.d.ts", "import": "./dist/transport.js" },
-    "./vitest": { "types": "./dist/vitest.d.ts", "import": "./dist/vitest.js" }
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
   },
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./transport": {
+      "types": "./dist/transport.d.ts",
+      "import": "./dist/transport.js"
+    },
+    "./vitest": {
+      "types": "./dist/vitest.d.ts",
+      "import": "./dist/vitest.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/transport.ts src/vitest.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
@@ -28,7 +41,9 @@
     "vitest": "4.1.11"
   },
   "peerDependenciesMeta": {
-    "vitest": { "optional": true }
+    "vitest": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@termwright/local-transport": "workspace:*",

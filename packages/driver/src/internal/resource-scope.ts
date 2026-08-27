@@ -12,7 +12,10 @@ interface RegisteredResource {
 export class ResourceCleanupError extends AggregateError {
   readonly failedResources: readonly string[];
 
-  constructor(scope: string, failures: readonly { readonly name: string; readonly error: unknown }[]) {
+  constructor(
+    scope: string,
+    failures: readonly { readonly name: string; readonly error: unknown }[],
+  ) {
     super(
       failures.map(({ name, error }) => new Error(`failed to dispose ${name}`, { cause: error })),
       `${scope} cleanup failed`,

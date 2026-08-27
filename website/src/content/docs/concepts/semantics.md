@@ -12,14 +12,14 @@ semantic tree.
 
 ## Screen and semantics answer different questions
 
-| Question | Source |
-| --- | --- |
-| What characters and styles were rendered? | Terminal grid |
-| Did the program enable mouse or paste modes? | Terminal emulator |
-| Which element is a button named Save? | Semantic tree |
-| Which node is focused or selected? | Framework state |
-| Is a node clipped by the viewport? | Qualified framework geometry, when available |
-| Which node receives a pointer at this cell? | Exact framework hit test, when available |
+| Question                                     | Source                                       |
+| -------------------------------------------- | -------------------------------------------- |
+| What characters and styles were rendered?    | Terminal grid                                |
+| Did the program enable mouse or paste modes? | Terminal emulator                            |
+| Which element is a button named Save?        | Semantic tree                                |
+| Which node is focused or selected?           | Framework state                              |
+| Is a node clipped by the viewport?           | Qualified framework geometry, when available |
+| Which node receives a pointer at this cell?  | Exact framework hit test, when available     |
 
 Use both sources when both rendering and meaning matter.
 

@@ -12,8 +12,21 @@ function tree(nodes: readonly Partial<SemanticNode>[]): SemanticIndex {
     rows: 24,
     rootIds: ['root'],
     nodes: nodes.map((node) => ({ role: 'generic', name: '', ...node }) as SemanticNode),
-    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    coordinateSpace: {
+      status: 'known',
+      value: 'viewport-cells',
+      evidence: {
+        source: 'driver',
+        method: 'native',
+        strength: 'authoritative',
+        providerId: 'test',
+      },
+    },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
   return new SemanticIndex(snapshot);
 }
@@ -29,15 +42,42 @@ const dialog = tree([
     testId: 'approve primary',
     state: { focused: true },
   },
-  { id: 'b2', parentId: 'd1', role: 'button', name: 'Reject', testId: 'reject', state: { disabled: true } },
+  {
+    id: 'b2',
+    parentId: 'd1',
+    role: 'button',
+    name: 'Reject',
+    testId: 'reject',
+    state: { disabled: true },
+  },
   { id: 'l1', parentId: 'root', role: 'text', name: 'Your name' },
-  { id: 'i1', parentId: 'root', role: 'textbox', name: '', value: { status: 'known', value: 'Ada', sensitivity: 'public', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } }, labelledBy: ['l1'] },
+  {
+    id: 'i1',
+    parentId: 'root',
+    role: 'textbox',
+    name: '',
+    value: {
+      status: 'known',
+      value: 'Ada',
+      sensitivity: 'public',
+      evidence: {
+        source: 'driver',
+        method: 'native',
+        strength: 'authoritative',
+        providerId: 'test',
+      },
+    },
+    labelledBy: ['l1'],
+  },
   { id: 'b3', parentId: 'root', role: 'button', name: 'Approve' },
 ]);
 
 describe('matchSemantic', () => {
   it('matches by role and name', () => {
-    const matches = matchSemantic(dialog, roleQuery('button', textMatcher('Approve', true), {}).steps);
+    const matches = matchSemantic(
+      dialog,
+      roleQuery('button', textMatcher('Approve', true), {}).steps,
+    );
     expect(matches.map((node) => node.id)).toEqual(['b1', 'b3']);
   });
 
@@ -47,21 +87,34 @@ describe('matchSemantic', () => {
   });
 
   it('matches pseudo-class state', () => {
-    expect(matchSemantic(dialog, parseSelector('button:focused').steps).map((n) => n.id)).toEqual(['b1']);
-    expect(matchSemantic(dialog, parseSelector('button:disabled').steps).map((n) => n.id)).toEqual(['b2']);
+    expect(matchSemantic(dialog, parseSelector('button:focused').steps).map((n) => n.id)).toEqual([
+      'b1',
+    ]);
+    expect(matchSemantic(dialog, parseSelector('button:disabled').steps).map((n) => n.id)).toEqual([
+      'b2',
+    ]);
   });
 
   it('matches #testId and .class tokens', () => {
     expect(matchSemantic(dialog, parseSelector('#reject').steps).map((n) => n.id)).toEqual(['b2']);
     // '.class' is provisional: it matches a token of testId (or of the name),
     // while '#id' still requires the whole testId to match.
-    expect(matchSemantic(dialog, parseSelector('button.primary').steps).map((n) => n.id)).toEqual(['b1']);
-    expect(matchSemantic(dialog, parseSelector('button.Approve').steps).map((n) => n.id)).toEqual(['b1', 'b3']);
+    expect(matchSemantic(dialog, parseSelector('button.primary').steps).map((n) => n.id)).toEqual([
+      'b1',
+    ]);
+    expect(matchSemantic(dialog, parseSelector('button.Approve').steps).map((n) => n.id)).toEqual([
+      'b1',
+      'b3',
+    ]);
     expect(matchSemantic(dialog, parseSelector('#approve').steps)).toHaveLength(0);
   });
 
   it('scopes matching to a subtree', () => {
-    const scoped = matchSemantic(dialog, roleQuery('button', textMatcher('Approve', true), {}).steps, 'd1');
+    const scoped = matchSemantic(
+      dialog,
+      roleQuery('button', textMatcher('Approve', true), {}).steps,
+      'd1',
+    );
     expect(scoped.map((node) => node.id)).toEqual(['b1']);
   });
 

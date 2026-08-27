@@ -1,5 +1,5 @@
-import {stat} from 'node:fs/promises';
-import {join} from 'node:path';
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const root = new URL('../public/images/runner/', import.meta.url);
 const expected = [

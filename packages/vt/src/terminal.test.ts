@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { createTerminal, loadSerializeAddon } from './terminal.js';
-import { DEFAULT_PROFILE, resolveProfile, resolveProfileId, TERMINAL_PROFILES } from './profiles.js';
+import {
+  DEFAULT_PROFILE,
+  resolveProfile,
+  resolveProfileId,
+  TERMINAL_PROFILES,
+} from './profiles.js';
 import { isAmbiguousWidth } from './unicode.js';
 import type { TerminalProfileLike } from './profiles.js';
 
 /** Writes text and reports the columns each cell of the first row occupies. */
 async function widths(text: string, profile?: TerminalProfileLike): Promise<number[]> {
-  const { terminal } = createTerminal({ columns: 40, rows: 4, ...(profile !== undefined ? { profile } : {}) });
+  const { terminal } = createTerminal({
+    columns: 40,
+    rows: 4,
+    ...(profile !== undefined ? { profile } : {}),
+  });
   await new Promise<void>((resolve) => terminal.write(text, resolve));
   const line = terminal.buffer.active.getLine(0);
   const out: number[] = [];
@@ -28,7 +37,11 @@ async function columnsUsed(text: string, profile?: TerminalProfileLike): Promise
 describe('createTerminal', () => {
   it('activates the profile as the terminal’s Unicode version', () => {
     for (const [id, profile] of Object.entries(TERMINAL_PROFILES)) {
-      const { terminal, profile: applied } = createTerminal({ columns: 10, rows: 2, profile: id as never });
+      const { terminal, profile: applied } = createTerminal({
+        columns: 10,
+        rows: 2,
+        profile: id as never,
+      });
       // The active version names the profile, so a replay can ask a terminal
       // which profile it is using.
       expect(terminal.unicode.activeVersion).toBe(id);
@@ -151,7 +164,11 @@ describe('the portable half', () => {
       },
     };
 
-    applyProfile(unicode as never, new unicode11.Unicode11Addon() as never, TERMINAL_PROFILES['iterm2-ambiguous-wide']);
+    applyProfile(
+      unicode as never,
+      new unicode11.Unicode11Addon() as never,
+      TERMINAL_PROFILES['iterm2-ambiguous-wide'],
+    );
 
     // Registering alone changes nothing: the provider must also be activated.
     expect(active).toBe('iterm2-ambiguous-wide');

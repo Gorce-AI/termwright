@@ -92,7 +92,9 @@ export class TraceStore {
    * recover from a server that has wedged itself on old readers. The evicted
    * handle is reported so the caller knows why it stopped working.
    */
-  async open(path: string): Promise<{ readonly trace: OpenTrace; readonly evicted: string | null }> {
+  async open(
+    path: string,
+  ): Promise<{ readonly trace: OpenTrace; readonly evicted: string | null }> {
     let size: number;
     try {
       const stats = await stat(path);

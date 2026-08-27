@@ -51,7 +51,10 @@ export interface ScreenshotRequest {
  * run at all (no font, no rasteriser) is `capability-unavailable` — each with the
  * next thing to try.
  */
-export function renderScreenshot(frame: ScreenFrame, request: ScreenshotRequest = {}): ScreenshotImage {
+export function renderScreenshot(
+  frame: ScreenFrame,
+  request: ScreenshotRequest = {},
+): ScreenshotImage {
   const scale = request.scale ?? 1;
   if (!Number.isFinite(scale) || scale <= 0 || scale > SCREENSHOT_LIMITS.maxScale) {
     throw new McpError(

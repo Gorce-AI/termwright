@@ -22,9 +22,7 @@ interface BunGlobal {
 }
 
 /** Register the Ink entry replacement before the application's first import. */
-export function installBunPreload(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
+export function installBunPreload(env: Record<string, string | undefined> = process.env): boolean {
   if (!isInstrumented(env)) return false;
   const bun = (globalThis as { Bun?: BunGlobal }).Bun;
   if (bun === undefined) return false;

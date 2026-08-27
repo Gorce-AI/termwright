@@ -38,7 +38,9 @@ export function formatRef(nodeId: string, revision: number): SemanticLocatorRef 
 }
 
 /** Splits a semantic ref back into its parts; screen refs are rejected. */
-export function parseRef(ref: string): { readonly nodeId: string; readonly revision: number } | null {
+export function parseRef(
+  ref: string,
+): { readonly nodeId: string; readonly revision: number } | null {
   const match = /^semantic:([^@\s]+)@(\d+)$/u.exec(ref);
   if (match === null) return null;
   const nodeId = match[1];
@@ -80,7 +82,9 @@ export function formatNodeLine(entry: RefEntry): string {
 }
 
 /** Depth-first walk of a snapshot in document order, roots first. */
-export function walkSnapshot(snapshot: SemanticSnapshot): readonly { node: SemanticNode; depth: number }[] {
+export function walkSnapshot(
+  snapshot: SemanticSnapshot,
+): readonly { node: SemanticNode; depth: number }[] {
   const children = new Map<string, SemanticNode[]>();
   const byId = new Map<string, SemanticNode>();
   for (const node of snapshot.nodes) {
@@ -110,7 +114,9 @@ export function walkSnapshot(snapshot: SemanticSnapshot): readonly { node: Seman
 
 /** Turns a snapshot into ref entries in document order. */
 export function refEntries(snapshot: SemanticSnapshot): readonly RefEntry[] {
-  return walkSnapshot(snapshot).map(({ node, depth }) => toRefEntry(node, snapshot.revision, depth));
+  return walkSnapshot(snapshot).map(({ node, depth }) =>
+    toRefEntry(node, snapshot.revision, depth),
+  );
 }
 
 /** Projects a single node into a {@link RefEntry}. */
@@ -124,12 +130,18 @@ export function toRefEntry(node: SemanticNode, revision: number, depth = 0): Ref
     ...(visibleRect.status === 'known' ? { bounds: visibleRect.value } : {}),
     flags: stateFlags(node.state),
     ...(node.testId === undefined ? {} : { testId: node.testId }),
-    ...(node.value?.status === 'known' && node.value.sensitivity === 'public' ? { value: node.value.value } : {}),
+    ...(node.value?.status === 'known' && node.value.sensitivity === 'public'
+      ? { value: node.value.value }
+      : {}),
     ...(node.scroll?.status === 'known'
-      ? { applicationScroll: `${node.scroll.value.axis}:${node.scroll.value.offset}+${node.scroll.value.viewport}/${node.scroll.value.extent}` }
+      ? {
+          applicationScroll: `${node.scroll.value.axis}:${node.scroll.value.offset}+${node.scroll.value.viewport}/${node.scroll.value.extent}`,
+        }
       : {}),
     ...(node.paintedRegion?.status === 'known'
-      ? { paintedRegion: `${formatBounds(node.paintedRegion.value.regionBounds)}:${node.paintedRegion.value.spans.length}-spans` }
+      ? {
+          paintedRegion: `${formatBounds(node.paintedRegion.value.regionBounds)}:${node.paintedRegion.value.spans.length}-spans`,
+        }
       : {}),
   };
 }

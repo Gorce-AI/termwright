@@ -11,7 +11,12 @@ import { afterEach, describe, expect } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { DiagnosticCode, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
-import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
+import {
+  CONFORMANCE_FIXTURES,
+  createSessionPool,
+  ptyAvailable,
+  rejection,
+} from '../support/pty.js';
 
 const sessions = createSessionPool();
 const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
@@ -64,7 +69,9 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     await terminal.press('Enter');
     await terminal.waitForText('HANGING');
 
-    const error = (await rejection(terminal.waitForShellPrompt({ timeout: 600 }))) as TermwrightError;
+    const error = (await rejection(
+      terminal.waitForShellPrompt({ timeout: 600 }),
+    )) as TermwrightError;
     expect(error.code).toBe('timeout');
     expect(error.diagnostics.screenExcerpt).toContain('HANGING');
     // Structural rather than textual: the wait must not have concluded
@@ -81,13 +88,18 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     await terminal.waitForQuiet({ quietMs: 150 });
 
     expect(terminal.screen().text()).toContain('PROMPT APP');
-    const error = (await rejection(terminal.waitForShellPrompt({ timeout: 100 }))) as TermwrightError;
+    const error = (await rejection(
+      terminal.waitForShellPrompt({ timeout: 100 }),
+    )) as TermwrightError;
     expect(error.code).toBe('capability-unavailable');
     expect(strategies(terminal)).toEqual([]);
   });
 
   it('is available to an uninstrumented program with no prompt at all', async () => {
-    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), { columns: 60, rows: 20 });
+    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
+      columns: 60,
+      rows: 20,
+    });
     await terminal.waitForText('GENERIC READY');
     await terminal.waitForQuiet();
 
@@ -106,7 +118,9 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     // still on the grid — but readiness is a claim about the *future*: that the
     // program will accept input. A dead one will not, so this must fail rather
     // than hand back a promise the next press() would break.
-    const error = (await rejection(terminal.waitForShellPrompt({ timeout: 500 }))) as TermwrightError;
+    const error = (await rejection(
+      terminal.waitForShellPrompt({ timeout: 500 }),
+    )) as TermwrightError;
     expect(error.code).toBe('process-exited');
 
     // The waits that assert an *observation* keep working after exit, on
@@ -119,7 +133,10 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
   it("does not hand the runner's environment to the child by default", async () => {
     process.env['CONFORMANCE_ECHO'] = 'leaked';
     try {
-      const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), { columns: 60, rows: 20 });
+      const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
+        columns: 60,
+        rows: 20,
+      });
       await terminal.waitForText('env: unset');
       expect(terminal.screen().text()).not.toContain('env: leaked');
     } finally {
@@ -128,7 +145,10 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
   });
 
   it('hands the child the documented allowlist and nothing more', async () => {
-    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), { columns: 60, rows: 20 });
+    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
+      columns: 60,
+      rows: 20,
+    });
 
     // Withholding secrets must not cost the child the variables it genuinely
     // needs: a program that lost PATH or TERM fails much later, in ways that
@@ -141,38 +161,51 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
     // the wrong question: a Windows runner does have `HOME` (bash sets it) and
     // the driver still, correctly, does not forward it.
     await terminal.waitForText('allow: PATH=yes');
-    const line = terminal.screen().text().split('\n').find((row) => row.startsWith('allow: ')) ?? '';
+    const line =
+      terminal
+        .screen()
+        .text()
+        .split('\n')
+        .find((row) => row.startsWith('allow: ')) ?? '';
     expect(line).toContain(`${process.platform === 'win32' ? 'USERPROFILE' : 'HOME'}=yes`);
 
     // `TERM` and `COLORTERM` are not forwarded but *set*: the child's terminal
     // is the driver's emulator, whose capabilities are known exactly. So the
     // assertion is on the values, on every platform — a Windows runner has no
     // `TERM` of its own to inherit, and the child must still be told.
-    const term = terminal.screen().text().split('\n').find((row) => row.startsWith('term: ')) ?? '';
+    const term =
+      terminal
+        .screen()
+        .text()
+        .split('\n')
+        .find((row) => row.startsWith('term: ')) ?? '';
     expect(term.trim()).toBe('term: xterm-256color/truecolor');
     expect(terminal.screen().text()).toContain('env: unset');
   });
 
-  resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })('passes what the caller declares, in either mode', async () => {
-    const replaced = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
-      columns: 60,
-      rows: 20,
-      env: { CONFORMANCE_ECHO: 'declared' },
-    });
-    await replaced.waitForText('env: declared');
-
-    process.env['CONFORMANCE_ECHO'] = 'inherited';
-    try {
-      const inherited = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
+  resourceAwareIt.resources({ terminals: 2, traceWriters: 0 })(
+    'passes what the caller declares, in either mode',
+    async () => {
+      const replaced = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
         columns: 60,
         rows: 20,
-        envMode: 'inherit',
+        env: { CONFORMANCE_ECHO: 'declared' },
       });
-      await inherited.waitForText('env: inherited');
-    } finally {
-      delete process.env['CONFORMANCE_ECHO'];
-    }
-  });
+      await replaced.waitForText('env: declared');
+
+      process.env['CONFORMANCE_ECHO'] = 'inherited';
+      try {
+        const inherited = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
+          columns: 60,
+          rows: 20,
+          envMode: 'inherit',
+        });
+        await inherited.waitForText('env: inherited');
+      } finally {
+        delete process.env['CONFORMANCE_ECHO'];
+      }
+    },
+  );
 
   it('still instruments the child in the secret-safe mode', async () => {
     // The allowlist must not cost the handshake: a semantic session has to work

@@ -72,23 +72,32 @@ describe('feature-local runtime', () => {
       { path: '/far.ts', tier: 2, definitions: defineSteps(Given('a value', vi.fn())) },
     ]);
 
-    await expect(runtime.run(
-      { text: 'a value', title: 'Given a value' },
-      context().value,
-    )).rejects.toThrow(/Ambiguous Gherkin step.*\/a\.ts.*\/b\.ts/s);
+    await expect(
+      runtime.run({ text: 'a value', title: 'Given a value' }, context().value),
+    ).rejects.toThrow(/Ambiguous Gherkin step.*\/a\.ts.*\/b\.ts/s);
   });
 
   test('validates undefined and ambiguous steps without executing bodies', () => {
     const body = vi.fn();
-    const runtime = createGherkinRuntime([{
-      path: '/steps.ts',
-      tier: 0,
-      definitions: defineSteps(Given('known', body), Given(/^duplicate$/, body), Given('duplicate', body)),
-    }]);
+    const runtime = createGherkinRuntime([
+      {
+        path: '/steps.ts',
+        tier: 0,
+        definitions: defineSteps(
+          Given('known', body),
+          Given(/^duplicate$/, body),
+          Given('duplicate', body),
+        ),
+      },
+    ]);
 
     expect(() => runtime.validate({ text: 'known', title: 'known' })).not.toThrow();
-    expect(() => runtime.validate({ text: 'missing', title: 'missing' })).toThrow(/Undefined Gherkin step/u);
-    expect(() => runtime.validate({ text: 'duplicate', title: 'duplicate' })).toThrow(/Ambiguous Gherkin step/u);
+    expect(() => runtime.validate({ text: 'missing', title: 'missing' })).toThrow(
+      /Undefined Gherkin step/u,
+    );
+    expect(() => runtime.validate({ text: 'duplicate', title: 'duplicate' })).toThrow(
+      /Ambiguous Gherkin step/u,
+    );
     expect(body).not.toHaveBeenCalled();
   });
 
@@ -96,20 +105,21 @@ describe('feature-local runtime', () => {
     const transformer = vi.fn((_value: string): string => {
       throw new Error('transformer must not run for an ambiguous step');
     });
-    const runtime = createGherkinRuntime([{
-      path: '/ambiguous.ts',
-      tier: 0,
-      definitions: defineSteps(
-        defineParameterType({ name: 'token', regexp: /\w+/, transformer }),
-        Given('a {token}', vi.fn()),
-        Given('a {token}', vi.fn()),
-      ),
-    }]);
+    const runtime = createGherkinRuntime([
+      {
+        path: '/ambiguous.ts',
+        tier: 0,
+        definitions: defineSteps(
+          defineParameterType({ name: 'token', regexp: /\w+/, transformer }),
+          Given('a {token}', vi.fn()),
+          Given('a {token}', vi.fn()),
+        ),
+      },
+    ]);
 
-    await expect(runtime.run(
-      { text: 'a value', title: 'Given a value' },
-      context().value,
-    )).rejects.toThrow(/Ambiguous Gherkin step/);
+    await expect(
+      runtime.run({ text: 'a value', title: 'Given a value' }, context().value),
+    ).rejects.toThrow(/Ambiguous Gherkin step/);
     expect(transformer).not.toHaveBeenCalled();
   });
 
@@ -135,11 +145,13 @@ describe('feature-local runtime', () => {
       {
         path: '/local.ts',
         tier: 0,
-        definitions: defineSteps(defineParameterType({
-          name: 'token',
-          regexp: /\w+/,
-          transformer: (value) => `local:${value}`,
-        })),
+        definitions: defineSteps(
+          defineParameterType({
+            name: 'token',
+            regexp: /\w+/,
+            transformer: (value) => `local:${value}`,
+          }),
+        ),
       },
       {
         path: '/global.ts',
@@ -162,19 +174,21 @@ describe('feature-local runtime', () => {
 
   test('runs scoped hooks and LIFO resource cleanup around each scenario', async () => {
     const calls: string[] = [];
-    const runtime = createGherkinRuntime([{
-      path: '/steps.ts',
-      tier: 0,
-      definitions: defineSteps(
-        Before(({ defer }) => {
-          calls.push('before');
-          defer(() => calls.push('cleanup:first'));
-          defer(() => calls.push('cleanup:last'));
-        }),
-        Given('a value', () => calls.push('step')),
-        After(() => calls.push('after')),
-      ),
-    }]);
+    const runtime = createGherkinRuntime([
+      {
+        path: '/steps.ts',
+        tier: 0,
+        definitions: defineSteps(
+          Before(({ defer }) => {
+            calls.push('before');
+            defer(() => calls.push('cleanup:first'));
+            defer(() => calls.push('cleanup:last'));
+          }),
+          Given('a value', () => calls.push('step')),
+          After(() => calls.push('after')),
+        ),
+      },
+    ]);
     const managed = createGherkinContext(context().value);
 
     await runGherkinScenario(runtime, managed, async () => {
@@ -187,16 +201,23 @@ describe('feature-local runtime', () => {
   test('runs After hooks and cleanup when a scenario fails', async () => {
     const after = vi.fn();
     const close = vi.fn();
-    const runtime = createGherkinRuntime([{
-      path: '/steps.ts',
-      tier: 0,
-      definitions: defineSteps(Before(({ use }) => use({ close })), After(after)),
-    }]);
+    const runtime = createGherkinRuntime([
+      {
+        path: '/steps.ts',
+        tier: 0,
+        definitions: defineSteps(
+          Before(({ use }) => use({ close })),
+          After(after),
+        ),
+      },
+    ]);
     const managed = createGherkinContext(context().value);
 
-    await expect(runGherkinScenario(runtime, managed, async () => {
-      throw new Error('scenario failed');
-    })).rejects.toThrow('scenario failed');
+    await expect(
+      runGherkinScenario(runtime, managed, async () => {
+        throw new Error('scenario failed');
+      }),
+    ).rejects.toThrow('scenario failed');
 
     expect(after).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
@@ -205,14 +226,16 @@ describe('feature-local runtime', () => {
   test('selects scenario hooks with Cucumber tag expressions', async () => {
     const smoke = vi.fn();
     const slow = vi.fn();
-    const runtime = createGherkinRuntime([{
-      path: '/steps.ts',
-      tier: 0,
-      definitions: defineSteps(
-        Before({ tags: '@smoke and not @slow' }, smoke),
-        Before({ tags: '@slow' }, slow),
-      ),
-    }]);
+    const runtime = createGherkinRuntime([
+      {
+        path: '/steps.ts',
+        tier: 0,
+        definitions: defineSteps(
+          Before({ tags: '@smoke and not @slow' }, smoke),
+          Before({ tags: '@slow' }, slow),
+        ),
+      },
+    ]);
     const base = context().value;
     const managed = createGherkinContext({
       ...base,

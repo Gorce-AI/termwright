@@ -159,17 +159,19 @@ export async function packTrace(dir: string, outFile: string): Promise<number> {
   const commit = await readFile(join(dir, TRACE_FILES.commit)).catch(() => null);
   if (commit === null) {
     const hasMeta = (await readFile(join(dir, TRACE_FILES.meta)).catch(() => null)) !== null;
-    throw new TraceError(hasMeta ? 'protocol-violation' : 'not-found',
-      hasMeta ? `${dir} is an incomplete .twtrace archive` : `${dir} is not a .twtrace archive`, {
+    throw new TraceError(
+      hasMeta ? 'protocol-violation' : 'not-found',
+      hasMeta ? `${dir} is an incomplete .twtrace archive` : `${dir} is not a .twtrace archive`,
+      {
         suggestion: hasMeta
           ? `Only atomically published archives containing ${TRACE_FILES.commit} can be packed.`
           : `Expected ${TRACE_FILES.meta} and ${TRACE_FILES.commit} inside the archive.`,
-      });
+      },
+    );
   }
   for (const member of ARCHIVE_MEMBERS) {
-    const bytes = member === TRACE_FILES.commit
-      ? commit
-      : await readFile(join(dir, member)).catch(() => null);
+    const bytes =
+      member === TRACE_FILES.commit ? commit : await readFile(join(dir, member)).catch(() => null);
     if (bytes === null) {
       if (member === TRACE_FILES.meta) {
         throw new TraceError('not-found', `${dir} is not a .twtrace archive`);

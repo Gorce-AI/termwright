@@ -65,12 +65,13 @@ export function buildSemanticCompletenessReport(registry) {
         unsupported: [...framework.capabilityGraph.unsupported],
       },
       extendedOrDiagnostic: {
-        annotations: framework.annotations === null
-          ? null
-          : {
-              package: framework.annotations.package,
-              apis: [...framework.annotations.apis],
-            },
+        annotations:
+          framework.annotations === null
+            ? null
+            : {
+                package: framework.annotations.package,
+                apis: [...framework.annotations.apis],
+              },
         producerFactsNotPromotedToAutomaticSessionCapabilities: producerFactsNotPromoted(framework),
       },
       applicationProvidersCanAdd: framework.capabilityGraph.applicationIntegrated.map((entry) => ({
@@ -123,9 +124,13 @@ async function main() {
   }
   const actual = await readFile(outputUrl, 'utf8').catch(() => '');
   if (actual !== expected) {
-    throw new Error('framework semantic completeness report drifted; run node scripts/generate-semantic-completeness.mjs --write');
+    throw new Error(
+      'framework semantic completeness report drifted; run node scripts/generate-semantic-completeness.mjs --write',
+    );
   }
-  process.stdout.write(`semantic completeness: ${registry.frameworks.length} exact adapter reports, zero drift\n`);
+  process.stdout.write(
+    `semantic completeness: ${registry.frameworks.length} exact adapter reports, zero drift\n`,
+  );
 }
 
 if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

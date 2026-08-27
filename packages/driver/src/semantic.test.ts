@@ -9,7 +9,12 @@ import { connect, createServer, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_LIMITS, encodeFrame, type LogRecord, type SemanticSnapshot } from '@termwright/protocol';
+import {
+  DEFAULT_LIMITS,
+  encodeFrame,
+  type LogRecord,
+  type SemanticSnapshot,
+} from '@termwright/protocol';
 import type { ProtocolViolationError } from './errors.js';
 import {
   SemanticChannel,
@@ -31,7 +36,10 @@ interface Harness {
   violations: ProtocolViolationError[];
   wireCodes: string[];
   negotiationStates: Array<{ admissionOpen: boolean; pendingHandshakes: number }>;
-  waitForNegotiationState(state: { admissionOpen: boolean; pendingHandshakes: number }): Promise<void>;
+  waitForNegotiationState(state: {
+    admissionOpen: boolean;
+    pendingHandshakes: number;
+  }): Promise<void>;
 }
 
 const open: { channel: SemanticChannel; sockets: Socket[] }[] = [];
@@ -68,39 +76,46 @@ async function createChannel(
     state: { admissionOpen: boolean; pendingHandshakes: number };
     resolve(): void;
   }> = [];
-  const channel = await SemanticChannel.listen({
-    sessionId: SESSION_ID,
-    token: TOKEN,
-    limits: DEFAULT_LIMITS,
-    acceptHello: () => accepting,
-    logBudget: { maxRecordsPerSecond: 200, burst: 500 },
-    ...(handshakeTimeoutMs === undefined ? {} : { handshakeTimeoutMs }),
-    hooks: {
-      onSnapshot: (snapshot) => snapshots.push(snapshot),
-      onLogRecord: (record) => records.push(record),
-      onCommit: () => {},
-      onFrameBegin: (revision) => frameBegins.push(revision),
-      onAttach: (attachment) => attachments.push(attachment),
-      onDisconnect: () => undefined,
-      onDiagnostic: (code, detail, about) => {
-        diagnostics.push(`${code}: ${detail}`);
-        if (about?.wireCode !== undefined) diagnosticWireCodes.push(`${code}:${about.wireCode}`);
-      },
-      onProtocolViolation: (error, wireCode) => {
-        violations.push(error);
-        wireCodes.push(wireCode);
-      },
-      onNegotiationStateChange: (state) => {
-        negotiationStates.push({ ...state });
-        for (let index = negotiationWaiters.length - 1; index >= 0; index -= 1) {
-          const waiter = negotiationWaiters[index]!;
-          if (waiter.state.admissionOpen !== state.admissionOpen || waiter.state.pendingHandshakes !== state.pendingHandshakes) continue;
-          negotiationWaiters.splice(index, 1);
-          waiter.resolve();
-        }
+  const channel = await SemanticChannel.listen(
+    {
+      sessionId: SESSION_ID,
+      token: TOKEN,
+      limits: DEFAULT_LIMITS,
+      acceptHello: () => accepting,
+      logBudget: { maxRecordsPerSecond: 200, burst: 500 },
+      ...(handshakeTimeoutMs === undefined ? {} : { handshakeTimeoutMs }),
+      hooks: {
+        onSnapshot: (snapshot) => snapshots.push(snapshot),
+        onLogRecord: (record) => records.push(record),
+        onCommit: () => {},
+        onFrameBegin: (revision) => frameBegins.push(revision),
+        onAttach: (attachment) => attachments.push(attachment),
+        onDisconnect: () => undefined,
+        onDiagnostic: (code, detail, about) => {
+          diagnostics.push(`${code}: ${detail}`);
+          if (about?.wireCode !== undefined) diagnosticWireCodes.push(`${code}:${about.wireCode}`);
+        },
+        onProtocolViolation: (error, wireCode) => {
+          violations.push(error);
+          wireCodes.push(wireCode);
+        },
+        onNegotiationStateChange: (state) => {
+          negotiationStates.push({ ...state });
+          for (let index = negotiationWaiters.length - 1; index >= 0; index -= 1) {
+            const waiter = negotiationWaiters[index]!;
+            if (
+              waiter.state.admissionOpen !== state.admissionOpen ||
+              waiter.state.pendingHandshakes !== state.pendingHandshakes
+            )
+              continue;
+            negotiationWaiters.splice(index, 1);
+            waiter.resolve();
+          }
+        },
       },
     },
-  }, dependencies);
+    dependencies,
+  );
   open.push({ channel, sockets: [] });
   return {
     channel,
@@ -115,7 +130,11 @@ async function createChannel(
     negotiationStates,
     waitForNegotiationState(state): Promise<void> {
       const current = negotiationStates.at(-1);
-      if (current?.admissionOpen === state.admissionOpen && current.pendingHandshakes === state.pendingHandshakes) return Promise.resolve();
+      if (
+        current?.admissionOpen === state.admissionOpen &&
+        current.pendingHandshakes === state.pendingHandshakes
+      )
+        return Promise.resolve();
       return new Promise<void>((resolve) => negotiationWaiters.push({ state, resolve }));
     },
   };
@@ -146,7 +165,10 @@ async function connectClient(channel: SemanticChannel): Promise<Client> {
       if (pending.length < 4) return;
       const length = pending.readUInt32BE(0);
       if (pending.length < 4 + length) return;
-      const message = JSON.parse(pending.subarray(4, 4 + length).toString('utf8')) as Record<string, unknown>;
+      const message = JSON.parse(pending.subarray(4, 4 + length).toString('utf8')) as Record<
+        string,
+        unknown
+      >;
       pending = pending.subarray(4 + length);
       const waiter = waiters.shift();
       if (waiter === undefined) queue.push(message);
@@ -174,7 +196,11 @@ async function connectClient(channel: SemanticChannel): Promise<Client> {
 }
 
 function hello(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  const requested = (overrides['capabilities'] as readonly string[] | undefined) ?? ['tree', 'states', 'render-revisions'];
+  const requested = (overrides['capabilities'] as readonly string[] | undefined) ?? [
+    'tree',
+    'states',
+    'render-revisions',
+  ];
   return {
     type: 'hello',
     protocol: 'termwright/2',
@@ -188,11 +214,18 @@ function hello(overrides: Record<string, unknown> = {}): Record<string, unknown>
 
 function snapshot(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const { nodes: _nodes, ...rest } = overrides;
-  const nodes = ((overrides['nodes'] as readonly Record<string, unknown>[] | undefined) ?? [{ id: 'n1', role: 'application', name: 'app' }])
-    .map((node) => ({
-      geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } },
-      ...node,
-    }));
+  const nodes = (
+    (overrides['nodes'] as readonly Record<string, unknown>[] | undefined) ?? [
+      { id: 'n1', role: 'application', name: 'app' },
+    ]
+  ).map((node) => ({
+    geometry: {
+      displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    },
+    ...node,
+  }));
   return {
     v: 2,
     sessionId: SESSION_ID,
@@ -200,8 +233,21 @@ function snapshot(overrides: Record<string, unknown> = {}): Record<string, unkno
     columns: 80,
     rows: 24,
     rootIds: ['n1'],
-    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: { source: 'application', method: 'declared', strength: 'authoritative', providerId: 'test' } },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    coordinateSpace: {
+      status: 'known',
+      value: 'viewport-cells',
+      evidence: {
+        source: 'application',
+        method: 'declared',
+        strength: 'authoritative',
+        providerId: 'test',
+      },
+    },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
     ...rest,
     nodes,
   };
@@ -231,10 +277,14 @@ describe('the probe lifecycle', () => {
     expect(harness.attachments[0]?.probe?.framework).toBe('test-framework');
     expect(harness.attachments[0]?.probe?.identityKind).toBe('stable');
     expect(harness.attachments[0]?.probe?.instrumentation).toEqual({
-      highestTier: 'T3', semanticClass: 'A', degradedCapabilities: [],
+      highestTier: 'T3',
+      semanticClass: 'A',
+      degradedCapabilities: [],
     });
     expect(Object.isFrozen(harness.attachments[0]?.probe?.instrumentation)).toBe(true);
-    expect(Object.isFrozen(harness.attachments[0]?.probe?.instrumentation?.degradedCapabilities)).toBe(true);
+    expect(
+      Object.isFrozen(harness.attachments[0]?.probe?.instrumentation?.degradedCapabilities),
+    ).toBe(true);
 
     client.send({ type: 'frame-begin', revision: 7 });
     await expect.poll(() => harness.frameBegins).toEqual([7]);
@@ -278,12 +328,18 @@ describe('SemanticChannel', () => {
     await harness.waitForNegotiationState({ admissionOpen: true, pendingHandshakes: 1 });
     expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: true, pendingHandshakes: 1 });
     harness.channel.closeAdmission();
-    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 1 });
+    expect(harness.negotiationStates.at(-1)).toEqual({
+      admissionOpen: false,
+      pendingHandshakes: 1,
+    });
 
     client.send(hello());
     await expect(client.next()).resolves.toMatchObject({ type: 'hello-ack' });
     expect(harness.attachments).toHaveLength(1);
-    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 0 });
+    expect(harness.negotiationStates.at(-1)).toEqual({
+      admissionOpen: false,
+      pendingHandshakes: 0,
+    });
   });
 
   it('refuses peers first seen after discovery closes', async () => {
@@ -292,7 +348,9 @@ describe('SemanticChannel', () => {
     const client = await connectClient(harness.channel);
 
     await expect(client.next()).resolves.toMatchObject({
-      type: 'error', code: 'internal', message: 'semantic adapter discovery has closed',
+      type: 'error',
+      code: 'internal',
+      message: 'semantic adapter discovery has closed',
     });
     await client.closed;
     expect(harness.attachments).toHaveLength(0);
@@ -308,10 +366,15 @@ describe('SemanticChannel', () => {
 
     await vi.advanceTimersByTimeAsync(50);
     await expect(client.next()).resolves.toMatchObject({
-      type: 'error', code: 'internal', message: 'semantic hello deadline exceeded',
+      type: 'error',
+      code: 'internal',
+      message: 'semantic hello deadline exceeded',
     });
     await client.closed;
-    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 0 });
+    expect(harness.negotiationStates.at(-1)).toEqual({
+      admissionOpen: false,
+      pendingHandshakes: 0,
+    });
   });
 
   it('bounds every pre-deadline peer and never reopens admission after one wins', async () => {
@@ -321,7 +384,10 @@ describe('SemanticChannel', () => {
     const second = await connectClient(harness.channel);
     await harness.waitForNegotiationState({ admissionOpen: true, pendingHandshakes: 2 });
     harness.channel.closeAdmission();
-    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 2 });
+    expect(harness.negotiationStates.at(-1)).toEqual({
+      admissionOpen: false,
+      pendingHandshakes: 2,
+    });
 
     first.send(hello({ adapter: { name: 'winner', version: '1.0.0' } }));
     await expect(first.next()).resolves.toMatchObject({ type: 'hello-ack' });
@@ -329,7 +395,10 @@ describe('SemanticChannel', () => {
     await expect(second.next()).resolves.toMatchObject({ type: 'error', code: 'internal' });
     await second.closed;
     expect(harness.attachments).toHaveLength(1);
-    expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: false, pendingHandshakes: 0 });
+    expect(harness.negotiationStates.at(-1)).toEqual({
+      admissionOpen: false,
+      pendingHandshakes: 0,
+    });
   });
 
   it('bounds active sockets before excess peers can allocate timers or graceful-flush state', async () => {
@@ -345,7 +414,9 @@ describe('SemanticChannel', () => {
     await excess.closed;
     expect(harness.negotiationStates.at(-1)).toEqual({ admissionOpen: true, pendingHandshakes: 4 });
     expect(admitted).toHaveLength(4);
-    expect(harness.diagnostics).toContain('endpoint-error: refused a semantic peer because 4 sockets are already active');
+    expect(harness.diagnostics).toContain(
+      'endpoint-error: refused a semantic peer because 4 sockets are already active',
+    );
   });
 
   it('rolls back its Windows named-pipe listener when listen fails', async () => {
@@ -353,21 +424,23 @@ describe('SemanticChannel', () => {
     const close = vi.spyOn(server, 'close');
     let endpoint = '';
 
-    await expect(createChannel(true, undefined, {
-      platform: 'win32',
-      createServer: () => server,
-      listen: async (listener, candidateEndpoint) => {
-        endpoint = candidateEndpoint;
-        await new Promise<void>((resolve, reject) => {
-          listener.once('error', reject);
-          listener.listen(candidateEndpoint, () => {
-            listener.removeListener('error', reject);
-            resolve();
+    await expect(
+      createChannel(true, undefined, {
+        platform: 'win32',
+        createServer: () => server,
+        listen: async (listener, candidateEndpoint) => {
+          endpoint = candidateEndpoint;
+          await new Promise<void>((resolve, reject) => {
+            listener.once('error', reject);
+            listener.listen(candidateEndpoint, () => {
+              listener.removeListener('error', reject);
+              resolve();
+            });
           });
-        });
-        throw new Error('injected named-pipe listen failure');
-      },
-    })).rejects.toThrow('injected named-pipe listen failure');
+          throw new Error('injected named-pipe listen failure');
+        },
+      }),
+    ).rejects.toThrow('injected named-pipe listen failure');
 
     expect(endpoint).toMatch(/^\\\\\.\\pipe\\termwright-/u);
     expect(close).toHaveBeenCalledOnce();
@@ -376,39 +449,91 @@ describe('SemanticChannel', () => {
 
   it('rolls back its private directory when listen fails', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-listen-fault-'));
-    await expect(createChannel(true, undefined, {
-      platform: 'darwin',
-      makeDirectory: async () => directory,
-      listen: async () => {
-        throw new Error('injected listen failure');
-      },
-    })).rejects.toThrow('injected listen failure');
+    await expect(
+      createChannel(true, undefined, {
+        platform: 'darwin',
+        makeDirectory: async () => directory,
+        listen: async () => {
+          throw new Error('injected listen failure');
+        },
+      }),
+    ).rejects.toThrow('injected listen failure');
     expect(existsSync(directory)).toBe(false);
   });
 
   it('negotiates termwright/2 and accepts its evidence-qualified snapshot shape', async () => {
     const harness = await createChannel();
     const client = await connectClient(harness.channel);
-    client.send(hello({
+    client.send(
+      hello({
+        protocol: 'termwright/2',
+        capabilities: ['tree', 'states', 'render-revisions'],
+      }),
+    );
+    expect(await client.next()).toMatchObject({
+      type: 'hello-ack',
       protocol: 'termwright/2',
-      capabilities: ['tree', 'states', 'render-revisions'],
-    }));
-    expect(await client.next()).toMatchObject({ type: 'hello-ack', protocol: 'termwright/2', subscribe: 'snapshots' });
+      subscribe: 'snapshots',
+    });
     expect(harness.attachments[0]?.protocol).toBe('termwright/2');
     client.send({
       type: 'snapshot',
       snapshot: snapshot({
         v: 2,
-        nodes: [{
-          id: 'n1', role: 'application', name: 'app',
-          geometry: {
-            displayed: { status: 'known', value: true, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test-adapter' } },
-            intendedRect: { status: 'known', value: { row: 0, column: 0, width: 80, height: 24 }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test-adapter' } },
-            visibleRect: { status: 'known', value: { row: 0, column: 0, width: 80, height: 24 }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test-adapter' } },
+        nodes: [
+          {
+            id: 'n1',
+            role: 'application',
+            name: 'app',
+            geometry: {
+              displayed: {
+                status: 'known',
+                value: true,
+                evidence: {
+                  source: 'framework',
+                  method: 'native',
+                  strength: 'authoritative',
+                  providerId: 'test-adapter',
+                },
+              },
+              intendedRect: {
+                status: 'known',
+                value: { row: 0, column: 0, width: 80, height: 24 },
+                evidence: {
+                  source: 'framework',
+                  method: 'native',
+                  strength: 'authoritative',
+                  providerId: 'test-adapter',
+                },
+              },
+              visibleRect: {
+                status: 'known',
+                value: { row: 0, column: 0, width: 80, height: 24 },
+                evidence: {
+                  source: 'framework',
+                  method: 'native',
+                  strength: 'authoritative',
+                  providerId: 'test-adapter',
+                },
+              },
+            },
           },
-        }],
-        coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test-adapter' } },
-        hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+        ],
+        coordinateSpace: {
+          status: 'known',
+          value: 'viewport-cells',
+          evidence: {
+            source: 'framework',
+            method: 'native',
+            strength: 'authoritative',
+            providerId: 'test-adapter',
+          },
+        },
+        hitGrid: {
+          status: 'unsupported',
+          capability: 'pointer-hit-grid',
+          reason: 'framework-unobservable',
+        },
       }),
     });
     await expect.poll(() => harness.snapshots.length).toBe(1);
@@ -607,10 +732,7 @@ describe('SemanticChannel', () => {
     const close = vi.spyOn(server, 'close');
     const harness = await createChannel(true, undefined, { createServer: () => server });
     const admitted = new Promise<Socket>((resolve) => server.once('connection', resolve));
-    const [client, acceptedSocket] = await Promise.all([
-      connectClient(harness.channel),
-      admitted,
-    ]);
+    const [client, acceptedSocket] = await Promise.all([connectClient(harness.channel), admitted]);
     const destroy = acceptedSocket.destroy.bind(acceptedSocket);
     vi.spyOn(acceptedSocket, 'destroy').mockImplementationOnce((error) => {
       destroy(error);
@@ -618,7 +740,10 @@ describe('SemanticChannel', () => {
     });
 
     await expect(harness.channel.close()).rejects.toThrow('semantic channel cleanup failed');
-    open.splice(open.findIndex((entry) => entry.channel === harness.channel), 1);
+    open.splice(
+      open.findIndex((entry) => entry.channel === harness.channel),
+      1,
+    );
     await client.closed;
     expect(close).toHaveBeenCalledOnce();
     expect(server.listening).toBe(false);
@@ -758,7 +883,10 @@ describe('SemanticChannel', () => {
     client.send(hello({ capabilities: ['tree', 'logs'] }));
     await client.next();
 
-    client.send({ type: 'log', record: { ts: Date.now(), level: 'shouting', message: 'x', seq: 1 } });
+    client.send({
+      type: 'log',
+      record: { ts: Date.now(), level: 'shouting', message: 'x', seq: 1 },
+    });
     const error = await client.next();
     expect(error['type']).toBe('error');
     expect(harness.records).toHaveLength(0);

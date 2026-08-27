@@ -41,12 +41,14 @@ export function instrumentationSentinel(): InkInstrumentationSentinel | undefine
   const value = (globalThis as Record<PropertyKey, unknown>)[INK_INSTRUMENTATION_SENTINEL];
   if (value === null || typeof value !== 'object') return undefined;
   const candidate = value as Partial<InkInstrumentationSentinel>;
-  const profile = instrumentationProfiles().find((entry) => entry.version === candidate.frameworkVersion);
-  return profile !== undefined
-    && candidate.version === 1
-    && candidate.rendererChecksum === profile.rendererSha256
-    && candidate.coreChecksum === profile.coreSha256
-    ? candidate as InkInstrumentationSentinel
+  const profile = instrumentationProfiles().find(
+    (entry) => entry.version === candidate.frameworkVersion,
+  );
+  return profile !== undefined &&
+    candidate.version === 1 &&
+    candidate.rendererChecksum === profile.rendererSha256 &&
+    candidate.coreChecksum === profile.coreSha256
+    ? (candidate as InkInstrumentationSentinel)
     : undefined;
 }
 
@@ -62,7 +64,9 @@ export function instrumentInkCore(path: string, source: string): string | undefi
   const sentinelNeedle = `const noop = () => { };`;
   if (source.split(sentinelNeedle).length !== 2) return undefined;
   const sentinel = `const __termwrightInkSentinelSymbol = Symbol.for("termwright.ink.instrumentation.v1");\nconst __termwrightInkPriorSentinel = globalThis[__termwrightInkSentinelSymbol] ?? {};\nglobalThis[__termwrightInkSentinelSymbol] = Object.freeze({ ...__termwrightInkPriorSentinel, version: 1, frameworkVersion: "${profile.version}", coreChecksum: "${checksum}" });`;
-  return source.replace(sentinelNeedle, `${sentinel}\n${sentinelNeedle}`).replace(needle, replacement);
+  return source
+    .replace(sentinelNeedle, `${sentinel}\n${sentinelNeedle}`)
+    .replace(needle, replacement);
 }
 
 /** Transform only the byte-exact renderer shipped by Ink 7.1.1. */
@@ -148,15 +152,16 @@ function certificationOverride(): InkInstrumentationProfile | undefined {
     const digest = process.env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'];
     const revision = process.env['TERMWRIGHT_CERTIFICATION_SOURCE_REVISION'];
     if (
-      value['framework'] !== 'ink'
-      || !/^sha256:[a-f0-9]{64}$/u.test(digest ?? '')
-      || revision !== process.env['GITHUB_SHA']
-      || value['sourceRevision'] !== revision
-      || value['candidateDigest'] !== digest
-      || typeof value['version'] !== 'string'
-      || !/^[a-f0-9]{64}$/u.test(String(value['rendererSha256']))
-      || !/^[a-f0-9]{64}$/u.test(String(value['coreSha256']))
-    ) return undefined;
+      value['framework'] !== 'ink' ||
+      !/^sha256:[a-f0-9]{64}$/u.test(digest ?? '') ||
+      revision !== process.env['GITHUB_SHA'] ||
+      value['sourceRevision'] !== revision ||
+      value['candidateDigest'] !== digest ||
+      typeof value['version'] !== 'string' ||
+      !/^[a-f0-9]{64}$/u.test(String(value['rendererSha256'])) ||
+      !/^[a-f0-9]{64}$/u.test(String(value['coreSha256']))
+    )
+      return undefined;
     return {
       version: value['version'],
       rendererSha256: String(value['rendererSha256']),

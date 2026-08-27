@@ -18,5 +18,5 @@
   "disableGit": true,
   "sourceLinkTemplate": "https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/{path}#L{line}",
   "router": "member",
-  "frontmatterGlobals": {"editUrl": false}
+  "frontmatterGlobals": { "editUrl": false }
 }

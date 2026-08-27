@@ -535,12 +535,17 @@ console.log('[pty-cert] output-pressure');
 const pressure = collect([
   'const fs = require("node:fs");',
   'const payload = Buffer.alloc(' + pressureFrameBytes + ', 0x71);',
+  'const parts = [];',
   'for (let index = 0; index < ' + pressureFrameCount + '; index += 1) {',
-  'fs.writeSync(1, Buffer.from("\\x1b]8487;TW_PRESSURE;" + index.toString(16).padStart(8, "0") + ";"));',
-  'fs.writeSync(1, payload);',
-  'fs.writeSync(1, Buffer.from("\\x07"));',
+  'parts.push(Buffer.from("\\x1b]8487;TW_PRESSURE;" + index.toString(16).padStart(8, "0") + ";"), payload, Buffer.from("\\x07"));',
   '}',
-  'fs.writeSync(1, Buffer.from("PRESSURE_SENTINEL"));',
+  'parts.push(Buffer.from("PRESSURE_SENTINEL"));',
+  'const burst = Buffer.concat(parts);',
+  'for (let offset = 0; offset < burst.length;) {',
+  'const written = fs.writeSync(1, burst, offset);',
+  'if (written <= 0) throw new Error("pressure burst made no write progress");',
+  'offset += written;',
+  '}',
 ].join(''));
 await pressure.session.outputEnded;
 const pressureOutput = Buffer.concat(pressure.output);
@@ -633,9 +638,7 @@ if (checkProbeSyntax) {
   exit(syntax.status ?? 1);
 }
 if (installDirectory === undefined) {
-  console.error(
-    'usage: check-installed-pty.mjs <install-dir> [--verdict <path>]',
-  );
+  console.error('usage: check-installed-pty.mjs <install-dir> [--verdict <path>]');
   exit(1);
 }
 if (verdictFlag >= 0 && verdictPath === undefined) {
@@ -678,19 +681,10 @@ if (verdictPath !== undefined) {
     console.error('--verdict is only supported for a Windows ConPTY bundle');
     exit(1);
   }
-  const installedRequire = createRequire(
-    join(installDirectory, 'termwright-pty-certifier.cjs'),
-  );
-  const addonPath = installedRequire.resolve(
-    `@termwright/pty-win32-${arch}/termwright_pty.node`,
-  );
-  const manifestPath = join(
-    dirname(addonPath),
-    'vendor',
-    'conpty-manifest.json',
-  );
-  const sha256 = (path) =>
-    createHash('sha256').update(readFileSync(path)).digest('hex');
+  const installedRequire = createRequire(join(installDirectory, 'termwright-pty-certifier.cjs'));
+  const addonPath = installedRequire.resolve(`@termwright/pty-win32-${arch}/termwright_pty.node`);
+  const manifestPath = join(dirname(addonPath), 'vendor', 'conpty-manifest.json');
+  const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
   const runtime = installedRequire(addonPath).conPtyRuntimeInfo();
   writeFileSync(
     verdictPath,
@@ -734,6 +728,4 @@ if (verdictPath !== undefined) {
     )}\n`,
   );
 }
-console.log(
-  `the installed @termwright/pty runs a real pseudoterminal on ${platform}-${arch}`,
-);
+console.log(`the installed @termwright/pty runs a real pseudoterminal on ${platform}-${arch}`);

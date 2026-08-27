@@ -43,7 +43,10 @@ function importedNames(markdown: string): readonly string[] {
   for (const block of codeBlocks(markdown)) {
     for (const match of block.matchAll(pattern)) {
       for (const name of (match[1] ?? '').split(',')) {
-        const cleaned = name.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0];
+        const cleaned = name
+          .trim()
+          .replace(/^type\s+/, '')
+          .split(/\s+as\s+/)[0];
         if (cleaned !== undefined && cleaned !== '') names.add(cleaned);
       }
     }

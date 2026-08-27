@@ -1,7 +1,7 @@
 ---
-"@termwright/driver": patch
-"@termwright/screenshot": patch
-"termwright": patch
+'@termwright/driver': patch
+'@termwright/screenshot': patch
+'termwright': patch
 ---
 
 Preserve native ConPTY output, exit evidence, and the first fatal I/O error

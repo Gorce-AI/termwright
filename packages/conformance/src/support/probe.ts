@@ -17,9 +17,9 @@
  *
  * It is still not a second driver: it never locates and never acts.
  */
-import { createServer, type Server, type Socket } from 'node:net';
+import { type Server, type Socket } from 'node:net';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -47,6 +47,8 @@ import xh from '@xterm/headless';
 import type { Terminal } from '@xterm/headless';
 import { createNativePtyBackend, type PtyProcess } from '@termwright/driver/experimental';
 import { environment } from './pty.js';
+import { ProbePeerOwner } from './probe-peer-owner.js';
+import { ProbeStartupTransaction } from './probe-startup.js';
 
 /** How a fixture is started. Everything else about it is opaque to the probe. */
 export interface AdapterCommand {
@@ -145,10 +147,11 @@ export class AdapterProbe {
   #markerScanFrom = 0;
   #connections = 0;
   #socket: Socket | null = null;
+  readonly #peers: ProbePeerOwner;
   #exit: { code: number | null; signal: string | null } | null = null;
   /** Where the adapter writes its own account of attaching, if it writes one. */
   #debugFile: string | null = null;
-  #stopped = false;
+  #stopPromise: Promise<void> | null = null;
   readonly #changeWaiters = new Set<() => void>();
 
   private constructor(
@@ -157,12 +160,14 @@ export class AdapterProbe {
     directory: string | null,
     pty: PtyProcess,
     size: { readonly columns: number; readonly rows: number },
+    peers: ProbePeerOwner,
   ) {
     this.sessionId = identity.sessionId;
     this.token = identity.token;
     this.#server = server;
     this.#directory = directory;
     this.#pty = pty;
+    this.#peers = peers;
     this.#terminal = new xh.Terminal({
       cols: size.columns,
       rows: size.rows,
@@ -176,80 +181,61 @@ export class AdapterProbe {
     const instrument = options.instrument ?? true;
     const sessionId = randomUUID();
     const token = generateToken();
-
-    let server: Server | null = null;
-    let directory: string | null = null;
-    let endpoint: string | null = null;
-
-    if (instrument) {
-      server = createServer();
-      if (process.platform === 'win32') {
-        endpoint = `\\\\.\\pipe\\termwright-probe-${randomBytes(16).toString('hex')}`;
-      } else {
-        directory = await mkdtemp(join(tmpdir(), 'termwright-probe-'));
-        endpoint = join(directory, 'semantic.sock');
+    const startup = new ProbeStartupTransaction();
+    try {
+      await startup.acquireEndpoint(instrument);
+      const { server, directory, endpoint, peers } = startup;
+      const env = environment(command.env);
+      // A dormant run must not merely lack our endpoint — it must not inherit one
+      // from whatever process is running the suite.
+      delete env[ENV_ENDPOINT];
+      delete env[ENV_TOKEN];
+      if (endpoint !== null) {
+        env[ENV_ENDPOINT] = endpoint;
+        env[ENV_TOKEN] = token;
       }
-      const listening = server;
-      const address = endpoint;
-      await new Promise<void>((resolve, reject) => {
-        listening.once('error', reject);
-        listening.listen(address, () => {
-          listening.removeListener('error', reject);
-          resolve();
-        });
+
+      // The adapter's own account of why it did or did not attach. The probe can
+      // only see the outside — no connection arrived — which leaves "wrong
+      // transport", "driver not listening" and "never started" indistinguishable.
+      // The clients write that distinction here (1bbe0f9), and a failure quotes
+      // the file, so the attribution lands in the message rather than in an
+      // artifact somebody has to go and find. A path, never `TERMWRIGHT_DEBUG=1`:
+      // that means "log to stderr", which under a pty lands in the middle of the
+      // frame this suite makes assertions about.
+      startup.debugFile = join(
+        tmpdir(),
+        `termwright-adapter-debug-${randomBytes(8).toString('hex')}.log`,
+      );
+      env['TERMWRIGHT_DEBUG_FILE'] = startup.debugFile;
+
+      const size = { columns: options.columns ?? 80, rows: options.rows ?? 24 };
+      startup.pty = createNativePtyBackend().spawn({
+        command: command.command,
+        ...(command.cwd === undefined ? {} : { cwd: command.cwd }),
+        env,
+        columns: size.columns,
+        rows: size.rows,
+        // This probe is itself the terminal emulator. Do not inherit a harness
+        // shell's `TERM=dumb`: the child is connected to our xterm-compatible
+        // parser regardless of which terminal launched Vitest.
+        term: 'xterm-256color',
       });
+      const pty = startup.pty;
+
+      const probe = new AdapterProbe({ sessionId, token }, server, directory, pty, size, peers);
+      probe.#debugFile = startup.debugFile;
+
+      pty.onData((data) => probe.#onData(data));
+      pty.onExit((status) => {
+        probe.#exit = status;
+        probe.#notifyChange();
+      });
+      peers.activate((socket) => probe.#onConnection(socket as Socket));
+      return probe;
+    } catch (error) {
+      return startup.rollback(error);
     }
-
-    const env = environment(command.env);
-    // A dormant run must not merely lack our endpoint — it must not inherit one
-    // from whatever process is running the suite.
-    delete env[ENV_ENDPOINT];
-    delete env[ENV_TOKEN];
-    if (endpoint !== null) {
-      env[ENV_ENDPOINT] = endpoint;
-      env[ENV_TOKEN] = token;
-    }
-
-    // The adapter's own account of why it did or did not attach. The probe can
-    // only see the outside — no connection arrived — which leaves "wrong
-    // transport", "driver not listening" and "never started" indistinguishable.
-    // The clients write that distinction here (1bbe0f9), and a failure quotes
-    // the file, so the attribution lands in the message rather than in an
-    // artifact somebody has to go and find. A path, never `TERMWRIGHT_DEBUG=1`:
-    // that means "log to stderr", which under a pty lands in the middle of the
-    // frame this suite makes assertions about.
-    const debugFile = join(tmpdir(), `termwright-adapter-debug-${randomBytes(8).toString('hex')}.log`);
-    env['TERMWRIGHT_DEBUG_FILE'] = debugFile;
-
-    const size = { columns: options.columns ?? 80, rows: options.rows ?? 24 };
-    const pty = createNativePtyBackend().spawn({
-      command: command.command,
-      ...(command.cwd === undefined ? {} : { cwd: command.cwd }),
-      env,
-      columns: size.columns,
-      rows: size.rows,
-      // This probe is itself the terminal emulator. Do not inherit a harness
-      // shell's `TERM=dumb`: the child is connected to our xterm-compatible
-      // parser regardless of which terminal launched Vitest.
-      term: 'xterm-256color',
-    });
-
-    const probe = new AdapterProbe(
-      { sessionId, token },
-      server,
-      directory,
-      pty,
-      size,
-    );
-    probe.#debugFile = debugFile;
-
-    pty.onData((data) => probe.#onData(data));
-    pty.onExit((status) => {
-      probe.#exit = status;
-      probe.#notifyChange();
-    });
-    server?.on('connection', (socket) => probe.#onConnection(socket));
-    return probe;
   }
 
   /** Everything observed so far. Safe to call at any point. */
@@ -353,7 +339,10 @@ export class AdapterProbe {
     }
     const traffic =
       kinds.size === 0 ? 'no messages' : [...kinds].map(([kind, n]) => `${kind}×${n}`).join(', ');
-    const screen = this.screenText().trimEnd().split('\n').filter((line) => line.trim() !== '');
+    const screen = this.screenText()
+      .trimEnd()
+      .split('\n')
+      .filter((line) => line.trim() !== '');
     const exit = this.#exit === null ? 'still running' : `exited ${JSON.stringify(this.#exit)}`;
     return (
       `${connections} connection(s) to the endpoint, ${traffic}; the child is ${exit}; ` +
@@ -407,16 +396,50 @@ export class AdapterProbe {
   }
 
   /** Stops the child and releases the endpoint. Idempotent. */
-  async stop(): Promise<void> {
-    if (this.#stopped) return;
-    this.#stopped = true;
-    this.#socket?.destroy();
-    this.#pty.dispose();
-    this.#notifyChange();
-    this.#terminal.dispose();
-    if (this.#server !== null) await new Promise<void>((resolve) => this.#server?.close(() => resolve()));
-    if (this.#directory !== null) await rm(this.#directory, { recursive: true, force: true }).catch(() => {});
-    if (this.#debugFile !== null) await rm(this.#debugFile, { force: true }).catch(() => {});
+  stop(): Promise<void> {
+    this.#stopPromise ??= this.#stop();
+    return this.#stopPromise;
+  }
+
+  async #stop(): Promise<void> {
+    // Stop admission first. A connection accepted by the OS but delivered to
+    // JavaScript later is rejected by #peers.admit(), so the server-close
+    // barrier cannot acquire an unowned peer while cleanup is in progress.
+    const serverClosed =
+      this.#server === null ? Promise.resolve() : this.#peers.close(this.#server);
+    const failures: unknown[] = [];
+    for (const dispose of [
+      () => this.#pty.dispose(),
+      () => this.#notifyChange(),
+      () => this.#terminal.dispose(),
+    ]) {
+      try {
+        dispose();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    try {
+      await serverClosed;
+    } catch (error) {
+      failures.push(error);
+    }
+    if (this.#directory !== null) {
+      try {
+        await rm(this.#directory, { recursive: true, force: true });
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (this.#debugFile !== null) {
+      try {
+        await rm(this.#debugFile, { force: true });
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, 'adapter probe cleanup failed');
   }
 
   // -------------------------------------------------------------------------
@@ -450,7 +473,10 @@ export class AdapterProbe {
       const payload = match[1] ?? '';
       const verified = verifyMarkerPayload(payload, this.token, this.sessionId);
       if (verified === null) {
-        this.#faults.push({ code: 'marker', detail: `marker did not verify: ${JSON.stringify(payload)}` });
+        this.#faults.push({
+          code: 'marker',
+          detail: `marker did not verify: ${JSON.stringify(payload)}`,
+        });
       } else {
         this.#markers.push({ revision: verified.revision, offset: match.index, atMs: this.#now() });
       }
@@ -464,7 +490,10 @@ export class AdapterProbe {
     this.#notifyChange();
     if (this.#socket !== null) {
       // One adapter per session; a second connection is a conformance failure.
-      this.#faults.push({ code: 'second-connection', detail: 'the adapter opened a second channel' });
+      this.#faults.push({
+        code: 'second-connection',
+        detail: 'the adapter opened a second channel',
+      });
       socket.destroy();
       return;
     }
@@ -475,14 +504,16 @@ export class AdapterProbe {
       try {
         frames = decoder.push(chunk);
       } catch (error) {
-        this.#faults.push({ code: 'framing', detail: error instanceof Error ? error.message : String(error) });
+        this.#faults.push({
+          code: 'framing',
+          detail: error instanceof Error ? error.message : String(error),
+        });
         this.#notifyChange();
         socket.destroy();
         return;
       }
       for (const frame of frames) this.#onFrame(socket, frame);
     });
-    socket.on('error', () => socket.destroy());
     socket.on('close', () => {
       if (this.#socket === socket) this.#socket = null;
       this.#notifyChange();

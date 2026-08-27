@@ -8,16 +8,12 @@ import type { EvidenceProvenance } from './contract.js';
  * observe a fact is `unsupported`, never `unknown`.
  */
 export type ObservationUnknownReason =
-  | 'awaiting-revision-pair'
-  | 'provider-refresh'
-  | 'stale-revision';
+  'awaiting-revision-pair' | 'provider-refresh' | 'stale-revision';
 
 export type ObservationAbsentReason = 'detached' | 'not-displayed' | 'not-laid-out';
 
 export type ObservationUnsupportedReason =
-  | 'capability'
-  | 'framework-unobservable'
-  | 'not-negotiated';
+  'capability' | 'framework-unobservable' | 'not-negotiated';
 
 export type ObservationEvidence = EvidenceProvenance;
 export type AuthoritativeObservationEvidence = ObservationEvidence & {
@@ -155,7 +151,11 @@ export function rectArea(rect: Rect): number {
   return Math.max(0, rect.width) * Math.max(0, rect.height);
 }
 
-export function viewportIntersection(rect: Rect, columns: number, rows: number): ViewportIntersection {
+export function viewportIntersection(
+  rect: Rect,
+  columns: number,
+  rows: number,
+): ViewportIntersection {
   const intersection = intersectRects(rect, { row: 0, column: 0, width: columns, height: rows });
   const area = rectArea(rect);
   const visible = rectArea(intersection);
@@ -172,18 +172,37 @@ export function spatialRelation(a: Rect, relation: SpatialRelation, b: Rect): bo
   const aRight = a.column + a.width;
   const bRight = b.column + b.width;
   switch (relation) {
-    case 'contains': return a.row <= b.row && a.column <= b.column && aBottom >= bBottom && aRight >= bRight;
-    case 'inside': return spatialRelation(b, 'contains', a);
-    case 'overlaps': return rectArea(intersectRects(a, b)) > 0;
-    case 'left-of': return aRight <= b.column;
-    case 'right-of': return bRight <= a.column;
-    case 'above': return aBottom <= b.row;
-    case 'below': return bBottom <= a.row;
-    case 'aligned-left': return a.column === b.column;
-    case 'aligned-right': return aRight === bRight;
-    case 'aligned-top': return a.row === b.row;
-    case 'aligned-bottom': return aBottom === bBottom;
-    case 'adjacent-horizontal': return (aRight === b.column || bRight === a.column) && Math.max(a.row, b.row) < Math.min(aBottom, bBottom);
-    case 'adjacent-vertical': return (aBottom === b.row || bBottom === a.row) && Math.max(a.column, b.column) < Math.min(aRight, bRight);
+    case 'contains':
+      return a.row <= b.row && a.column <= b.column && aBottom >= bBottom && aRight >= bRight;
+    case 'inside':
+      return spatialRelation(b, 'contains', a);
+    case 'overlaps':
+      return rectArea(intersectRects(a, b)) > 0;
+    case 'left-of':
+      return aRight <= b.column;
+    case 'right-of':
+      return bRight <= a.column;
+    case 'above':
+      return aBottom <= b.row;
+    case 'below':
+      return bBottom <= a.row;
+    case 'aligned-left':
+      return a.column === b.column;
+    case 'aligned-right':
+      return aRight === bRight;
+    case 'aligned-top':
+      return a.row === b.row;
+    case 'aligned-bottom':
+      return aBottom === bBottom;
+    case 'adjacent-horizontal':
+      return (
+        (aRight === b.column || bRight === a.column) &&
+        Math.max(a.row, b.row) < Math.min(aBottom, bBottom)
+      );
+    case 'adjacent-vertical':
+      return (
+        (aBottom === b.row || bBottom === a.row) &&
+        Math.max(a.column, b.column) < Math.min(aRight, bRight)
+      );
   }
 }

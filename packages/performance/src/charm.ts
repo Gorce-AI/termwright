@@ -49,10 +49,12 @@ const measured = (
   note: string,
 ): MeasuredMetric => ({ status: 'measured', unit, value, note });
 
-const unavailable = (
-  unit: PerformanceMetric['unit'],
-  reason: string,
-): PerformanceMetric => ({ status: 'unavailable', unit, value: null, reason });
+const unavailable = (unit: PerformanceMetric['unit'], reason: string): PerformanceMetric => ({
+  status: 'unavailable',
+  unit,
+  value: null,
+  reason,
+});
 
 function average(values: readonly number[]): number {
   if (values.length === 0) throw new Error('cannot average an empty measurement');
@@ -71,8 +73,11 @@ export function summarizeApplicationDurations(
   vanilla: readonly number[],
   instrumented: readonly number[],
 ): { readonly ratio: number; readonly pairedRatios: readonly number[] } {
-  if (vanilla.length !== instrumented.length || vanilla.length < 3
-    || [...vanilla, ...instrumented].some((duration) => !Number.isFinite(duration) || duration <= 0)) {
+  if (
+    vanilla.length !== instrumented.length ||
+    vanilla.length < 3 ||
+    [...vanilla, ...instrumented].some((duration) => !Number.isFinite(duration) || duration <= 0)
+  ) {
     throw new Error('Charm duration evidence requires at least three positive paired samples');
   }
   const pairedRatios = instrumented.map((duration, index) => duration / (vanilla[index] as number));
@@ -100,15 +105,14 @@ export function parseCharmDebug(text: string): CharmDebugMetrics {
   const fullSnapshots = [...text.matchAll(/\br\d+ snapshot nodes=\d+/gu)].length;
   const close = /close r\d+ snapshots=(\d+) logs_dropped=\d+ performance_dropped=(\d+)/u.exec(text);
   const dropLines = [...text.matchAll(/performance_drop total=(\d+)/gu)];
-  if (bytes.length === 0) throw new Error('Charm adapter debug log has no performance publications');
+  if (bytes.length === 0)
+    throw new Error('Charm adapter debug log has no performance publications');
   return {
     fullSnapshots: close === null ? fullSnapshots : Number(close[1]),
     // Every failed publication emits its cumulative count immediately in
     // debug mode. A clean normal-exit log with publications and no such line
     // therefore proves zero even though the fixture does not call Close.
-    droppedEvents: close === null
-      ? Number(dropLines.at(-1)?.[1] ?? 0)
-      : Number(close[2]),
+    droppedEvents: close === null ? Number(dropLines.at(-1)?.[1] ?? 0) : Number(close[2]),
     bytes,
     nodes,
     unknownNodes,
@@ -146,9 +150,8 @@ async function runApplication(binary: string, debugFile?: string): Promise<Appli
     }
     const durationMs = performance.now() - started;
     const latestSemanticRevision = terminal.semanticTree()?.revision ?? 0;
-    const debug = debugFile === undefined
-      ? null
-      : parseCharmDebug(await readFile(debugFile, 'utf8'));
+    const debug =
+      debugFile === undefined ? null : parseCharmDebug(await readFile(debugFile, 'utf8'));
     if (debug !== null && debug.droppedEvents !== 0) {
       throw new Error(`Charm adapter dropped ${debug.droppedEvents} semantic publications`);
     }
@@ -174,13 +177,17 @@ async function waitForSemanticValue(
 ): Promise<void> {
   for (let change = 0; change < APPLICATION_BATCH_KEYS * 4; change += 1) {
     const after = terminal.checkpoint();
-    const found = terminal.semanticTree()?.nodes.some(
-      (node) => node.value?.status === 'known' && node.value.value === expected,
-    ) ?? false;
+    const found =
+      terminal
+        .semanticTree()
+        ?.nodes.some((node) => node.value?.status === 'known' && node.value.value === expected) ??
+      false;
     if (found) return;
     await terminal.waitForCheckpointChange({ after, timeout });
   }
-  throw new Error('Charm semantic batch value did not commit within the bounded observation sequence');
+  throw new Error(
+    'Charm semantic batch value did not commit within the bounded observation sequence',
+  );
 }
 
 async function goCompilerVersion(binary: string): Promise<string> {
@@ -198,8 +205,12 @@ export async function runCharmPerformanceBenchmark(
   options: CharmBenchmarkOptions = {},
 ): Promise<PerformanceReport> {
   const iterations = options.iterations ?? 8;
-  if (!Number.isSafeInteger(iterations) || iterations <= 0 || iterations > 20
-    || iterations % MEASUREMENT_ORDER.length !== 0) {
+  if (
+    !Number.isSafeInteger(iterations) ||
+    iterations <= 0 ||
+    iterations > 20 ||
+    iterations % MEASUREMENT_ORDER.length !== 0
+  ) {
     throw new Error('iterations must be 8 or 16 to preserve complete balanced measurement blocks');
   }
 
@@ -238,7 +249,10 @@ export async function runCharmPerformanceBenchmark(
     const instrumented: ApplicationRun[] = [];
     // Warm both binaries and their OS page-cache paths once. These runs are
     // explicit calibration, never silently counted as successful samples.
-    const instrumentedWarmup = await runApplication(instrumentedBinary, join(root, 'debug-warmup.log'));
+    const instrumentedWarmup = await runApplication(
+      instrumentedBinary,
+      join(root, 'debug-warmup.log'),
+    );
     const vanillaWarmup = await runApplication(vanillaBinary);
     if (vanillaWarmup.screen !== instrumentedWarmup.screen) {
       throw new Error('instrumented Charm warmup output diverged from vanilla');
@@ -249,9 +263,13 @@ export async function runCharmPerformanceBenchmark(
       const referenceFirst = MEASUREMENT_ORDER[index % MEASUREMENT_ORDER.length];
       if (referenceFirst) {
         vanilla.push(await runApplication(vanillaBinary));
-        instrumented.push(await runApplication(instrumentedBinary, join(root, `debug-${index}.log`)));
+        instrumented.push(
+          await runApplication(instrumentedBinary, join(root, `debug-${index}.log`)),
+        );
       } else {
-        instrumented.push(await runApplication(instrumentedBinary, join(root, `debug-${index}.log`)));
+        instrumented.push(
+          await runApplication(instrumentedBinary, join(root, `debug-${index}.log`)),
+        );
         vanilla.push(await runApplication(vanillaBinary));
       }
     }
@@ -263,7 +281,8 @@ export async function runCharmPerformanceBenchmark(
     }
 
     const debug = instrumented.map((entry) => entry.debug);
-    if (debug.some((entry) => entry === null)) throw new Error('instrumented run produced no debug metrics');
+    if (debug.some((entry) => entry === null))
+      throw new Error('instrumented run produced no debug metrics');
     const observed = debug as CharmDebugMetrics[];
     if (observed.some((entry) => entry.fullSnapshots < APPLICATION_BATCH_KEYS)) {
       throw new Error(
@@ -297,7 +316,8 @@ export async function runCharmPerformanceBenchmark(
       id: 'charm-v2-burst-e2e',
       framework: 'charm',
       renderingMode: 'immediate',
-      description: 'real zero-config Bubble Tea v2 fixture, vanilla and instrumented builds, driven through PTYs with a deterministic 256-key burst',
+      description:
+        'real zero-config Bubble Tea v2 fixture, vanilla and instrumented builds, driven through PTYs with a deterministic 256-key burst',
       workload: {
         frames: semanticFrames,
         warmupFrames: instrumentedWarmup.debug?.fullSnapshots ?? 0,
@@ -327,7 +347,11 @@ export async function runCharmPerformanceBenchmark(
           'count',
           'Bubble Tea owns renderer coalescing before the probe hook and exposes no counter for discarded View requests.',
         ),
-        semanticNodesPerFrame: measured('nodes/frame', average(allNodes), 'Actual probe snapshots.'),
+        semanticNodesPerFrame: measured(
+          'nodes/frame',
+          average(allNodes),
+          'Actual probe snapshots.',
+        ),
         unknownFrameworkNodesPerFrame: measured(
           'nodes/frame',
           average(allUnknown),

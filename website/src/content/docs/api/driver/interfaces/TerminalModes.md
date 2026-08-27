@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalModes
 
-Defined in: [driver/src/api.ts:439](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L439)
+Defined in: [driver/src/api.ts:428](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L428)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **applicationCursorKeys**: `boolean`
 
-Defined in: [driver/src/api.ts:464](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L464)
+Defined in: [driver/src/api.ts:453](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L453)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:464](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **applicationKeypad**: `boolean`
 
-Defined in: [driver/src/api.ts:465](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L465)
+Defined in: [driver/src/api.ts:454](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L454)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:465](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **bracketedPaste**: `boolean`
 
-Defined in: [driver/src/api.ts:463](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L463)
+Defined in: [driver/src/api.ts:452](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L452)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [driver/src/api.ts:463](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **focusReporting**: `"unknown"` \| `"on"` \| `"off"`
 
-Defined in: [driver/src/api.ts:474](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L474)
+Defined in: [driver/src/api.ts:463](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L463)
 
 Whether the child asked for focus in/out reports, or `'unknown'`.
 
@@ -75,7 +75,7 @@ revision-bound fact; generic children/shadows may not. Observable VT must agree.
 
 > `readonly` **mouseEncoding**: `"default"` \| `"unknown"` \| `"sgr"` \| `"urxvt"` \| `"utf8"`
 
-Defined in: [driver/src/api.ts:462](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L462)
+Defined in: [driver/src/api.ts:451](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L451)
 
 Mouse report encoding, or `'unknown'` when no authoritative source can
 prove it (see
@@ -88,7 +88,7 @@ prove it (see
 
 > `readonly` **mouseTracking**: `"none"` \| `"any"` \| `"unknown"` \| `"x10"` \| `"vt200"` \| `"drag"`
 
-Defined in: [driver/src/api.ts:455](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L455)
+Defined in: [driver/src/api.ts:444](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L444)
 
 Mouse tracking level the child asked for, or `'unknown'`.
 
@@ -110,4 +110,4 @@ with distinct diagnostics.
 
 > `readonly` **synchronizedOutput**: `boolean`
 
-Defined in: [driver/src/api.ts:475](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L475)
+Defined in: [driver/src/api.ts:464](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L464)

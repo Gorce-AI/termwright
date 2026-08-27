@@ -1,7 +1,5 @@
 {
-  "cucumber.features": [
-    "**/*.feature"
-  ],
+  "cucumber.features": ["**/*.feature"],
   "cucumber.glue": [
     "**/*.steps.{ts,tsx,mts}",
     "**/*.feature.{ts,tsx,mts}",

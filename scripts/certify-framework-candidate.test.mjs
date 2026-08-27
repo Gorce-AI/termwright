@@ -26,7 +26,10 @@ import {
   verifyPreparedUpdateInvariant,
 } from './certify-framework-candidate.mjs';
 import { digestTree } from './prepare-framework-candidate.mjs';
-import { instrumentInkCore, instrumentInkRenderer } from '../packages/probe-ink/src/instrumentation.ts';
+import {
+  instrumentInkCore,
+  instrumentInkRenderer,
+} from '../packages/probe-ink/src/instrumentation.ts';
 
 const exec = promisify(execFile);
 const requireInk = createRequire(new URL('../packages/probe-ink/package.json', import.meta.url));
@@ -73,7 +76,10 @@ async function npmClosureFixture() {
   const probe = join(directory, 'probe');
   const rootPackage = join(probe, 'node_modules', '@example', 'root');
   const dependency = join(probe, 'node_modules', 'dependency');
-  await Promise.all([mkdir(rootPackage, { recursive: true }), mkdir(dependency, { recursive: true })]);
+  await Promise.all([
+    mkdir(rootPackage, { recursive: true }),
+    mkdir(dependency, { recursive: true }),
+  ]);
   await writeFile(join(probe, 'package.json'), JSON.stringify({ name: 'probe' }));
   const rootManifest = JSON.stringify({
     name: '@example/root',
@@ -147,7 +153,10 @@ describe('framework candidate evidence binding', () => {
     const client = join(directory, 'client');
     const app = join(directory, 'app');
     await Promise.all([mkdir(client), mkdir(app)]);
-    await writeFile(join(client, 'go.mod'), 'module github.com/gorce-ai/termwright/clients/go\n\ngo 1.22\n');
+    await writeFile(
+      join(client, 'go.mod'),
+      'module github.com/gorce-ai/termwright/clients/go\n\ngo 1.22\n',
+    );
     await writeFile(
       join(app, 'go.mod'),
       'module example.com/candidate\n\ngo 1.22\n\nrequire github.com/gorce-ai/termwright/clients/go v0.0.0\n',
@@ -167,15 +176,29 @@ describe('framework candidate evidence binding', () => {
   });
 
   it('refuses a zero-test Rust certification filter', () => {
-    expect(() => assertRustTestDiscovered('running 0 tests\n\ntest result: ok. 0 passed; 0 failed\n', 'required_contract_test', 'ratatui-core@0.1.2')).toThrow(/was not discovered/u);
-    expect(() => assertRustTestDiscovered('required_contract_test: test\n', 'required_contract_test', 'ratatui-core@0.1.2')).not.toThrow();
+    expect(() =>
+      assertRustTestDiscovered(
+        'running 0 tests\n\ntest result: ok. 0 passed; 0 failed\n',
+        'required_contract_test',
+        'ratatui-core@0.1.2',
+      ),
+    ).toThrow(/was not discovered/u);
+    expect(() =>
+      assertRustTestDiscovered(
+        'required_contract_test: test\n',
+        'required_contract_test',
+        'ratatui-core@0.1.2',
+      ),
+    ).not.toThrow();
   });
 
   it('binds verdict provenance to the actual supported host platform', () => {
     expect(certificationPlatform('linux')).toBe('linux');
     expect(certificationPlatform('darwin')).toBe('macos');
     expect(certificationPlatform('win32')).toBe('windows');
-    expect(() => certificationPlatform('freebsd')).toThrow(/unsupported certification host platform/u);
+    expect(() => certificationPlatform('freebsd')).toThrow(
+      /unsupported certification host platform/u,
+    );
     expect(candidateExecutableName('windows')).toBe('candidate-app.exe');
     expect(candidateExecutableName('linux')).toBe('candidate-app');
   });
@@ -205,7 +228,14 @@ describe('framework candidate evidence binding', () => {
       { name: tea, version: 'v2.0.9' },
       { name: bubbles, version: 'v2.1.1' },
     ];
-    expect(selectCharmCandidateComposition({ id: 'bubbletea-v2@v2.0.9', package: tea, version: 'v2.0.9' }, patchSets, tea, bubbles)).toEqual({ teaVersion: 'v2.0.9', bubblesVersion: 'v2.1.1' });
+    expect(
+      selectCharmCandidateComposition(
+        { id: 'bubbletea-v2@v2.0.9', package: tea, version: 'v2.0.9' },
+        patchSets,
+        tea,
+        bubbles,
+      ),
+    ).toEqual({ teaVersion: 'v2.0.9', bubblesVersion: 'v2.1.1' });
     expect(
       selectCharmCandidateComposition(
         {
@@ -226,11 +256,29 @@ describe('framework candidate evidence binding', () => {
   it('admits only the declared add-only Go capability streams', () => {
     for (const candidate of [
       { frameworkId: 'tview', package: 'github.com/rivo/tview', capability: 'tview-private-state' },
-      { frameworkId: 'tview', package: 'github.com/gdamore/tcell/v2', capability: 'tcell-same-writer-marker' },
-      { frameworkId: 'charm', package: 'github.com/charmbracelet/bubbles', capability: 'bubbles-private-state' },
-      { frameworkId: 'charm', package: 'charm.land/bubbles/v2', capability: 'bubbles-private-state' },
+      {
+        frameworkId: 'tview',
+        package: 'github.com/gdamore/tcell/v2',
+        capability: 'tcell-same-writer-marker',
+      },
+      {
+        frameworkId: 'charm',
+        package: 'github.com/charmbracelet/bubbles',
+        capability: 'bubbles-private-state',
+      },
+      {
+        frameworkId: 'charm',
+        package: 'charm.land/bubbles/v2',
+        capability: 'bubbles-private-state',
+      },
     ]) {
-      expect(isSupportedCompileCapabilityCandidate({ ...candidate, mode: 'capability', capabilityStrategy: 'compile-conformance' })).toBe(true);
+      expect(
+        isSupportedCompileCapabilityCandidate({
+          ...candidate,
+          mode: 'capability',
+          capabilityStrategy: 'compile-conformance',
+        }),
+      ).toBe(true);
     }
     expect(
       isSupportedCompileCapabilityCandidate({
@@ -253,9 +301,14 @@ describe('framework candidate evidence binding', () => {
   });
 
   it('fails closed when a Charm candidate has no exact companion profile', () => {
-    expect(() => selectCharmCandidateComposition({ id: 'bubbletea-v2@v2.0.9', package: 'tea', version: 'v2.0.9' }, [{ name: 'tea', version: 'v2.0.9' }], 'tea', 'bubbles')).toThrow(
-      /no exact certified Charm companion/u,
-    );
+    expect(() =>
+      selectCharmCandidateComposition(
+        { id: 'bubbletea-v2@v2.0.9', package: 'tea', version: 'v2.0.9' },
+        [{ name: 'tea', version: 'v2.0.9' }],
+        'tea',
+        'bubbles',
+      ),
+    ).toThrow(/no exact certified Charm companion/u);
   });
 
   it('rejects a Bubbles compile-capability candidate without an exact-certified Bubble Tea companion', () => {
@@ -316,12 +369,28 @@ describe('framework candidate evidence binding', () => {
     const stripAnsi71 = packageDirectory('strip-ansi@7.1.2', 'strip-ansi');
     const stripAnsi72 = packageDirectory('strip-ansi@7.2.0', 'strip-ansi');
     try {
-      await Promise.all([rootPackage, stringWidth, stripAnsi71, stripAnsi72].map((path) => mkdir(path, { recursive: true })));
+      await Promise.all(
+        [rootPackage, stringWidth, stripAnsi71, stripAnsi72].map((path) =>
+          mkdir(path, { recursive: true }),
+        ),
+      );
       await Promise.all([
-        writeFile(join(rootPackage, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' })),
-        writeFile(join(stringWidth, 'package.json'), JSON.stringify({ name: 'string-width', version: '7.2.0' })),
-        writeFile(join(stripAnsi71, 'package.json'), JSON.stringify({ name: 'strip-ansi', version: '7.1.2' })),
-        writeFile(join(stripAnsi72, 'package.json'), JSON.stringify({ name: 'strip-ansi', version: '7.2.0' })),
+        writeFile(
+          join(rootPackage, 'package.json'),
+          JSON.stringify({ name: 'root', version: '1.0.0' }),
+        ),
+        writeFile(
+          join(stringWidth, 'package.json'),
+          JSON.stringify({ name: 'string-width', version: '7.2.0' }),
+        ),
+        writeFile(
+          join(stripAnsi71, 'package.json'),
+          JSON.stringify({ name: 'strip-ansi', version: '7.1.2' }),
+        ),
+        writeFile(
+          join(stripAnsi72, 'package.json'),
+          JSON.stringify({ name: 'strip-ansi', version: '7.2.0' }),
+        ),
       ]);
       await mkdir(join(rootPackage, 'node_modules'), { recursive: true });
       await symlink(stringWidth, join(rootPackage, 'node_modules', 'string-width'), 'dir');
@@ -362,14 +431,20 @@ describe('framework candidate evidence binding', () => {
       },
     };
     expect(() =>
-      verifyDerivedInkTransforms('ink@7.1.1', { instrumentInkCore, instrumentInkRenderer }, profile),
+      verifyDerivedInkTransforms(
+        'ink@7.1.1',
+        { instrumentInkCore, instrumentInkRenderer },
+        profile,
+      ),
     ).not.toThrow();
   });
 
   it('cryptographically binds the exact installed npm graph to every discovered tarball', async () => {
     const { candidate, directory, fetchImpl, probe } = await npmClosureFixture();
     try {
-      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).resolves.toMatchObject({ version: '1.2.3', resolvedNodes: 1 });
+      await expect(
+        verifyInstalledNpmClosure(candidate, probe, { fetchImpl }),
+      ).resolves.toMatchObject({ version: '1.2.3', resolvedNodes: 1 });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -379,7 +454,9 @@ describe('framework candidate evidence binding', () => {
     const { candidate, dependency, directory, fetchImpl, probe } = await npmClosureFixture();
     try {
       await writeFile(join(dependency, 'index.js'), 'export const altered = true;\n');
-      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(/content does not match/u);
+      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(
+        /content does not match/u,
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -389,8 +466,13 @@ describe('framework candidate evidence binding', () => {
     const { candidate, directory, fetchImpl, probe, rootPackage } = await npmClosureFixture();
     try {
       await mkdir(join(rootPackage, 'node_modules'), { recursive: true });
-      await writeFile(join(rootPackage, 'node_modules', 'hidden.js'), 'export const hidden = true;\n');
-      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(/root content does not match/u);
+      await writeFile(
+        join(rootPackage, 'node_modules', 'hidden.js'),
+        'export const hidden = true;\n',
+      );
+      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(
+        /root content does not match/u,
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -403,7 +485,9 @@ describe('framework candidate evidence binding', () => {
         recursive: true,
       });
       await writeFile(join(rootPackage, 'node_modules', '.bin', 'dependency'), '#!/bin/sh\n');
-      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).resolves.toMatchObject({ version: '1.2.3', resolvedNodes: 1 });
+      await expect(
+        verifyInstalledNpmClosure(candidate, probe, { fetchImpl }),
+      ).resolves.toMatchObject({ version: '1.2.3', resolvedNodes: 1 });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -416,7 +500,9 @@ describe('framework candidate evidence binding', () => {
         recursive: true,
       });
       await writeFile(join(rootPackage, 'node_modules', '.bin', 'unbound'), '#!/bin/sh\n');
-      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(/bin entry is undeclared/u);
+      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(
+        /bin entry is undeclared/u,
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -432,7 +518,9 @@ describe('framework candidate evidence binding', () => {
     ];
     const executable = [{ ...regular[0], executableMode: 0o111 }];
 
-    expect(packageContentDigestForEntries(executable)).not.toBe(packageContentDigestForEntries(regular));
+    expect(packageContentDigestForEntries(executable)).not.toBe(
+      packageContentDigestForEntries(regular),
+    );
   });
 
   it('rejects expected closure nodes that are unreachable from the installed root', async () => {
@@ -443,7 +531,9 @@ describe('framework candidate evidence binding', () => {
         name: 'orphan',
         version: '9.0.0',
       });
-      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(/unreachable nodes: orphan@9\.0\.0/u);
+      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(
+        /unreachable nodes: orphan@9\.0\.0/u,
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -456,7 +546,9 @@ describe('framework candidate evidence binding', () => {
       }),
       semanticTree: () => ({ v: 2 }),
     };
-    await expect(assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9')).resolves.toBeUndefined();
+    await expect(
+      assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9'),
+    ).resolves.toBeUndefined();
   });
 
   it('rejects a session whose frozen contract lacks semantic support', async () => {
@@ -466,7 +558,9 @@ describe('framework candidate evidence binding', () => {
       }),
       semanticTree: () => ({ v: 2 }),
     };
-    await expect(assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9')).rejects.toThrow(/no supported semantic tree/u);
+    await expect(assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9')).rejects.toThrow(
+      /no supported semantic tree/u,
+    );
   });
 
   it('classifies a newer upstream Go floor as a typed red candidate outcome', () => {
@@ -478,7 +572,9 @@ describe('framework candidate evidence binding', () => {
         },
         '1.25',
       ),
-    ).toBe('bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25');
+    ).toBe(
+      'bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25',
+    );
   });
 
   it('returns a failing process status after retaining a typed red verdict', async () => {
@@ -525,7 +621,8 @@ describe('framework candidate evidence binding', () => {
         candidateId: 'bubbletea-v2@v2.1.0',
         platform: certificationPlatform(),
         state: 'red',
-        detail: 'bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25',
+        detail:
+          'bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25',
       });
     } finally {
       await rm(directory, { recursive: true, force: true });

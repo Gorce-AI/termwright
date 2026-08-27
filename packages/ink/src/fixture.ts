@@ -128,7 +128,9 @@ const RUNNER_ENTRY = new URL('../runner/runner-entry.mjs', import.meta.url);
  * await harness.close();
  * ```
  */
-export async function launchInkFixture(options: LaunchInkFixtureOptions): Promise<InkFixtureHarness> {
+export async function launchInkFixture(
+  options: LaunchInkFixtureOptions,
+): Promise<InkFixtureHarness> {
   const payload = encodeFixturePayload({
     v: 1,
     module: moduleUrl(options.component),
@@ -232,7 +234,11 @@ class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarne
   #rerenderTail: Promise<void> = Promise.resolve();
   #closePromise: Promise<void> | null = null;
 
-  constructor(session: TerminalHarness, control: ControlChannel, settle: SettleOptions | undefined) {
+  constructor(
+    session: TerminalHarness,
+    control: ControlChannel,
+    settle: SettleOptions | undefined,
+  ) {
     super(session);
     this.#control = control;
     this.#settle = settle;
@@ -244,7 +250,10 @@ class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarne
     // either command is sent would let both observe the first commit. Queue the
     // complete send + paired-frame operation, not merely the socket write.
     const run = this.#rerenderTail.then(() => this.#rerenderOne(props, opts));
-    this.#rerenderTail = run.then(() => undefined, () => undefined);
+    this.#rerenderTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
     return run;
   }
 
@@ -287,28 +296,39 @@ async function closeFixtureResources(
   );
 }
 
-function pairedRevisionObserver(harness: TerminalHarness, deadline: number): {
+function pairedRevisionObserver(
+  harness: TerminalHarness,
+  deadline: number,
+): {
   waitFor(revision: number): Promise<void>;
   close(): void;
 } {
   const seen = new Set<number>();
-  const waiters = new Map<number, {
-    readonly resolve: () => void;
-    readonly reject: (error: Error) => void;
-  }>();
-  let exited: { readonly code: number | null; readonly signal: string | null } | null = null;
-  const unsubscribes = [harness.events.on('semantic-revision', ({ revision }) => {
-    seen.add(revision);
-    waiters.get(revision)?.resolve();
-  }), harness.events.on('exit', (status) => {
-    exited = status;
-    for (const [revision, waiter] of waiters) {
-      waiter.reject(new ProcessExitedError(
-        `the fixture exited (code ${String(status.code)}, signal ${String(status.signal)}) before semantic revision ${revision} was paired`,
-        { semanticTree: true },
-      ));
+  const waiters = new Map<
+    number,
+    {
+      readonly resolve: () => void;
+      readonly reject: (error: Error) => void;
     }
-  })];
+  >();
+  let exited: { readonly code: number | null; readonly signal: string | null } | null = null;
+  const unsubscribes = [
+    harness.events.on('semantic-revision', ({ revision }) => {
+      seen.add(revision);
+      waiters.get(revision)?.resolve();
+    }),
+    harness.events.on('exit', (status) => {
+      exited = status;
+      for (const [revision, waiter] of waiters) {
+        waiter.reject(
+          new ProcessExitedError(
+            `the fixture exited (code ${String(status.code)}, signal ${String(status.signal)}) before semantic revision ${revision} was paired`,
+            { semanticTree: true },
+          ),
+        );
+      }
+    }),
+  ];
   let closed = false;
   return {
     async waitFor(revision) {
@@ -323,10 +343,12 @@ function pairedRevisionObserver(harness: TerminalHarness, deadline: number): {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           waiters.delete(revision);
-          reject(new TimeoutError(
-            `the fixture's semantic revision ${revision} was not paired within ${timeout} ms`,
-            { semanticTree: true, screenExcerpt: harness.screen().text() },
-          ));
+          reject(
+            new TimeoutError(
+              `the fixture's semantic revision ${revision} was not paired within ${timeout} ms`,
+              { semanticTree: true, screenExcerpt: harness.screen().text() },
+            ),
+          );
         }, timeout);
         timer.unref?.();
         waiters.set(revision, {
@@ -347,9 +369,11 @@ function pairedRevisionObserver(harness: TerminalHarness, deadline: number): {
       if (closed) return;
       closed = true;
       for (const waiter of waiters.values()) {
-        waiter.reject(new SessionClosedError('the paired revision observer was closed', {
-          semanticTree: harness.contract()?.capabilities['semantic-tree'].status === 'supported',
-        }));
+        waiter.reject(
+          new SessionClosedError('the paired revision observer was closed', {
+            semanticTree: harness.contract()?.capabilities['semantic-tree'].status === 'supported',
+          }),
+        );
       }
       for (const unsubscribe of unsubscribes) unsubscribe();
     },

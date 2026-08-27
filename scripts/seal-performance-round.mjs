@@ -15,7 +15,14 @@ export const PERFORMANCE_ROUND_INPUTS = Object.freeze({
   opentui: 'opentui-marker-route.json',
 });
 
-export async function sealPerformanceRound({ directory, subject, round, sequence, subjectSha, env = process.env }) {
+export async function sealPerformanceRound({
+  directory,
+  subject,
+  round,
+  sequence,
+  subjectSha,
+  env = process.env,
+}) {
   validateIdentity({ subject, round, sequence, subjectSha });
   const inputs = await hashInputs(directory);
   const ci = githubIdentity(env, subjectSha);
@@ -33,15 +40,27 @@ export async function sealPerformanceRound({ directory, subject, round, sequence
 
 export async function loadPerformanceRoundSeal(path, expected, env = process.env) {
   const value = JSON.parse(await readFile(resolve(path), 'utf8'));
-  exactKeys(value, ['kind', 'schemaVersion', 'subject', 'round', 'sequence', 'subjectSha', 'ci', 'inputs'], 'performance round seal');
-  if (value.kind !== PERFORMANCE_ROUND_SEAL_KIND || value.schemaVersion !== PERFORMANCE_ROUND_SEAL_VERSION) {
+  exactKeys(
+    value,
+    ['kind', 'schemaVersion', 'subject', 'round', 'sequence', 'subjectSha', 'ci', 'inputs'],
+    'performance round seal',
+  );
+  if (
+    value.kind !== PERFORMANCE_ROUND_SEAL_KIND ||
+    value.schemaVersion !== PERFORMANCE_ROUND_SEAL_VERSION
+  ) {
     throw new Error('performance round seal kind or schema is unsupported');
   }
   validateIdentity(value);
-  if (value.subject !== expected.subject || value.round !== expected.round
-    || value.sequence !== expected.sequence
-    || value.subjectSha !== expected.subjectSha) {
-    throw new Error('performance round seal differs from the expected subject, round, sequence or SHA');
+  if (
+    value.subject !== expected.subject ||
+    value.round !== expected.round ||
+    value.sequence !== expected.sequence ||
+    value.subjectSha !== expected.subjectSha
+  ) {
+    throw new Error(
+      'performance round seal differs from the expected subject, round, sequence or SHA',
+    );
   }
   validateGithubIdentity(value.ci, value.subjectSha, env);
   exactKeys(value.inputs, Object.keys(PERFORMANCE_ROUND_INPUTS), 'performance round seal inputs');
@@ -55,9 +74,14 @@ export async function loadPerformanceRoundSeal(path, expected, env = process.env
 }
 
 async function hashInputs(directory) {
-  return Object.fromEntries(await Promise.all(Object.entries(PERFORMANCE_ROUND_INPUTS).map(
-    async ([name, file]) => [name, sha256(await readFile(resolve(directory, file)))],
-  )));
+  return Object.fromEntries(
+    await Promise.all(
+      Object.entries(PERFORMANCE_ROUND_INPUTS).map(async ([name, file]) => [
+        name,
+        sha256(await readFile(resolve(directory, file))),
+      ]),
+    ),
+  );
 }
 
 function validateIdentity({ subject, round, sequence, subjectSha }) {
@@ -86,16 +110,22 @@ function githubIdentity(env, subjectSha) {
 
 function validateGithubIdentity(value, subjectSha, env) {
   if (value === null) {
-    if (env.GITHUB_ACTIONS === 'true') throw new Error('performance round GitHub provenance is missing');
+    if (env.GITHUB_ACTIONS === 'true')
+      throw new Error('performance round GitHub provenance is missing');
     return;
   }
   exactKeys(value, ['runId', 'runAttempt', 'sha'], 'performance round GitHub provenance');
-  if (!/^[1-9][0-9]*$/u.test(value.runId ?? '') || value.runAttempt !== '1'
-    || value.sha !== subjectSha) {
+  if (
+    !/^[1-9][0-9]*$/u.test(value.runId ?? '') ||
+    value.runAttempt !== '1' ||
+    value.sha !== subjectSha
+  ) {
     throw new Error('performance round GitHub provenance is invalid or not the first attempt');
   }
-  if (env.GITHUB_ACTIONS === 'true' && (value.runId !== env.GITHUB_RUN_ID
-    || value.runAttempt !== env.GITHUB_RUN_ATTEMPT)) {
+  if (
+    env.GITHUB_ACTIONS === 'true' &&
+    (value.runId !== env.GITHUB_RUN_ID || value.runAttempt !== env.GITHUB_RUN_ATTEMPT)
+  ) {
     throw new Error('performance round GitHub provenance differs from the current workflow run');
   }
 }
@@ -111,15 +141,22 @@ function exactKeys(value, keys, label) {
   }
 }
 
-function sha256(value) { return createHash('sha256').update(value).digest('hex'); }
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
 
 function parseArgs(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index]?.replace(/^--/u, '');
     const value = argv[index + 1];
-    if (!['directory', 'subject', 'round', 'sequence', 'subject-sha', 'output'].includes(name) || !value) {
-      throw new Error('usage: seal-performance-round.mjs --directory <dir> --subject <reference|candidate> --round <1|2> --sequence <1..4> --subject-sha <sha> --output <json>');
+    if (
+      !['directory', 'subject', 'round', 'sequence', 'subject-sha', 'output'].includes(name) ||
+      !value
+    ) {
+      throw new Error(
+        'usage: seal-performance-round.mjs --directory <dir> --subject <reference|candidate> --round <1|2> --sequence <1..4> --subject-sha <sha> --output <json>',
+      );
     }
     const key = name.replace(/-([a-z])/gu, (_, letter) => letter.toUpperCase());
     if (options[key] !== undefined) throw new Error(`duplicate performance round option --${name}`);
@@ -137,6 +174,9 @@ async function main(argv) {
   await writeFile(resolve(options.output), `${JSON.stringify(seal, null, 2)}\n`, 'utf8');
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   await main(process.argv.slice(2));
 }

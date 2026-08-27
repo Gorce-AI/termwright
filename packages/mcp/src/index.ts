@@ -61,12 +61,7 @@ export type {
   SemanticState,
 } from './model.js';
 
-export {
-  createTermwrightMcpServer,
-  serveHttp,
-  serveInMemory,
-  serveStdio,
-} from './server.js';
+export { createTermwrightMcpServer, serveHttp, serveInMemory, serveStdio } from './server.js';
 export type { HttpServeOptions, HttpServerHandle, RunningServer, ServeOptions } from './server.js';
 export type { HttpRateLimitOptions } from './http-security.js';
 

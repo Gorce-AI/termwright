@@ -10,14 +10,14 @@ Termwright migration source.
 If you already use a modern browser test runner, parts of the authoring model
 will feel familiar:
 
-| Browser testing | Termwright |
-|---|---|
-| browser or page session | terminal session in a real PTY |
-| rendered DOM | rendered terminal grid plus an optional semantic tree |
-| `getByRole()` | semantic locator when a framework integration is available |
-| browser keyboard and mouse | keyboard and mouse input sent through the PTY |
-| retrying locator assertion | retrying Termwright assertion |
-| trace viewer | Runner replay and the retained HTML report |
+| Browser testing            | Termwright                                                 |
+| -------------------------- | ---------------------------------------------------------- |
+| browser or page session    | terminal session in a real PTY                             |
+| rendered DOM               | rendered terminal grid plus an optional semantic tree      |
+| `getByRole()`              | semantic locator when a framework integration is available |
+| browser keyboard and mouse | keyboard and mouse input sent through the PTY              |
+| retrying locator assertion | retrying Termwright assertion                              |
+| trace viewer               | Runner replay and the retained HTML report                 |
 
 ## Important differences
 

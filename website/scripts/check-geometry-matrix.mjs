@@ -9,21 +9,34 @@ const graphPath = resolve(here, '../../clients/test-vectors/capability-graph.jso
 const start = '<!-- geometry-matrices:start -->';
 const end = '<!-- geometry-matrices:end -->';
 const rank = { automatic: 0, 'application-integrated': 1, unsupported: 2 };
-const weakest = (values) => values.reduce((result, value) => (rank[value] > rank[result] ? value : result), 'automatic');
-const strongest = (values) => values.reduce((result, value) => (rank[value] < rank[result] ? value : result), 'unsupported');
+const weakest = (values) =>
+  values.reduce((result, value) => (rank[value] > rank[result] ? value : result), 'automatic');
+const strongest = (values) =>
+  values.reduce((result, value) => (rank[value] < rank[result] ? value : result), 'unsupported');
 
 function sessionAvailability(row, capability) {
   if (row.capabilityGraph.automatic.includes(capability)) return 'automatic';
-  if (row.capabilityGraph.applicationIntegrated.some((entry) => entry.capabilities.includes(capability))) return 'application-integrated';
-  if (row.capabilityGraph.input.some((entry) => entry.capability === capability)) return 'automatic';
+  if (
+    row.capabilityGraph.applicationIntegrated.some((entry) =>
+      entry.capabilities.includes(capability),
+    )
+  )
+    return 'application-integrated';
+  if (row.capabilityGraph.input.some((entry) => entry.capability === capability))
+    return 'automatic';
   return 'unsupported';
 }
 
 function producerAvailability(row, id) {
-  if (id.startsWith('adapter.')) return row.probe.adapterCapabilities.includes(id.slice(8)) ? 'automatic' : 'unsupported';
-  if (id.startsWith('probe.')) return row.probe.capabilities.includes(id.slice(6)) ? 'automatic' : 'unsupported';
+  if (id.startsWith('adapter.'))
+    return row.probe.adapterCapabilities.includes(id.slice(8)) ? 'automatic' : 'unsupported';
+  if (id.startsWith('probe.'))
+    return row.probe.capabilities.includes(id.slice(6)) ? 'automatic' : 'unsupported';
   if (id.startsWith('provider.'))
-    return [...row.capabilityGraph.applicationIntegrated, ...row.capabilityGraph.input.flatMap((entry) => entry.providerAlternatives)].some((entry) => entry.providerCapabilities.includes(id.slice(9)))
+    return [
+      ...row.capabilityGraph.applicationIntegrated,
+      ...row.capabilityGraph.input.flatMap((entry) => entry.providerAlternatives),
+    ].some((entry) => entry.providerCapabilities.includes(id.slice(9)))
       ? 'application-integrated'
       : 'unsupported';
   if (id.startsWith('terminal.')) return 'automatic';
@@ -37,10 +50,19 @@ function availability(row, id, graph, visiting = new Set()) {
   if (id.startsWith('runtime.')) return 'automatic';
   if (visiting.has(id)) throw new Error(`capability graph cycle at ${id}`);
   visiting.add(id);
-  const incoming = graph.edges.filter((edge) => edge.to === id && (edge.kind === 'requires' || edge.kind === 'requires-any'));
-  const required = incoming.filter((edge) => edge.kind === 'requires').map((edge) => availability(row, edge.from, graph, new Set(visiting)));
-  const alternatives = incoming.filter((edge) => edge.kind === 'requires-any').map((edge) => availability(row, edge.from, graph, new Set(visiting)));
-  const result = weakest([...(required.length === 0 ? ['automatic'] : required), ...(alternatives.length === 0 ? [] : [strongest(alternatives)])]);
+  const incoming = graph.edges.filter(
+    (edge) => edge.to === id && (edge.kind === 'requires' || edge.kind === 'requires-any'),
+  );
+  const required = incoming
+    .filter((edge) => edge.kind === 'requires')
+    .map((edge) => availability(row, edge.from, graph, new Set(visiting)));
+  const alternatives = incoming
+    .filter((edge) => edge.kind === 'requires-any')
+    .map((edge) => availability(row, edge.from, graph, new Set(visiting)));
+  const result = weakest([
+    ...(required.length === 0 ? ['automatic'] : required),
+    ...(alternatives.length === 0 ? [] : [strongest(alternatives)]),
+  ]);
   visiting.delete(id);
   return result;
 }
@@ -71,8 +93,14 @@ const publicColumns = [
 ];
 export function renderGeometryPage(page, registry, graph) {
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
-  const evidenceRows = registry.frameworks.map((row) => `| ${row.name} | ${evidenceColumns.map(([, capability]) => sessionAvailability(row, capability)).join(' | ')} |`);
-  const publicRows = registry.frameworks.map((row) => `| ${row.name} | ${publicColumns.map(([, id]) => availability(row, id, graph)).join(' | ')} |`);
+  const evidenceRows = registry.frameworks.map(
+    (row) =>
+      `| ${row.name} | ${evidenceColumns.map(([, capability]) => sessionAvailability(row, capability)).join(' | ')} |`,
+  );
+  const publicRows = registry.frameworks.map(
+    (row) =>
+      `| ${row.name} | ${publicColumns.map(([, id]) => availability(row, id, graph)).join(' | ')} |`,
+  );
   const certificationRows = registry.frameworks.map((row) => {
     const sources =
       row.certification.checksumSources.length === 0
@@ -109,7 +137,8 @@ export function renderGeometryPage(page, registry, graph) {
     row.capabilityGraph.input.flatMap((input) =>
       input.runtimePrerequisites.map((prerequisite) => {
         const remediation = nodeById.get(`runtime.${prerequisite}`)?.remediation;
-        if (remediation === undefined) throw new Error(`missing generated remediation for runtime.${prerequisite}`);
+        if (remediation === undefined)
+          throw new Error(`missing generated remediation for runtime.${prerequisite}`);
         return `- **${row.name} — ${input.capability} / ${prerequisite}:** ${remediation.message}`;
       }),
     ),
@@ -159,7 +188,8 @@ export function renderGeometryPage(page, registry, graph) {
 
   const begin = page.indexOf(start);
   const finish = page.indexOf(end);
-  if (begin < 0 || finish < begin) throw new Error('geometry page is missing generated matrix markers');
+  if (begin < 0 || finish < begin)
+    throw new Error('geometry page is missing generated matrix markers');
   return page.slice(0, begin) + generated + page.slice(finish + end.length);
 }
 
@@ -172,10 +202,13 @@ async function main() {
     await writeFile(pagePath, rendered);
     console.log('generated capability graph matrices from compatibility/registry.json');
   } else if (page !== rendered) {
-    throw new Error('capability graph matrices drifted; run `pnpm --dir website generate:geometry`');
+    throw new Error(
+      'capability graph matrices drifted; run `pnpm --dir website generate:geometry`',
+    );
   } else {
     console.log('capability graph matrices match compatibility/registry.json');
   }
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) await main();
+if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1]))
+  await main();

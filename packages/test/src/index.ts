@@ -40,7 +40,12 @@ export { afterAll, afterEach, beforeAll, beforeEach, describe, expect, vi } from
 // Public harness types belong beside the fixture that returns them. Consumers
 // of the umbrella `termwright` package should not need a second direct package
 // dependency only to type a custom fixture.
-export type { AnyLocator, SemanticLocator, ScreenLocator, TerminalHarness } from '@termwright/driver';
+export type {
+  AnyLocator,
+  SemanticLocator,
+  ScreenLocator,
+  TerminalHarness,
+} from '@termwright/driver';
 
 export {
   configureTermwright,
@@ -96,10 +101,7 @@ export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 
 export { ptyAvailable, ptyUnavailableReason, type PtyUnavailableReason } from './pty-available.js';
 
-export {
-  type LaunchOverrides,
-  type TermwrightOptions,
-} from './options.js';
+export { type LaunchOverrides, type TermwrightOptions } from './options.js';
 
 export {
   seedDirectory,

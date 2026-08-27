@@ -13,7 +13,7 @@ editUrl: false
 
 > **encodeMouse**(`event`, `modes`): `Uint8Array`
 
-Defined in: [mouse.ts:99](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/mouse.ts#L99)
+Defined in: [mouse.ts:100](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/mouse.ts#L100)
 
 Encodes one mouse event.
 

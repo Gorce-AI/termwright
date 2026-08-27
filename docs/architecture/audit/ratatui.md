@@ -18,8 +18,8 @@ that prefix. Cargo 1.97.1.
 
 The headline is that Ratatui is immediate mode, and that single fact decides
 most of what follows: there is no retained tree, no widget identity, and no
-record of which widget painted which cell. Where Textual can be *inspected*,
-Ratatui can only be *intercepted*.
+record of which widget painted which cell. Where Textual can be _inspected_,
+Ratatui can only be _intercepted_.
 
 ---
 
@@ -97,8 +97,8 @@ self[(x, y)].set_symbol(symbol).set_style(style);
 No read-back, no ownership test, no blending. A multi-width grapheme
 additionally `reset()`s the trailing cells (`buffer.rs:365`), so a widget can
 erase a neighbour's content. `Buffer::merge` says it outright in a comment at
-`buffer.rs:451`: *"Push content of the other buffer into this one (may erase
-previous data)"*.
+`buffer.rs:451`: _"Push content of the other buffer into this one (may erase
+previous data)"_.
 
 **Cells carry no provenance.** `Cell`
 (`ratatui-core-0.1.2/src/buffer/cell.rs:37-72`) holds a symbol, colours, a
@@ -112,16 +112,16 @@ a claim on cells.** Any later call whose area intersects it overwrites, and
 nothing anywhere records that this happened. Widgets exist specifically to
 exploit that: `ratatui-widgets-0.3.2/src/clear.rs`, `block/shadow.rs`,
 `fill.rs`. A probe that reports `area` as a node's bounds is reporting where a
-widget *tried* to draw. For overlapping UIs — popups, modals, shadows — that
+widget _tried_ to draw. For overlapping UIs — popups, modals, shadows — that
 is not where it ended up.
 
 ## 3. Stateful widgets: what state is actually readable
 
-| State | Definition | Publicly readable |
-|---|---|---|
-| `ListState` | `ratatui-widgets-0.3.2/src/list/state.rs:45-48`: `offset`, `selected`, both `pub(crate)` | `offset()` `:95`, `selected()` `:125` |
-| `TableState` | `.../table/state.rs:55-59`: `offset`, `selected`, `selected_column` | `offset()` `:171`, `selected()` `:201`, `selected_column()` `:216`, `selected_cell()` `:231` |
-| `ScrollbarState` | `.../scrollbar.rs:145-154`: `content_length`, `position`, `viewport_content_length`, all **fully private** | `get_position()` `:496` only |
+| State            | Definition                                                                                                 | Publicly readable                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ListState`      | `ratatui-widgets-0.3.2/src/list/state.rs:45-48`: `offset`, `selected`, both `pub(crate)`                   | `offset()` `:95`, `selected()` `:125`                                                        |
+| `TableState`     | `.../table/state.rs:55-59`: `offset`, `selected`, `selected_column`                                        | `offset()` `:171`, `selected()` `:201`, `selected_column()` `:216`, `selected_cell()` `:231` |
+| `ScrollbarState` | `.../scrollbar.rs:145-154`: `content_length`, `position`, `viewport_content_length`, all **fully private** | `get_position()` `:496` only                                                                 |
 
 Two gaps worth naming:
 
@@ -131,14 +131,14 @@ Two gaps worth naming:
   `setSize` — which the semantic tree wants for a list — is not obtainable
   from the state alone.
 - **`ScrollbarState` is write-only in practice.** `content_length()`
-  (`:445`) and `viewport_content_length()` (`:454`) are *setters returning
-  `Self`*, not getters; only `get_position()` reads. `scrollExtent` is
+  (`:445`) and `viewport_content_length()` (`:454`) are _setters returning
+  `Self`_, not getters; only `get_position()` reads. `scrollExtent` is
   therefore unavailable without `serde`.
 
 One useful behaviour: rendering **mutates** the state to reflect what was
 actually drawn — `list/rendering.rs:58` assigns `state.offset =
 first_visible_index`, and `table.rs:757-770` clamps similarly. A probe reading
-state *after* the render sees the true viewport rather than the requested one.
+state _after_ the render sees the true viewport rather than the requested one.
 
 ## 4. Identity across frames: why it cannot be synthesised
 
@@ -148,7 +148,7 @@ handle anywhere in the render path. A repository-wide grep for `type_name`,
 never inspects widget types at runtime.
 
 `Frame` does carry a frame counter (`frame.rs:37`, read via `count()` `:235`,
-incremented at `terminal/render.rs:317`), but that identifies the *frame*, not
+incremented at `terminal/render.rs:317`), but that identifies the _frame_, not
 anything in it.
 
 The reasons identity cannot be reconstructed, each independently sufficient:
@@ -225,7 +225,7 @@ version — one patch entry suffices for the core hook.
 No chokepoint is total, and the audit should not pretend otherwise:
 
 1. Nested composition bypasses `Frame` (§5).
-2. `render_widget_ref` routes through `buffer_mut()`, in the *facade* crate
+2. `render_widget_ref` routes through `buffer_mut()`, in the _facade_ crate
    (`ratatui-0.30.2/src/widgets.rs:761`), so it needs a second hook.
 3. `Buffer`'s fields are public, so `buf.content[i] = …` is legal application
    code and passes through no method at all.
@@ -255,7 +255,7 @@ even a `.cargo/` directory.
 **c. The patch rewrites `Cargo.lock`.** Diffing the lockfile before and after a
 patched build shows the `ratatui-core` entry **losing** its `source` and
 `checksum` lines — it becomes a path dependency. Running unpatched again
-restores them. So the mechanism is *not* lockfile-neutral, and an instrumented
+restores them. So the mechanism is _not_ lockfile-neutral, and an instrumented
 build mutates a file that is normally committed.
 
 **d. `--locked` refuses the patch.** From a clean lockfile,
@@ -268,7 +268,7 @@ default — cannot be instrumented this way without an explicit accommodation.
 **e. Config discovery walks up.** Cargo found the workspace manifest and
 config from a nested subdirectory, so a generated `.cargo/config.toml` placed
 at the workspace root applies to builds started deeper in the tree. The
-converse is the risk: a config written next to a *member* manifest does not
+converse is the risk: a config written next to a _member_ manifest does not
 apply to the workspace root.
 
 Remaining sensitivities, not yet measured and flagged for whoever builds this:
@@ -283,7 +283,6 @@ Remaining sensitivities, not yet measured and flagged for whoever builds this:
   satisfies the dependants' requirements; `ratatui-core` moving to 0.2 would
   need a new copy of the patched source, not a version bump in the patch entry.
 
-
 ### Measured again at implementation time (Phase 6)
 
 Four more facts, from patching a real copy rather than a marker constant. The
@@ -291,14 +290,14 @@ scratch project depends on `ratatui` 0.30.2; the copy is `ratatui-core` 0.1.2
 with an insertion inside `Frame::render_widget` itself.
 
 **f. The patched code executes, not merely resolves.** The earlier measurement
-proved the graph *pointed* at the copy. This one proves the copy *runs*: the
+proved the graph _pointed_ at the copy. This one proves the copy _runs_: the
 line inserted into `render_widget` printed on every frame, and vanished when
 the `--config` flag was dropped. Resolution and execution are different claims
 and only the second one matters.
 
 **g. `ratatui-core` is `#![no_std]`** (`src/lib.rs:1`). A patch that reaches
 for `std` unguarded does not compile — measured, with `cannot find macro
-eprintln in this scope`. The `std` feature *is* enabled in a normal
+eprintln in this scope`. The `std` feature _is_ enabled in a normal
 application, because the `ratatui` facade turns it on (`cargo metadata` reports
 `["default", "layout-cache", "std", "underline-color"]`), but that is the
 facade's doing and not a property of the crate. Every line of instrumentation
@@ -331,10 +330,10 @@ not a bug to fix.
 4. Widget identity across frames **cannot be derived** from anything upstream.
    Whatever the Probe IR does here, it must not present a synthesised ordinal
    as a stable handle.
-5. Selection and scroll *position* are readable for `List` and `Table`; content
-   *extent* is not readable anywhere, and `ScrollbarState` exposes only
+5. Selection and scroll _position_ are readable for `List` and `Table`; content
+   _extent_ is not readable anywhere, and `ScrollbarState` exposes only
    position. **Corrected in Phase 6:** this measured the public API, and a
-   patch runs *inside* the crate. `List::items` is `pub(crate)`, so the item
+   patch runs _inside_ the crate. `List::items` is `pub(crate)`, so the item
    count and the item text are reachable from a patched `ratatui-widgets` and
    from nowhere else — which is what makes `setSize` and item names
    obtainable, and what justifies patching a second crate. `ScrollbarState`'s

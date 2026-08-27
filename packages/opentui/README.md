@@ -5,8 +5,8 @@ Optional, annotation-only semantics for an ordinary OpenTUI application.
 it does not instrument or own the renderer.
 
 ```ts
-import {BoxRenderable, createCliRenderer} from '@opentui/core';
-import {describeRenderable} from '@termwright/opentui';
+import { BoxRenderable, createCliRenderer } from '@opentui/core';
+import { describeRenderable } from '@termwright/opentui';
 
 const renderer = await createCliRenderer();
 const deployment = new BoxRenderable(renderer, {
@@ -19,7 +19,7 @@ const dispose = describeRenderable(deployment, {
   role: 'status',
   name: 'Deployment',
   testId: 'deployment',
-  extended: {environment: 'staging'},
+  extended: { environment: 'staging' },
 });
 
 renderer.root.add(deployment);

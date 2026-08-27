@@ -5,8 +5,7 @@ import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const PERFORMANCE_HARNESS_FINGERPRINT_KIND =
-  'termwright-performance-harness-fingerprint';
+export const PERFORMANCE_HARNESS_FINGERPRINT_KIND = 'termwright-performance-harness-fingerprint';
 export const PERFORMANCE_HARNESS_FINGERPRINT_VERSION = 1;
 
 /**
@@ -18,33 +17,35 @@ export const PERFORMANCE_HARNESS_FINGERPRINT_VERSION = 1;
  * seed checkout does not execute or need to contain them; their own hashes are
  * recorded separately in paired provenance.
  */
-export const PERFORMANCE_HARNESS_FILES = Object.freeze([
-  'packages/performance/package.json',
-  'packages/performance/tsconfig.json',
-  'packages/performance/src/charm-e2e.ts',
-  'packages/performance/src/charm.ts',
-  'packages/performance/src/cli.ts',
-  'packages/performance/src/fixtures.ts',
-  'packages/performance/src/index.ts',
-  'packages/performance/src/opentui-marker-e2e.ts',
-  'packages/performance/src/opentui-marker.ts',
-  'packages/performance/src/report.ts',
-  'packages/performance/src/report-schema.ts',
-  'packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json',
-  'packages/probe-charm/src/testing/fixture-v2/go.mod',
-  'packages/probe-charm/src/testing/fixture-v2/go.sum',
-  'packages/probe-charm/src/testing/fixture-v2/main.go',
-  'packages/probe-opentui/bench/marker-route.ts',
-  'quality/soak/terminal-cycle.test.ts',
-  'quality/soak/vitest.config.ts',
-  'quality/stress/terminal-concurrency.test.ts',
-  'quality/stress/vitest.config.ts',
-  'scripts/collect-quality-performance.mjs',
-  'scripts/performance-environment.mjs',
-  'scripts/quality-performance-checkpoint.mjs',
-  'scripts/quality-performance-timing.mjs',
-  'scripts/test-support/process-resource-observation.mjs',
-].sort());
+export const PERFORMANCE_HARNESS_FILES = Object.freeze(
+  [
+    'packages/performance/package.json',
+    'packages/performance/tsconfig.json',
+    'packages/performance/src/charm-e2e.ts',
+    'packages/performance/src/charm.ts',
+    'packages/performance/src/cli.ts',
+    'packages/performance/src/fixtures.ts',
+    'packages/performance/src/index.ts',
+    'packages/performance/src/opentui-marker-e2e.ts',
+    'packages/performance/src/opentui-marker.ts',
+    'packages/performance/src/report.ts',
+    'packages/performance/src/report-schema.ts',
+    'packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json',
+    'packages/probe-charm/src/testing/fixture-v2/go.mod',
+    'packages/probe-charm/src/testing/fixture-v2/go.sum',
+    'packages/probe-charm/src/testing/fixture-v2/main.go',
+    'packages/probe-opentui/bench/marker-route.ts',
+    'quality/soak/terminal-cycle.test.ts',
+    'quality/soak/vitest.config.ts',
+    'quality/stress/terminal-concurrency.test.ts',
+    'quality/stress/vitest.config.ts',
+    'scripts/collect-quality-performance.mjs',
+    'scripts/performance-environment.mjs',
+    'scripts/quality-performance-checkpoint.mjs',
+    'scripts/quality-performance-timing.mjs',
+    'scripts/test-support/process-resource-observation.mjs',
+  ].sort(),
+);
 
 export async function fingerprintPerformanceHarness({
   root,
@@ -60,7 +61,9 @@ export async function fingerprintPerformanceHarness({
     try {
       [metadata, contents] = await Promise.all([lstat(absolute), readFile(absolute)]);
     } catch (error) {
-      throw new Error(`performance harness file is missing or unreadable: ${path}`, { cause: error });
+      throw new Error(`performance harness file is missing or unreadable: ${path}`, {
+        cause: error,
+      });
     }
     if (!metadata.isFile() || metadata.isSymbolicLink()) {
       throw new Error(`performance harness path is not a regular file: ${path}`);
@@ -80,14 +83,20 @@ export async function fingerprintPerformanceHarness({
 }
 
 function requireExactFileContract(expectedFiles) {
-  if (!Array.isArray(expectedFiles)
-    || expectedFiles.some((path) => typeof path !== 'string' || !canonicalPath(path))) {
-    throw new Error('performance harness expected files must be canonical repository-relative paths');
+  if (
+    !Array.isArray(expectedFiles) ||
+    expectedFiles.some((path) => typeof path !== 'string' || !canonicalPath(path))
+  ) {
+    throw new Error(
+      'performance harness expected files must be canonical repository-relative paths',
+    );
   }
   const actual = [...expectedFiles].sort();
-  if (new Set(actual).size !== actual.length
-    || actual.length !== PERFORMANCE_HARNESS_FILES.length
-    || actual.some((path, index) => path !== PERFORMANCE_HARNESS_FILES[index])) {
+  if (
+    new Set(actual).size !== actual.length ||
+    actual.length !== PERFORMANCE_HARNESS_FILES.length ||
+    actual.some((path, index) => path !== PERFORMANCE_HARNESS_FILES[index])
+  ) {
     throw new Error(
       `performance harness expected-file contract differs from the canonical ${PERFORMANCE_HARNESS_FILES.length}-file list`,
     );
@@ -95,10 +104,12 @@ function requireExactFileContract(expectedFiles) {
 }
 
 function canonicalPath(path) {
-  return path.length > 0
-    && !path.startsWith('/')
-    && !path.includes('\\')
-    && path.split('/').every((part) => part.length > 0 && part !== '.' && part !== '..');
+  return (
+    path.length > 0 &&
+    !path.startsWith('/') &&
+    !path.includes('\\') &&
+    path.split('/').every((part) => part.length > 0 && part !== '.' && part !== '..')
+  );
 }
 
 function canonicalJson(value) {
@@ -118,7 +129,9 @@ function parseArgs(argv) {
     const name = argv[index];
     const value = argv[index + 1];
     if ((name !== '--root' && name !== '--output') || value === undefined || value.length === 0) {
-      throw new Error('usage: performance-harness-fingerprint.mjs [--root <checkout>] [--output <json>]');
+      throw new Error(
+        'usage: performance-harness-fingerprint.mjs [--root <checkout>] [--output <json>]',
+      );
     }
     options[name.slice(2)] = value;
     index += 1;
@@ -134,6 +147,9 @@ async function main(argv) {
   else await writeFile(resolve(options.output), output, 'utf8');
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   await main(process.argv.slice(2));
 }

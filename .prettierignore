@@ -1,0 +1,43 @@
+# Dependencies, build products, reports, and local state.
+**/node_modules/**
+**/dist/**
+**/coverage/**
+**/.astro/**
+**/target/**
+**/.venv/**
+**/.pytest_cache/**
+**/.termwright/**
+**/build/**
+**/playwright-report/**
+**/termwright-report/**
+**/test-results/**
+worktrees/**
+plans/**
+CONTRACTS.md
+CHANGELOG-contracts.md
+
+# Package-manager and native toolchain lock files own their serialization.
+pnpm-lock.yaml
+**/Cargo.lock
+**/go.sum
+clients/python/uv.lock
+
+# Generated, content-addressed, or byte-certified evidence.
+**/upstream-patches/**
+**/__snapshots__/**
+packages/pty-win32-*/vendor/**
+packages/probe-tview/assets/*.go.txt
+clients/test-vectors/**
+packages/performance/reports/**
+website/src/content/docs/api/**
+compatibility/*.json
+quality/determinism-constructs.json
+docs/architecture/audit/mission-completion.json
+
+# Generator-owned documentation; generators remain the only writers.
+packages/mcp/README.md
+website/src/content/docs/getting-started.md
+website/src/content/docs/reference/configuration.md
+website/src/content/docs/reference/geometry-visibility.md
+website/src/content/docs/reference/limitations.md
+website/src/content/docs/reference/mcp.md

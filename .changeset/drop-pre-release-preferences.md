@@ -1,6 +1,6 @@
 ---
-"@termwright/ui": patch
-"termwright": patch
+'@termwright/ui': patch
+'termwright': patch
 ---
 
 Remove migration of pre-release Runner preference keys. The Runner now reads

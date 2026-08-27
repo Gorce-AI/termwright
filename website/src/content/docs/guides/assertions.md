@@ -8,13 +8,13 @@ terminal and semantic revisions until the expectation passes or reaches the
 configured expect timeout.
 
 ```ts
-import {expect, test} from 'termwright/test';
-import {fileURLToPath} from 'node:url';
+import { expect, test } from 'termwright/test';
+import { fileURLToPath } from 'node:url';
 
 const profile = fileURLToPath(new URL('../profile.js', import.meta.url));
 
-test('saves a profile', async ({terminal}) => {
-  const app = await terminal.launch({command: [process.execPath, profile]});
+test('saves a profile', async ({ terminal }) => {
+  const app = await terminal.launch({ command: [process.execPath, profile] });
   await app.press('Enter');
   await expect(app).toHaveText('Saved');
 });
@@ -34,7 +34,7 @@ Use this for text a user can see on the terminal grid. On a locator,
 ## Assert presence and semantic state
 
 ```ts
-const save = app.getByRole('button', {name: 'Save'});
+const save = app.getByRole('button', { name: 'Save' });
 
 await expect(save).toBeAttached();
 await expect(save).toBeFocused();
@@ -43,7 +43,7 @@ await expect(mode).toBeChecked();
 await expect(tab).toBeSelected();
 await expect(details).toBeExpanded();
 await expect(name).toHaveValue('Ada');
-await expect(save).toHaveExtendedState({value: 'release'});
+await expect(save).toHaveExtendedState({ value: 'release' });
 ```
 
 Use `toHaveState()` for less common portable flags. The named matchers above
@@ -59,7 +59,7 @@ Geometry and visibility are capability-dependent:
 ```ts
 await expect(panel).toBeDisplayed();
 await expect(panel).toBeVisible();
-await expect(panel).toBeInViewport({fully: true});
+await expect(panel).toBeInViewport({ fully: true });
 await expect(panel).toBeOffscreen();
 ```
 
@@ -75,8 +75,8 @@ For transient UI such as a loader, wait on that concrete condition instead of
 waiting for the whole terminal to become idle:
 
 ```ts
-const loader = app.getByRole('progressbar', {name: 'Saving'});
-await loader.waitFor({state: 'hidden'}); // hidden or removed from the tree
+const loader = app.getByRole('progressbar', { name: 'Saving' });
+await loader.waitFor({ state: 'hidden' }); // hidden or removed from the tree
 ```
 
 Use `{state: 'detached'}` when removal from the semantic tree itself is the
@@ -86,7 +86,7 @@ condition.
 ## Assert bounds and spatial relationships
 
 ```ts
-await expect(card).toHaveBounds({width: 40, height: 8});
+await expect(card).toHaveBounds({ width: 40, height: 8 });
 await expect(label).toHaveSpatialRelation({
   relation: 'left-of',
   target: input,
@@ -120,7 +120,7 @@ collection.
 
 ```ts
 configureTermwright({
-  timeouts: {expect: 10_000},
+  timeouts: { expect: 10_000 },
 });
 ```
 
@@ -128,7 +128,7 @@ Override an individual matcher only when the operation has a known different
 budget:
 
 ```ts
-await expect(app).toHaveText('Imported 10,000 rows', {timeout: 30_000});
+await expect(app).toHaveText('Imported 10,000 rows', { timeout: 30_000 });
 ```
 
 Do not put a fixed sleep before an assertion. The matcher already waits for the

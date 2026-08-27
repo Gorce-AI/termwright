@@ -51,8 +51,7 @@ export function gridFrame(
   rows: readonly (readonly CellSnapshot[])[],
   options: { columns?: number; cursor?: CursorInfo } = {},
 ): ScreenFrame {
-  const columns =
-    options.columns ?? rows.reduce((widest, row) => Math.max(widest, row.length), 0);
+  const columns = options.columns ?? rows.reduce((widest, row) => Math.max(widest, row.length), 0);
   return {
     columns,
     rows: rows.length,

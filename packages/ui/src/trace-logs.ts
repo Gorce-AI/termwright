@@ -185,7 +185,10 @@ function parseSources(value: unknown): LogSourceView[] {
     const label = typeof source['label'] === 'string' ? source['label'] : undefined;
     const path = typeof source['path'] === 'string' ? source['path'] : undefined;
     if (label === undefined && path === undefined) continue;
-    out.push({ ...(label === undefined ? {} : { label }), ...(path === undefined ? {} : { path }) });
+    out.push({
+      ...(label === undefined ? {} : { label }),
+      ...(path === undefined ? {} : { path }),
+    });
   }
   return out;
 }

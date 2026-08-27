@@ -27,7 +27,9 @@ describe('LogTailer final drain', () => {
       },
       (poll) => {
         scheduled = poll;
-        return () => { cancelled = true; };
+        return () => {
+          cancelled = true;
+        };
       },
     );
     await tailer.start();

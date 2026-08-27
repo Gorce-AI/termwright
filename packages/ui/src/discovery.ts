@@ -68,9 +68,13 @@ export async function discoverTests(options: DiscoveryOptions): Promise<readonly
   if (tests.length > MAX_TESTS) throw new Error(`native discovery exceeded ${MAX_TESTS} tests`);
   const ids = new Set<string>();
   for (const test of tests) {
-    if (test.id === '' || ids.has(test.id)) throw new Error(`native discovery returned duplicate/invalid id ${test.id}`);
+    if (test.id === '' || ids.has(test.id))
+      throw new Error(`native discovery returned duplicate/invalid id ${test.id}`);
     ids.add(test.id);
-    if (test.title === '' || test.file === '') throw new Error('native discovery returned an invalid test');
+    if (test.title === '' || test.file === '')
+      throw new Error('native discovery returned an invalid test');
   }
-  return Object.freeze(tests.map((test) => Object.freeze({ ...test, file: canonicalTestFile(test.file) })));
+  return Object.freeze(
+    tests.map((test) => Object.freeze({ ...test, file: canonicalTestFile(test.file) })),
+  );
 }

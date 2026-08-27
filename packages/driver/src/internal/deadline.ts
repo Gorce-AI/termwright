@@ -23,13 +23,16 @@ export class Deadline {
 
   static after(timeoutMs: number, clock: MonotonicClock = systemMonotonicClock): Deadline {
     if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
-      throw new RangeError(`timeout must be a finite non-negative number, received ${String(timeoutMs)}`);
+      throw new RangeError(
+        `timeout must be a finite non-negative number, received ${String(timeoutMs)}`,
+      );
     }
     return new Deadline(clock.now() + timeoutMs, clock);
   }
 
   static at(at: number, clock: MonotonicClock = systemMonotonicClock): Deadline {
-    if (!Number.isFinite(at)) throw new RangeError(`deadline must be finite, received ${String(at)}`);
+    if (!Number.isFinite(at))
+      throw new RangeError(`deadline must be finite, received ${String(at)}`);
     return new Deadline(at, clock);
   }
 

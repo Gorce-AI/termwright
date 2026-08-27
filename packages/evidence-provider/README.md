@@ -7,14 +7,14 @@ painter, and keybindings.
 Register providers before the framework probe negotiates its session contract:
 
 ```ts
-import { registerPointerEvidenceProvider } from "@termwright/evidence-provider";
+import { registerPointerEvidenceProvider } from '@termwright/evidence-provider';
 
 registerPointerEvidenceProvider({
-  id: "my-app-pointer",
-  version: "1",
-  method: "native",
-  family: "pointer",
-  capabilities: ["pointer-regions", "hit-test"],
+  id: 'my-app-pointer',
+  version: '1',
+  method: 'native',
+  family: 'pointer',
+  capabilities: ['pointer-regions', 'hit-test'],
   observe({ columns, rows }) {
     const regions = productionMouseRouter.regions({ columns, rows });
     return {
@@ -58,13 +58,13 @@ prove the postcondition while still sending every key through the real PTY:
 import {
   registerActionStrategyProvider,
   registerFocusEvidenceProvider,
-} from "@termwright/evidence-provider";
+} from '@termwright/evidence-provider';
 
 registerFocusEvidenceProvider({
-  id: "my-app-focus",
-  version: "1",
-  method: "native",
-  family: "focus",
+  id: 'my-app-focus',
+  version: '1',
+  method: 'native',
+  family: 'focus',
   observe() {
     const target = productionFocusManager.current();
     return { focused: target === null ? null : { testId: target.testId } };
@@ -72,10 +72,10 @@ registerFocusEvidenceProvider({
 });
 
 registerActionStrategyProvider({
-  id: "my-app-keys",
-  version: "1",
-  method: "native",
-  family: "action-strategy",
+  id: 'my-app-keys',
+  version: '1',
+  method: 'native',
+  family: 'action-strategy',
   observe() {
     return { actionRecipes: productionFocusManager.termwrightRecipes() };
   },
@@ -93,20 +93,20 @@ offset, visible viewport and total extent travel together in one committed
 semantic revision:
 
 ```ts
-import { registerScrollEvidenceProvider } from "@termwright/evidence-provider";
+import { registerScrollEvidenceProvider } from '@termwright/evidence-provider';
 
 registerScrollEvidenceProvider({
-  id: "my-app-scroll",
-  version: "1",
-  method: "native",
-  family: "scroll",
+  id: 'my-app-scroll',
+  version: '1',
+  method: 'native',
+  family: 'scroll',
   observe() {
     const viewport = productionList.viewport();
     return {
       scrollStates: [
         {
-          recipient: { testId: "results" },
-          axis: "vertical",
+          recipient: { testId: 'results' },
+          axis: 'vertical',
           offset: viewport.firstVisibleItem,
           viewport: viewport.visibleItemCount,
           extent: viewport.itemCount,
@@ -116,7 +116,7 @@ registerScrollEvidenceProvider({
   },
 });
 
-const observed = await terminal.getByTestId("results").semanticScroll();
+const observed = await terminal.getByTestId('results').semanticScroll();
 ```
 
 `offset + viewport` may not exceed `extent`. Duplicate providers may co-prove
@@ -128,13 +128,13 @@ ownership. Publish only cells attributed by the application's real production
 painter; a rectangle inferred from widget geometry is not paint evidence:
 
 ```ts
-import { registerPaintEvidenceProvider } from "@termwright/evidence-provider";
+import { registerPaintEvidenceProvider } from '@termwright/evidence-provider';
 
 registerPaintEvidenceProvider({
-  id: "my-app-painter",
-  version: "1",
-  method: "native",
-  family: "paint",
+  id: 'my-app-painter',
+  version: '1',
+  method: 'native',
+  family: 'paint',
   observe() {
     return {
       paintedRegions: productionPainter.attribution().map((paint) => ({
@@ -146,7 +146,7 @@ registerPaintEvidenceProvider({
   },
 });
 
-const painted = await terminal.getByTestId("results").paintedRegion();
+const painted = await terminal.getByTestId('results').paintedRegion();
 ```
 
 Spans are canonical non-overlapping half-open row runs, must stay inside their
@@ -162,13 +162,13 @@ sequences directly. Termwright still sends mouse and focus bytes through the
 real PTY:
 
 ```ts
-import { registerTerminalInputModeEvidenceProvider } from "@termwright/evidence-provider";
+import { registerTerminalInputModeEvidenceProvider } from '@termwright/evidence-provider';
 
 registerTerminalInputModeEvidenceProvider({
-  id: "my-app-input-parser",
-  version: "1",
-  method: "native",
-  family: "input-mode",
+  id: 'my-app-input-parser',
+  version: '1',
+  method: 'native',
+  family: 'input-mode',
   observe() {
     return { inputModes: productionParser.termwrightInputModes() };
   },

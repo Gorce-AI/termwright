@@ -1,7 +1,13 @@
 import type { EffectiveSessionContract, SemanticSnapshot } from '@termwright/protocol';
 import type { AppLogView } from '../../app-log.js';
 import type { CommandRow } from '../../commands.js';
-import type { UiActionability, UiActionPlan, UiGherkinStep, UiRunSummary, UiServerMode } from '../../events.js';
+import type {
+  UiActionability,
+  UiActionPlan,
+  UiGherkinStep,
+  UiRunSummary,
+  UiServerMode,
+} from '../../events.js';
 import type { PlaybackSpeed } from '../../playback.js';
 import type { ProjectInfo } from '../../project.js';
 import type { TraceLogs } from '../../trace-logs.js';
@@ -10,13 +16,7 @@ import type { TraceOverview, TraceStatePayload } from '../../trace-source.js';
 
 export type AppRoute = 'specs' | 'runner' | 'runs' | 'settings';
 export type CompactWorkspace = 'steps' | 'screen' | 'inspect';
-export type ExecutionStatus =
-  | 'queued'
-  | 'running'
-  | 'passed'
-  | 'failed'
-  | 'skipped'
-  | 'cancelled';
+export type ExecutionStatus = 'queued' | 'running' | 'passed' | 'failed' | 'skipped' | 'cancelled';
 
 export type ExecutionNodeKind = 'hook' | 'body' | 'step' | 'action' | 'assertion' | 'input';
 
@@ -116,9 +116,25 @@ export interface ReplayState {
 export type EvidenceState =
   | { readonly kind: 'empty' }
   | { readonly kind: 'live'; readonly runId: string; readonly executionId: string }
-  | { readonly kind: 'replay-loading'; readonly runId: string; readonly executionId: string; readonly traceRef: string }
-  | { readonly kind: 'replay-error'; readonly runId: string; readonly executionId: string; readonly traceRef: string; readonly error: string }
-  | { readonly kind: 'replay'; readonly runId: string; readonly executionId: string; readonly replay: ReplayState };
+  | {
+      readonly kind: 'replay-loading';
+      readonly runId: string;
+      readonly executionId: string;
+      readonly traceRef: string;
+    }
+  | {
+      readonly kind: 'replay-error';
+      readonly runId: string;
+      readonly executionId: string;
+      readonly traceRef: string;
+      readonly error: string;
+    }
+  | {
+      readonly kind: 'replay';
+      readonly runId: string;
+      readonly executionId: string;
+      readonly replay: ReplayState;
+    };
 
 export interface AppState {
   readonly boot: 'loading' | 'ready' | 'error';

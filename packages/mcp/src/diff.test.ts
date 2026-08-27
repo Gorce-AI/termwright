@@ -2,15 +2,50 @@ import { describe, expect, it } from 'vitest';
 import { diffRows, diffSemantic } from './diff.js';
 import type { SemanticNode, SemanticSnapshot } from './model.js';
 
-const geometry = (rect?: { row: number; column: number; width: number; height: number }): SemanticNode['geometry'] => rect === undefined ? {
-  displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
-  intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
-  visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
-} : {
-  displayed: { status: 'known', value: true, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'mcp-test' } },
-  intendedRect: { status: 'known', value: { ...rect }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'mcp-test' } },
-  visibleRect: { status: 'known', value: { ...rect }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'mcp-test' } },
-};
+const geometry = (rect?: {
+  row: number;
+  column: number;
+  width: number;
+  height: number;
+}): SemanticNode['geometry'] =>
+  rect === undefined
+    ? {
+        displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+        intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+        visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      }
+    : {
+        displayed: {
+          status: 'known',
+          value: true,
+          evidence: {
+            source: 'framework',
+            method: 'native',
+            strength: 'authoritative',
+            providerId: 'mcp-test',
+          },
+        },
+        intendedRect: {
+          status: 'known',
+          value: { ...rect },
+          evidence: {
+            source: 'framework',
+            method: 'native',
+            strength: 'authoritative',
+            providerId: 'mcp-test',
+          },
+        },
+        visibleRect: {
+          status: 'known',
+          value: { ...rect },
+          evidence: {
+            source: 'framework',
+            method: 'native',
+            strength: 'authoritative',
+            providerId: 'mcp-test',
+          },
+        },
+      };
 
 function snapshot(revision: number, nodes: readonly SemanticNode[]): SemanticSnapshot {
   return {
@@ -22,7 +57,11 @@ function snapshot(revision: number, nodes: readonly SemanticNode[]): SemanticSna
     rootIds: nodes.filter((node) => node.parentId === undefined).map((node) => node.id),
     nodes,
     coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }
 
@@ -35,7 +74,13 @@ const approve: SemanticNode = {
   state: { focused: true },
   geometry: geometry(),
 };
-const reject: SemanticNode = { id: 'n3', parentId: 'n1', role: 'button', name: 'Reject', geometry: geometry() };
+const reject: SemanticNode = {
+  id: 'n3',
+  parentId: 'n1',
+  role: 'button',
+  name: 'Reject',
+  geometry: geometry(),
+};
 
 describe('row diffs', () => {
   it('reports only the rows that differ', () => {

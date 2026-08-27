@@ -7,7 +7,12 @@ import type { AdapterCapability } from '@termwright/protocol';
 import { ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { connectProbe, type ProbeChannel } from '@termwright/probe-runtime';
 import type { InkDomElement, MeasureElement } from './observe.js';
-import { createInkMarkerWriter, createInkSession, probeInfo, type InkProbeSession } from './session.js';
+import {
+  createInkMarkerWriter,
+  createInkSession,
+  probeInfo,
+  type InkProbeSession,
+} from './session.js';
 import { isInstrumented } from './runtime.js';
 import type { EnvSource } from './runtime.js';
 import { PACKAGE_VERSION } from './version.js';
@@ -56,10 +61,7 @@ const INK_CAPABILITIES: readonly AdapterCapability[] = [
 export const INK_FLUSH_NEXT_RENDER = Symbol.for('@termwright/probe-ink/flush-next-render');
 const COMMIT_GENERATION_ATTRIBUTE = '__termwrightCommitGeneration';
 
-type InkRender = (
-  node: ReactNode,
-  options?: NodeJS.WriteStream | RenderOptions,
-) => Instance;
+type InkRender = (node: ReactNode, options?: NodeJS.WriteStream | RenderOptions) => Instance;
 
 /** Runtime Ink surface forwarded by the shim, kept structural to avoid cycles. */
 export interface InkModule {
@@ -190,16 +192,17 @@ function instrumentedRender(
     return renderAfterSetupFailure(ink, node, suppliedOptions, connector, env, error);
   }
 
-  const wrap = (child: ReactNode): ReactNode => createElement(
-    Fragment,
-    null,
-    createElement(ink.Box, {
-      ref: probeRef,
-      display: 'none',
-      [COMMIT_GENERATION_ATTRIBUTE]: commitGeneration,
-    }),
-    child,
-  );
+  const wrap = (child: ReactNode): ReactNode =>
+    createElement(
+      Fragment,
+      null,
+      createElement(ink.Box, {
+        ref: probeRef,
+        display: 'none',
+        [COMMIT_GENERATION_ATTRIBUTE]: commitGeneration,
+      }),
+      child,
+    );
 
   const userOnRender = options.onRender;
   let instrumentedNode: ReactNode;
@@ -212,34 +215,43 @@ function instrumentedRender(
         // Box forwards non-layout metadata through the host style object. The
         // hidden sentinel is excluded from semantic observation, but its host
         // commit still gives this callback a synchronous causal generation.
-        const generation = (probeRef.current as InkDomElement | null)
-          ?.style?.[COMMIT_GENERATION_ATTRIBUTE];
-        const boundary = typeof generation === 'number'
-          ? renderBoundaries.take(generation)
-          : undefined;
+        const generation = (probeRef.current as InkDomElement | null)?.style?.[
+          COMMIT_GENERATION_ATTRIBUTE
+        ];
+        const boundary =
+          typeof generation === 'number' ? renderBoundaries.take(generation) : undefined;
         try {
           if (!certifiedRuntime) {
             const root = (probeRef.current?.parentNode as InkDomElement | undefined) ?? null;
             if (root !== null) {
               const measured = ink.measureElement(root);
               const staticNode = root.staticNode;
-              const staticRows = staticNode === undefined ? 0 : ink.measureElement(staticNode).height;
-              retainInkFrame(captureInkLayout(root, {
-                output: '',
-                outputHeight: measured.height,
-                staticOutput: '\n'.repeat(staticRows),
-              }, {
-                interactive: options.interactive === true,
-                alternateScreen: options.alternateScreen === true,
-                debug: options.debug === true,
-                stdoutIsTTY: stdout.isTTY === true,
-                rows: stdout.rows ?? 24,
-              }));
+              const staticRows =
+                staticNode === undefined ? 0 : ink.measureElement(staticNode).height;
+              retainInkFrame(
+                captureInkLayout(
+                  root,
+                  {
+                    output: '',
+                    outputHeight: measured.height,
+                    staticOutput: '\n'.repeat(staticRows),
+                  },
+                  {
+                    interactive: options.interactive === true,
+                    alternateScreen: options.alternateScreen === true,
+                    debug: options.debug === true,
+                    stdoutIsTTY: stdout.isTTY === true,
+                    rows: stdout.rows ?? 24,
+                  },
+                ),
+              );
             }
           }
           // Freeze the committed host tree before an application callback can
           // synchronously schedule or flush another update.
-          const publication = state.session?.notifyRender({ awaitPublication: boundary !== undefined });
+          const publication = state.session?.notifyRender({
+            awaitPublication: boundary !== undefined,
+          });
           if (boundary !== undefined) {
             if (publication === undefined) {
               boundary.reject(new Error('Ink semantic session is not attached'));
@@ -249,7 +261,8 @@ function instrumentedRender(
                   if (revision === null) boundary.reject(new Error('Ink render was not published'));
                   else boundary.resolve(revision);
                 },
-                (error) => boundary.reject(error instanceof Error ? error : new Error(String(error))),
+                (error) =>
+                  boundary.reject(error instanceof Error ? error : new Error(String(error))),
               );
             }
           }
@@ -293,56 +306,55 @@ function instrumentedRender(
       adapterName: ADAPTER_NAME,
       adapterVersion: ADAPTER_VERSION,
     })
-    .then(async (channel) => {
-      if (channel === null || disposed) {
-        channel?.close();
-        return;
-      }
-      state.channel = channel;
-      state.session = createInkSession({
-        channel,
-        // The React bridge observes the same committed Ink host root through
-        // FiberRoot.containerInfo. Keep the hidden ref as the certified
-        // control while differential conformance is still in progress.
-        resolveRoot: () => reactRoot
-          ?? (probeRef.current?.parentNode as InkDomElement | undefined)
-          ?? null,
-        resolveExcluded: () => probeRef.current as InkDomElement | null,
-        resolveCapture: (root) => capturedInkFrame(root),
-        waitForRenderFlush: () => instance.waitUntilRenderFlush(),
-        stdout,
-        writeMarker: createInkMarkerWriter(stdout, { certifiedHarness }),
-        tracker,
-        onGuaranteeViolation: (error) => {
-          state.session?.stop();
-          channel.fail('adapter-guarantee-violation', error.message);
-          // `fail()` owns transport termination. Keep the guard explicit so a
-          // future channel implementation cannot leave a failed producer
-          // attached and silently downgrade semantic coverage.
-          if (channel.isOpen) channel.close();
-        },
-      });
-      // The first commit may have beaten the handshake, but the live host tree
-      // can already contain a throttled commit whose bytes are not on screen.
-      // Drain that work, then bind a fresh hidden-host generation to one real
-      // rerender. A bare `rerender(); waitUntilRenderFlush()` is not causal:
-      // Ink may satisfy the wait with the render that was already pending,
-      // leaving the new commit without an onRender publication. That race was
-      // observable on Windows under Node 22 as a negotiated adapter with no
-      // authoritative first tree.
-      try {
-        await renderBoundaries.afterCurrentRender(
-          () => instance.waitUntilRenderFlush(),
-          (generation) => {
-            commitGeneration = generation;
-            instance.rerender(wrap(currentNode));
+      .then(async (channel) => {
+        if (channel === null || disposed) {
+          channel?.close();
+          return;
+        }
+        state.channel = channel;
+        state.session = createInkSession({
+          channel,
+          // The React bridge observes the same committed Ink host root through
+          // FiberRoot.containerInfo. Keep the hidden ref as the certified
+          // control while differential conformance is still in progress.
+          resolveRoot: () =>
+            reactRoot ?? (probeRef.current?.parentNode as InkDomElement | undefined) ?? null,
+          resolveExcluded: () => probeRef.current as InkDomElement | null,
+          resolveCapture: (root) => capturedInkFrame(root),
+          waitForRenderFlush: () => instance.waitUntilRenderFlush(),
+          stdout,
+          writeMarker: createInkMarkerWriter(stdout, { certifiedHarness }),
+          tracker,
+          onGuaranteeViolation: (error) => {
+            state.session?.stop();
+            channel.fail('adapter-guarantee-violation', error.message);
+            // `fail()` owns transport termination. Keep the guard explicit so a
+            // future channel implementation cannot leave a failed producer
+            // attached and silently downgrade semantic coverage.
+            if (channel.isOpen) channel.close();
           },
-        );
-      } catch {
-        state.session.stop();
-        return;
-      }
-    })
+        });
+        // The first commit may have beaten the handshake, but the live host tree
+        // can already contain a throttled commit whose bytes are not on screen.
+        // Drain that work, then bind a fresh hidden-host generation to one real
+        // rerender. A bare `rerender(); waitUntilRenderFlush()` is not causal:
+        // Ink may satisfy the wait with the render that was already pending,
+        // leaving the new commit without an onRender publication. That race was
+        // observable on Windows under Node 22 as a negotiated adapter with no
+        // authoritative first tree.
+        try {
+          await renderBoundaries.afterCurrentRender(
+            () => instance.waitUntilRenderFlush(),
+            (generation) => {
+              commitGeneration = generation;
+              instance.rerender(wrap(currentNode));
+            },
+          );
+        } catch {
+          state.session.stop();
+          return;
+        }
+      })
       .catch(() => undefined);
   } catch (error) {
     stop();
@@ -353,7 +365,8 @@ function instrumentedRender(
   // Natural `useApp().exit()` does not call our wrapped cleanup. Await the
   // attach attempt and the exact publication queue instead of guessing a
   // teardown delay; a slow stdout must not lose its final marker.
-  void instance.waitUntilExit()
+  void instance
+    .waitUntilExit()
     .catch(() => undefined)
     .then(async () => {
       // An exited renderer cannot complete an armed commit. Reject its causal
@@ -394,9 +407,7 @@ function instrumentedRender(
   return wrappedInstance;
 }
 
-function normalizeOptions(
-  supplied: NodeJS.WriteStream | RenderOptions | undefined,
-): RenderOptions {
+function normalizeOptions(supplied: NodeJS.WriteStream | RenderOptions | undefined): RenderOptions {
   if (supplied === undefined) return {};
   // Match Ink's own `getOptions` test exactly. A merely stream-shaped options
   // object must not gain different semantics only because the probe is active.
@@ -420,13 +431,15 @@ function reportSetupFailure(
       capabilities: INK_CAPABILITIES,
       adapterName: ADAPTER_NAME,
       adapterVersion: ADAPTER_VERSION,
-    }).then((channel) => {
-      if (channel === null) return;
-      channel.fail('adapter-guarantee-violation', error.message);
-      // ProbeChannel.fail owns termination. Keep this guard explicit so a
-      // future transport cannot leave a failed semantic producer connected.
-      if (channel.isOpen) channel.close();
-    }).catch(() => undefined);
+    })
+      .then((channel) => {
+        if (channel === null) return;
+        channel.fail('adapter-guarantee-violation', error.message);
+        // ProbeChannel.fail owns termination. Keep this guard explicit so a
+        // future transport cannot leave a failed semantic producer connected.
+        if (channel.isOpen) channel.close();
+      })
+      .catch(() => undefined);
   } catch {
     // Diagnostics must never replace the application's own render result.
   }

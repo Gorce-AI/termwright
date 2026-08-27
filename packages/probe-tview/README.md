@@ -32,15 +32,14 @@ Prepare the controlled build and pass the returned Go arguments to the build
 or test command:
 
 ```ts
-import {execFile} from 'node:child_process';
-import {prepareInstrumentedBuild} from '@termwright/probe-tview';
+import { execFile } from 'node:child_process';
+import { prepareInstrumentedBuild } from '@termwright/probe-tview';
 
-const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
-await execFile(
-  'go',
-  ['build', ...build.goArgs, '-o', 'app-binary', '.'],
-  {cwd: 'path/to/app', env: build.env},
-);
+const build = await prepareInstrumentedBuild({ moduleDir: 'path/to/app' });
+await execFile('go', ['build', ...build.goArgs, '-o', 'app-binary', '.'], {
+  cwd: 'path/to/app',
+  env: build.env,
+});
 ```
 
 The mechanism works with ordinary module-cache dependencies, local

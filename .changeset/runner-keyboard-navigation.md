@@ -1,6 +1,6 @@
 ---
-"@termwright/ui": minor
-"termwright": minor
+'@termwright/ui': minor
+'termwright': minor
 ---
 
 Add shared ARIA tree navigation to the Semantic Inspector and Specs catalogue:

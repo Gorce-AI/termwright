@@ -93,7 +93,9 @@ describe.skipIf(!runnable)('the todo app', () => {
     await expect(app).toHaveText('status: removed write the README');
   });
 
-  test('uses the production pointer router but delivers clicks through the PTY', async ({ terminal }) => {
+  test('uses the production pointer router but delivers clicks through the PTY', async ({
+    terminal,
+  }) => {
     const app = await terminal.launch();
     await app.waitForQuiet();
 

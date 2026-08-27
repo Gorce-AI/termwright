@@ -17,7 +17,12 @@ const test = (partial: Partial<TestRow> & Pick<TestRow, 'id'>): TestRow => ({
 
 const suite: TestRow[] = [
   test({ id: 't1', title: 'logs in', file: '/repo/tests/auth/login.test.ts', durationMs: 120 }),
-  test({ id: 't2', title: 'rejects a bad password', file: '/repo/tests/auth/login.test.ts', status: 'failed' }),
+  test({
+    id: 't2',
+    title: 'rejects a bad password',
+    file: '/repo/tests/auth/login.test.ts',
+    status: 'failed',
+  }),
   test({ id: 't3', title: 'renders the menu', file: '/repo/tests/ui/menu.test.ts', flaky: true }),
   test({ id: 't4', title: 'no file reported' }),
 ];
@@ -83,7 +88,9 @@ describe('testDuration', () => {
   });
 
   it('measures a running test against the clock', () => {
-    expect(testDuration(test({ id: 't1', status: 'running', startedAt: 1_000 }), 3_500)).toBe(2_500);
+    expect(testDuration(test({ id: 't1', status: 'running', startedAt: 1_000 }), 3_500)).toBe(
+      2_500,
+    );
   });
 
   it('never goes negative when the clocks disagree', () => {
@@ -112,7 +119,16 @@ describe('describeCounts', () => {
   it('mentions flaky, skipped and running only when they happened', () => {
     expect(describeCounts(countTests(suite))).toBe('4 tests, 3 passed, 1 failed, 1 flaky');
     expect(
-      describeCounts({ total: 2, passed: 2, failed: 0, skipped: 0, flaky: 0, running: 0, cancelled: 0, notRun: 0 }),
+      describeCounts({
+        total: 2,
+        passed: 2,
+        failed: 0,
+        skipped: 0,
+        flaky: 0,
+        running: 0,
+        cancelled: 0,
+        notRun: 0,
+      }),
     ).toBe('2 tests, 2 passed, 0 failed');
   });
 });

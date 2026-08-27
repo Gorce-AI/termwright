@@ -17,7 +17,9 @@ import {
 } from './index.js';
 
 const directories: string[] = [];
-afterEach(async () => Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))));
+afterEach(async () =>
+  Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))),
+);
 
 describe('native run history transaction', () => {
   it('prepares and becomes complete only after the atomic commit', async () => {
@@ -29,7 +31,9 @@ describe('native run history transaction', () => {
     const path = await transaction.commitPrepared();
     expect(path).toBe(join(runs, runDirectoryName(start.runId), 'manifest.json'));
     expect(await readRunManifest(runs, start.runId)).toMatchObject({
-      state: 'complete', runId: start.runId, manifest: { invocationId: start.invocationId },
+      state: 'complete',
+      runId: start.runId,
+      manifest: { invocationId: start.invocationId },
     });
     await expect(transaction.commitPrepared()).rejects.toThrow(/not prepared/u);
   });
@@ -43,27 +47,48 @@ describe('native run history transaction', () => {
     const truncatedDirectory = join(runs, runDirectoryName(truncated.runId));
     await mkdir(truncatedDirectory);
     await writeFile(join(truncatedDirectory, 'manifest.json'), '{"v":1', 'utf8');
-    await writeFile(join(truncatedDirectory, 'COMMITTED'), marker(createHash('sha256').update('{"v":1').digest('hex')), 'utf8');
+    await writeFile(
+      join(truncatedDirectory, 'COMMITTED'),
+      marker(createHash('sha256').update('{"v":1').digest('hex')),
+      'utf8',
+    );
 
     const mismatched = provenance();
     const mismatchTransaction = await beginRunManifest(runs, mismatched, { writer: nodeWriter() });
     await mismatchTransaction.commit(manifest(mismatched));
-    await writeFile(join(runs, runDirectoryName(mismatched.runId), 'COMMITTED'), marker('0'.repeat(64)), 'utf8');
+    await writeFile(
+      join(runs, runDirectoryName(mismatched.runId), 'COMMITTED'),
+      marker('0'.repeat(64)),
+      'utf8',
+    );
 
     const unsupported = provenance();
     const unsupportedDirectory = join(runs, runDirectoryName(unsupported.runId));
     await mkdir(unsupportedDirectory);
     const unsupportedBody = `${JSON.stringify({ ...manifest(unsupported), v: 99 })}\n`;
     await writeFile(join(unsupportedDirectory, 'manifest.json'), unsupportedBody, 'utf8');
-    await writeFile(join(unsupportedDirectory, 'COMMITTED'),
-      marker(createHash('sha256').update(unsupportedBody).digest('hex')), 'utf8');
+    await writeFile(
+      join(unsupportedDirectory, 'COMMITTED'),
+      marker(createHash('sha256').update(unsupportedBody).digest('hex')),
+      'utf8',
+    );
 
     const records = await readRunHistory(runs);
     expect(records.find((record) => record.runId === partial.runId)?.state).toBe('incomplete');
-    expect(records.find((record) => 'directory' in record && record.directory === runDirectoryName(truncated.runId))?.state).toBe('corrupt');
-    expect(records.find((record) => 'directory' in record && record.directory === runDirectoryName(mismatched.runId))?.state).toBe('corrupt');
+    expect(
+      records.find(
+        (record) => 'directory' in record && record.directory === runDirectoryName(truncated.runId),
+      )?.state,
+    ).toBe('corrupt');
+    expect(
+      records.find(
+        (record) =>
+          'directory' in record && record.directory === runDirectoryName(mismatched.runId),
+      )?.state,
+    ).toBe('corrupt');
     expect(records.find((record) => record.runId === unsupported.runId)).toMatchObject({
-      state: 'unsupported-version', version: 99,
+      state: 'unsupported-version',
+      version: 99,
     });
   });
 
@@ -77,13 +102,16 @@ describe('native run history transaction', () => {
     expect(collisions.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(collisions.filter((result) => result.status === 'rejected')).toHaveLength(1);
 
-    const first = provenance(); const second = provenance();
+    const first = provenance();
+    const second = provenance();
     const [one, two] = await Promise.all([
       beginRunManifest(runs, first, { writer: nodeWriter() }),
       beginRunManifest(runs, second, { writer: nodeWriter() }),
     ]);
     await Promise.all([one.commit(manifest(first)), two.commit(manifest(second))]);
-    expect((await readRunHistory(runs)).filter((record) => record.state === 'complete')).toHaveLength(2);
+    expect(
+      (await readRunHistory(runs)).filter((record) => record.state === 'complete'),
+    ).toHaveLength(2);
   });
 
   it('leaves an explicit incomplete transaction when finalization hits ENOSPC', async () => {
@@ -103,43 +131,76 @@ describe('native run history transaction', () => {
     };
     const transaction = await beginRunManifest(runs, start, { writer });
     await expect(transaction.prepare(manifest(start))).rejects.toMatchObject({ code: 'ENOSPC' });
-    expect(await readRunManifest(runs, start.runId)).toMatchObject({ state: 'incomplete', runId: start.runId });
+    expect(await readRunManifest(runs, start.runId)).toMatchObject({
+      state: 'incomplete',
+      runId: start.runId,
+    });
   });
 
   it('rejects a manifest whose status is not proven by its canonical journal', () => {
     const start = provenance();
     const passed = manifest(start);
     expect(parseManifest(JSON.stringify({ ...passed, status: 'failed' })).state).toBe('corrupt');
-    expect(parseManifest(JSON.stringify({ ...passed, status: 'incomplete' })).state).toBe('corrupt');
-    const correction = new RunEventProducer({ producerId: createRunId('producer'), epoch: 0 }).emit({
-      eventClass: 'authoritative', type: 'run.persistence-failed',
-      identity: { invocationId: start.invocationId, runId: start.runId },
-      payload: { stage: 'canonical-run-history', detail: 'fault' },
-    });
-    expect(parseManifest(JSON.stringify({ ...passed, status: 'incomplete', events: [...passed.events, correction] })).state)
-      .toBe('complete');
+    expect(parseManifest(JSON.stringify({ ...passed, status: 'incomplete' })).state).toBe(
+      'corrupt',
+    );
+    const correction = new RunEventProducer({ producerId: createRunId('producer'), epoch: 0 }).emit(
+      {
+        eventClass: 'authoritative',
+        type: 'run.persistence-failed',
+        identity: { invocationId: start.invocationId, runId: start.runId },
+        payload: { stage: 'canonical-run-history', detail: 'fault' },
+      },
+    );
+    expect(
+      parseManifest(
+        JSON.stringify({ ...passed, status: 'incomplete', events: [...passed.events, correction] }),
+      ).state,
+    ).toBe('complete');
   });
 
   it('requires current monotonic run and attempt timing evidence', () => {
     const current = manifest(provenance());
     const { durationMs: _duration, ...missingDuration } = current;
     expect(parseManifest(JSON.stringify(missingDuration)).state).toBe('corrupt');
-    const attemptWithoutFinishOffset = current.attempts.map(({ finishedAfterRunMs: _finished, ...attempt }) => attempt);
-    expect(parseManifest(JSON.stringify({ ...current, attempts: attemptWithoutFinishOffset })).state).toBe('corrupt');
+    const attemptWithoutFinishOffset = current.attempts.map(
+      ({ finishedAfterRunMs: _finished, ...attempt }) => attempt,
+    );
+    expect(
+      parseManifest(JSON.stringify({ ...current, attempts: attemptWithoutFinishOffset })).state,
+    ).toBe('corrupt');
     expect(parseManifest(JSON.stringify({ ...current, v: 2 })).state).toBe('unsupported-version');
     expect(parseManifest(JSON.stringify({ ...current, durationMs: -1 })).state).toBe('corrupt');
-    expect(parseManifest(JSON.stringify({
-      ...current,
-      attempts: current.attempts.map((attempt) => ({ ...attempt, startedAfterRunMs: current.durationMs + 1 })),
-    })).state).toBe('corrupt');
-    expect(parseManifest(JSON.stringify({
-      ...current,
-      attempts: current.attempts.map((attempt) => ({ ...attempt, finishedAfterRunMs: 0 })),
-    })).state).toBe('corrupt');
-    expect(parseManifest(JSON.stringify({
-      ...current,
-      attempts: current.attempts.map((attempt) => ({ ...attempt, finishedAfterRunMs: current.durationMs + 1 })),
-    })).state).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...current,
+          attempts: current.attempts.map((attempt) => ({
+            ...attempt,
+            startedAfterRunMs: current.durationMs + 1,
+          })),
+        }),
+      ).state,
+    ).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...current,
+          attempts: current.attempts.map((attempt) => ({ ...attempt, finishedAfterRunMs: 0 })),
+        }),
+      ).state,
+    ).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...current,
+          attempts: current.attempts.map((attempt) => ({
+            ...attempt,
+            finishedAfterRunMs: current.durationMs + 1,
+          })),
+        }),
+      ).state,
+    ).toBe('corrupt');
   });
 
   it('rejects changed attempt hierarchy and events emitted after attempt completion', () => {
@@ -154,10 +215,18 @@ describe('native run history transaction', () => {
       identity: { ...attemptStart.identity, executionId: createRunId('execution') },
       payload: {},
     });
-    expect(parseManifest(JSON.stringify({
-      ...passed,
-      events: [...passed.events.slice(0, attemptFinish), changedHierarchy, ...passed.events.slice(attemptFinish)],
-    })).state).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...passed,
+          events: [
+            ...passed.events.slice(0, attemptFinish),
+            changedHierarchy,
+            ...passed.events.slice(attemptFinish),
+          ],
+        }),
+      ).state,
+    ).toBe('corrupt');
 
     const lateEvent = diagnostics.emit({
       eventClass: 'diagnostic',
@@ -165,10 +234,18 @@ describe('native run history transaction', () => {
       identity: attemptStart.identity,
       payload: {},
     });
-    expect(parseManifest(JSON.stringify({
-      ...passed,
-      events: [...passed.events.slice(0, attemptFinish + 1), lateEvent, ...passed.events.slice(attemptFinish + 1)],
-    })).state).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...passed,
+          events: [
+            ...passed.events.slice(0, attemptFinish + 1),
+            lateEvent,
+            ...passed.events.slice(attemptFinish + 1),
+          ],
+        }),
+      ).state,
+    ).toBe('corrupt');
   });
 
   it('rejects missing, duplicate, count-mismatched and plain-green skip evidence', () => {
@@ -176,20 +253,42 @@ describe('native run history transaction', () => {
     const passed = manifest(start);
     const aggregateIndex = passed.events.findIndex((event) => event.type === 'run.skip-policy');
     const aggregate = passed.events[aggregateIndex]!;
-    expect(parseManifest(JSON.stringify({
-      ...passed,
-      events: passed.events.filter((event) => event !== aggregate),
-    })).state).toBe('corrupt');
-    expect(parseManifest(JSON.stringify({
-      ...passed,
-      events: [...passed.events.slice(0, aggregateIndex), aggregate, aggregate, ...passed.events.slice(aggregateIndex + 1)],
-    })).state).toBe('corrupt');
-    expect(parseManifest(JSON.stringify({
-      ...passed,
-      events: passed.events.map((event) => event === aggregate
-        ? { ...event, payload: { status: 'matched', declarations: 0, observed: 1, issues: 0 } }
-        : event),
-    })).state).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...passed,
+          events: passed.events.filter((event) => event !== aggregate),
+        }),
+      ).state,
+    ).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...passed,
+          events: [
+            ...passed.events.slice(0, aggregateIndex),
+            aggregate,
+            aggregate,
+            ...passed.events.slice(aggregateIndex + 1),
+          ],
+        }),
+      ).state,
+    ).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...passed,
+          events: passed.events.map((event) =>
+            event === aggregate
+              ? {
+                  ...event,
+                  payload: { status: 'matched', declarations: 0, observed: 1, issues: 0 },
+                }
+              : event,
+          ),
+        }),
+      ).state,
+    ).toBe('corrupt');
 
     const skippedSpec = {
       runnerTaskId: createRunId('runner-task'),
@@ -200,7 +299,8 @@ describe('native run history transaction', () => {
       fullName: 'platform case',
     };
     const skipped = new RunEventProducer({ producerId: createRunId('producer'), epoch: 0 }).emit({
-      eventClass: 'authoritative', type: 'test.skipped',
+      eventClass: 'authoritative',
+      type: 'test.skipped',
       identity: {
         invocationId: start.invocationId,
         runId: start.runId,
@@ -208,7 +308,11 @@ describe('native run history transaction', () => {
         specId: skippedSpec.specId,
         runnerTaskId: skippedSpec.runnerTaskId,
       },
-      payload: { nativeTaskId: skippedSpec.nativeTaskId, file: skippedSpec.file, fullName: skippedSpec.fullName },
+      payload: {
+        nativeTaskId: skippedSpec.nativeTaskId,
+        file: skippedSpec.file,
+        fullName: skippedSpec.fullName,
+      },
     });
     const forgedGreen = {
       ...passed,
@@ -224,9 +328,9 @@ describe('native run history transaction', () => {
     const yellow = {
       ...forgedGreen,
       status: 'passed-with-skips' as const,
-      events: forgedGreen.events.map((event) => event.type === 'run.state'
-        ? { ...event, payload: { state: 'passed-with-skips' } }
-        : event),
+      events: forgedGreen.events.map((event) =>
+        event.type === 'run.state' ? { ...event, payload: { state: 'passed-with-skips' } } : event,
+      ),
     };
     expect(parseManifest(JSON.stringify(yellow)).state).toBe('complete');
   });
@@ -241,7 +345,9 @@ async function runsDirectory(): Promise<string> {
 
 function provenance(): RunStartProvenance {
   return {
-    invocationId: createRunId('invocation'), runId: createRunId('run'), startedAt: Date.now(),
+    invocationId: createRunId('invocation'),
+    runId: createRunId('run'),
+    startedAt: Date.now(),
     engine: { name: 'vitest', version: '4.1.11', certification: 'termwright-vitest-4.1.11' },
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
     resources: {
@@ -251,7 +357,8 @@ function provenance(): RunStartProvenance {
       perTerminal: { ptySession: 1 },
     },
     timeouts: { totalRunMs: 60_000, finalizationReserveMs: 5_000 },
-    ci: {}, git: null,
+    ci: {},
+    git: null,
   };
 }
 
@@ -262,45 +369,108 @@ function manifest(start: RunStartProvenance): RunManifest {
   const attemptId = createRunId('attempt');
   const executionId = createRunId('execution');
   let clock = 0;
-  const producer = new RunEventProducer({ producerId: createRunId('producer'), epoch: 0, monotonicNow: () => {
-    clock += clock === 1 ? 4 : 1;
-    return clock;
-  } });
-  const identity = { invocationId: start.invocationId, runId: start.runId, projectId, specId, runnerTaskId, executionId, attemptId };
+  const producer = new RunEventProducer({
+    producerId: createRunId('producer'),
+    epoch: 0,
+    monotonicNow: () => {
+      clock += clock === 1 ? 4 : 1;
+      return clock;
+    },
+  });
+  const identity = {
+    invocationId: start.invocationId,
+    runId: start.runId,
+    projectId,
+    specId,
+    runnerTaskId,
+    executionId,
+    attemptId,
+  };
   return {
-    ...start, v: RUN_MANIFEST_VERSION, finishedAt: start.startedAt + 5, durationMs: 5, status: 'passed',
-    specs: [{ runnerTaskId, specId, projectId, nativeTaskId: 'native_0', file: 'example.test.ts', fullName: 'works' }],
-    attempts: [{ attemptId, executionId, runnerTaskId,
-      projectId, specId, nativeTaskId: 'native_0', repeat: 0, retry: 0, status: 'passed',
-      startedAfterRunMs: 1, finishedAfterRunMs: 5, durationMs: 4 }],
-    events: [producer.emit({
-      eventClass: 'authoritative', type: 'attempt.started', identity,
-      payload: { nativeTaskId: 'native_0', repeat: 0, retry: 0 },
-    }), producer.emit({
-      eventClass: 'authoritative', type: 'attempt.finished', identity,
-      payload: { nativeTaskId: 'native_0', repeat: 0, retry: 0, state: 'passed' },
-    }), producer.emit({
-      eventClass: 'authoritative', type: 'run.skip-policy',
-      identity: { invocationId: start.invocationId, runId: start.runId },
-      payload: { status: 'matched', declarations: 0, observed: 0, issues: 0 },
-    }), producer.emit({
-      eventClass: 'authoritative', type: 'run.state',
-      identity: { invocationId: start.invocationId, runId: start.runId }, payload: { state: 'passed' },
-    })],
+    ...start,
+    v: RUN_MANIFEST_VERSION,
+    finishedAt: start.startedAt + 5,
+    durationMs: 5,
+    status: 'passed',
+    specs: [
+      {
+        runnerTaskId,
+        specId,
+        projectId,
+        nativeTaskId: 'native_0',
+        file: 'example.test.ts',
+        fullName: 'works',
+      },
+    ],
+    attempts: [
+      {
+        attemptId,
+        executionId,
+        runnerTaskId,
+        projectId,
+        specId,
+        nativeTaskId: 'native_0',
+        repeat: 0,
+        retry: 0,
+        status: 'passed',
+        startedAfterRunMs: 1,
+        finishedAfterRunMs: 5,
+        durationMs: 4,
+      },
+    ],
+    events: [
+      producer.emit({
+        eventClass: 'authoritative',
+        type: 'attempt.started',
+        identity,
+        payload: { nativeTaskId: 'native_0', repeat: 0, retry: 0 },
+      }),
+      producer.emit({
+        eventClass: 'authoritative',
+        type: 'attempt.finished',
+        identity,
+        payload: { nativeTaskId: 'native_0', repeat: 0, retry: 0, state: 'passed' },
+      }),
+      producer.emit({
+        eventClass: 'authoritative',
+        type: 'run.skip-policy',
+        identity: { invocationId: start.invocationId, runId: start.runId },
+        payload: { status: 'matched', declarations: 0, observed: 0, issues: 0 },
+      }),
+      producer.emit({
+        eventClass: 'authoritative',
+        type: 'run.state',
+        identity: { invocationId: start.invocationId, runId: start.runId },
+        payload: { state: 'passed' },
+      }),
+    ],
   };
 }
 
 function nodeWriter(): RunManifestWriter {
   return {
-    async mkdir(path, options) { await mkdir(path, options); },
-    async exists(path) { try { await stat(path); return true; } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-      throw error;
-    } },
-    async writeExclusive(path, body) { await writeFile(path, body, { encoding: 'utf8', flag: 'wx' }); },
+    async mkdir(path, options) {
+      await mkdir(path, options);
+    },
+    async exists(path) {
+      try {
+        await stat(path);
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+        throw error;
+      }
+    },
+    async writeExclusive(path, body) {
+      await writeFile(path, body, { encoding: 'utf8', flag: 'wx' });
+    },
     async syncDirectory() {},
-    async rename(source, destination) { await rename(source, destination); },
+    async rename(source, destination) {
+      await rename(source, destination);
+    },
   };
 }
 
-function marker(digest: string): string { return `termwright-run-history-v1 sha256:${digest}\n`; }
+function marker(digest: string): string {
+  return `termwright-run-history-v1 sha256:${digest}\n`;
+}

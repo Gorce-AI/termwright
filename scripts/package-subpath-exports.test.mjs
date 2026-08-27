@@ -26,7 +26,11 @@ describe('published protocol subpath exports', () => {
     await mkdir(archiveDirectory, { recursive: true });
     await mkdir(packageDirectory, { recursive: true });
 
-    await exec(pnpm.command, [...pnpm.args, '--dir', 'packages/protocol', 'pack', '--pack-destination', archiveDirectory], { cwd: root });
+    await exec(
+      pnpm.command,
+      [...pnpm.args, '--dir', 'packages/protocol', 'pack', '--pack-destination', archiveDirectory],
+      { cwd: root },
+    );
     const archive = (await readdir(archiveDirectory)).find((name) => name.endsWith('.tgz'));
     expect(archive).toBeDefined();
     // The tar on Windows runners is GNU tar, which reads a colon in a path
@@ -37,18 +41,30 @@ describe('published protocol subpath exports', () => {
     await exec(
       'tar',
       // Forward slashes: tar reads a backslash as an escape, not a separator.
-      ['-xzf', `archives/${archive}`, '--strip-components=1', '-C', 'node_modules/@termwright/protocol'],
+      [
+        '-xzf',
+        `archives/${archive}`,
+        '--strip-components=1',
+        '-C',
+        'node_modules/@termwright/protocol',
+      ],
       { cwd: directory },
     );
 
     const consumer = join(directory, 'consumer.mjs');
-    await writeFile(consumer, [
-      "import { SESSION_CAPABILITIES } from '@termwright/protocol/contract';",
-      "import { CONDITION_KINDS } from '@termwright/protocol/action-model';",
-      "if (!SESSION_CAPABILITIES.includes('pointer-input')) throw new Error('contract export missing');",
-      "if (!CONDITION_KINDS.includes('visible')) throw new Error('action-model export missing');",
-    ].join('\n'), 'utf8');
+    await writeFile(
+      consumer,
+      [
+        "import { SESSION_CAPABILITIES } from '@termwright/protocol/contract';",
+        "import { CONDITION_KINDS } from '@termwright/protocol/action-model';",
+        "if (!SESSION_CAPABILITIES.includes('pointer-input')) throw new Error('contract export missing');",
+        "if (!CONDITION_KINDS.includes('visible')) throw new Error('action-model export missing');",
+      ].join('\n'),
+      'utf8',
+    );
 
-    await expect(exec(process.execPath, [consumer], { cwd: directory })).resolves.toMatchObject({ stderr: '' });
+    await expect(exec(process.execPath, [consumer], { cwd: directory })).resolves.toMatchObject({
+      stderr: '',
+    });
   }, 30_000);
 });

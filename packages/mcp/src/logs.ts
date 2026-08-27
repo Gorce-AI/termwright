@@ -33,14 +33,20 @@ export const logEntrySchema = z.object({
   message: z.string().describe('the raw line, or the record’s formatted message'),
   logger: z.string().optional(),
   attrs: z.record(z.string(), z.unknown()).optional(),
-  revision: z.number().int().optional().describe('semantic revision current when the record was produced'),
+  revision: z
+    .number()
+    .int()
+    .optional()
+    .describe('semantic revision current when the record was produced'),
 });
 
 /** The structured shape of {@link logEntrySchema}. */
 export type LogEntry = z.output<typeof logEntrySchema>;
 
 function clamp(text: string): string {
-  return text.length > LOG_LIMITS.maxTextChars ? `${text.slice(0, LOG_LIMITS.maxTextChars)}…` : text;
+  return text.length > LOG_LIMITS.maxTextChars
+    ? `${text.slice(0, LOG_LIMITS.maxTextChars)}…`
+    : text;
 }
 
 /** Projects a driver event into a buffered entry. */
@@ -104,12 +110,14 @@ export class LogBuffer {
   append(event: AppLogEvent): void {
     this.#counter += 1;
     this.#entries.push(toEntry(event, this.#counter));
-    if (this.#entries.length > this.#capacity) this.#entries.splice(0, this.#entries.length - this.#capacity);
+    if (this.#entries.length > this.#capacity)
+      this.#entries.splice(0, this.#entries.length - this.#capacity);
   }
 
   /** Advances the cursor for source events that were explicitly reported lost. */
   omit(count: number): void {
-    if (!Number.isSafeInteger(count) || count <= 0) throw new TypeError('omitted log count must be a positive safe integer');
+    if (!Number.isSafeInteger(count) || count <= 0)
+      throw new TypeError('omitted log count must be a positive safe integer');
     this.#counter += count;
   }
 

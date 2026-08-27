@@ -12,16 +12,15 @@ npm install --save-dev termwright
 ```
 
 ```tsx
-import {mountInk} from 'termwright/ink';
-import {expect, test, vi} from 'termwright/test';
-import {Approve} from './Approve.js';
+import { mountInk } from 'termwright/ink';
+import { expect, test, vi } from 'termwright/test';
+import { Approve } from './Approve.js';
 
-test('approves the request', async ({terminal}) => {
+test('approves the request', async ({ terminal }) => {
   const onApprove = vi.fn();
-  const harness = await terminal.attach(
-    await mountInk(<Approve onApprove={onApprove} />),
-    {command: ['<mountInk>']},
-  );
+  const harness = await terminal.attach(await mountInk(<Approve onApprove={onApprove} />), {
+    command: ['<mountInk>'],
+  });
 
   await harness.press('Tab');
   await harness.waitForQuiet();
@@ -42,12 +41,12 @@ host tree lacks application intent.
 
 ## Choosing a mode
 
-| | `mountInk` | `launchInkFixture` |
-|---|---|---|
-| where it runs | current test process | child process in a real PTY |
-| props | any React props, including spies | bounded JSON |
-| rerender | React element | JSON props |
-| process/env/signal fidelity | modelled | real |
+|                             | `mountInk`                       | `launchInkFixture`          |
+| --------------------------- | -------------------------------- | --------------------------- |
+| where it runs               | current test process             | child process in a real PTY |
+| props                       | any React props, including spies | bounded JSON                |
+| rerender                    | React element                    | JSON props                  |
+| process/env/signal fidelity | modelled                         | real                        |
 
 Use `mountInk` for component behavior and `launchInkFixture` when process
 identity, environment, signals, crash reporting, or a real PTY is part of the
@@ -83,13 +82,13 @@ socket as bounded JSON, never through stdin:
 ```ts
 const harness = await launchInkFixture({
   component: new URL('./approve-fixture.mjs', import.meta.url),
-  props: {label: 'Approve'},
+  props: { label: 'Approve' },
   nodeArgs: ['--import', 'tsx'],
   columns: 40,
   rows: 10,
 });
 
-await harness.rerender({label: 'Reject'});
+await harness.rerender({ label: 'Reject' });
 ```
 
 The child environment defaults to the driver's secret-safe replace mode. An

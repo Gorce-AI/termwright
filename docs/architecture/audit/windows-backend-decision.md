@@ -35,14 +35,14 @@ turn it into a boundary.
 
 ## Options considered
 
-| Criterion | node-pty as-is | node-pty fork/patch | Own N-API addon | napi-rs + portable-pty |
-| --- | --- | --- | --- | --- |
-| authoritative EOF | no — timer | possible, but rewriting its lifetime model | yes, by design | yes, would still be ours to add |
-| job-object tree ownership | no — PID enumeration | would have to be added | yes | would have to be added |
-| no private JS internals | no | n/a | yes | yes |
-| plumbing already solved | yes | yes | **no — written here** | yes |
-| toolchain added | none | none | C++ / node-gyp | Rust, cargo, napi-rs |
-| surface maintained | none | whole package | ~470 lines | glue plus our additions |
+| Criterion                 | node-pty as-is       | node-pty fork/patch                        | Own N-API addon       | napi-rs + portable-pty          |
+| ------------------------- | -------------------- | ------------------------------------------ | --------------------- | ------------------------------- |
+| authoritative EOF         | no — timer           | possible, but rewriting its lifetime model | yes, by design        | yes, would still be ours to add |
+| job-object tree ownership | no — PID enumeration | would have to be added                     | yes                   | would have to be added          |
+| no private JS internals   | no                   | n/a                                        | yes                   | yes                             |
+| plumbing already solved   | yes                  | yes                                        | **no — written here** | yes                             |
+| toolchain added           | none                 | none                                       | C++ / node-gyp        | Rust, cargo, napi-rs            |
+| surface maintained        | none                 | whole package                              | ~470 lines            | glue plus our additions         |
 
 ## What the evidence says so far
 
@@ -71,13 +71,13 @@ fresh one.
 
 Read rather than assumed, after four rounds of guessing at ConPTY semantics.
 
-| | node-pty (native) | WezTerm `portable-pty` |
-| --- | --- | --- |
-| CreateProcess flags | `EXTENDED_STARTUPINFO_PRESENT \| CREATE_UNICODE_ENVIRONMENT` | same |
-| `STARTF_USESTDHANDLES` | not set | set, all three handles `INVALID_HANDLE_VALUE` |
-| `ReleasePseudoConsole` | only when using the standalone ConPTY DLL | never |
-| shutdown | `ClosePseudoConsole` | `ClosePseudoConsole` in `Drop` |
-| end of output | waits on the process handle, then a one-second flush window | not addressed |
+|                        | node-pty (native)                                            | WezTerm `portable-pty`                        |
+| ---------------------- | ------------------------------------------------------------ | --------------------------------------------- |
+| CreateProcess flags    | `EXTENDED_STARTUPINFO_PRESENT \| CREATE_UNICODE_ENVIRONMENT` | same                                          |
+| `STARTF_USESTDHANDLES` | not set                                                      | set, all three handles `INVALID_HANDLE_VALUE` |
+| `ReleasePseudoConsole` | only when using the standalone ConPTY DLL                    | never                                         |
+| shutdown               | `ClosePseudoConsole`                                         | `ClosePseudoConsole` in `Drop`                |
+| end of output          | waits on the process handle, then a one-second flush window  | not addressed                                 |
 
 Three conclusions follow.
 
@@ -130,15 +130,15 @@ remaining boundary in this backend should be approached the second way.
 This was written as a mandatory property and it is not one Windows offers.
 The evidence, gathered in that order:
 
-| Question | Answer | How it was obtained |
-| --- | --- | --- |
-| Was the descendant created? | yes, with a real pid | the root reported it |
-| Did it run and reach the console? | yes | it printed its own line first |
-| Was it inside the job? | yes — two members | job census while the root was alive |
-| Was it alive at root exit? | no | `process.kill(pid, 0)` from the test |
-| What did the job say at that instant? | zero members | counted natively inside the session, before the drain and before the console close |
-| Did it finish or was it cut off? | cut off | its journal stops before the exit hook it installed, with work still pending |
-| Is the console what kills it? | yes | the same case run detached from the console survives its root, stays in the job, and is still killable by it |
+| Question                              | Answer               | How it was obtained                                                                                          |
+| ------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Was the descendant created?           | yes, with a real pid | the root reported it                                                                                         |
+| Did it run and reach the console?     | yes                  | it printed its own line first                                                                                |
+| Was it inside the job?                | yes — two members    | job census while the root was alive                                                                          |
+| Was it alive at root exit?            | no                   | `process.kill(pid, 0)` from the test                                                                         |
+| What did the job say at that instant? | zero members         | counted natively inside the session, before the drain and before the console close                           |
+| Did it finish or was it cut off?      | cut off              | its journal stops before the exit hook it installed, with work still pending                                 |
+| Is the console what kills it?         | yes                  | the same case run detached from the console survives its root, stays in the job, and is still killable by it |
 
 The count is taken in the session's own exit path, immediately after the
 root's handle is signalled, so nothing in this backend had acted yet. The last

@@ -35,7 +35,9 @@ afterEach(async () => {
   }
 });
 
-async function launchWithLog(options: Record<string, unknown> = {}): Promise<Harness & { path: string }> {
+async function launchWithLog(
+  options: Record<string, unknown> = {},
+): Promise<Harness & { path: string }> {
   const directory = mkdtempSync(join(tmpdir(), 'termwright-logs-'));
   directories.push(directory);
   const path = join(directory, 'app.log');
@@ -215,7 +217,6 @@ describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, ()
     expect(captured.join('')).toContain('tw:app');
     expect(captured.join('')).toContain('app | hello 1');
   });
-
 });
 
 describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout: 20_000 }, () => {
@@ -241,7 +242,9 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
 
   it('negotiates the channel and publishes records on the session timeline', async () => {
     const { terminal, lines } = await launchSemantic();
-    expect(terminal.contract()?.providers.some((provider) => provider.kind === 'framework')).toBe(true);
+    expect(terminal.contract()?.providers.some((provider) => provider.kind === 'framework')).toBe(
+      true,
+    );
 
     await terminal.press('g');
     await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(1);
@@ -310,7 +313,9 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
 
     await terminal.press('G');
     await expect
-      .poll(() => logDiagnostics.some((entry) => entry.detail.includes('refused')), { timeout: 8_000 })
+      .poll(() => logDiagnostics.some((entry) => entry.detail.includes('refused')), {
+        timeout: 8_000,
+      })
       .toBe(true);
 
     // Far fewer than the 400 records the fixture sent, and the session lives on.

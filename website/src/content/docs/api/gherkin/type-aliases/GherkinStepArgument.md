@@ -13,6 +13,6 @@ editUrl: false
 
 > **GherkinStepArgument** = `string` \| readonly readonly `string`[][]
 
-Defined in: [definitions.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L34)
+Defined in: [definitions.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L35)
 
 A DocString or DataTable attached to a Gherkin step.

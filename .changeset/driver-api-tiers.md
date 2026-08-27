@@ -1,6 +1,6 @@
 ---
-"@termwright/driver": minor
-"termwright": minor
+'@termwright/driver': minor
+'termwright': minor
 ---
 
 BREAKING: narrow the supported driver root to application-facing terminal,

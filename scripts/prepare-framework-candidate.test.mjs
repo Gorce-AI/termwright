@@ -25,7 +25,10 @@ async function fixture(source = 'before\nanchor\nafter\n') {
   await mkdir(join(template, 'add'), { recursive: true });
   await mkdir(sourceRoot, { recursive: true });
   await writeFile(join(sourceRoot, 'source.txt'), source);
-  await writeFile(join(template, 'patches/source.patch'), '--- a/source.txt\n+++ b/source.txt\n@@ -1,3 +1,4 @@\n before\n anchor\n+injected\n after\n');
+  await writeFile(
+    join(template, 'patches/source.patch'),
+    '--- a/source.txt\n+++ b/source.txt\n@@ -1,3 +1,4 @@\n before\n anchor\n+injected\n after\n',
+  );
   await writeFile(join(template, 'add/version.txt'), 'framework=2.0.0\n');
   await writeFile(
     join(template, 'manifest.json'),
@@ -74,12 +77,16 @@ describe('framework candidate patch preparation', () => {
     await expect(removeMaterializedCandidateSource(lease)).resolves.toBeUndefined();
     await expect(removeMaterializedCandidateSource(lease)).resolves.toBeUndefined();
     await expect(access(directory)).rejects.toMatchObject({ code: 'ENOENT' });
-    await expect(removeMaterializedCandidateSource(repositoryRoot)).rejects.toThrow(/not owned by Termwright/u);
+    await expect(removeMaterializedCandidateSource(repositoryRoot)).rejects.toThrow(
+      /not owned by Termwright/u,
+    );
 
     const forgedDirectory = await mkdtemp(join(tmpdir(), 'termwright-upstream-forged-'));
     const forgedSource = join(forgedDirectory, 'source');
     await mkdir(forgedSource);
-    await expect(removeMaterializedCandidateSource(Object.freeze({ sourceRoot: forgedSource }))).rejects.toThrow(/not owned by Termwright/u);
+    await expect(
+      removeMaterializedCandidateSource(Object.freeze({ sourceRoot: forgedSource })),
+    ).rejects.toThrow(/not owned by Termwright/u);
     await expect(access(forgedDirectory)).resolves.toBeUndefined();
     await rm(forgedDirectory, { recursive: true });
   });
@@ -90,7 +97,11 @@ describe('framework candidate patch preparation', () => {
     const externalFile = join(external, 'preserved.txt');
     await mkdir(lease.sourceRoot);
     await writeFile(externalFile, 'preserved');
-    await symlink(external, join(lease.sourceRoot, 'external'), process.platform === 'win32' ? 'junction' : 'dir');
+    await symlink(
+      external,
+      join(lease.sourceRoot, 'external'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
 
     await removeMaterializedCandidateSource(lease);
 
@@ -117,12 +128,18 @@ describe('framework candidate patch preparation', () => {
       },
     };
     await expect(assertGoDownloadBinding(result, candidate)).resolves.toBeUndefined();
-    await expect(assertGoDownloadBinding({ ...result, Sum: 'h1:other' }, candidate)).rejects.toThrow(/identity does not match/u);
+    await expect(
+      assertGoDownloadBinding({ ...result, Sum: 'h1:other' }, candidate),
+    ).rejects.toThrow(/identity does not match/u);
     await writeFile(zip, 'changed archive');
-    await expect(assertGoDownloadBinding(result, candidate)).rejects.toThrow(/archive does not match/u);
+    await expect(assertGoDownloadBinding(result, candidate)).rejects.toThrow(
+      /archive does not match/u,
+    );
   });
   it('rejects a registry archive before extraction when its checksum differs', () => {
-    expect(() => assertArtifactSha256(Buffer.from('archive'), '0'.repeat(64), 'crate@1.0.0')).toThrow(/downloaded archive hashes/u);
+    expect(() =>
+      assertArtifactSha256(Buffer.from('archive'), '0'.repeat(64), 'crate@1.0.0'),
+    ).toThrow(/downloaded archive hashes/u);
   });
   it('replays an audited transform reproducibly and binds it to revision and source', async () => {
     const one = await fixture();
@@ -143,7 +160,9 @@ describe('framework candidate patch preparation', () => {
       sourceRevision: 'abcdef123',
       targetPath: 'patches/example/2.0.1',
     });
-    expect(await readFile(join(first.destination, 'add/version.txt'), 'utf8')).toBe('framework=2.0.1\n');
+    expect(await readFile(join(first.destination, 'add/version.txt'), 'utf8')).toBe(
+      'framework=2.0.1\n',
+    );
     expect(first.manifest.patchSetVersion).toBe(9);
   });
 
@@ -234,7 +253,10 @@ describe('framework candidate patch preparation', () => {
       version: 'v2.1.1',
       patchSetVersion: 2,
     });
-    expect(registry.frameworks[0].certification.checksumSources).toEqual(['patches/bubbles/v2.1.0/manifest.json', 'patches/bubbletea/v2.1.1/manifest.json']);
+    expect(registry.frameworks[0].certification.checksumSources).toEqual([
+      'patches/bubbles/v2.1.0/manifest.json',
+      'patches/bubbletea/v2.1.1/manifest.json',
+    ]);
     expect(
       proposeCompatibilityUpdate(registry, candidate, {
         framework: candidate.package,
@@ -252,9 +274,16 @@ describe('framework candidate patch preparation', () => {
       ],
     });
     expect(registry.frameworks[0].instrumentation.variants).toHaveLength(2);
-    expect(registry.frameworks[0].instrumentation.variants.at(-1).modules.filter((module) => module.name === candidate.package)).toHaveLength(1);
+    expect(
+      registry.frameworks[0].instrumentation.variants
+        .at(-1)
+        .modules.filter((module) => module.name === candidate.package),
+    ).toHaveLength(1);
     expect(registry.frameworks[0].versions.verified).toEqual(['v2.1.0', 'v2.1.1']);
-    expect(registry.frameworks[0].certification.ids).toEqual(['charm@v2.1.0/0.2.0', 'charm@v2.1.1/0.2.0']);
+    expect(registry.frameworks[0].certification.ids).toEqual([
+      'charm@v2.1.0/0.2.0',
+      'charm@v2.1.1/0.2.0',
+    ]);
   });
 
   it('keeps 2.1, 2.1.1, 2.2 and a late 2.1.2 as distinct exact variants without a false cross-product', () => {
@@ -288,9 +317,22 @@ describe('framework candidate patch preparation', () => {
         modules: [{ name: 'example/core', version }],
       });
     }
-    expect(registry.frameworks[0].instrumentation.variants.map((variant) => variant.frameworkVersion).sort()).toEqual(['2.1', '2.1.1', '2.1.2', '2.2']);
-    expect(registry.frameworks[0].instrumentation.variants.every((variant) => variant.modules.length === 1)).toBe(true);
-    expect(registry.frameworks[0].certification.ids).toEqual(['example@2.1/1.0.0', 'example@2.1.1/1.0.0', 'example@2.1.2/1.0.0', 'example@2.2/1.0.0']);
+    expect(
+      registry.frameworks[0].instrumentation.variants
+        .map((variant) => variant.frameworkVersion)
+        .sort(),
+    ).toEqual(['2.1', '2.1.1', '2.1.2', '2.2']);
+    expect(
+      registry.frameworks[0].instrumentation.variants.every(
+        (variant) => variant.modules.length === 1,
+      ),
+    ).toBe(true);
+    expect(registry.frameworks[0].certification.ids).toEqual([
+      'example@2.1/1.0.0',
+      'example@2.1.1/1.0.0',
+      'example@2.1.2/1.0.0',
+      'example@2.2/1.0.0',
+    ]);
   });
 
   it('does not promote a companion candidate to a framework version', () => {
@@ -340,7 +382,9 @@ describe('framework candidate patch preparation', () => {
     });
     expect(registry.frameworks[0].versions.verified).toEqual(['v2.0.9']);
     expect(registry.frameworks[0].certification.ids).toEqual(['charm@v2.0.9/0.2.0']);
-    expect(registry.frameworks[0].certification.checksumSources).toEqual(['patches/bubbles/v2.2.0/manifest.json']);
+    expect(registry.frameworks[0].certification.checksumSources).toEqual([
+      'patches/bubbles/v2.2.0/manifest.json',
+    ]);
     expect(registry.frameworks[0].instrumentation.variants).toHaveLength(1);
     expect(registry.frameworks[0].instrumentation.variants[0].modules).toEqual([
       { name: 'charm.land/bubbles/v2', version: 'v2.2.0', optional: true },
@@ -401,8 +445,12 @@ describe('framework candidate patch preparation', () => {
       ],
     });
 
-    expect(updated.frameworks[0].instrumentation.patchSets).toEqual(registry.frameworks[0].instrumentation.patchSets);
-    expect(updated.frameworks[0].certification.checksumSources).toEqual(['patches/tea/v2.0.9/manifest.json']);
+    expect(updated.frameworks[0].instrumentation.patchSets).toEqual(
+      registry.frameworks[0].instrumentation.patchSets,
+    );
+    expect(updated.frameworks[0].certification.checksumSources).toEqual([
+      'patches/tea/v2.0.9/manifest.json',
+    ]);
     expect(updated.frameworks[0].instrumentation.variants).toHaveLength(2);
     expect(updated.frameworks[0].versions.verified).toEqual(['v2.0.9']);
   });
@@ -423,7 +471,11 @@ describe('framework candidate patch preparation', () => {
           id: 'tview',
           frameworkPackage: 'github.com/rivo/tview',
           probe: { packageVersion: '0.2.0' },
-          versions: { policy: 'capability', declared: '>=v0.42.0 (advisory)', verified: ['v0.42.0'] },
+          versions: {
+            policy: 'capability',
+            declared: '>=v0.42.0 (advisory)',
+            verified: ['v0.42.0'],
+          },
           certification: { ids: ['tview@compile-capability/0.2.0'], checksumSources: [] },
           instrumentation: {
             patchSets: [],
@@ -671,8 +723,14 @@ describe('framework candidate patch preparation', () => {
     const bubblesFirst = apply(apply(base, bubbles), tea);
     expect(teaFirst).toEqual(bubblesFirst);
     expect(teaFirst.frameworks[0].versions.verified).toEqual(['v2.0.8', 'v2.0.9']);
-    expect(teaFirst.frameworks[0].certification.ids).toEqual(['charm@v2.0.8/0.2.0', 'charm@v2.0.9/0.2.0']);
-    expect(teaFirst.frameworks[0].certification.checksumSources).toEqual(['patches/bubbles/v2.2.0/manifest.json', 'patches/tea/v2.0.9/manifest.json']);
+    expect(teaFirst.frameworks[0].certification.ids).toEqual([
+      'charm@v2.0.8/0.2.0',
+      'charm@v2.0.9/0.2.0',
+    ]);
+    expect(teaFirst.frameworks[0].certification.checksumSources).toEqual([
+      'patches/bubbles/v2.2.0/manifest.json',
+      'patches/tea/v2.0.9/manifest.json',
+    ]);
     expect(teaFirst.frameworks[0].instrumentation.variants).toHaveLength(3);
   });
 });

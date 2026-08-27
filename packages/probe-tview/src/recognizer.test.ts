@@ -68,7 +68,11 @@ describe('facts are carried, not invented', () => {
   it('keeps intended geometry unknown when the probe reported no geometry', () => {
     const snapshot = recognize(frameOf(object({ frameworkType: 'Button' })), OPTIONS);
 
-    expect(snapshot.nodes[0]?.geometry.intendedRect).toEqual({ status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' });
+    expect(snapshot.nodes[0]?.geometry.intendedRect).toEqual({
+      status: 'unsupported',
+      capability: 'intended-geometry',
+      reason: 'framework-unobservable',
+    });
   });
 
   it('uses intendedRect and never fabricates a visibleRect', () => {
@@ -82,7 +86,10 @@ describe('facts are carried, not invented', () => {
       OPTIONS,
     );
 
-    expect(snapshot.nodes[0]?.geometry.intendedRect).toMatchObject({ status: 'known', value: { row: 2, column: 1, width: 30, height: 7 } });
+    expect(snapshot.nodes[0]?.geometry.intendedRect).toMatchObject({
+      status: 'known',
+      value: { row: 2, column: 1, width: 30, height: 7 },
+    });
     expect(snapshot.nodes[0]?.geometry.visibleRect).toMatchObject({ status: 'unsupported' });
   });
 
@@ -140,7 +147,11 @@ describe('the shape of the tree', () => {
     const snapshot = recognize(
       frameOf(
         object({ identity: { kind: 'stable', value: 'root' }, frameworkType: 'Pages' }),
-        object({ identity: { kind: 'stable', value: 'child' }, frameworkType: 'Flex', parent: 'root' }),
+        object({
+          identity: { kind: 'stable', value: 'child' },
+          frameworkType: 'Flex',
+          parent: 'root',
+        }),
       ),
       OPTIONS,
     );

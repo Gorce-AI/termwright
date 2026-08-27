@@ -69,7 +69,10 @@ export interface CrashSource {
  * that filtering lives in the driver, so this stays a mapping.
  */
 export function collectCrashes(
-  sessions: readonly { readonly harness: CrashSource | TerminalHarness; readonly dir?: string | undefined }[],
+  sessions: readonly {
+    readonly harness: CrashSource | TerminalHarness;
+    readonly dir?: string | undefined;
+  }[],
 ): readonly CrashedSession[] {
   const crashed: CrashedSession[] = [];
   sessions.forEach((session, index) => {
@@ -99,7 +102,9 @@ export function formatCrashSection(crashes: readonly CrashedSession[]): string {
 function formatOne(crash: CrashedSession, numbered: boolean): string {
   const { report } = crash;
   const lines: string[] = [];
-  const heading = numbered ? `session ${crash.index + 1} (${crash.sessionId ?? 'unknown'})` : undefined;
+  const heading = numbered
+    ? `session ${crash.index + 1} (${crash.sessionId ?? 'unknown'})`
+    : undefined;
   if (heading !== undefined) lines.push(heading);
 
   lines.push(`  ${describeExit(report.exit)} after ${Math.round(report.timeMs)}ms`);
@@ -133,13 +138,21 @@ function formatOne(crash: CrashedSession, numbered: boolean): string {
 }
 
 /** `exited with code 1` / `killed by SIGSEGV`. */
-export function describeExit(exit: { readonly code: number | null; readonly signal: string | null }): string {
+export function describeExit(exit: {
+  readonly code: number | null;
+  readonly signal: string | null;
+}): string {
   if (exit.signal !== null) return `killed by ${exit.signal}`;
   if (exit.code !== null) return `exited with code ${exit.code}`;
   return 'exited for an unknown reason';
 }
 
-function describeInput(input: { kind: string; bytes: number; preview?: string; timeMs: number }): string {
+function describeInput(input: {
+  kind: string;
+  bytes: number;
+  preview?: string;
+  timeMs: number;
+}): string {
   const what = input.preview === undefined ? `${input.bytes} bytes` : JSON.stringify(input.preview);
   return `${input.kind} ${what} at ${Math.round(input.timeMs)}ms`;
 }

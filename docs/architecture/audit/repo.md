@@ -28,20 +28,20 @@ Verdict vocabulary used in the tables:
 
 ### 1.1 Protocol (`packages/protocol/src`)
 
-| Component | Where | Verdict | Why |
-|---|---|---|---|
-| Framing: 4-byte BE length + UTF-8 JSON | `framing.ts` | **foundation** | Transport-agnostic, already hostile-input hardened |
-| `projectDto` DTO projection | `framing.ts:365` | **foundation** | The whole prototype/getter/alias/cycle defence lives here |
-| Message envelopes | `messages.ts` | **rework** | Shape survives, vocabulary changes (§4) |
-| Strict vs tolerant reader split | `messages.ts:377/460` | **foundation** | Adapter input strict, driver input tolerant — keep the asymmetry |
-| Render marker | `marker.ts` | **foundation, conditional** | See §2 — this is the campaign's sharpest question |
-| `TreeDelta` + `applyTreeDelta` | `delta.ts` | **foundation** | Semantics carry over to IR facts unchanged (§3.4) |
-| Limits | `limits.ts` | **foundation** | Only `maxNodes`/`maxDepth` need re-reading against progressive levels |
-| Fixed role vocabulary (23) | `roles.ts:5` | **rework** | Closed set contradicts "unknown widget = generic node, never disappears" (§5, Q1) |
-| Fixed action vocabulary (7) | `roles.ts:34` | **foundation** | Descriptive hints, not endpoints; nothing in the new model needs more |
-| `SemanticState` closed record | `tree.ts:12` | **rework** | Provenance is per-property (spec b) and this type has nowhere to carry it |
-| AccessKit export | `accesskit.ts` | **foundation** | Independent consumer of the model, useful as an external correctness check |
-| Env + token | `env.ts` | **foundation** | Token is an opaque UTF-8 string end to end — that property is what keeps Python/Go/Rust interoperable |
+| Component                              | Where                 | Verdict                     | Why                                                                                                   |
+| -------------------------------------- | --------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Framing: 4-byte BE length + UTF-8 JSON | `framing.ts`          | **foundation**              | Transport-agnostic, already hostile-input hardened                                                    |
+| `projectDto` DTO projection            | `framing.ts:365`      | **foundation**              | The whole prototype/getter/alias/cycle defence lives here                                             |
+| Message envelopes                      | `messages.ts`         | **rework**                  | Shape survives, vocabulary changes (§4)                                                               |
+| Strict vs tolerant reader split        | `messages.ts:377/460` | **foundation**              | Adapter input strict, driver input tolerant — keep the asymmetry                                      |
+| Render marker                          | `marker.ts`           | **foundation, conditional** | See §2 — this is the campaign's sharpest question                                                     |
+| `TreeDelta` + `applyTreeDelta`         | `delta.ts`            | **foundation**              | Semantics carry over to IR facts unchanged (§3.4)                                                     |
+| Limits                                 | `limits.ts`           | **foundation**              | Only `maxNodes`/`maxDepth` need re-reading against progressive levels                                 |
+| Fixed role vocabulary (23)             | `roles.ts:5`          | **rework**                  | Closed set contradicts "unknown widget = generic node, never disappears" (§5, Q1)                     |
+| Fixed action vocabulary (7)            | `roles.ts:34`         | **foundation**              | Descriptive hints, not endpoints; nothing in the new model needs more                                 |
+| `SemanticState` closed record          | `tree.ts:12`          | **rework**                  | Provenance is per-property (spec b) and this type has nowhere to carry it                             |
+| AccessKit export                       | `accesskit.ts`        | **foundation**              | Independent consumer of the model, useful as an external correctness check                            |
+| Env + token                            | `env.ts`              | **foundation**              | Token is an opaque UTF-8 string end to end — that property is what keeps Python/Go/Rust interoperable |
 
 Detail worth carrying into Phase 1: **the delta model cannot express "unset a
 field"** (`delta.ts:11-31` — `changed` replaces a node wholesale) and **cannot
@@ -52,23 +52,23 @@ when a recognizer loses confidence, not an edge case.
 
 ### 1.2 Driver (`packages/driver/src`)
 
-| Component | Where | Verdict | Why |
-|---|---|---|---|
-| PTY backend abstraction | `pty.ts` | **foundation** | Already the seam that isolates ConPTY; probes need the same seam |
-| `VtScreen` + `@termwright/vt` | `vt.ts` | **foundation** | Real terminal stays authoritative (spec d) |
-| Revision pairing | `pairing.ts` | **foundation** | Two-halves model maps onto FRAME_BEGIN/END (§4) |
-| Evidence barrier (drain + quiet) | `pairing.ts`, `internal/quiet.ts` | **foundation** | Hard-won; see §2.3 |
-| Locators, strict mode | `locator.ts`, `selectors.ts` | **rework** | Selector surface survives; `semanticTree: boolean` gating does not (spec c) |
-| `TerminalModes` with `'unknown'` | `api.ts`, `vt.ts` | **foundation** | The "we cannot see it, so we do not claim it" pattern is exactly what per-property provenance needs |
-| Diagnostics (18 codes) | `api.ts` | **rework** | Codes carry over; the set gains probe-attach/recognizer failures |
-| `capabilities().semanticTree` | `api.ts` | **delete** | Binary flag is what progressive levels replace |
-| Log ingestion (file tail + adapter records) | `logs.ts`, `session.ts` | **foundation** | Orthogonal to instrumentation |
-| Crash report | `session.ts` | **foundation** | Orthogonal |
+| Component                                   | Where                             | Verdict        | Why                                                                                                 |
+| ------------------------------------------- | --------------------------------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| PTY backend abstraction                     | `pty.ts`                          | **foundation** | Already the seam that isolates ConPTY; probes need the same seam                                    |
+| `VtScreen` + `@termwright/vt`               | `vt.ts`                           | **foundation** | Real terminal stays authoritative (spec d)                                                          |
+| Revision pairing                            | `pairing.ts`                      | **foundation** | Two-halves model maps onto FRAME_BEGIN/END (§4)                                                     |
+| Evidence barrier (drain + quiet)            | `pairing.ts`, `internal/quiet.ts` | **foundation** | Hard-won; see §2.3                                                                                  |
+| Locators, strict mode                       | `locator.ts`, `selectors.ts`      | **rework**     | Selector surface survives; `semanticTree: boolean` gating does not (spec c)                         |
+| `TerminalModes` with `'unknown'`            | `api.ts`, `vt.ts`                 | **foundation** | The "we cannot see it, so we do not claim it" pattern is exactly what per-property provenance needs |
+| Diagnostics (18 codes)                      | `api.ts`                          | **rework**     | Codes carry over; the set gains probe-attach/recognizer failures                                    |
+| `capabilities().semanticTree`               | `api.ts`                          | **delete**     | Binary flag is what progressive levels replace                                                      |
+| Log ingestion (file tail + adapter records) | `logs.ts`, `session.ts`           | **foundation** | Orthogonal to instrumentation                                                                       |
+| Crash report                                | `session.ts`                      | **foundation** | Orthogonal                                                                                          |
 
 The most transferable thing the driver already owns is not code, it is a
 **discipline about unverifiable claims**: `mouseTracking`, `mouseEncoding` and
 `focusReporting` report `'unknown'` where the platform makes the truth
-unobservable, and pointer actions refuse only on a mode *known* to be off
+unobservable, and pointer actions refuse only on a mode _known_ to be off
 (`mouse.ts`, `api.ts`). That is the same shape as provenance ranking: a fact
 with a weak source is not the same as an absent fact, and neither is the same
 as a fact known to be false.
@@ -78,12 +78,12 @@ as a fact known to be false.
 At the start of the audit every adapter required source changes. The Ink and
 OpenTUI rows below now show the zero-config replacement:
 
-| Adapter | Mount-level change | Per-widget change | Tree source |
-|---|---|---|---|
-| Ink | none; launcher injects `@termwright/probe-ink` around ordinary `ink.render` | optional annotation-only `useSemantic` / `<Semantic>`; Ink `aria-*` remains framework-native | retained Ink host tree observed by the injected probe |
-| OpenTUI | none; launcher injects `@termwright/probe-opentui` around ordinary renderer creation | optional annotation-only `describeRenderable` | retained Renderer scene graph observed by the injected probe |
-| Textual (py) | `enable_semantics(app)` (`clients/python/.../textual_adapter.py:405`) | `termwright_role/name/test_id` attrs | Textual DOM via `screen.query("*")` |
-| tview (go) | `Attach(app, root, …)` (`clients/go/termwright/attach.go:178`) | `WithDescriber` / `SetTestID` / `WithChildren` | tview primitive walk |
+| Adapter      | Mount-level change                                                                   | Per-widget change                                                                            | Tree source                                                  |
+| ------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Ink          | none; launcher injects `@termwright/probe-ink` around ordinary `ink.render`          | optional annotation-only `useSemantic` / `<Semantic>`; Ink `aria-*` remains framework-native | retained Ink host tree observed by the injected probe        |
+| OpenTUI      | none; launcher injects `@termwright/probe-opentui` around ordinary renderer creation | optional annotation-only `describeRenderable`                                                | retained Renderer scene graph observed by the injected probe |
+| Textual (py) | `enable_semantics(app)` (`clients/python/.../textual_adapter.py:405`)                | `termwright_role/name/test_id` attrs                                                         | Textual DOM via `screen.query("*")`                          |
+| tview (go)   | `Attach(app, root, …)` (`clients/go/termwright/attach.go:178`)                       | `WithDescriber` / `SetTestID` / `WithChildren`                                               | tview primitive walk                                         |
 
 Three findings that matter for the campaign:
 
@@ -96,7 +96,7 @@ Three findings that matter for the campaign:
    including unannotated layout objects as `generic` nodes. Regression tests
    assert that the vanilla fixtures keep the full subtree.
 3. **Marker placement is already correct and already subtle.** Every adapter
-   writes the marker *after* the frame bytes and *after* a drain: the Ink probe
+   writes the marker _after_ the frame bytes and _after_ a drain: the Ink probe
    waits a macrotask because `onRender` fires before the write,
    OpenTUI collects synchronously inside the `frame` event because that event
    fires after the write, tview stashes the marker and writes it after
@@ -133,8 +133,8 @@ have to produce.
 authentication tag (`marker.ts:122`). It carries **no semantic content**: not a
 role, not a name, not a bound. The revision is a pointer into data that
 travelled on the socket, and the MAC exists only so ordinary program output
-cannot forge one. The module states its own job in one line: *a frame COMMIT
-signal (Neovim `flush` semantics), never a data carrier.*
+cannot forge one. The module states its own job in one line: _a frame COMMIT
+signal (Neovim `flush` semantics), never a data carrier._
 
 Against the spec's "no metadata inside terminal escape sequences", the honest
 reading is that this is **PTY output sequencing** and falls under §35's
@@ -148,15 +148,15 @@ No — and this is the one place in the audit where I would push back on a
 plausible-sounding simplification.
 
 The marker's unique property is that **it occupies a position in the byte
-stream**. It answers: *the screen state after byte N corresponds to tree
-revision R*. Nothing delivered on a side channel can answer that question,
+stream**. It answers: _the screen state after byte N corresponds to tree
+revision R_. Nothing delivered on a side channel can answer that question,
 because the socket and the pty are independent transports with independent,
 unbounded, variable delay. A `FRAME_END` on the socket says the application
 finished rendering. It does not say the driver's emulator has consumed the
 bytes that rendering produced.
 
 The drain/quiet barrier is not a replacement for that ordering; it is the
-compensation we built *for its absence in the other direction*, and it is
+compensation we built _for its absence in the other direction_, and it is
 strictly weaker. It can conclude "probably nothing more is in flight". It
 cannot conclude "this byte position corresponds to this revision".
 
@@ -167,15 +167,15 @@ frame-based inbox runtime. The pinned passthrough runtime now forwards child
 DECSET, DCS, APC and OSC 8 and is certified independently; these rows explain
 the original marker choice rather than current Windows capability.
 
-| Measurement | Result | Source |
-|---|---|---|
-| DCS through legacy inbox ConPTY | dropped | escape probe, run 31947757843 |
-| APC, OSC 8 through legacy inbox ConPTY | dropped | same |
-| Private OSC (BEL and ST), OSC 133 | pass | same |
-| OSC 8487 specifically | pass, parsed, no leak | same (candidate added so the number itself was measured, not inferred from its family) |
-| Parse-queue delay under a 200-render flood, macOS | transport +0 ms, parsing +692 ms against a 1000 ms window | flood probe |
-| Transport delay when the pipe is slower than the socket | 1697 ms median, 3359 ms tail | throttled probe |
-| Same, end to end | revision 1 of 200 with `revision-dropped×136, revision-expired×64` — identical to the Windows signature; fixed by the quiet condition, verified by disabling that one condition | conformance `-t "storm"` with `STDOUT_BPS=5000` |
+| Measurement                                             | Result                                                                                                                                                                          | Source                                                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| DCS through legacy inbox ConPTY                         | dropped                                                                                                                                                                         | escape probe, run 31947757843                                                          |
+| APC, OSC 8 through legacy inbox ConPTY                  | dropped                                                                                                                                                                         | same                                                                                   |
+| Private OSC (BEL and ST), OSC 133                       | pass                                                                                                                                                                            | same                                                                                   |
+| OSC 8487 specifically                                   | pass, parsed, no leak                                                                                                                                                           | same (candidate added so the number itself was measured, not inferred from its family) |
+| Parse-queue delay under a 200-render flood, macOS       | transport +0 ms, parsing +692 ms against a 1000 ms window                                                                                                                       | flood probe                                                                            |
+| Transport delay when the pipe is slower than the socket | 1697 ms median, 3359 ms tail                                                                                                                                                    | throttled probe                                                                        |
+| Same, end to end                                        | revision 1 of 200 with `revision-dropped×136, revision-expired×64` — identical to the Windows signature; fixed by the quiet condition, verified by disabling that one condition | conformance `-t "storm"` with `STDOUT_BPS=5000`                                        |
 
 Two conclusions Phase 1 should not re-litigate:
 
@@ -247,7 +247,7 @@ by the driver when a delta cannot be applied, with the `delta-resync`
 diagnostic. **`FULL_SNAPSHOT` on backpressure is not a new mechanism for us — it
 is the existing resync path with a different trigger.** One caution from
 history: when the resync returns a revision already published, republishing it
-reads downstream as a *loss*; the driver fixed this by swapping the composed
+reads downstream as a _loss_; the driver fixed this by swapping the composed
 head without republishing, and the regression is pinned by an assertion on the
 **absence** of a misleading signal.
 
@@ -267,15 +267,15 @@ head without republishing, and the regression is pinned by an assertion on the
 
 ## 4. Lifecycle mapping
 
-| Spec lifecycle | Today | Notes |
-|---|---|---|
-| `HELLO` | `hello` (`messages.ts:33`): protocol id, token, adapter name/version, capabilities | Direct match. Capabilities become level/provenance claims |
-| (ack) | `hello-ack` (`messages.ts:42`): sessionId, limits, `subscribe`, `marker.enabled`, optional `logs` budget | No spec counterpart named, but required: this is where the driver hands back limits and *chooses the mode*. Keep it |
-| `FRAME_BEGIN` | **no equivalent** | Today the driver learns a frame started only by output arriving. A begin signal is new information: it separates "the app is rendering" from "the app is idle", which the quiet barrier currently has to infer |
-| `FRAME_END` | `revision-commit` (`messages.ts:78`) + the marker | `revision-commit` is the socket-side half and is explicitly advisory: it says the adapter believes it committed N, and never publishes on its own |
-| Tree payload | `snapshot` / `tree-delta` | Unchanged in role |
-| Resync | `get-tree` / `get-tree-result` | Unchanged in role |
-| Teardown | socket close → `adapter-disconnected`; protocol error → terminal `error` frame then close | Keep both; the terminal error frame is what makes a refusal debuggable |
+| Spec lifecycle | Today                                                                                                    | Notes                                                                                                                                                                                                          |
+| -------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HELLO`        | `hello` (`messages.ts:33`): protocol id, token, adapter name/version, capabilities                       | Direct match. Capabilities become level/provenance claims                                                                                                                                                      |
+| (ack)          | `hello-ack` (`messages.ts:42`): sessionId, limits, `subscribe`, `marker.enabled`, optional `logs` budget | No spec counterpart named, but required: this is where the driver hands back limits and _chooses the mode_. Keep it                                                                                            |
+| `FRAME_BEGIN`  | **no equivalent**                                                                                        | Today the driver learns a frame started only by output arriving. A begin signal is new information: it separates "the app is rendering" from "the app is idle", which the quiet barrier currently has to infer |
+| `FRAME_END`    | `revision-commit` (`messages.ts:78`) + the marker                                                        | `revision-commit` is the socket-side half and is explicitly advisory: it says the adapter believes it committed N, and never publishes on its own                                                              |
+| Tree payload   | `snapshot` / `tree-delta`                                                                                | Unchanged in role                                                                                                                                                                                              |
+| Resync         | `get-tree` / `get-tree-result`                                                                           | Unchanged in role                                                                                                                                                                                              |
+| Teardown       | socket close → `adapter-disconnected`; protocol error → terminal `error` frame then close                | Keep both; the terminal error frame is what makes a refusal debuggable                                                                                                                                         |
 
 The mapping is close enough that the lifecycle rename is mostly vocabulary,
 with one genuine addition (`FRAME_BEGIN`) and one thing the spec's list does

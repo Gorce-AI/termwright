@@ -13,16 +13,16 @@ npm install --save-dev @termwright/probe-opentui
 ```
 
 ```ts
-import {fileURLToPath} from 'node:url';
-import {withProbe} from '@termwright/probe-opentui';
-import {test, expect} from 'termwright/test';
+import { fileURLToPath } from 'node:url';
+import { withProbe } from '@termwright/probe-opentui';
+import { test, expect } from 'termwright/test';
 
 const appPath = fileURLToPath(new URL('../app.ts', import.meta.url));
 
-test('deploys a release', async ({terminal}) => {
+test('deploys a release', async ({ terminal }) => {
   const instrumented = withProbe('bun', ['bun', appPath]);
-  const app = await terminal.launch({command: instrumented.command});
-  const deploy = app.getByRole('button', {name: 'Deploy'});
+  const app = await terminal.launch({ command: instrumented.command });
+  const deploy = app.getByRole('button', { name: 'Deploy' });
   await expect(deploy).toBeAttached();
   await deploy.click();
 });
@@ -34,13 +34,13 @@ on Node.
 ## Annotate a custom Renderable
 
 ```ts
-import {describeRenderable} from '@termwright/opentui';
+import { describeRenderable } from '@termwright/opentui';
 
 const dispose = describeRenderable(deployment, {
   role: 'status',
   name: 'Deployment',
   testId: 'deployment',
-  extended: {environment: 'staging'},
+  extended: { environment: 'staging' },
 });
 ```
 

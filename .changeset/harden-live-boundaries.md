@@ -1,7 +1,7 @@
 ---
-"@termwright/mcp": minor
-"@termwright/ui": minor
-"termwright": minor
+'@termwright/mcp': minor
+'@termwright/ui': minor
+'termwright': minor
 ---
 
 Harden live HTTP and Runner boundaries with per-launch MCP bearer

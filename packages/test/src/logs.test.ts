@@ -29,7 +29,13 @@ function record(level: LogLevel, message: string, extra: Partial<LogRecord> = {}
 }
 
 function line(text: string, label?: string): CapturedLog {
-  return { source: 'file', sessionId: 's1', timeMs: 10, line: text, ...(label === undefined ? {} : { label }) };
+  return {
+    source: 'file',
+    sessionId: 's1',
+    timeMs: 10,
+    line: text,
+    ...(label === undefined ? {} : { label }),
+  };
 }
 
 describe('createLogCollection', () => {
@@ -37,7 +43,10 @@ describe('createLogCollection', () => {
     const logs = createLogCollection();
     logs.push(record('info', 'first'));
     logs.push(line('second'));
-    expect(logs.all().map((entry) => entry.record?.message ?? entry.line)).toEqual(['first', 'second']);
+    expect(logs.all().map((entry) => entry.record?.message ?? entry.line)).toEqual([
+      'first',
+      'second',
+    ]);
   });
 
   it('counts a record once, however many times it arrives', () => {
@@ -76,7 +85,8 @@ describe('createLogCollection', () => {
     const logs = createLogCollection();
     const first = record('info', 'oldest');
     logs.push(first);
-    for (let index = 0; index < MAX_CAPTURED_LOGS; index += 1) logs.push(record('info', `filler ${index}`));
+    for (let index = 0; index < MAX_CAPTURED_LOGS; index += 1)
+      logs.push(record('info', `filler ${index}`));
     expect(logs.dropped()).toBe(1);
     // The oldest entry is gone, so its identity is free again.
     logs.push(first);
@@ -148,7 +158,9 @@ describe('matchesLog', () => {
 
 describe('formatLogEntry', () => {
   it('leaves out the fields that change every run', () => {
-    const text = formatLogEntry(record('error', 'save failed', { seq: 42, revision: 7, ts: Date.now() }));
+    const text = formatLogEntry(
+      record('error', 'save failed', { seq: 42, revision: 7, ts: Date.now() }),
+    );
     expect(text).toBe('error save failed');
     expect(text).not.toContain('42');
   });
@@ -203,7 +215,10 @@ describe('collectLogs', () => {
           };
         },
         checkpoint: () => sequence,
-        subscribe: (options: { fromSequence: number }, callback: (record: SessionEventRecord) => void) => {
+        subscribe: (
+          options: { fromSequence: number },
+          callback: (record: SessionEventRecord) => void,
+        ) => {
           for (const record of journal) {
             if (record.sequence >= options.fromSequence) callback(record);
           }
@@ -225,15 +240,25 @@ describe('collectLogs', () => {
 
   it('replays application logs emitted before collection attaches', () => {
     const { harness, emit } = fakeHarness();
-    emit('app-log', { source: 'file', timeMs: 1, line: 'startup' } satisfies SessionEventMap['app-log']);
+    emit('app-log', {
+      source: 'file',
+      timeMs: 1,
+      line: 'startup',
+    } satisfies SessionEventMap['app-log']);
     const { collection } = collectLogs(harness);
-    expect(collection.all()).toEqual([expect.objectContaining({ sessionId: 'session-9', line: 'startup' })]);
+    expect(collection.all()).toEqual([
+      expect.objectContaining({ sessionId: 'session-9', line: 'startup' }),
+    ]);
   });
 
   it('tags entries with the session and finds them by harness', () => {
     const { harness, emit } = fakeHarness();
     const { collection, dispose } = collectLogs(harness);
-    emit('app-log', { source: 'adapter', timeMs: 5, record: { ts: 1, level: 'info', message: 'hi', seq: 1 } });
+    emit('app-log', {
+      source: 'adapter',
+      timeMs: 5,
+      record: { ts: 1, level: 'info', message: 'hi', seq: 1 },
+    });
     expect(collection.all()[0]?.sessionId).toBe('session-9');
     expect(logsOf(harness)).toBe(collection);
     dispose();
@@ -243,8 +268,18 @@ describe('collectLogs', () => {
   it('sums the records the session says never arrived, live', () => {
     const { harness, emit } = fakeHarness();
     const { collection, dispose } = collectLogs(harness);
-    emit('diagnostic', { code: 'log-dropped', detail: 'the adapter dropped 4', count: 4, timeMs: 5 });
-    emit('diagnostic', { code: 'log-dropped', detail: 'refused 2 over budget', count: 2, timeMs: 6 });
+    emit('diagnostic', {
+      code: 'log-dropped',
+      detail: 'the adapter dropped 4',
+      count: 4,
+      timeMs: 5,
+    });
+    emit('diagnostic', {
+      code: 'log-dropped',
+      detail: 'refused 2 over budget',
+      count: 2,
+      timeMs: 6,
+    });
     emit('diagnostic', { code: 'listener-error', detail: 'unrelated', count: 9, timeMs: 7 });
     expect(collection.lostRecords()).toBe(6);
     // A diagnostic is not a log entry.
@@ -259,7 +294,11 @@ describe('collectLogs', () => {
     // nothing is missing and the evidence is not incomplete.
     const { harness, emit } = fakeHarness();
     const { collection } = collectLogs(harness);
-    emit('diagnostic', { code: 'log-dropped', detail: 'refused a log record with seq 7', timeMs: 5 });
+    emit('diagnostic', {
+      code: 'log-dropped',
+      detail: 'refused a log record with seq 7',
+      timeMs: 5,
+    });
     expect(collection.lostRecords()).toBe(0);
   });
 
@@ -279,7 +318,11 @@ describe('collectLogs', () => {
     const shared = createLogCollection();
     collectLogs(harness, shared);
     collectLogs(harness, shared);
-    emit('app-log', { source: 'adapter', timeMs: 5, record: { ts: 1, level: 'error', message: 'save failed', seq: 1 } });
+    emit('app-log', {
+      source: 'adapter',
+      timeMs: 5,
+      record: { ts: 1, level: 'error', message: 'save failed', seq: 1 },
+    });
     expect(shared.all()).toHaveLength(1);
   });
 
@@ -321,7 +364,9 @@ describe('the failure threshold', () => {
     expect(message).toContain('3 log records never reached this test');
     expect(message).toContain('may be incomplete');
     // Nothing lost, nothing to caveat.
-    expect(describeLogThresholdFailure([record('error', 'x')], 'error', 0)).not.toContain('never reached');
+    expect(describeLogThresholdFailure([record('error', 'x')], 'error', 0)).not.toContain(
+      'never reached',
+    );
   });
 
   it('refuses a clean certification when the only evidence is a log gap', () => {

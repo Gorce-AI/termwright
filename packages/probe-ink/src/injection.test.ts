@@ -37,8 +37,9 @@ describe('Ink shim', () => {
 
   it('resolves the reconciler beside Node and Bun entry paths', () => {
     expect(reconcilerUrl(entry)).toBe('/repo/node_modules/ink/build/reconciler.js');
-    expect(reconcilerUrl('file:///repo/node_modules/ink/build/index.js?x=1'))
-      .toBe('file:///repo/node_modules/ink/build/reconciler.js');
+    expect(reconcilerUrl('file:///repo/node_modules/ink/build/index.js?x=1')).toBe(
+      'file:///repo/node_modules/ink/build/reconciler.js',
+    );
   });
 });
 

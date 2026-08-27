@@ -33,11 +33,13 @@ describe('test-provider metadata contract', () => {
   });
 
   it('accepts the exact structural marker without relying on object identity', () => {
-    expect(hasTermwrightProvider({
-      termwright: {
-        provider: { id: 'custom-provider', version: TERMWRIGHT_PROVIDER_VERSION },
-      },
-    })).toBe(true);
+    expect(
+      hasTermwrightProvider({
+        termwright: {
+          provider: { id: 'custom-provider', version: TERMWRIGHT_PROVIDER_VERSION },
+        },
+      }),
+    ).toBe(true);
   });
 
   it.each([
@@ -45,18 +47,30 @@ describe('test-provider metadata contract', () => {
     { termwright: { provider: { id: 'provider', version: 2 } } },
     { termwright: { provider: termwrightProvider('provider') } },
     { termwright: { provider: termwrightProvider('provider'), declaration: null } },
-    { termwright: { provider: termwrightProvider('provider'), declaration: { mode: 'later', exclusive: false } } },
-    { termwright: { provider: termwrightProvider('provider'), declaration: { mode: 'run', exclusive: 'yes' } } },
+    {
+      termwright: {
+        provider: termwrightProvider('provider'),
+        declaration: { mode: 'later', exclusive: false },
+      },
+    },
+    {
+      termwright: {
+        provider: termwrightProvider('provider'),
+        declaration: { mode: 'run', exclusive: 'yes' },
+      },
+    },
   ])('rejects malformed declarations: %#', (meta) => {
     expect(termwrightProviderDeclaration(meta)).toBeUndefined();
   });
 
   it.each(['run', 'skip', 'todo'] as const)('reads the bounded %s declaration', (mode) => {
-    expect(termwrightProviderDeclaration({
-      termwright: {
-        provider: termwrightProvider('provider'),
-        declaration: { mode, exclusive: mode === 'run' },
-      },
-    })).toEqual({ mode, exclusive: mode === 'run' });
+    expect(
+      termwrightProviderDeclaration({
+        termwright: {
+          provider: termwrightProvider('provider'),
+          declaration: { mode, exclusive: mode === 'run' },
+        },
+      }),
+    ).toEqual({ mode, exclusive: mode === 'run' });
   });
 });

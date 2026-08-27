@@ -18,7 +18,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { ENV_ENDPOINT, ENV_TOKEN, PROTOCOL_ID, verifyMarkerPayload, MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
+import {
+  ENV_ENDPOINT,
+  ENV_TOKEN,
+  PROTOCOL_ID,
+  verifyMarkerPayload,
+  MARKER_OSC_CODE,
+  MARKER_OSC_PREFIX,
+} from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { bunAvailable } from './testing/bun-available.js';
 import { runtimePreloadSpecifier } from './launch.js';
@@ -31,16 +38,20 @@ const geometryApp = join(packageRoot, 'src', 'testing', 'geometry-app.ts');
 const runtimeConformanceApp = join(packageRoot, 'src', 'testing', 'runtime-conformance-app.ts');
 const annotationSdkRoot = join(packageRoot, '..', 'opentui');
 const openTuiEntry = createRequire(import.meta.url).resolve('@opentui/core');
-const installedOpenTuiVersion = (JSON.parse(readFileSync(join(dirname(openTuiEntry), 'package.json'), 'utf8')) as { version: string }).version;
+const installedOpenTuiVersion = (
+  JSON.parse(readFileSync(join(dirname(openTuiEntry), 'package.json'), 'utf8')) as {
+    version: string;
+  }
+).version;
 
 async function requireBuiltInputs(): Promise<void> {
-  await requireImmutableBuildInputs([
-    join(annotationSdkRoot, 'dist', 'index.js'),
-    join(packageRoot, 'dist', 'bun-preload.js'),
-  ], {
-    label: '@termwright/probe-opentui zero-config tests',
-    buildCommand: 'pnpm --filter @termwright/opentui --filter @termwright/probe-opentui build',
-  });
+  await requireImmutableBuildInputs(
+    [join(annotationSdkRoot, 'dist', 'index.js'), join(packageRoot, 'dist', 'bun-preload.js')],
+    {
+      label: '@termwright/probe-opentui zero-config tests',
+      buildCommand: 'pnpm --filter @termwright/opentui --filter @termwright/probe-opentui build',
+    },
+  );
 }
 
 interface Run {
@@ -54,12 +65,12 @@ interface Run {
 function launch(options: {
   readonly driver?: FakeDriver;
   readonly steps?: number;
-    readonly appPath?: string;
-    readonly fixtureEnv?: Readonly<Record<string, string>>;
-    readonly controlled?: boolean;
-    readonly captureOracle?: boolean;
-    readonly onSpawn?: (child: ChildProcess) => void;
-  }): Promise<Run> {
+  readonly appPath?: string;
+  readonly fixtureEnv?: Readonly<Record<string, string>>;
+  readonly controlled?: boolean;
+  readonly captureOracle?: boolean;
+  readonly onSpawn?: (child: ChildProcess) => void;
+}): Promise<Run> {
   const entry = runtimePreloadSpecifier('bun', join(packageRoot, 'dist', 'bun-preload.js'));
   const targetApp = options.appPath ?? app;
   const argv = options.driver === undefined ? [targetApp] : ['--preload', entry, targetApp];
@@ -101,7 +112,12 @@ function launch(options: {
       stderr += chunk;
     });
     const oracleStream = child.stdio[3];
-    if (options.captureOracle === true && oracleStream !== undefined && oracleStream !== null && 'setEncoding' in oracleStream) {
+    if (
+      options.captureOracle === true &&
+      oracleStream !== undefined &&
+      oracleStream !== null &&
+      'setEncoding' in oracleStream
+    ) {
       oracleStream.setEncoding('utf8');
       oracleStream.on('data', (chunk: string) => {
         oracle += chunk;
@@ -119,7 +135,7 @@ async function launchInstrumented(
   if (result.code !== 0) {
     throw new Error(
       `instrumented Bun application exited with ${String(result.code)} before probe evidence: ` +
-      (result.stderr.trim() || '<empty stderr>'),
+        (result.stderr.trim() || '<empty stderr>'),
     );
   }
   return result;
@@ -172,18 +188,16 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     expect(roles).toContain('application');
     expect(roles).toContain('text');
     expect(roles).toContain('textbox');
-    expect(snapshot!.nodes.find(
-      (node) => node.frameworkType === 'SelectRenderable',
-    )).toMatchObject({ role: 'list' });
-    expect(snapshot!.nodes.find(
-      (node) => node.frameworkType === 'TextTableRenderable',
-    )).toMatchObject({ role: 'table' });
+    expect(snapshot!.nodes.find((node) => node.frameworkType === 'SelectRenderable')).toMatchObject(
+      { role: 'list' },
+    );
+    expect(
+      snapshot!.nodes.find((node) => node.frameworkType === 'TextTableRenderable'),
+    ).toMatchObject({ role: 'table' });
 
     // A ScrollBox is deliberately not mislabeled as a scrollbar or region.
     // Unknown widgets survive with the framework's own type and their subtree.
-    const scrollBox = snapshot!.nodes.find(
-      (node) => node.frameworkType === 'ScrollBoxRenderable',
-    );
+    const scrollBox = snapshot!.nodes.find((node) => node.frameworkType === 'ScrollBoxRenderable');
     expect(scrollBox).toMatchObject({ role: 'generic', name: '' });
     const activity = snapshot!.nodes.find((node) => node.name === 'Activity 1');
     const byId = new Map(snapshot!.nodes.map((node) => [node.id, node]));
@@ -238,7 +252,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const values = snapshots
       .map((snapshot) => snapshot.nodes.find((node) => node.role === 'textbox')?.value)
       .filter((value) => value?.status === 'known')
-      .map((value) => value!.status === 'known' ? value!.value : '');
+      .map((value) => (value!.status === 'known' ? value!.value : ''));
 
     // The app types into the field on every step; at least one snapshot has to
     // show a value it set, or the probe is reporting a stale tree.
@@ -259,9 +273,13 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     // retained in probe IR diagnostics, but do not become portable scroll
     // truth without an explicit scroll-state producer including its viewport.
     expect(new Set(selectedPositions).size).toBeGreaterThan(1);
-    expect(snapshots.some((snapshot) => snapshot.nodes.some(
-      (node) => node.frameworkType === 'ScrollBoxRenderable' && node.scroll !== undefined,
-    ))).toBe(false);
+    expect(
+      snapshots.some((snapshot) =>
+        snapshot.nodes.some(
+          (node) => node.frameworkType === 'ScrollBoxRenderable' && node.scroll !== undefined,
+        ),
+      ),
+    ).toBe(false);
   }, 60_000);
 
   it('marks each revision it published, and the markers verify', async () => {
@@ -334,18 +352,32 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const fixtureEnv = { TW_WRAP_STDOUT_WRITE: '1' };
 
     const instrumented = await launchInstrumented({
-      driver, steps: 2, fixtureEnv, captureOracle: true,
+      driver,
+      steps: 2,
+      fixtureEnv,
+      captureOracle: true,
     });
     const vanilla = await launch({ steps: 2, fixtureEnv, captureOracle: true });
-    const parseOracle = (value: string): Array<Record<string, unknown>> => value
-      .trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+    const parseOracle = (value: string): Array<Record<string, unknown>> =>
+      value
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
     const instrumentedOracle = parseOracle(instrumented.oracle);
     const vanillaOracle = parseOracle(vanilla.oracle);
 
     expect(instrumentedOracle[0]).toEqual({ rendererCapturedWrapper: true });
     expect(instrumentedOracle[1]?.['wrapperRestoredAfterDestroy']).toBe(true);
-    expect(instrumentedOracle.map((record) => record['rendererCapturedWrapper'] ?? record['wrapperRestoredAfterDestroy']))
-      .toEqual(vanillaOracle.map((record) => record['rendererCapturedWrapper'] ?? record['wrapperRestoredAfterDestroy']));
+    expect(
+      instrumentedOracle.map(
+        (record) => record['rendererCapturedWrapper'] ?? record['wrapperRestoredAfterDestroy'],
+      ),
+    ).toEqual(
+      vanillaOracle.map(
+        (record) => record['rendererCapturedWrapper'] ?? record['wrapperRestoredAfterDestroy'],
+      ),
+    );
     expect(instrumented.stdout.replaceAll(markerPattern(), '')).toBe(vanilla.stdout);
   }, 90_000);
 
@@ -374,9 +406,16 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     expect(snapshot?.v).toBe(2);
     expect(snapshot?.coordinateSpace).toMatchObject({ status: 'known', value: 'viewport-cells' });
     expect(snapshot?.hitGrid).toMatchObject({ status: 'known' });
-    expect(snapshot?.nodes.some((node) => node.geometry?.intendedRect.status === 'known')).toBe(true);
-    expect(snapshot?.nodes.every((node) =>
-      node.geometry?.visibleRect.status === 'known' || node.geometry?.visibleRect.status === 'absent')).toBe(true);
+    expect(snapshot?.nodes.some((node) => node.geometry?.intendedRect.status === 'known')).toBe(
+      true,
+    );
+    expect(
+      snapshot?.nodes.every(
+        (node) =>
+          node.geometry?.visibleRect.status === 'known' ||
+          node.geometry?.visibleRect.status === 'absent',
+      ),
+    ).toBe(true);
     expect(snapshot?.nodes.every((node) => node.geometry !== undefined)).toBe(true);
   }, 60_000);
 
@@ -389,7 +428,9 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
       driver,
       appPath: geometryApp,
       controlled: true,
-      onSpawn: (spawned) => { child = spawned; },
+      onSpawn: (spawned) => {
+        child = spawned;
+      },
     });
     const control = child?.stdin;
     if (control === undefined || control === null) {
@@ -406,7 +447,10 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
         (candidate) => candidate.nodes.some((node) => node.name === 'nested clipped target'),
         'initial geometry snapshot',
       );
-      expect({columns: snapshot.columns, rows: snapshot.rows}).not.toEqual({columns: 40, rows: 12});
+      expect({ columns: snapshot.columns, rows: snapshot.rows }).not.toEqual({
+        columns: 40,
+        rows: 12,
+      });
       control.write('resize\n');
       resized = await driver.waitForSnapshot(
         (candidate) => candidate.columns === 40 && candidate.rows === 12,
@@ -442,8 +486,13 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
 
     expect(clipped.geometry.intendedRect).toMatchObject({ status: 'known' });
     expect(clipped.geometry.visibleRect).toMatchObject({ status: 'known' });
-    if (clipped.geometry.intendedRect.status === 'known' && clipped.geometry.visibleRect.status === 'known') {
-      expect(clipped.geometry.visibleRect.value.width).toBeLessThan(clipped.geometry.intendedRect.value.width);
+    if (
+      clipped.geometry.intendedRect.status === 'known' &&
+      clipped.geometry.visibleRect.status === 'known'
+    ) {
+      expect(clipped.geometry.visibleRect.value.width).toBeLessThan(
+        clipped.geometry.intendedRect.value.width,
+      );
     }
     expect(hidden.geometry).toMatchObject({
       displayed: { status: 'known', value: false },
@@ -453,13 +502,17 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     expect(snapshot.hitGrid).toMatchObject({ status: 'known' });
     if (snapshot.hitGrid.status === 'known' && upper.geometry.visibleRect.status === 'known') {
       const { row, column } = upper.geometry.visibleRect.value;
-      expect(snapshot.hitGrid.value.regions.some((region) =>
-        region.recipientId === upper.id
-        && region.rect.row === row
-        && column >= region.rect.column
-        && column < region.rect.column + region.rect.width)).toBe(true);
+      expect(
+        snapshot.hitGrid.value.regions.some(
+          (region) =>
+            region.recipientId === upper.id &&
+            region.rect.row === row &&
+            column >= region.rect.column &&
+            column < region.rect.column + region.rect.width,
+        ),
+      ).toBe(true);
     }
-    expect({columns: resized.columns, rows: resized.rows}).toEqual({columns: 40, rows: 12});
+    expect({ columns: resized.columns, rows: resized.rows }).toEqual({ columns: 40, rows: 12 });
     expect(resized.revision).toBeGreaterThan(snapshot.revision);
   }, 60_000);
 
@@ -471,7 +524,9 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
       driver,
       appPath: runtimeConformanceApp,
       controlled: true,
-      onSpawn: (spawned) => { child = spawned; },
+      onSpawn: (spawned) => {
+        child = spawned;
+      },
       fixtureEnv: {
         TW_RUNTIME_CONTROLLED_LIFECYCLE: '1',
       },
@@ -487,33 +542,49 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const snapshots = driver.snapshots;
     expect(driver.errors).toEqual([]);
     expect(snapshots.length).toBeGreaterThanOrEqual(1);
-    expect(snapshots.some((snapshot) => snapshot.nodes.some(
-      (node) => node.frameworkType === 'NoHitGridRenderable',
-    ))).toBe(true);
-    expect(snapshots.some((snapshot) => snapshot.nodes.some(
-      (node) => node.frameworkType === 'LocalBufferScissorRenderable',
-    ))).toBe(true);
-    expect(snapshots.some((snapshot) => snapshot.nodes.some(
-      (node) => node.name === 'dynamic mounted',
-    ))).toBe(true);
-    expect(snapshots.some((snapshot) => snapshot.nodes.every(
-      (node) => node.name !== 'dynamic mounted',
-    ))).toBe(true);
+    expect(
+      snapshots.some((snapshot) =>
+        snapshot.nodes.some((node) => node.frameworkType === 'NoHitGridRenderable'),
+      ),
+    ).toBe(true);
+    expect(
+      snapshots.some((snapshot) =>
+        snapshot.nodes.some((node) => node.frameworkType === 'LocalBufferScissorRenderable'),
+      ),
+    ).toBe(true);
+    expect(
+      snapshots.some((snapshot) => snapshot.nodes.some((node) => node.name === 'dynamic mounted')),
+    ).toBe(true);
+    expect(
+      snapshots.some((snapshot) => snapshot.nodes.every((node) => node.name !== 'dynamic mounted')),
+    ).toBe(true);
     const revisions = snapshots.map((snapshot) => snapshot.revision);
     expect(revisions).toEqual([...revisions].sort((left, right) => left - right));
     expect(new Set(revisions).size).toBe(revisions.length);
-    const scrolledRow = snapshots.flatMap((snapshot) => snapshot.nodes).filter(
-      (node) => node.name === 'differential row 7',
-    );
-    expect(scrolledRow.some((node) => node.geometry.visibleRect.status === 'known'
-      && node.geometry.visibleRect.value.width > 0
-      && node.geometry.visibleRect.value.height > 0)).toBe(true);
-    expect(snapshots.some((snapshot) => {
-      const upper = snapshot.nodes.find((node) => node.name === 'upper overlap');
-      return upper !== undefined && snapshot.hitGrid.status === 'known'
-        && snapshot.hitGrid.value.regions.some((region) => region.recipientId === upper.id);
-    })).toBe(true);
-    expect(new Set(snapshots.map((snapshot) => `${snapshot.columns}x${snapshot.rows}`)).size).toBeGreaterThan(1);
+    const scrolledRow = snapshots
+      .flatMap((snapshot) => snapshot.nodes)
+      .filter((node) => node.name === 'differential row 7');
+    expect(
+      scrolledRow.some(
+        (node) =>
+          node.geometry.visibleRect.status === 'known' &&
+          node.geometry.visibleRect.value.width > 0 &&
+          node.geometry.visibleRect.value.height > 0,
+      ),
+    ).toBe(true);
+    expect(
+      snapshots.some((snapshot) => {
+        const upper = snapshot.nodes.find((node) => node.name === 'upper overlap');
+        return (
+          upper !== undefined &&
+          snapshot.hitGrid.status === 'known' &&
+          snapshot.hitGrid.value.regions.some((region) => region.recipientId === upper.id)
+        );
+      }),
+    ).toBe(true);
+    expect(
+      new Set(snapshots.map((snapshot) => `${snapshot.columns}x${snapshot.rows}`)).size,
+    ).toBeGreaterThan(1);
   }, 60_000);
 
   it('uses the certified same-pass renderOffset in split-footer mode', async () => {
@@ -525,7 +596,9 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
       appPath: runtimeConformanceApp,
       controlled: true,
       captureOracle: true,
-      onSpawn: (spawned) => { child = spawned; },
+      onSpawn: (spawned) => {
+        child = spawned;
+      },
       fixtureEnv: {
         TW_RUNTIME_SPLIT_FOOTER: '1',
         TW_RUNTIME_CONTROLLED_LIFECYCLE: '1',
@@ -541,15 +614,26 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     expect(result.stderr).toBe('');
     expect(driver.errors).toEqual([]);
     const oracleByToken = new Map(
-      result.oracle.trim().split('\n').filter(Boolean).map((line) => {
-        const record = JSON.parse(line) as { frameId: number; renderOffset: number; token: string };
-        return [record.token, record] as const;
-      }),
+      result.oracle
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => {
+          const record = JSON.parse(line) as {
+            frameId: number;
+            renderOffset: number;
+            token: string;
+          };
+          return [record.token, record] as const;
+        }),
     );
     const matchedOrigins: number[] = [];
     for (const snapshot of driver.snapshots) {
-      const oracleNode = snapshot.nodes.find((node) => node.name?.startsWith('split origin oracle '));
-      const oracle = oracleNode?.name === undefined ? undefined : oracleByToken.get(oracleNode.name);
+      const oracleNode = snapshot.nodes.find((node) =>
+        node.name?.startsWith('split origin oracle '),
+      );
+      const oracle =
+        oracleNode?.name === undefined ? undefined : oracleByToken.get(oracleNode.name);
       expect(oracle).toBeDefined();
       if (oracle === undefined) continue;
       const noHit = snapshot.nodes.find((node) => node.frameworkType === 'NoHitGridRenderable');
@@ -562,21 +646,26 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
       matchedOrigins.push(origin);
       expect(origin).toBe(oracle.renderOffset);
       expect(noHit?.geometry.intendedRect).toMatchObject({
-        status: 'known', value: { row: origin + 1, column: 31, width: 9, height: 2 },
+        status: 'known',
+        value: { row: origin + 1, column: 31, width: 9, height: 2 },
       });
       expect(noHit?.geometry.visibleRect).toMatchObject({
-        status: 'known', value: { row: origin + 1, column: 31, width: 9, height: 2 },
+        status: 'known',
+        value: { row: origin + 1, column: 31, width: 9, height: 2 },
       });
       const clipped = snapshot.nodes.find((node) => node.name === 'differential clipped');
       expect(clipped?.geometry.intendedRect).toMatchObject({
-        status: 'known', value: { row: origin + 2, column: 6, width: 20, height: 1 },
+        status: 'known',
+        value: { row: origin + 2, column: 6, width: 20, height: 1 },
       });
       expect(clipped?.geometry.visibleRect).toMatchObject({
-        status: 'known', value: { row: origin + 2, column: 6, width: 7, height: 1 },
+        status: 'known',
+        value: { row: origin + 2, column: 6, width: 7, height: 1 },
       });
       const upper = snapshot.nodes.find((node) => node.name === 'upper overlap');
       expect(upper?.geometry.visibleRect).toMatchObject({
-        status: 'known', value: { row: origin + 7, column: 21, width: 8, height: 1 },
+        status: 'known',
+        value: { row: origin + 7, column: 21, width: 8, height: 1 },
       });
       expect(snapshot.hitGrid.status).toBe('known');
       if (snapshot.hitGrid.status === 'known' && upper !== undefined) {

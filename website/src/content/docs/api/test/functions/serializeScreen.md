@@ -13,7 +13,7 @@ editUrl: false
 
 > **serializeScreen**(`screen`, `options?`): `string`
 
-Defined in: [test/src/cells.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/cells.ts#L40)
+Defined in: [test/src/cells.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/cells.ts#L45)
 
 Renders the visible grid.
 

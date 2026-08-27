@@ -87,12 +87,7 @@ export interface SemanticExtendedObject {
 }
 
 export type SemanticExtendedValue =
-  | null
-  | boolean
-  | number
-  | string
-  | SemanticExtendedArray
-  | SemanticExtendedObject;
+  null | boolean | number | string | SemanticExtendedArray | SemanticExtendedObject;
 
 /** Application-defined state, deliberately separate from {@link SemanticState}. */
 export type SemanticExtendedState = SemanticExtendedObject;
@@ -201,8 +196,7 @@ export interface ProviderTerminalInputModes {
 
 /** Exact production focus-manager result for one committed revision. */
 export type ProviderFocusState =
-  | { readonly status: 'focused'; readonly recipientId: string }
-  | { readonly status: 'none' };
+  { readonly status: 'focused'; readonly recipientId: string } | { readonly status: 'none' };
 
 /**
  * Application evidence bound to the same revision as its containing snapshot.

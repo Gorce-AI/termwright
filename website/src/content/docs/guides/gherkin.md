@@ -33,21 +33,21 @@ Pair the feature with a step-definition module:
 
 ```ts
 // tests/features/command-approval.steps.ts
-import {fileURLToPath} from 'node:url';
-import type {TerminalHarness} from 'termwright';
-import {Given, Then, When, defineSteps} from 'termwright/gherkin';
+import { fileURLToPath } from 'node:url';
+import type { TerminalHarness } from 'termwright';
+import { Given, Then, When, defineSteps } from 'termwright/gherkin';
 
 const program = fileURLToPath(new URL('../../src/permission.js', import.meta.url));
 
 export default defineSteps(
-  Given('the permission terminal is running', async ({terminal, world}) => {
-    world.app = await terminal.launch({command: [process.execPath, program]});
+  Given('the permission terminal is running', async ({ terminal, world }) => {
+    world.app = await terminal.launch({ command: [process.execPath, program] });
     await world.app.waitForText('Permission required');
   }),
-  When('I approve the command', async ({world}) => {
+  When('I approve the command', async ({ world }) => {
     await (world.app as TerminalHarness).press('Enter');
   }),
-  Then('the command should start', async ({expect, world}) => {
+  Then('the command should start', async ({ expect, world }) => {
     await expect(world.app as TerminalHarness).toHaveText('running: ls -la');
   }),
 );
@@ -67,16 +67,16 @@ in the same nearest-scope glue module as step definitions; they do not register
 process-global state.
 
 ```ts
-import {After, Before, Given, defineSteps} from 'termwright/gherkin';
+import { After, Before, Given, defineSteps } from 'termwright/gherkin';
 
 export default defineSteps(
-  Before(async ({terminal, world}) => {
-    world.app = await terminal.launch({command: [process.execPath, program]});
+  Before(async ({ terminal, world }) => {
+    world.app = await terminal.launch({ command: [process.execPath, program] });
   }),
-  After(({world}) => {
+  After(({ world }) => {
     world.app = undefined;
   }),
-  Given('the application is ready', async ({world}) => {
+  Given('the application is ready', async ({ world }) => {
     await (world.app as TerminalHarness).waitForQuiet();
   }),
 );
@@ -104,7 +104,7 @@ Hooks accept a Cucumber tag expression when setup applies only to part of the
 suite:
 
 ```ts
-Before({tags: '@component and not @slow'}, async (context) => {
+Before({ tags: '@component and not @slow' }, async (context) => {
   // scenario-scoped setup
 });
 ```
@@ -115,12 +115,16 @@ For an explicit plugin configuration, export a project-owned extended test
 alongside `describe` and `expect`:
 
 ```ts title="tests/fixtures.ts"
-import {describe, expect, test as base} from 'termwright/test';
+import { describe, expect, test as base } from 'termwright/test';
 
-export {describe, expect};
-export interface ProjectFixtures { account: {name: string} }
+export { describe, expect };
+export interface ProjectFixtures {
+  account: { name: string };
+}
 export const test = base.extend<ProjectFixtures>({
-  account: async ({}, use) => { await use({name: 'Ada'}); },
+  account: async ({}, use) => {
+    await use({ name: 'Ada' });
+  },
 });
 ```
 
@@ -129,9 +133,9 @@ list makes Vitest request them statically, preserving its native setup and
 teardown lifecycle.
 
 ```ts title="vitest.config.ts"
-import {fileURLToPath} from 'node:url';
-import {gherkinPlugin} from 'termwright/gherkin';
-import type {ProjectFixtures} from './tests/fixtures';
+import { fileURLToPath } from 'node:url';
+import { gherkinPlugin } from 'termwright/gherkin';
+import type { ProjectFixtures } from './tests/fixtures';
 
 gherkinPlugin<ProjectFixtures>({
   fixtureNames: ['account'],
@@ -145,7 +149,7 @@ gherkinPlugin<ProjectFixtures>({
 Use the project fixture type on authored definitions:
 
 ```ts
-Given<ProjectFixtures>('an account exists', ({account, world}) => {
+Given<ProjectFixtures>('an account exists', ({ account, world }) => {
   world.name = account.name;
 });
 ```
@@ -174,14 +178,16 @@ plugin and an explicit `.feature` include there; execute through Termwright:
 
 ```ts
 // vitest.config.ts
-import {gherkinPlugin} from 'termwright/gherkin';
-import {defineConfig} from 'vitest/config';
+import { gherkinPlugin } from 'termwright/gherkin';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [gherkinPlugin({
-    featureRoot: 'tests/features',
-    stepDefinitions: ['[filepath].steps.{ts,tsx,mts}'],
-  })],
+  plugins: [
+    gherkinPlugin({
+      featureRoot: 'tests/features',
+      stepDefinitions: ['[filepath].steps.{ts,tsx,mts}'],
+    }),
+  ],
   test: {
     include: ['tests/**/*.test.ts', 'tests/features/**/*.feature'],
   },

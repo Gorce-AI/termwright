@@ -9,9 +9,9 @@ import type {
   ProviderTerminalInputModes,
   SemanticScrollState,
   Rect,
-} from "@termwright/protocol";
+} from '@termwright/protocol';
 
-const REGISTRY = Symbol.for("termwright.application-evidence-providers.v1");
+const REGISTRY = Symbol.for('termwright.application-evidence-providers.v1');
 
 export interface EvidenceRevisionContext {
   /** Driver-issued session identity; prevents revision reuse across reconnects. */
@@ -81,56 +81,44 @@ interface ApplicationProviderIdentity {
   readonly id: string;
   readonly version: string;
   /** `native` for a production mechanism; `declared` for an explicit app contract. */
-  readonly method: "native" | "declared";
+  readonly method: 'native' | 'declared';
 }
 
 /** A closed provider family for production pointer ownership/routing. */
-export interface ApplicationPointerEvidenceProvider
-  extends ApplicationProviderIdentity {
-  readonly family: "pointer";
-  readonly capabilities: readonly ("pointer-regions" | "hit-test")[];
-  observe(
-    context: EvidenceRevisionContext,
-  ): ApplicationPointerEvidenceObservation;
+export interface ApplicationPointerEvidenceProvider extends ApplicationProviderIdentity {
+  readonly family: 'pointer';
+  readonly capabilities: readonly ('pointer-regions' | 'hit-test')[];
+  observe(context: EvidenceRevisionContext): ApplicationPointerEvidenceObservation;
 }
 
 /** A closed provider family for production physical keyboard recipes. */
-export interface ApplicationActionStrategyProvider
-  extends ApplicationProviderIdentity {
-  readonly family: "action-strategy";
-  observe(
-    context: EvidenceRevisionContext,
-  ): ApplicationActionStrategyObservation;
+export interface ApplicationActionStrategyProvider extends ApplicationProviderIdentity {
+  readonly family: 'action-strategy';
+  observe(context: EvidenceRevisionContext): ApplicationActionStrategyObservation;
 }
 
 /** A closed provider family for the application's production focus manager. */
-export interface ApplicationFocusEvidenceProvider
-  extends ApplicationProviderIdentity {
-  readonly family: "focus";
+export interface ApplicationFocusEvidenceProvider extends ApplicationProviderIdentity {
+  readonly family: 'focus';
   observe(context: EvidenceRevisionContext): ApplicationFocusEvidenceObservation;
 }
 
 /** A closed provider family for the application's production viewport model. */
-export interface ApplicationScrollEvidenceProvider
-  extends ApplicationProviderIdentity {
-  readonly family: "scroll";
+export interface ApplicationScrollEvidenceProvider extends ApplicationProviderIdentity {
+  readonly family: 'scroll';
   observe(context: EvidenceRevisionContext): ApplicationScrollEvidenceObservation;
 }
 
 /** A closed provider family for the application's production painter. */
-export interface ApplicationPaintEvidenceProvider
-  extends ApplicationProviderIdentity {
-  readonly family: "paint";
+export interface ApplicationPaintEvidenceProvider extends ApplicationProviderIdentity {
+  readonly family: 'paint';
   observe(context: EvidenceRevisionContext): ApplicationPaintEvidenceObservation;
 }
 
 /** A closed provider family for production terminal parser configuration. */
-export interface ApplicationTerminalInputModeEvidenceProvider
-  extends ApplicationProviderIdentity {
-  readonly family: "input-mode";
-  observe(
-    context: EvidenceRevisionContext,
-  ): ApplicationTerminalInputModeObservation;
+export interface ApplicationTerminalInputModeEvidenceProvider extends ApplicationProviderIdentity {
+  readonly family: 'input-mode';
+  observe(context: EvidenceRevisionContext): ApplicationTerminalInputModeObservation;
 }
 
 export type ApplicationEvidenceProvider =
@@ -161,21 +149,13 @@ interface RegistryState {
 }
 
 export interface EvidenceProviderRegistry {
-  registerPointer(
-    provider: ApplicationPointerEvidenceProvider,
-  ): EvidenceProviderRegistrationHandle;
+  registerPointer(provider: ApplicationPointerEvidenceProvider): EvidenceProviderRegistrationHandle;
   registerActionStrategies(
     provider: ApplicationActionStrategyProvider,
   ): EvidenceProviderRegistrationHandle;
-  registerFocus(
-    provider: ApplicationFocusEvidenceProvider,
-  ): EvidenceProviderRegistrationHandle;
-  registerScroll(
-    provider: ApplicationScrollEvidenceProvider,
-  ): EvidenceProviderRegistrationHandle;
-  registerPaint(
-    provider: ApplicationPaintEvidenceProvider,
-  ): EvidenceProviderRegistrationHandle;
+  registerFocus(provider: ApplicationFocusEvidenceProvider): EvidenceProviderRegistrationHandle;
+  registerScroll(provider: ApplicationScrollEvidenceProvider): EvidenceProviderRegistrationHandle;
+  registerPaint(provider: ApplicationPaintEvidenceProvider): EvidenceProviderRegistrationHandle;
   registerInputModes(
     provider: ApplicationTerminalInputModeEvidenceProvider,
   ): EvidenceProviderRegistrationHandle;
@@ -209,38 +189,36 @@ function normalizedCapabilities(
   provider: ApplicationEvidenceProvider,
 ): readonly EvidenceProviderCapability[] {
   const capabilities =
-    provider.family === "action-strategy"
-      ? (["action-recipes"] as const)
-      : provider.family === "focus"
-        ? (["focus-state"] as const)
-        : provider.family === "scroll"
-          ? (["scroll-state"] as const)
-          : provider.family === "paint"
-            ? (["painted-regions"] as const)
-            : provider.family === "input-mode"
-              ? (["terminal-input-modes"] as const)
-            : provider.capabilities;
+    provider.family === 'action-strategy'
+      ? (['action-recipes'] as const)
+      : provider.family === 'focus'
+        ? (['focus-state'] as const)
+        : provider.family === 'scroll'
+          ? (['scroll-state'] as const)
+          : provider.family === 'paint'
+            ? (['painted-regions'] as const)
+            : provider.family === 'input-mode'
+              ? (['terminal-input-modes'] as const)
+              : provider.capabilities;
   const unique: EvidenceProviderCapability[] = [
     ...new Set<EvidenceProviderCapability>(capabilities as readonly EvidenceProviderCapability[]),
   ];
   if (unique.length === 0) {
-    throw new TypeError(
-      "provider must declare at least one evidence capability",
-    );
+    throw new TypeError('provider must declare at least one evidence capability');
   }
   if (
     unique.some(
       (capability) =>
-        capability !== "pointer-regions" &&
-        capability !== "hit-test" &&
-        capability !== "focus-state" &&
-        capability !== "action-recipes" &&
-        capability !== "scroll-state" &&
-        capability !== "painted-regions" &&
-        capability !== "terminal-input-modes",
+        capability !== 'pointer-regions' &&
+        capability !== 'hit-test' &&
+        capability !== 'focus-state' &&
+        capability !== 'action-recipes' &&
+        capability !== 'scroll-state' &&
+        capability !== 'painted-regions' &&
+        capability !== 'terminal-input-modes',
     )
   ) {
-    throw new TypeError("provider declares an unknown evidence capability");
+    throw new TypeError('provider declares an unknown evidence capability');
   }
   return Object.freeze(unique);
 }
@@ -252,15 +230,13 @@ function registerIn(
 ): EvidenceProviderRegistrationHandle {
   if (registry.activeLeases > 0) {
     throw new EvidenceProviderLifecycleError(
-      `provider ${provider.id || "<empty>"} registered after the session contract was frozen`,
+      `provider ${provider.id || '<empty>'} registered after the session contract was frozen`,
     );
   }
-  assertIdentifier(provider.id, "provider id");
-  assertIdentifier(provider.version, "provider version");
+  assertIdentifier(provider.id, 'provider id');
+  assertIdentifier(provider.version, 'provider version');
   if (registry.entries.has(provider.id)) {
-    throw new EvidenceProviderLifecycleError(
-      `provider ${provider.id} is already registered`,
-    );
+    throw new EvidenceProviderLifecycleError(`provider ${provider.id} is already registered`);
   }
   const capabilities = normalizedCapabilities(provider);
   // Multiple authoritative producers may co-prove the same fact. Revision
@@ -296,12 +272,8 @@ function freezeState(registry: RegistryState): FrozenEvidenceProviderRegistry {
   let closed = false;
   return Object.freeze({
     registrations,
-    collect(
-      context: EvidenceRevisionContext,
-    ): readonly ProviderRevisionEvidence[] {
-      return Object.freeze(
-        entries.map((entry) => collectEntry(entry, context)),
-      );
+    collect(context: EvidenceRevisionContext): readonly ProviderRevisionEvidence[] {
+      return Object.freeze(entries.map((entry) => collectEntry(entry, context)));
     },
     close(): void {
       if (closed) return;
@@ -313,16 +285,12 @@ function freezeState(registry: RegistryState): FrozenEvidenceProviderRegistry {
 
 function registryFor(state: RegistryState): EvidenceProviderRegistry {
   return Object.freeze({
-    registerPointer: (provider: ApplicationPointerEvidenceProvider) =>
-      registerIn(state, provider),
+    registerPointer: (provider: ApplicationPointerEvidenceProvider) => registerIn(state, provider),
     registerActionStrategies: (provider: ApplicationActionStrategyProvider) =>
       registerIn(state, provider),
-    registerFocus: (provider: ApplicationFocusEvidenceProvider) =>
-      registerIn(state, provider),
-    registerScroll: (provider: ApplicationScrollEvidenceProvider) =>
-      registerIn(state, provider),
-    registerPaint: (provider: ApplicationPaintEvidenceProvider) =>
-      registerIn(state, provider),
+    registerFocus: (provider: ApplicationFocusEvidenceProvider) => registerIn(state, provider),
+    registerScroll: (provider: ApplicationScrollEvidenceProvider) => registerIn(state, provider),
+    registerPaint: (provider: ApplicationPaintEvidenceProvider) => registerIn(state, provider),
     registerInputModes: (provider: ApplicationTerminalInputModeEvidenceProvider) =>
       registerIn(state, provider),
     freeze: () => freezeState(state),
@@ -404,8 +372,8 @@ function collectEntry(
       providerId,
       sessionId: context.sessionId,
       revision: context.revision,
-      status: "lost" as const,
-      reason: "provider was disposed after negotiation",
+      status: 'lost' as const,
+      reason: 'provider was disposed after negotiation',
     });
   }
   try {
@@ -415,61 +383,49 @@ function collectEntry(
     let scrollObservation: ApplicationScrollEvidenceObservation | undefined;
     let paintObservation: ApplicationPaintEvidenceObservation | undefined;
     let inputModeObservation: ApplicationTerminalInputModeObservation | undefined;
-    if (entry.provider.family === "pointer") {
+    if (entry.provider.family === 'pointer') {
       pointerObservation = entry.provider.observe(context);
-    } else if (entry.provider.family === "action-strategy") {
+    } else if (entry.provider.family === 'action-strategy') {
       strategyObservation = entry.provider.observe(context);
-    } else if (entry.provider.family === "focus") {
+    } else if (entry.provider.family === 'focus') {
       focusObservation = entry.provider.observe(context);
-    } else if (entry.provider.family === "scroll") {
+    } else if (entry.provider.family === 'scroll') {
       scrollObservation = entry.provider.observe(context);
-    } else if (entry.provider.family === "paint") {
+    } else if (entry.provider.family === 'paint') {
       paintObservation = entry.provider.observe(context);
     } else {
       inputModeObservation = entry.provider.observe(context);
     }
     if (
-      !entry.capabilities.includes("pointer-regions") &&
+      !entry.capabilities.includes('pointer-regions') &&
       pointerObservation !== undefined &&
       pointerObservation.pointerRegions.length > 0
     ) {
-      throw new Error(
-        "published pointer regions without negotiating pointer-regions",
-      );
+      throw new Error('published pointer regions without negotiating pointer-regions');
+    }
+    if (entry.capabilities.includes('hit-test') && pointerObservation?.hitTest === undefined) {
+      throw new Error('negotiated hit-test callback is unavailable');
+    }
+    if (!entry.capabilities.includes('hit-test') && pointerObservation?.hitTest !== undefined) {
+      throw new Error('published a hit-test callback without negotiating hit-test');
     }
     if (
-      entry.capabilities.includes("hit-test") &&
-      pointerObservation?.hitTest === undefined
-    ) {
-      throw new Error("negotiated hit-test callback is unavailable");
-    }
-    if (
-      !entry.capabilities.includes("hit-test") &&
-      pointerObservation?.hitTest !== undefined
-    ) {
-      throw new Error(
-        "published a hit-test callback without negotiating hit-test",
-      );
-    }
-    if (
-      entry.capabilities.includes("action-recipes") &&
+      entry.capabilities.includes('action-recipes') &&
       strategyObservation?.actionRecipes === undefined
     ) {
-      throw new Error("negotiated action-recipes evidence is unavailable");
+      throw new Error('negotiated action-recipes evidence is unavailable');
     }
     if (
-      !entry.capabilities.includes("action-recipes") &&
+      !entry.capabilities.includes('action-recipes') &&
       strategyObservation?.actionRecipes !== undefined
     ) {
-      throw new Error(
-        "published action recipes without negotiating action-recipes",
-      );
+      throw new Error('published action recipes without negotiating action-recipes');
     }
     const resolve =
       context.resolveRecipient ??
       ((recipient: EvidenceRecipient): string => {
-        if ("semanticId" in recipient) return recipient.semanticId;
-        throw new Error("semantic recipient resolver is unavailable");
+        if ('semanticId' in recipient) return recipient.semanticId;
+        throw new Error('semantic recipient resolver is unavailable');
       });
     const pointerRegions = Object.freeze(
       (pointerObservation?.pointerRegions ?? []).map((region) =>
@@ -486,7 +442,7 @@ function collectEntry(
               return recipient === null ? null : resolve(recipient);
             },
             context,
-            entry.capabilities.includes("pointer-regions"),
+            entry.capabilities.includes('pointer-regions'),
           );
     const actionRecipes = strategyObservation?.actionRecipes.map((entry) =>
       Object.freeze({
@@ -495,17 +451,23 @@ function collectEntry(
           entry.recipes.map((recipe) =>
             Object.freeze({
               ...recipe,
-              steps: Object.freeze(
-                recipe.steps.map((step) => Object.freeze({ ...step })),
-              ),
+              steps: Object.freeze(recipe.steps.map((step) => Object.freeze({ ...step }))),
             }),
           ),
         ),
       }),
     );
     const scrollStates = scrollObservation?.scrollStates.map((state) => {
-      if (!Number.isSafeInteger(state.offset) || !Number.isSafeInteger(state.viewport) || !Number.isSafeInteger(state.extent) || state.offset < 0 || state.viewport < 0 || state.extent < 0 || state.offset + state.viewport > state.extent) {
-        throw new Error("scroll state must contain non-negative safe integers within its extent");
+      if (
+        !Number.isSafeInteger(state.offset) ||
+        !Number.isSafeInteger(state.viewport) ||
+        !Number.isSafeInteger(state.extent) ||
+        state.offset < 0 ||
+        state.viewport < 0 ||
+        state.extent < 0 ||
+        state.offset + state.viewport > state.extent
+      ) {
+        throw new Error('scroll state must contain non-negative safe integers within its extent');
       }
       return Object.freeze({
         recipientId: resolve(state.recipient),
@@ -525,11 +487,11 @@ function collectEntry(
       providerId,
       sessionId: context.sessionId,
       revision: context.revision,
-      status: "available" as const,
+      status: 'available' as const,
       evidence: Object.freeze({
-        source: "application" as const,
+        source: 'application' as const,
         method: entry.provider.method,
-        strength: "authoritative" as const,
+        strength: 'authoritative' as const,
         providerId,
       }),
       pointerRegions,
@@ -538,24 +500,16 @@ function collectEntry(
         : {
             focusState:
               focusObservation.focused === null
-                ? Object.freeze({ status: "none" as const })
+                ? Object.freeze({ status: 'none' as const })
                 : Object.freeze({
-                    status: "focused" as const,
+                    status: 'focused' as const,
                     recipientId: resolve(focusObservation.focused),
                   }),
           }),
-      ...(actionRecipes === undefined
-        ? {}
-        : { actionRecipes: Object.freeze(actionRecipes) }),
-      ...(scrollStates === undefined
-        ? {}
-        : { scrollStates: Object.freeze(scrollStates) }),
-      ...(paintedRegions === undefined
-        ? {}
-        : { paintedRegions: Object.freeze(paintedRegions) }),
-      ...(inputModes === undefined
-        ? {}
-        : { inputModes: Object.freeze({ ...inputModes }) }),
+      ...(actionRecipes === undefined ? {} : { actionRecipes: Object.freeze(actionRecipes) }),
+      ...(scrollStates === undefined ? {} : { scrollStates: Object.freeze(scrollStates) }),
+      ...(paintedRegions === undefined ? {} : { paintedRegions: Object.freeze(paintedRegions) }),
+      ...(inputModes === undefined ? {} : { inputModes: Object.freeze({ ...inputModes }) }),
       ...(hitGrid === undefined ? {} : { hitGrid }),
     });
   } catch (error) {
@@ -563,21 +517,21 @@ function collectEntry(
       providerId,
       sessionId: context.sessionId,
       revision: context.revision,
-      status: "violation" as const,
+      status: 'violation' as const,
       reason: error instanceof Error ? error.message : String(error),
     });
   }
 }
 
 function validateInputModes(modes: ProviderTerminalInputModes): void {
-  if (!["none", "x10", "vt200", "drag", "any"].includes(modes.mouseTracking)) {
-    throw new Error("input modes contain an invalid mouseTracking value");
+  if (!['none', 'x10', 'vt200', 'drag', 'any'].includes(modes.mouseTracking)) {
+    throw new Error('input modes contain an invalid mouseTracking value');
   }
-  if (!["default", "sgr", "urxvt", "utf8"].includes(modes.mouseEncoding)) {
-    throw new Error("input modes contain an invalid mouseEncoding value");
+  if (!['default', 'sgr', 'urxvt', 'utf8'].includes(modes.mouseEncoding)) {
+    throw new Error('input modes contain an invalid mouseEncoding value');
   }
-  if (modes.focusReporting !== "on" && modes.focusReporting !== "off") {
-    throw new Error("input modes contain an invalid focusReporting value");
+  if (modes.focusReporting !== 'on' && modes.focusReporting !== 'off') {
+    throw new Error('input modes contain an invalid focusReporting value');
   }
 }
 
@@ -588,9 +542,7 @@ function freezeRegion(
   return Object.freeze({
     recipientId,
     regionBounds: Object.freeze({ ...region.regionBounds }),
-    spans: Object.freeze(
-      region.spans.map((span) => Object.freeze({ ...span })),
-    ),
+    spans: Object.freeze(region.spans.map((span) => Object.freeze({ ...span }))),
   });
 }
 
@@ -610,18 +562,11 @@ function buildHitGrid(
   for (const region of regions) {
     for (const span of region.spans) {
       for (let column = span.from; column < span.to; column += 1) {
-        if (
-          span.row >= 0 &&
-          span.row < context.rows &&
-          column >= 0 &&
-          column < context.columns
-        ) {
+        if (span.row >= 0 && span.row < context.rows && column >= 0 && column < context.columns) {
           const key = `${span.row}:${column}`;
           const previous = declared.get(key);
           if (previous !== undefined && previous !== region.recipientId) {
-            throw new Error(
-              `declared pointer regions overlap at ${column},${span.row}`,
-            );
+            throw new Error(`declared pointer regions overlap at ${column},${span.row}`);
           }
           declared.set(key, region.recipientId);
         }
@@ -645,9 +590,7 @@ function buildHitGrid(
     }
   }
   const output: { recipientId: string; rect: Rect }[] = [];
-  for (const [row, rowCells] of [...rows].sort(
-    ([left], [right]) => left - right,
-  )) {
+  for (const [row, rowCells] of [...rows].sort(([left], [right]) => left - right)) {
     rowCells.sort((left, right) => left.column - right.column);
     let start = rowCells[0];
     if (start === undefined) continue;
@@ -687,7 +630,7 @@ function buildHitGrid(
 }
 
 export class EvidenceProviderLifecycleError extends Error {
-  override readonly name = "EvidenceProviderLifecycleError";
+  override readonly name = 'EvidenceProviderLifecycleError';
 }
 
 /** @internal Test isolation for the SDK package itself. */

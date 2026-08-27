@@ -76,7 +76,12 @@ export function cacheRoot(env: NodeJS.ProcessEnv = process.env): string {
 /** Absolute directory a given copy occupies. */
 export function copyDir(input: CopyKeyInput, env?: NodeJS.ProcessEnv): string {
   const safeFramework = input.framework.replace(/[^\w.-]+/gu, '-');
-  return join(cacheRoot(env), 'copies', safeFramework, `${input.frameworkVersion}-${copyKey(input)}`);
+  return join(
+    cacheRoot(env),
+    'copies',
+    safeFramework,
+    `${input.frameworkVersion}-${copyKey(input)}`,
+  );
 }
 
 /** Marker file written last, so a half-built copy is never mistaken for a good one. */

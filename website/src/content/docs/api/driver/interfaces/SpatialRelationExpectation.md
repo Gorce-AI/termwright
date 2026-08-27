@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SpatialRelationExpectation
 
-Defined in: [driver/src/api.ts:768](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L768)
+Defined in: [driver/src/api.ts:728](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L728)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **relation**: `SpatialRelation`
 
-Defined in: [driver/src/api.ts:769](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L769)
+Defined in: [driver/src/api.ts:729](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L729)
 
 ***
 
@@ -44,4 +44,4 @@ Defined in: [driver/src/api.ts:769](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **target**: [`SemanticLocator`](../semanticlocator/) \| [`ScreenLocator`](../screenlocator/)
 
-Defined in: [driver/src/api.ts:770](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L770)
+Defined in: [driver/src/api.ts:730](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L730)

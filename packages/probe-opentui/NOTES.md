@@ -10,7 +10,7 @@ The first version called `target.write(marker)` directly. Every byte still
 arrived, in a plausible-looking order, and one test caught it: writing straight
 to the target jumps the Writable's own queue, so a marker overtook the frame it
 was committing. A receiver would then pair a tree with the screen that came
-*before* it — a wrong pairing rather than a missing one, which is the worse
+_before_ it — a wrong pairing rather than a missing one, which is the worse
 failure and the exact thing the marker exists to prevent.
 
 Both now go through one queue, so ordering is structural rather than a matter of
@@ -65,18 +65,18 @@ the Phase 0 audit; `bench/marker-route.ts` runs them against each other. Numbers
 below: Bun 1.2.15, macOS arm64, `@opentui/core@0.5.3`, `targetFps: 240`, 2 s
 windows, median of three runs, `useThread: true` throughout.
 
-| arm | fps | vs native | bytes seen in JS | marker route works |
-|---|---|---|---|---|
-| `native` (untouched stdout) | 203 | — | **0** | impossible |
-| `feed-quiet` (custom stdout, no marker) | 205 | +1.0 % | 3 118 | — |
-| `feed` (custom stdout + marker per frame) | 194 | −4.4 % | 10 401 | yes, by construction |
-| `postprocess` (custom stdout + `addPostProcessFn`) | 193 | −4.9 % | 10 114 | see below |
-| `postprocess-real` (real stdout + `addPostProcessFn`) | 182–192 | −5..−10 % | 0 | ordering unprovable |
+| arm                                                   | fps     | vs native | bytes seen in JS | marker route works   |
+| ----------------------------------------------------- | ------- | --------- | ---------------- | -------------------- |
+| `native` (untouched stdout)                           | 203     | —         | **0**            | impossible           |
+| `feed-quiet` (custom stdout, no marker)               | 205     | +1.0 %    | 3 118            | —                    |
+| `feed` (custom stdout + marker per frame)             | 194     | −4.4 %    | 10 401           | yes, by construction |
+| `postprocess` (custom stdout + `addPostProcessFn`)    | 193     | −4.9 %    | 10 114           | see below            |
+| `postprocess-real` (real stdout + `addPostProcessFn`) | 182–192 | −5..−10 % | 0                | ordering unprovable  |
 
 Four things the measurement settled that reading the source did not:
 
 1. **The audit's central claim is confirmed by number, not inference.** With the
-   real stdout the JS side sees *zero* bytes. Intercepting `process.stdout.write`
+   real stdout the JS side sees _zero_ bytes. Intercepting `process.stdout.write`
    cannot be a marker route here, unlike under Ink.
 2. **The NativeSpanFeed is free.** Handing OpenTUI a custom stdout — which is
    what makes it route bytes back into JS — cost nothing measurable (+1 %, inside
@@ -86,7 +86,7 @@ Four things the measurement settled that reading the source did not:
    renderer's `writeOut` into the same native queue as the frames, so all 365
    markers appeared in the captured stream. The audit had left this open.
 4. **`postprocess` still cannot be trusted for attribution.** `addPostProcessFn`
-   runs *before* `renderNative()` (`chunk-node-kq7as74d.js:9794-9799`), so a
+   runs _before_ `renderNative()` (`chunk-node-kq7as74d.js:9794-9799`), so a
    marker queued during frame N is queued ahead of frame N's own bytes. The
    captured stream interleaves plausibly — every marker is preceded by a real
    63-byte frame — but which frame a given marker commits could not be

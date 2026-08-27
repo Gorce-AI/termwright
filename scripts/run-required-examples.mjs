@@ -33,7 +33,8 @@ function waitForExit(child) {
     child.once('error', reject);
     child.once('exit', (code, signal) => {
       if (signal !== null) reject(new Error(`required example tests stopped by ${signal}`));
-      else if (code !== 0) reject(new Error(`required example tests exited with code ${String(code)}`));
+      else if (code !== 0)
+        reject(new Error(`required example tests exited with code ${String(code)}`));
       else resolveRun();
     });
   });

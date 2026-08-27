@@ -86,8 +86,16 @@ export function recognize(frame: ProbeFrame, options: RecognizeOptions): Semanti
     rows: options.rows,
     rootIds,
     nodes,
-    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    coordinateSpace: {
+      status: 'known',
+      value: 'viewport-cells',
+      evidence: evidence('framework', 'instrumented', 'authoritative', 'tview'),
+    },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }
 
@@ -105,20 +113,42 @@ function recognizeObject(object: ProbeObject): SemanticNode {
     name: object.annotations?.name ?? object.text ?? '',
     ...(object.parent === undefined ? {} : { parentId: object.parent }),
     geometry: {
-      displayed: object.state?.displayed === undefined
-        ? { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' }
-        : { status: 'known', value: object.state.displayed, evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
-      intendedRect: object.geometry?.intendedRect === undefined
-        ? { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' }
-        : { status: 'known', value: object.geometry.intendedRect, evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
-      visibleRect: { status: 'unsupported', capability: 'visible-rect', reason: 'framework-unobservable' },
+      displayed:
+        object.state?.displayed === undefined
+          ? { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' }
+          : {
+              status: 'known',
+              value: object.state.displayed,
+              evidence: evidence('framework', 'instrumented', 'authoritative', 'tview'),
+            },
+      intendedRect:
+        object.geometry?.intendedRect === undefined
+          ? {
+              status: 'unsupported',
+              capability: 'intended-geometry',
+              reason: 'framework-unobservable',
+            }
+          : {
+              status: 'known',
+              value: object.geometry.intendedRect,
+              evidence: evidence('framework', 'instrumented', 'authoritative', 'tview'),
+            },
+      visibleRect: {
+        status: 'unsupported',
+        capability: 'visible-rect',
+        reason: 'framework-unobservable',
+      },
     },
-    ...(object.state?.value === undefined ? {} : { value: {
-      status: 'known' as const,
-      value: object.state.value,
-      sensitivity: object.state?.valueSensitivity ?? 'sensitive',
-      evidence: evidence('framework', 'instrumented', 'authoritative', 'tview'),
-    } }),
+    ...(object.state?.value === undefined
+      ? {}
+      : {
+          value: {
+            status: 'known' as const,
+            value: object.state.value,
+            sensitivity: object.state?.valueSensitivity ?? 'sensitive',
+            evidence: evidence('framework', 'instrumented', 'authoritative', 'tview'),
+          },
+        }),
     ...(state === undefined ? {} : { state }),
   } as SemanticNode;
 }

@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const packageDirectory = fileURLToPath(new URL('../', import.meta.url));
-const outputDirectory = fileURLToPath(new URL('../../../website/public/images/runner/', import.meta.url));
+const outputDirectory = fileURLToPath(
+  new URL('../../../website/public/images/runner/', import.meta.url),
+);
 const expected = [
   'spec-catalog.png',
   'active-run.png',
@@ -20,15 +22,27 @@ const expected = [
 ];
 
 await run('pnpm', ['run', 'build:app']);
-await run('pnpm', ['exec', 'vitest', 'run', '--config', 'vitest.browser.config.ts', 'src/app/docs-screenshots.e2e.ts'], {
-  TERMWRIGHT_CAPTURE_DOCS: '1',
-});
+await run(
+  'pnpm',
+  [
+    'exec',
+    'vitest',
+    'run',
+    '--config',
+    'vitest.browser.config.ts',
+    'src/app/docs-screenshots.e2e.ts',
+  ],
+  {
+    TERMWRIGHT_CAPTURE_DOCS: '1',
+  },
+);
 
 const actual = new Set(await readdir(outputDirectory));
 for (const filename of expected) {
   if (!actual.has(filename)) throw new Error(`Missing generated Runner screenshot: ${filename}`);
   const bytes = await readFile(join(outputDirectory, filename));
-  if (bytes.length < 10_000) throw new Error(`${filename} is unexpectedly small (${bytes.length} bytes)`);
+  if (bytes.length < 10_000)
+    throw new Error(`${filename} is unexpectedly small (${bytes.length} bytes)`);
   if (bytes.toString('ascii', 1, 4) !== 'PNG') throw new Error(`${filename} is not a PNG`);
   const width = bytes.readUInt32BE(16);
   const height = bytes.readUInt32BE(20);

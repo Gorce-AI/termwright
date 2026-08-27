@@ -40,19 +40,21 @@ export const test = base.extend<ProjectFixtures>({
     // the edge: the terminal fixture closes it after this callback returns.
     await expect(session).toHaveText('Permission required');
     events.push('fixture:teardown');
-    expect(events).toEqual(events.includes('given')
-      ? [
-        'fixture:setup',
-        'before',
-        'given',
-        'when',
-        'then',
-        'after',
-        'resource:close',
-        'context:cleanup',
-        'fixture:teardown',
-      ]
-      : ['fixture:setup', 'fixture:teardown']);
+    expect(events).toEqual(
+      events.includes('given')
+        ? [
+            'fixture:setup',
+            'before',
+            'given',
+            'when',
+            'then',
+            'after',
+            'resource:close',
+            'context:cleanup',
+            'fixture:teardown',
+          ]
+        : ['fixture:setup', 'fixture:teardown'],
+    );
     expect(terminal.sessions).toContain(session);
   },
 });

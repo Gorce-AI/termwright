@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RunEventJournal } from './run-journal.js';
-import { RunEventProducer, createRunEvent, createRunId, type RunEvent, type RunEventClass } from './run-events.js';
+import {
+  RunEventProducer,
+  createRunEvent,
+  createRunId,
+  type RunEvent,
+  type RunEventClass,
+} from './run-events.js';
 import {
   RUN_STATES,
   RUN_STATE_TRANSITIONS,
@@ -10,7 +16,8 @@ import {
   validateRunStateTransition,
 } from './run-state.js';
 
-const uuid = (value: number): string => `00000000-0000-4000-8000-${value.toString(16).padStart(12, '0')}`;
+const uuid = (value: number): string =>
+  `00000000-0000-4000-8000-${value.toString(16).padStart(12, '0')}`;
 const invocationId = createRunId('invocation', () => uuid(1));
 const runId = createRunId('run', () => uuid(2));
 const producerId = createRunId('producer', () => uuid(3));
@@ -27,7 +34,11 @@ function gapProducer(): RunEventProducer {
   });
 }
 
-function event(seq: number, eventClass: RunEventClass, payload: Record<string, string | number> = {}): RunEvent {
+function event(
+  seq: number,
+  eventClass: RunEventClass,
+  payload: Record<string, string | number> = {},
+): RunEvent {
   return createRunEvent({
     eventId: createRunId('event', () => uuid(100 + seq)),
     producerId,
@@ -43,9 +54,17 @@ function event(seq: number, eventClass: RunEventClass, payload: Record<string, s
 
 describe('RunEventJournal invariants', () => {
   it('keeps authoritative events lossless and applies backpressure before mutating ordering state', async () => {
-    const journal = new RunEventJournal({ invocationId, runId, gapProducer: gapProducer(), limits: { maxAuthoritativeEvents: 1, maxStateKeys: 2, maxDiagnosticEvents: 2 } });
+    const journal = new RunEventJournal({
+      invocationId,
+      runId,
+      gapProducer: gapProducer(),
+      limits: { maxAuthoritativeEvents: 1, maxStateKeys: 2, maxDiagnosticEvents: 2 },
+    });
     expect(journal.append(event(0, 'authoritative'))).toMatchObject({ ok: true });
-    expect(journal.append(event(1, 'authoritative'))).toMatchObject({ ok: false, code: 'journal-full' });
+    expect(journal.append(event(1, 'authoritative'))).toMatchObject({
+      ok: false,
+      code: 'journal-full',
+    });
     const barrier = journal.barrier();
     const flushed = await journal.flushThrough(barrier, () => {});
     expect(flushed.map((item) => item.seq)).toEqual([0]);
@@ -54,10 +73,16 @@ describe('RunEventJournal invariants', () => {
 
   it('coalesces explicit state keys only until a barrier seals the generation', async () => {
     const journal = new RunEventJournal({ invocationId, runId, gapProducer: gapProducer() });
-    expect(journal.append(event(0, 'state'), { stateKey: 'session:one' })).toMatchObject({ ok: true });
-    expect(journal.append(event(1, 'state'), { stateKey: 'session:one' })).toMatchObject({ ok: true });
+    expect(journal.append(event(0, 'state'), { stateKey: 'session:one' })).toMatchObject({
+      ok: true,
+    });
+    expect(journal.append(event(1, 'state'), { stateKey: 'session:one' })).toMatchObject({
+      ok: true,
+    });
     const first = journal.barrier();
-    expect(journal.append(event(2, 'state'), { stateKey: 'session:one' })).toMatchObject({ ok: true });
+    expect(journal.append(event(2, 'state'), { stateKey: 'session:one' })).toMatchObject({
+      ok: true,
+    });
     expect((await journal.flushThrough(first, () => {})).map((item) => item.seq)).toEqual([1]);
     const second = journal.barrier();
     expect((await journal.flushThrough(second, () => {})).map((item) => item.seq)).toEqual([2]);
@@ -71,14 +96,26 @@ describe('RunEventJournal invariants', () => {
   });
 
   it('bounds diagnostics and emits an explicit causal gap before retained diagnostics', async () => {
-    const journal = new RunEventJournal({ invocationId, runId, gapProducer: gapProducer(), limits: { maxAuthoritativeEvents: 2, maxStateKeys: 2, maxDiagnosticEvents: 2 } });
+    const journal = new RunEventJournal({
+      invocationId,
+      runId,
+      gapProducer: gapProducer(),
+      limits: { maxAuthoritativeEvents: 2, maxStateKeys: 2, maxDiagnosticEvents: 2 },
+    });
     journal.append(event(0, 'diagnostic', { index: 0 }));
     journal.append(event(1, 'diagnostic', { index: 1 }));
     journal.append(event(2, 'diagnostic', { index: 2 }));
     expect(journal.pending).toBe(3);
     const batch = await journal.flushThrough(journal.barrier(), () => {});
-    expect(batch.map((item) => item.type)).toEqual(['journal.diagnostic-gap', 'diagnostic.fixture', 'diagnostic.fixture']);
-    expect(batch[0]?.payload).toMatchObject({ dropped: 1, firstEventId: event(0, 'diagnostic').eventId });
+    expect(batch.map((item) => item.type)).toEqual([
+      'journal.diagnostic-gap',
+      'diagnostic.fixture',
+      'diagnostic.fixture',
+    ]);
+    expect(batch[0]?.payload).toMatchObject({
+      dropped: 1,
+      firstEventId: event(0, 'diagnostic').eventId,
+    });
     expect(batch.slice(1).map((item) => item.seq)).toEqual([1, 2]);
   });
 
@@ -90,7 +127,9 @@ describe('RunEventJournal invariants', () => {
     await expect(journal.flushThrough(barrier, failing)).rejects.toThrow('disk unavailable');
     expect(journal.pending).toBe(1);
     const written: RunEvent[][] = [];
-    const retry = await journal.flushThrough(barrier, (batch) => { written.push([...batch]); });
+    const retry = await journal.flushThrough(barrier, (batch) => {
+      written.push([...batch]);
+    });
     expect(retry.map((item) => item.eventId)).toEqual([event(0, 'authoritative').eventId]);
     expect(written).toHaveLength(1);
     expect(journal.pending).toBe(0);
@@ -102,7 +141,13 @@ describe('RunEventJournal invariants', () => {
     journal.append(event(0, 'authoritative'));
     const first = journal.barrier();
     let release!: () => void;
-    const blocked = journal.flushThrough(first, () => new Promise<void>((resolve) => { release = resolve; }));
+    const blocked = journal.flushThrough(
+      first,
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
     await expect(journal.flushThrough(first, () => {})).rejects.toThrow(/already in progress/u);
     release();
     await expect(blocked).resolves.toHaveLength(1);
@@ -111,13 +156,20 @@ describe('RunEventJournal invariants', () => {
   it('rejects stale runs, sequence collisions and epoch regression deterministically', () => {
     const journal = new RunEventJournal({ invocationId, runId, gapProducer: gapProducer() });
     const otherRun = createRunId('run', () => uuid(55));
-    expect(journal.append({ ...event(0, 'authoritative'), identity: { invocationId, runId: otherRun } }))
-      .toMatchObject({ ok: false, code: 'stale-run' });
+    expect(
+      journal.append({ ...event(0, 'authoritative'), identity: { invocationId, runId: otherRun } }),
+    ).toMatchObject({ ok: false, code: 'stale-run' });
     expect(journal.append(event(0, 'authoritative'))).toMatchObject({ ok: true });
-    expect(journal.append({ ...event(1, 'authoritative'), seq: 0 })).toMatchObject({ ok: false, code: 'event-collision' });
+    expect(journal.append({ ...event(1, 'authoritative'), seq: 0 })).toMatchObject({
+      ok: false,
+      code: 'event-collision',
+    });
     const newEpoch = { ...event(2, 'authoritative'), epoch: 2 };
     expect(journal.append(newEpoch)).toMatchObject({ ok: true });
-    expect(journal.append({ ...event(3, 'authoritative'), epoch: 1 })).toMatchObject({ ok: false, code: 'epoch-regression' });
+    expect(journal.append({ ...event(3, 'authoritative'), epoch: 1 })).toMatchObject({
+      ok: false,
+      code: 'epoch-regression',
+    });
   });
 });
 
@@ -131,13 +183,26 @@ describe('closed run lifecycle', () => {
   });
 
   it('accepts the normal and cancellation paths and rejects terminal resurrection', () => {
-    const path: (typeof RUN_STATES)[number][] = ['requested', 'collecting', 'scheduled', 'running', 'finalizing', 'passed'];
-    expect(path.every((state, index) =>
-      index === 0 || canTransitionRunState(path[index - 1]!, state),
-    )).toBe(true);
+    const path: (typeof RUN_STATES)[number][] = [
+      'requested',
+      'collecting',
+      'scheduled',
+      'running',
+      'finalizing',
+      'passed',
+    ];
+    expect(
+      path.every((state, index) => index === 0 || canTransitionRunState(path[index - 1]!, state)),
+    ).toBe(true);
     expect(validateRunStateTransition('running', 'cancelling')).toMatchObject({ ok: true });
     expect(validateRunStateTransition('cancelling', 'cancelled')).toMatchObject({ ok: true });
-    expect(validateRunStateTransition('failed', 'running')).toMatchObject({ ok: false, code: 'illegal-run-transition' });
-    expect(validateRunStateTransition('running', 'mystery')).toMatchObject({ ok: false, code: 'invalid-run-state' });
+    expect(validateRunStateTransition('failed', 'running')).toMatchObject({
+      ok: false,
+      code: 'illegal-run-transition',
+    });
+    expect(validateRunStateTransition('running', 'mystery')).toMatchObject({
+      ok: false,
+      code: 'invalid-run-state',
+    });
   });
 });

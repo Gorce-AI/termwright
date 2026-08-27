@@ -3,14 +3,14 @@
  * framework's normal `render`; zero-config tests must not weaken that premise.
  */
 
-import React, {useEffect, useState} from 'react';
-import {Box, Text, render, useApp} from 'ink';
+import React, { useEffect, useState } from 'react';
+import { Box, Text, render, useApp } from 'ink';
 
 const maxStep = Number(process.env['TW_APP_STEPS'] ?? '2');
 
 function App() {
   const [step, setStep] = useState(0);
-  const {exit} = useApp();
+  const { exit } = useApp();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -22,18 +22,10 @@ function App() {
 
   return React.createElement(
     Box,
-    {flexDirection: 'column'},
+    { flexDirection: 'column' },
     React.createElement(Text, null, `Count ${step}`),
-    React.createElement(
-      Box,
-      {'aria-role': 'button'},
-      React.createElement(Text, null, 'Approve'),
-    ),
-    React.createElement(
-      Box,
-      null,
-      React.createElement(Text, null, `Generic child ${step}`),
-    ),
+    React.createElement(Box, { 'aria-role': 'button' }, React.createElement(Text, null, 'Approve')),
+    React.createElement(Box, null, React.createElement(Text, null, `Generic child ${step}`)),
   );
 }
 

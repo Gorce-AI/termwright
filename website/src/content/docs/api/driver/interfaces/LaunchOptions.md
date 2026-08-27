@@ -131,7 +131,7 @@ Defined in: [driver/src/api.ts:132](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"focus"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"pointer-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: [driver/src/api.ts:146](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L146)
+Defined in: [driver/src/api.ts:145](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L145)
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`

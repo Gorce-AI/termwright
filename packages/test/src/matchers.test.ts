@@ -45,9 +45,21 @@ interface FakeLocatorState {
 }
 
 /** A locator with just the surface the matchers touch. */
-function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("button")'): AnyLocator {
+function fakeLocator(
+  read: () => FakeLocatorState,
+  description = 'getByRole("button")',
+): AnyLocator {
   let sequence = 1;
-  const stamp = () => ({ sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence, screenRevision: sequence, semanticRevision: sequence, pairedScreenRevision: sequence } as const);
+  const stamp = () =>
+    ({
+      sessionId: 'fake',
+      contractId: 'fake:0',
+      epoch: 0,
+      sequence,
+      screenRevision: sequence,
+      semanticRevision: sequence,
+      pairedScreenRevision: sequence,
+    }) as const;
   const locator = {
     domain: 'semantic' as const,
     description,
@@ -59,11 +71,20 @@ function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("but
     },
     async evaluateCondition(condition: import('@termwright/protocol').Condition) {
       const error = read().resolveError;
-      if (error !== undefined && typeof error === 'object' && error !== null &&
-          'code' in error && error.code === 'capability-unavailable') throw error;
+      if (
+        error !== undefined &&
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'capability-unavailable'
+      )
+        throw error;
       const checkpoint = stamp();
-      const known = (value: boolean): import('@termwright/protocol').Observation<boolean> =>
-        ({ status: 'known', value, evidence: evidence('canonical-condition') });
+      const known = (value: boolean): import('@termwright/protocol').Observation<boolean> => ({
+        status: 'known',
+        value,
+        evidence: evidence('canonical-condition'),
+      });
       let observation: import('@termwright/protocol').Observation<boolean>;
       const visibility = await locator.visibility();
       const state = read().state;
@@ -71,60 +92,124 @@ function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("but
         const attached = visibility.attached.status === 'known' ? visibility.attached.value : false;
         observation = known(condition.kind === 'attached' ? attached : !attached);
       } else if (visibility.attached.status === 'known' && !visibility.attached.value) {
-        observation = condition.kind === 'hidden'
-          ? known(true)
-          : visibility.displayed as import('@termwright/protocol').Observation<boolean>;
+        observation =
+          condition.kind === 'hidden'
+            ? known(true)
+            : (visibility.displayed as import('@termwright/protocol').Observation<boolean>);
       } else if (condition.kind === 'displayed' || condition.kind === 'hidden') {
-        observation = visibility.displayed.status === 'known'
-          ? known(condition.kind === 'displayed' ? visibility.displayed.value : !visibility.displayed.value)
-          : visibility.displayed as import('@termwright/protocol').Observation<boolean>;
-      } else if (condition.kind === 'visible' || condition.kind === 'in-viewport' || condition.kind === 'offscreen') {
+        observation =
+          visibility.displayed.status === 'known'
+            ? known(
+                condition.kind === 'displayed'
+                  ? visibility.displayed.value
+                  : !visibility.displayed.value,
+              )
+            : (visibility.displayed as import('@termwright/protocol').Observation<boolean>);
+      } else if (
+        condition.kind === 'visible' ||
+        condition.kind === 'in-viewport' ||
+        condition.kind === 'offscreen'
+      ) {
         const viewport = visibility.viewport;
-        observation = viewport.status === 'known'
-          ? known(condition.kind === 'offscreen' ? viewport.value.ratio === 0 : condition.kind === 'visible' ? viewport.value.ratio > 0 : viewport.value.ratio >= condition.minRatio)
-          : viewport as import('@termwright/protocol').Observation<boolean>;
+        observation =
+          viewport.status === 'known'
+            ? known(
+                condition.kind === 'offscreen'
+                  ? viewport.value.ratio === 0
+                  : condition.kind === 'visible'
+                    ? viewport.value.ratio > 0
+                    : viewport.value.ratio >= condition.minRatio,
+              )
+            : (viewport as import('@termwright/protocol').Observation<boolean>);
       } else if (condition.kind === 'receives-pointer') {
         const receives = (await locator.hitTest()).receivesEvents;
-        observation = receives.status === 'known'
-          ? known(receives.value)
-          : receives as import('@termwright/protocol').Observation<boolean>;
+        observation =
+          receives.status === 'known'
+            ? known(receives.value)
+            : (receives as import('@termwright/protocol').Observation<boolean>);
       } else if (condition.kind === 'value') {
         const value = read().value;
         const matcher = condition.matcher;
-        observation = known(value !== null && value !== undefined && (matcher.kind === 'regex'
-          ? new RegExp(matcher.source, matcher.flags.replace(/[gy]/gu, '')).test(value)
-          : matcher.kind === 'exact' ? value === matcher.text : value.includes(matcher.text)));
+        observation = known(
+          value !== null &&
+            value !== undefined &&
+            (matcher.kind === 'regex'
+              ? new RegExp(matcher.source, matcher.flags.replace(/[gy]/gu, '')).test(value)
+              : matcher.kind === 'exact'
+                ? value === matcher.text
+                : value.includes(matcher.text)),
+        );
       } else if (state === null || state === undefined) {
         observation = { status: 'unsupported', capability: condition.kind, reason: 'capability' };
       } else if (condition.kind === 'focused') observation = known(state.focused === true);
       else if (condition.kind === 'enabled') observation = known(state.disabled !== true);
       else if (condition.kind === 'disabled') observation = known(state.disabled === true);
-      else if (condition.kind === 'checked' || condition.kind === 'selected' || condition.kind === 'expanded') {
+      else if (
+        condition.kind === 'checked' ||
+        condition.kind === 'selected' ||
+        condition.kind === 'expanded'
+      ) {
         const actual = state[condition.kind];
-        observation = actual === undefined
-          ? { status: 'unsupported', capability: condition.kind, reason: 'capability' }
-          : known(actual === condition.value);
+        observation =
+          actual === undefined
+            ? { status: 'unsupported', capability: condition.kind, reason: 'capability' }
+            : known(actual === condition.value);
       } else if (condition.kind === 'collapsed') observation = known(state.expanded === false);
-      else observation = { status: 'unsupported', capability: condition.kind, reason: 'capability' };
-      return { condition, checkpoint, observation, verdict: observation.status === 'known' ? observation.value ? 'satisfied' as const : 'unsatisfied' as const : 'inconclusive' as const };
+      else
+        observation = { status: 'unsupported', capability: condition.kind, reason: 'capability' };
+      return {
+        condition,
+        checkpoint,
+        observation,
+        verdict:
+          observation.status === 'known'
+            ? observation.value
+              ? ('satisfied' as const)
+              : ('unsatisfied' as const)
+            : ('inconclusive' as const),
+      };
     },
     async visibility() {
       const supplied = read().visibility;
       if (supplied !== undefined) return supplied;
       const visible = read().visible ?? false;
-      const stamp = { sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence: 1, screenRevision: 1, semanticRevision: 1, pairedScreenRevision: 1 } as const;
+      const stamp = {
+        sessionId: 'fake',
+        contractId: 'fake:0',
+        epoch: 0,
+        sequence: 1,
+        screenRevision: 1,
+        semanticRevision: 1,
+        pairedScreenRevision: 1,
+      } as const;
       return {
         stamp,
         attached: { status: 'known', value: true, evidence: evidence('adapter') },
         displayed: { status: 'known', value: visible, evidence: evidence('adapter') },
-        viewport: { status: 'known', value: { rect: { row: 0, column: 0, width: visible ? 1 : 0, height: visible ? 1 : 0 }, ratio: visible ? 1 : 0, fullyInside: visible }, evidence: evidence('viewport-clip') },
+        viewport: {
+          status: 'known',
+          value: {
+            rect: { row: 0, column: 0, width: visible ? 1 : 0, height: visible ? 1 : 0 },
+            ratio: visible ? 1 : 0,
+            fullyInside: visible,
+          },
+          evidence: evidence('viewport-clip'),
+        },
         offscreen: { status: 'known', value: !visible, evidence: evidence('viewport-clip') },
       };
     },
     async geometry() {
       const supplied = read().geometry;
       if (supplied !== undefined) return supplied;
-      const stamp = { sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence: 1, screenRevision: 1, semanticRevision: 1, pairedScreenRevision: 1 } as const;
+      const stamp = {
+        sessionId: 'fake',
+        contractId: 'fake:0',
+        epoch: 0,
+        sequence: 1,
+        screenRevision: 1,
+        semanticRevision: 1,
+        pairedScreenRevision: 1,
+      } as const;
       const rect = { row: 0, column: 0, width: 1, height: 1 };
       return {
         stamp,
@@ -136,7 +221,15 @@ function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("but
     async hitTest() {
       const supplied = read().hitTest;
       if (supplied !== undefined) return supplied;
-      const stamp = { sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence: 1, screenRevision: 1, semanticRevision: 1, pairedScreenRevision: 1 } as const;
+      const stamp = {
+        sessionId: 'fake',
+        contractId: 'fake:0',
+        epoch: 0,
+        sequence: 1,
+        screenRevision: 1,
+        semanticRevision: 1,
+        pairedScreenRevision: 1,
+      } as const;
       return {
         stamp,
         point: { status: 'known', value: { row: 0, column: 0 }, evidence: evidence('hit-grid') },
@@ -170,12 +263,20 @@ function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("but
   return locator as unknown as AnyLocator;
 }
 
-function fakeHarness(read: () => { screen?: ScreenSnapshot; tree?: SemanticSnapshot | null }): TerminalHarness {
+function fakeHarness(
+  read: () => { screen?: ScreenSnapshot; tree?: SemanticSnapshot | null },
+): TerminalHarness {
   let sequence = 1;
-  const checkpoint = () => ({
-    sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence,
-    screenRevision: sequence, semanticRevision: sequence, pairedScreenRevision: sequence,
-  } as const);
+  const checkpoint = () =>
+    ({
+      sessionId: 'fake',
+      contractId: 'fake:0',
+      epoch: 0,
+      sequence,
+      screenRevision: sequence,
+      semanticRevision: sequence,
+      pairedScreenRevision: sequence,
+    }) as const;
   const harness = {
     screen: () => read().screen ?? fakeScreen(['']),
     semanticTree: () => read().tree ?? null,
@@ -191,7 +292,9 @@ function fakeHarness(read: () => { screen?: ScreenSnapshot; tree?: SemanticSnaps
 
 /** A driver-shaped failure, so the matcher can harvest its diagnostics. */
 function timeoutError(): Error & { code: string } {
-  const error = new Error('locator getByRole("button") matched 0 nodes; expected exactly one') as Error & {
+  const error = new Error(
+    'locator getByRole("button") matched 0 nodes; expected exactly one',
+  ) as Error & {
     code: string;
     diagnostics: unknown;
   };
@@ -213,8 +316,12 @@ beforeEach(() => {
   // regressions and collapse every test onto one snapshot identity.
   currentAttemptContext();
   exitDefaultScope = enterScope({
-    testId: 'matcher-unit', testName: 'matcher unit', testFile: '/repo/matcher.test.ts',
-    config: resolveTermwrightConfig({}, {}), writers: [], traces: [],
+    testId: 'matcher-unit',
+    testName: 'matcher unit',
+    testFile: '/repo/matcher.test.ts',
+    config: resolveTermwrightConfig({}, {}),
+    writers: [],
+    traces: [],
   });
   const dir = mkdtempSync(join(tmpdir(), 'tw-matchers-'));
   directories.push(dir);
@@ -232,7 +339,8 @@ afterEach(() => {
   exitDefaultScope?.();
   exitDefaultScope = undefined;
   resetTermwrightConfig();
-  while (directories.length > 0) rmSync(directories.pop() as string, { recursive: true, force: true });
+  while (directories.length > 0)
+    rmSync(directories.pop() as string, { recursive: true, force: true });
 });
 
 describe('toBeVisible', () => {
@@ -265,11 +373,17 @@ describe('toBeVisible', () => {
   it('rejects the removed boolean-only visibility surface instead of falling back to it', async () => {
     const legacy = {
       description: 'legacy locator',
-      async resolve() { return { ref: 'n1@1', revision: 1, semantic: true, rect: null }; },
-      async isVisible() { return true; },
+      async resolve() {
+        return { ref: 'n1@1', revision: 1, semantic: true, rect: null };
+      },
+      async isVisible() {
+        return true;
+      },
     };
     await expect(expect(legacy).toBeVisible({ timeout: 0 })).rejects.toThrow(/expects a locator/u);
-    await expect(expect(legacy).not.toBeVisible({ timeout: 0 })).rejects.toThrow(/expects a locator/u);
+    await expect(expect(legacy).not.toBeVisible({ timeout: 0 })).rejects.toThrow(
+      /expects a locator/u,
+    );
   });
 
   it('fails fast on an error that waiting cannot fix', async () => {
@@ -279,13 +393,23 @@ describe('toBeVisible', () => {
     });
     const started = Date.now();
     await expect(async () => {
-      await expect(fakeLocator(() => ({ resolveError: fatal, visible: false }))).toBeFocused({ timeout: 5_000 });
+      await expect(fakeLocator(() => ({ resolveError: fatal, visible: false }))).toBeFocused({
+        timeout: 5_000,
+      });
     }).rejects.toThrow(/no semantic tree/u);
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it('never lets unknown evidence pass either the positive or negated assertion', async () => {
-    const stamp = { sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence: 1, screenRevision: 1, semanticRevision: 1, pairedScreenRevision: 1 } as const;
+    const stamp = {
+      sessionId: 'fake',
+      contractId: 'fake:0',
+      epoch: 0,
+      sequence: 1,
+      screenRevision: 1,
+      semanticRevision: 1,
+      pairedScreenRevision: 1,
+    } as const;
     const unknown = { status: 'unknown', reason: 'stale-revision' } as const;
     const locator = fakeLocator(() => ({
       visibility: {
@@ -301,9 +425,19 @@ describe('toBeVisible', () => {
   });
 
   it('never lets unsupported evidence pass either the positive or negated assertion', async () => {
-    const stamp = { sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence: 1, screenRevision: 1, semanticRevision: 1, pairedScreenRevision: 1 } as const;
+    const stamp = {
+      sessionId: 'fake',
+      contractId: 'fake:0',
+      epoch: 0,
+      sequence: 1,
+      screenRevision: 1,
+      semanticRevision: 1,
+      pairedScreenRevision: 1,
+    } as const;
     const unsupported = {
-      status: 'unsupported', capability: 'visible-rect', reason: 'framework-unobservable',
+      status: 'unsupported',
+      capability: 'visible-rect',
+      reason: 'framework-unobservable',
     } as const;
     const locator = fakeLocator(() => ({
       visibility: {
@@ -320,8 +454,21 @@ describe('toBeVisible', () => {
 });
 
 describe('qualified geometry matchers', () => {
-  const stamp = { sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence: 7, screenRevision: 4, semanticRevision: 7, pairedScreenRevision: 4 } as const;
-  const geometry = (rect: { row: number; column: number; width: number; height: number }): LocatorGeometry => ({
+  const stamp = {
+    sessionId: 'fake',
+    contractId: 'fake:0',
+    epoch: 0,
+    sequence: 7,
+    screenRevision: 4,
+    semanticRevision: 7,
+    pairedScreenRevision: 4,
+  } as const;
+  const geometry = (rect: {
+    row: number;
+    column: number;
+    width: number;
+    height: number;
+  }): LocatorGeometry => ({
     stamp,
     coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence('probe') },
     intendedRect: { status: 'known', value: rect, evidence: evidence('probe') },
@@ -356,7 +503,9 @@ describe('qualified geometry matchers', () => {
     };
     await expect(fakeLocator(() => ({ visibility: detached }))).toBeDetached();
     await expect(fakeLocator(() => ({ visibility: detached }))).toBeHidden();
-    await expect(expect(fakeLocator(() => ({ visibility: detached }))).not.toBeEnabled()).rejects.toThrow(/absent/u);
+    await expect(
+      expect(fakeLocator(() => ({ visibility: detached }))).not.toBeEnabled(),
+    ).rejects.toThrow(/absent/u);
     await expect(fakeLocator(() => ({ visibility: hidden }))).toBeAttached();
     await expect(fakeLocator(() => ({ visibility: hidden }))).toBeHidden();
     await expect(fakeLocator(() => ({ visibility: offscreen }))).toBeDisplayed();
@@ -384,8 +533,14 @@ describe('qualified geometry matchers', () => {
   });
 
   it('matches exact bounds and half-open spatial relations', async () => {
-    const left = fakeLocator(() => ({ geometry: geometry({ row: 2, column: 1, width: 3, height: 2 }) }), 'left');
-    const right = fakeLocator(() => ({ geometry: geometry({ row: 2, column: 4, width: 2, height: 2 }) }), 'right');
+    const left = fakeLocator(
+      () => ({ geometry: geometry({ row: 2, column: 1, width: 3, height: 2 }) }),
+      'left',
+    );
+    const right = fakeLocator(
+      () => ({ geometry: geometry({ row: 2, column: 4, width: 2, height: 2 }) }),
+      'right',
+    );
     await expect(left).toHaveBounds({ row: 2, width: 3 });
     await expect(left).toHaveSpatialRelation({ relation: 'left-of', target: right });
     await expect(left).toHaveSpatialRelation({ relation: 'adjacent-horizontal', target: right });
@@ -393,34 +548,70 @@ describe('qualified geometry matchers', () => {
   });
 
   it('never compares geometry from different sessions or observation revisions', async () => {
-    const source = fakeLocator(() => ({ geometry: geometry({ row: 0, column: 0, width: 1, height: 1 }) }), 'source');
-    const otherSession = fakeLocator(() => ({ geometry: {
-      ...geometry({ row: 0, column: 2, width: 1, height: 1 }),
-      stamp: { ...stamp, sessionId: 'other' },
-    } }), 'other-session');
-    const otherRevision = fakeLocator(() => ({ geometry: {
-      ...geometry({ row: 0, column: 2, width: 1, height: 1 }),
-      stamp: { ...stamp, screenRevision: stamp.screenRevision + 1 },
-    } }), 'other-revision');
-    await expect(expect(source).toHaveSpatialRelation({ relation: 'left-of', target: otherSession }, { timeout: 0 })).rejects.toThrow(/different terminal sessions/u);
-    await expect(expect(source).not.toHaveSpatialRelation({ relation: 'left-of', target: otherSession }, { timeout: 0 })).rejects.toThrow(/different terminal sessions/u);
-    await expect(expect(source).toHaveSpatialRelation({ relation: 'left-of', target: otherRevision }, { timeout: 0 })).rejects.toThrow(/different revisions/u);
+    const source = fakeLocator(
+      () => ({ geometry: geometry({ row: 0, column: 0, width: 1, height: 1 }) }),
+      'source',
+    );
+    const otherSession = fakeLocator(
+      () => ({
+        geometry: {
+          ...geometry({ row: 0, column: 2, width: 1, height: 1 }),
+          stamp: { ...stamp, sessionId: 'other' },
+        },
+      }),
+      'other-session',
+    );
+    const otherRevision = fakeLocator(
+      () => ({
+        geometry: {
+          ...geometry({ row: 0, column: 2, width: 1, height: 1 }),
+          stamp: { ...stamp, screenRevision: stamp.screenRevision + 1 },
+        },
+      }),
+      'other-revision',
+    );
+    await expect(
+      expect(source).toHaveSpatialRelation(
+        { relation: 'left-of', target: otherSession },
+        { timeout: 0 },
+      ),
+    ).rejects.toThrow(/different terminal sessions/u);
+    await expect(
+      expect(source).not.toHaveSpatialRelation(
+        { relation: 'left-of', target: otherSession },
+        { timeout: 0 },
+      ),
+    ).rejects.toThrow(/different terminal sessions/u);
+    await expect(
+      expect(source).toHaveSpatialRelation(
+        { relation: 'left-of', target: otherRevision },
+        { timeout: 0 },
+      ),
+    ).rejects.toThrow(/different revisions/u);
   });
 
   it('uses exact point ownership and keeps unsupported hit tests fail-closed', async () => {
     const locator = fakeLocator(() => ({}));
     await expect(locator).toReceivePointerEvents();
     const unsupported = {
-      status: 'unsupported', capability: 'pointer-hit-test', reason: 'framework-unobservable',
+      status: 'unsupported',
+      capability: 'pointer-hit-test',
+      reason: 'framework-unobservable',
     } as const;
-    const unobservable = fakeLocator(() => ({ hitTest: {
-      stamp,
-      point: { status: 'known', value: { row: 0, column: 0 }, evidence: evidence('probe') },
-      receivesEvents: unsupported,
-      recipient: unsupported,
-    } }));
-    await expect(expect(unobservable).toReceivePointerEvents({ timeout: 0 })).rejects.toThrow(/unsupported/u);
-    await expect(expect(unobservable).not.toReceivePointerEvents({ timeout: 0 })).rejects.toThrow(/unsupported/u);
+    const unobservable = fakeLocator(() => ({
+      hitTest: {
+        stamp,
+        point: { status: 'known', value: { row: 0, column: 0 }, evidence: evidence('probe') },
+        receivesEvents: unsupported,
+        recipient: unsupported,
+      },
+    }));
+    await expect(expect(unobservable).toReceivePointerEvents({ timeout: 0 })).rejects.toThrow(
+      /unsupported/u,
+    );
+    await expect(expect(unobservable).not.toReceivePointerEvents({ timeout: 0 })).rejects.toThrow(
+      /unsupported/u,
+    );
   });
 });
 
@@ -428,7 +619,9 @@ describe('toBeFocused and toHaveState', () => {
   it('reads the semantic state', async () => {
     await expect(fakeLocator(() => ({ state: { focused: true } }))).toBeFocused();
     await expect(fakeLocator(() => ({ state: { focused: false } }))).not.toBeFocused();
-    await expect(fakeLocator(() => ({ state: { focused: true, disabled: false } }))).toHaveState({ focused: true });
+    await expect(fakeLocator(() => ({ state: { focused: true, disabled: false } }))).toHaveState({
+      focused: true,
+    });
   });
 
   it('constrains only the listed keys', async () => {
@@ -461,7 +654,9 @@ describe('common semantic state matchers', () => {
   it('treats an omitted disabled flag as enabled but not as a checked state', async () => {
     const locator = fakeLocator(() => ({ state: {} }));
     await expect(locator).toBeEnabled();
-    await expect(expect(locator).toBeChecked({ timeout: 0 })).rejects.toThrow(/checked unsupported/u);
+    await expect(expect(locator).toBeChecked({ timeout: 0 })).rejects.toThrow(
+      /checked unsupported/u,
+    );
   });
 
   it('matches the published semantic value rather than the accessible name', async () => {
@@ -492,7 +687,10 @@ describe('toHaveExtendedState', () => {
 
   it('distinguishes a missing namespace from an empty one', async () => {
     await expect(async () => {
-      await expect(fakeLocator(() => ({ extended: null }))).toHaveExtendedState({}, { timeout: 50 });
+      await expect(fakeLocator(() => ({ extended: null }))).toHaveExtendedState(
+        {},
+        { timeout: 50 },
+      );
     }).rejects.toThrow(/no extended state/u);
     await expect(fakeLocator(() => ({ extended: {} }))).toHaveExtendedState({});
   });
@@ -502,12 +700,16 @@ describe('toHaveText', () => {
   it('compares the text of a locator exactly, after normalizing whitespace', async () => {
     await expect(fakeLocator(() => ({ text: '  Approve  ' }))).toHaveText('Approve');
     await expect(fakeLocator(() => ({ text: 'Approve all' }))).not.toHaveText('Approve');
-    await expect(fakeLocator(() => ({ text: 'Approve all' }))).toHaveText('Approve', { exact: false });
+    await expect(fakeLocator(() => ({ text: 'Approve all' }))).toHaveText('Approve', {
+      exact: false,
+    });
     await expect(fakeLocator(() => ({ text: 'Approve all' }))).toHaveText(/^Approve/u);
   });
 
   it('searches the whole screen when the subject is a terminal', async () => {
-    const harness = fakeHarness(() => ({ screen: fakeScreen(['Permission required', 'last: none']) }));
+    const harness = fakeHarness(() => ({
+      screen: fakeScreen(['Permission required', 'last: none']),
+    }));
     await expect(harness).toHaveText('last: none');
     await expect(async () => {
       await expect(harness).toHaveText('ACTIVATED', { timeout: 50 });
@@ -531,7 +733,8 @@ describe('toMatchSemanticSnapshot', () => {
   it('polls until the tree settles', async () => {
     const settlesAt = Date.now() + 80;
     const harness = fakeHarness(() => ({
-      tree: Date.now() >= settlesAt ? permissionDialog() : snapshot([node('n1', 'text', 'Loading')]),
+      tree:
+        Date.now() >= settlesAt ? permissionDialog() : snapshot([node('n1', 'text', 'Loading')]),
     }));
     await expect(harness).toMatchSemanticSnapshot('- dialog "Permission"');
   });
@@ -540,7 +743,9 @@ describe('toMatchSemanticSnapshot', () => {
     const harness = fakeHarness(() => ({ tree: permissionDialog() }));
     await expect(async () => {
       await expect(harness).toMatchSemanticSnapshot('- dialog "Denied"', { timeout: 50 });
-    }).rejects.toThrow(/Expected:[\s\S]*- dialog "Denied"[\s\S]*Received:[\s\S]*- dialog "Permission" \[modal\]/u);
+    }).rejects.toThrow(
+      /Expected:[\s\S]*- dialog "Denied"[\s\S]*Received:[\s\S]*- dialog "Permission" \[modal\]/u,
+    );
     await expect(async () => {
       await expect(harness).toMatchSemanticSnapshot('- dialog "Denied"', { timeout: 50 });
     }).rejects.toThrow(/reason: "dialog \\"Denied\\"" — closest candidate: name is "Permission"/u);
@@ -548,7 +753,9 @@ describe('toMatchSemanticSnapshot', () => {
 
   it('waits out the gap before the first tree is observable', async () => {
     const arrivesAt = Date.now() + 80;
-    const harness = fakeHarness(() => ({ tree: Date.now() >= arrivesAt ? permissionDialog() : null }));
+    const harness = fakeHarness(() => ({
+      tree: Date.now() >= arrivesAt ? permissionDialog() : null,
+    }));
     await expect(harness).toMatchSemanticSnapshot('- dialog "Permission"');
   });
 
@@ -572,16 +779,26 @@ describe('toMatchSemanticSnapshot', () => {
     const movesAt = Date.now() + 80;
     const harness = fakeHarness(() => ({ tree: permissionDialog() }));
     // Resolves to the focused button first, to the dialog once the app settles.
-    const moving = fakeLocator(() => ({ ref: Date.now() >= movesAt ? 'semantic:n1@1' : 'semantic:n3@1' }), 'getByTestId("scope")');
-    await expect(harness).toMatchSemanticSnapshot('- button "Approve" [focused]', { within: moving });
+    const moving = fakeLocator(
+      () => ({ ref: Date.now() >= movesAt ? 'semantic:n1@1' : 'semantic:n3@1' }),
+      'getByTestId("scope")',
+    );
+    await expect(harness).toMatchSemanticSnapshot('- button "Approve" [focused]', {
+      within: moving,
+    });
   });
 
   it('names the scope in the failure header', async () => {
     const harness = fakeHarness(() => ({ tree: permissionDialog() }));
     const dialog = fakeLocator(() => ({ ref: 'semantic:n1@1' }), 'getByRole("dialog")');
     await expect(async () => {
-      await expect(harness).toMatchSemanticSnapshot('- button "Deny"', { within: dialog, timeout: 50 });
-    }).rejects.toThrow(/expect\(semantic tree within getByRole\("dialog"\)\)\.toMatchSemanticSnapshot\(\)/u);
+      await expect(harness).toMatchSemanticSnapshot('- button "Deny"', {
+        within: dialog,
+        timeout: 50,
+      });
+    }).rejects.toThrow(
+      /expect\(semantic tree within getByRole\("dialog"\)\)\.toMatchSemanticSnapshot\(\)/u,
+    );
   });
 
   it('refuses a scope that is not a semantic node', async () => {
@@ -655,7 +872,11 @@ describe('external snapshots', () => {
     }).rejects.toThrow(/differs from the stored snapshot[\s\S]*/u);
 
     beginSnapshotScope();
-    configureTermwright({ timeouts: { expect: 100 }, snapshotDir: dir, updateSnapshots: 'changed' });
+    configureTermwright({
+      timeouts: { expect: 100 },
+      snapshotDir: dir,
+      updateSnapshots: 'changed',
+    });
     await expect(harness).toMatchSemanticSnapshot();
 
     beginSnapshotScope();
@@ -666,7 +887,9 @@ describe('external snapshots', () => {
   it('waits for the first tree before writing a new snapshot', async () => {
     const dir = directories[directories.length - 1] as string;
     const arrivesAt = Date.now() + 80;
-    const harness = fakeHarness(() => ({ tree: Date.now() >= arrivesAt ? permissionDialog() : null }));
+    const harness = fakeHarness(() => ({
+      tree: Date.now() >= arrivesAt ? permissionDialog() : null,
+    }));
     await expect(harness).toMatchSemanticSnapshot();
     const stored = readFileSync(join(dir, 'matchers.test.ts.tw-semantic.yaml'), 'utf8');
     expect(stored).toContain('- dialog "Permission" [modal]:');
@@ -674,7 +897,10 @@ describe('external snapshots', () => {
 
   it('compares a stored snapshot strictly: a new node fails', async () => {
     const state = {
-      tree: snapshot([node('n1', 'dialog', 'Permission'), node('n2', 'button', 'Approve', { parentId: 'n1' })]),
+      tree: snapshot([
+        node('n1', 'dialog', 'Permission'),
+        node('n2', 'button', 'Approve', { parentId: 'n1' }),
+      ]),
     };
     const harness = fakeHarness(() => state);
     await expect(harness).toMatchSemanticSnapshot();
@@ -713,7 +939,9 @@ describe('external snapshots', () => {
     });
     await expect(async () => {
       await expect(harness).toMatchSemanticSnapshot();
-    }).rejects.toThrow(/Expected:[\s\S]*- button "Approve"[\s\S]*Received:[\s\S]*\[focused\][\s\S]*differs from the stored snapshot/u);
+    }).rejects.toThrow(
+      /Expected:[\s\S]*- button "Approve"[\s\S]*Received:[\s\S]*\[focused\][\s\S]*differs from the stored snapshot/u,
+    );
   });
 
   it('keeps an inline pattern partial: a new node is fine', async () => {
@@ -759,7 +987,12 @@ describe('toHaveLogged', () => {
   /** A record with a fresh `seq`: records sharing one are deduplicated. */
   function record(level: 'info' | 'warn' | 'error', message: string): CapturedLog {
     seq += 1;
-    return { source: 'adapter', sessionId: 's1', timeMs: 1, record: { ts: 1, level, message, seq } };
+    return {
+      source: 'adapter',
+      sessionId: 's1',
+      timeMs: 1,
+      record: { ts: 1, level, message, seq },
+    };
   }
 
   it('accepts a log collection and anything holding one', async () => {
@@ -842,7 +1075,9 @@ describe('what the trace records', () => {
     const { asserts, exit } = recordingScope();
     try {
       await expect(async () => {
-        await expect(fakeLocator(() => ({ visible: false, resolveError: timeoutError() }))).toBeVisible({
+        await expect(
+          fakeLocator(() => ({ visible: false, resolveError: timeoutError() })),
+        ).toBeVisible({
           timeout: 50,
         });
       }).rejects.toThrow();
@@ -863,6 +1098,10 @@ describe('what the trace records', () => {
     } finally {
       exit();
     }
-    expect(asserts[0]).toMatchObject({ api: 'toMatchSemanticSnapshot', ok: true, ref: 'semantic:n1@3' });
+    expect(asserts[0]).toMatchObject({
+      api: 'toMatchSemanticSnapshot',
+      ok: true,
+      ref: 'semantic:n1@3',
+    });
   });
 });

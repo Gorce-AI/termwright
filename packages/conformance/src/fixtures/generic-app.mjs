@@ -65,7 +65,9 @@ function draw() {
     out(index === selected ? `\x1b[1;32m> ${item}\x1b[0m\r\n` : `  ${item}\r\n`);
   }
   out('\x1b[31mRED\x1b[0m \x1b[4mUNDER\x1b[0m \x1b[44mONBLUE\x1b[0m\r\n');
-  out(`modes: mouse=${mouse} paste=${bracketed ? 'on' : 'off'} focus=${focusReporting ? 'on' : 'off'}`);
+  out(
+    `modes: mouse=${mouse} paste=${bracketed ? 'on' : 'off'} focus=${focusReporting ? 'on' : 'off'}`,
+  );
   out(` alt=${alternate ? 'on' : 'off'}\r\n`);
   out(`size: ${process.stdout.columns}x${process.stdout.rows}\r\n`);
   out(`activated: ${activated}\r\n`);
@@ -88,7 +90,8 @@ function draw() {
     .map((name) => `${name}=${process.env[name] === undefined ? 'no' : 'yes'}`)
     .join(' ');
   out(`allow: ${allow}\r\n`);
-  if (unicode) out('U: \u{1F600} \u{1F469}\u200D\u{1F469}\u200D\u{1F467} e\u0301 \u65E5\u672C\u8A9E ok\r\n');
+  if (unicode)
+    out('U: \u{1F600} \u{1F469}\u200D\u{1F469}\u200D\u{1F467} e\u0301 \u65E5\u672C\u8A9E ok\r\n');
   if (wide) out(`W: ${'0123456789'.repeat(12)} END\r\n`);
 }
 

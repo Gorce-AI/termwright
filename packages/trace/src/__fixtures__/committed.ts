@@ -4,7 +4,11 @@ import { join } from 'node:path';
 import { TRACE_FILES } from '../types.js';
 
 /** Edit one member while keeping a deliberately authored test archive committed. */
-export async function rewriteCommittedMember(dir: string, name: string, body: string): Promise<void> {
+export async function rewriteCommittedMember(
+  dir: string,
+  name: string,
+  body: string,
+): Promise<void> {
   await writeFile(join(dir, name), body, 'utf8');
   const path = join(dir, TRACE_FILES.commit);
   const commit = JSON.parse(await readFile(path, 'utf8')) as {

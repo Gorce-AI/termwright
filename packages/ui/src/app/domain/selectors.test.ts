@@ -26,7 +26,12 @@ describe('currentRunCases', () => {
 
     const cases = currentRunCases({
       ...initialAppState,
-      run: { ...initialAppState.run, runId: 'run:1', status: 'running', requestedTargets: ['case:a', 'case:b'] },
+      run: {
+        ...initialAppState.run,
+        runId: 'run:1',
+        status: 'running',
+        requestedTargets: ['case:a', 'case:b'],
+      },
       catalog: [catalogA, catalogB, catalogC, catalogOutside],
       executions: [a, unexpected],
     });
@@ -40,7 +45,12 @@ describe('currentRunCases', () => {
   it('does not expand an active exact scope when discovery adds another case', () => {
     const state = {
       ...initialAppState,
-      run: { ...initialAppState.run, runId: 'run:1', status: 'running' as const, requestedTargets: ['case:a'] },
+      run: {
+        ...initialAppState.run,
+        runId: 'run:1',
+        status: 'running' as const,
+        requestedTargets: ['case:a'],
+      },
       catalog: [catalog('case:a'), catalog('case:new')],
     };
     expect(currentRunCases(state).map((test) => test.caseKey)).toEqual(['case:a']);
@@ -61,12 +71,19 @@ describe('currentRunCases', () => {
   });
 
   it('keeps Specs on the full catalogue while exposing each latest known result', () => {
-    const latestA = { ...execution('case:a', 'latest-a', 2, 'passed'), runId: 'run:2', startedAt: 20 };
+    const latestA = {
+      ...execution('case:a', 'latest-a', 2, 'passed'),
+      runId: 'run:2',
+      startedAt: 20,
+    };
     const cases = catalogCases({
       ...initialAppState,
       run: { ...initialAppState.run, runId: 'run:2', requestedTargets: ['case:a'] },
       catalog: [catalog('case:a'), catalog('case:b')],
-      executions: [latestA, { ...execution('case:a', 'old-a', 1, 'failed'), runId: 'run:1', startedAt: 10 }],
+      executions: [
+        latestA,
+        { ...execution('case:a', 'old-a', 1, 'failed'), runId: 'run:1', startedAt: 10 },
+      ],
     });
     expect(cases.map((test) => [test.caseKey, test.status])).toEqual([
       ['case:a', 'passed'],
@@ -82,7 +99,12 @@ function catalog(caseKey: string): ExecutionCase {
   };
 }
 
-function execution(caseKey: string, executionId: string, attempt: number, status: ExecutionCase['status']): ExecutionCase {
+function execution(
+  caseKey: string,
+  executionId: string,
+  attempt: number,
+  status: ExecutionCase['status'],
+): ExecutionCase {
   return {
     caseKey,
     runId: 'run:1',

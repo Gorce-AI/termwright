@@ -46,9 +46,18 @@ export class BoundedRateLimiter {
   readonly #buckets = new Map<string, RateBucket>();
 
   constructor(options: HttpRateLimitOptions = {}) {
-    this.#windowMs = positiveInteger(options.windowMs ?? DEFAULT_HTTP_RATE_LIMIT.windowMs, 'rateLimit.windowMs');
-    this.#maxRequests = positiveInteger(options.maxRequests ?? DEFAULT_HTTP_RATE_LIMIT.maxRequests, 'rateLimit.maxRequests');
-    this.#maxClients = positiveInteger(options.maxClients ?? DEFAULT_HTTP_RATE_LIMIT.maxClients, 'rateLimit.maxClients');
+    this.#windowMs = positiveInteger(
+      options.windowMs ?? DEFAULT_HTTP_RATE_LIMIT.windowMs,
+      'rateLimit.windowMs',
+    );
+    this.#maxRequests = positiveInteger(
+      options.maxRequests ?? DEFAULT_HTTP_RATE_LIMIT.maxRequests,
+      'rateLimit.maxRequests',
+    );
+    this.#maxClients = positiveInteger(
+      options.maxClients ?? DEFAULT_HTTP_RATE_LIMIT.maxClients,
+      'rateLimit.maxClients',
+    );
   }
 
   /** Visible for deterministic tests and operational diagnostics. */
@@ -108,9 +117,17 @@ export function normalizeAllowedOrigins(origins: readonly string[] = []): Readon
     } catch {
       throw new TypeError(`allowed origin is not a URL: ${JSON.stringify(candidate)}`);
     }
-    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username !== '' || url.password !== '' ||
-        url.pathname !== '/' || url.search !== '' || url.hash !== '') {
-      throw new TypeError(`allowed origin must be an HTTP(S) origin without path, query or credentials: ${JSON.stringify(candidate)}`);
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+      url.username !== '' ||
+      url.password !== '' ||
+      url.pathname !== '/' ||
+      url.search !== '' ||
+      url.hash !== ''
+    ) {
+      throw new TypeError(
+        `allowed origin must be an HTTP(S) origin without path, query or credentials: ${JSON.stringify(candidate)}`,
+      );
     }
     normalized.add(url.origin);
   }
@@ -199,8 +216,11 @@ function admitPreflight(request: IncomingMessage, response: ServerResponse): fal
     .split(',')
     .map((header) => header.trim().toLowerCase())
     .filter((header) => header !== '');
-  if (typeof method !== 'string' || !CORS_METHODS.has(method.toUpperCase()) ||
-      requestedHeaders.some((header) => !CORS_HEADERS.has(header))) {
+  if (
+    typeof method !== 'string' ||
+    !CORS_METHODS.has(method.toUpperCase()) ||
+    requestedHeaders.some((header) => !CORS_HEADERS.has(header))
+  ) {
     sendSecurityError(response, 403, 'CORS preflight is not allowed');
     return false;
   }
@@ -240,7 +260,8 @@ function sendSecurityError(
 }
 
 function positiveInteger(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${name} must be a positive safe integer`);
+  if (!Number.isSafeInteger(value) || value <= 0)
+    throw new TypeError(`${name} must be a positive safe integer`);
   return value;
 }
 

@@ -23,12 +23,18 @@ export class ShellCommandTracker {
   #pending: PendingCommand | undefined;
   readonly #decoder = new TextDecoder();
 
-  arm(command: string, timeout: number, maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES): Promise<TrackedShellCommand> {
+  arm(
+    command: string,
+    timeout: number,
+    maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES,
+  ): Promise<TrackedShellCommand> {
     if (this.#pending !== undefined) throw new Error('a shell command is already running');
     return new Promise<TrackedShellCommand>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending = undefined;
-        reject(new Error(`the shell did not finish ${JSON.stringify(command)} within ${timeout} ms`));
+        reject(
+          new Error(`the shell did not finish ${JSON.stringify(command)} within ${timeout} ms`),
+        );
       }, timeout);
       this.#pending = {
         command,
@@ -101,7 +107,9 @@ export class ShellCommandTracker {
   }
 }
 
-function markerTerminator(value: string): { readonly index: number; readonly length: number } | undefined {
+function markerTerminator(
+  value: string,
+): { readonly index: number; readonly length: number } | undefined {
   const bel = value.indexOf('\u0007', PREFIX.length);
   const st = value.indexOf('\u001b\\', PREFIX.length);
   if (bel < 0 && st < 0) return undefined;

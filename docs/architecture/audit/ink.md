@@ -22,9 +22,9 @@ not React's fiber tree and does not contain the application's components.
 
 - Host node factory: `createNode(nodeName)` — `build/dom.js:5`.
 - Node kinds are a closed set of four: `'ink-root' | 'ink-box' | 'ink-text' |
-  'ink-virtual-text'` (`ElementNames`, `build/dom.d.ts`).
+'ink-virtual-text'` (`ElementNames`, `build/dom.d.ts`).
 - Nodes are created by the reconciler's `createInstance(originalType, newProps,
-  …)` — `build/reconciler.js:129`. A `<Text>` nested inside another `<Text>`
+…)` — `build/reconciler.js:129`. A `<Text>` nested inside another `<Text>`
   becomes `ink-virtual-text` (`build/reconciler.js:134-136`); a `<Box>` inside a
   `<Text>` throws (`:130-132`).
 - Structure is mutated through `appendChildNode` / `insertBeforeNode` /
@@ -49,7 +49,7 @@ Yoga, per node, driven from the root once per commit.
   (`applyStyles` lives in `build/styles.js`).
 - The single layout pass: `Ink.calculateLayout` — `build/ink.js:319`, whose body
   is `this.rootNode.yogaNode.calculateLayout(undefined, undefined,
-  Yoga.DIRECTION_LTR)` — `build/ink.js:322`. It is bound to the root as
+Yoga.DIRECTION_LTR)` — `build/ink.js:322`. It is bound to the root as
   `rootNode.onComputeLayout` at `build/ink.js:184` and invoked by the reconciler
   at commit time (§5).
 - Public read path: `measureElement(node)` — `build/measure-element.js:31`, which
@@ -176,19 +176,19 @@ the stdout stream from the same tick (`build/ink.js:359-411`).
 Frame writes are wrapped in synchronized-output sequences (`ESC[?2026h` /
 `ESC[?2026l`) — `build/ink.js:227-231`, `:374-411`.
 
-**Consequence:** intercepting `process.stdout.write` *does* see every frame, in
+**Consequence:** intercepting `process.stdout.write` _does_ see every frame, in
 order — unlike OpenTUI (see that audit, §9). Our marker relies on this.
 
 ## 10. Version-sensitive internals
 
-| Surface | Status | Risk if it changes |
-|---|---|---|
-| `DOMElement.internal_accessibility` `{role, state}` (`build/dom.d.ts`) | `internal_`-prefixed but in the public type | Role/state for un-annotated apps stops working |
-| `internal_transform`, `internal_static` (`build/dom.d.ts`) | internal | Static detection and text transforms |
-| `yogaNode` on the host node (`build/dom.js:12`) | internal | All geometry |
-| `rootNode.onComputeLayout` / `onRender` / `onImmediateRender` / `onStaticChange` (`build/reconciler.js:92-112`) | internal wiring | The commit hook |
-| `emitLayoutListeners` / `addLayoutListener` (`build/dom.js`) | exported from `dom.js`, **not** from the package index | Layout subscription |
-| `options.onRender`, `measureElement`, `useFocusManager`, `waitUntilRenderFlush` | **public** (`build/index.d.ts`) | Safe base |
+| Surface                                                                                                         | Status                                                 | Risk if it changes                             |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------- |
+| `DOMElement.internal_accessibility` `{role, state}` (`build/dom.d.ts`)                                          | `internal_`-prefixed but in the public type            | Role/state for un-annotated apps stops working |
+| `internal_transform`, `internal_static` (`build/dom.d.ts`)                                                      | internal                                               | Static detection and text transforms           |
+| `yogaNode` on the host node (`build/dom.js:12`)                                                                 | internal                                               | All geometry                                   |
+| `rootNode.onComputeLayout` / `onRender` / `onImmediateRender` / `onStaticChange` (`build/reconciler.js:92-112`) | internal wiring                                        | The commit hook                                |
+| `emitLayoutListeners` / `addLayoutListener` (`build/dom.js`)                                                    | exported from `dom.js`, **not** from the package index | Layout subscription                            |
+| `options.onRender`, `measureElement`, `useFocusManager`, `waitUntilRenderFlush`                                 | **public** (`build/index.d.ts`)                        | Safe base                                      |
 
 ### aria props: what upstream already has
 
@@ -197,8 +197,8 @@ These are **Ink's own**, not something we added; we only read them.
 - `<Box>` accepts `aria-role`, `aria-state`, `aria-label`, `aria-hidden`
   (`build/components/Box.d.ts:9-31`). Only `role` and `state` are stored on the
   node, via `internal_accessibility: {role, state}` — `build/components/Box.js`.
-- `aria-label` is **not retained**: `Box` renders it as a text child *only when a
-  screen reader is active* (`const label = ariaLabel ? <ink-text>{ariaLabel}</ink-text> : undefined`,
+- `aria-label` is **not retained**: `Box` renders it as a text child _only when a
+  screen reader is active_ (`const label = ariaLabel ? <ink-text>{ariaLabel}</ink-text> : undefined`,
   used under `isScreenReaderEnabled`), and `<Text>` drops it the same way
   (`build/components/Text.js`). There is no way to read an accessible name back
   off the tree.
@@ -222,10 +222,10 @@ run against this repo's `node_modules`, then deleted.
 
 ### Node — two APIs, different reach
 
-| API | 20.17.0 | 22.9.0 | 22.22.0 | 24.1.0 |
-|---|---|---|---|---|
-| `module.register` (async, off-thread) | ✅ | ✅ | ✅ | ✅ |
-| `module.registerHooks` (sync, in-thread) | ❌ | ❌ | ✅ | ✅ |
+| API                                      | 20.17.0 | 22.9.0 | 22.22.0 | 24.1.0 |
+| ---------------------------------------- | ------- | ------ | ------- | ------ |
+| `module.register` (async, off-thread)    | ✅      | ✅     | ✅      | ✅     |
+| `module.registerHooks` (sync, in-thread) | ❌      | ❌     | ✅      | ✅     |
 
 Measured by running the same probe under each interpreter from `~/.nvm`.
 
@@ -246,7 +246,7 @@ export visible to the application:
 
 Two observations that matter for a "leaves no trace" guarantee:
 
-- Only `load` is needed. Matching on the *resolved URL* is what works; a
+- Only `load` is needed. Matching on the _resolved URL_ is what works; a
   `resolve` hook filtering the bare specifier is not required.
 - On 22.9.0 the `register()` path emitted
   `ExperimentalWarning: Importing JSON modules` to stderr. Nothing was printed on
@@ -267,7 +267,7 @@ bun --preload ./preload.ts ./app.ts
 
 - The flag is `-r, --preload=<val>` (`bun --help`), with `--require` as a Node
   compatibility alias. It must come **before** the entry file; `bun run --preload
-  … app.ts` also works, but `bun --preload … run app.ts` is rejected as a usage
+… app.ts` also works, but `bun --preload … run app.ts` is rejected as a usage
   error.
 - `BUN_PRELOAD` as an environment variable did **not** work — the preload never
   ran. A launcher must pass the flag on argv.

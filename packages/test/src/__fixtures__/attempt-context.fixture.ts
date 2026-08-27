@@ -4,23 +4,31 @@ import { currentAttemptContext } from '../attempt-context.js';
 import { test as termwrightTest } from '../fixtures.js';
 
 const configuredOutput = process.env['TERMWRIGHT_ATTEMPT_CONTEXT_OUTPUT'];
-if (configuredOutput === undefined) throw new Error('TERMWRIGHT_ATTEMPT_CONTEXT_OUTPUT is required');
+if (configuredOutput === undefined)
+  throw new Error('TERMWRIGHT_ATTEMPT_CONTEXT_OUTPUT is required');
 const output: string = configuredOutput;
 
 function record(phase: string, label: string): void {
-  appendFileSync(output, `${JSON.stringify({ phase, label, ...currentAttemptContext() })}\n`, 'utf8');
+  appendFileSync(
+    output,
+    `${JSON.stringify({ phase, label, ...currentAttemptContext() })}\n`,
+    'utf8',
+  );
 }
 
 const test = base.extend<{ witness: void }>({
-  witness: [async ({ task }, use) => {
-    const label = task.name === 'repeat and retry' ? 'repeat-retry' : task.name;
-    record('fixture-before', label);
-    try {
-      await use();
-    } finally {
-      record('fixture-cleanup', label);
-    }
-  }, { auto: true }],
+  witness: [
+    async ({ task }, use) => {
+      const label = task.name === 'repeat and retry' ? 'repeat-retry' : task.name;
+      record('fixture-before', label);
+      try {
+        await use();
+      } finally {
+        record('fixture-cleanup', label);
+      }
+    },
+    { auto: true },
+  ],
 });
 
 beforeEach(({ task }) => {
@@ -52,7 +60,11 @@ describe('native repeat/retry', { repeats: 1, retry: 1 }, () => {
 
 termwrightTest('brokered terminal', async ({ terminal, step }) => {
   const app = await terminal.launch({
-    command: [process.execPath, '-e', 'process.stdin.setRawMode?.(true);process.stdout.write("brokered\\n");process.stdin.once("data",()=>process.exit(0));process.stdin.resume()'],
+    command: [
+      process.execPath,
+      '-e',
+      'process.stdin.setRawMode?.(true);process.stdout.write("brokered\\n");process.stdin.once("data",()=>process.exit(0));process.stdin.resume()',
+    ],
     trace: 'off',
   });
   await app.waitForText('brokered');
@@ -61,11 +73,14 @@ termwrightTest('brokered terminal', async ({ terminal, step }) => {
 });
 
 const hostile = base.extend<{ cleanupBomb: void }>({
-  cleanupBomb: [async ({ task }, use) => {
-    await use();
-    record('hostile-fixture-cleanup', task.name);
-    throw new Error('hostile fixture cleanup');
-  }, { auto: true }],
+  cleanupBomb: [
+    async ({ task }, use) => {
+      await use();
+      record('hostile-fixture-cleanup', task.name);
+      throw new Error('hostile fixture cleanup');
+    },
+    { auto: true },
+  ],
 });
 
 hostile.fails('hostile cleanup and completion hooks', ({ onTestFinished, onTestFailed }) => {

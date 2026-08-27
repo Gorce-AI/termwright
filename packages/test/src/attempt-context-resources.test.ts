@@ -19,21 +19,26 @@ describe('attempt resource diagnostics', () => {
       attach: async () => undefined,
       release: async () => undefined,
     };
-    const context = createAttemptContext({
-      invocationId: createRunId('invocation'),
-      runId,
-      projectId: createRunId('project'),
-      specId: createRunId('spec'),
-      runnerTaskId: createRunId('runner-task'),
-      nativeTaskId: 'resource-diagnostic',
-      file: '/repo/resource.test.ts',
-      fullName: 'resource diagnostic',
-    }, 0, 0, {
-      ...unitAttemptOptions(),
-      attemptId,
-      reservedLease: Promise.resolve(reservedLease),
-      resourceReservation: { ptySession: 1 },
-    });
+    const context = createAttemptContext(
+      {
+        invocationId: createRunId('invocation'),
+        runId,
+        projectId: createRunId('project'),
+        specId: createRunId('spec'),
+        runnerTaskId: createRunId('runner-task'),
+        nativeTaskId: 'resource-diagnostic',
+        file: '/repo/resource.test.ts',
+        fullName: 'resource diagnostic',
+      },
+      0,
+      0,
+      {
+        ...unitAttemptOptions(),
+        attemptId,
+        reservedLease: Promise.resolve(reservedLease),
+        resourceReservation: { ptySession: 1 },
+      },
+    );
 
     const first = await context.resources.acquire({ ptySession: 1 });
     await expect(context.resources.acquire({ ptySession: 1 })).rejects.toThrow(

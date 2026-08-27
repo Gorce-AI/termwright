@@ -9,14 +9,14 @@ expect script can be a better fit for one-off automation.
 
 ## Compare the approaches
 
-| Need | tmux | expect / pexpect | Grid-only test tool | Termwright |
-| --- | --- | --- | --- | --- |
-| Control an already running session | Yes | No | No | No |
-| Launch an isolated PTY | No | Yes | Yes | Yes |
-| Model a full VT screen | Partial | No | Yes | Yes |
-| Retry assertions against screen state | Manual | Pattern-based | Varies | Yes |
-| Locate by role and name | No | No | No | With an integration |
-| Retain terminal, actions, semantics, and logs | No | No | Varies | Yes |
+| Need                                          | tmux    | expect / pexpect | Grid-only test tool | Termwright          |
+| --------------------------------------------- | ------- | ---------------- | ------------------- | ------------------- |
+| Control an already running session            | Yes     | No               | No                  | No                  |
+| Launch an isolated PTY                        | No      | Yes              | Yes                 | Yes                 |
+| Model a full VT screen                        | Partial | No               | Yes                 | Yes                 |
+| Retry assertions against screen state         | Manual  | Pattern-based    | Varies              | Yes                 |
+| Locate by role and name                       | No      | No               | No                  | With an integration |
+| Retain terminal, actions, semantics, and logs | No      | No               | Varies              | Yes                 |
 
 ## Use tmux when
 

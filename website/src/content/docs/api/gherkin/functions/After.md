@@ -15,7 +15,7 @@ editUrl: false
 
 > **After**\<`Fixtures`\>(`body`): [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:149](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L149)
+Defined in: [definitions.ts:156](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L156)
 
 Runs after each matching Scenario or Outline row, including failed scenarios.
 
@@ -39,7 +39,7 @@ Runs after each matching Scenario or Outline row, including failed scenarios.
 
 > **After**\<`Fixtures`\>(`options`, `body`): [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:150](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L150)
+Defined in: [definitions.ts:159](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L159)
 
 Runs after each matching Scenario or Outline row, including failed scenarios.
 

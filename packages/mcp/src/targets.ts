@@ -85,7 +85,10 @@ export function buildLocator(harness: TerminalHarness, input: TargetInput): AnyL
     // so two nodes with the same name stay distinct. The driver alone decides
     // whether that producer promised stable identity or requires a fresh ref.
     if (parseRef(input.ref) === null) {
-      throw usageError('ref must include an explicit locator domain', 'use semantic:<node>@<revision> or screen:<row>,<column>,<width>,<height>@<revision>');
+      throw usageError(
+        'ref must include an explicit locator domain',
+        'use semantic:<node>@<revision> or screen:<row>,<column>,<width>,<height>@<revision>',
+      );
     }
     locator = harness.locatorForRef(input.ref as LocatorRef);
   } else if (input.selector !== undefined) {
@@ -106,7 +109,10 @@ export function buildLocator(harness: TerminalHarness, input: TargetInput): AnyL
   } else if (input.text !== undefined) {
     locator = harness.getByText(textOrRegExp(input.text), definedOnly({ exact: input.exact }));
   } else if (input.screenText !== undefined) {
-    locator = harness.getByScreenText(textOrRegExp(input.screenText), definedOnly({ exact: input.exact }));
+    locator = harness.getByScreenText(
+      textOrRegExp(input.screenText),
+      definedOnly({ exact: input.exact }),
+    );
   } else {
     throw usageError(
       'no target given',

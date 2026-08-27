@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { certifiedProjectShards, projectSelectorArguments } from './ci-project-shards.mjs';
 
-const readWorkflow = (name) => readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8');
+const readWorkflow = (name) =>
+  readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8');
 
 function jobBlock(workflow, jobName) {
   const marker = `  ${jobName}:\n`;
@@ -17,7 +18,10 @@ function jobBlock(workflow, jobName) {
 describe('autonomous workflow security', () => {
   it('keeps write privileges out of upstream certification', async () => {
     const workflow = await readWorkflow('upstream-candidates.yml');
-    const certifier = await readFile(new URL('./certify-framework-candidate.mjs', import.meta.url), 'utf8');
+    const certifier = await readFile(
+      new URL('./certify-framework-candidate.mjs', import.meta.url),
+      'utf8',
+    );
     expect(workflow).not.toMatch(/contents:\s*write|pull-requests:\s*write|issues:\s*write/u);
     expect(workflow).not.toContain('git push');
     expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(4);
@@ -30,12 +34,16 @@ describe('autonomous workflow security', () => {
     );
     expect(certificationStep).not.toContain('if:');
     expect(workflow).toContain('      - name: Candidate summary\n        if: always()');
-    expect(workflow).toMatch(/uses: actions\/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6\n        if: always\(\)/u);
+    expect(workflow).toMatch(
+      /uses: actions\/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6\n        if: always\(\)/u,
+    );
     expect(workflow).not.toContain("--candidate '${{ matrix.id }}'");
     expect(workflow).toContain('runner: "macos-latest"');
     expect(workflow).toContain('runner: "windows-latest"');
     expect(workflow).toContain('runs-on: ${{ matrix.runner }}');
-    expect(workflow).toContain('name: framework-candidate-result-${{ matrix.slot }}-${{ matrix.platform }}');
+    expect(workflow).toContain(
+      'name: framework-candidate-result-${{ matrix.slot }}-${{ matrix.platform }}',
+    );
     expect(workflow).toContain('name: framework-verdict-aggregate');
     expect(workflow).toContain('aggregate-framework-candidate-verdicts.mjs');
     expect(workflow).toContain('--assessments compatibility/candidate-assessments.json');
@@ -54,7 +62,9 @@ describe('autonomous workflow security', () => {
     expect(certification).not.toMatch(/fallback|node-pty/u);
     const aggregate = jobBlock(workflow, 'aggregate');
     expect(jobBlock(workflow, 'certify')).not.toContain('astral-sh/setup-uv@');
-    expect(aggregate).toContain('astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1');
+    expect(aggregate).toContain(
+      'astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1',
+    );
     expect(aggregate).toContain("version: '0.12.6'");
     expect(aggregate).toContain('enable-cache: false');
     expect(aggregate).toContain("python-version: '3.12'");
@@ -62,21 +72,33 @@ describe('autonomous workflow security', () => {
 
   it('coordinates only completed workflow_run events and never checks out the PR head in a write-token job', async () => {
     const workflow = await readWorkflow('autonomous-coordinator.yml');
-    const coordinator = await readFile(new URL('./autonomous-release-coordinator.mjs', import.meta.url), 'utf8');
-    const reconciler = await readFile(new URL('./reconcile-framework-candidates.mjs', import.meta.url), 'utf8');
+    const coordinator = await readFile(
+      new URL('./autonomous-release-coordinator.mjs', import.meta.url),
+      'utf8',
+    );
+    const reconciler = await readFile(
+      new URL('./reconcile-framework-candidates.mjs', import.meta.url),
+      'utf8',
+    );
     expect(workflow).toContain('workflow_run:');
-    expect(workflow).toContain("types: [completed]");
+    expect(workflow).toContain('types: [completed]');
     expect(workflow).toContain('autonomous-coordinator-${{ github.event.repository.full_name }}');
     expect(workflow).not.toMatch(/ref:\s*\$\{\{\s*github\.event\.workflow_run\.head_sha\s*\}\}/u);
     expect(workflow).toContain('Version PR differs from the deterministic transformation');
-    expect(workflow).toContain('Compatibility PR differs from exact trusted artifact reconciliation');
-    expect(workflow).toContain("workflows: ['Framework compatibility candidates', 'CI', 'Release']");
+    expect(workflow).toContain(
+      'Compatibility PR differs from exact trusted artifact reconciliation',
+    );
+    expect(workflow).toContain(
+      "workflows: ['Framework compatibility candidates', 'CI', 'Release']",
+    );
     expect(workflow).not.toContain('rerun-failed-jobs');
     expect(workflow).not.toContain('astral-sh/setup-uv@');
     expect(workflow).not.toContain("--pattern 'framework-verdict-*'");
     expect(workflow.match(/--name framework-verdict-aggregate --dir/gu)).toHaveLength(2);
     expect(workflow.match(/test "\$\{#verdict_artifacts\[@\]\}" -eq 1/gu)).toHaveLength(2);
-    expect(workflow.match(/test "\$\{verdict_artifacts\[0\]\}" = framework-verdict-aggregate/gu)).toHaveLength(2);
+    expect(
+      workflow.match(/test "\$\{verdict_artifacts\[0\]\}" = framework-verdict-aggregate/gu),
+    ).toHaveLength(2);
     expect(workflow).toContain('validate-release-failure');
     expect(workflow).toContain('gh pr list --state open --head "$BRANCH"');
     expect(workflow).not.toContain('gh pr view "$BRANCH"');
@@ -89,10 +111,14 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('dispatch-pending-changesets');
     expect(workflow).toContain('refresh-heartbeat');
     expect(coordinator).toContain('framework-semantic-completeness');
-    expect(reconciler).toContain("join(root, 'compatibility/framework-semantic-completeness.json')");
+    expect(reconciler).toContain(
+      "join(root, 'compatibility/framework-semantic-completeness.json')",
+    );
     expect(reconciler).toContain('renderSemanticCompletenessReport(compatibility)');
     expect(workflow).toContain('automation/workflow-heartbeat');
-    expect(workflow).toContain('Heartbeat PR differs from the deterministic source-run-bound transformation');
+    expect(workflow).toContain(
+      'Heartbeat PR differs from the deterministic source-run-bound transformation',
+    );
     expect(workflow).toContain('notify-upstream-failure:');
     const notify = jobBlock(workflow, 'notify-upstream-failure');
     expect(notify).toContain('needs: reconcile');
@@ -104,20 +130,30 @@ describe('autonomous workflow security', () => {
     const reconcile = jobBlock(workflow, 'reconcile');
     expect(reconcile).not.toContain("github.event.workflow_run.conclusion == 'success'");
     expect(reconcile).toContain('Typed candidate artifacts reconciled from $SOURCE_RUN_URL.');
-    expect(reconcile).not.toContain('Close candidate issues only after the compatibility allowlist merged');
-    expect(reconcile.match(/--assessments compatibility\/candidate-assessments\.json/gu)).toHaveLength(1);
-    const publish = reconcile.slice(reconcile.indexOf('      - name: Commit only the compatibility allowlist'));
+    expect(reconcile).not.toContain(
+      'Close candidate issues only after the compatibility allowlist merged',
+    );
+    expect(
+      reconcile.match(/--assessments compatibility\/candidate-assessments\.json/gu),
+    ).toHaveLength(1);
+    const publish = reconcile.slice(
+      reconcile.indexOf('      - name: Commit only the compatibility allowlist'),
+    );
     expect(publish).toContain('Source certification run: $SOURCE_RUN_ID');
     expect(publish).not.toContain('Source certification run: $RUN_ID');
     expect(publish).toContain('node scripts/resolve-push-lease.mjs "$push_remote" "$target_ref"');
     expect(publish).toContain('git push --force-with-lease="$target_ref:$expected_remote_sha"');
-    expect(publish).toContain('          push_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"');
+    expect(publish).toContain(
+      '          push_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"',
+    );
     expect(publish).not.toMatch(/git push --force-with-lease\s/u);
     expect(reconcile).not.toContain('refs/remotes/origin/$BRANCH');
     expect(coordinator).toContain('probe-ink\\/src\\/certified-instrumentation');
     expect(coordinator).toContain('probe-opentui\\/src\\/certified-runtime');
     expect(coordinator).toContain('release dispatch intentionally suppressed');
-    expect(workflow).toContain('"https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"');
+    expect(workflow).toContain(
+      '"https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"',
+    );
     const merge = jobBlock(workflow, 'merge');
     expect(merge).toContain('issues: write');
     expect(merge).toContain('Close candidate issues only after the compatibility allowlist merged');
@@ -136,7 +172,9 @@ describe('autonomous workflow security', () => {
     expect(workflow).not.toMatch(/^\s{2}push:/mu);
     expect(workflow).toContain('validate-version-pr');
     expect(workflow).toContain('Independently reproduce the merged Version PR tree');
-    expect(workflow).toContain('Merged Version PR differs from the trusted deterministic transformation');
+    expect(workflow).toContain(
+      'Merged Version PR differs from the trusted deterministic transformation',
+    );
     expect(workflow).toContain('verify-published-artifact.mjs npm');
     expect(workflow).toContain('verify-published-artifact.mjs pypi');
     expect(workflow).toContain('verify-published-artifact.mjs crate');
@@ -146,7 +184,16 @@ describe('autonomous workflow security', () => {
   });
 
   it('pins every external action in the autonomous and release workflows to a full commit SHA', async () => {
-    for (const name of ['ci.yml', 'reliability.yml', 'docs.yml', 'performance.yml', 'preview-release.yml', 'upstream-candidates.yml', 'autonomous-coordinator.yml', 'release.yml']) {
+    for (const name of [
+      'ci.yml',
+      'reliability.yml',
+      'docs.yml',
+      'performance.yml',
+      'preview-release.yml',
+      'upstream-candidates.yml',
+      'autonomous-coordinator.yml',
+      'release.yml',
+    ]) {
       const workflow = await readWorkflow(name);
       for (const line of workflow.split('\n').filter((value) => /^\s*(?:- )?uses:/u.test(value))) {
         if (/uses:\s+\.\//u.test(line)) continue;
@@ -201,11 +248,17 @@ describe('autonomous workflow security', () => {
   it('partitions the Windows catalogue into explicit project groups', async () => {
     const workflow = await readWorkflow('ci.yml');
     const block = jobBlock(workflow, 'windows-driver-native');
-    const invocations = block.match(/^          pnpm test -- --resource-profile windows-ci --json -- --project=.*$/gmu) ?? [];
+    const invocations =
+      block.match(
+        /^          pnpm test -- --resource-profile windows-ci --json -- --project=.*$/gmu,
+      ) ?? [];
 
-    expect(invocations).toEqual(certifiedProjectShards.map(
-      (projects) => `          pnpm test -- --resource-profile windows-ci --json -- ${projectSelectorArguments(projects)}`,
-    ));
+    expect(invocations).toEqual(
+      certifiedProjectShards.map(
+        (projects) =>
+          `          pnpm test -- --resource-profile windows-ci --json -- ${projectSelectorArguments(projects)}`,
+      ),
+    );
     expect(invocations.join('\n')).not.toContain('--project=!');
     expect(block).not.toContain('--shard');
     expect(block).not.toContain('--retry');
@@ -248,7 +301,9 @@ describe('autonomous workflow security', () => {
       expect(block).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
     }
     const candidateCertification = jobBlock(upstreamCandidates, 'certify');
-    expect(candidateCertification).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
+    expect(candidateCertification).toContain(
+      'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2',
+    );
     expect(candidateCertification).toContain("bun-version: '1.4.0'");
     expect(candidateCertification).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
     expect(candidateCertification.indexOf('oven-sh/setup-bun@')).toBeLessThan(
@@ -260,7 +315,10 @@ describe('autonomous workflow security', () => {
     const workflows = [
       await readWorkflow('release.yml'),
       await readWorkflow('upstream-candidates.yml'),
-      await readFile(new URL('../.github/actions/upload-termwright-runs/action.yml', import.meta.url), 'utf8'),
+      await readFile(
+        new URL('../.github/actions/upload-termwright-runs/action.yml', import.meta.url),
+        'utf8',
+      ),
     ];
     const node24Pins = new Set([
       'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7',
@@ -269,7 +327,8 @@ describe('autonomous workflow security', () => {
     ]);
 
     for (const workflow of workflows) {
-      const artifactActions = workflow.match(/actions\/(?:upload|download)-artifact@[^\n]+/gu) ?? [];
+      const artifactActions =
+        workflow.match(/actions\/(?:upload|download)-artifact@[^\n]+/gu) ?? [];
       expect(artifactActions.length).toBeGreaterThan(0);
       for (const action of artifactActions) expect(node24Pins.has(action), action).toBe(true);
     }
@@ -278,7 +337,8 @@ describe('autonomous workflow security', () => {
   it('does not persist checkout credentials in any untrusted-code CI job', async () => {
     const workflow = await readWorkflow('ci.yml');
     expect(workflow).toMatch(/permissions:\n  contents: read/u);
-    const checkoutSteps = workflow.match(/- uses: actions\/checkout@[^\n]+\n(?: {8}[^\n]*\n){0,8}/gu) ?? [];
+    const checkoutSteps =
+      workflow.match(/- uses: actions\/checkout@[^\n]+\n(?: {8}[^\n]*\n){0,8}/gu) ?? [];
     expect(checkoutSteps.length).toBeGreaterThan(0);
     for (const step of checkoutSteps) expect(step).toContain('persist-credentials: false');
   });
@@ -307,7 +367,7 @@ describe('autonomous workflow security', () => {
     expect(step).toContain('github.event.pull_request.head.repo.full_name == github.repository');
     expect(step).toContain("github.event.pull_request.head.ref == 'release-pr/main'");
     expect(step).not.toContain('github.event.pull_request.labels');
-    expect(step).not.toContain("git diff --name-only");
+    expect(step).not.toContain('git diff --name-only');
   });
 
   it('retains hidden Termwright run evidence from failed main and nightly jobs', async () => {
@@ -341,7 +401,9 @@ describe('autonomous workflow security', () => {
       'examples',
     ];
 
-    expect(uploader).toContain('uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7');
+    expect(uploader).toContain(
+      'uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7',
+    );
     expect(uploader).toContain('default: .termwright/runs');
     expect(uploader).toContain('path: ${{ inputs.runs-path }}');
     expect(uploader).toContain('if-no-files-found: warn');
@@ -355,7 +417,9 @@ describe('autonomous workflow security', () => {
       expect(block, job).toContain('artifact-name: termwright-runs-${{ github.job }}-');
     }
 
-    expect(conformance).toContain("runsDir: join(REPOSITORY_ROOT, '.termwright', 'conformance-runs')");
+    expect(conformance).toContain(
+      "runsDir: join(REPOSITORY_ROOT, '.termwright', 'conformance-runs')",
+    );
     for (const job of ['conformance-posix', 'conformance-windows']) {
       expect(jobBlock(ci, job), job).toContain('runs-path: .termwright/conformance-runs');
     }
@@ -380,7 +444,9 @@ describe('autonomous workflow security', () => {
     const website = jobBlock(workflow, 'website');
     const certification = jobBlock(workflow, 'certification');
     const docs = await readWorkflow('docs.yml');
-    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    const manifest = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    );
     const experimentalDocs = JSON.parse(
       await readFile(new URL('../typedoc.driver-experimental.json', import.meta.url), 'utf8'),
     );
@@ -390,7 +456,9 @@ describe('autonomous workflow security', () => {
     expect(certification).toContain('      - website');
     expect(manifest.scripts['check:generated-docs']).toContain('generate-mcp-docs.mjs');
     expect(manifest.scripts['check:generated-docs']).toContain('generate-runtime-requirements.mjs');
-    expect(manifest.scripts['check:generated-docs']).toContain('generate-resource-profile-docs.mjs');
+    expect(manifest.scripts['check:generated-docs']).toContain(
+      'generate-resource-profile-docs.mjs',
+    );
     expect(docs).toContain("- 'packages/**'");
     expect(docs).toContain('pull_request:');
     expect(docs).toContain('run: pnpm check:package-metadata');

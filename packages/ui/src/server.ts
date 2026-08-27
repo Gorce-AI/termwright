@@ -93,7 +93,9 @@ export interface UiServerOptions {
    * the panel, because a run that could not be started must not look like a
    * run that produced nothing.
    */
-  readonly onRun?: (runnerTaskIds: readonly string[] | undefined) => UiRunHandle | Promise<UiRunHandle>;
+  readonly onRun?: (
+    runnerTaskIds: readonly string[] | undefined,
+  ) => UiRunHandle | Promise<UiRunHandle>;
   /** Called when a client asks to stop one exact run. */
   readonly onStop?: (runId: RunId) => void | Promise<void>;
   /**
@@ -172,17 +174,29 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   // Read once at startup: the branch can change under a long-running server,
   // but re-reading it per request would spawn a git process on every poll for
   // a line of context. A restart is the cheap way to refresh it.
-  const project = await readProjectInfo(options.discovery?.cwd ?? options.record?.cwd ?? process.cwd());
+  const project = await readProjectInfo(
+    options.discovery?.cwd ?? options.record?.cwd ?? process.cwd(),
+  );
 
   let mode: UiServerMode = 'live';
   let stopping = false;
   let nextRequestedRunGeneration = 0;
   let requestedRun: { readonly generation: number; readonly runId?: RunId } | undefined;
-  const producerSessions = new Map<string, { readonly socket: WebSocket; readonly generation: number }>();
+  const producerSessions = new Map<
+    string,
+    { readonly socket: WebSocket; readonly generation: number }
+  >();
   const producerRevisions = new Map<string, number>();
   const rejectedProducers = new WeakSet<WebSocket>();
   let nextInspectionRequest = 0;
-  const pendingInspections = new Map<string, { readonly viewer: WebSocket; readonly clientRequestId: string; readonly timer: ReturnType<typeof setTimeout> }>();
+  const pendingInspections = new Map<
+    string,
+    {
+      readonly viewer: WebSocket;
+      readonly clientRequestId: string;
+      readonly timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   let reader: TraceReader | undefined;
   let overview: TraceOverview | undefined;
   let recorder: RecorderSession | undefined;
@@ -248,7 +262,13 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     // Start the run before attaching the session. `run-start` resets event
     // history, so the opposite order erased the only session announcement for
     // every browser that connected after recording began.
-    hub.publish({ v: 1, type: 'run-start', runId: createRunId('run'), mode: 'record', startedAt: Date.now() });
+    hub.publish({
+      v: 1,
+      type: 'run-start',
+      runId: createRunId('run'),
+      mode: 'record',
+      startedAt: Date.now(),
+    });
     detachRecorder = attach({
       source: recorder.harness,
       write: (bytes) => recorder?.handleInput(bytes) ?? Promise.resolve(),
@@ -293,7 +313,13 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     // the stale `record` start and showed a ghost REC banner for a process that
     // no longer existed. Resetting the hub also drops discovery, so republish
     // the cached listing immediately.
-    hub.publish({ v: 1, type: 'run-start', runId: createRunId('run'), mode: 'live', startedAt: Date.now() });
+    hub.publish({
+      v: 1,
+      type: 'run-start',
+      runId: createRunId('run'),
+      mode: 'live',
+      startedAt: Date.now(),
+    });
     if (options.discovery !== undefined) {
       hub.publish({ v: 1, type: 'tests-discovered', tests: discovered });
     }
@@ -426,7 +452,12 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       if (message.type === 'session') {
         const owner = producerSessions.get(message.sessionId);
         const generation = hub.runGeneration;
-        if (owner !== undefined && owner.generation === generation && owner.socket !== ws && owner.socket.readyState === WebSocket.OPEN) {
+        if (
+          owner !== undefined &&
+          owner.generation === generation &&
+          owner.socket !== ws &&
+          owner.socket.readyState === WebSocket.OPEN
+        ) {
           rejectProducer(ws, 'session is already owned by another producer');
           return;
         }
@@ -437,10 +468,12 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       } else if (message.type === 'actionability-inspection') {
         const pending = pendingInspections.get(message.requestId);
         const owner = producerSessions.get(message.sessionId);
-        if (pending === undefined || owner?.socket !== ws || owner.generation !== hub.runGeneration) return;
+        if (pending === undefined || owner?.socket !== ws || owner.generation !== hub.runGeneration)
+          return;
         clearTimeout(pending.timer);
         pendingInspections.delete(message.requestId);
-        if (pending.viewer.readyState === WebSocket.OPEN) pending.viewer.send(encodeMessage({ ...message, requestId: pending.clientRequestId }));
+        if (pending.viewer.readyState === WebSocket.OPEN)
+          pending.viewer.send(encodeMessage({ ...message, requestId: pending.clientRequestId }));
         return;
       } else if ('sessionId' in message && message.sessionId !== undefined) {
         const owner = producerSessions.get(message.sessionId);
@@ -450,9 +483,17 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         }
         if (message.type === 'semantic') {
           const checked = validateSnapshot(message.snapshot, DEFAULT_LIMITS);
-          if (!checked.ok || checked.snapshot.sessionId !== message.sessionId ||
-              checked.snapshot.revision !== message.revision) {
-            rejectProducer(ws, checked.ok ? 'semantic envelope does not match its snapshot' : `invalid semantic snapshot: ${checked.code}`);
+          if (
+            !checked.ok ||
+            checked.snapshot.sessionId !== message.sessionId ||
+            checked.snapshot.revision !== message.revision
+          ) {
+            rejectProducer(
+              ws,
+              checked.ok
+                ? 'semantic envelope does not match its snapshot'
+                : `invalid semantic snapshot: ${checked.code}`,
+            );
             return;
           }
           const previous = producerRevisions.get(message.sessionId) ?? 0;
@@ -483,12 +524,19 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   }
 
   function validateRunTargets(runnerTaskIds: readonly string[] | undefined): void {
-    if (options.discovery === undefined || runnerTaskIds === undefined || runnerTaskIds.length === 0) return;
-    if (!discoveryReady) throw new RunRequestError(409, 'the scoped test catalogue is still loading');
+    if (
+      options.discovery === undefined ||
+      runnerTaskIds === undefined ||
+      runnerTaskIds.length === 0
+    )
+      return;
+    if (!discoveryReady)
+      throw new RunRequestError(409, 'the scoped test catalogue is still loading');
     const providerTests = discovered.filter((test) => test.provider !== undefined);
     for (const target of runnerTaskIds) {
       const allowed = providerTests.some((test) => test.id === target);
-      if (!allowed) throw new RunRequestError(400, 'run targets must belong to the scoped provider catalogue');
+      if (!allowed)
+        throw new RunRequestError(400, 'run targets must belong to the scoped provider catalogue');
     }
   }
 
@@ -502,7 +550,8 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     requestedRun = { generation };
     try {
       const handle = await options.onRun(runnerTaskIds);
-      if (requestedRun?.generation === generation) requestedRun = { generation, runId: handle.runId };
+      if (requestedRun?.generation === generation)
+        requestedRun = { generation, runId: handle.runId };
       void handle.completed.then(
         () => {
           if (requestedRun?.generation === generation) requestedRun = undefined;
@@ -561,19 +610,50 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         const local = sessions.get(message.sessionId)?.source;
         if (local !== undefined) {
           const response = await inspectNodeActionability(local, message.nodeId)
-            .then<ServerMessage>((results) => ({ v: 1, type: 'actionability-inspection', requestId: message.requestId, sessionId: message.sessionId, nodeId: message.nodeId, results }))
-            .catch<ServerMessage>((error: unknown) => ({ v: 1, type: 'actionability-inspection', requestId: message.requestId, sessionId: message.sessionId, nodeId: message.nodeId, error: describeError(error) }));
+            .then<ServerMessage>((results) => ({
+              v: 1,
+              type: 'actionability-inspection',
+              requestId: message.requestId,
+              sessionId: message.sessionId,
+              nodeId: message.nodeId,
+              results,
+            }))
+            .catch<ServerMessage>((error: unknown) => ({
+              v: 1,
+              type: 'actionability-inspection',
+              requestId: message.requestId,
+              sessionId: message.sessionId,
+              nodeId: message.nodeId,
+              error: describeError(error),
+            }));
           if (viewer.readyState === WebSocket.OPEN) viewer.send(encodeMessage(response));
           return;
         }
         const producer = producerSessions.get(message.sessionId);
-        if (producer === undefined || producer.generation !== hub.runGeneration || producer.socket.readyState !== WebSocket.OPEN) {
-          viewer.send(encodeMessage({ v: 1, type: 'actionability-inspection', requestId: message.requestId, sessionId: message.sessionId, nodeId: message.nodeId, error: 'the live session owner is unavailable' }));
+        if (
+          producer === undefined ||
+          producer.generation !== hub.runGeneration ||
+          producer.socket.readyState !== WebSocket.OPEN
+        ) {
+          viewer.send(
+            encodeMessage({
+              v: 1,
+              type: 'actionability-inspection',
+              requestId: message.requestId,
+              sessionId: message.sessionId,
+              nodeId: message.nodeId,
+              error: 'the live session owner is unavailable',
+            }),
+          );
           return;
         }
         const internalRequestId = `server-inspect:${++nextInspectionRequest}`;
         const timer = setTimeout(() => pendingInspections.delete(internalRequestId), 5_000);
-        pendingInspections.set(internalRequestId, { viewer, clientRequestId: message.requestId, timer });
+        pendingInspections.set(internalRequestId, {
+          viewer,
+          clientRequestId: message.requestId,
+          timer,
+        });
         producer.socket.send(encodeMessage({ ...message, requestId: internalRequestId }));
         return;
       }
@@ -586,14 +666,16 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     error?: string,
   ): void {
     if (message.requestId === undefined || viewer.readyState !== WebSocket.OPEN) return;
-    viewer.send(encodeMessage({
-      v: 1,
-      type: 'control-result',
-      requestId: message.requestId,
-      control: message.type,
-      ok: error === undefined,
-      ...(error === undefined ? {} : { error }),
-    }));
+    viewer.send(
+      encodeMessage({
+        v: 1,
+        type: 'control-result',
+        requestId: message.requestId,
+        control: message.type,
+        ok: error === undefined,
+        ...(error === undefined ? {} : { error }),
+      }),
+    );
   }
 
   async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -660,10 +742,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       case 'POST /api/specs': {
         const body = await readJsonBody(request);
         const requested = body['files'];
-        if (
-          !Array.isArray(requested) ||
-          requested.some((file) => typeof file !== 'string')
-        ) {
+        if (!Array.isArray(requested) || requested.some((file) => typeof file !== 'string')) {
           sendJson(response, 400, { error: 'files must be an array of strings' });
           return;
         }
@@ -677,7 +756,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       case 'POST /api/run': {
         const body = await readJsonBody(request);
         const runnerTaskIds = body['runnerTaskIds'];
-        if (runnerTaskIds !== undefined && (!Array.isArray(runnerTaskIds) || runnerTaskIds.some((id) => typeof id !== 'string'))) {
+        if (
+          runnerTaskIds !== undefined &&
+          (!Array.isArray(runnerTaskIds) || runnerTaskIds.some((id) => typeof id !== 'string'))
+        ) {
           sendJson(response, 400, { error: 'runnerTaskIds must be an array of strings' });
           return;
         }
@@ -688,7 +770,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           const handle = await requestRun(runnerTaskIds as string[] | undefined);
           sendJson(response, 202, { runId: handle.runId });
         } catch (error) {
-          sendJson(response, error instanceof RunRequestError ? error.status : 500, { error: describeError(error) });
+          sendJson(response, error instanceof RunRequestError ? error.status : 500, {
+            error: describeError(error),
+          });
         }
         return;
       }
@@ -723,7 +807,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         return;
       }
       case 'GET /api/runs': {
-        sendJson(response, 200, { runs: await readRunHistory(options.runsDir ?? DEFAULT_RUNS_DIR) });
+        sendJson(response, 200, {
+          runs: await readRunHistory(options.runsDir ?? DEFAULT_RUNS_DIR),
+        });
         return;
       }
       case 'GET /api/run': {
@@ -737,7 +823,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sendJson(response, 400, detail);
           return;
         }
-        if (detail.state === 'corrupt' && detail.reason === 'run history directory does not exist') {
+        if (
+          detail.state === 'corrupt' &&
+          detail.reason === 'run history directory does not exist'
+        ) {
           sendJson(response, 404, detail);
           return;
         }
@@ -900,14 +989,16 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sendJson(response, 400, { error: 'kind must be click or assert-visible' });
           return;
         }
-        const selector = kind === 'assert-visible'
-          ? recorder.recordAssertVisible(nodeId)
-          : recorder.recordClick(nodeId);
+        const selector =
+          kind === 'assert-visible'
+            ? recorder.recordAssertVisible(nodeId)
+            : recorder.recordClick(nodeId);
         if (selector === undefined) {
           sendJson(response, 409, {
-            error: kind === 'click'
-              ? 'semantic click requires an authoritative pointer owner in the negotiated contract and current revision'
-              : 'no semantic tree, or unknown node',
+            error:
+              kind === 'click'
+                ? 'semantic click requires an authoritative pointer owner in the negotiated contract and current revision'
+                : 'no semantic tree, or unknown node',
           });
           return;
         }
@@ -957,7 +1048,11 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       case 'POST /api/record/start': {
         const body = await readJsonBody(request);
         const command = body['command'];
-        if (!Array.isArray(command) || command.some((part) => typeof part !== 'string') || command.length === 0) {
+        if (
+          !Array.isArray(command) ||
+          command.some((part) => typeof part !== 'string') ||
+          command.length === 0
+        ) {
           sendJson(response, 400, { error: 'command must be a non-empty array of strings' });
           return;
         }
@@ -1033,10 +1128,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     closing ??= (async () => {
       const wssClosed = new Promise<void>((resolveClose, rejectClose) => {
         for (const client of wss.clients) client.terminate();
-        wss.close((error) => error === undefined ? resolveClose() : rejectClose(error));
+        wss.close((error) => (error === undefined ? resolveClose() : rejectClose(error)));
       });
       const httpClosed = new Promise<void>((resolveClose, rejectClose) => {
-        http.close((error) => error === undefined ? resolveClose() : rejectClose(error));
+        http.close((error) => (error === undefined ? resolveClose() : rejectClose(error)));
         http.closeAllConnections();
       });
       const watcherResult = await Promise.allSettled([
@@ -1052,9 +1147,11 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         recorder?.close(),
         reader?.close(),
       ]);
-      const failures = [...watcherResult, ...results]
-        .flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-      if (failures.length > 0) throw new AggregateError(failures, 'Termwright UI failed to close cleanly');
+      const failures = [...watcherResult, ...results].flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError(failures, 'Termwright UI failed to close cleanly');
     })();
     return closing;
   };
@@ -1067,9 +1164,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     // Discovery runs in the background: the server is useful before it finishes,
     // and a project whose listing takes ten seconds should not delay the page.
     void scheduleDiscovery();
-    stopWatching = options.discovery?.watch === true
-      ? await watchForChanges(options.discovery.cwd, scheduleDiscovery)
-      : undefined;
+    stopWatching =
+      options.discovery?.watch === true
+        ? await watchForChanges(options.discovery.cwd, scheduleDiscovery)
+        : undefined;
   } catch (error) {
     try {
       // In runUi the discovery callback awaits a host which is created only
@@ -1110,7 +1208,10 @@ const IGNORED_DIRECTORIES = /(^|[/\\])(node_modules|dist|coverage|\.git)([/\\]|$
  * listing takes seconds. The watcher is closed asynchronously with the server
  * so no native filesystem callback can outlive the project directory.
  */
-async function watchForChanges(cwd: string, onChange: () => Promise<void>): Promise<() => Promise<void>> {
+async function watchForChanges(
+  cwd: string,
+  onChange: () => Promise<void>,
+): Promise<() => Promise<void>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let pendingRefresh: Promise<void> | undefined;
@@ -1328,7 +1429,10 @@ function describeError(error: unknown): string {
 }
 
 class RunRequestError extends Error {
-  constructor(readonly status: 400 | 409, message: string) {
+  constructor(
+    readonly status: 400 | 409,
+    message: string,
+  ) {
     super(message);
   }
 }

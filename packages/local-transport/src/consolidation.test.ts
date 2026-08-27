@@ -39,7 +39,8 @@ describe('local transport consolidation', () => {
     for (const sourceRoot of sourceRoots) {
       const entries = await readdir(sourceRoot, { recursive: true, withFileTypes: true });
       for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith('.ts') || entry.name.endsWith('.test.ts')) continue;
+        if (!entry.isFile() || !entry.name.endsWith('.ts') || entry.name.endsWith('.test.ts'))
+          continue;
         const sourcePath = `${entry.parentPath}/${entry.name}`;
         expect(await readFile(sourcePath, 'utf8'), sourcePath).not.toMatch(duplicatePrimitive);
       }

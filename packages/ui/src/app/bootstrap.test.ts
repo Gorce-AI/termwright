@@ -6,7 +6,9 @@ import { bootstrapRunner } from './bootstrap.js';
 describe('Runner bootstrap barrier', () => {
   it('commits the HTTP snapshot before subscribing to replayed live events', async () => {
     let resolveState!: (viewer: ViewerState) => void;
-    const state = new Promise<ViewerState>((resolve) => { resolveState = resolve; });
+    const state = new Promise<ViewerState>((resolve) => {
+      resolveState = resolve;
+    });
     const order: string[] = [];
     const viewer = {} as ViewerState;
     const message = {} as ServerMessage;
@@ -21,10 +23,19 @@ describe('Runner bootstrap barrier', () => {
       },
       {
         active: () => true,
-        ready: (received) => { expect(received).toBe(viewer); order.push('ready'); },
+        ready: (received) => {
+          expect(received).toBe(viewer);
+          order.push('ready');
+        },
         failed: vi.fn(),
-        message: (received) => { expect(received).toBe(message); order.push('message'); },
-        status: (connected) => { expect(connected).toBe(true); order.push('status'); },
+        message: (received) => {
+          expect(received).toBe(message);
+          order.push('message');
+        },
+        status: (connected) => {
+          expect(connected).toBe(true);
+          order.push('status');
+        },
       },
     );
 
@@ -36,7 +47,9 @@ describe('Runner bootstrap barrier', () => {
 
   it('does not connect a page that unmounted while its snapshot was loading', async () => {
     let resolveState!: (viewer: ViewerState) => void;
-    const state = new Promise<ViewerState>((resolve) => { resolveState = resolve; });
+    const state = new Promise<ViewerState>((resolve) => {
+      resolveState = resolve;
+    });
     let active = true;
     const connect = vi.fn();
     const ready = vi.fn();

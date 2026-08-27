@@ -59,10 +59,12 @@ describe('atomic push lease resolution', () => {
     const absent = Object.assign(new Error('not found'), { code: 2, stdout: '' });
     const transport = Object.assign(new Error('transport failure'), { code: 128, stdout: '' });
 
-    await expect(resolvePushLease('origin', ref, vi.fn().mockRejectedValue(absent))).resolves.toBe('');
-    await expect(resolvePushLease('origin', ref, vi.fn().mockRejectedValue(transport))).rejects.toThrow(
-      'git ls-remote failed with status 128',
+    await expect(resolvePushLease('origin', ref, vi.fn().mockRejectedValue(absent))).resolves.toBe(
+      '',
     );
+    await expect(
+      resolvePushLease('origin', ref, vi.fn().mockRejectedValue(transport)),
+    ).rejects.toThrow('git ls-remote failed with status 128');
   });
 
   it('re-queries the exact branch across absent, created and updated states', async () => {

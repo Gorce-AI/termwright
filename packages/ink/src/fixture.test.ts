@@ -4,14 +4,14 @@
  */
 
 import { afterEach, describe, expect, vi } from 'vitest';
-import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { TerminalHarness } from '@termwright/driver';
 import { ControlChannel } from './control.js';
 import { launchInkFixture } from './fixture.js';
 import type { JsonProps } from './payload.js';
 
 const COMPONENT = new URL('./testing/counter-app.mjs', import.meta.url);
-const it = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 const open: TerminalHarness[] = [];
 
@@ -152,12 +152,14 @@ describe('launchInkFixture', () => {
       return channel;
     });
     try {
-      await expect(launchInkFixture({
-        component: COMPONENT,
-        cwd: `/termwright-does-not-exist-${process.pid}`,
-        columns: 20,
-        rows: 5,
-      })).rejects.toThrow();
+      await expect(
+        launchInkFixture({
+          component: COMPONENT,
+          cwd: `/termwright-does-not-exist-${process.pid}`,
+          columns: 20,
+          rows: 5,
+        }),
+      ).rejects.toThrow();
       expect(close).toHaveBeenCalledOnce();
     } finally {
       listenSpy.mockRestore();
@@ -174,7 +176,9 @@ describe('launchInkFixture', () => {
     try {
       const harness = await launchInkFixture({ component: COMPONENT, columns: 20, rows: 5 });
       if (channel === undefined) throw new Error('fixture did not acquire its control channel');
-      vi.spyOn(channel, 'close').mockRejectedValueOnce(new Error('injected control cleanup failure'));
+      vi.spyOn(channel, 'close').mockRejectedValueOnce(
+        new Error('injected control cleanup failure'),
+      );
 
       const first = harness.close();
       const second = harness.close();

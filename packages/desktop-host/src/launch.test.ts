@@ -24,12 +24,13 @@ async function expectFailedLaunchReapsSpawnedChild(
   let spawnedPid: number | undefined;
   const observe = (message: unknown): void => {
     if (
-      typeof message === 'object' && message !== null &&
-      (message as {type?: unknown}).type === 'spawned' &&
-      (message as {main?: unknown}).main === main &&
-      typeof (message as {pid?: unknown}).pid === 'number'
+      typeof message === 'object' &&
+      message !== null &&
+      (message as { type?: unknown }).type === 'spawned' &&
+      (message as { main?: unknown }).main === main &&
+      typeof (message as { pid?: unknown }).pid === 'number'
     ) {
-      spawnedPid = (message as {pid: number}).pid;
+      spawnedPid = (message as { pid: number }).pid;
     }
   };
   subscribe(DESKTOP_HOST_LIFECYCLE, observe);
@@ -50,31 +51,34 @@ describe('desktop host launcher', () => {
     const cwd = await mkdtemp(join(tmpdir(), 'termwright-desktop-host-'));
     const fake = join(cwd, 'fake-host.mjs');
     const observed = join(cwd, 'observed.json');
-    await writeFile(fake, [
-      "import { writeFileSync } from 'node:fs';",
-      `const observed = ${JSON.stringify(observed)};`,
-      "import { connect } from 'node:net';",
-      "const address = process.env.TERMWRIGHT_DESKTOP_CONTROL; delete process.env.TERMWRIGHT_DESKTOP_CONTROL;",
-      "const input = connect(address); input.setEncoding('utf8');",
-      "const output = input;",
-      "let buffer = '';",
-      "input.on('data', chunk => {",
-      "  buffer += chunk;",
-      "  for (;;) {",
-      "    const newline = buffer.indexOf('\\n');",
-      "    if (newline < 0) break;",
-      "    const message = JSON.parse(buffer.slice(0, newline));",
-      "    buffer = buffer.slice(newline + 1);",
-      "    if (message.type === 'bootstrap') {",
-      "      writeFileSync(observed, JSON.stringify({ argv: process.argv, env: process.env, bootstrap: message }));",
-      "      output.write(JSON.stringify({ protocol: 1, type: 'ready' }) + '\\n');",
-      "    } else if (message.type === 'shutdown') {",
-      "      output.write(JSON.stringify({ protocol: 1, type: 'closed' }) + '\\n');",
-      "      process.exit(0);",
-      "    }",
-      "  }",
-      "});",
-    ].join('\n'));
+    await writeFile(
+      fake,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        `const observed = ${JSON.stringify(observed)};`,
+        "import { connect } from 'node:net';",
+        'const address = process.env.TERMWRIGHT_DESKTOP_CONTROL; delete process.env.TERMWRIGHT_DESKTOP_CONTROL;',
+        "const input = connect(address); input.setEncoding('utf8');",
+        'const output = input;',
+        "let buffer = '';",
+        "input.on('data', chunk => {",
+        '  buffer += chunk;',
+        '  for (;;) {',
+        "    const newline = buffer.indexOf('\\n');",
+        '    if (newline < 0) break;',
+        '    const message = JSON.parse(buffer.slice(0, newline));',
+        '    buffer = buffer.slice(newline + 1);',
+        "    if (message.type === 'bootstrap') {",
+        '      writeFileSync(observed, JSON.stringify({ argv: process.argv, env: process.env, bootstrap: message }));',
+        "      output.write(JSON.stringify({ protocol: 1, type: 'ready' }) + '\\n');",
+        "    } else if (message.type === 'shutdown') {",
+        "      output.write(JSON.stringify({ protocol: 1, type: 'closed' }) + '\\n');",
+        '      process.exit(0);',
+        '    }',
+        '  }',
+        '});',
+      ].join('\n'),
+    );
 
     try {
       const url = 'http://127.0.0.1:4567/?token=private-value';
@@ -105,22 +109,30 @@ describe('desktop host launcher', () => {
   it('uses one readiness deadline across connection and ready phases', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'termwright-desktop-host-'));
     const fake = join(cwd, 'slow-host.mjs');
-    await writeFile(fake, [
-      "import { connect } from 'node:net';",
-      'setTimeout(() => {',
-      '  const socket = connect(process.env.TERMWRIGHT_DESKTOP_CONTROL);',
-      "  socket.setEncoding('utf8');",
-      "  socket.on('data', () => setTimeout(() => socket.write(JSON.stringify({ protocol: 1, type: 'ready' }) + '\\n'), 60));",
-      '}, 60);',
-      'setInterval(() => undefined, 1_000);',
-    ].join('\n'));
+    await writeFile(
+      fake,
+      [
+        "import { connect } from 'node:net';",
+        'setTimeout(() => {',
+        '  const socket = connect(process.env.TERMWRIGHT_DESKTOP_CONTROL);',
+        "  socket.setEncoding('utf8');",
+        "  socket.on('data', () => setTimeout(() => socket.write(JSON.stringify({ protocol: 1, type: 'ready' }) + '\\n'), 60));",
+        '}, 60);',
+        'setInterval(() => undefined, 1_000);',
+      ].join('\n'),
+    );
     try {
-      await expectFailedLaunchReapsSpawnedChild(fake, () => launchDesktopHost({
-        url: 'http://127.0.0.1:4567/?token=private-value',
-        executable: process.execPath,
-        main: fake,
-        readyTimeoutMs: 100,
-      }), /did not become ready|did not connect/u);
+      await expectFailedLaunchReapsSpawnedChild(
+        fake,
+        () =>
+          launchDesktopHost({
+            url: 'http://127.0.0.1:4567/?token=private-value',
+            executable: process.execPath,
+            main: fake,
+            readyTimeoutMs: 100,
+          }),
+        /did not become ready|did not connect/u,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -132,22 +144,27 @@ describe('desktop host launcher', () => {
     // Connects, so the launcher reaches the readiness phase, then stays silent
     // until its deadline expires and rollback kills it. That kill is what used
     // to reject the abandoned readiness promise.
-    await writeFile(fake, [
-      "import { connect } from 'node:net';",
-      'const socket = connect(process.env.TERMWRIGHT_DESKTOP_CONTROL);',
-      "socket.setEncoding('utf8');",
-      'setInterval(() => undefined, 1_000);',
-    ].join('\n'));
+    await writeFile(
+      fake,
+      [
+        "import { connect } from 'node:net';",
+        'const socket = connect(process.env.TERMWRIGHT_DESKTOP_CONTROL);',
+        "socket.setEncoding('utf8');",
+        'setInterval(() => undefined, 1_000);',
+      ].join('\n'),
+    );
     const abandoned: unknown[] = [];
     const record = (reason: unknown): void => void abandoned.push(reason);
     process.on('unhandledRejection', record);
     try {
-      await expect(launchDesktopHost({
-        url: 'http://127.0.0.1:4567/?token=private-value',
-        executable: process.execPath,
-        main: fake,
-        readyTimeoutMs: 100,
-      })).rejects.toThrow(/did not become ready|did not connect/u);
+      await expect(
+        launchDesktopHost({
+          url: 'http://127.0.0.1:4567/?token=private-value',
+          executable: process.execPath,
+          main: fake,
+          readyTimeoutMs: 100,
+        }),
+      ).rejects.toThrow(/did not become ready|did not connect/u);
       // Node reports an unhandled rejection once the microtask queue drains
       // after the rejection, so give the exit handler a real turn to run.
       await new Promise((resolve) => setImmediate(resolve));
@@ -162,16 +179,19 @@ describe('desktop host launcher', () => {
   it('reaps a child that never connects before rejecting startup', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'termwright-desktop-host-'));
     const fake = join(cwd, 'detached-host.mjs');
-    await writeFile(fake, [
-      'setInterval(() => undefined, 1_000);',
-    ].join('\n'));
+    await writeFile(fake, ['setInterval(() => undefined, 1_000);'].join('\n'));
     try {
-      await expectFailedLaunchReapsSpawnedChild(fake, () => launchDesktopHost({
-        url: 'http://127.0.0.1:4567/?token=private-value',
-        executable: process.execPath,
-        main: fake,
-        readyTimeoutMs: 100,
-      }), 'did not connect');
+      await expectFailedLaunchReapsSpawnedChild(
+        fake,
+        () =>
+          launchDesktopHost({
+            url: 'http://127.0.0.1:4567/?token=private-value',
+            executable: process.execPath,
+            main: fake,
+            readyTimeoutMs: 100,
+          }),
+        'did not connect',
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

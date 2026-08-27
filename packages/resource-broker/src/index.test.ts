@@ -55,7 +55,11 @@ function attempt(owner: WorkerIdentity, id: string): AttemptIdentity {
   return { ...owner, attemptId: id as AttemptId };
 }
 
-function broker(clock = new ManualClock(), maxQueued = 100, capacities = CAPACITIES): ResourceBroker {
+function broker(
+  clock = new ManualClock(),
+  maxQueued = 100,
+  capacities = CAPACITIES,
+): ResourceBroker {
   let id = 0;
   return new ResourceBroker({
     runId: RUN,
@@ -68,7 +72,10 @@ function broker(clock = new ManualClock(), maxQueued = 100, capacities = CAPACIT
 }
 
 async function errorCode(promise: Promise<unknown>): Promise<string | undefined> {
-  return promise.then(() => undefined, (error: unknown) => (error as ResourceBrokerError).code);
+  return promise.then(
+    () => undefined,
+    (error: unknown) => (error as ResourceBrokerError).code,
+  );
 }
 
 describe('ResourceBroker', () => {
@@ -127,15 +134,24 @@ describe('ResourceBroker', () => {
     for (const identity of [owner, older, younger]) resources.registerWorker(identity);
 
     const held = await resources.acquire({
-      ...attempt(owner, 'held'), resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...attempt(owner, 'held'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     const olderPromise = resources.acquire({
-      ...attempt(older, 'older'), resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...attempt(older, 'older'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     const youngerPromise = resources.acquire({
-      ...attempt(younger, 'younger'), resources: { traceWriter: 1 }, deadline: clock.now + 1_000,
+      ...attempt(younger, 'younger'),
+      resources: { traceWriter: 1 },
+      deadline: clock.now + 1_000,
     });
-    expect(resources.snapshot().queue.map((entry) => entry.attemptId)).toEqual(['older', 'younger']);
+    expect(resources.snapshot().queue.map((entry) => entry.attemptId)).toEqual([
+      'older',
+      'younger',
+    ]);
 
     await held.release();
     const [olderLease, youngerLease] = await Promise.all([olderPromise, youngerPromise]);
@@ -150,10 +166,14 @@ describe('ResourceBroker', () => {
     resources.registerWorker(owner);
 
     const first = await resources.acquire({
-      ...identity, resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...identity,
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     const second = await resources.acquire({
-      ...identity, resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...identity,
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     await first.attach([{ resource: 'ptySession', pid: 42, sessionId: 'session-42' }]);
     expect(resources.snapshot().used.ptySession).toBe(2);
@@ -176,13 +196,19 @@ describe('ResourceBroker', () => {
     const identity = attempt(owner, 'multi-terminal-attempt');
     resources.registerWorker(owner);
     const first = await resources.acquire({
-      ...identity, resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...identity,
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     const second = resources.acquire({
-      ...identity, resources: { ptySession: 1 }, deadline: clock.now + 25,
+      ...identity,
+      resources: { ptySession: 1 },
+      deadline: clock.now + 25,
     });
     expect(resources.snapshot().used.ptySession).toBe(1);
-    expect(resources.snapshot().queue).toMatchObject([{ attemptId: identity.attemptId, position: 1 }]);
+    expect(resources.snapshot().queue).toMatchObject([
+      { attemptId: identity.attemptId, position: 1 },
+    ]);
     const code = errorCode(second);
     clock.advance(25);
     expect(await code).toBe('deadline-exceeded');
@@ -195,18 +221,25 @@ describe('ResourceBroker', () => {
     const holder = worker('holder');
     const deadlineWorker = worker('deadline');
     const abortedWorker = worker('aborted');
-    for (const identity of [holder, deadlineWorker, abortedWorker]) resources.registerWorker(identity);
+    for (const identity of [holder, deadlineWorker, abortedWorker])
+      resources.registerWorker(identity);
     const held = await resources.acquire({
-      ...attempt(holder, 'holder'), resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...attempt(holder, 'holder'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
 
     const expires = resources.acquire({
-      ...attempt(deadlineWorker, 'deadline'), resources: { ptySession: 1 }, deadline: clock.now + 10,
+      ...attempt(deadlineWorker, 'deadline'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 10,
     });
     const controller = new AbortController();
     const aborts = resources.acquire({
-      ...attempt(abortedWorker, 'aborted'), resources: { ptySession: 1 },
-      deadline: clock.now + 1_000, signal: controller.signal,
+      ...attempt(abortedWorker, 'aborted'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
+      signal: controller.signal,
     });
     const expiresCode = errorCode(expires);
     const abortsCode = errorCode(aborts);
@@ -226,13 +259,19 @@ describe('ResourceBroker', () => {
     const rejected = worker('rejected');
     for (const identity of [holder, queued, rejected]) resources.registerWorker(identity);
     const held = await resources.acquire({
-      ...attempt(holder, 'holder'), resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...attempt(holder, 'holder'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     const waits = resources.acquire({
-      ...attempt(queued, 'queued'), resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...attempt(queued, 'queued'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     const refusal = resources.acquire({
-      ...attempt(rejected, 'rejected'), resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...attempt(rejected, 'rejected'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     expect(await errorCode(refusal)).toBe('queue-full');
     await held.release();
@@ -247,23 +286,35 @@ describe('ResourceBroker', () => {
     resources.registerWorker(oldWorker);
     resources.registerWorker(waitingWorker);
     const lease = await resources.acquire({
-      ...attempt(oldWorker, 'old-attempt'), resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...attempt(oldWorker, 'old-attempt'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
     const waits = resources.acquire({
-      ...attempt(waitingWorker, 'waiting'), resources: { ptySession: 1 }, deadline: clock.now + 1_000,
+      ...attempt(waitingWorker, 'waiting'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 1_000,
     });
 
     resources.disconnectWorker(oldWorker);
     const granted = await waits;
     expect(resources.snapshot().active.map((entry) => entry.attemptId)).toEqual(['waiting']);
-    await expect(lease.attach([{ resource: 'ptySession', pid: 10 }])).rejects.toMatchObject({ code: 'stale-worker' });
-    expect(() => resources.registerWorker(oldWorker)).toThrowError(expect.objectContaining({ code: 'stale-worker' }));
+    await expect(lease.attach([{ resource: 'ptySession', pid: 10 }])).rejects.toMatchObject({
+      code: 'stale-worker',
+    });
+    expect(() => resources.registerWorker(oldWorker)).toThrowError(
+      expect.objectContaining({ code: 'stale-worker' }),
+    );
     const nextWorker = worker('worker', 5);
     resources.registerWorker(nextWorker);
-    expect(() => resources.acquire({
-      ...attempt(nextWorker, 'wrong-run'), runId: OTHER_RUN,
-      resources: { traceWriter: 1 }, deadline: clock.now + 1_000,
-    })).toThrowError(expect.objectContaining({ code: 'stale-run' }));
+    expect(() =>
+      resources.acquire({
+        ...attempt(nextWorker, 'wrong-run'),
+        runId: OTHER_RUN,
+        resources: { traceWriter: 1 },
+        deadline: clock.now + 1_000,
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'stale-run' }));
     await granted.release();
   });
 });

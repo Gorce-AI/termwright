@@ -175,7 +175,11 @@ function isDescendant(
 
 /** Text a node can be addressed by when it has no accessible name. */
 function textOf(node: SemanticNode): string {
-  return (node.value?.status === 'known' && node.value.sensitivity === 'public' ? node.value.value : node.description ?? '').trim();
+  return (
+    node.value?.status === 'known' && node.value.sensitivity === 'public'
+      ? node.value.value
+      : (node.description ?? '')
+  ).trim();
 }
 
 /** Single-quoted TypeScript string literal. */

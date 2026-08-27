@@ -24,7 +24,7 @@ Bubble Tea v2 is not the v1 path with a suffix. It lives at
 concludes the application is v1.
 
 ```ts
-import {detectCharmFlavour, capabilitiesFor} from '@termwright/probe-charm';
+import { detectCharmFlavour, capabilitiesFor } from '@termwright/probe-charm';
 
 const flavour = await detectCharmFlavour('path/to/app');
 // → {major: 'v2', module: 'charm.land/bubbletea/v2', version: 'v2.0.9', companions: {…}}
@@ -39,11 +39,11 @@ requires both majors is refused by name instead of being guessed at.
 The normal launcher path is one call:
 
 ```ts
-import {prepareInstrumentedBuild} from '@termwright/probe-charm';
+import { prepareInstrumentedBuild } from '@termwright/probe-charm';
 
-const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
+const build = await prepareInstrumentedBuild({ moduleDir: 'path/to/app' });
 // Pass both the generated environment and explicit compiler-wrapper arguments.
-await execFile('go', ['build', ...build.goArgs, '.'], {env: build.env});
+await execFile('go', ['build', ...build.goArgs, '.'], { env: build.env });
 ```
 
 It detects the major and resolved versions, materialises the independently cached
@@ -91,12 +91,12 @@ recognised; it cannot produce a green run with a reduced tree.
 Those accessors exist because the public API answers a slightly different
 question than a test asks:
 
-| component | the public API says | the accessor says |
-|---|---|---|
-| `spinner` | a glyph — "animating" and "stuck" look alike | the frame index |
-| `progress` | `Percent()` is the animation's *target* | the fraction actually drawn |
-| `filepicker` | a highlighted path, no position | index and entry count |
-| `table` | nothing distinguishes absent from scrolled out | the rendered window |
+| component    | the public API says                            | the accessor says           |
+| ------------ | ---------------------------------------------- | --------------------------- |
+| `spinner`    | a glyph — "animating" and "stuck" look alike   | the frame index             |
+| `progress`   | `Percent()` is the animation's _target_        | the fraction actually drawn |
+| `filepicker` | a highlighted path, no position                | index and entry count       |
+| `table`      | nothing distinguishes absent from scrolled out | the rendered window         |
 
 ## Passwords are not published
 

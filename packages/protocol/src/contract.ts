@@ -34,7 +34,8 @@ export interface EvidenceProviderRegistration {
 /** Where a fact originated, how it was obtained, and what consumers may infer. */
 export interface EvidenceProvenance {
   readonly source: 'framework' | 'application' | 'terminal' | 'recognizer' | 'driver';
-  readonly method: 'native' | 'instrumented' | 'declared' | 'correlated' | 'measured' | 'derived' | 'heuristic';
+  readonly method:
+    'native' | 'instrumented' | 'declared' | 'correlated' | 'measured' | 'derived' | 'heuristic';
   readonly strength: 'authoritative' | 'diagnostic';
   /** Stable identity of the producer, never a display label. */
   readonly providerId: string;
@@ -55,10 +56,7 @@ export type SessionCapabilityAvailability =
   | {
       readonly status: 'unsupported';
       readonly reason:
-        | 'not-negotiated'
-        | 'framework-unobservable'
-        | 'terminal-unobservable'
-        | 'provider-required';
+        'not-negotiated' | 'framework-unobservable' | 'terminal-unobservable' | 'provider-required';
     };
 
 export type ContractProvider =

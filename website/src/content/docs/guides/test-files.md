@@ -13,14 +13,14 @@ Use an absolute path for the program itself. Relative commands resolve from the
 private working directory, not from the repository:
 
 ```ts
-import {fileURLToPath} from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const editor = fileURLToPath(new URL('../editor.js', import.meta.url));
 
 const app = await terminal.launch({
   command: [process.execPath, editor],
   files: {
-    'config.json': JSON.stringify({theme: 'dark'}),
+    'config.json': JSON.stringify({ theme: 'dark' }),
     'notes/todo.md': '- write tests\n',
   },
 });
@@ -37,7 +37,7 @@ Use `template` when a test needs an existing directory tree:
 const app = await terminal.launch({
   command: [process.execPath, editor],
   template: 'test/fixtures/editor-project',
-  files: {'config.json': JSON.stringify({theme: 'light'})},
+  files: { 'config.json': JSON.stringify({ theme: 'light' }) },
 });
 ```
 
@@ -68,7 +68,7 @@ configuration into the child process.
 ```ts
 const app = await terminal.launch({
   command: [process.execPath, editor],
-  env: {EDITOR_MODE: 'test'},
+  env: { EDITOR_MODE: 'test' },
 });
 ```
 

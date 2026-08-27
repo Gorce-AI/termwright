@@ -31,8 +31,9 @@ describe('encodeFixturePayload', () => {
   });
 
   it('rejects a function, naming the prop', () => {
-    expect(() => encodeFixturePayload(payload({ onPress: (() => undefined) as never })))
-      .toThrowError(/\$\.onPress is a function/u);
+    expect(() =>
+      encodeFixturePayload(payload({ onPress: (() => undefined) as never })),
+    ).toThrowError(/\$\.onPress is a function/u);
   });
 
   it('rejects undefined rather than dropping the key', () => {
@@ -53,7 +54,9 @@ describe('encodeFixturePayload', () => {
     const cyclic: Record<string, unknown> = { name: 'loop' };
     cyclic['self'] = cyclic;
 
-    expect(() => encodeFixturePayload(payload(cyclic as JsonProps))).toThrowError(/part of a cycle/u);
+    expect(() => encodeFixturePayload(payload(cyclic as JsonProps))).toThrowError(
+      /part of a cycle/u,
+    );
   });
 
   it('rejects props nested deeper than the limit', () => {
@@ -77,6 +80,8 @@ describe('encodeFixturePayload', () => {
   it('accepts a payload just under the limit', () => {
     const props = { blob: 'x'.repeat(MAX_PAYLOAD_BYTES - 200) } satisfies JsonProps;
 
-    expect(Buffer.byteLength(encodeFixturePayload(payload(props)))).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
+    expect(Buffer.byteLength(encodeFixturePayload(payload(props)))).toBeLessThanOrEqual(
+      MAX_PAYLOAD_BYTES,
+    );
   });
 });

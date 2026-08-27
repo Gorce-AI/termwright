@@ -13,15 +13,16 @@ export interface GherkinScenario {
 }
 
 /** Termwright's native and project fixtures plus Gherkin's per-scenario state. */
-export type GherkinContext<Fixtures extends object = object> = TermwrightFixtures & Fixtures & {
-  readonly expect: typeof import('vitest')['expect'];
-  readonly world: GherkinWorld;
-  readonly scenario: GherkinScenario;
-  /** Registers test-scoped cleanup. Cleanups run in reverse order after `After` hooks. */
-  readonly defer: (cleanup: () => unknown | Promise<unknown>) => void;
-  /** Registers a closeable/disposable resource and returns it unchanged. */
-  readonly use: <T extends GherkinResource>(resource: T) => T;
-};
+export type GherkinContext<Fixtures extends object = object> = TermwrightFixtures &
+  Fixtures & {
+    readonly expect: (typeof import('vitest'))['expect'];
+    readonly world: GherkinWorld;
+    readonly scenario: GherkinScenario;
+    /** Registers test-scoped cleanup. Cleanups run in reverse order after `After` hooks. */
+    readonly defer: (cleanup: () => unknown | Promise<unknown>) => void;
+    /** Registers a closeable/disposable resource and returns it unchanged. */
+    readonly use: <T extends GherkinResource>(resource: T) => T;
+  };
 
 export interface GherkinResource {
   close?: () => unknown | Promise<unknown>;
@@ -50,7 +51,7 @@ export interface StepDefinition<Fixtures extends object = object> {
 }
 
 export type HookDefinitionBody<Fixtures extends object = object> = (
-  context: GherkinContext<Fixtures>
+  context: GherkinContext<Fixtures>,
 ) => unknown | Promise<unknown>;
 
 export interface HookDefinitionOptions {
@@ -81,10 +82,9 @@ export interface ParameterTypeDefinition<T = unknown> {
 }
 
 export type GherkinDefinition<Fixtures extends object = object> =
-  | StepDefinition<Fixtures>
-  | ParameterTypeDefinition
-  | HookDefinition<Fixtures>;
-export type GherkinDefinitions<Fixtures extends object = object> = readonly GherkinDefinition<Fixtures>[];
+  StepDefinition<Fixtures> | ParameterTypeDefinition | HookDefinition<Fixtures>;
+export type GherkinDefinitions<Fixtures extends object = object> =
+  readonly GherkinDefinition<Fixtures>[];
 
 function definition<Fixtures extends object>(
   keyword: StepKeyword,
@@ -130,7 +130,9 @@ export function Step<Fixtures extends object = object>(
 }
 
 /** Runs before each matching Scenario or Outline row selected by this glue scope. */
-export function Before<Fixtures extends object = object>(body: HookDefinitionBody<Fixtures>): HookDefinition<Fixtures>;
+export function Before<Fixtures extends object = object>(
+  body: HookDefinitionBody<Fixtures>,
+): HookDefinition<Fixtures>;
 export function Before<Fixtures extends object = object>(
   options: HookDefinitionOptions,
   body: HookDefinitionBody<Fixtures>,
@@ -142,11 +144,18 @@ export function Before<Fixtures extends object = object>(
   const options = typeof optionsOrBody === 'function' ? {} : optionsOrBody;
   const resolvedBody = typeof optionsOrBody === 'function' ? optionsOrBody : body;
   if (resolvedBody === undefined) throw new TypeError('Before() needs a hook body');
-  return Object.freeze({ type: 'hook', phase: 'before', options: Object.freeze({ ...options }), body: resolvedBody });
+  return Object.freeze({
+    type: 'hook',
+    phase: 'before',
+    options: Object.freeze({ ...options }),
+    body: resolvedBody,
+  });
 }
 
 /** Runs after each matching Scenario or Outline row, including failed scenarios. */
-export function After<Fixtures extends object = object>(body: HookDefinitionBody<Fixtures>): HookDefinition<Fixtures>;
+export function After<Fixtures extends object = object>(
+  body: HookDefinitionBody<Fixtures>,
+): HookDefinition<Fixtures>;
 export function After<Fixtures extends object = object>(
   options: HookDefinitionOptions,
   body: HookDefinitionBody<Fixtures>,
@@ -158,11 +167,18 @@ export function After<Fixtures extends object = object>(
   const options = typeof optionsOrBody === 'function' ? {} : optionsOrBody;
   const resolvedBody = typeof optionsOrBody === 'function' ? optionsOrBody : body;
   if (resolvedBody === undefined) throw new TypeError('After() needs a hook body');
-  return Object.freeze({ type: 'hook', phase: 'after', options: Object.freeze({ ...options }), body: resolvedBody });
+  return Object.freeze({
+    type: 'hook',
+    phase: 'after',
+    options: Object.freeze({ ...options }),
+    body: resolvedBody,
+  });
 }
 
 /** Declares a custom Cucumber Expression parameter type. */
-export function defineParameterType<T>(options: ParameterTypeOptions<T>): ParameterTypeDefinition<T> {
+export function defineParameterType<T>(
+  options: ParameterTypeOptions<T>,
+): ParameterTypeDefinition<T> {
   if (options.name.length === 0) throw new TypeError('parameter type name must not be empty');
   return Object.freeze({ type: 'parameter', options: Object.freeze({ ...options }) });
 }

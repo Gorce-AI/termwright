@@ -88,8 +88,9 @@ async function makeTreeOwnerWritable(path) {
 export async function digestTree(root) {
   const entries = [];
   const visit = async (directory) => {
-    for (const entry of (await readdir(directory, { withFileTypes: true }))
-      .sort((left, right) => left.name.localeCompare(right.name))) {
+    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )) {
       const full = join(directory, entry.name);
       const name = relative(root, full).split(sep).join('/');
       if (entry.isDirectory()) {
@@ -110,13 +111,15 @@ export async function digestTree(root) {
 
 function safeRelativePath(value, field) {
   if (
-    typeof value !== 'string'
-    || value.length === 0
-    || isAbsolute(value)
-    || value.includes('\\')
-    || value.split('/').some((part) => part === '' || part === '.' || part === '..')
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    isAbsolute(value) ||
+    value.includes('\\') ||
+    value.split('/').some((part) => part === '' || part === '.' || part === '..')
   ) {
-    throw new CertificationError(`${field} must be a normalized relative path, found ${JSON.stringify(value)}`);
+    throw new CertificationError(
+      `${field} must be a normalized relative path, found ${JSON.stringify(value)}`,
+    );
   }
   return value;
 }
@@ -155,7 +158,8 @@ export function validateManifestShape(manifest, label = 'manifest') {
     safeRelativePath(file?.patch, `${prefix}.patch`);
     requiredDigest(file?.sha256Before, `${prefix}.sha256Before`);
     requiredDigest(file?.sha256After, `${prefix}.sha256After`);
-    if (targets.has(target)) throw new CertificationError(`${label} declares ${target} more than once`);
+    if (targets.has(target))
+      throw new CertificationError(`${label} declares ${target} more than once`);
     targets.add(target);
   }
   for (const [index, file] of manifest.added.entries()) {
@@ -163,7 +167,8 @@ export function validateManifestShape(manifest, label = 'manifest') {
     const target = safeRelativePath(file?.path, `${prefix}.path`);
     safeRelativePath(file?.source, `${prefix}.source`);
     requiredDigest(file?.sha256, `${prefix}.sha256`);
-    if (targets.has(target)) throw new CertificationError(`${label} declares ${target} more than once`);
+    if (targets.has(target))
+      throw new CertificationError(`${label} declares ${target} more than once`);
     targets.add(target);
   }
   if (targets.size === 0) throw new CertificationError(`${label} changes no files`);
@@ -174,13 +179,17 @@ async function manifestsBelow(root, ecosystem, relativeRoot) {
   const base = join(root, relativeRoot);
   const found = [];
   const visit = async (directory) => {
-    for (const entry of (await readdir(directory, { withFileTypes: true }))
-      .sort((left, right) => left.name.localeCompare(right.name))) {
+    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )) {
       const full = join(directory, entry.name);
       if (entry.isDirectory()) await visit(full);
       else if (entry.name === 'manifest.json') {
         const patchSetDir = dirname(full);
-        const manifest = validateManifestShape(JSON.parse(await readFile(full, 'utf8')), relative(root, full));
+        const manifest = validateManifestShape(
+          JSON.parse(await readFile(full, 'utf8')),
+          relative(root, full),
+        );
         found.push({ ecosystem, patchSetDir, manifest });
       }
     }
@@ -191,11 +200,13 @@ async function manifestsBelow(root, ecosystem, relativeRoot) {
 
 export async function discoverPatchSets(root = defaultRoot, ecosystems = new Set(['go', 'rust'])) {
   const groups = await Promise.all(
-    PATCH_ROOTS
-      .filter(({ ecosystem }) => ecosystems.has(ecosystem))
-      .map(({ ecosystem, path }) => manifestsBelow(root, ecosystem, path)),
+    PATCH_ROOTS.filter(({ ecosystem }) => ecosystems.has(ecosystem)).map(({ ecosystem, path }) =>
+      manifestsBelow(root, ecosystem, path),
+    ),
   );
-  return groups.flat().sort((left, right) => candidateKey(left.manifest).localeCompare(candidateKey(right.manifest)));
+  return groups
+    .flat()
+    .sort((left, right) => candidateKey(left.manifest).localeCompare(candidateKey(right.manifest)));
 }
 
 function candidateKey(candidate) {
@@ -213,11 +224,11 @@ export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(
   for (const framework of registry.frameworks) {
     if (!STATIC_FRAMEWORKS.has(framework.id)) continue;
     if (
-      !['stable', 'frame-local', 'correlated'].includes(framework.probe?.identityKind)
-      || !Array.isArray(framework.probe?.capabilities)
-      || !Array.isArray(framework.probe?.adapterCapabilities)
-      || framework.probe.capabilities.some((capability) => typeof capability !== 'string')
-      || framework.probe.adapterCapabilities.some((capability) => typeof capability !== 'string')
+      !['stable', 'frame-local', 'correlated'].includes(framework.probe?.identityKind) ||
+      !Array.isArray(framework.probe?.capabilities) ||
+      !Array.isArray(framework.probe?.adapterCapabilities) ||
+      framework.probe.capabilities.some((capability) => typeof capability !== 'string') ||
+      framework.probe.adapterCapabilities.some((capability) => typeof capability !== 'string')
     ) {
       throw new CertificationError(`${framework.id} has an invalid capability declaration`);
     }
@@ -225,17 +236,22 @@ export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(
     if (!ecosystems.has(ecosystem)) continue;
     for (const module of framework.instrumentation?.patchSets ?? []) {
       if (
-        typeof module.name !== 'string'
-        || typeof module.version !== 'string'
-        || !Number.isSafeInteger(module.patchSetVersion)
-        || module.patchSetVersion <= 0
+        typeof module.name !== 'string' ||
+        typeof module.version !== 'string' ||
+        !Number.isSafeInteger(module.patchSetVersion) ||
+        module.patchSetVersion <= 0
       ) {
         throw new CertificationError(`${framework.id} has an invalid patch-set declaration`);
       }
       const key = `${module.name}@${module.version}`;
-      if (declarations.has(key)) throw new CertificationError(`duplicate compatibility declaration ${key}`);
+      if (declarations.has(key))
+        throw new CertificationError(`duplicate compatibility declaration ${key}`);
       const executableVariants = (framework.instrumentation?.variants ?? [])
-        .filter((variant) => variant.modules?.some((entry) => entry.name === module.name && entry.version === module.version))
+        .filter((variant) =>
+          variant.modules?.some(
+            (entry) => entry.name === module.name && entry.version === module.version,
+          ),
+        )
         .map((variant) => variant.id)
         .sort();
       declarations.set(key, {
@@ -264,7 +280,9 @@ export function crossCheckDeclarations(patchSets, declarations) {
       throw new CertificationError(`${candidateKey(manifest)} has no compatibility declaration`);
     }
     if (declaration.ecosystem !== patchSet.ecosystem) {
-      throw new CertificationError(`${key} is declared as ${declaration.ecosystem}, found under ${patchSet.ecosystem}`);
+      throw new CertificationError(
+        `${key} is declared as ${declaration.ecosystem}, found under ${patchSet.ecosystem}`,
+      );
     }
     if (declaration.patchSetVersion !== manifest.patchSetVersion) {
       throw new CertificationError(
@@ -274,9 +292,12 @@ export function crossCheckDeclarations(patchSets, declarations) {
     matched.set(key, { ...patchSet, declaration });
   }
   for (const key of declarations.keys()) {
-    if (!matched.has(key)) throw new CertificationError(`${key} is declared but has no patch-set manifest`);
+    if (!matched.has(key))
+      throw new CertificationError(`${key} is declared but has no patch-set manifest`);
   }
-  return [...matched.values()].sort((left, right) => candidateKey(left.manifest).localeCompare(candidateKey(right.manifest)));
+  return [...matched.values()].sort((left, right) =>
+    candidateKey(left.manifest).localeCompare(candidateKey(right.manifest)),
+  );
 }
 
 export async function validatePatchSetFiles(candidate) {
@@ -309,7 +330,8 @@ export async function validatePatchSetFiles(candidate) {
 export function assertDeterministicRuns(label, first, second) {
   const left = canonicalJson(first);
   const right = canonicalJson(second);
-  if (left !== right) throw new CertificationError(`${label} produced different results in two clean runs`);
+  if (left !== right)
+    throw new CertificationError(`${label} produced different results in two clean runs`);
 }
 
 async function run(command, args, options = {}) {
@@ -349,8 +371,12 @@ async function collectToolchains(root, ecosystems) {
     };
   }
   if (ecosystems.has('rust')) {
-    toolchains.rustc = { version: (await run('rustc', ['--version', '--verbose'], { cwd: root })).stdout };
-    toolchains.cargo = { version: (await run('cargo', ['--version', '--verbose'], { cwd: root })).stdout };
+    toolchains.rustc = {
+      version: (await run('rustc', ['--version', '--verbose'], { cwd: root })).stdout,
+    };
+    toolchains.cargo = {
+      version: (await run('cargo', ['--version', '--verbose'], { cwd: root })).stdout,
+    };
   }
   return toolchains;
 }
@@ -384,35 +410,44 @@ async function goModule(root, candidate) {
     try {
       module = JSON.parse(downloaded.stdout);
     } catch {
-      throw new CertificationError(`${candidateKey(manifest)}: go mod download returned invalid JSON`);
+      throw new CertificationError(
+        `${candidateKey(manifest)}: go mod download returned invalid JSON`,
+      );
     }
     if (
-      module.Path !== manifest.framework
-      || module.Version !== manifest.frameworkVersion
-      || typeof module.Dir !== 'string'
-      || typeof module.Sum !== 'string'
-      || !module.Sum.startsWith('h1:')
-      || typeof module.GoModSum !== 'string'
-      || !module.GoModSum.startsWith('h1:')
-      || typeof module.Zip !== 'string'
+      module.Path !== manifest.framework ||
+      module.Version !== manifest.frameworkVersion ||
+      typeof module.Dir !== 'string' ||
+      typeof module.Sum !== 'string' ||
+      !module.Sum.startsWith('h1:') ||
+      typeof module.GoModSum !== 'string' ||
+      !module.GoModSum.startsWith('h1:') ||
+      typeof module.Zip !== 'string'
     ) {
-      throw new CertificationError(`${candidateKey(manifest)}: Go registry identity is incomplete or mismatched`);
+      throw new CertificationError(
+        `${candidateKey(manifest)}: Go registry identity is incomplete or mismatched`,
+      );
     }
 
     for (const file of manifest.added) {
       try {
         await lstat(join(module.Dir, file.path));
-        throw new CertificationError(`${candidateKey(manifest)}: added target ${file.path} already exists upstream`);
+        throw new CertificationError(
+          `${candidateKey(manifest)}: added target ${file.path} already exists upstream`,
+        );
       } catch (error) {
         if (error instanceof CertificationError) throw error;
         if (error?.code !== 'ENOENT') throw error;
       }
     }
 
-    const probeGo = await import(pathToFileURL(join(root, 'packages/probe-go/dist/index.js')).href)
-      .catch(() => {
-        throw new CertificationError('packages/probe-go/dist is missing; run pnpm --filter @termwright/probe-go build');
-      });
+    const probeGo = await import(
+      pathToFileURL(join(root, 'packages/probe-go/dist/index.js')).href
+    ).catch(() => {
+      throw new CertificationError(
+        'packages/probe-go/dist is missing; run pnpm --filter @termwright/probe-go build',
+      );
+    });
     const execute = async (name) => {
       const copyDir = join(scratch, name);
       await probeGo.materializeUpstream(module.Dir, copyDir);
@@ -439,7 +474,9 @@ async function goModule(root, candidate) {
         upstreamTreeDigest: await digestTree(module.Dir),
         sourceBinding: 'isolated-go-checksum-database-download',
         checksumDatabase: 'sum.golang.org',
-        effectiveGoToolchain: (await run('go', ['version'], { cwd: module.Dir, env: goEnvironment })).stdout,
+        effectiveGoToolchain: (
+          await run('go', ['version'], { cwd: module.Dir, env: goEnvironment })
+        ).stdout,
       },
       result: first,
     };
@@ -455,13 +492,29 @@ async function rustCrate(root, candidate) {
   const { manifest, patchSetDir } = candidate;
   const scratch = await mkdtemp(join(tmpdir(), 'tw-upstream-rust-'));
   try {
-    const metadataResponse = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(manifest.framework)}/${encodeURIComponent(manifest.frameworkVersion)}`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
-    if (!metadataResponse.ok) throw new CertificationError(`${candidateKey(manifest)}: crates.io metadata failed with ${metadataResponse.status}`);
+    const metadataResponse = await fetch(
+      `https://crates.io/api/v1/crates/${encodeURIComponent(manifest.framework)}/${encodeURIComponent(manifest.frameworkVersion)}`,
+      { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } },
+    );
+    if (!metadataResponse.ok)
+      throw new CertificationError(
+        `${candidateKey(manifest)}: crates.io metadata failed with ${metadataResponse.status}`,
+      );
     const metadata = await metadataResponse.json();
-    const published = metadata.version?.num === manifest.frameworkVersion ? metadata.version : undefined;
-    if (!/^[0-9a-f]{64}$/u.test(published?.checksum ?? '')) throw new CertificationError(`${candidateKey(manifest)}: crates.io returned no exact checksum`);
-    const archiveResponse = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(manifest.framework)}/${encodeURIComponent(manifest.frameworkVersion)}/download`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
-    if (!archiveResponse.ok) throw new CertificationError(`${candidateKey(manifest)}: crates.io archive failed with ${archiveResponse.status}`);
+    const published =
+      metadata.version?.num === manifest.frameworkVersion ? metadata.version : undefined;
+    if (!/^[0-9a-f]{64}$/u.test(published?.checksum ?? ''))
+      throw new CertificationError(
+        `${candidateKey(manifest)}: crates.io returned no exact checksum`,
+      );
+    const archiveResponse = await fetch(
+      `https://crates.io/api/v1/crates/${encodeURIComponent(manifest.framework)}/${encodeURIComponent(manifest.frameworkVersion)}/download`,
+      { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } },
+    );
+    if (!archiveResponse.ok)
+      throw new CertificationError(
+        `${candidateKey(manifest)}: crates.io archive failed with ${archiveResponse.status}`,
+      );
     const archive = Buffer.from(await archiveResponse.arrayBuffer());
     const archiveDigest = sha256(archive);
     const checksum = `sha256:${published.checksum}`;
@@ -476,25 +529,36 @@ async function rustCrate(root, candidate) {
     const extracted = await readdir(registrySource, { withFileTypes: true });
     const expectedDirectory = `${manifest.framework}-${manifest.frameworkVersion}`;
     if (
-      extracted.length !== 1
-      || extracted[0].name !== expectedDirectory
-      || !extracted[0].isDirectory()
+      extracted.length !== 1 ||
+      extracted[0].name !== expectedDirectory ||
+      !extracted[0].isDirectory()
     ) {
-      throw new CertificationError(`${candidateKey(manifest)}: crates.io archive has an unexpected root layout`);
+      throw new CertificationError(
+        `${candidateKey(manifest)}: crates.io archive has an unexpected root layout`,
+      );
     }
     const sourceDir = join(registrySource, expectedDirectory);
     const upstreamTreeDigest = await digestTree(sourceDir);
     const execute = async (name) => {
       const copyDir = join(scratch, name);
-      const helper = await run('cargo', [
-        'run', '--quiet', '--locked',
-        '--manifest-path', join(root, 'clients/rust-probe/Cargo.toml'),
-        '--example', 'upstream_certify', '--',
-        patchSetDir,
-        sourceDir,
-        copyDir,
-        '__TERMWRIGHT_PROBE_PATH__',
-      ], { cwd: root });
+      const helper = await run(
+        'cargo',
+        [
+          'run',
+          '--quiet',
+          '--locked',
+          '--manifest-path',
+          join(root, 'clients/rust-probe/Cargo.toml'),
+          '--example',
+          'upstream_certify',
+          '--',
+          patchSetDir,
+          sourceDir,
+          copyDir,
+          '__TERMWRIGHT_PROBE_PATH__',
+        ],
+        { cwd: root },
+      );
       return {
         helper: JSON.parse(helper.stdout),
         outputTreeDigest: await digestTree(copyDir),
@@ -527,16 +591,24 @@ async function runExistingTests(root, ecosystems) {
   await runPnpm(['run', 'test:compatibility'], { cwd: root });
   const gates = [{ id: 'compatibility-registry-runtime-drift', status: 'pass' }];
   if (ecosystems.has('go')) {
-    for (const packageName of ['@termwright/probe-go', '@termwright/probe-tview', '@termwright/probe-charm']) {
+    for (const packageName of [
+      '@termwright/probe-go',
+      '@termwright/probe-tview',
+      '@termwright/probe-charm',
+    ]) {
       await runPnpm(['--filter', packageName, 'run', 'test'], { cwd: root });
       gates.push({ id: `existing-tests:${packageName}`, status: 'pass' });
     }
   }
   if (ecosystems.has('rust')) {
-    await run('cargo', ['test', '--locked', '--manifest-path', join(root, 'clients/rust-probe/Cargo.toml')], {
-      cwd: root,
-      env: { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' },
-    });
+    await run(
+      'cargo',
+      ['test', '--locked', '--manifest-path', join(root, 'clients/rust-probe/Cargo.toml')],
+      {
+        cwd: root,
+        env: { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' },
+      },
+    );
     gates.push({ id: 'existing-tests:termwright-probe-ratatui', status: 'pass' });
   }
   return gates;
@@ -567,7 +639,10 @@ function candidateRecord(root, candidate, local, execution) {
 
 export function provenance(report, sourceRevision, registryDigest, certifierDigest) {
   const verificationSuites = report.gates
-    .filter((gate) => gate.id === 'compatibility-registry-runtime-drift' || gate.id.startsWith('existing-tests:'))
+    .filter(
+      (gate) =>
+        gate.id === 'compatibility-registry-runtime-drift' || gate.id.startsWith('existing-tests:'),
+    )
     .map((gate) => gate.id);
   return {
     _type: 'https://in-toto.io/Statement/v1',
@@ -589,9 +664,18 @@ export function provenance(report, sourceRevision, registryDigest, certifierDige
           toolchains: report.toolchains,
         },
         resolvedDependencies: [
-          { uri: 'git+https://github.com/gorce-ai/termwright', digest: { gitCommit: sourceRevision } },
-          { uri: 'file:compatibility/registry.json', digest: { sha256: registryDigest.slice('sha256:'.length) } },
-          { uri: 'file:scripts/certify-upstream-patches.mjs', digest: { sha256: certifierDigest.slice('sha256:'.length) } },
+          {
+            uri: 'git+https://github.com/gorce-ai/termwright',
+            digest: { gitCommit: sourceRevision },
+          },
+          {
+            uri: 'file:compatibility/registry.json',
+            digest: { sha256: registryDigest.slice('sha256:'.length) },
+          },
+          {
+            uri: 'file:scripts/certify-upstream-patches.mjs',
+            digest: { sha256: certifierDigest.slice('sha256:'.length) },
+          },
           ...report.candidates.map((candidate) => ({
             uri: `file:${candidate.patchSetPath}`,
             digest: { sha256: candidate.patchSetDigest.slice('sha256:'.length) },
@@ -599,7 +683,9 @@ export function provenance(report, sourceRevision, registryDigest, certifierDige
           ...report.candidates.map((candidate) => ({
             uri: `${candidate.material.source}:${candidate.module}@${candidate.upstreamVersion}`,
             digest: {
-              sha256: (candidate.material.archiveDigest ?? candidate.material.zipDigest).slice('sha256:'.length),
+              sha256: (candidate.material.archiveDigest ?? candidate.material.zipDigest).slice(
+                'sha256:'.length,
+              ),
             },
           })),
           ...report.candidates.map((candidate) => ({
@@ -609,9 +695,13 @@ export function provenance(report, sourceRevision, registryDigest, certifierDige
         ],
       },
       runDetails: {
-        builder: { id: 'https://github.com/gorce-ai/termwright/scripts/certify-upstream-patches.mjs' },
+        builder: {
+          id: 'https://github.com/gorce-ai/termwright/scripts/certify-upstream-patches.mjs',
+        },
         metadata: { invocationId: sourceRevision },
-        byproducts: [{ name: 'candidate-report.json', digest: sha256(Buffer.from(canonicalJson(report))) }],
+        byproducts: [
+          { name: 'candidate-report.json', digest: sha256(Buffer.from(canonicalJson(report))) },
+        ],
       },
       signed: false,
     },
@@ -697,9 +787,10 @@ export async function certify(options = {}) {
     const records = [];
     for (const candidate of candidates) {
       const local = await validatePatchSetFiles(candidate);
-      const execution = candidate.ecosystem === 'go'
-        ? await goModule(root, candidate)
-        : await rustCrate(root, candidate);
+      const execution =
+        candidate.ecosystem === 'go'
+          ? await goModule(root, candidate)
+          : await rustCrate(root, candidate);
       records.push(candidateRecord(root, candidate, local, execution));
     }
 
@@ -708,7 +799,8 @@ export async function certify(options = {}) {
       { id: 'pinned-input-output', status: 'pass' },
       { id: 'two-clean-run-determinism', status: 'pass' },
     ];
-    if (options.skipExistingTests !== true) gates.push(...await runExistingTests(root, ecosystems));
+    if (options.skipExistingTests !== true)
+      gates.push(...(await runExistingTests(root, ecosystems)));
     const report = {
       schemaVersion: 1,
       kind: 'termwright-upstream-patch-candidate',
@@ -730,7 +822,12 @@ export async function certify(options = {}) {
         'Recorded toolchain versions describe this runner; this profile is not a hermetic or reproducible-build claim.',
       ],
     };
-    const attestation = provenance(report, sourceRevision, registryDigest, await sha256File(scriptPath));
+    const attestation = provenance(
+      report,
+      sourceRevision,
+      registryDigest,
+      await sha256File(scriptPath),
+    );
     await writeJson(join(outputDir, 'candidate-report.json'), report);
     await writeJson(join(outputDir, 'candidate-provenance.json'), attestation);
     return { report, provenance: attestation };
@@ -763,9 +860,9 @@ function parseArguments(argv) {
     if (argument === '--output') outputDir = argv[++index];
     else if (argument === '--source-revision') {
       sourceRevision = argv[++index];
-      if (sourceRevision === undefined) throw new CertificationError('--source-revision needs a value');
-    }
-    else if (argument === '--ecosystem') {
+      if (sourceRevision === undefined)
+        throw new CertificationError('--source-revision needs a value');
+    } else if (argument === '--ecosystem') {
       const value = argv[++index];
       if (value !== 'go' && value !== 'rust' && value !== 'all') {
         throw new CertificationError(`--ecosystem must be go, rust or all; found ${value}`);
@@ -775,8 +872,12 @@ function parseArguments(argv) {
     else if (argument === '--initialize-only') initializeOnly = true;
     else throw new CertificationError(`unknown argument ${argument}`);
   }
-  if (typeof outputDir !== 'string' || outputDir.length === 0) throw new CertificationError('--output needs a directory');
-  if (sourceRevision !== undefined && (typeof sourceRevision !== 'string' || sourceRevision.length === 0)) {
+  if (typeof outputDir !== 'string' || outputDir.length === 0)
+    throw new CertificationError('--output needs a directory');
+  if (
+    sourceRevision !== undefined &&
+    (typeof sourceRevision !== 'string' || sourceRevision.length === 0)
+  ) {
     throw new CertificationError('--source-revision needs a value');
   }
   if (initializeOnly && skipExistingTests) {
@@ -785,7 +886,10 @@ function parseArguments(argv) {
   return { outputDir, sourceRevision, ecosystems, skipExistingTests, initializeOnly };
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   try {
     const options = parseArguments(process.argv.slice(2));
     if (options.initializeOnly) {
@@ -794,8 +898,8 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(p
     } else {
       const result = await certify(options);
       process.stdout.write(
-        `${result.report.state}/${result.report.candidateStage}: `
-        + `${result.report.candidates.length} upstream patch-set candidates\n`,
+        `${result.report.state}/${result.report.candidateStage}: ` +
+          `${result.report.candidates.length} upstream patch-set candidates\n`,
       );
     }
   } catch (error) {

@@ -69,7 +69,10 @@ export async function prepareGoToolExec(
   options: PrepareGoToolExecOptions,
 ): Promise<PreparedGoToolExec> {
   if (options.units.length === 0) {
-    throw new GoToolExecError('invalid-unit', 'a Go tool executor needs at least one compilation unit');
+    throw new GoToolExecError(
+      'invalid-unit',
+      'a Go tool executor needs at least one compilation unit',
+    );
   }
   const env = options.env ?? process.env;
   const goEnvironment = await inspectGoEnvironment(options.moduleDir, env);
@@ -79,7 +82,10 @@ export async function prepareGoToolExec(
       'GOFLAGS already selects a tool executor; Termwright requires one composed compiler wrapper per build',
     );
   }
-  if (goEnvironment.GOOS !== goEnvironment.GOHOSTOS || goEnvironment.GOARCH !== goEnvironment.GOHOSTARCH) {
+  if (
+    goEnvironment.GOOS !== goEnvironment.GOHOSTOS ||
+    goEnvironment.GOARCH !== goEnvironment.GOHOSTARCH
+  ) {
     throw new GoToolExecError(
       'cross-compilation',
       `Termwright's compiler wrapper must execute on the build host; target ` +
@@ -118,16 +124,15 @@ export async function prepareGoToolExec(
   // requested archive. Re-running `go list -export` once per unit only made a
   // cold toolchain compile the same graph again and put compiler startup on
   // the critical path of every preparation.
-  const unitImportFiles = options.units.map((unit) => selectImportFiles(unit.imports ?? [], linkFiles));
+  const unitImportFiles = options.units.map((unit) =>
+    selectImportFiles(unit.imports ?? [], linkFiles),
+  );
   const packageDirs = await resolvePackageDirs(
     options.units.map((unit) => unit.packagePath),
     options.moduleDir,
     env,
   );
-  const configDigest = digestConfiguration(
-    options.units,
-    await digestResolvedImports(linkFiles),
-  );
+  const configDigest = digestConfiguration(options.units, await digestResolvedImports(linkFiles));
   const outputDir = join(outputRoot, configDigest.slice('sha256:'.length));
   await mkdir(outputDir, { recursive: true });
   const entries: {
@@ -151,7 +156,10 @@ export async function prepareGoToolExec(
     const sourceFile = join(outputDir, `${String(index).padStart(3, '0')}-${unit.targetFile}`);
     await writeFile(sourceFile, unit.source, 'utf8');
     if (digestGoToolExecSource(await readFile(sourceFile, 'utf8')) !== unit.sourceDigest) {
-      throw new GoToolExecError('source-mismatch', `${sourceFile} changed while materialising the compiler unit`);
+      throw new GoToolExecError(
+        'source-mismatch',
+        `${sourceFile} changed while materialising the compiler unit`,
+      );
     }
     entries.push({
       packagePath: unit.packagePath,
@@ -164,12 +172,18 @@ export async function prepareGoToolExec(
   }
   const wrapperSource = renderWrapper(entries, configDigest, linkFiles);
   const wrapperSourceFile = join(outputDir, 'termwright-toolexec.go');
-  const wrapperFile = join(outputDir, process.platform === 'win32' ? 'termwright-toolexec.exe' : 'termwright-toolexec');
+  const wrapperFile = join(
+    outputDir,
+    process.platform === 'win32' ? 'termwright-toolexec.exe' : 'termwright-toolexec',
+  );
   await writeFile(wrapperSourceFile, wrapperSource, 'utf8');
   try {
     await run('go', ['build', '-o', wrapperFile, wrapperSourceFile], { env });
   } catch (error) {
-    throw new GoToolExecError('wrapper-build-failed', `could not build the Go compiler wrapper: ${message(error)}`);
+    throw new GoToolExecError(
+      'wrapper-build-failed',
+      `could not build the Go compiler wrapper: ${message(error)}`,
+    );
   }
 
   return {
@@ -204,8 +218,8 @@ async function digestResolvedImports(
   try {
     // Read sequentially: a framework unit may pull a wide transitive graph,
     // and preparation must not retain every export archive in memory at once.
-    for (const [importPath, archive] of Object.entries(files).sort(
-      ([left], [right]) => left.localeCompare(right),
+    for (const [importPath, archive] of Object.entries(files).sort(([left], [right]) =>
+      left.localeCompare(right),
     )) {
       digests[importPath] = `sha256:${createHash('sha256')
         .update(await readFile(archive))
@@ -233,7 +247,12 @@ function renderWrapper(
 ): string {
   const grouped = new Map<
     string,
-    {sourceFile: string; source: string; sourceDigest: string; importFiles: Readonly<Record<string, string>>}[]
+    {
+      sourceFile: string;
+      source: string;
+      sourceDigest: string;
+      importFiles: Readonly<Record<string, string>>;
+    }[]
   >();
   for (const entry of entries) {
     const sources = grouped.get(entry.packagePath) ?? [];
@@ -245,25 +264,34 @@ function renderWrapper(
     });
     grouped.set(entry.packagePath, sources);
   }
-  const cases = [...grouped.entries()].map(([packagePath, sources]) => {
-    const checks = sources.map(({ sourceFile, source, sourceDigest }) =>
-      `\t\tverifySource(${JSON.stringify(sourceFile)}, ${JSON.stringify(source)}, ${JSON.stringify(sourceDigest)})`,
-    ).join('\n');
-    const paths = sources.map(({ sourceFile }) => JSON.stringify(sourceFile)).join(', ');
-    const importFiles = Object.fromEntries(
-      sources.flatMap((source) => Object.entries(source.importFiles)),
-    );
-    const imports = Object.entries(importFiles)
-      .map(([path, archive]) => `${JSON.stringify(path)}: ${JSON.stringify(archive)}`)
-      .join(', ');
-    const augment = imports.length === 0
-      ? ''
-      : `\n\t\tvar cleanup func()\n\t\targs, cleanup = augmentImportConfig(args, map[string]string{${imports}})\n\t\tdefer cleanup()`;
-    return `\tif matchesImportPath(importPath, ${JSON.stringify(packagePath)}) {\n${checks}\n\t\targs = append(args, ${paths})${augment}\n\t}`;
-  }).join('\n');
-  const allChecks = entries.map(({ sourceFile, source, sourceDigest }) =>
-    `\tverifySource(${JSON.stringify(sourceFile)}, ${JSON.stringify(source)}, ${JSON.stringify(sourceDigest)})`,
-  ).join('\n');
+  const cases = [...grouped.entries()]
+    .map(([packagePath, sources]) => {
+      const checks = sources
+        .map(
+          ({ sourceFile, source, sourceDigest }) =>
+            `\t\tverifySource(${JSON.stringify(sourceFile)}, ${JSON.stringify(source)}, ${JSON.stringify(sourceDigest)})`,
+        )
+        .join('\n');
+      const paths = sources.map(({ sourceFile }) => JSON.stringify(sourceFile)).join(', ');
+      const importFiles = Object.fromEntries(
+        sources.flatMap((source) => Object.entries(source.importFiles)),
+      );
+      const imports = Object.entries(importFiles)
+        .map(([path, archive]) => `${JSON.stringify(path)}: ${JSON.stringify(archive)}`)
+        .join(', ');
+      const augment =
+        imports.length === 0
+          ? ''
+          : `\n\t\tvar cleanup func()\n\t\targs, cleanup = augmentImportConfig(args, map[string]string{${imports}})\n\t\tdefer cleanup()`;
+      return `\tif matchesImportPath(importPath, ${JSON.stringify(packagePath)}) {\n${checks}\n\t\targs = append(args, ${paths})${augment}\n\t}`;
+    })
+    .join('\n');
+  const allChecks = entries
+    .map(
+      ({ sourceFile, source, sourceDigest }) =>
+        `\tverifySource(${JSON.stringify(sourceFile)}, ${JSON.stringify(source)}, ${JSON.stringify(sourceDigest)})`,
+    )
+    .join('\n');
   const linkImports = Object.entries(linkFiles)
     .map(([path, archive]) => `${JSON.stringify(path)}: ${JSON.stringify(archive)}`)
     .join(', ');
@@ -420,7 +448,10 @@ function validateUnit(unit: GoToolExecUnit): void {
     );
   }
   if (unit.targetFile.endsWith('_test.go')) {
-    throw new GoToolExecError('invalid-unit', `${unit.targetFile} must be compiled by build and test commands`);
+    throw new GoToolExecError(
+      'invalid-unit',
+      `${unit.targetFile} must be compiled by build and test commands`,
+    );
   }
   if (/^\s*\/\/\s*(?:go:build|\+build)\b/mu.test(unit.source)) {
     throw new GoToolExecError(
@@ -429,10 +460,35 @@ function validateUnit(unit: GoToolExecUnit): void {
     );
   }
   const platform = [
-    'aix', 'android', 'darwin', 'dragonfly', 'freebsd', 'illumos', 'ios', 'js', 'linux',
-    'netbsd', 'openbsd', 'plan9', 'solaris', 'wasip1', 'windows',
-    '386', 'amd64', 'arm', 'arm64', 'loong64', 'mips', 'mips64', 'mips64le', 'mipsle',
-    'ppc64', 'ppc64le', 'riscv64', 's390x', 'wasm',
+    'aix',
+    'android',
+    'darwin',
+    'dragonfly',
+    'freebsd',
+    'illumos',
+    'ios',
+    'js',
+    'linux',
+    'netbsd',
+    'openbsd',
+    'plan9',
+    'solaris',
+    'wasip1',
+    'windows',
+    '386',
+    'amd64',
+    'arm',
+    'arm64',
+    'loong64',
+    'mips',
+    'mips64',
+    'mips64le',
+    'mipsle',
+    'ppc64',
+    'ppc64le',
+    'riscv64',
+    's390x',
+    'wasm',
   ].join('|');
   if (new RegExp(`_(?:${platform})(?:_(?:${platform}))?\\.go$`, 'u').test(unit.targetFile)) {
     throw new GoToolExecError(
@@ -442,7 +498,10 @@ function validateUnit(unit: GoToolExecUnit): void {
   }
   for (const imported of unit.imports ?? []) {
     if (!/^[A-Za-z0-9_.~\-/]+$/u.test(imported)) {
-      throw new GoToolExecError('invalid-unit', `invalid injected import ${JSON.stringify(imported)}`);
+      throw new GoToolExecError(
+        'invalid-unit',
+        `invalid injected import ${JSON.stringify(imported)}`,
+      );
     }
   }
 }
@@ -458,8 +517,14 @@ async function resolveImportFiles(
   try {
     const result = await run(
       'go',
-      ['list', ...(includeDependencies ? ['-deps'] : []), '-export', '-f={{.ImportPath}}\t{{.Export}}', ...unique],
-      {cwd: moduleDir, env},
+      [
+        'list',
+        ...(includeDependencies ? ['-deps'] : []),
+        '-export',
+        '-f={{.ImportPath}}\t{{.Export}}',
+        ...unique,
+      ],
+      { cwd: moduleDir, env },
     );
     const resolved: Record<string, string> = {};
     for (const line of result.stdout.trim().split(/\r?\n/u)) {
@@ -486,7 +551,9 @@ function selectImportFiles(
   resolved: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   return Object.fromEntries(
-    [...new Set(imports)].filter(requiresExportArchive).sort()
+    [...new Set(imports)]
+      .filter(requiresExportArchive)
+      .sort()
       .map((importPath) => [importPath, resolved[importPath]!]),
   );
 }
@@ -515,7 +582,8 @@ async function resolvePackageDirs(
       resolved[line.slice(0, separator)] = line.slice(separator + 1);
     }
     for (const packagePath of unique) {
-      if (!resolved[packagePath]) throw new Error(`go list returned no directory for ${packagePath}`);
+      if (!resolved[packagePath])
+        throw new Error(`go list returned no directory for ${packagePath}`);
     }
     return resolved;
   } catch (error) {
@@ -532,14 +600,23 @@ async function targetExists(path: string): Promise<boolean> {
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw new GoToolExecError('package-unavailable', `cannot inspect add-only target ${path}: ${message(error)}`);
+    throw new GoToolExecError(
+      'package-unavailable',
+      `cannot inspect add-only target ${path}: ${message(error)}`,
+    );
   }
 }
 
 async function inspectGoEnvironment(
   moduleDir: string,
   env: NodeJS.ProcessEnv,
-): Promise<{ GOFLAGS: string; GOOS: string; GOARCH: string; GOHOSTOS: string; GOHOSTARCH: string }> {
+): Promise<{
+  GOFLAGS: string;
+  GOOS: string;
+  GOARCH: string;
+  GOHOSTOS: string;
+  GOHOSTARCH: string;
+}> {
   try {
     const result = await run(
       'go',
@@ -550,9 +627,18 @@ async function inspectGoEnvironment(
     for (const field of ['GOFLAGS', 'GOOS', 'GOARCH', 'GOHOSTOS', 'GOHOSTARCH'] as const) {
       if (typeof parsed[field] !== 'string') throw new Error(`go env omitted ${field}`);
     }
-    return parsed as { GOFLAGS: string; GOOS: string; GOARCH: string; GOHOSTOS: string; GOHOSTARCH: string };
+    return parsed as {
+      GOFLAGS: string;
+      GOOS: string;
+      GOARCH: string;
+      GOHOSTOS: string;
+      GOHOSTARCH: string;
+    };
   } catch (error) {
-    throw new GoToolExecError('go-environment', `could not inspect the effective Go build environment: ${message(error)}`);
+    throw new GoToolExecError(
+      'go-environment',
+      `could not inspect the effective Go build environment: ${message(error)}`,
+    );
   }
 }
 

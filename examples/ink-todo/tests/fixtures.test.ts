@@ -9,7 +9,13 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, ptyAvailable, test as base, type TerminalHarness } from 'termwright/test';
+import {
+  describe,
+  expect,
+  ptyAvailable,
+  test as base,
+  type TerminalHarness,
+} from 'termwright/test';
 import { cli } from '../termwright.config.js';
 
 // The built CLI gates this suite for the same reason it gates the end-to-end

@@ -1,5 +1,5 @@
-import { createRunId, type ObservationStamp } from "@termwright/protocol";
-import type { ActionEvent, ActionStartedEvent } from "../api.js";
+import { createRunId, type ObservationStamp } from '@termwright/protocol';
+import type { ActionEvent, ActionStartedEvent } from '../api.js';
 
 /** Session facts and event delivery required by the action lifecycle. */
 export interface SessionActionSink {
@@ -10,10 +10,7 @@ export interface SessionActionSink {
   finished(event: ActionEvent): void;
 }
 
-type ActionCompletion = Omit<
-  ActionEvent,
-  "actionId" | "api" | "ok" | "timeMs" | "observation"
->;
+type ActionCompletion = Omit<ActionEvent, 'actionId' | 'api' | 'ok' | 'timeMs' | 'observation'>;
 
 /**
  * Correlates every announced action with exactly one terminal outcome.
@@ -28,7 +25,7 @@ export class SessionActionLifecycle {
   }
 
   begin(api: string, about?: { readonly selector?: string }): string {
-    const actionId = createRunId("action");
+    const actionId = createRunId('action');
     if (!this.#sink.isOpen()) return actionId;
     const pending = {
       api,

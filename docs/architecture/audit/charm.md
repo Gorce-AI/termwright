@@ -14,11 +14,11 @@ provenance from component to screen region can survive the trip.
 Read against the current stable releases, pulled fresh for this audit — the
 repository pins none of them today:
 
-| Module | v1 | v2 |
-|---|---|---|
+| Module     | v1                                               | v2                                   |
+| ---------- | ------------------------------------------------ | ------------------------------------ |
 | Bubble Tea | `github.com/charmbracelet/bubbletea` **v1.3.10** | `charm.land/bubbletea/v2` **v2.0.8** |
-| Bubbles | `github.com/charmbracelet/bubbles` **v1.0.0** | `charm.land/bubbles/v2` **v2.1.1** |
-| Lip Gloss | `github.com/charmbracelet/lipgloss` **v1.1.0** | `charm.land/lipgloss/v2` **v2.0.6** |
+| Bubbles    | `github.com/charmbracelet/bubbles` **v1.0.0**    | `charm.land/bubbles/v2` **v2.1.1**   |
+| Lip Gloss  | `github.com/charmbracelet/lipgloss` **v1.1.0**   | `charm.land/lipgloss/v2` **v2.0.6**  |
 
 **The v2 module path is not `github.com/charmbracelet/…/v2`.** Asking the proxy
 for that path fails with `module declares its path as: charm.land/bubbletea/v2`.
@@ -106,17 +106,17 @@ into the renderer.
 
 ### v1 → v2, what an instrumentation author must know
 
-| Was | Is |
-|---|---|
-| `github.com/charmbracelet/bubbletea` | `charm.land/bubbletea/v2` (`go.mod:1`) |
-| `View() string` (`tea.go:55`) | `View() View` struct (`tea.go:64`, def. `:84`) |
-| `renderer.write(string)` (`renderer.go:16`) | `renderer.render(View)` + `flush(bool) error` (`renderer.go:26,29`) |
-| ~30 imperative renderer methods (`renderer.go:4-85`) | 14 methods; modes are `View` fields (`renderer.go:18-57`) |
+| Was                                                                  | Is                                                                        |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `github.com/charmbracelet/bubbletea`                                 | `charm.land/bubbletea/v2` (`go.mod:1`)                                    |
+| `View() string` (`tea.go:55`)                                        | `View() View` struct (`tea.go:64`, def. `:84`)                            |
+| `renderer.write(string)` (`renderer.go:16`)                          | `renderer.render(View)` + `flush(bool) error` (`renderer.go:26,29`)       |
+| ~30 imperative renderer methods (`renderer.go:4-85`)                 | 14 methods; modes are `View` fields (`renderer.go:18-57`)                 |
 | `standardRenderer`, line-diffed strings (`standard_renderer.go:180`) | `cursedRenderer` over `ultraviolet` cell buffer (`cursed_renderer.go:22`) |
-| three bare `p.renderer.write(...)` call sites | one `p.render(model)` wrapper (`tea.go:886`) |
-| ticker owned by renderer (`standard_renderer.go:88`) | ticker owned by `Program` (`tea.go:1393`), double flush (`:1417-1418`) |
-| `KeyMsg` concrete type (`key.go:45`) | `KeyPressMsg`/`KeyReleaseMsg` + `KeyMsg` interface (`key.go:191,224,259`) |
-| `MouseMsg` (`mouse.go:8`) | split messages (`mouse.go:83`) + per-view `View.OnMouse` (`tea.go:126`) |
+| three bare `p.renderer.write(...)` call sites                        | one `p.render(model)` wrapper (`tea.go:886`)                              |
+| ticker owned by renderer (`standard_renderer.go:88`)                 | ticker owned by `Program` (`tea.go:1393`), double flush (`:1417-1418`)    |
+| `KeyMsg` concrete type (`key.go:45`)                                 | `KeyPressMsg`/`KeyReleaseMsg` + `KeyMsg` interface (`key.go:191,224,259`) |
+| `MouseMsg` (`mouse.go:8`)                                            | split messages (`mouse.go:83`) + per-view `View.OnMouse` (`tea.go:126`)   |
 
 ## 2. Bubbles: state before the flattening
 
@@ -124,17 +124,17 @@ Every component's `View()` returns `string` in both majors, so all semantic
 detail must be read from fields **before** calling it. The good news is that
 almost everything we need is a plain field.
 
-| Component | Model | Name / label | Value | Focus | Selection | Scroll | Renders via |
-|---|---|---|---|---|---|---|---|
-| `textinput` | v1 `:89` / v2 `:90` | `Placeholder` (`:95`), `Prompt` (v1 `:93`, v2 `:94`) | `value []rune` (v1 `:127`, v2 `:123`) | `focus bool` (v1 `:131`, v2 `:127`), `Focused()` | cursor `pos` (v1 `:134`, v2 `:130`) | `offset`, `offsetRight` (v1 `:138`, v2 `:134`) | Lip Gloss + concat |
-| `textarea` | v1 `:188` / v2 `:247` | `Placeholder` (v1 `:204`), `Prompt` (v1 `:200`) | `value [][]rune` (v1 `:258`, v2 `:333`) | `focus bool` (v1 `:262`, v2 `:337`) | `col`,`row` (v1 `:265`) | via nested viewport | Lip Gloss **+ `strings.Builder`** (v1 `:1101`) |
-| `list` | `:147` (both) | `Title` (`:158`) | `items []Item` (`:196`), `filteredItems` (`:201`) | — | `cursor int` (`:183`, page-relative); `Index()`, `GlobalIndex()` | via `Paginator` | Lip Gloss + builder + `fmt.Sprintf` |
-| `table` | v1 `:17` / v2 `:16` | `cols []Column{Title,Width}` (v1 `:36`) | `rows []Row` (v1 `:33`) | `focus bool` (v1 `:24`) | `cursor int` | `start`,`end` (v1 `:28`) | Lip Gloss |
-| `progress` | v1 `:126` / v2 `:187` | — | `percentShown` (v1 `:153`), `targetPercent` (`:154`) — `Percent()` returns the **target**, not what is drawn | — | — | — | **hand-built** `strings.Builder` (v1 `:280`) |
-| `paginator` | v1 `:37` / v2 `:39` | — | `Page`, `PerPage`, `TotalPages` (v1 `:41-45`) | — | `Page` | — | **no Lip Gloss at all** — `fmt.Sprintf` (v1 `:213`) |
-| `viewport` | v1 `:23` / v2 `:52` | — | `lines []string` (v1 `:66`, v2 `:98`) | — | — | v1 `YOffset` public (`:36`); v2 `yOffset` private (`:72`) + `YOffset()` (`:469`) | Lip Gloss + `strings.Join` |
-| `filepicker` | v1 `:133` / v2 `:127` | `CurrentDirectory` (v1 `:140`) | `files []os.DirEntry` (v1 `:147`) | — | `selected int` (v1 `:155`) | v1 `min`/`max` → **v2 `minIdx`/`maxIdx`** (`:152-153`) | mostly hand-built |
-| `spinner` | `:88` (both) | — | `Spinner.Frames` | — | `frame int` (`:99`), no getter | Lip Gloss, single fragment |
+| Component    | Model                 | Name / label                                         | Value                                                                                                        | Focus                                            | Selection                                                        | Scroll                                                                           | Renders via                                         |
+| ------------ | --------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `textinput`  | v1 `:89` / v2 `:90`   | `Placeholder` (`:95`), `Prompt` (v1 `:93`, v2 `:94`) | `value []rune` (v1 `:127`, v2 `:123`)                                                                        | `focus bool` (v1 `:131`, v2 `:127`), `Focused()` | cursor `pos` (v1 `:134`, v2 `:130`)                              | `offset`, `offsetRight` (v1 `:138`, v2 `:134`)                                   | Lip Gloss + concat                                  |
+| `textarea`   | v1 `:188` / v2 `:247` | `Placeholder` (v1 `:204`), `Prompt` (v1 `:200`)      | `value [][]rune` (v1 `:258`, v2 `:333`)                                                                      | `focus bool` (v1 `:262`, v2 `:337`)              | `col`,`row` (v1 `:265`)                                          | via nested viewport                                                              | Lip Gloss **+ `strings.Builder`** (v1 `:1101`)      |
+| `list`       | `:147` (both)         | `Title` (`:158`)                                     | `items []Item` (`:196`), `filteredItems` (`:201`)                                                            | —                                                | `cursor int` (`:183`, page-relative); `Index()`, `GlobalIndex()` | via `Paginator`                                                                  | Lip Gloss + builder + `fmt.Sprintf`                 |
+| `table`      | v1 `:17` / v2 `:16`   | `cols []Column{Title,Width}` (v1 `:36`)              | `rows []Row` (v1 `:33`)                                                                                      | `focus bool` (v1 `:24`)                          | `cursor int`                                                     | `start`,`end` (v1 `:28`)                                                         | Lip Gloss                                           |
+| `progress`   | v1 `:126` / v2 `:187` | —                                                    | `percentShown` (v1 `:153`), `targetPercent` (`:154`) — `Percent()` returns the **target**, not what is drawn | —                                                | —                                                                | —                                                                                | **hand-built** `strings.Builder` (v1 `:280`)        |
+| `paginator`  | v1 `:37` / v2 `:39`   | —                                                    | `Page`, `PerPage`, `TotalPages` (v1 `:41-45`)                                                                | —                                                | `Page`                                                           | —                                                                                | **no Lip Gloss at all** — `fmt.Sprintf` (v1 `:213`) |
+| `viewport`   | v1 `:23` / v2 `:52`   | —                                                    | `lines []string` (v1 `:66`, v2 `:98`)                                                                        | —                                                | —                                                                | v1 `YOffset` public (`:36`); v2 `yOffset` private (`:72`) + `YOffset()` (`:469`) | Lip Gloss + `strings.Join`                          |
+| `filepicker` | v1 `:133` / v2 `:127` | `CurrentDirectory` (v1 `:140`)                       | `files []os.DirEntry` (v1 `:147`)                                                                            | —                                                | `selected int` (v1 `:155`)                                       | v1 `min`/`max` → **v2 `minIdx`/`maxIdx`** (`:152-153`)                           | mostly hand-built                                   |
+| `spinner`    | `:88` (both)          | —                                                    | `Spinner.Frames`                                                                                             | —                                                | `frame int` (`:99`), no getter                                   | Lip Gloss, single fragment                                                       |
 
 Notes that change what a probe can promise:
 
@@ -230,7 +230,7 @@ precisely the cases where a registry is not needed.
 **(b) Content hash plus a call token — workable as a fallback, but fragile.**
 It would wrap `Style.Render` and look the registered fragments up in the final
 string. It breaks in named places: two list rows with identical text hash the
-same; `join.go:88` pads a fragment's line with spaces *after* it was registered;
+same; `join.go:88` pads a fragment's line with spaces _after_ it was registered;
 `ansi.Truncate` (v1 `style.go:454`) and `Wrap` (`:368`) change both content and
 line count so the registered form never appears in the output at all; and
 `StyleRanges` (v1 `ranges.go:12`) rewrites styling over an already-rendered
@@ -258,6 +258,7 @@ already exist:
    Its limit: bounds come from `Width(layer.content)`/`Height(layer.content)`
    (`:246`), so it covers fragments passed as `Layer`s, not ones glued together
    by `JoinHorizontal`.
+
 2. **Per-cell metadata through OSC 8.** `uv.Cell` (`ultraviolet/cell.go:15-26`)
    carries a `Link Link` field, and `Link` is `{URL, Params string}`
    (`cell.go:90-97`). v2's `Style.Hyperlink` (`set.go:820`) emits
@@ -280,7 +281,7 @@ same line (`borders.go:281`,`:425`); `MaxWidth` truncation discarding the tail
 with no record of its length (`style.go:454`); `MaxHeight` dropping whole
 fragments (`:465`); `inline` deleting newlines (`:362`); `JoinHorizontal`'s
 space padding and empty filler lines (`join.go:88`,`:60-78`); `Place`'s
-whitespace filler, which can carry the *same style* as the content
+whitespace filler, which can carry the _same style_ as the content
 (`WithWhitespaceForeground`) and so is not even distinguishable by ANSI
 (`position.go:71-83`); and `StyleRanges` rewriting styles over finished output
 (v1 `ranges.go:12`).

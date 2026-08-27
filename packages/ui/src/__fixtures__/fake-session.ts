@@ -10,7 +10,15 @@ import type {
   SessionEvents,
   TerminalHarness,
 } from '@termwright/driver';
-import { SESSION_CAPABILITIES, evidence, type ActionReceipt, type ActionabilityExplanation, type EffectiveSessionContract, type SemanticNode, type SemanticSnapshot } from '@termwright/protocol';
+import {
+  SESSION_CAPABILITIES,
+  evidence,
+  type ActionReceipt,
+  type ActionabilityExplanation,
+  type EffectiveSessionContract,
+  type SemanticNode,
+  type SemanticSnapshot,
+} from '@termwright/protocol';
 import type { UiSessionSource } from '../live.js';
 
 type Listener = (payload: never) => void;
@@ -24,14 +32,28 @@ export function frameworkContract(
 ): EffectiveSessionContract {
   const enabled = new Set(supported);
   return Object.freeze({
-    contractId: `${sessionId}:contract`, sessionId, epoch: 1, protocol: 'termwright/2',
-    framework: { name, version, adapterVersion: version, certificationId: `test:${name}@${version}` },
+    contractId: `${sessionId}:contract`,
+    sessionId,
+    epoch: 1,
+    protocol: 'termwright/2',
+    framework: {
+      name,
+      version,
+      adapterVersion: version,
+      certificationId: `test:${name}@${version}`,
+    },
     providers: [{ id: name, kind: 'framework', version }],
-    capabilities: Object.fromEntries(SESSION_CAPABILITIES.map((capability) => [capability,
-      enabled.has(capability)
-        ? { status: 'supported', evidence: evidence('framework', 'instrumented', 'authoritative', name) }
-        : { status: 'unsupported', reason: 'framework-unobservable' },
-    ])) as EffectiveSessionContract['capabilities'],
+    capabilities: Object.fromEntries(
+      SESSION_CAPABILITIES.map((capability) => [
+        capability,
+        enabled.has(capability)
+          ? {
+              status: 'supported',
+              evidence: evidence('framework', 'instrumented', 'authoritative', name),
+            }
+          : { status: 'unsupported', reason: 'framework-unobservable' },
+      ]),
+    ) as EffectiveSessionContract['capabilities'],
     terminal: { profile, platform: process.platform, mouseModesObservable: true },
   } satisfies EffectiveSessionContract);
 }
@@ -46,7 +68,12 @@ export class FakeSession implements UiSessionSource {
   #actionCounter = 0;
   #tree: SemanticSnapshot | null = null;
   clock = 0;
-  actionabilityPlanner: ((action: 'click' | 'hover' | 'focus' | 'type', ref: import('@termwright/protocol').SemanticLocatorRef) => Promise<ActionabilityExplanation>) | undefined;
+  actionabilityPlanner:
+    | ((
+        action: 'click' | 'hover' | 'focus' | 'type',
+        ref: import('@termwright/protocol').SemanticLocatorRef,
+      ) => Promise<ActionabilityExplanation>)
+    | undefined;
 
   constructor(sessionId = 's1') {
     this.sessionId = sessionId;
@@ -78,8 +105,18 @@ export class FakeSession implements UiSessionSource {
   terminalProfile = 'default';
   negotiatedContract: EffectiveSessionContract | null = null;
 
-  negotiateFramework(name: string, version: string, supported: readonly (typeof SESSION_CAPABILITIES)[number][] = ['semantic-tree']): void {
-    this.negotiatedContract = frameworkContract(this.sessionId, name, version, this.terminalProfile, supported);
+  negotiateFramework(
+    name: string,
+    version: string,
+    supported: readonly (typeof SESSION_CAPABILITIES)[number][] = ['semantic-tree'],
+  ): void {
+    this.negotiatedContract = frameworkContract(
+      this.sessionId,
+      name,
+      version,
+      this.terminalProfile,
+      supported,
+    );
   }
 
   contract(): EffectiveSessionContract | null {
@@ -94,12 +131,21 @@ export class FakeSession implements UiSessionSource {
     return this.#tree;
   }
 
-  locatorForRef(ref: string): { actionability(action: 'click' | 'hover' | 'focus' | 'type'): Promise<ActionabilityExplanation> } {
-    if (!/^semantic:[^@\s]+@\d+$/u.test(ref)) throw new TypeError('fake live inspector requires a semantic locator ref');
-    return { actionability: (action) => {
-      if (this.actionabilityPlanner === undefined) return Promise.reject(new Error('fake planner is not configured'));
-      return this.actionabilityPlanner(action, ref as import('@termwright/protocol').SemanticLocatorRef);
-    } };
+  locatorForRef(ref: string): {
+    actionability(action: 'click' | 'hover' | 'focus' | 'type'): Promise<ActionabilityExplanation>;
+  } {
+    if (!/^semantic:[^@\s]+@\d+$/u.test(ref))
+      throw new TypeError('fake live inspector requires a semantic locator ref');
+    return {
+      actionability: (action) => {
+        if (this.actionabilityPlanner === undefined)
+          return Promise.reject(new Error('fake planner is not configured'));
+        return this.actionabilityPlanner(
+          action,
+          ref as import('@termwright/protocol').SemanticLocatorRef,
+        );
+      },
+    };
   }
 
   output(text: string): void {
@@ -134,7 +180,15 @@ export class FakeSession implements UiSessionSource {
 
   finishAction(
     actionId: string,
-    event: { api: string; ok: boolean; selector?: string; ref?: import('@termwright/driver').LocatorRef; error?: string; receipt?: ActionReceipt; actionability?: ActionabilityExplanation },
+    event: {
+      api: string;
+      ok: boolean;
+      selector?: string;
+      ref?: import('@termwright/driver').LocatorRef;
+      error?: string;
+      receipt?: ActionReceipt;
+      actionability?: ActionabilityExplanation;
+    },
   ): void {
     this.#emit('action', { actionId, ...event, timeMs: this.clock });
   }
@@ -218,18 +272,34 @@ export function snapshot(
     rootIds: nodes.filter((item) => item.parentId === undefined).map((item) => item.id),
     nodes,
     coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }
 
 /** Builds a semantic node with sane defaults. */
 export function node(
-  partial: Omit<Partial<SemanticNode>, 'value'> & Pick<SemanticNode, 'id' | 'role'> & { readonly value?: SemanticNode['value'] | string },
+  partial: Omit<Partial<SemanticNode>, 'value'> &
+    Pick<SemanticNode, 'id' | 'role'> & { readonly value?: SemanticNode['value'] | string },
 ): SemanticNode {
   const { value: rawValue, ...rest } = partial;
-  const value = typeof rawValue === 'string'
-    ? { status: 'known' as const, value: rawValue, sensitivity: 'public' as const, evidence: { source: 'driver' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'ui-fixture' } }
-    : rawValue;
+  const value =
+    typeof rawValue === 'string'
+      ? {
+          status: 'known' as const,
+          value: rawValue,
+          sensitivity: 'public' as const,
+          evidence: {
+            source: 'driver' as const,
+            method: 'native' as const,
+            strength: 'authoritative' as const,
+            providerId: 'ui-fixture',
+          },
+        }
+      : rawValue;
   return {
     name: '',
     geometry: {

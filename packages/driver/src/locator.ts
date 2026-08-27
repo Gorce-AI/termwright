@@ -93,7 +93,8 @@ export interface LocatorContext {
   readonly timeouts: Required<TimeoutClasses>;
   readonly artifactValuePolicy: ArtifactValuePolicy;
   operationTimeout?(requestedMs: number, operation: string): number;
-  actionObservationState(): 'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
+  actionObservationState():
+    'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
   negotiationPending(): boolean;
   /** Resolves once semantic negotiation has settled one way or the other. */
   negotiationSettled(): Promise<void>;
@@ -110,10 +111,22 @@ export interface LocatorContext {
   contract(): import('@termwright/protocol').EffectiveSessionContract | null;
   semanticNode(id: string): SemanticNode | undefined;
   hitGrid(): Observation<import('@termwright/protocol').PointerHitGrid> | undefined;
-  pointerRegion(id: string): { readonly regionBounds: Rect; readonly spans: import('@termwright/protocol').PhysicalRegion['spans']; readonly evidence: EvidenceProvenance } | undefined;
-  screenRegionUnchangedSince(revision: number, spans: import('@termwright/protocol').PhysicalRegion['spans']): boolean;
+  pointerRegion(id: string):
+    | {
+        readonly regionBounds: Rect;
+        readonly spans: import('@termwright/protocol').PhysicalRegion['spans'];
+        readonly evidence: EvidenceProvenance;
+      }
+    | undefined;
+  screenRegionUnchangedSince(
+    revision: number,
+    spans: import('@termwright/protocol').PhysicalRegion['spans'],
+  ): boolean;
   /** Why the region is unusable at that revision; see VtScreen.regionChangeSince. */
-  screenRegionChangeSince?(revision: number, spans: import('@termwright/protocol').PhysicalRegion['spans']): string;
+  screenRegionChangeSince?(
+    revision: number,
+    spans: import('@termwright/protocol').PhysicalRegion['spans'],
+  ): string;
   rows(): readonly CapturedRow[];
   modes(): TerminalModes;
   /** The best identity the attached producer can offer for a node. */
@@ -129,7 +142,11 @@ export interface LocatorContext {
     state: 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending',
   ): void;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
-  executeDeviceOperations(operations: readonly ExecutableDeviceOperation[], expected: ObservationStamp, deadline?: number): Promise<readonly ExecutableDeviceOperation[]>;
+  executeDeviceOperations(
+    operations: readonly ExecutableDeviceOperation[],
+    expected: ObservationStamp,
+    deadline?: number,
+  ): Promise<readonly ExecutableDeviceOperation[]>;
   /** Publishes the start of an action and returns its session-local id. */
   beginAction(api: string, about?: { selector?: string }): string;
   /** Publishes the authoritative completion of an action. */
@@ -137,7 +154,13 @@ export interface LocatorContext {
     actionId: string,
     api: string,
     ok: boolean,
-    about?: { selector?: string; ref?: string; error?: string; receipt?: ActionReceipt; actionability?: ActionabilityExplanation },
+    about?: {
+      selector?: string;
+      ref?: string;
+      error?: string;
+      receipt?: ActionReceipt;
+      actionability?: ActionabilityExplanation;
+    },
   ): void;
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics;
   assertOpen(): void;
@@ -147,30 +170,87 @@ export interface LocatorContext {
 const MAX_CANDIDATES = 10;
 
 const EVIDENCE_BY_KIND = Object.freeze({
-  adapter: Object.freeze({ source: 'application', method: 'declared', strength: 'authoritative', providerId: 'semantic-adapter' }),
-  probe: Object.freeze({ source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'framework-probe' }),
-  'terminal-grid': Object.freeze({ source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'termwright-vt' }),
-  'viewport-clip': Object.freeze({ source: 'driver', method: 'derived', strength: 'authoritative', providerId: 'termwright-driver' }),
-  'paint-order': Object.freeze({ source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'framework-probe' }),
-  'hit-grid': Object.freeze({ source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'framework-hit-grid' }),
+  adapter: Object.freeze({
+    source: 'application',
+    method: 'declared',
+    strength: 'authoritative',
+    providerId: 'semantic-adapter',
+  }),
+  probe: Object.freeze({
+    source: 'framework',
+    method: 'instrumented',
+    strength: 'authoritative',
+    providerId: 'framework-probe',
+  }),
+  'terminal-grid': Object.freeze({
+    source: 'terminal',
+    method: 'native',
+    strength: 'authoritative',
+    providerId: 'termwright-vt',
+  }),
+  'viewport-clip': Object.freeze({
+    source: 'driver',
+    method: 'derived',
+    strength: 'authoritative',
+    providerId: 'termwright-driver',
+  }),
+  'paint-order': Object.freeze({
+    source: 'framework',
+    method: 'instrumented',
+    strength: 'authoritative',
+    providerId: 'framework-probe',
+  }),
+  'hit-grid': Object.freeze({
+    source: 'framework',
+    method: 'instrumented',
+    strength: 'authoritative',
+    providerId: 'framework-hit-grid',
+  }),
 } as const satisfies Record<string, EvidenceProvenance>);
 
-function known<T>(value: T, evidence: EvidenceProvenance | keyof typeof EVIDENCE_BY_KIND): Observation<T> {
-  return Object.freeze({ status: 'known', value, evidence: typeof evidence === 'string' ? EVIDENCE_BY_KIND[evidence] : evidence });
+function known<T>(
+  value: T,
+  evidence: EvidenceProvenance | keyof typeof EVIDENCE_BY_KIND,
+): Observation<T> {
+  return Object.freeze({
+    status: 'known',
+    value,
+    evidence: typeof evidence === 'string' ? EVIDENCE_BY_KIND[evidence] : evidence,
+  });
 }
 
-function absent<T>(reason: 'detached' | 'not-displayed' | 'not-laid-out', evidence: EvidenceProvenance | keyof typeof EVIDENCE_BY_KIND): Observation<T> {
+function absent<T>(
+  reason: 'detached' | 'not-displayed' | 'not-laid-out',
+  evidence: EvidenceProvenance | keyof typeof EVIDENCE_BY_KIND,
+): Observation<T> {
   const provenance = typeof evidence === 'string' ? EVIDENCE_BY_KIND[evidence] : evidence;
-  if (provenance.strength !== 'authoritative') throw new TypeError('absent observation requires authoritative evidence');
-  return Object.freeze({ status: 'absent', reason, evidence: Object.freeze({ ...provenance, strength: 'authoritative' as const }) });
+  if (provenance.strength !== 'authoritative')
+    throw new TypeError('absent observation requires authoritative evidence');
+  return Object.freeze({
+    status: 'absent',
+    reason,
+    evidence: Object.freeze({ ...provenance, strength: 'authoritative' as const }),
+  });
 }
 
 function withoutValue<T>(observation: Observation<unknown>): Observation<T> {
   switch (observation.status) {
-    case 'known': throw new TypeError('cannot erase a known observation value');
-    case 'absent': return Object.freeze({ status: 'absent', reason: observation.reason, evidence: observation.evidence });
-    case 'unknown': return Object.freeze({ status: 'unknown', reason: observation.reason });
-    case 'unsupported': return Object.freeze({ status: 'unsupported', capability: observation.capability, reason: observation.reason });
+    case 'known':
+      throw new TypeError('cannot erase a known observation value');
+    case 'absent':
+      return Object.freeze({
+        status: 'absent',
+        reason: observation.reason,
+        evidence: observation.evidence,
+      });
+    case 'unknown':
+      return Object.freeze({ status: 'unknown', reason: observation.reason });
+    case 'unsupported':
+      return Object.freeze({
+        status: 'unsupported',
+        capability: observation.capability,
+        reason: observation.reason,
+      });
   }
 }
 
@@ -185,10 +265,30 @@ type LocatorDomain = 'semantic' | 'screen';
 /** Immutable lazy query algebra. Operator order is part of the expression. */
 type LocatorExpr =
   | { readonly kind: 'leaf'; readonly query: LocatorQuery; readonly domain: LocatorDomain }
-  | { readonly kind: 'descendant'; readonly parent: LocatorExpr; readonly child: LocatorExpr; readonly domain: LocatorDomain }
-  | { readonly kind: 'select'; readonly source: LocatorExpr; readonly index: number | 'last'; readonly domain: LocatorDomain }
-  | { readonly kind: 'filter'; readonly source: LocatorExpr; readonly filter: LocatorFilter; readonly domain: LocatorDomain }
-  | { readonly kind: 'and' | 'or'; readonly left: LocatorExpr; readonly right: LocatorExpr; readonly domain: LocatorDomain };
+  | {
+      readonly kind: 'descendant';
+      readonly parent: LocatorExpr;
+      readonly child: LocatorExpr;
+      readonly domain: LocatorDomain;
+    }
+  | {
+      readonly kind: 'select';
+      readonly source: LocatorExpr;
+      readonly index: number | 'last';
+      readonly domain: LocatorDomain;
+    }
+  | {
+      readonly kind: 'filter';
+      readonly source: LocatorExpr;
+      readonly filter: LocatorFilter;
+      readonly domain: LocatorDomain;
+    }
+  | {
+      readonly kind: 'and' | 'or';
+      readonly left: LocatorExpr;
+      readonly right: LocatorExpr;
+      readonly domain: LocatorDomain;
+    };
 
 function queryDomain(query: LocatorQuery): LocatorDomain {
   if (query.kind === 'semantic') return 'semantic';
@@ -198,12 +298,18 @@ function queryDomain(query: LocatorQuery): LocatorDomain {
 
 function describeExpr(expr: LocatorExpr): string {
   switch (expr.kind) {
-    case 'leaf': return expr.query.description;
-    case 'descendant': return `${describeExpr(expr.parent)} >> ${describeExpr(expr.child)}`;
-    case 'select': return `${describeExpr(expr.source)} >> ${expr.index === 'last' ? 'last()' : `nth(${expr.index})`}`;
-    case 'filter': return `${describeExpr(expr.source)} >> filter()`;
-    case 'and': return `(${describeExpr(expr.left)}) and (${describeExpr(expr.right)})`;
-    case 'or': return `(${describeExpr(expr.left)}) or (${describeExpr(expr.right)})`;
+    case 'leaf':
+      return expr.query.description;
+    case 'descendant':
+      return `${describeExpr(expr.parent)} >> ${describeExpr(expr.child)}`;
+    case 'select':
+      return `${describeExpr(expr.source)} >> ${expr.index === 'last' ? 'last()' : `nth(${expr.index})`}`;
+    case 'filter':
+      return `${describeExpr(expr.source)} >> filter()`;
+    case 'and':
+      return `(${describeExpr(expr.left)}) and (${describeExpr(expr.right)})`;
+    case 'or':
+      return `(${describeExpr(expr.left)}) or (${describeExpr(expr.right)})`;
   }
 }
 
@@ -273,12 +379,23 @@ export class LocatorImpl {
       throw new TypeError('within() requires a locator from the same terminal session');
     }
     this.#assertDomain(raw.#expr.domain, 'within()');
-    return this.#fromExpr(Object.freeze({ kind: 'descendant', parent: raw.#expr, child: this.#expr, domain: this.#expr.domain })) as unknown as AnyLocator;
+    return this.#fromExpr(
+      Object.freeze({
+        kind: 'descendant',
+        parent: raw.#expr,
+        child: this.#expr,
+        domain: this.#expr.domain,
+      }),
+    ) as unknown as AnyLocator;
   }
 
-  getByRole(role: import('@termwright/protocol').SemanticRole, opts?: RoleLocatorOptions): AnyLocator {
+  getByRole(
+    role: import('@termwright/protocol').SemanticRole,
+    opts?: RoleLocatorOptions,
+  ): AnyLocator {
     const name = opts?.name === undefined ? undefined : textMatcher(opts.name, opts.exact ?? false);
-    const frameworkType = opts?.frameworkType === undefined ? undefined : textMatcher(opts.frameworkType, true);
+    const frameworkType =
+      opts?.frameworkType === undefined ? undefined : textMatcher(opts.frameworkType, true);
     return this.#descendant(roleQuery(role, name, opts?.state ?? {}, frameworkType));
   }
 
@@ -291,14 +408,17 @@ export class LocatorImpl {
   }
 
   getByScreenText(text: string | RegExp, opts?: ScreenTextLocatorOptions): AnyLocator {
-    const style = opts?.fg !== undefined || opts?.bg !== undefined || opts?.attributes !== undefined
-      ? {
-          ...(opts.fg !== undefined ? { fg: opts.fg } : {}),
-          ...(opts.bg !== undefined ? { bg: opts.bg } : {}),
-          ...(opts.attributes !== undefined ? { attributes: opts.attributes } : {}),
-        }
-      : undefined;
-    return this.#descendant(gridQuery(textMatcher(text, opts?.exact ?? false), opts?.occurrence, style));
+    const style =
+      opts?.fg !== undefined || opts?.bg !== undefined || opts?.attributes !== undefined
+        ? {
+            ...(opts.fg !== undefined ? { fg: opts.fg } : {}),
+            ...(opts.bg !== undefined ? { bg: opts.bg } : {}),
+            ...(opts.attributes !== undefined ? { attributes: opts.attributes } : {}),
+          }
+        : undefined;
+    return this.#descendant(
+      gridQuery(textMatcher(text, opts?.exact ?? false), opts?.occurrence, style),
+    );
   }
 
   getByTestId(testId: string): AnyLocator {
@@ -312,7 +432,9 @@ export class LocatorImpl {
   #descendant(query: LocatorQuery): AnyLocator {
     const child = Object.freeze<LocatorExpr>({ kind: 'leaf', query, domain: queryDomain(query) });
     this.#assertDomain(child.domain, 'descendant locator');
-    return this.#fromExpr(Object.freeze({ kind: 'descendant', parent: this.#expr, child, domain: child.domain })) as unknown as AnyLocator;
+    return this.#fromExpr(
+      Object.freeze({ kind: 'descendant', parent: this.#expr, child, domain: child.domain }),
+    ) as unknown as AnyLocator;
   }
 
   #fromExpr(expr: LocatorExpr): LocatorImpl {
@@ -329,7 +451,9 @@ export class LocatorImpl {
 
   #assertDomain(domain: LocatorDomain, api: string): void {
     if (domain !== this.#expr.domain) {
-      throw new TypeError(`${api} cannot combine semantic and terminal-grid locators; use an explicit screen query instead`);
+      throw new TypeError(
+        `${api} cannot combine semantic and terminal-grid locators; use an explicit screen query instead`,
+      );
     }
   }
 
@@ -338,19 +462,32 @@ export class LocatorImpl {
   }
 
   last(): AnyLocator {
-    return this.#fromExpr(Object.freeze({ kind: 'select', source: this.#expr, index: 'last', domain: this.#expr.domain })) as unknown as AnyLocator;
+    return this.#fromExpr(
+      Object.freeze({
+        kind: 'select',
+        source: this.#expr,
+        index: 'last',
+        domain: this.#expr.domain,
+      }),
+    ) as unknown as AnyLocator;
   }
 
   nth(index: number): AnyLocator {
     if (!Number.isInteger(index) || index < 0) {
       throw new TypeError(`nth() needs a non-negative integer, received ${index}`);
     }
-    return this.#fromExpr(Object.freeze({ kind: 'select', source: this.#expr, index, domain: this.#expr.domain })) as unknown as AnyLocator;
+    return this.#fromExpr(
+      Object.freeze({ kind: 'select', source: this.#expr, index, domain: this.#expr.domain }),
+    ) as unknown as AnyLocator;
   }
 
   filter(options: SemanticLocatorFilterOptions | ScreenLocatorFilterOptions): AnyLocator {
-    const has = options.has === undefined ? undefined : this.#sameHarness(options.has, 'filter({has})');
-    const hasNot = options.hasNot === undefined ? undefined : this.#sameHarness(options.hasNot, 'filter({hasNot})');
+    const has =
+      options.has === undefined ? undefined : this.#sameHarness(options.has, 'filter({has})');
+    const hasNot =
+      options.hasNot === undefined
+        ? undefined
+        : this.#sameHarness(options.hasNot, 'filter({hasNot})');
     if (options.hasText === undefined && has === undefined && hasNot === undefined) {
       throw new TypeError('filter() requires hasText, has, or hasNot');
     }
@@ -359,7 +496,14 @@ export class LocatorImpl {
       ...(has === undefined ? {} : { has: has.#expr }),
       ...(hasNot === undefined ? {} : { hasNot: hasNot.#expr }),
     };
-    return this.#fromExpr(Object.freeze({ kind: 'filter', source: this.#expr, filter: Object.freeze(filter), domain: this.#expr.domain })) as unknown as AnyLocator;
+    return this.#fromExpr(
+      Object.freeze({
+        kind: 'filter',
+        source: this.#expr,
+        filter: Object.freeze(filter),
+        domain: this.#expr.domain,
+      }),
+    ) as unknown as AnyLocator;
   }
 
   and(other: AnyLocator): AnyLocator {
@@ -373,7 +517,14 @@ export class LocatorImpl {
   #combine(mode: 'and' | 'or', other: AnyLocator): AnyLocator {
     const right = this.#sameHarness(other, `${mode}()`);
     this.#assertDomain(right.#expr.domain, `${mode}()`);
-    return this.#fromExpr(Object.freeze({ kind: mode, left: this.#expr, right: right.#expr, domain: this.#expr.domain })) as unknown as AnyLocator;
+    return this.#fromExpr(
+      Object.freeze({
+        kind: mode,
+        left: this.#expr,
+        right: right.#expr,
+        domain: this.#expr.domain,
+      }),
+    ) as unknown as AnyLocator;
   }
 
   #sameHarness(locator: AnyLocator, api: string): LocatorImpl {
@@ -388,7 +539,11 @@ export class LocatorImpl {
     this.#ctx.assertOpen();
     const deadline = Deadline.after(this.#timeout(this.#ctx.timeouts.action, 'count'));
     await this.#awaitNegotiation(deadline, 'count()');
-    while (this.#expr.domain === 'semantic' && this.#ctx.semanticIndex() === null && this.#ctx.semanticPossible()) {
+    while (
+      this.#expr.domain === 'semantic' &&
+      this.#ctx.semanticIndex() === null &&
+      this.#ctx.semanticPossible()
+    ) {
       if (deadline.expired()) break;
       await this.#ctx.waitForChange(deadline.at);
     }
@@ -397,7 +552,9 @@ export class LocatorImpl {
 
   async resolve(opts?: WaitOptions): Promise<ResolvedTarget> {
     this.#ctx.assertOpen();
-    const deadline = Deadline.after(this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, 'resolve'));
+    const deadline = Deadline.after(
+      this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, 'resolve'),
+    );
     await this.#awaitNegotiation(deadline, 'resolve()');
     for (;;) {
       this.#ctx.assertOpen();
@@ -424,16 +581,27 @@ export class LocatorImpl {
     return this.#ctx.checkpoint();
   }
 
-  async waitForCheckpointChange(options: { readonly after: ObservationStamp } & WaitOptions): Promise<ObservationStamp> {
-    const deadline = Deadline.after(this.#timeout(options.timeout ?? this.#ctx.timeouts.action, 'waitForCheckpointChange'));
+  async waitForCheckpointChange(
+    options: { readonly after: ObservationStamp } & WaitOptions,
+  ): Promise<ObservationStamp> {
+    const deadline = Deadline.after(
+      this.#timeout(options.timeout ?? this.#ctx.timeouts.action, 'waitForCheckpointChange'),
+    );
     for (;;) {
       const armChange = this.#ctx.armChange;
-      if (armChange === undefined) throw new Error('locator context does not implement race-free observation arming');
+      if (armChange === undefined)
+        throw new Error('locator context does not implement race-free observation arming');
       const arm = armChange.call(this.#ctx, deadline.at);
       const current = this.#ctx.checkpoint();
-      if (current.sessionId !== options.after.sessionId || current.contractId !== options.after.contractId) {
+      if (
+        current.sessionId !== options.after.sessionId ||
+        current.contractId !== options.after.contractId
+      ) {
         arm.cancel();
-        throw new StaleSnapshotError('checkpoint belongs to a different locator session contract', this.#ctx.errorDiagnostics());
+        throw new StaleSnapshotError(
+          'checkpoint belongs to a different locator session contract',
+          this.#ctx.errorDiagnostics(),
+        );
       }
       if (current.sequence > options.after.sequence) {
         arm.cancel();
@@ -441,32 +609,56 @@ export class LocatorImpl {
       }
       if (deadline.expired()) {
         arm.cancel();
-        throw new TimeoutError(`locator observation did not advance beyond ${options.after.sequence}`, this.#ctx.errorDiagnostics());
+        throw new TimeoutError(
+          `locator observation did not advance beyond ${options.after.sequence}`,
+          this.#ctx.errorDiagnostics(),
+        );
       }
       await arm.wait();
     }
   }
 
-  async waitFor(opts?: { state?: 'visible' | 'hidden' | 'attached' | 'detached' | 'displayed' | 'offscreen' | 'focused' | 'enabled' | 'disabled' | 'checked' | 'selected' | 'expanded' | 'collapsed' } & WaitOptions): Promise<void> {
+  async waitFor(
+    opts?: {
+      state?:
+        | 'visible'
+        | 'hidden'
+        | 'attached'
+        | 'detached'
+        | 'displayed'
+        | 'offscreen'
+        | 'focused'
+        | 'enabled'
+        | 'disabled'
+        | 'checked'
+        | 'selected'
+        | 'expanded'
+        | 'collapsed';
+    } & WaitOptions,
+  ): Promise<void> {
     this.#ctx.assertOpen();
     const wanted = opts?.state ?? 'visible';
-    const deadline = Deadline.after(this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, `waitFor(${opts?.state ?? 'visible'})`));
+    const deadline = Deadline.after(
+      this.#timeout(
+        opts?.timeout ?? this.#ctx.timeouts.action,
+        `waitFor(${opts?.state ?? 'visible'})`,
+      ),
+    );
     await this.#awaitNegotiation(deadline, `waitFor(${wanted})`);
     for (;;) {
       this.#ctx.assertOpen();
       const matches = await this.#tryEvaluate(deadline.at);
       const selected = this.#select(matches);
-      const condition: Condition = wanted === 'checked'
-        ? { kind: 'checked', target: this.description, value: true }
-        : wanted === 'selected'
-          ? { kind: 'selected', target: this.description, value: true }
-          : wanted === 'expanded'
-            ? { kind: 'expanded', target: this.description, value: true }
-            : { kind: wanted, target: this.description };
-      const evaluation = evaluateCanonicalCondition(
-        condition,
-        this.#ctx.checkpoint(),
-        (leaf) => this.#observeCondition(leaf, selected),
+      const condition: Condition =
+        wanted === 'checked'
+          ? { kind: 'checked', target: this.description, value: true }
+          : wanted === 'selected'
+            ? { kind: 'selected', target: this.description, value: true }
+            : wanted === 'expanded'
+              ? { kind: 'expanded', target: this.description, value: true }
+              : { kind: wanted, target: this.description };
+      const evaluation = evaluateCanonicalCondition(condition, this.#ctx.checkpoint(), (leaf) =>
+        this.#observeCondition(leaf, selected),
       );
       if (evaluation.verdict === 'satisfied') return;
       if (deadline.expired()) {
@@ -479,9 +671,14 @@ export class LocatorImpl {
     }
   }
 
-  async evaluateCondition(condition: Condition, opts?: WaitOptions): Promise<import('@termwright/protocol').ConditionResult> {
+  async evaluateCondition(
+    condition: Condition,
+    opts?: WaitOptions,
+  ): Promise<import('@termwright/protocol').ConditionResult> {
     this.#ctx.assertOpen();
-    const deadline = Deadline.after(this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, 'evaluateCondition'));
+    const deadline = Deadline.after(
+      this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, 'evaluateCondition'),
+    );
     await this.#awaitNegotiation(deadline, 'evaluateCondition()');
     const before = this.#ctx.checkpoint();
     const selected = this.#select(await this.#tryEvaluate(deadline.at));
@@ -494,7 +691,9 @@ export class LocatorImpl {
         verdict: 'inconclusive',
       });
     }
-    return evaluateCanonicalCondition(condition, before, (leaf) => this.#observeCondition(leaf, selected));
+    return evaluateCanonicalCondition(condition, before, (leaf) =>
+      this.#observeCondition(leaf, selected),
+    );
   }
 
   async geometry(): Promise<LocatorGeometry> {
@@ -502,14 +701,34 @@ export class LocatorImpl {
     const stamp = this.#stamp();
     if (target === null) {
       const detached = absent<never>('detached', 'adapter');
-      return Object.freeze({ stamp, coordinateSpace: detached, intendedRect: detached, visibleRect: detached });
+      return Object.freeze({
+        stamp,
+        coordinateSpace: detached,
+        intendedRect: detached,
+        visibleRect: detached,
+      });
     }
     if (!target.semantic && target.rect !== null) {
       return Object.freeze({
         stamp,
-        coordinateSpace: known<CoordinateSpace>('viewport-cells', { source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'termwright-vt' }),
-        intendedRect: known(target.rect, { source: 'terminal', method: 'measured', strength: 'authoritative', providerId: 'termwright-vt' }),
-        visibleRect: known(this.#clip(target.rect), { source: 'driver', method: 'derived', strength: 'authoritative', providerId: 'termwright-driver' }),
+        coordinateSpace: known<CoordinateSpace>('viewport-cells', {
+          source: 'terminal',
+          method: 'native',
+          strength: 'authoritative',
+          providerId: 'termwright-vt',
+        }),
+        intendedRect: known(target.rect, {
+          source: 'terminal',
+          method: 'measured',
+          strength: 'authoritative',
+          providerId: 'termwright-vt',
+        }),
+        visibleRect: known(this.#clip(target.rect), {
+          source: 'driver',
+          method: 'derived',
+          strength: 'authoritative',
+          providerId: 'termwright-driver',
+        }),
       });
     }
     const qualifiedNode = this.#node(target);
@@ -518,13 +737,26 @@ export class LocatorImpl {
         stamp,
         coordinateSpace:
           this.#ctx.semanticIndex()?.snapshot.coordinateSpace ??
-          Object.freeze({ status: 'unsupported', capability: 'coordinate-space', reason: 'not-negotiated' } as const),
+          Object.freeze({
+            status: 'unsupported',
+            capability: 'coordinate-space',
+            reason: 'not-negotiated',
+          } as const),
         intendedRect: qualifiedNode.geometry.intendedRect,
         visibleRect: qualifiedNode.geometry.visibleRect,
       });
     }
-    const unsupported = Object.freeze({ status: 'unsupported', capability: 'intended-geometry', reason: 'not-negotiated' } as const);
-    return Object.freeze({ stamp, coordinateSpace: unsupported, intendedRect: unsupported, visibleRect: unsupported });
+    const unsupported = Object.freeze({
+      status: 'unsupported',
+      capability: 'intended-geometry',
+      reason: 'not-negotiated',
+    } as const);
+    return Object.freeze({
+      stamp,
+      coordinateSpace: unsupported,
+      intendedRect: unsupported,
+      visibleRect: unsupported,
+    });
   }
 
   async visibility(): Promise<LocatorVisibility> {
@@ -555,53 +787,105 @@ export class LocatorImpl {
       const intended = node.geometry.intendedRect;
       const visible = node.geometry.visibleRect;
       const displayed = node.geometry.displayed;
-      const notDisplayed = absent<never>('not-displayed', displayed.status === 'known' ? displayed.evidence : 'adapter');
-      const viewport: LocatorVisibility['viewport'] = displayed.status === 'known' && displayed.value === false
-        ? notDisplayed
-        : intended.status === 'known' && visible.status === 'known'
-        ? known({
-            rect: visible.value,
-            ratio: intended.value.width * intended.value.height === 0
-              ? 0
-              : (visible.value.width * visible.value.height) / (intended.value.width * intended.value.height),
-            fullyInside:
-              intended.value.row === visible.value.row &&
-              intended.value.column === visible.value.column &&
-              intended.value.width === visible.value.width &&
-              intended.value.height === visible.value.height,
-          }, 'viewport-clip')
-        : visible.status !== 'known'
-          ? withoutValue<ViewportIntersection>(visible)
-          : withoutValue<ViewportIntersection>(intended);
-      const offscreen: LocatorVisibility['offscreen'] = displayed.status === 'known' && displayed.value === false
-        ? notDisplayed
-        : intended.status === 'known' && visible.status === 'known'
-          ? known(intended.value.width * intended.value.height > 0 && visible.value.width * visible.value.height === 0, 'viewport-clip')
-          : visible.status !== 'known'
-            ? withoutValue<boolean>(visible)
-            : withoutValue<boolean>(intended);
-      return Object.freeze({ stamp, attached: known(true, 'adapter'), displayed, viewport, offscreen });
+      const notDisplayed = absent<never>(
+        'not-displayed',
+        displayed.status === 'known' ? displayed.evidence : 'adapter',
+      );
+      const viewport: LocatorVisibility['viewport'] =
+        displayed.status === 'known' && displayed.value === false
+          ? notDisplayed
+          : intended.status === 'known' && visible.status === 'known'
+            ? known(
+                {
+                  rect: visible.value,
+                  ratio:
+                    intended.value.width * intended.value.height === 0
+                      ? 0
+                      : (visible.value.width * visible.value.height) /
+                        (intended.value.width * intended.value.height),
+                  fullyInside:
+                    intended.value.row === visible.value.row &&
+                    intended.value.column === visible.value.column &&
+                    intended.value.width === visible.value.width &&
+                    intended.value.height === visible.value.height,
+                },
+                'viewport-clip',
+              )
+            : visible.status !== 'known'
+              ? withoutValue<ViewportIntersection>(visible)
+              : withoutValue<ViewportIntersection>(intended);
+      const offscreen: LocatorVisibility['offscreen'] =
+        displayed.status === 'known' && displayed.value === false
+          ? notDisplayed
+          : intended.status === 'known' && visible.status === 'known'
+            ? known(
+                intended.value.width * intended.value.height > 0 &&
+                  visible.value.width * visible.value.height === 0,
+                'viewport-clip',
+              )
+            : visible.status !== 'known'
+              ? withoutValue<boolean>(visible)
+              : withoutValue<boolean>(intended);
+      return Object.freeze({
+        stamp,
+        attached: known(true, 'adapter'),
+        displayed,
+        viewport,
+        offscreen,
+      });
     }
-    const unsupported = Object.freeze({ status: 'unsupported', capability: 'clipped-geometry', reason: 'not-negotiated' } as const);
-    return Object.freeze({ stamp, attached: known(true, 'adapter'), displayed: unsupported, viewport: unsupported, offscreen: unsupported });
+    const unsupported = Object.freeze({
+      status: 'unsupported',
+      capability: 'clipped-geometry',
+      reason: 'not-negotiated',
+    } as const);
+    return Object.freeze({
+      stamp,
+      attached: known(true, 'adapter'),
+      displayed: unsupported,
+      viewport: unsupported,
+      offscreen: unsupported,
+    });
   }
 
-  async hitTest(opts?: { readonly position?: PointerOptions['position'] }): Promise<PointerHitTest> {
+  async hitTest(opts?: {
+    readonly position?: PointerOptions['position'];
+  }): Promise<PointerHitTest> {
     const target = await this.#readStrict();
     const stamp = this.#stamp();
     if (target === null) {
       const detached = absent<never>('detached', 'adapter');
-      return Object.freeze({ stamp, point: detached, receivesEvents: detached, recipient: detached });
+      return Object.freeze({
+        stamp,
+        point: detached,
+        receivesEvents: detached,
+        recipient: detached,
+      });
     }
     if (target.rect === null) {
       const notLaidOut = absent<never>('not-laid-out', 'adapter');
-      return Object.freeze({ stamp, point: notLaidOut, receivesEvents: notLaidOut, recipient: notLaidOut });
+      return Object.freeze({
+        stamp,
+        point: notLaidOut,
+        receivesEvents: notLaidOut,
+        recipient: notLaidOut,
+      });
     }
     if (target.semantic && stamp.pairedScreenRevision !== stamp.screenRevision) {
-      const pairingFailure = this.#ctx.contract()?.capabilities['paired-revisions'].status === 'supported'
-        ? Object.freeze({ status: 'unknown', reason: 'stale-revision' } as const)
-        : Object.freeze({ status: 'unsupported', capability: 'paired-revisions', reason: 'not-negotiated' } as const);
-      return Object.freeze({ stamp, point: pairingFailure, receivesEvents: pairingFailure, recipient: pairingFailure });
+      const pairingFailure =
+        this.#ctx.contract()?.capabilities['paired-revisions'].status === 'supported'
+          ? Object.freeze({ status: 'unknown', reason: 'stale-revision' } as const)
+          : Object.freeze({
+              status: 'unsupported',
+              capability: 'paired-revisions',
+              reason: 'not-negotiated',
+            } as const);
+      return Object.freeze({
+        stamp,
+        point: pairingFailure,
+        receivesEvents: pairingFailure,
+        recipient: pairingFailure,
+      });
     }
     const point = this.#center(target, opts?.position);
     const snapshot = this.#ctx.semanticIndex()?.snapshot;
@@ -614,13 +898,21 @@ export class LocatorImpl {
           recipient: snapshot.hitGrid,
         });
       }
-      const owner = snapshot.hitGrid.value.regions.find(({ rect }) =>
-        point.row >= rect.row && point.row < rect.row + rect.height &&
-        point.column >= rect.column && point.column < rect.column + rect.width,
+      const owner = snapshot.hitGrid.value.regions.find(
+        ({ rect }) =>
+          point.row >= rect.row &&
+          point.row < rect.row + rect.height &&
+          point.column >= rect.column &&
+          point.column < rect.column + rect.width,
       );
       if (owner === undefined) {
         const noRecipient = absent<string>('not-laid-out', 'hit-grid');
-        return Object.freeze({ stamp, point: known(point, 'hit-grid'), receivesEvents: known(false, 'hit-grid'), recipient: noRecipient });
+        return Object.freeze({
+          stamp,
+          point: known(point, 'hit-grid'),
+          receivesEvents: known(false, 'hit-grid'),
+          recipient: noRecipient,
+        });
       }
       const targetId = semanticNodeId(target.ref) ?? '';
       return Object.freeze({
@@ -630,13 +922,25 @@ export class LocatorImpl {
         recipient: known(owner.recipientId, 'hit-grid'),
       });
     }
-    const unsupported = Object.freeze({ status: 'unsupported', capability: 'pointer-hit-testing', reason: 'not-negotiated' } as const);
-    return Object.freeze({ stamp, point: known(point, 'probe'), receivesEvents: unsupported, recipient: unsupported });
+    const unsupported = Object.freeze({
+      status: 'unsupported',
+      capability: 'pointer-hit-testing',
+      reason: 'not-negotiated',
+    } as const);
+    return Object.freeze({
+      stamp,
+      point: known(point, 'probe'),
+      receivesEvents: unsupported,
+      recipient: unsupported,
+    });
   }
 
   async cellSnapshot(opts: LocatorCellSnapshotOptions = {}): Promise<LocatorCellSnapshot> {
     const geometry = await this.geometry();
-    if (this.#expr.domain === 'semantic' && geometry.stamp.pairedScreenRevision !== geometry.stamp.screenRevision) {
+    if (
+      this.#expr.domain === 'semantic' &&
+      geometry.stamp.pairedScreenRevision !== geometry.stamp.screenRevision
+    ) {
       if (this.#ctx.contract()?.capabilities['paired-revisions'].status === 'supported') {
         throw new StaleSnapshotError(
           'cellSnapshot() semantic geometry is waiting for its committed terminal frame',
@@ -645,19 +949,29 @@ export class LocatorImpl {
       }
       throw new CapabilityUnavailableError(
         'cellSnapshot() requires semantic geometry paired with the committed terminal frame',
-        this.#ctx.errorDiagnostics({ suggestion: 'use a certified adapter that negotiates render-revisions' }),
+        this.#ctx.errorDiagnostics({
+          suggestion: 'use a certified adapter that negotiates render-revisions',
+        }),
       );
     }
     const observation = opts.box === 'intended' ? geometry.intendedRect : geometry.visibleRect;
     if (observation.status !== 'known') {
       throw new CapabilityUnavailableError(
         `cellSnapshot() needs known ${opts.box ?? 'visible'} bounds; received ${observation.status}`,
-        this.#ctx.errorDiagnostics({ suggestion: 'use a grid locator or a probe that publishes qualified viewport geometry' }),
+        this.#ctx.errorDiagnostics({
+          suggestion: 'use a grid locator or a probe that publishes qualified viewport geometry',
+        }),
       );
     }
-    const pad = typeof opts.padding === 'number'
-      ? { top: opts.padding, right: opts.padding, bottom: opts.padding, left: opts.padding }
-      : { top: opts.padding?.top ?? 0, right: opts.padding?.right ?? 0, bottom: opts.padding?.bottom ?? 0, left: opts.padding?.left ?? 0 };
+    const pad =
+      typeof opts.padding === 'number'
+        ? { top: opts.padding, right: opts.padding, bottom: opts.padding, left: opts.padding }
+        : {
+            top: opts.padding?.top ?? 0,
+            right: opts.padding?.right ?? 0,
+            bottom: opts.padding?.bottom ?? 0,
+            left: opts.padding?.left ?? 0,
+          };
     if (Object.values(pad).some((value) => !Number.isSafeInteger(value) || value < 0)) {
       throw new TypeError('cellSnapshot() padding must contain non-negative safe integers');
     }
@@ -678,12 +992,30 @@ export class LocatorImpl {
       );
     }
     const cells = Array.from({ length: rect.height }, (_, row) =>
-      Object.freeze((source[rect.row + row]?.cells.slice(rect.column, rect.column + rect.width) ?? []).slice()),
+      Object.freeze(
+        (source[rect.row + row]?.cells.slice(rect.column, rect.column + rect.width) ?? []).slice(),
+      ),
     );
-    const lines = cells.map((row) => row.filter((cell) => cell.width !== 0).map((cell) => cell.char === '' ? ' ' : cell.char).join('').replace(/ +$/u, ''));
+    const lines = cells.map((row) =>
+      row
+        .filter((cell) => cell.width !== 0)
+        .map((cell) => (cell.char === '' ? ' ' : cell.char))
+        .join('')
+        .replace(/ +$/u, ''),
+    );
     const empty: CellSnapshot = Object.freeze<CellSnapshot>({
-      char: '', width: 1, fg: { kind: 'default' }, bg: { kind: 'default' },
-      attributes: { bold: false, dim: false, italic: false, underline: false, inverse: false, strikethrough: false },
+      char: '',
+      width: 1,
+      fg: { kind: 'default' },
+      bg: { kind: 'default' },
+      attributes: {
+        bold: false,
+        dim: false,
+        italic: false,
+        underline: false,
+        inverse: false,
+        strikethrough: false,
+      },
     });
     return Object.freeze({
       stamp: geometry.stamp,
@@ -704,7 +1036,9 @@ export class LocatorImpl {
   /** Immediate strict observation: zero is detached; ambiguity is an error. */
   async #readStrict(): Promise<ResolvedTarget | null> {
     this.#ctx.assertOpen();
-    const deadline = Deadline.after(this.#timeout(this.#ctx.timeouts.action, 'locator observation'));
+    const deadline = Deadline.after(
+      this.#timeout(this.#ctx.timeouts.action, 'locator observation'),
+    );
     await this.#awaitNegotiation(deadline, 'locator observation');
     const matches = await this.#tryEvaluate(deadline.at);
     return this.#select(matches);
@@ -717,7 +1051,10 @@ export class LocatorImpl {
       if (deadline.expired()) {
         throw new TimeoutError(
           `${operation} exceeded its timeout during semantic capability negotiation`,
-          this.#ctx.errorDiagnostics({ suggestion: 'increase the timeout or diagnose why the framework probe did not complete negotiation' }),
+          this.#ctx.errorDiagnostics({
+            suggestion:
+              'increase the timeout or diagnose why the framework probe did not complete negotiation',
+          }),
         );
       }
       const completed = await Promise.race([
@@ -727,7 +1064,10 @@ export class LocatorImpl {
       if (deadline.expired()) {
         throw new TimeoutError(
           `${operation} exceeded its timeout during semantic capability negotiation`,
-          this.#ctx.errorDiagnostics({ suggestion: 'increase the timeout or diagnose why the framework probe did not complete negotiation' }),
+          this.#ctx.errorDiagnostics({
+            suggestion:
+              'increase the timeout or diagnose why the framework probe did not complete negotiation',
+          }),
         );
       }
       if (completed || !this.#ctx.negotiationPending()) return;
@@ -758,31 +1098,49 @@ export class LocatorImpl {
 
   async semanticValue(): Promise<SemanticValueObservation> {
     const target = await this.resolve();
-    if (!target.semantic) return Object.freeze({ status: 'unsupported', capability: 'semantic-value', reason: 'not-negotiated' });
+    if (!target.semantic)
+      return Object.freeze({
+        status: 'unsupported',
+        capability: 'semantic-value',
+        reason: 'not-negotiated',
+      });
     const node = this.#node(target);
     if (node.value !== undefined) return node.value;
     const evidence = this.#ctx.contract()?.capabilities['semantic-tree'];
     if (evidence?.status === 'supported' && evidence.evidence.strength === 'authoritative') {
-      return Object.freeze({ status: 'absent', reason: 'no-value', evidence: { ...evidence.evidence, strength: 'authoritative' as const } });
+      return Object.freeze({
+        status: 'absent',
+        reason: 'no-value',
+        evidence: { ...evidence.evidence, strength: 'authoritative' as const },
+      });
     }
-    return Object.freeze({ status: 'unsupported', capability: 'semantic-value', reason: 'capability' });
+    return Object.freeze({
+      status: 'unsupported',
+      capability: 'semantic-value',
+      reason: 'capability',
+    });
   }
 
   async semanticScroll(): Promise<Observation<SemanticScrollState>> {
     const target = await this.resolve();
     if (!target.semantic) {
-      return Object.freeze({ status: 'unsupported', capability: 'scroll', reason: 'not-negotiated' });
+      return Object.freeze({
+        status: 'unsupported',
+        capability: 'scroll',
+        reason: 'not-negotiated',
+      });
     }
     const capability = this.#ctx.contract()?.capabilities.scroll;
     if (capability?.status !== 'supported') {
       return Object.freeze({
         status: 'unsupported',
         capability: 'scroll',
-        reason: capability?.reason === 'framework-unobservable'
-          ? 'framework-unobservable'
-          : capability?.reason === 'not-negotiated' || capability === undefined
-            ? 'not-negotiated'
-            : 'capability',
+        reason:
+          capability?.reason === 'framework-unobservable'
+            ? 'framework-unobservable'
+            : capability?.reason === 'not-negotiated' || capability === undefined
+              ? 'not-negotiated'
+              : 'capability',
       });
     }
     const node = this.#node(target);
@@ -794,21 +1152,28 @@ export class LocatorImpl {
     });
   }
 
-  async paintedRegion(): Promise<Observation<import('@termwright/protocol').SemanticPaintedRegion>> {
+  async paintedRegion(): Promise<
+    Observation<import('@termwright/protocol').SemanticPaintedRegion>
+  > {
     const target = await this.resolve();
     if (!target.semantic) {
-      return Object.freeze({ status: 'unsupported', capability: 'painted-region', reason: 'not-negotiated' });
+      return Object.freeze({
+        status: 'unsupported',
+        capability: 'painted-region',
+        reason: 'not-negotiated',
+      });
     }
     const capability = this.#ctx.contract()?.capabilities['painted-region'];
     if (capability?.status !== 'supported') {
       return Object.freeze({
         status: 'unsupported',
         capability: 'painted-region',
-        reason: capability?.reason === 'framework-unobservable'
-          ? 'framework-unobservable'
-          : capability?.reason === 'not-negotiated' || capability === undefined
-            ? 'not-negotiated'
-            : 'capability',
+        reason:
+          capability?.reason === 'framework-unobservable'
+            ? 'framework-unobservable'
+            : capability?.reason === 'not-negotiated' || capability === undefined
+              ? 'not-negotiated'
+              : 'capability',
       });
     }
     const node = this.#node(target);
@@ -830,19 +1195,40 @@ export class LocatorImpl {
   // Actions
 
   async click(opts?: PointerOptions): Promise<ActionReceipt> {
-    return this.#act('click', (record, actionId) => this.#plannedPointer({ kind: 'click', selector: this.description }, opts, record, actionId));
+    return this.#act('click', (record, actionId) =>
+      this.#plannedPointer({ kind: 'click', selector: this.description }, opts, record, actionId),
+    );
   }
 
   async doubleClick(opts?: PointerOptions): Promise<ActionReceipt> {
-    return this.#act('doubleClick', (record, actionId) => this.#plannedPointer({ kind: 'double-click', selector: this.description }, opts, record, actionId));
+    return this.#act('doubleClick', (record, actionId) =>
+      this.#plannedPointer(
+        { kind: 'double-click', selector: this.description },
+        opts,
+        record,
+        actionId,
+      ),
+    );
   }
 
   async hover(opts?: PointerOptions): Promise<ActionReceipt> {
-    return this.#act('hover', (record, actionId) => this.#plannedPointer({ kind: 'hover', selector: this.description }, opts, record, actionId));
+    return this.#act('hover', (record, actionId) =>
+      this.#plannedPointer({ kind: 'hover', selector: this.description }, opts, record, actionId),
+    );
   }
 
   async actionability(
-    action: 'click' | 'double-click' | 'hover' | 'focus' | 'activate' | 'press' | 'type' | 'fill' | 'check' | 'uncheck',
+    action:
+      | 'click'
+      | 'double-click'
+      | 'hover'
+      | 'focus'
+      | 'activate'
+      | 'press'
+      | 'type'
+      | 'fill'
+      | 'check'
+      | 'uncheck',
     opts?: PointerOptions & { readonly value?: string },
   ): Promise<ActionabilityExplanation> {
     const target = await this.resolve(opts);
@@ -868,7 +1254,9 @@ export class LocatorImpl {
     if (!(raw instanceof LocatorImpl)) {
       throw new TypeError('dragTo() requires a locator created by this harness');
     }
-    const retry = new ActionRetryController(this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, 'drag'));
+    const retry = new ActionRetryController(
+      this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, 'drag'),
+    );
     for (;;) {
       try {
         const remaining = retry.remaining();
@@ -899,7 +1287,9 @@ export class LocatorImpl {
     record: (target: ResolvedTarget) => void,
     actionId: string,
   ): Promise<ActionReceipt> {
-    const retry = new ActionRetryController(this.#timeout(opts.timeout ?? this.#ctx.timeouts.action, 'wheel'));
+    const retry = new ActionRetryController(
+      this.#timeout(opts.timeout ?? this.#ctx.timeouts.action, 'wheel'),
+    );
     for (;;) {
       try {
         const target = await this.resolve({ ...opts, timeout: retry.remaining() });
@@ -920,26 +1310,48 @@ export class LocatorImpl {
 
   async press(keys: string, opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('press', async (record, actionId) => {
-      const { receipt } = await this.#plannedKeyboard({ kind: 'press', selector: this.description }, keys, opts, record, actionId);
+      const { receipt } = await this.#plannedKeyboard(
+        { kind: 'press', selector: this.description },
+        keys,
+        opts,
+        record,
+        actionId,
+      );
       return receipt;
     });
   }
 
   async type(text: ExecutableValue, opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('type', async (record, actionId) => {
-      const { receipt } = await this.#plannedKeyboard({ kind: 'type', selector: this.description }, text, opts, record, actionId);
+      const { receipt } = await this.#plannedKeyboard(
+        { kind: 'type', selector: this.description },
+        text,
+        opts,
+        record,
+        actionId,
+      );
       return receipt;
     });
   }
 
   async fill(text: ExecutableValue, opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('fill', async (record, actionId) => {
-      const { receipt, target, retry } = await this.#plannedKeyboard({ kind: 'fill', selector: this.description }, text, opts, record, actionId);
-      const before = target.semantic ? this.#ctx.semanticNode(semanticNodeId(target.ref) ?? '')?.value : undefined;
+      const { receipt, target, retry } = await this.#plannedKeyboard(
+        { kind: 'fill', selector: this.description },
+        text,
+        opts,
+        record,
+        actionId,
+      );
+      const before = target.semantic
+        ? this.#ctx.semanticNode(semanticNodeId(target.ref) ?? '')?.value
+        : undefined;
       if (receipt.plan.operations.length > 0 && before?.status === 'known') {
         const expected = typeof text === 'string' ? text : text.value;
         await this.#waitForSemanticPostcondition(
-          'fill', target, retry,
+          'fill',
+          target,
+          retry,
           (node) => node.value?.status === 'known' && node.value.value === expected,
           `semantic value ${JSON.stringify(expected)}`,
         );
@@ -950,10 +1362,20 @@ export class LocatorImpl {
 
   async focus(opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('focus', async (record, actionId) => {
-      const { receipt, target, retry } = await this.#plannedKeyboard({ kind: 'focus', selector: this.description }, '', opts, record, actionId);
+      const { receipt, target, retry } = await this.#plannedKeyboard(
+        { kind: 'focus', selector: this.description },
+        '',
+        opts,
+        record,
+        actionId,
+      );
       if (receipt.plan.operations.length > 0) {
         await this.#waitForSemanticPostcondition(
-          'focus', target, retry, (node) => node.state?.focused === true, 'focused=true',
+          'focus',
+          target,
+          retry,
+          (node) => node.state?.focused === true,
+          'focused=true',
         );
       }
       return Object.freeze({ ...receipt, after: this.#ctx.checkpoint() });
@@ -962,7 +1384,13 @@ export class LocatorImpl {
 
   async activate(opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('activate', async (record, actionId) => {
-      const { receipt } = await this.#plannedKeyboard({ kind: 'activate', selector: this.description }, '', opts, record, actionId);
+      const { receipt } = await this.#plannedKeyboard(
+        { kind: 'activate', selector: this.description },
+        '',
+        opts,
+        record,
+        actionId,
+      );
       return receipt;
     });
   }
@@ -993,11 +1421,17 @@ export class LocatorImpl {
             : undefined;
           if (node?.state?.checked === value) break;
           if (retry.expired()) {
-            throw new TimeoutError(`${api}() did not observe checked=${String(value)} after the physical action`, this.#ctx.errorDiagnostics({ candidates: [target] }));
+            throw new TimeoutError(
+              `${api}() did not observe checked=${String(value)} after the physical action`,
+              this.#ctx.errorDiagnostics({ candidates: [target] }),
+            );
           }
           await this.#ctx.waitForChange(retry.deadline);
           if (retry.expired()) {
-            throw new TimeoutError(`${api}() did not observe checked=${String(value)} after the physical action`, this.#ctx.errorDiagnostics({ candidates: [target] }));
+            throw new TimeoutError(
+              `${api}() did not observe checked=${String(value)} after the physical action`,
+              this.#ctx.errorDiagnostics({ candidates: [target] }),
+            );
           }
         }
       }
@@ -1040,8 +1474,14 @@ export class LocatorImpl {
     opts: WaitOptions | undefined,
     record: (target: ResolvedTarget) => void,
     actionId: string,
-  ): Promise<{ readonly receipt: ActionReceipt; readonly target: ResolvedTarget; readonly retry: ActionRetryController }> {
-    const retry = new ActionRetryController(this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, intent.kind));
+  ): Promise<{
+    readonly receipt: ActionReceipt;
+    readonly target: ResolvedTarget;
+    readonly retry: ActionRetryController;
+  }> {
+    const retry = new ActionRetryController(
+      this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, intent.kind),
+    );
     for (;;) {
       const target = await this.resolve({ ...opts, timeout: retry.remaining() });
       record(target);
@@ -1093,7 +1533,12 @@ export class LocatorImpl {
       this.#ctx.endAction(actionId, api, false, {
         selector: this.description,
         ...(ref !== undefined ? { ref } : {}),
-        error: error instanceof TermwrightError ? error.code : error instanceof Error ? error.name : 'unknown',
+        error:
+          error instanceof TermwrightError
+            ? error.code
+            : error instanceof Error
+              ? error.name
+              : 'unknown',
         ...(error instanceof TermwrightError && error.actionability !== undefined
           ? { actionability: error.actionability }
           : {}),
@@ -1108,12 +1553,19 @@ export class LocatorImpl {
     record: (target: ResolvedTarget) => void,
     actionId: string,
   ): Promise<ActionReceipt> {
-    const retry = new ActionRetryController(this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, intent.kind));
+    const retry = new ActionRetryController(
+      this.#timeout(opts?.timeout ?? this.#ctx.timeouts.action, intent.kind),
+    );
     for (;;) {
       const target = await this.resolve({ ...opts, timeout: retry.remaining() });
       record(target);
       try {
-        const { plan } = new ActionPlanner(this.#ctx).planPointer(actionId, { ...intent, targetRef: target.ref }, target, opts);
+        const { plan } = new ActionPlanner(this.#ctx).planPointer(
+          actionId,
+          { ...intent, targetRef: target.ref },
+          target,
+          opts,
+        );
         retry.assertBeforeInput(this.#ctx.errorDiagnostics({ candidates: [target] }));
         return await this.#executePlan(plan, retry);
       } catch (error) {
@@ -1126,21 +1578,35 @@ export class LocatorImpl {
     }
   }
 
-  async #executePlan(plan: ExecutableActionPlan, retry: ActionRetryController): Promise<ActionReceipt> {
+  async #executePlan(
+    plan: ExecutableActionPlan,
+    retry: ActionRetryController,
+  ): Promise<ActionReceipt> {
     retry.assertBeforeInput(this.#ctx.errorDiagnostics());
-    const executed = await this.#ctx.executeDeviceOperations(plan.operations, plan.checkpoint, retry.deadline);
+    const executed = await this.#ctx.executeDeviceOperations(
+      plan.operations,
+      plan.checkpoint,
+      retry.deadline,
+    );
     const recordedPlan = recordActionPlan(plan, this.#ctx.artifactValuePolicy);
     return Object.freeze({
       intent: plan.intent,
       plan: recordedPlan,
       before: plan.checkpoint,
       after: this.#ctx.checkpoint(),
-      executed: Object.freeze(executed.map((operation) => recordDeviceOperation(operation, this.#ctx.artifactValuePolicy))),
+      executed: Object.freeze(
+        executed.map((operation) =>
+          recordDeviceOperation(operation, this.#ctx.artifactValuePolicy),
+        ),
+      ),
       outcome: 'completed',
     });
   }
 
-  #center(target: ResolvedTarget, position?: PointerOptions['position']): { row: number; column: number } {
+  #center(
+    target: ResolvedTarget,
+    position?: PointerOptions['position'],
+  ): { row: number; column: number } {
     const rect = target.rect;
     if (rect === null) {
       throw new CapabilityUnavailableError(
@@ -1168,7 +1634,11 @@ export class LocatorImpl {
     return this.#viewport(rect).rect;
   }
 
-  #viewport(rect: Rect): { readonly rect: Rect; readonly ratio: number; readonly fullyInside: boolean } {
+  #viewport(rect: Rect): {
+    readonly rect: Rect;
+    readonly ratio: number;
+    readonly fullyInside: boolean;
+  } {
     const rows = this.#ctx.rows();
     const columns = rows[0]?.cells.length ?? 0;
     const row = Math.max(0, rect.row);
@@ -1183,7 +1653,11 @@ export class LocatorImpl {
     });
     const area = Math.max(0, rect.width) * Math.max(0, rect.height);
     const visible = clipped.width * clipped.height;
-    return Object.freeze({ rect: clipped, ratio: area === 0 ? 0 : visible / area, fullyInside: area > 0 && visible === area });
+    return Object.freeze({
+      rect: clipped,
+      ratio: area === 0 ? 0 : visible / area,
+      fullyInside: area > 0 && visible === area,
+    });
   }
 
   #observeCondition(condition: LeafCondition, target: ResolvedTarget | null): Observation<boolean> {
@@ -1191,17 +1665,29 @@ export class LocatorImpl {
     const capability = this.#expr.domain === 'semantic' ? 'semantic-tree' : 'keyboard-input';
     const availability = this.#ctx.contract()?.capabilities[capability];
     if (availability?.status !== 'supported') {
-      return Object.freeze({ status: 'unsupported', capability, reason: availability?.reason === 'framework-unobservable' ? 'framework-unobservable' : availability?.reason === undefined || availability.reason === 'not-negotiated' ? 'not-negotiated' : 'capability' });
+      return Object.freeze({
+        status: 'unsupported',
+        capability,
+        reason:
+          availability?.reason === 'framework-unobservable'
+            ? 'framework-unobservable'
+            : availability?.reason === undefined || availability.reason === 'not-negotiated'
+              ? 'not-negotiated'
+              : 'capability',
+      });
     }
-    const bool = (value: boolean, evidence: EvidenceProvenance = availability.evidence): Observation<boolean> =>
-      Object.freeze({ status: 'known', value, evidence });
+    const bool = (
+      value: boolean,
+      evidence: EvidenceProvenance = availability.evidence,
+    ): Observation<boolean> => Object.freeze({ status: 'known', value, evidence });
     // Before the first committed semantic tree, an empty match set is not
     // evidence of absence. In particular hidden/detached must not false-green
     // while an attached provider is still producing its initial revision.
     if (this.#expr.domain === 'semantic' && this.#ctx.semanticIndex() === null) {
       return Object.freeze({ status: 'unknown', reason: 'awaiting-revision-pair' });
     }
-    if (kind === 'attached' || kind === 'detached') return bool(kind === 'attached' ? target !== null : target === null);
+    if (kind === 'attached' || kind === 'detached')
+      return bool(kind === 'attached' ? target !== null : target === null);
     if (target === null) {
       // Hidden intentionally includes detachment. This is the ergonomic
       // condition for transient UI such as loaders; callers that need to
@@ -1214,7 +1700,13 @@ export class LocatorImpl {
       if (kind === 'hidden') return bool(false);
       if (kind === 'visible' || kind === 'in-viewport' || kind === 'offscreen') {
         const ratio = target.rect === null ? 0 : this.#viewport(target.rect).ratio;
-        return bool(kind === 'offscreen' ? ratio === 0 : kind === 'visible' ? ratio > 0 : ratio >= (condition.kind === 'in-viewport' ? condition.minRatio : 0));
+        return bool(
+          kind === 'offscreen'
+            ? ratio === 0
+            : kind === 'visible'
+              ? ratio > 0
+              : ratio >= (condition.kind === 'in-viewport' ? condition.minRatio : 0),
+        );
       }
       return Object.freeze({ status: 'unsupported', capability: kind, reason: 'capability' });
     }
@@ -1236,74 +1728,167 @@ export class LocatorImpl {
       const intendedArea = intended.value.width * intended.value.height;
       const visibleArea = visible.value.width * visible.value.height;
       const ratio = intendedArea === 0 ? 0 : visibleArea / intendedArea;
-      return bool(kind === 'offscreen' ? intendedArea > 0 && visibleArea === 0 : kind === 'visible' ? visibleArea > 0 : ratio >= (condition.kind === 'in-viewport' ? condition.minRatio : 0), visible.evidence);
+      return bool(
+        kind === 'offscreen'
+          ? intendedArea > 0 && visibleArea === 0
+          : kind === 'visible'
+            ? visibleArea > 0
+            : ratio >= (condition.kind === 'in-viewport' ? condition.minRatio : 0),
+        visible.evidence,
+      );
     }
     if (kind === 'pointer-input') {
       const pointer = this.#ctx.contract()?.capabilities['pointer-input'];
       return pointer?.status === 'supported'
         ? bool(true, pointer.evidence)
-        : Object.freeze({ status: 'unsupported', capability: kind, reason: pointer?.reason === 'not-negotiated' || pointer === undefined ? 'not-negotiated' : 'capability' });
+        : Object.freeze({
+            status: 'unsupported',
+            capability: kind,
+            reason:
+              pointer?.reason === 'not-negotiated' || pointer === undefined
+                ? 'not-negotiated'
+                : 'capability',
+          });
     }
     if (kind === 'mouse-input-enabled') {
       const modes = this.#ctx.modes();
-      const evidence = Object.freeze({ source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'termwright-vt' } as const);
+      const evidence = Object.freeze({
+        source: 'terminal',
+        method: 'native',
+        strength: 'authoritative',
+        providerId: 'termwright-vt',
+      } as const);
       return modes.mouseTracking === 'unknown' || modes.mouseEncoding === 'unknown'
         ? Object.freeze({ status: 'unknown', reason: 'provider-refresh' })
         : bool(modes.mouseTracking !== 'none', evidence);
     }
     if (kind === 'pointer-region' || kind === 'receives-pointer') {
-      const pointer = this.#ctx.contract()?.capabilities[kind === 'pointer-region' ? 'pointer-geometry' : 'pointer-hit-testing'];
+      const pointer =
+        this.#ctx.contract()?.capabilities[
+          kind === 'pointer-region' ? 'pointer-geometry' : 'pointer-hit-testing'
+        ];
       if (pointer?.status !== 'supported') {
         if (kind === 'receives-pointer') {
           const nodeId = semanticNodeId(target.ref) ?? '';
           const region = this.#ctx.pointerRegion(nodeId);
-          if (region !== undefined && isAuthoritativeRegionOwnership(this.#ctx.contract(), region.evidence)) {
+          if (
+            region !== undefined &&
+            isAuthoritativeRegionOwnership(this.#ctx.contract(), region.evidence)
+          ) {
             return bool(region.spans.length > 0, region.evidence);
           }
         }
-        return Object.freeze({ status: 'unsupported', capability: kind, reason: pointer?.reason === 'framework-unobservable' ? 'framework-unobservable' : pointer?.reason === 'not-negotiated' || pointer === undefined ? 'not-negotiated' : 'capability' });
+        return Object.freeze({
+          status: 'unsupported',
+          capability: kind,
+          reason:
+            pointer?.reason === 'framework-unobservable'
+              ? 'framework-unobservable'
+              : pointer?.reason === 'not-negotiated' || pointer === undefined
+                ? 'not-negotiated'
+                : 'capability',
+        });
       }
       const nodeId = semanticNodeId(target.ref) ?? '';
       const region = this.#ctx.pointerRegion(nodeId);
-      if (kind === 'pointer-region') return bool(region !== undefined && region.spans.length > 0, pointer.evidence);
+      if (kind === 'pointer-region')
+        return bool(region !== undefined && region.spans.length > 0, pointer.evidence);
       const grid = this.#ctx.hitGrid();
-      if (grid === undefined) return Object.freeze({ status: 'unknown', reason: 'provider-refresh' });
+      if (grid === undefined)
+        return Object.freeze({ status: 'unknown', reason: 'provider-refresh' });
       if (grid.status !== 'known') return withoutValue<boolean>(grid);
       if (region === undefined) return bool(false, grid.evidence);
-      const receives = region.spans.some((span) => grid.value.regions.some((hit) =>
-        hit.recipientId === nodeId && span.row >= hit.rect.row && span.row < hit.rect.row + hit.rect.height &&
-        Math.max(span.from, hit.rect.column) < Math.min(span.to, hit.rect.column + hit.rect.width),
-      ));
+      const receives = region.spans.some((span) =>
+        grid.value.regions.some(
+          (hit) =>
+            hit.recipientId === nodeId &&
+            span.row >= hit.rect.row &&
+            span.row < hit.rect.row + hit.rect.height &&
+            Math.max(span.from, hit.rect.column) <
+              Math.min(span.to, hit.rect.column + hit.rect.width),
+        ),
+      );
       return bool(receives, grid.evidence);
     }
-    const stateEvidence = this.#ctx.contract()?.capabilities[kind === 'focused' ? 'focus' : 'semantic-tree'];
+    const stateEvidence =
+      this.#ctx.contract()?.capabilities[kind === 'focused' ? 'focus' : 'semantic-tree'];
     if (stateEvidence?.status !== 'supported') {
-      return Object.freeze({ status: 'unsupported', capability: kind, reason: stateEvidence?.reason === 'framework-unobservable' ? 'framework-unobservable' : stateEvidence?.reason === 'not-negotiated' || stateEvidence === undefined ? 'not-negotiated' : 'capability' });
+      return Object.freeze({
+        status: 'unsupported',
+        capability: kind,
+        reason:
+          stateEvidence?.reason === 'framework-unobservable'
+            ? 'framework-unobservable'
+            : stateEvidence?.reason === 'not-negotiated' || stateEvidence === undefined
+              ? 'not-negotiated'
+              : 'capability',
+      });
     }
     const state = node.state ?? {};
     if (kind === 'focused') return bool(state.focused === true, stateEvidence.evidence);
-    if (kind === 'enabled' || kind === 'disabled') return bool(kind === 'enabled' ? state.disabled !== true : state.disabled === true, stateEvidence.evidence);
-    if (kind === 'checked') return state.checked === undefined
-      ? Object.freeze({ status: 'unsupported', capability: 'checked-state', reason: 'capability' })
-      : bool(state.checked === condition.value, stateEvidence.evidence);
-    if (kind === 'selected') return state.selected === undefined
-      ? Object.freeze({ status: 'unsupported', capability: 'selected-state', reason: 'capability' })
-      : bool(state.selected === condition.value, stateEvidence.evidence);
-    if (kind === 'expanded') return state.expanded === undefined
-      ? Object.freeze({ status: 'unsupported', capability: 'expanded-state', reason: 'capability' })
-      : bool(state.expanded === condition.value, stateEvidence.evidence);
-    if (kind === 'collapsed') return state.expanded === undefined
-      ? Object.freeze({ status: 'unsupported', capability: 'expanded-state', reason: 'capability' })
-      : bool(state.expanded === false, stateEvidence.evidence);
+    if (kind === 'enabled' || kind === 'disabled')
+      return bool(
+        kind === 'enabled' ? state.disabled !== true : state.disabled === true,
+        stateEvidence.evidence,
+      );
+    if (kind === 'checked')
+      return state.checked === undefined
+        ? Object.freeze({
+            status: 'unsupported',
+            capability: 'checked-state',
+            reason: 'capability',
+          })
+        : bool(state.checked === condition.value, stateEvidence.evidence);
+    if (kind === 'selected')
+      return state.selected === undefined
+        ? Object.freeze({
+            status: 'unsupported',
+            capability: 'selected-state',
+            reason: 'capability',
+          })
+        : bool(state.selected === condition.value, stateEvidence.evidence);
+    if (kind === 'expanded')
+      return state.expanded === undefined
+        ? Object.freeze({
+            status: 'unsupported',
+            capability: 'expanded-state',
+            reason: 'capability',
+          })
+        : bool(state.expanded === condition.value, stateEvidence.evidence);
+    if (kind === 'collapsed')
+      return state.expanded === undefined
+        ? Object.freeze({
+            status: 'unsupported',
+            capability: 'expanded-state',
+            reason: 'capability',
+          })
+        : bool(state.expanded === false, stateEvidence.evidence);
     if (kind === 'value') {
       const observation = node.value;
-      if (observation === undefined || observation.status === 'absent') return Object.freeze({ status: 'unsupported', capability: 'semantic-value', reason: 'capability' });
-      if (observation.status === 'unknown' || observation.status === 'unsupported' || observation.status === 'withheld') return Object.freeze({ status: 'unsupported', capability: 'semantic-value', reason: 'capability' });
+      if (observation === undefined || observation.status === 'absent')
+        return Object.freeze({
+          status: 'unsupported',
+          capability: 'semantic-value',
+          reason: 'capability',
+        });
+      if (
+        observation.status === 'unknown' ||
+        observation.status === 'unsupported' ||
+        observation.status === 'withheld'
+      )
+        return Object.freeze({
+          status: 'unsupported',
+          capability: 'semantic-value',
+          reason: 'capability',
+        });
       const value = observation.value;
       const matcher = condition.matcher;
-      const matches = matcher.kind === 'regex'
-        ? new RegExp(matcher.source, matcher.flags.replace(/[gy]/gu, '')).test(value)
-        : matcher.kind === 'exact' ? value === matcher.text : value.includes(matcher.text);
+      const matches =
+        matcher.kind === 'regex'
+          ? new RegExp(matcher.source, matcher.flags.replace(/[gy]/gu, '')).test(value)
+          : matcher.kind === 'exact'
+            ? value === matcher.text
+            : value.includes(matcher.text);
       return bool(matches, stateEvidence.evidence);
     }
     return Object.freeze({ status: 'unsupported', capability: kind, reason: 'capability' });
@@ -1345,7 +1930,9 @@ export class LocatorImpl {
         return match === undefined ? [] : [match];
       }
       case 'filter':
-        return this.#evaluate(expr.source, scope).filter((target) => this.#matchesFilter(target, expr.filter));
+        return this.#evaluate(expr.source, scope).filter((target) =>
+          this.#matchesFilter(target, expr.filter),
+        );
       case 'and': {
         const left = this.#evaluate(expr.left, scope);
         const rightRefs = new Set(this.#evaluate(expr.right, scope).map((target) => target.ref));
@@ -1354,7 +1941,10 @@ export class LocatorImpl {
       case 'or': {
         const left = this.#evaluate(expr.left, scope);
         const refs = new Set(left.map((target) => target.ref));
-        return [...left, ...this.#evaluate(expr.right, scope).filter((target) => !refs.has(target.ref))];
+        return [
+          ...left,
+          ...this.#evaluate(expr.right, scope).filter((target) => !refs.has(target.ref)),
+        ];
       }
     }
   }
@@ -1366,20 +1956,35 @@ export class LocatorImpl {
             const index = this.#ctx.semanticIndex();
             const node = index?.node(semanticNodeId(target.ref) ?? '');
             if (node === undefined) return '';
-            const nodes = [node, ...(index?.nodes.filter((candidate) => index.isDescendantOf(candidate, node.id)) ?? [])];
-            return nodes.flatMap((candidate) => [candidate.name, candidate.value?.status === 'known' ? candidate.value.value : undefined, index?.label(candidate)]).filter(Boolean).join(' ');
+            const nodes = [
+              node,
+              ...(index?.nodes.filter((candidate) => index.isDescendantOf(candidate, node.id)) ??
+                []),
+            ];
+            return nodes
+              .flatMap((candidate) => [
+                candidate.name,
+                candidate.value?.status === 'known' ? candidate.value.value : undefined,
+                index?.label(candidate),
+              ])
+              .filter(Boolean)
+              .join(' ');
           })()
-        : target.rect === null ? '' : textInRect(this.#ctx.rows(), target.rect);
+        : target.rect === null
+          ? ''
+          : textInRect(this.#ctx.rows(), target.rect);
       const matcher = filter.hasText;
-      const matches = matcher.kind === 'regex'
-        ? new RegExp(matcher.source.source, matcher.source.flags.replace(/[gy]/gu, '')).test(text)
-        : matcher.kind === 'exact'
-          ? text.trim() === matcher.text.trim()
-          : text.toLowerCase().includes(matcher.text.trim().toLowerCase());
+      const matches =
+        matcher.kind === 'regex'
+          ? new RegExp(matcher.source.source, matcher.source.flags.replace(/[gy]/gu, '')).test(text)
+          : matcher.kind === 'exact'
+            ? text.trim() === matcher.text.trim()
+            : text.toLowerCase().includes(matcher.text.trim().toLowerCase());
       if (!matches) return false;
     }
     if (filter.has !== undefined && this.#evaluate(filter.has, target).length === 0) return false;
-    if (filter.hasNot !== undefined && this.#evaluate(filter.hasNot, target).length > 0) return false;
+    if (filter.hasNot !== undefined && this.#evaluate(filter.hasNot, target).length > 0)
+      return false;
     return true;
   }
 
@@ -1466,11 +2071,13 @@ export class LocatorImpl {
     if (scope?.semantic === true) {
       throw new TypeError(
         'terminal-grid locators cannot be scoped through semantic geometry implicitly; ' +
-        'query the screen explicitly with getByScreenText()',
+          'query the screen explicitly with getByScreenText()',
       );
     }
     const revision = this.#ctx.screenRevision();
-    return matchGrid(this.#ctx.rows(), query, scope?.rect ?? null).map((rect) => rectTarget(rect, revision));
+    return matchGrid(this.#ctx.rows(), query, scope?.rect ?? null).map((rect) =>
+      rectTarget(rect, revision),
+    );
   }
 
   /** Applies strict-mode selection; returns `null` when nothing is selectable yet. */
@@ -1481,7 +2088,8 @@ export class LocatorImpl {
         `locator ${this.description} matched ${matches.length} nodes in strict mode`,
         matches.slice(0, MAX_CANDIDATES),
         this.#ctx.errorDiagnostics({
-          suggestion: 'narrow the locator with within(), a name option, or select one with first()/nth()',
+          suggestion:
+            'narrow the locator with within(), a name option, or select one with first()/nth()',
         }),
       );
     }

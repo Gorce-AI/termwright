@@ -37,7 +37,10 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
     expect(first.error ?? null).toBeNull();
     expect(first.state).toBe('passed');
     expect(first.catalog?.tests).toHaveLength(2);
-    expect(first.catalog?.tests.map((test) => test.fullName)).toEqual(['duplicate title', 'duplicate title']);
+    expect(first.catalog?.tests.map((test) => test.fullName)).toEqual([
+      'duplicate title',
+      'duplicate title',
+    ]);
     expect(first.catalog?.tests[0]?.resourceReservation).toEqual({
       ptySession: 2,
       externalProcess: 2,
@@ -50,11 +53,16 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
     expect(first.events.filter((event) => event.type === 'attempt.finished')).toHaveLength(2);
     const output = first.events.filter((event) => event.type === 'test.output');
     expect(output).toHaveLength(2);
-    expect(output.map((event) => (event.payload as { stream: string }).stream).sort()).toEqual(['stderr', 'stdout']);
-    const contentByStream = new Map(output.map((event) => {
-      const payload = event.payload as { stream: string; content: string };
-      return [payload.stream, payload.content] as const;
-    }));
+    expect(output.map((event) => (event.payload as { stream: string }).stream).sort()).toEqual([
+      'stderr',
+      'stdout',
+    ]);
+    const contentByStream = new Map(
+      output.map((event) => {
+        const payload = event.payload as { stream: string; content: string };
+        return [payload.stream, payload.content] as const;
+      }),
+    );
     expect(contentByStream.get('stdout')).toContain('native-host-output:attempt:');
     expect(contentByStream.get('stderr')).toContain('native-host-stderr-fixture:attempt:');
     // Vitest delivers console output on its own schedule, so a line written
@@ -63,9 +71,14 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
     // legitimately absent then, which is what taskAttributed reports. The
     // guarantee that matters is the other one: a line must never land on a
     // different test's attempt, and it must always name its own task.
-    const startedFor = new Map(first.events
-      .filter((event) => event.type === 'attempt.started')
-      .map((event) => [(event.payload as { nativeTaskId: string }).nativeTaskId, event.identity.attemptId]));
+    const startedFor = new Map(
+      first.events
+        .filter((event) => event.type === 'attempt.started')
+        .map((event) => [
+          (event.payload as { nativeTaskId: string }).nativeTaskId,
+          event.identity.attemptId,
+        ]),
+    );
     expect(startedFor.size).toBe(2);
     for (const event of output) {
       const task = (event.payload as { nativeTaskId?: string }).nativeTaskId;
@@ -77,7 +90,9 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
         expect(event.identity.attemptId).toBe(startedFor.get(task!));
       }
     }
-    expect(new Set(output.map((event) => (event.payload as { nativeTaskId: string }).nativeTaskId)).size).toBe(2);
+    expect(
+      new Set(output.map((event) => (event.payload as { nativeTaskId: string }).nativeTaskId)).size,
+    ).toBe(2);
 
     const selected = first.catalog?.tests[1]?.runnerTaskId;
     expect(selected).toBeDefined();

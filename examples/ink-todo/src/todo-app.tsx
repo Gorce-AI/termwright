@@ -11,7 +11,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, type DOMElement } from 'ink';
 import { useSemantic } from '@termwright/ink';
 import { ConfirmDialog } from './confirm-dialog.js';
-import { isMouseReport, parseMousePress, routePointer, useMouseReporting, usePointerTarget } from './mouse.js';
+import {
+  isMouseReport,
+  parseMousePress,
+  routePointer,
+  useMouseReporting,
+  usePointerTarget,
+} from './mouse.js';
 import { SEED_TODOS, type Todo } from './store.js';
 
 export interface TodoAppProps {
@@ -88,7 +94,10 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
 
   function add(): void {
     if (filter.length === 0) return;
-    setTodos((all) => [...all, { id: Math.max(0, ...all.map((t) => t.id)) + 1, text: filter, done: false }]);
+    setTodos((all) => [
+      ...all,
+      { id: Math.max(0, ...all.map((t) => t.id)) + 1, text: filter, done: false },
+    ]);
     setStatus(`added ${filter}`);
     setFilter('');
   }
@@ -144,12 +153,15 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
         return;
       }
       if (input === ' ' && focus === 'list' && current !== undefined) {
-        setTodos((all) => all.map((todo) => (todo.id === current.id ? { ...todo, done: !todo.done } : todo)));
+        setTodos((all) =>
+          all.map((todo) => (todo.id === current.id ? { ...todo, done: !todo.done } : todo)),
+        );
         return;
       }
       if (focus === 'filter') {
         if (key.backspace || key.delete) setFilter((text) => text.slice(0, -1));
-        else if (input.length > 0 && !key.ctrl && !key.meta && !key.escape) setFilter((text) => text + input);
+        else if (input.length > 0 && !key.ctrl && !key.meta && !key.escape)
+          setFilter((text) => text + input);
       }
     },
     { isActive: !confirming },
@@ -165,11 +177,7 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
 
       <Box ref={listRef} flexDirection="column">
         {visible.map((todo) => (
-          <TodoRow
-            key={todo.id}
-            todo={todo}
-            selected={current?.id === todo.id}
-          />
+          <TodoRow key={todo.id} todo={todo} selected={current?.id === todo.id} />
         ))}
       </Box>
 
@@ -205,13 +213,7 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
   );
 }
 
-function TodoRow({
-  todo,
-  selected,
-}: {
-  readonly todo: Todo;
-  readonly selected: boolean;
-}) {
+function TodoRow({ todo, selected }: { readonly todo: Todo; readonly selected: boolean }) {
   const ref = useRef<DOMElement>(null);
 
   useSemantic(ref, {

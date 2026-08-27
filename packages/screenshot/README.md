@@ -64,17 +64,17 @@ rather than looked up by first code point.
 
 ```ts
 const shot = renderSvg(frame);
-shot.svg;                  // the document
-shot.width;                // user units, so a caller can size the element
+shot.svg; // the document
+shot.width; // user units, so a caller can size the element
 shot.height;
-shot.selfContained;        // true when no character needed a font at view time
-shot.fallbackCharacters;   // the ones that did, e.g. ['\u{F0000}']
-shot.fontsUsed;            // font files whose glyphs were embedded
+shot.selfContained; // true when no character needed a font at view time
+shot.fallbackCharacters; // the ones that did, e.g. ['\u{F0000}']
+shot.fontsUsed; // font files whose glyphs were embedded
 ```
 
 `renderPng` returns the same story in pixels: `png`, `width`, `height` (SVG
 units × `scale`), plus `selfContained`, `fallbackCharacters` and
-`systemFontsLoaded` — the last one says whether *this* render paid for the font
+`systemFontsLoaded` — the last one says whether _this_ render paid for the font
 scan described below.
 
 ### The cost of a fallback
@@ -85,7 +85,7 @@ on **every call** — about a second on macOS, several on Windows, with no cache
 between renders. Rendering a batch of frames that all contain one uncoverable
 character therefore costs seconds per frame.
 
-Whether a frame has fallback characters is a property of *the machine's fonts*,
+Whether a frame has fallback characters is a property of _the machine's fonts_,
 not of the content: a desktop with CJK and emoji faces embeds almost everything,
 while a minimal CI container with one Latin font falls back on both. The slow
 path is therefore rarest where it is usually measured and commonest where it
@@ -132,13 +132,15 @@ import { generateHtmlReport } from '@termwright/trace';
 
 await generateHtmlReport({
   outFile: 'out/report.html',
-  results: [{
-    id: 't1',
-    title: 'login',
-    status: 'failed',
-    tracePath: 'out/login.twtrace',
-    screenshots: [{ label: 'at failure', image: renderPng(frame, { scale: 2 }).png }],
-  }],
+  results: [
+    {
+      id: 't1',
+      title: 'login',
+      status: 'failed',
+      tracePath: 'out/login.twtrace',
+      screenshots: [{ label: 'at failure', image: renderPng(frame, { scale: 2 }).png }],
+    },
+  ],
 });
 ```
 

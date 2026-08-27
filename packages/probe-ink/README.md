@@ -16,9 +16,9 @@ the preload verifies both instrumented upstream modules by SHA-256 before it
 negotiates semantic capabilities.
 
 ```ts
-import {withProbe} from '@termwright/probe-ink';
+import { withProbe } from '@termwright/probe-ink';
 
-const {command} = withProbe('node', ['node', 'app.mjs']);
+const { command } = withProbe('node', ['node', 'app.mjs']);
 await launchTerminal({
   command,
   env: {

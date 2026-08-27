@@ -30,7 +30,9 @@ for (const entry of entries.sort((left, right) => left.name.localeCompare(right.
     manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   } catch (error) {
     if (error?.code === 'ENOENT') continue;
-    errors.push(`${relative(ROOT, manifestPath)}: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(
+      `${relative(ROOT, manifestPath)}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     continue;
   }
 
@@ -48,9 +50,7 @@ for (const entry of entries.sort((left, right) => left.name.localeCompare(right.
     actual?.url !== expected.url ||
     actual?.directory !== expected.directory
   ) {
-    errors.push(
-      `${relative(ROOT, manifestPath)}: repository must be ${JSON.stringify(expected)}`,
-    );
+    errors.push(`${relative(ROOT, manifestPath)}: repository must be ${JSON.stringify(expected)}`);
   }
 }
 

@@ -15,16 +15,16 @@ and retained traces beyond `lastFrame()` string assertions.
 
 ```tsx
 // before
-import {render} from 'ink-testing-library';
+import { render } from 'ink-testing-library';
 
-const {lastFrame, stdin, rerender} = render(<Approve />);
+const { lastFrame, stdin, rerender } = render(<Approve />);
 stdin.write('\r');
 expect(lastFrame()).toContain('approved');
 ```
 
 ```tsx
 // after
-import {mountInk} from 'termwright/ink';
+import { mountInk } from 'termwright/ink';
 
 const harness = await mountInk(<Approve />);
 await harness.press('Enter');
@@ -32,14 +32,14 @@ await harness.waitForText('approved');
 await harness.close();
 ```
 
-| `ink-testing-library` | Termwright |
-|---|---|
-| `render(<App />)` | `await mountInk(<App />)` |
-| `lastFrame()` | `harness.screen().text()`, `waitForText()`, or `toHaveText()` |
-| `frames` | retained [trace recording](../../tools/traces-reports/) |
-| `stdin.write('\r')` | `harness.press('Enter')` |
-| `rerender(<App />)` | `await harness.rerender(<App />)` |
-| `unmount()` | `await harness.close()` |
+| `ink-testing-library` | Termwright                                                    |
+| --------------------- | ------------------------------------------------------------- |
+| `render(<App />)`     | `await mountInk(<App />)`                                     |
+| `lastFrame()`         | `harness.screen().text()`, `waitForText()`, or `toHaveText()` |
+| `frames`              | retained [trace recording](../../tools/traces-reports/)       |
+| `stdin.write('\r')`   | `harness.press('Enter')`                                      |
+| `rerender(<App />)`   | `await harness.rerender(<App />)`                             |
+| `unmount()`           | `await harness.close()`                                       |
 
 Calls are asynchronous because they wait for rendered terminal state. Add the
 [Ink integration](../../adapters/ink/) when the test needs semantic roles,
@@ -75,14 +75,14 @@ Keep the executable and user-visible scenarios. Replace process lifecycle,
 terminal parsing, polling, and artifact collection with the corresponding
 Termwright surfaces:
 
-| Existing harness | Termwright |
-|---|---|
-| `spawn()` or PTY setup | `terminal.launch()` |
-| raw stdout buffer | `app.screen()` |
-| polling loop | `waitForText()` or a retrying assertion |
-| stdin writes | `press()`, `type()`, or `paste()` |
+| Existing harness         | Termwright                                |
+| ------------------------ | ----------------------------------------- |
+| `spawn()` or PTY setup   | `terminal.launch()`                       |
+| raw stdout buffer        | `app.screen()`                            |
+| polling loop             | `waitForText()` or a retrying assertion   |
+| stdin writes             | `press()`, `type()`, or `paste()`         |
 | shared fixture directory | `launch({files})` or `launch({template})` |
-| transcript on failure | retained trace and HTML report |
+| transcript on failure    | retained trace and HTML report            |
 
 Start by preserving the existing keyboard-driven workflow. Add semantic
 locators only after the relevant [framework integration](../../adapters/) is

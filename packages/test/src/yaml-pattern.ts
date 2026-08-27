@@ -46,8 +46,19 @@ export interface NodePattern {
 }
 
 const STATE_KEYS: ReadonlySet<string> = new Set<keyof SemanticState>([
-  'disabled', 'focused', 'selected', 'checked', 'expanded', 'modal', 'busy',
-  'hidden', 'readonly', 'multiline', 'orientation', 'level', 'positionInSet',
+  'disabled',
+  'focused',
+  'selected',
+  'checked',
+  'expanded',
+  'modal',
+  'busy',
+  'hidden',
+  'readonly',
+  'multiline',
+  'orientation',
+  'level',
+  'positionInSet',
   'setSize',
 ]);
 
@@ -95,14 +106,18 @@ function parseItem(item: unknown, path: string): NodePattern {
     const entries = Object.entries(item as Record<string, unknown>);
     const entry = entries[0];
     if (entries.length !== 1 || entry === undefined) {
-      throw new TypeError(`invalid semantic snapshot at ${path}: a node must carry exactly one head`);
+      throw new TypeError(
+        `invalid semantic snapshot at ${path}: a node must carry exactly one head`,
+      );
     }
     const [head, children] = entry;
     const parsed = parseNodeHead(head, path);
     if (children === null) return parsed;
     return { ...parsed, children: parseList(children, path) };
   }
-  throw new TypeError(`invalid semantic snapshot at ${path}: expected a node, received ${describe(item)}`);
+  throw new TypeError(
+    `invalid semantic snapshot at ${path}: expected a node, received ${describe(item)}`,
+  );
 }
 
 /** Parses a single head such as `button "Approve" [focused,!disabled]`. */
@@ -117,7 +132,9 @@ export function parseNodeHead(head: string, path = ''): NodePattern {
   }
   const role = groups['role'] as SemanticRole | '*';
   if (role !== '*' && !(SEMANTIC_ROLES as readonly string[]).includes(role)) {
-    throw new TypeError(`unknown role ${JSON.stringify(role)}${at}; see SEMANTIC_ROLES in @termwright/protocol`);
+    throw new TypeError(
+      `unknown role ${JSON.stringify(role)}${at}; see SEMANTIC_ROLES in @termwright/protocol`,
+    );
   }
   const name = groups['name'];
   return {
@@ -156,13 +173,22 @@ function parseFlags(source: string | undefined, at: string): readonly FlagAssert
     const eq = body.indexOf('=');
     const key = (eq === -1 ? body : body.slice(0, eq)).trim();
     if (!STATE_KEYS.has(key)) {
-      throw new TypeError(`unknown state flag ${JSON.stringify(key)}${at}; see SemanticState in @termwright/protocol`);
+      throw new TypeError(
+        `unknown state flag ${JSON.stringify(key)}${at}; see SemanticState in @termwright/protocol`,
+      );
     }
     const value = eq === -1 ? undefined : body.slice(eq + 1).trim();
     if (value !== undefined && negated) {
-      throw new TypeError(`flag ${JSON.stringify(entry)}${at} cannot be both negated and compared to a value`);
+      throw new TypeError(
+        `flag ${JSON.stringify(entry)}${at} cannot be both negated and compared to a value`,
+      );
     }
-    flags.push({ key: key as keyof SemanticState, negated, ...(value === undefined ? {} : { value }), source: entry });
+    flags.push({
+      key: key as keyof SemanticState,
+      negated,
+      ...(value === undefined ? {} : { value }),
+      source: entry,
+    });
   }
   return flags;
 }

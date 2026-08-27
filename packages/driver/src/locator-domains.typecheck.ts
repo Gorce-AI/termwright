@@ -6,8 +6,13 @@ declare const semantic: SemanticLocator;
 declare const screen: ScreenLocator;
 
 if (false) {
-  const nested: SemanticLocator = semantic.getByRole('button').filter({ has: app.getByText('Save') });
-  const physical: ScreenLocator = screen.getByScreenText('Save').nth(0).and(app.getByScreenText('Save'));
+  const nested: SemanticLocator = semantic
+    .getByRole('button')
+    .filter({ has: app.getByText('Save') });
+  const physical: ScreenLocator = screen
+    .getByScreenText('Save')
+    .nth(0)
+    .and(app.getByScreenText('Save'));
   void nested;
   void physical;
 

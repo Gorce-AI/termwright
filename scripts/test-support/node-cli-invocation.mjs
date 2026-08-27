@@ -19,7 +19,11 @@ export function npmInvocation(options = {}) {
 }
 
 /** Invoke the installed Vitest entry point without a platform shell shim. */
-export function vitestInvocation(project, execPath = process.execPath, platform = process.platform) {
+export function vitestInvocation(
+  project,
+  execPath = process.execPath,
+  platform = process.platform,
+) {
   const path = platform === 'win32' ? win32 : posix;
   return {
     file: execPath,

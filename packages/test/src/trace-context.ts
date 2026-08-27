@@ -9,9 +9,18 @@
  */
 
 import type { GherkinStepMetadata, StepHandle, StepStatus, TraceWriter } from '@termwright/trace';
-import { createRunId, type LocatorRef, type ObservationStamp, type StepId } from '@termwright/protocol';
+import {
+  createRunId,
+  type LocatorRef,
+  type ObservationStamp,
+  type StepId,
+} from '@termwright/protocol';
 import type { ResolvedTermwrightConfig } from './config.js';
-import { currentAttemptContext, currentAttemptEventRecorder, currentAttemptRuntime } from './attempt-context.js';
+import {
+  currentAttemptContext,
+  currentAttemptEventRecorder,
+  currentAttemptRuntime,
+} from './attempt-context.js';
 
 /** A recorded assertion, mirroring `AssertEvent` without the trace bookkeeping. */
 export interface AssertRecord {
@@ -52,7 +61,8 @@ const stepStacks = new WeakMap<TermwrightScope, ActiveStep[]>();
  */
 export function enterScope(scope: TermwrightScope): () => void {
   const runtime = currentAttemptRuntime();
-  if (runtime.scope !== undefined) throw new Error('the current Termwright attempt already has a fixture scope');
+  if (runtime.scope !== undefined)
+    throw new Error('the current Termwright attempt already has a fixture scope');
   runtime.scope = scope;
   let exited = false;
   return () => {
@@ -107,7 +117,10 @@ export function beginStep(
   currentAttemptContext();
   const attemptEvents = currentAttemptEventRecorder();
   const id = createRunId('step');
-  const writerMetadata = { stepId: id, ...(metadata?.gherkin === undefined ? {} : { gherkin: metadata.gherkin }) };
+  const writerMetadata = {
+    stepId: id,
+    ...(metadata?.gherkin === undefined ? {} : { gherkin: metadata.gherkin }),
+  };
   const frame: ActiveStep = {
     id,
     title,
@@ -123,9 +136,11 @@ export function beginStep(
     stepId: id,
     payload: {
       title,
-      ...(metadata?.gherkin === undefined ? {} : {
-        gherkin: JSON.parse(JSON.stringify(metadata.gherkin)),
-      }),
+      ...(metadata?.gherkin === undefined
+        ? {}
+        : {
+            gherkin: JSON.parse(JSON.stringify(metadata.gherkin)),
+          }),
     },
   });
   let ended = false;

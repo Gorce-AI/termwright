@@ -66,7 +66,10 @@ export function installInkCaptureHook(): () => void {
     if (screenReader) {
       retainInkFrame({
         root: root as InkDomElement,
-        staticRoots: (root as InkDomElement).staticNode === undefined ? [] : [(root as InkDomElement).staticNode as InkDomElement],
+        staticRoots:
+          (root as InkDomElement).staticNode === undefined
+            ? []
+            : [(root as InkDomElement).staticNode as InkDomElement],
         staticChildren: snapshotStaticChildren((root as InkDomElement).staticNode),
         rendered,
         screenReader,
@@ -195,7 +198,10 @@ export function retainInkFrame(capture: InkFrameCapture): void {
   const staticChildren = new Map(previous.staticChildren);
   for (const [parent, currentChildren] of capture.staticChildren) {
     const retained = staticChildren.get(parent) ?? [];
-    staticChildren.set(parent, [...retained, ...currentChildren.filter((child) => !retained.includes(child))]);
+    staticChildren.set(parent, [
+      ...retained,
+      ...currentChildren.filter((child) => !retained.includes(child)),
+    ]);
   }
   latest.set(capture.root, {
     ...capture,
@@ -206,7 +212,9 @@ export function retainInkFrame(capture: InkFrameCapture): void {
   });
 }
 
-function snapshotStaticChildren(root: InkDomElement | undefined): ReadonlyMap<InkDomElement, readonly InkDomNode[]> {
+function snapshotStaticChildren(
+  root: InkDomElement | undefined,
+): ReadonlyMap<InkDomElement, readonly InkDomNode[]> {
   const result = new Map<InkDomElement, readonly InkDomNode[]>();
   if (root === undefined) return result;
   const stack = [root];

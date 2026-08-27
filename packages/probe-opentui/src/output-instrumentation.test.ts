@@ -37,29 +37,59 @@ describe('OpenTUI local-feed structural instrumentation', () => {
     expect(transformed).toContain('__termwrightLocalFeed ? this.stdout.write : stdout.write');
     expect(transformed).toContain('const useFeedOutput = (__termwrightLocalFeed ||');
     expect(transformed.match(/streamOwners\.(?:get|set)\(this\.stdout/gu)).toHaveLength(2);
-    expect(transformed).toContain('stdout[Symbol.for("termwright.opentui.marker-sink-feed-write.v1")](bytes');
+    expect(transformed).toContain(
+      'stdout[Symbol.for("termwright.opentui.marker-sink-feed-write.v1")](bytes',
+    );
     expect(transformed).not.toContain('remote: false');
   });
 
   it('fails closed when the constructor shape is absent or ambiguous', () => {
-    expect(instrumentOpenTuiOutput('export const value = 1;', '0.5.3', 'test-token')).toBeUndefined();
-    expect(instrumentOpenTuiOutput(`${fixture}\n${fixture}`, '0.5.3', 'test-token')).toBeUndefined();
+    expect(
+      instrumentOpenTuiOutput('export const value = 1;', '0.5.3', 'test-token'),
+    ).toBeUndefined();
+    expect(
+      instrumentOpenTuiOutput(`${fixture}\n${fixture}`, '0.5.3', 'test-token'),
+    ).toBeUndefined();
   });
 
   it.each([
-    ['duplicate feed write', fixture.replace(
-      'this.realStdoutWrite.call(this.stdout, bytes, () => resolve());',
-      'this.realStdoutWrite.call(this.stdout, bytes, () => resolve()); this.realStdoutWrite.call(this.stdout, bytes, () => resolve());',
-    )],
+    [
+      'duplicate feed write',
+      fixture.replace(
+        'this.realStdoutWrite.call(this.stdout, bytes, () => resolve());',
+        'this.realStdoutWrite.call(this.stdout, bytes, () => resolve()); this.realStdoutWrite.call(this.stdout, bytes, () => resolve());',
+      ),
+    ],
     ['feed write outside onData', fixture.replace('this._detachFeed = feed.onData', 'consume')],
-    ['unexpected feed write arity', fixture.replace('bytes, () => resolve()', 'bytes, "utf8", () => resolve()')],
-    ['missing stdout lease set', fixture.replace('rendererTracker.streamOwners.set(stdout, this)', 'rendererTracker.streamOwners.get(stdout)')],
-    ['nested stdout anchor', fixture.replace('this.stdout = stdout;', '(() => { this.stdout = stdout; })();')],
-    ['injected binding collision', fixture.replace('this.stdout = stdout;', 'this.stdout = stdout; const __termwrightLocalFeed = false;')],
-    ['feed write hidden in a nested function', fixture.replace(
-      'this.realStdoutWrite.call(this.stdout, bytes, () => resolve());',
-      'const neverCalled = () => this.realStdoutWrite.call(this.stdout, bytes, () => resolve()); resolve();',
-    )],
+    [
+      'unexpected feed write arity',
+      fixture.replace('bytes, () => resolve()', 'bytes, "utf8", () => resolve()'),
+    ],
+    [
+      'missing stdout lease set',
+      fixture.replace(
+        'rendererTracker.streamOwners.set(stdout, this)',
+        'rendererTracker.streamOwners.get(stdout)',
+      ),
+    ],
+    [
+      'nested stdout anchor',
+      fixture.replace('this.stdout = stdout;', '(() => { this.stdout = stdout; })();'),
+    ],
+    [
+      'injected binding collision',
+      fixture.replace(
+        'this.stdout = stdout;',
+        'this.stdout = stdout; const __termwrightLocalFeed = false;',
+      ),
+    ],
+    [
+      'feed write hidden in a nested function',
+      fixture.replace(
+        'this.realStdoutWrite.call(this.stdout, bytes, () => resolve());',
+        'const neverCalled = () => this.realStdoutWrite.call(this.stdout, bytes, () => resolve()); resolve();',
+      ),
+    ],
   ])('fails closed for %s', (_label, source) => {
     expect(instrumentOpenTuiOutput(source, '0.5.3', 'test-token')).toBeUndefined();
   });

@@ -1,5 +1,6 @@
 export function createPtyLeasePool(capacity) {
-  if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error('invalid PTY lease capacity');
+  if (!Number.isSafeInteger(capacity) || capacity < 1)
+    throw new Error('invalid PTY lease capacity');
   let available = capacity;
   const waiters = [];
 
@@ -16,7 +17,8 @@ export function createPtyLeasePool(capacity) {
           releaseLease = releaseOnce(release);
           resolveRequest({
             claim() {
-              if (state === 'cancelled') throw new Error('PTY lease grant was cancelled before claim');
+              if (state === 'cancelled')
+                throw new Error('PTY lease grant was cancelled before claim');
               if (state !== 'granted') throw new Error(`PTY lease cannot be claimed from ${state}`);
               state = 'claimed';
               return releaseLease;

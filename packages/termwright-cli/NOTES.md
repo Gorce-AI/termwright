@@ -18,14 +18,14 @@ configuration; they never become a correctness transport.
 
 ## Public subpaths
 
-| Entry | Re-exports |
-|---|---|
-| `termwright` | `@termwright/driver` |
-| `termwright/test` | `@termwright/test` |
-| `termwright/ink` | `@termwright/ink` |
-| `termwright/gherkin` | `@termwright/gherkin` |
-| `termwright/host` | native-host embedding API |
-| `termwright/cli` | programmatic CLI entry |
+| Entry                | Re-exports                |
+| -------------------- | ------------------------- |
+| `termwright`         | `@termwright/driver`      |
+| `termwright/test`    | `@termwright/test`        |
+| `termwright/ink`     | `@termwright/ink`         |
+| `termwright/gherkin` | `@termwright/gherkin`     |
+| `termwright/host`    | native-host embedding API |
+| `termwright/cli`     | programmatic CLI entry    |
 
 The runtime driver remains separate from the test DSL so a production script
 can drive a terminal without importing Vitest or registering matchers. That is

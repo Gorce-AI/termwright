@@ -17,7 +17,9 @@ function registry(): WeakMap<object, StoredOpenTuiAnnotation> {
   return current;
 }
 
-function weakTargets(targets: readonly OpenTuiRenderable[] | undefined): readonly WeakRef<object>[] | undefined {
+function weakTargets(
+  targets: readonly OpenTuiRenderable[] | undefined,
+): readonly WeakRef<object>[] | undefined {
   if (targets === undefined || targets.length === 0) return undefined;
   return Object.freeze(targets.map((target) => new WeakRef<object>(target)));
 }

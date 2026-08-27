@@ -6,14 +6,14 @@ time travel in the runner UI, and a self-contained HTML failure report.
 
 An archive is a directory (zippable for transport):
 
-| File | Content |
-|---|---|
-| `meta.json` | session id, command, viewport, platform, terminal profile, exit, crash, log summary |
-| `session.cast` | asciicast **v3**; `test.step()` titles become markers |
-| `events.jsonl` | inputs, resizes, steps, driver actions, assertions, crash |
-| `semantics.jsonl` | one semantic tree per revision, with its cast offset |
-| `logs.jsonl` | application log entries; absent when the session logged nothing |
-| `COMMITTED` | versioned SHA-256 manifest written last before atomic publication |
+| File              | Content                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `meta.json`       | session id, command, viewport, platform, terminal profile, exit, crash, log summary |
+| `session.cast`    | asciicast **v3**; `test.step()` titles become markers                               |
+| `events.jsonl`    | inputs, resizes, steps, driver actions, assertions, crash                           |
+| `semantics.jsonl` | one semantic tree per revision, with its cast offset                                |
+| `logs.jsonl`      | application log entries; absent when the session logged nothing                     |
+| `COMMITTED`       | versioned SHA-256 manifest written last before atomic publication                   |
 
 The layout is normative in [`/CONTRACTS.md`](../../CONTRACTS.md) §Trace. Nothing
 outside this package reads or writes those files directly.
@@ -38,15 +38,15 @@ const writer = createTraceWriter(harness, {
   rows: 30,
 });
 
-writer.hide();                     // keep setup noise out of the recording
+writer.hide(); // keep setup noise out of the recording
 await harness.waitForText('ready');
 writer.show();
 
-const step = writer.addStep('submit the form');  // → cast marker "submit the form"
+const step = writer.addStep('submit the form'); // → cast marker "submit the form"
 await harness.getByRole('button', { name: 'Submit' }).click();
 step.end('failed', 'button stayed disabled');
 
-await writer.finalize({ idleTimeLimit: 2 });     // trim gaps longer than 2s
+await writer.finalize({ idleTimeLimit: 2 }); // trim gaps longer than 2s
 ```
 
 The writer attaches to anything exposing `sessionId` and `events` — a
@@ -66,7 +66,7 @@ Every artefact carries two times, and mixing them up is the easiest mistake to
 make here:
 
 - **`t`** — wall-clock milliseconds since recording started.
-- **`castOffset`** — position on the *recording*: `t` after `hide()` windows
+- **`castOffset`** — position on the _recording_: `t` after `hide()` windows
   were cut out and idle gaps compressed.
 
 They are equal only in a recording that was neither hidden nor trimmed, so
@@ -81,14 +81,14 @@ Everything a player or UI seeks to is a `castOffset`.
 ```ts
 import { openTrace } from '@termwright/trace';
 
-const trace = await openTrace('out/login.twtrace');   // directory or zip
+const trace = await openTrace('out/login.twtrace'); // directory or zip
 
 const state = await trace.stateAt(1_500);
-state.castPrefix;                // output to write into an emulator
-state.columns;                   // viewport after resizes up to that point
-state.nearestSemanticRevision;   // newest tree at or before it
-state.step;                      // the step covering that moment
-state.logs;                      // preceding log entries, bounded
+state.castPrefix; // output to write into an emulator
+state.columns; // viewport after resizes up to that point
+state.nearestSemanticRevision; // newest tree at or before it
+state.step; // the step covering that moment
+state.logs; // preceding log entries, bounded
 
 for await (const event of trace.events()) console.log(event.kind, event.castOffset);
 for (const step of await trace.steps()) console.log(step.title, step.status);
@@ -109,7 +109,7 @@ needed to render that moment. `packTrace(dir, file)` and
 import { frameAt } from '@termwright/trace';
 
 const frame = await frameAt(trace, 1_500);
-frame.cell(3, 10);   // a driver-shaped CellSnapshot
+frame.cell(3, 10); // a driver-shaped CellSnapshot
 frame.text();
 ```
 
@@ -175,7 +175,7 @@ marked on the timeline in `events.jsonl`.
 ```ts
 if (trace.meta.crash !== undefined) {
   console.error(trace.meta.crash.screenTail.join('\n'));
-  const tree = await trace.crashSemantic();   // the tree current at the time
+  const tree = await trace.crashSemantic(); // the tree current at the time
 }
 ```
 
@@ -193,9 +193,7 @@ import { generateHtmlReport } from '@termwright/trace';
 
 await generateHtmlReport({
   outFile: 'out/report.html',
-  results: [
-    { id: 't1', title: 'login', status: 'failed', tracePath: 'out/login.twtrace' },
-  ],
+  results: [{ id: 't1', title: 'login', status: 'failed', tracePath: 'out/login.twtrace' }],
 });
 ```
 

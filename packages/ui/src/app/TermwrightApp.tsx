@@ -6,7 +6,11 @@ import { parseCommandLine } from '../command-line.js';
 import { editorLink } from '../editor-link.js';
 import { AppShell } from './components/AppShell.js';
 import { RunnerPage } from './components/RunnerPage.js';
-import { RecordReviewDialog, RecordStartDialog, type RecorderDraft } from './components/RecorderDialogs.js';
+import {
+  RecordReviewDialog,
+  RecordStartDialog,
+  type RecorderDraft,
+} from './components/RecorderDialogs.js';
 import { RunsPage } from './components/RunsPage.js';
 import { SettingsPage } from './components/SettingsPage.js';
 import { SpecsPage } from './components/SpecsPage.js';
@@ -19,21 +23,39 @@ import { Tooltip } from './components/Tooltip.js';
 import { parseAppUrl, shareableAppUrl, urlStateFromApp, type AppUrlState } from './url-state.js';
 import { bootstrapRunner } from './bootstrap.js';
 
-export function TermwrightApp({ source, client }: { readonly source: DataSource; readonly client?: RunnerClient }) {
+export function TermwrightApp({
+  source,
+  client,
+}: {
+  readonly source: DataSource;
+  readonly client?: RunnerClient;
+}) {
   const { preferences } = usePreferences();
   const [state, dispatch] = useReducer(appReducer, initialAppState);
   const pendingUrlState = useRef<AppUrlState | null>(parseAppUrl(window.location.href));
   const [navigationEpoch, setNavigationEpoch] = useState(0);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const initialViewer = useRef<ViewerState | null>(null);
-  const activeTrace = useRef<{ readonly ref: string; readonly overview: NonNullable<ViewerState['trace']> } | null>(null);
+  const activeTrace = useRef<{
+    readonly ref: string;
+    readonly overview: NonNullable<ViewerState['trace']>;
+  } | null>(null);
   const replayEpoch = useRef(0);
   const replayClock = useRef(0);
   const autoReplayRequests = useRef(new Set<string>());
   const runRequestInFlight = useRef(false);
   const [recordDialog, setRecordDialog] = useState<'closed' | 'start' | 'review'>('closed');
-  const [recordDraft, setRecordDraft] = useState<RecorderDraft>({ command: '', outFile: 'tests/recorded.test.ts', error: null, busy: false });
-  const [recordReview, setRecordReview] = useState({ source: '', error: null as string | null, busy: false });
+  const [recordDraft, setRecordDraft] = useState<RecorderDraft>({
+    command: '',
+    outFile: 'tests/recorded.test.ts',
+    error: null,
+    busy: false,
+  });
+  const [recordReview, setRecordReview] = useState({
+    source: '',
+    error: null as string | null,
+    busy: false,
+  });
 
   useEffect(() => {
     let active = true;
@@ -41,7 +63,8 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       active: () => active,
       ready: (viewer) => {
         initialViewer.current = viewer;
-        activeTrace.current = viewer.trace === null ? null : { ref: viewer.trace.path, overview: viewer.trace };
+        activeTrace.current =
+          viewer.trace === null ? null : { ref: viewer.trace.path, overview: viewer.trace };
         if (viewer.record !== null) {
           setRecordDraft((draft) => ({
             ...draft,
@@ -62,53 +85,66 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
   }, [client, source]);
 
   const inspectActionability = useCallback(
-    (sessionId: string, nodeId: string) => client?.inspectActionability(sessionId, nodeId)
-      ?? Promise.reject(new Error('live actionability requires a Runner connection')),
+    (sessionId: string, nodeId: string) =>
+      client?.inspectActionability(sessionId, nodeId) ??
+      Promise.reject(new Error('live actionability requires a Runner connection')),
     [client],
   );
 
-  const openReplay = useCallback(async (execution: ExecutionCase, requestedTimeMs = 0) => {
-    if (execution.traceRef === undefined) return;
-    const epoch = ++replayEpoch.current;
-    dispatch({ type: 'replay-loading', executionId: execution.executionId, traceRef: execution.traceRef });
-    try {
-      const initial = initialViewer.current?.trace;
-      let overview = activeTrace.current?.ref === execution.traceRef
-        ? activeTrace.current.overview
-        : null;
-      if (overview === null && source.features.openTrace) {
-        overview = (await source.openTrace(execution.traceRef)).trace;
-        if (overview !== null) activeTrace.current = { ref: execution.traceRef, overview };
-      } else if (overview === null) {
-        overview = initial ?? null;
-      }
-      if (overview === null || overview === undefined) throw new Error('The recording is unavailable.');
-      const timeMs = Math.min(Math.max(requestedTimeMs, 0), overview.durationMs);
-      const [frames, commands, traceState, logs] = await Promise.all([
-        source.traceFrames(),
-        source.traceCommands(),
-        source.traceState(timeMs),
-        source.traceLogs({ limit: 500 }),
-      ]);
-      if (epoch !== replayEpoch.current) return;
+  const openReplay = useCallback(
+    async (execution: ExecutionCase, requestedTimeMs = 0) => {
+      if (execution.traceRef === undefined) return;
+      const epoch = ++replayEpoch.current;
       dispatch({
-        type: 'replay-loaded',
+        type: 'replay-loading',
         executionId: execution.executionId,
         traceRef: execution.traceRef,
-        overview,
-        frames,
-        commands,
-        traceState,
-        logs,
-        timeMs,
       });
-    } catch (cause) {
-      if (epoch === replayEpoch.current) {
-        autoReplayRequests.current.delete(`${execution.executionId}:${execution.traceRef}`);
-        dispatch({ type: 'replay-error', executionId: execution.executionId, traceRef: execution.traceRef, error: describe(cause) });
+      try {
+        const initial = initialViewer.current?.trace;
+        let overview =
+          activeTrace.current?.ref === execution.traceRef ? activeTrace.current.overview : null;
+        if (overview === null && source.features.openTrace) {
+          overview = (await source.openTrace(execution.traceRef)).trace;
+          if (overview !== null) activeTrace.current = { ref: execution.traceRef, overview };
+        } else if (overview === null) {
+          overview = initial ?? null;
+        }
+        if (overview === null || overview === undefined)
+          throw new Error('The recording is unavailable.');
+        const timeMs = Math.min(Math.max(requestedTimeMs, 0), overview.durationMs);
+        const [frames, commands, traceState, logs] = await Promise.all([
+          source.traceFrames(),
+          source.traceCommands(),
+          source.traceState(timeMs),
+          source.traceLogs({ limit: 500 }),
+        ]);
+        if (epoch !== replayEpoch.current) return;
+        dispatch({
+          type: 'replay-loaded',
+          executionId: execution.executionId,
+          traceRef: execution.traceRef,
+          overview,
+          frames,
+          commands,
+          traceState,
+          logs,
+          timeMs,
+        });
+      } catch (cause) {
+        if (epoch === replayEpoch.current) {
+          autoReplayRequests.current.delete(`${execution.executionId}:${execution.traceRef}`);
+          dispatch({
+            type: 'replay-error',
+            executionId: execution.executionId,
+            traceRef: execution.traceRef,
+            error: describe(cause),
+          });
+        }
       }
-    }
-  }, [source]);
+    },
+    [source],
+  );
 
   useEffect(() => {
     const restore = () => {
@@ -140,11 +176,12 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       setNavigationEpoch((epoch) => epoch + 1);
       return;
     }
-    const execution = [...state.executions, ...state.catalog].find((candidate) => (
-      candidate.executionId === requested.executionId
-      && (requested.runId === undefined || candidate.runId === requested.runId)
-      && (requested.traceRef === undefined || candidate.traceRef === requested.traceRef)
-    ));
+    const execution = [...state.executions, ...state.catalog].find(
+      (candidate) =>
+        candidate.executionId === requested.executionId &&
+        (requested.runId === undefined || candidate.runId === requested.runId) &&
+        (requested.traceRef === undefined || candidate.traceRef === requested.traceRef),
+    );
     // Live executions arrive after /api/state through the hub backlog. Keep the
     // intent pending until that authoritative identity exists rather than
     // fabricating a selectable execution from attacker-controlled URL text.
@@ -154,15 +191,24 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       return;
     }
     if (requested.traceRef !== undefined) {
-      if (state.evidence.kind === 'replay' && state.evidence.replay.traceRef === requested.traceRef) {
+      if (
+        state.evidence.kind === 'replay' &&
+        state.evidence.replay.traceRef === requested.traceRef
+      ) {
         const timeMs = Math.min(requested.timeMs ?? 0, state.evidence.replay.overview.durationMs);
         if (Math.round(state.evidence.replay.timeMs) !== Math.round(timeMs)) {
           dispatch({ type: 'replay-time', timeMs });
           return;
         }
-      } else if (state.evidence.kind === 'replay-loading' && state.evidence.traceRef === requested.traceRef) {
+      } else if (
+        state.evidence.kind === 'replay-loading' &&
+        state.evidence.traceRef === requested.traceRef
+      ) {
         return;
-      } else if (state.evidence.kind === 'replay-error' && state.evidence.traceRef === requested.traceRef) {
+      } else if (
+        state.evidence.kind === 'replay-error' &&
+        state.evidence.traceRef === requested.traceRef
+      ) {
         pendingUrlState.current = null;
         setNavigationEpoch((epoch) => epoch + 1);
         return;
@@ -188,22 +234,30 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
   };
 
   const selected = selectedCase(state);
-  const runBusy = state.pendingRunTargets !== null || state.run.status === 'running' || state.run.status === 'stopping';
+  const runBusy =
+    state.pendingRunTargets !== null ||
+    state.run.status === 'running' ||
+    state.run.status === 'stopping';
   useEffect(() => {
-    if (state.pendingRunTargets === null && state.run.status !== 'running' && state.run.status !== 'stopping') {
+    if (
+      state.pendingRunTargets === null &&
+      state.run.status !== 'running' &&
+      state.run.status !== 'stopping'
+    ) {
       runRequestInFlight.current = false;
     }
   }, [state.pendingRunTargets, state.run.status]);
   useEffect(() => {
     if (
-      pendingUrlState.current !== null
-      || !preferences.autoLiveReplay
-      || selected === null
-      || selected.traceRef === undefined
-      || (selected.status !== 'passed' && selected.status !== 'failed')
-      || state.evidence.kind !== 'live'
-      || state.evidence.executionId !== selected.executionId
-    ) return;
+      pendingUrlState.current !== null ||
+      !preferences.autoLiveReplay ||
+      selected === null ||
+      selected.traceRef === undefined ||
+      (selected.status !== 'passed' && selected.status !== 'failed') ||
+      state.evidence.kind !== 'live' ||
+      state.evidence.executionId !== selected.executionId
+    )
+      return;
     const requestKey = `${selected.executionId}:${selected.traceRef}`;
     if (autoReplayRequests.current.has(requestKey)) return;
     autoReplayRequests.current.add(requestKey);
@@ -244,15 +298,29 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
     const epoch = replayEpoch.current;
     let active = true;
     const timer = window.setTimeout(() => {
-      void source.traceState(replay.timeMs).then((traceState) => {
-        if (active && epoch === replayEpoch.current) dispatch({ type: 'replay-state', traceRef, traceState });
-      }).catch(() => undefined);
+      void source
+        .traceState(replay.timeMs)
+        .then((traceState) => {
+          if (active && epoch === replayEpoch.current)
+            dispatch({ type: 'replay-state', traceRef, traceState });
+        })
+        .catch(() => undefined);
     }, 50);
-    return () => { active = false; window.clearTimeout(timer); };
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [replay?.timeMs, replay?.traceRef, source]);
 
   const run = (targets: readonly string[]) => {
-    if (client === undefined || !state.connected || !state.canRun || runBusy || runRequestInFlight.current) return;
+    if (
+      client === undefined ||
+      !state.connected ||
+      !state.canRun ||
+      runBusy ||
+      runRequestInFlight.current
+    )
+      return;
     runRequestInFlight.current = true;
     dispatch({ type: 'run-requested', targets });
     void client.startRun(targets).catch((cause: unknown) => {
@@ -268,7 +336,8 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
     const location = editorLink(preferences.editor, file, execution.source.line);
     const copy = navigator.clipboard.writeText(file);
     if (location === null) {
-      void copy.then(() => dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` }))
+      void copy
+        .then(() => dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` }))
         .catch(() => dispatch({ type: 'toast', tone: 'failure', text: `Could not copy ${file}` }));
       return;
     }
@@ -276,7 +345,11 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
     // the exact path first leaves a deterministic fallback without another UI.
     void copy.catch(() => undefined);
     window.location.href = location;
-    dispatch({ type: 'toast', tone: 'info', text: 'Opening source in your configured editor; the path was copied as a fallback.' });
+    dispatch({
+      type: 'toast',
+      tone: 'info',
+      text: 'Opening source in your configured editor; the path was copied as a fallback.',
+    });
   };
   const stop = () => {
     if (client === undefined || state.run.status !== 'running') return;
@@ -291,13 +364,20 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       const command = parseCommandLine(recordDraft.command);
       if (command.length === 0) throw new Error('Enter a command to record.');
       setRecordDraft((draft) => ({ ...draft, busy: true, error: null }));
-      await client.startRecording(command, recordDraft.outFile === '' ? undefined : recordDraft.outFile);
+      await client.startRecording(
+        command,
+        recordDraft.outFile === '' ? undefined : recordDraft.outFile,
+      );
       // Launching is complete once the server accepts the recorder. Keeping
       // this flag set for the whole session also disables Stop, leaving the
       // recorder with no way to reach review.
       setRecordDraft((draft) => ({ ...draft, busy: false, error: null }));
       setRecordDialog('closed');
-      dispatch({ type: 'toast', tone: 'success', text: 'Recording started — interact with the terminal or semantic tree.' });
+      dispatch({
+        type: 'toast',
+        tone: 'success',
+        text: 'Recording started — interact with the terminal or semantic tree.',
+      });
     } catch (cause) {
       setRecordDraft((draft) => ({ ...draft, busy: false, error: describe(cause) }));
     }
@@ -311,14 +391,20 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       setRecordDialog('review');
     } catch (cause) {
       setRecordReview((review) => ({ ...review, busy: false, error: describe(cause) }));
-      dispatch({ type: 'toast', tone: 'failure', text: `Could not stop recording: ${describe(cause)}` });
+      dispatch({
+        type: 'toast',
+        tone: 'failure',
+        text: `Could not stop recording: ${describe(cause)}`,
+      });
     }
   };
   const saveRecording = async () => {
     if (client === undefined || recordReview.busy) return;
     setRecordReview((review) => ({ ...review, busy: true, error: null }));
     try {
-      const { path } = await client.save(recordDraft.outFile === '' ? undefined : recordDraft.outFile);
+      const { path } = await client.save(
+        recordDraft.outFile === '' ? undefined : recordDraft.outFile,
+      );
       setRecordDialog('closed');
       setRecordReview({ source: '', error: null, busy: false });
       dispatch({ type: 'toast', tone: 'success', text: `Saved recorded test to ${path}` });
@@ -340,11 +426,19 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
     }
   };
   const recorderCall = (operation: () => Promise<unknown>, success: string) => {
-    void operation().then(() => dispatch({ type: 'toast', tone: 'success', text: success }))
-      .catch((cause: unknown) => dispatch({ type: 'toast', tone: 'failure', text: describe(cause) }));
+    void operation()
+      .then(() => dispatch({ type: 'toast', tone: 'success', text: success }))
+      .catch((cause: unknown) =>
+        dispatch({ type: 'toast', tone: 'failure', text: describe(cause) }),
+      );
   };
   if (state.boot === 'loading') {
-    return <div className="tw-boot"><span className="tw-boot-mark" /><strong>Preparing the execution workspace</strong></div>;
+    return (
+      <div className="tw-boot">
+        <span className="tw-boot-mark" />
+        <strong>Preparing the execution workspace</strong>
+      </div>
+    );
   }
   if (state.boot === 'error' || state.project === null) {
     return (
@@ -380,51 +474,81 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           onInput={(sessionId, data) => {
             if (client === undefined) return;
             void client.sendInput(sessionId, data).catch((cause: unknown) => {
-              dispatch({ type: 'toast', tone: 'failure', text: `Terminal input failed: ${describe(cause)}` });
+              dispatch({
+                type: 'toast',
+                tone: 'failure',
+                text: `Terminal input failed: ${describe(cause)}`,
+              });
             });
           }}
           {...(client === undefined ? {} : { onInspectActionability: inspectActionability })}
           onTraceStateAt={(timeMs) => source.traceState(timeMs)}
           onOpenReplay={(executionId) => {
-            const execution = state.executions.find((test) => test.executionId === executionId)
-              ?? state.catalog.find((test) => test.executionId === executionId);
+            const execution =
+              state.executions.find((test) => test.executionId === executionId) ??
+              state.catalog.find((test) => test.executionId === executionId);
             if (execution !== undefined) {
               pushUrlState({
                 view: 'runner',
                 ...(execution.runId === null ? {} : { runId: execution.runId }),
                 executionId: execution.executionId,
-                ...(execution.traceRef === undefined ? {} : { traceRef: execution.traceRef, timeMs: 0 }),
+                ...(execution.traceRef === undefined
+                  ? {}
+                  : { traceRef: execution.traceRef, timeMs: 0 }),
               });
               void openReplay(execution);
             }
           }}
           onSelectExecution={(executionId) => {
-            const execution = state.executions.find((test) => test.executionId === executionId)
-              ?? state.catalog.find((test) => test.executionId === executionId);
-            if (execution !== undefined) pushUrlState({
-              view: 'runner',
-              ...(execution.runId === null ? {} : { runId: execution.runId }),
-              executionId: execution.executionId,
-              ...(execution.traceRef !== undefined && (execution.status === 'passed' || execution.status === 'failed')
-                ? { traceRef: execution.traceRef, timeMs: 0 }
-                : {}),
-            });
+            const execution =
+              state.executions.find((test) => test.executionId === executionId) ??
+              state.catalog.find((test) => test.executionId === executionId);
+            if (execution !== undefined)
+              pushUrlState({
+                view: 'runner',
+                ...(execution.runId === null ? {} : { runId: execution.runId }),
+                executionId: execution.executionId,
+                ...(execution.traceRef !== undefined &&
+                (execution.status === 'passed' || execution.status === 'failed')
+                  ? { traceRef: execution.traceRef, timeMs: 0 }
+                  : {}),
+              });
             dispatch({ type: 'select-execution', executionId });
-            if (execution?.traceRef !== undefined && (execution.status === 'passed' || execution.status === 'failed')) {
+            if (
+              execution?.traceRef !== undefined &&
+              (execution.status === 'passed' || execution.status === 'failed')
+            ) {
               void openReplay(execution);
             }
           }}
-          {...(client === undefined ? {} : {
-            recorder: {
-              active: state.run.mode === 'record',
-              busy: recordDraft.busy || recordReview.busy,
-              onStop: () => { void stopRecording(); },
-              onStep: (title: string) => recorderCall(() => client.recordStep(title), `Added step “${title}”`),
-              onSnapshot: () => recorderCall(() => client.recordAssert('snapshot'), 'Added semantic snapshot assertion'),
-              onClickNode: (nodeId: string) => recorderCall(() => client.recordAction('click', nodeId), 'Recorded semantic click'),
-              onAssertNode: (nodeId: string) => recorderCall(() => client.recordAction('assert-visible', nodeId), 'Added visibility assertion'),
-            },
-          })}
+          {...(client === undefined
+            ? {}
+            : {
+                recorder: {
+                  active: state.run.mode === 'record',
+                  busy: recordDraft.busy || recordReview.busy,
+                  onStop: () => {
+                    void stopRecording();
+                  },
+                  onStep: (title: string) =>
+                    recorderCall(() => client.recordStep(title), `Added step “${title}”`),
+                  onSnapshot: () =>
+                    recorderCall(
+                      () => client.recordAssert('snapshot'),
+                      'Added semantic snapshot assertion',
+                    ),
+                  onClickNode: (nodeId: string) =>
+                    recorderCall(
+                      () => client.recordAction('click', nodeId),
+                      'Recorded semantic click',
+                    ),
+                  onAssertNode: (nodeId: string) =>
+                    recorderCall(
+                      () => client.recordAction('assert-visible', nodeId),
+                      'Added visibility assertion',
+                    ),
+                },
+              })}
         />
       ) : state.route === 'specs' ? (
         <SpecsPage
@@ -435,17 +559,27 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           runBusy={runBusy}
           onRun={run}
           onOpenSource={openSource}
-          {...(client === undefined ? {} : { newTest: {
-            canRecord: state.connected && !runBusy,
-            onCreateFile: () => {
-              const file = projectFile(project.root, recordDraft.outFile || 'tests/new.test.ts');
-              const link = editorLink(preferences.editor, file);
-              void navigator.clipboard.writeText(file).catch(() => undefined);
-              if (link !== null) window.location.href = link;
-              else dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` });
-            },
-            onRecord: () => { setRecordDraft((draft) => ({ ...draft, busy: false, error: null })); setRecordDialog('start'); },
-          } })}
+          {...(client === undefined
+            ? {}
+            : {
+                newTest: {
+                  canRecord: state.connected && !runBusy,
+                  onCreateFile: () => {
+                    const file = projectFile(
+                      project.root,
+                      recordDraft.outFile || 'tests/new.test.ts',
+                    );
+                    const link = editorLink(preferences.editor, file);
+                    void navigator.clipboard.writeText(file).catch(() => undefined);
+                    if (link !== null) window.location.href = link;
+                    else dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` });
+                  },
+                  onRecord: () => {
+                    setRecordDraft((draft) => ({ ...draft, busy: false, error: null }));
+                    setRecordDialog('start');
+                  },
+                },
+              })}
         />
       ) : state.route === 'runs' ? (
         <RunsPage
@@ -462,14 +596,24 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       {state.toast === null ? null : (
         <div className="tw-toast" data-tone={state.toast.tone} role="status">
           <span>{state.toast.text}</span>
-          <Tooltip label="Dismiss notification"><button type="button" aria-label="Dismiss notification" onClick={() => dispatch({ type: 'toast-clear' })}><X aria-hidden="true" size={15} /></button></Tooltip>
+          <Tooltip label="Dismiss notification">
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={() => dispatch({ type: 'toast-clear' })}
+            >
+              <X aria-hidden="true" size={15} />
+            </button>
+          </Tooltip>
         </div>
       )}
       {recordDialog === 'start' ? (
         <RecordStartDialog
           draft={recordDraft}
           onChange={setRecordDraft}
-          onStart={() => { void startRecording(); }}
+          onStart={() => {
+            void startRecording();
+          }}
           onClose={() => setRecordDialog('closed')}
         />
       ) : recordDialog === 'review' ? (
@@ -478,9 +622,19 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           outFile={recordDraft.outFile}
           error={recordReview.error}
           busy={recordReview.busy}
-          onSave={() => { void saveRecording(); }}
-          onCopy={() => { void navigator.clipboard.writeText(recordReview.source).then(() => dispatch({ type: 'toast', tone: 'success', text: 'Generated test copied.' })); }}
-          onDiscard={() => { void discardRecording(); }}
+          onSave={() => {
+            void saveRecording();
+          }}
+          onCopy={() => {
+            void navigator.clipboard
+              .writeText(recordReview.source)
+              .then(() =>
+                dispatch({ type: 'toast', tone: 'success', text: 'Generated test copied.' }),
+              );
+          }}
+          onDiscard={() => {
+            void discardRecording();
+          }}
         />
       ) : null}
     </AppShell>
@@ -500,7 +654,7 @@ function runFailureText(value: unknown): string {
 }
 
 function commandForForm(command: readonly string[]): string {
-  return command.map((part) => /[\s"'\\]/u.test(part) ? JSON.stringify(part) : part).join(' ');
+  return command.map((part) => (/[\s"'\\]/u.test(part) ? JSON.stringify(part) : part)).join(' ');
 }
 
 function projectFile(root: string, file: string): string {

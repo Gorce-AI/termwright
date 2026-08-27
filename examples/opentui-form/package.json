@@ -4,7 +4,9 @@
   "private": true,
   "description": "An OpenTUI form driven through its observed Renderable tree",
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "scripts": {
     "start": "bun app/form.ts",
     "typecheck": "tsc --noEmit",

@@ -57,7 +57,11 @@ export function installBunPreload(env: Record<string, string | undefined> = proc
         if (shouldShim(args.path)) {
           return { loader: 'js', contents: buildShimSource(args.path, certification) };
         }
-        const transformed = instrumentOpenTuiOutput(source, certification.version, env[ENV_TOKEN] ?? '');
+        const transformed = instrumentOpenTuiOutput(
+          source,
+          certification.version,
+          env[ENV_TOKEN] ?? '',
+        );
         return { loader: 'js', contents: transformed ?? source };
       });
     },

@@ -27,7 +27,9 @@ describe('URL navigation', () => {
     const page = await browser.newPage({ viewport: { width: 1_440, height: 900 } });
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(String(error)));
-    page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text());
+    });
     await page.goto(server.url, { waitUntil: 'domcontentloaded' });
     await page.locator('.tw-replay-controls').waitFor();
 
@@ -51,7 +53,9 @@ describe('URL navigation', () => {
     await expect.poll(() => new URL(page.url()).searchParams.get('view')).toBe('runner');
     await page.locator('.tw-replay-controls').waitFor();
     await expect.poll(() => slider.inputValue()).toBe(String(desired));
-    expect(new URL(page.url()).searchParams.get('executionId')).toBe(replayUrl.searchParams.get('executionId'));
+    expect(new URL(page.url()).searchParams.get('executionId')).toBe(
+      replayUrl.searchParams.get('executionId'),
+    );
 
     await page.goForward();
     await expect.poll(() => new URL(page.url()).searchParams.get('view')).toBe('settings');
@@ -60,7 +64,9 @@ describe('URL navigation', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('.tw-replay-controls').waitFor();
     await expect.poll(() => page.getByLabel('Replay position').inputValue()).toBe(String(desired));
-    await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');
+    await expect
+      .poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))
+      .toBe('true');
     expect(new URL(page.url()).searchParams.get('token')).toBeNull();
     expect(errors).toEqual([]);
     await page.close();

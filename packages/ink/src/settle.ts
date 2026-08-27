@@ -134,16 +134,13 @@ function nextFrame(
     const timer = setTimeout(() => {
       done(() =>
         reject(
-          new TimeoutError(
-            `the application committed no frame within ${timeout} ms`,
-            {
-              semanticTree: hasSemanticContract(harness),
-              screenExcerpt: harness.screen().text(),
-              suggestion:
-                'the component rendered nothing new; check that the update reaches React state, ' +
-                'or raise the settle timeout',
-            },
-          ),
+          new TimeoutError(`the application committed no frame within ${timeout} ms`, {
+            semanticTree: hasSemanticContract(harness),
+            screenExcerpt: harness.screen().text(),
+            suggestion:
+              'the component rendered nothing new; check that the update reaches React state, ' +
+              'or raise the settle timeout',
+          }),
         ),
       );
     }, timeout);

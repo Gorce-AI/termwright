@@ -287,9 +287,7 @@ export const PROBE_DEGRADED_CAPABILITIES = Object.freeze([
   'custom-container-enumeration',
 ] as const);
 export type ProbeDegradedCapabilityId =
-  | SessionCapabilityId
-  | 'inactive-screen-tree'
-  | 'custom-container-enumeration';
+  SessionCapabilityId | 'inactive-screen-tree' | 'custom-container-enumeration';
 
 /** Runtime record of the strongest attachment mechanism that actually engaged. */
 export interface ProbeInstrumentation {

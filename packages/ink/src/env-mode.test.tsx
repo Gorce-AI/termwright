@@ -15,7 +15,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
-import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { TerminalHarness } from '@termwright/driver';
 import { launchInkFixture } from './fixture.js';
 import { mountInk } from './mount.js';
@@ -23,7 +23,7 @@ import EnvApp from './testing/env-app.mjs';
 
 const COMPONENT = new URL('./testing/env-app.mjs', import.meta.url);
 const SIZE = { columns: 60, rows: 6 } as const;
-const fixtureIt = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
+const fixtureIt = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 const PROBE = 'TW_PROBE';
 const INSTRUMENTATION_ENV = [
   'TERMWRIGHT_ENDPOINT',

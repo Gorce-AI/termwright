@@ -19,12 +19,18 @@ export default class ProviderReporter implements Reporter {
         readonly termwright?: {
           readonly provider?: { readonly id?: unknown; readonly version?: unknown };
           readonly kind?: unknown;
-          readonly source?: { readonly file?: unknown; readonly line?: unknown; readonly column?: unknown };
+          readonly source?: {
+            readonly file?: unknown;
+            readonly line?: unknown;
+            readonly column?: unknown;
+          };
         };
       };
       const provider = meta.termwright?.provider;
       if (provider?.id !== '@termwright/test' || provider.version !== 1) {
-        throw new Error(`feature case ${test.name} is missing the @termwright/test provider marker`);
+        throw new Error(
+          `feature case ${test.name} is missing the @termwright/test provider marker`,
+        );
       }
       const arithmetic = module.moduleId.split('?', 1)[0]?.endsWith('arithmetic.feature') === true;
       const expectedKind = arithmetic ? 'gherkin-outline-example' : 'gherkin-scenario';

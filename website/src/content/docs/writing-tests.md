@@ -7,13 +7,13 @@ A normal Termwright test launches an application, waits for its initial state,
 performs real input, and asserts the observable result.
 
 ```ts
-import {fileURLToPath} from 'node:url';
-import {expect, test} from 'termwright/test';
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'termwright/test';
 
 const program = fileURLToPath(new URL('../profile.js', import.meta.url));
 
-test('saves a profile', async ({terminal, step}) => {
-  const app = await terminal.launch({command: [process.execPath, program]});
+test('saves a profile', async ({ terminal, step }) => {
+  const app = await terminal.launch({ command: [process.execPath, program] });
   await app.waitForText('Profile name');
 
   await step('enter a name', async () => {
@@ -55,7 +55,7 @@ const editor = fileURLToPath(new URL('../editor.js', import.meta.url));
 const app = await terminal.launch({
   command: [process.execPath, editor],
   files: {
-    'config.json': JSON.stringify({theme: 'dark'}),
+    'config.json': JSON.stringify({ theme: 'dark' }),
     'notes/todo.md': '- write tests\n',
   },
 });
@@ -71,7 +71,7 @@ Prefer a wait or retrying assertion that describes the state you need:
 ```ts
 await app.waitForText('Ready');
 await app.press('Tab');
-await expect(app.getByRole('button', {name: 'Save'})).toBeFocused();
+await expect(app.getByRole('button', { name: 'Save' })).toBeFocused();
 ```
 
 Avoid `setTimeout()` and fixed sleeps. They add latency and still fail under a
@@ -87,7 +87,7 @@ timeline:
 
 ```ts
 await step('confirm deletion', async () => {
-  await app.getByRole('button', {name: 'Delete'}).activate();
+  await app.getByRole('button', { name: 'Delete' }).activate();
   await expect(app.getByRole('dialog')).toBeVisible();
 });
 ```

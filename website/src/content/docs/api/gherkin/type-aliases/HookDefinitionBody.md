@@ -13,7 +13,7 @@ editUrl: false
 
 > **HookDefinitionBody**\<`Fixtures`\> = (`context`) => `unknown` \| `Promise`\<`unknown`\>
 
-Defined in: [definitions.ts:52](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L52)
+Defined in: [definitions.ts:53](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L53)
 
 ## Type Parameters
 

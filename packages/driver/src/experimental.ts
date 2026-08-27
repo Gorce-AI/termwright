@@ -8,10 +8,7 @@
  */
 
 export { inheritedSpawnEnv } from './session.js';
-export {
-  launchTerminalWithBackend,
-  type LaunchTerminalWithBackendOptions,
-} from './session.js';
+export { launchTerminalWithBackend, type LaunchTerminalWithBackendOptions } from './session.js';
 export { installTerminalLaunchResourceProvider } from './launch-resources.js';
 export type {
   TerminalLaunchResourceLease,
@@ -31,20 +28,19 @@ export {
   type NativePtySessionHandle,
   type NativePtySpawn,
 } from './native-pty-backend.js';
-export type {
-  PtyBackend,
-  PtyProcess,
-  PtySignal,
-  PtySpawnOptions,
-  PtyUnsubscribe,
-} from './pty.js';
+export type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
 export {
   ProcessLifecycleError,
   type ProcessLifecycleErrorCode,
 } from './internal/process-supervisor.js';
 
 export { encodeKeys, encodePaste, encodeText, type KeyEncodingModes } from './keys.js';
-export { encodeMouse, normalizeMouseModifiers, type MouseButton, type MouseEvent } from './mouse.js';
+export {
+  encodeMouse,
+  normalizeMouseModifiers,
+  type MouseButton,
+  type MouseEvent,
+} from './mouse.js';
 export {
   parseRef,
   semanticNodeId,

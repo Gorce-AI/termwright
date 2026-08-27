@@ -43,7 +43,14 @@ function contains(metrics, point) {
 /**
  * @param {{label?: string, greeting?: string, followup?: string, animateOutput?: boolean, showFocus?: boolean, onPress?: () => void}} props
  */
-export default function CounterApp({ label = 'Approve', greeting = 'ready', followup = '', animateOutput = false, showFocus = false, onPress }) {
+export default function CounterApp({
+  label = 'Approve',
+  greeting = 'ready',
+  followup = '',
+  animateOutput = false,
+  showFocus = false,
+  onPress,
+}) {
   const buttonRef = useRef(null);
   const inputRef = useRef(null);
   const [pressed, setPressed] = useState(0);

@@ -274,9 +274,7 @@ describe('renderSvg outline mode', () => {
   });
 
   it.runIf(hasSystemFont)('draws a colour emoji as an embedded image, not text', () => {
-    const frame = gridFrame([
-      [cell({ char: '🚀', width: 2 }), cell({ char: '', width: 0 })],
-    ]);
+    const frame = gridFrame([[cell({ char: '🚀', width: 2 }), cell({ char: '', width: 0 })]]);
     const shot = renderSvg(frame, { fontSize: 16, padding: 0 });
     if (loadFonts().glyphFor('🚀')?.kind !== 'image') return;
 

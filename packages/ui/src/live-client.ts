@@ -9,7 +9,12 @@
  */
 
 import { WebSocket } from 'ws';
-import { encodeMessage, parseClientMessage, UiProtocolError, type ServerMessage } from './events.js';
+import {
+  encodeMessage,
+  parseClientMessage,
+  UiProtocolError,
+  type ServerMessage,
+} from './events.js';
 import {
   inspectNodeActionability,
   streamSession,
@@ -72,7 +77,11 @@ export function connectLiveSession(
 
   let sink: ProducerSocketSink;
   try {
-    sink = new ProducerSocketSink(configured, options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS, source);
+    sink = new ProducerSocketSink(
+      configured,
+      options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS,
+      source,
+    );
   } catch {
     return DISABLED;
   }
@@ -165,26 +174,29 @@ class ProducerSocketSink implements UiSessionMessageSink {
         if (error instanceof UiProtocolError) return;
         throw error;
       }
-      if (message.type !== 'inspect-actionability' || message.sessionId !== source.sessionId) return;
-      void inspectNodeActionability(source, message.nodeId).then((results) => {
-        this.publish({
-          v: 1,
-          type: 'actionability-inspection',
-          requestId: message.requestId,
-          sessionId: message.sessionId,
-          nodeId: message.nodeId,
-          results,
+      if (message.type !== 'inspect-actionability' || message.sessionId !== source.sessionId)
+        return;
+      void inspectNodeActionability(source, message.nodeId)
+        .then((results) => {
+          this.publish({
+            v: 1,
+            type: 'actionability-inspection',
+            requestId: message.requestId,
+            sessionId: message.sessionId,
+            nodeId: message.nodeId,
+            results,
+          });
+        })
+        .catch((error: unknown) => {
+          this.publish({
+            v: 1,
+            type: 'actionability-inspection',
+            requestId: message.requestId,
+            sessionId: message.sessionId,
+            nodeId: message.nodeId,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
-      }).catch((error: unknown) => {
-        this.publish({
-          v: 1,
-          type: 'actionability-inspection',
-          requestId: message.requestId,
-          sessionId: message.sessionId,
-          nodeId: message.nodeId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
     });
   }
 
@@ -283,10 +295,7 @@ class ProducerSocketSink implements UiSessionMessageSink {
       const [removed] = this.#queue.splice(existingGap, 1);
       if (removed !== undefined) this.#queuedBytes -= removed.bytes;
     }
-    while (
-      this.#queue.length + 1 > MAX_QUEUED_MESSAGES ||
-      this.#queuedBytes > MAX_QUEUED_BYTES
-    ) {
+    while (this.#queue.length + 1 > MAX_QUEUED_MESSAGES || this.#queuedBytes > MAX_QUEUED_BYTES) {
       // Preserve the session announcement whenever another event can be
       // sacrificed. The server cannot interpret output/tree events without it.
       let index = this.#queue.findIndex((message) => message.type === 'output');
@@ -309,7 +318,10 @@ class ProducerSocketSink implements UiSessionMessageSink {
         droppedBytes: this.#droppedBytes,
       });
       const gap = { type: 'diagnostic-gap' as const, encoded, bytes: Buffer.byteLength(encoded) };
-      while (this.#queue.length + 1 > MAX_QUEUED_MESSAGES || this.#queuedBytes + gap.bytes > MAX_QUEUED_BYTES) {
+      while (
+        this.#queue.length + 1 > MAX_QUEUED_MESSAGES ||
+        this.#queuedBytes + gap.bytes > MAX_QUEUED_BYTES
+      ) {
         const [dropped] = this.#queue.splice(0, 1);
         if (dropped === undefined) break;
         this.#queuedBytes -= dropped.bytes;
@@ -323,7 +335,11 @@ class ProducerSocketSink implements UiSessionMessageSink {
         droppedMessages: this.#droppedMessages,
         droppedBytes: this.#droppedBytes,
       });
-      const finalGap = { type: 'diagnostic-gap' as const, encoded: finalEncoded, bytes: Buffer.byteLength(finalEncoded) };
+      const finalGap = {
+        type: 'diagnostic-gap' as const,
+        encoded: finalEncoded,
+        bytes: Buffer.byteLength(finalEncoded),
+      };
       this.#queue.push(finalGap);
       this.#queuedBytes += finalGap.bytes;
     }
@@ -332,8 +348,12 @@ class ProducerSocketSink implements UiSessionMessageSink {
 
 function producerUrl(url: string): URL {
   const target = new URL(url);
-  if (target.protocol !== 'http:' && target.protocol !== 'https:' &&
-      target.protocol !== 'ws:' && target.protocol !== 'wss:') {
+  if (
+    target.protocol !== 'http:' &&
+    target.protocol !== 'https:' &&
+    target.protocol !== 'ws:' &&
+    target.protocol !== 'wss:'
+  ) {
     throw new TypeError(`unsupported UI URL protocol ${target.protocol}`);
   }
   if (target.protocol === 'http:') target.protocol = 'ws:';

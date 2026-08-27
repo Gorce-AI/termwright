@@ -1,15 +1,15 @@
-import { execFile } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
 
-describe("Ink React bridge under Bun", () => {
-  it("observes a real committed Ink containerInfo without a skipped compatibility path", async () => {
-    const bridgeUrl = new URL("./react-commit-bridge.ts", import.meta.url).href;
-    const inkUrl = import.meta.resolve("ink");
-    const reconcilerUrl = inkUrl.replace(/index\.js$/u, "reconciler.js");
+describe('Ink React bridge under Bun', () => {
+  it('observes a real committed Ink containerInfo without a skipped compatibility path', async () => {
+    const bridgeUrl = new URL('./react-commit-bridge.ts', import.meta.url).href;
+    const inkUrl = import.meta.resolve('ink');
+    const reconcilerUrl = inkUrl.replace(/index\.js$/u, 'reconciler.js');
     const script = `
       import {PassThrough} from 'node:stream';
       import {createElement} from 'react';
@@ -37,15 +37,15 @@ describe("Ink React bridge under Bun", () => {
       release();
       console.log(JSON.stringify(commits));
     `;
-    const { stdout, stderr } = await execFileAsync("bun", ["--eval", script], {
-      cwd: fileURLToPath(new URL(".", inkUrl)),
+    const { stdout, stderr } = await execFileAsync('bun', ['--eval', script], {
+      cwd: fileURLToPath(new URL('.', inkUrl)),
     });
-    expect(stderr).toBe("");
+    expect(stderr).toBe('');
     const commits = JSON.parse(stdout) as Array<{
       same: boolean;
       nodeName: string;
     }>;
     expect(commits.length).toBeGreaterThan(0);
-    expect(commits.at(-1)).toEqual({ same: true, nodeName: "ink-root" });
+    expect(commits.at(-1)).toEqual({ same: true, nodeName: 'ink-root' });
   });
 });

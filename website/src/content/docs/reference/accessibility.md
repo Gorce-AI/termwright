@@ -7,9 +7,9 @@ Emulator and platform-bridge authors can convert a `SemanticSnapshot` to AccessK
 serde-compatible `TreeUpdate` shape:
 
 ```ts
-import {toAccessKitTreeUpdate} from '@termwright/protocol';
+import { toAccessKitTreeUpdate } from '@termwright/protocol';
 
-const {update, cellBounds} = toAccessKitTreeUpdate(snapshot, {
+const { update, cellBounds } = toAccessKitTreeUpdate(snapshot, {
   toolkitName: 'ink',
   toolkitVersion: '7.1.1',
 });
@@ -24,7 +24,7 @@ the emulator window and knows its cell metrics:
 
 ```ts
 const result = toAccessKitTreeUpdate(snapshot, {
-  cellSize: {width: 8, height: 16},
+  cellSize: { width: 8, height: 16 },
 });
 ```
 

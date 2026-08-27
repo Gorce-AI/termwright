@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { formatCompactSnapshot, parseRef, refEntries, stateFlags } from './format.js';
 import type { SemanticSnapshot } from './model.js';
 
-const evidence = () => ({ source: 'framework' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'mcp-test' });
+const evidence = () => ({
+  source: 'framework' as const,
+  method: 'native' as const,
+  strength: 'authoritative' as const,
+  providerId: 'mcp-test',
+});
 const geometry = (rect: { row: number; column: number; width: number; height: number }) => ({
   displayed: { status: 'known' as const, value: true, evidence: evidence() },
   intendedRect: { status: 'known' as const, value: { ...rect }, evidence: evidence() },
@@ -35,7 +40,11 @@ const permissionDialog: SemanticSnapshot = {
     },
   ],
   coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() },
-  hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+  hitGrid: {
+    status: 'unsupported',
+    capability: 'pointer-hit-grid',
+    reason: 'framework-unobservable',
+  },
 };
 
 describe('the compact snapshot format', () => {
@@ -43,10 +52,15 @@ describe('the compact snapshot format', () => {
     const secret = 'TW_SENTINEL_mcp_10c2';
     const semantic: SemanticSnapshot = {
       ...permissionDialog,
-      nodes: [{
-        id: 'password', role: 'textbox', name: 'Password', geometry: geometry({ row: 1, column: 1, width: 10, height: 1 }),
-        value: { status: 'known', value: secret, sensitivity: 'sensitive', evidence: evidence() },
-      }],
+      nodes: [
+        {
+          id: 'password',
+          role: 'textbox',
+          name: 'Password',
+          geometry: geometry({ row: 1, column: 1, width: 10, height: 1 }),
+          value: { status: 'known', value: secret, sensitivity: 'sensitive', evidence: evidence() },
+        },
+      ],
       rootIds: ['password'],
     };
     expect(JSON.stringify(refEntries(semantic))).not.toContain(secret);
@@ -54,14 +68,21 @@ describe('the compact snapshot format', () => {
   it('labels application viewport state without confusing it with terminal scrollback', () => {
     const semantic: SemanticSnapshot = {
       ...permissionDialog,
-      nodes: [{
-        ...permissionDialog.nodes[0]!,
-        scroll: {
-          status: 'known',
-          value: { axis: 'vertical', offset: 3, viewport: 4, extent: 20 },
-          evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll' },
+      nodes: [
+        {
+          ...permissionDialog.nodes[0]!,
+          scroll: {
+            status: 'known',
+            value: { axis: 'vertical', offset: 3, viewport: 4, extent: 20 },
+            evidence: {
+              source: 'application',
+              method: 'native',
+              strength: 'authoritative',
+              providerId: 'app.scroll',
+            },
+          },
         },
-      }],
+      ],
       rootIds: ['n7'],
     };
     expect(refEntries(semantic)[0]?.applicationScroll).toBe('vertical:3+4/20');
@@ -69,17 +90,24 @@ describe('the compact snapshot format', () => {
   it('projects authoritative paint provenance separately from layout bounds', () => {
     const semantic: SemanticSnapshot = {
       ...permissionDialog,
-      nodes: [{
-        ...permissionDialog.nodes[0]!,
-        paintedRegion: {
-          status: 'known',
-          value: {
-            regionBounds: { row: 2, column: 3, width: 4, height: 1 },
-            spans: [{ row: 2, from: 3, to: 7 }],
+      nodes: [
+        {
+          ...permissionDialog.nodes[0]!,
+          paintedRegion: {
+            status: 'known',
+            value: {
+              regionBounds: { row: 2, column: 3, width: 4, height: 1 },
+              spans: [{ row: 2, from: 3, to: 7 }],
+            },
+            evidence: {
+              source: 'application',
+              method: 'native',
+              strength: 'authoritative',
+              providerId: 'app.paint',
+            },
           },
-          evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint' },
         },
-      }],
+      ],
     };
     expect(refEntries(semantic)[0]?.paintedRegion).toBe('(2,3,4,1):1-spans');
   });
@@ -115,7 +143,10 @@ describe('the compact snapshot format', () => {
       semantic: null,
       text: ['$ '],
     });
-    expect(compact.split('\n').slice(0, 2)).toEqual(['Terminal t2 80x24 revision 3', 'semanticTree: unavailable']);
+    expect(compact.split('\n').slice(0, 2)).toEqual([
+      'Terminal t2 80x24 revision 3',
+      'semanticTree: unavailable',
+    ]);
     expect(compact).not.toContain('ref=');
   });
 
@@ -151,7 +182,10 @@ describe('the compact snapshot format', () => {
 
 describe('refs', () => {
   it('carries the semantic revision so staleness is detectable', () => {
-    expect(refEntries(permissionDialog).map((entry) => entry.ref)).toEqual(['semantic:n7@42', 'semantic:n8@42']);
+    expect(refEntries(permissionDialog).map((entry) => entry.ref)).toEqual([
+      'semantic:n7@42',
+      'semantic:n8@42',
+    ]);
     expect(parseRef('semantic:n8@42')).toEqual({ nodeId: 'n8', revision: 42 });
   });
 

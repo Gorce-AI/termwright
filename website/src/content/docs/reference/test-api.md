@@ -6,7 +6,7 @@ description: Public test fixtures, sessions, locators, actions, observations, an
 Import the normal testing surface from `termwright/test`:
 
 ```ts
-import {test, expect} from 'termwright/test';
+import { test, expect } from 'termwright/test';
 ```
 
 This page is a searchable map of the public API. Task-oriented examples live in
@@ -21,12 +21,12 @@ published surface in the [TypeScript API reference](../../api/).
 
 The Termwright Vitest test function. The callback receives:
 
-| Fixture | Purpose |
-| --- | --- |
-| `terminal` | Launch an isolated terminal process. |
-| `step` | Group actions and assertions under a named execution step. |
-| `termwright` | Read resolved config, the private test directory, retained traces, and the step runner. |
-| `termwrightOptions` | Apply file- or suite-scoped launch defaults with `test.override()`. |
+| Fixture             | Purpose                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| `terminal`          | Launch an isolated terminal process.                                                    |
+| `step`              | Group actions and assertions under a named execution step.                              |
+| `termwright`        | Read resolved config, the private test directory, retained traces, and the step runner. |
+| `termwrightOptions` | Apply file- or suite-scoped launch defaults with `test.override()`.                     |
 
 `it` is an alias of `test`.
 
@@ -61,34 +61,34 @@ scheduling.
 
 The session exposes terminal-level input and observation:
 
-| Method | Result |
-| --- | --- |
-| `press(key)` | Send a key or chord. |
-| `type(text)` | Type text through terminal input. |
-| `paste(text)` | Send a paste operation. |
-| `resize({columns, rows})` | Resize and return a receipt tied to the rendered revision. |
-| `waitForText(text, options?)` | Wait until the terminal contains text. |
-| `screen()` | Take a screen snapshot; use `.text()`, `.line()`, or `.cell()`. |
-| `terminalState.snapshot()` | Read authoritative cursor, title, bell, buffer, dimensions, and terminal modes at the current screen revision. |
-| `keyboard.press/type/paste` | Use the one physical keyboard device directly. |
-| `mouse.move/down/up/click/wheel/drag` | Use viewport coordinates, optional Shift/Alt/Control modifiers, and the one physical mouse device. |
-| `checkpoint()` | Capture the paired terminal/semantic committed observation. |
-| `waitForCheckpointChange({after})` | Wait for a committed observation newer than a checkpoint. |
-| `getByRole(role, options?)` | Locate by semantic role and accessible name. |
-| `getByText(text, options?)` | Locate semantic text. |
-| `getByScreenText(text, options?)` | Locate text in the physical terminal grid, with optional occurrence and cell-style filters. |
-| `getByTestId(id)` | Locate an application-defined semantic test id. |
+| Method                                | Result                                                                                                         |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `press(key)`                          | Send a key or chord.                                                                                           |
+| `type(text)`                          | Type text through terminal input.                                                                              |
+| `paste(text)`                         | Send a paste operation.                                                                                        |
+| `resize({columns, rows})`             | Resize and return a receipt tied to the rendered revision.                                                     |
+| `waitForText(text, options?)`         | Wait until the terminal contains text.                                                                         |
+| `screen()`                            | Take a screen snapshot; use `.text()`, `.line()`, or `.cell()`.                                                |
+| `terminalState.snapshot()`            | Read authoritative cursor, title, bell, buffer, dimensions, and terminal modes at the current screen revision. |
+| `keyboard.press/type/paste`           | Use the one physical keyboard device directly.                                                                 |
+| `mouse.move/down/up/click/wheel/drag` | Use viewport coordinates, optional Shift/Alt/Control modifiers, and the one physical mouse device.             |
+| `checkpoint()`                        | Capture the paired terminal/semantic committed observation.                                                    |
+| `waitForCheckpointChange({after})`    | Wait for a committed observation newer than a checkpoint.                                                      |
+| `getByRole(role, options?)`           | Locate by semantic role and accessible name.                                                                   |
+| `getByText(text, options?)`           | Locate semantic text.                                                                                          |
+| `getByScreenText(text, options?)`     | Locate text in the physical terminal grid, with optional occurrence and cell-style filters.                    |
+| `getByTestId(id)`                     | Locate an application-defined semantic test id.                                                                |
 
 ### `session.shell`
 
 Provides exact shell command and prompt observations when the child publishes
 OSC 133 shell-integration marks:
 
-| Method | Result |
-| --- | --- |
-| `shell.run(command, options?)` | Run one command and return its bounded output, exit code, cwd, title, and shared action receipt. |
-| `shell.waitForPrompt(options?)` | Wait for an OSC 133 input-prompt mark. |
-| `shell.status()` | Read prompt state, last command exit code, OSC 7 cwd, title, cursor, and bell count. |
+| Method                          | Result                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `shell.run(command, options?)`  | Run one command and return its bounded output, exit code, cwd, title, and shared action receipt. |
+| `shell.waitForPrompt(options?)` | Wait for an OSC 133 input-prompt mark.                                                           |
+| `shell.status()`                | Read prompt state, last command exit code, OSC 7 cwd, title, cursor, and bell count.             |
 
 These methods do not infer prompts or command boundaries from rendered text.
 See [Test commands in an integrated shell](../../guides/shell-commands/).
@@ -103,20 +103,20 @@ as `within`, `filter`, `and`, `or`, `first`, and `nth` preserves its input
 domain. Screen locators expose only physical observations and pointer actions;
 semantic input intents are available only on semantic locators.
 
-| Method | Behavior |
-| --- | --- |
-| `press(key)` | Send a key to a focused or exactly targetable node. |
-| `type(text)` | Type into a focused or exactly targetable node. |
-| `activate()` | Activate an already focused node, or use an exact pointer recipient. |
-| `click({modifiers?})` | Click only when authoritative pointer ownership is known; modifiers are preserved in input and receipts. |
-| `doubleClick()` | Double-click an exact pointer recipient. |
-| `hover()` | Move the real terminal pointer to an exact pointer recipient. |
-| `dragTo(target)` | Drag between two exact pointer recipients. |
-| `wheel({deltaY, deltaX?})` | Send wheel input to an exact target. |
-| `fill(text)` | Focus through an exact real-input strategy, then enter text. |
-| `focus()` | Focus the semantic element through an exact real-input strategy. |
-| `check()` / `uncheck()` | Drive real input and verify the resulting semantic checked state. |
-| `actionability(action)` | Explain the production action plan without executing it. |
+| Method                     | Behavior                                                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `press(key)`               | Send a key to a focused or exactly targetable node.                                                      |
+| `type(text)`               | Type into a focused or exactly targetable node.                                                          |
+| `activate()`               | Activate an already focused node, or use an exact pointer recipient.                                     |
+| `click({modifiers?})`      | Click only when authoritative pointer ownership is known; modifiers are preserved in input and receipts. |
+| `doubleClick()`            | Double-click an exact pointer recipient.                                                                 |
+| `hover()`                  | Move the real terminal pointer to an exact pointer recipient.                                            |
+| `dragTo(target)`           | Drag between two exact pointer recipients.                                                               |
+| `wheel({deltaY, deltaX?})` | Send wheel input to an exact target.                                                                     |
+| `fill(text)`               | Focus through an exact real-input strategy, then enter text.                                             |
+| `focus()`                  | Focus the semantic element through an exact real-input strategy.                                         |
+| `check()` / `uncheck()`    | Drive real input and verify the resulting semantic checked state.                                        |
+| `actionability(action)`    | Explain the production action plan without executing it.                                                 |
 
 Missing session capability, disabled terminal input modes, and a currently
 non-actionable target are separate typed failures. `activate()` does not
@@ -126,12 +126,12 @@ silently move focus to an arbitrary node.
 
 Observation methods return evidence-qualified results rather than guessing:
 
-| Method | Observes |
-| --- | --- |
-| `geometry()` | Intended and visible rectangles when the framework can prove them. |
-| `visibility()` | Attachment, display, viewport intersection, and visible cells. |
-| `hitTest()` | Exact pointer recipient for terminal cells when supported. |
-| `cellSnapshot()` | Current rendered terminal cells associated with the locator. |
+| Method           | Observes                                                           |
+| ---------------- | ------------------------------------------------------------------ |
+| `geometry()`     | Intended and visible rectangles when the framework can prove them. |
+| `visibility()`   | Attachment, display, viewport intersection, and visible cells.     |
+| `hitTest()`      | Exact pointer recipient for terminal cells when supported.         |
+| `cellSnapshot()` | Current rendered terminal cells associated with the locator.       |
 
 An observation can be `known`, `absent`, `unknown`, or `unsupported`. Unknown
 and unsupported evidence never satisfies either a positive or negated matcher.
@@ -177,7 +177,7 @@ See [Configuration](../configuration/) for defaults and precedence.
 
 - `serializeSemanticSnapshot(tree, options?)`
 - `serializeScreen(cells, options?)`
-Most tests should use the matchers rather than these lower-level helpers.
+  Most tests should use the matchers rather than these lower-level helpers.
 
 ## Reports
 

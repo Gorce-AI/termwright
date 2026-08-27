@@ -78,8 +78,8 @@ A screen revision lands before the semantic revision it belongs to: the tree
 arrives on the socket, the render-commit marker in the byte stream, and only the
 pair is observable. Two symptoms follow if a read tool does not wait. A snapshot
 taken right after `wait_for text` reports `semanticTree: unavailable` for a
-program that does publish a tree. And `capture_since` reports changed *rows* with
-no changed *subtrees*, because it caught the pair mid-flight — this one was
+program that does publish a tree. And `capture_since` reports changed _rows_ with
+no changed _subtrees_, because it caught the pair mid-flight — this one was
 intermittent in the end-to-end suite, and an agent polling `capture_since` after
 an action would have hit exactly the same race.
 
@@ -107,8 +107,8 @@ that make the tools legible in the first place.
 The dependency rule that once forced this (mcp could not reach trace) is gone —
 the replay tools import the trace reader. `diff.ts` stays anyway, because trace's
 `diffSemanticSnapshots` answers a different question: it reports every changed
-node for the HTML report, while an agent needs the *minimal changed subtree
-roots* rendered in the compact ref format and capped for a context window. One
+node for the HTML report, while an agent needs the _minimal changed subtree
+roots_ rendered in the compact ref format and capped for a context window. One
 implementation now serves both the live `capture_since` and `trace.diff`, which
 is what keeps those two tools reading identically.
 
@@ -156,8 +156,8 @@ cast prefix, the viewport after every resize, and the nearest semantic record;
 HTML report uses. This package parses no asciicast and drives no terminal.
 
 One asymmetry worth knowing: on a live session the header revision is the
-*screen* revision, while a reconstructed frame has no screen-revision counter, so
-it carries the *semantic* revision (0 when the recording had no tree). Refs in a
+_screen_ revision, while a reconstructed frame has no screen-revision counter, so
+it carries the _semantic_ revision (0 when the recording had no tree). Refs in a
 frame are `nX@<semanticRevision>` either way, which is what makes them
 comparable across the two worlds.
 
@@ -176,7 +176,7 @@ stays smaller, and session teardown closes every reader through
 
 ## Two stores per session
 
-A session now owns terminals *and* trace archives (`SessionStores`). The registry
+A session now owns terminals _and_ trace archives (`SessionStores`). The registry
 builds both and disposes both, so an HTTP `DELETE` or a dropped stdio connection
 releases file handles as reliably as it kills children. `ToolContext` carries the
 two stores rather than one, which is why the field is `terminals` and not
@@ -201,7 +201,7 @@ Both worlds feed the renderer the same shape. A live `harness.screen()` is
 already a `ScreenFrame`, and `frameFromAnsi()` from `@termwright/trace` gives one
 for a recorded moment — which is why `trace.frame_at` now reconstructs through
 that instead of `renderAnsiToHtml`: one call yields the cell grid for the picture
-*and* the text for the compact snapshot, rather than replaying the recording
+_and_ the text for the compact snapshot, rather than replaying the recording
 twice into two different representations.
 
 Three deliberate choices:
@@ -237,7 +237,7 @@ because it died, and the count matters most. Here, `omitted` is
 so it is correct even if nothing ever arrives again.
 
 Reads do not wait for the log tail the way they wait for semantic pairing
-(`settleSemantics`). A pairing that has not landed makes the *same* revision
+(`settleSemantics`). A pairing that has not landed makes the _same_ revision
 inconsistent, while a log line is an independent event: taxing every call with a
 poll interval to catch one that may not exist buys less than it costs, and the
 next capture picks it up without loss.
@@ -259,7 +259,7 @@ diff describe something it did not show.
 
 ## Crash reporting happens in one place
 
-`server.ts: withCrashContext()` attaches the crash to *any* failed tool call
+`server.ts: withCrashContext()` attaches the crash to _any_ failed tool call
 whose arguments name a terminal whose child died. Doing it there rather than in
 each acting tool means one code path instead of fifteen, and the server is the
 only layer that sees both the raw arguments and every thrown error. The
@@ -305,7 +305,7 @@ fake one to prove expiry and refresh deterministically, then one test runs on th
 real timer to prove the sweeper is actually scheduled — a fake-clock-only suite
 would pass just as happily with the interval never started.
 
-stdio gets no TTL. There, EOF on the pipe *is* the disconnect signal, and a
+stdio gets no TTL. There, EOF on the pipe _is_ the disconnect signal, and a
 session that idles while its host thinks it owns a terminal is a bug, not a leak.
 
 ## Session ownership

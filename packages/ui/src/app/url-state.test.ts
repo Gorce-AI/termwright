@@ -18,7 +18,10 @@ describe('application URL state', () => {
   });
 
   it('retains a history run identity and rejects malformed route values', () => {
-    expect(parseAppUrl('http://localhost/?view=runs&runId=run%3Aknown')).toEqual({ view: 'runs', runId: 'run:known' });
+    expect(parseAppUrl('http://localhost/?view=runs&runId=run%3Aknown')).toEqual({
+      view: 'runs',
+      runId: 'run:known',
+    });
     expect(parseAppUrl('http://localhost/?view=unknown&runId=ignored')).toEqual({ view: 'runner' });
     expect(parseAppUrl('http://localhost/?view=runner&timeMs=-1')).toEqual({ view: 'runner' });
     expect(parseAppUrl('http://localhost/?view=runner&timeMs=NaN')).toEqual({ view: 'runner' });
@@ -26,11 +29,21 @@ describe('application URL state', () => {
 
   it('bounds attacker-controlled identities and canonicalizes replay time', () => {
     const oversized = 'x'.repeat(4_097);
-    expect(parseAppUrl(`http://localhost/?view=runner&executionId=${oversized}&timeMs=1.6`)).toEqual({ view: 'runner', timeMs: 2 });
-    expect(shareableAppUrl('http://localhost/', { view: 'runner', timeMs: -2 }).searchParams.get('timeMs')).toBe('0');
+    expect(
+      parseAppUrl(`http://localhost/?view=runner&executionId=${oversized}&timeMs=1.6`),
+    ).toEqual({ view: 'runner', timeMs: 2 });
+    expect(
+      shareableAppUrl('http://localhost/', { view: 'runner', timeMs: -2 }).searchParams.get(
+        'timeMs',
+      ),
+    ).toBe('0');
   });
 
   it('rejects ambiguous duplicate fields', () => {
-    expect(parseAppUrl('http://localhost/?view=runner&executionId=one&executionId=two&timeMs=1&timeMs=2')).toEqual({ view: 'runner' });
+    expect(
+      parseAppUrl(
+        'http://localhost/?view=runner&executionId=one&executionId=two&timeMs=1&timeMs=2',
+      ),
+    ).toEqual({ view: 'runner' });
   });
 });

@@ -14,7 +14,9 @@ describe('Windows command-line quoting', () => {
   });
 
   it('quotes anything containing whitespace', () => {
-    expect(quoteWindowsArgument('C:\\Program Files\\node.exe')).toBe('"C:\\Program Files\\node.exe"');
+    expect(quoteWindowsArgument('C:\\Program Files\\node.exe')).toBe(
+      '"C:\\Program Files\\node.exe"',
+    );
   });
 
   it('quotes an empty argument, which would otherwise vanish', () => {

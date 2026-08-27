@@ -1,6 +1,6 @@
 ---
-"@termwright/driver": patch
-"@termwright/pty": patch
+'@termwright/driver': patch
+'@termwright/pty': patch
 ---
 
 Filter Linux process-group candidates before opening pidfds, preserve the

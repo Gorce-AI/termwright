@@ -25,11 +25,6 @@ export type {
   InkRendererRegistration,
 } from './react-commit-bridge.js';
 export { observeInkTree } from './observe.js';
-export type {
-  InkDomElement,
-  InkDomNode,
-  InkObservation,
-  MeasureElement,
-} from './observe.js';
+export type { InkDomElement, InkDomNode, InkObservation, MeasureElement } from './observe.js';
 export { createInkSession, probeInfo } from './session.js';
 export type { InkProbeSession, InkSessionOptions } from './session.js';

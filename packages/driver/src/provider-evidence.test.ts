@@ -1,40 +1,37 @@
-import { describe, expect, it } from "vitest";
-import type {
-  EvidenceProviderRegistration,
-  SemanticSnapshot,
-} from "@termwright/protocol";
-import { composeProviderEvidence } from "./provider-evidence.js";
+import { describe, expect, it } from 'vitest';
+import type { EvidenceProviderRegistration, SemanticSnapshot } from '@termwright/protocol';
+import { composeProviderEvidence } from './provider-evidence.js';
 
 const registration: EvidenceProviderRegistration = {
-  id: "app.router",
-  version: "1",
-  method: "native",
-  capabilities: ["pointer-regions", "hit-test"],
+  id: 'app.router',
+  version: '1',
+  method: 'native',
+  capabilities: ['pointer-regions', 'hit-test'],
 };
 const frameworkEvidence = {
-  source: "framework",
-  method: "instrumented",
-  strength: "authoritative",
-  providerId: "ink",
+  source: 'framework',
+  method: 'instrumented',
+  strength: 'authoritative',
+  providerId: 'ink',
 } as const;
 const unknown = {
-  status: "unknown",
-  reason: "awaiting-revision-pair",
+  status: 'unknown',
+  reason: 'awaiting-revision-pair',
 } as const;
 
 function snapshot(overrides: Partial<SemanticSnapshot> = {}): SemanticSnapshot {
   return {
     v: 2,
-    sessionId: "s1",
+    sessionId: 's1',
     revision: 3,
     columns: 20,
     rows: 6,
-    rootIds: ["root"],
+    rootIds: ['root'],
     nodes: [
       {
-        id: "root",
-        role: "button",
-        name: "Reject",
+        id: 'root',
+        role: 'button',
+        name: 'Reject',
         geometry: {
           displayed: unknown,
           intendedRect: unknown,
@@ -43,30 +40,30 @@ function snapshot(overrides: Partial<SemanticSnapshot> = {}): SemanticSnapshot {
       },
     ],
     coordinateSpace: {
-      status: "known",
-      value: "viewport-cells",
+      status: 'known',
+      value: 'viewport-cells',
       evidence: frameworkEvidence,
     },
     hitGrid: {
-      status: "unsupported",
-      capability: "pointer-hit-grid",
-      reason: "framework-unobservable",
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
     },
     providerEvidence: [
       {
-        providerId: "app.router",
-        sessionId: "s1",
+        providerId: 'app.router',
+        sessionId: 's1',
         revision: 3,
-        status: "available",
+        status: 'available',
         evidence: {
-          source: "application",
-          method: "native",
-          strength: "authoritative",
-          providerId: "app.router",
+          source: 'application',
+          method: 'native',
+          strength: 'authoritative',
+          providerId: 'app.router',
         },
         pointerRegions: [
           {
-            recipientId: "root",
+            recipientId: 'root',
             regionBounds: { row: 2, column: 4, width: 6, height: 1 },
             spans: [{ row: 2, from: 4, to: 10 }],
           },
@@ -74,7 +71,7 @@ function snapshot(overrides: Partial<SemanticSnapshot> = {}): SemanticSnapshot {
         hitGrid: {
           regions: [
             {
-              recipientId: "root",
+              recipientId: 'root',
               rect: { row: 2, column: 4, width: 6, height: 1 },
             },
           ],
@@ -85,255 +82,265 @@ function snapshot(overrides: Partial<SemanticSnapshot> = {}): SemanticSnapshot {
   };
 }
 
-describe("provider evidence composition", () => {
-  it("co-proves equivalent terminal input modes and rejects disagreement", () => {
+describe('provider evidence composition', () => {
+  it('co-proves equivalent terminal input modes and rejects disagreement', () => {
     const inputRegistration = (id: string): EvidenceProviderRegistration => ({
       id,
-      version: "1",
-      method: "native",
-      capabilities: ["terminal-input-modes"],
+      version: '1',
+      method: 'native',
+      capabilities: ['terminal-input-modes'],
     });
-    const inputFrame = (id: string, mouseTracking: "drag" | "any") => ({
+    const inputFrame = (id: string, mouseTracking: 'drag' | 'any') => ({
       providerId: id,
-      sessionId: "s1",
+      sessionId: 's1',
       revision: 3,
-      status: "available" as const,
+      status: 'available' as const,
       evidence: {
-        source: "application" as const,
-        method: "native" as const,
-        strength: "authoritative" as const,
+        source: 'application' as const,
+        method: 'native' as const,
+        strength: 'authoritative' as const,
         providerId: id,
       },
       pointerRegions: [],
       inputModes: {
         mouseTracking,
-        mouseEncoding: "sgr" as const,
-        focusReporting: "on" as const,
+        mouseEncoding: 'sgr' as const,
+        focusReporting: 'on' as const,
       },
     });
     expect(
-      composeProviderEvidence(
-        snapshot({ providerEvidence: [inputFrame("app.input", "drag")] }),
-        [inputRegistration("app.input")],
-      ),
+      composeProviderEvidence(snapshot({ providerEvidence: [inputFrame('app.input', 'drag')] }), [
+        inputRegistration('app.input'),
+      ]),
     ).toMatchObject({
       ok: true,
       inputModes: {
-        value: { mouseTracking: "drag", mouseEncoding: "sgr" },
-        providerId: "app.input",
+        value: { mouseTracking: 'drag', mouseEncoding: 'sgr' },
+        providerId: 'app.input',
       },
     });
     expect(
       composeProviderEvidence(
         snapshot({
-          providerEvidence: [
-            inputFrame("first", "drag"),
-            inputFrame("second", "any"),
-          ],
+          providerEvidence: [inputFrame('first', 'drag'), inputFrame('second', 'any')],
         }),
-        [inputRegistration("first"), inputRegistration("second")],
+        [inputRegistration('first'), inputRegistration('second')],
       ),
     ).toMatchObject({
       ok: false,
-      problem: { kind: "conflict", message: expect.stringContaining("input modes") },
+      problem: { kind: 'conflict', message: expect.stringContaining('input modes') },
     });
   });
-  it("composes authoritative focus state and rejects provider conflicts", () => {
+  it('composes authoritative focus state and rejects provider conflicts', () => {
     const focus = (id: string, focusedRecipientId: string | null) => ({
       providerId: id,
-      sessionId: "s1",
+      sessionId: 's1',
       revision: 3,
-      status: "available" as const,
+      status: 'available' as const,
       evidence: {
-        source: "application" as const,
-        method: "native" as const,
-        strength: "authoritative" as const,
+        source: 'application' as const,
+        method: 'native' as const,
+        strength: 'authoritative' as const,
         providerId: id,
       },
       pointerRegions: [],
       focusState:
         focusedRecipientId === null
-          ? ({ status: "none" as const })
-          : ({ status: "focused" as const, recipientId: focusedRecipientId }),
+          ? { status: 'none' as const }
+          : { status: 'focused' as const, recipientId: focusedRecipientId },
     });
     const focusRegistration = (id: string): EvidenceProviderRegistration => ({
       id,
-      version: "1",
-      method: "native",
-      capabilities: ["focus-state"],
+      version: '1',
+      method: 'native',
+      capabilities: ['focus-state'],
     });
     const result = composeProviderEvidence(
-      snapshot({ providerEvidence: [focus("app.focus", "root")] }),
-      [focusRegistration("app.focus")],
+      snapshot({ providerEvidence: [focus('app.focus', 'root')] }),
+      [focusRegistration('app.focus')],
     );
     expect(result).toMatchObject({
       ok: true,
       snapshot: {
-        nodes: [{ state: { focused: true }, px: { "state.focused": "application" } }],
+        nodes: [{ state: { focused: true }, px: { 'state.focused': 'application' } }],
       },
     });
     expect(
       composeProviderEvidence(
         snapshot({
-          providerEvidence: [focus("first", "root"), focus("second", null)],
+          providerEvidence: [focus('first', 'root'), focus('second', null)],
         }),
-        [focusRegistration("first"), focusRegistration("second")],
+        [focusRegistration('first'), focusRegistration('second')],
       ),
     ).toMatchObject({
       ok: false,
-      problem: { kind: "conflict", message: expect.stringContaining("disagree") },
+      problem: { kind: 'conflict', message: expect.stringContaining('disagree') },
     });
     expect(
       composeProviderEvidence(
         snapshot({
           nodes: [{ ...snapshot().nodes[0]!, state: { focused: false } }],
-          providerEvidence: [focus("app.focus", "root")],
+          providerEvidence: [focus('app.focus', 'root')],
         }),
-        [focusRegistration("app.focus")],
+        [focusRegistration('app.focus')],
       ),
     ).toMatchObject({
       ok: false,
-      problem: { kind: "conflict", message: expect.stringContaining("framework") },
+      problem: { kind: 'conflict', message: expect.stringContaining('framework') },
     });
   });
 
-  it("composes application scroll state and rejects conflicting producers", () => {
+  it('composes application scroll state and rejects conflicting producers', () => {
     const scrollRegistration = (id: string): EvidenceProviderRegistration => ({
       id,
-      version: "1",
-      method: "native",
-      capabilities: ["scroll-state"],
+      version: '1',
+      method: 'native',
+      capabilities: ['scroll-state'],
     });
     const scrollFrame = (id: string, offset: number) => ({
       providerId: id,
-      sessionId: "s1",
+      sessionId: 's1',
       revision: 3,
-      status: "available" as const,
+      status: 'available' as const,
       evidence: {
-        source: "application" as const,
-        method: "native" as const,
-        strength: "authoritative" as const,
+        source: 'application' as const,
+        method: 'native' as const,
+        strength: 'authoritative' as const,
         providerId: id,
       },
       pointerRegions: [],
-      scrollStates: [{
-        recipientId: "root",
-        axis: "vertical" as const,
-        offset,
-        viewport: 4,
-        extent: 20,
-      }],
+      scrollStates: [
+        {
+          recipientId: 'root',
+          axis: 'vertical' as const,
+          offset,
+          viewport: 4,
+          extent: 20,
+        },
+      ],
     });
-    expect(composeProviderEvidence(
-      snapshot({ providerEvidence: [scrollFrame("app.scroll", 3)] }),
-      [scrollRegistration("app.scroll")],
-    )).toMatchObject({
+    expect(
+      composeProviderEvidence(snapshot({ providerEvidence: [scrollFrame('app.scroll', 3)] }), [
+        scrollRegistration('app.scroll'),
+      ]),
+    ).toMatchObject({
       ok: true,
       snapshot: {
-        nodes: [{
-          scroll: {
-            status: "known",
-            value: { axis: "vertical", offset: 3, viewport: 4, extent: 20 },
-            evidence: { providerId: "app.scroll" },
+        nodes: [
+          {
+            scroll: {
+              status: 'known',
+              value: { axis: 'vertical', offset: 3, viewport: 4, extent: 20 },
+              evidence: { providerId: 'app.scroll' },
+            },
           },
-        }],
+        ],
       },
     });
-    expect(composeProviderEvidence(
-      snapshot({ providerEvidence: [scrollFrame("first", 3), scrollFrame("second", 4)] }),
-      [scrollRegistration("first"), scrollRegistration("second")],
-    )).toMatchObject({
+    expect(
+      composeProviderEvidence(
+        snapshot({ providerEvidence: [scrollFrame('first', 3), scrollFrame('second', 4)] }),
+        [scrollRegistration('first'), scrollRegistration('second')],
+      ),
+    ).toMatchObject({
       ok: false,
-      problem: { kind: "conflict", message: expect.stringContaining("disagree") },
+      problem: { kind: 'conflict', message: expect.stringContaining('disagree') },
     });
   });
 
-  it("composes authoritative paint attribution and rejects competing painters", () => {
+  it('composes authoritative paint attribution and rejects competing painters', () => {
     const registrationFor = (id: string): EvidenceProviderRegistration => ({
       id,
-      version: "1",
-      method: "native",
-      capabilities: ["painted-regions"],
+      version: '1',
+      method: 'native',
+      capabilities: ['painted-regions'],
     });
     const frame = (id: string, from: number) => ({
       providerId: id,
-      sessionId: "s1",
+      sessionId: 's1',
       revision: 3,
-      status: "available" as const,
+      status: 'available' as const,
       evidence: {
-        source: "application" as const,
-        method: "native" as const,
-        strength: "authoritative" as const,
+        source: 'application' as const,
+        method: 'native' as const,
+        strength: 'authoritative' as const,
         providerId: id,
       },
       pointerRegions: [],
-      paintedRegions: [{
-        recipientId: "root",
-        regionBounds: { row: 1, column: from, width: 2, height: 1 },
-        spans: [{ row: 1, from, to: from + 2 }],
-      }],
+      paintedRegions: [
+        {
+          recipientId: 'root',
+          regionBounds: { row: 1, column: from, width: 2, height: 1 },
+          spans: [{ row: 1, from, to: from + 2 }],
+        },
+      ],
     });
-    expect(composeProviderEvidence(
-      snapshot({ providerEvidence: [frame("app.paint", 2)] }),
-      [registrationFor("app.paint")],
-    )).toMatchObject({
+    expect(
+      composeProviderEvidence(snapshot({ providerEvidence: [frame('app.paint', 2)] }), [
+        registrationFor('app.paint'),
+      ]),
+    ).toMatchObject({
       ok: true,
       snapshot: {
-        nodes: [{
-          paintedRegion: {
-            status: "known",
-            value: {
-              regionBounds: { row: 1, column: 2, width: 2, height: 1 },
-              spans: [{ row: 1, from: 2, to: 4 }],
+        nodes: [
+          {
+            paintedRegion: {
+              status: 'known',
+              value: {
+                regionBounds: { row: 1, column: 2, width: 2, height: 1 },
+                spans: [{ row: 1, from: 2, to: 4 }],
+              },
+              evidence: { providerId: 'app.paint' },
             },
-            evidence: { providerId: "app.paint" },
           },
-        }],
+        ],
       },
     });
-    expect(composeProviderEvidence(
-      snapshot({ providerEvidence: [frame("first", 2), frame("second", 3)] }),
-      [registrationFor("first"), registrationFor("second")],
-    )).toMatchObject({
+    expect(
+      composeProviderEvidence(
+        snapshot({ providerEvidence: [frame('first', 2), frame('second', 3)] }),
+        [registrationFor('first'), registrationFor('second')],
+      ),
+    ).toMatchObject({
       ok: false,
-      problem: { kind: "conflict", message: expect.stringContaining("painted region") },
+      problem: { kind: 'conflict', message: expect.stringContaining('painted region') },
     });
   });
 
-  it("merges equivalent application recipes and rejects authoritative conflicts", () => {
+  it('merges equivalent application recipes and rejects authoritative conflicts', () => {
     const recipeRegistration: EvidenceProviderRegistration = {
-      id: "app.keys",
-      version: "1",
-      method: "native",
-      capabilities: ["action-recipes"],
+      id: 'app.keys',
+      version: '1',
+      method: 'native',
+      capabilities: ['action-recipes'],
     };
     const activate = {
-      action: "activate" as const,
+      action: 'activate' as const,
       requiresFocus: true,
-      steps: [{ kind: "press" as const, key: "Enter" }],
+      steps: [{ kind: 'press' as const, key: 'Enter' }],
     };
     const base = snapshot({
       nodes: [
         {
           ...snapshot().nodes[0]!,
-          actions: ["activate"],
+          actions: ['activate'],
           inputRecipes: [activate],
         },
       ],
       providerEvidence: [
         {
-          providerId: "app.keys",
-          sessionId: "s1",
+          providerId: 'app.keys',
+          sessionId: 's1',
           revision: 3,
-          status: "available",
+          status: 'available',
           evidence: {
-            source: "application",
-            method: "native",
-            strength: "authoritative",
-            providerId: "app.keys",
+            source: 'application',
+            method: 'native',
+            strength: 'authoritative',
+            providerId: 'app.keys',
           },
           pointerRegions: [],
-          actionRecipes: [{ recipientId: "root", recipes: [activate] }],
+          actionRecipes: [{ recipientId: 'root', recipes: [activate] }],
         },
       ],
     });
@@ -348,11 +355,11 @@ describe("provider evidence composition", () => {
           ...base.providerEvidence![0]!,
           actionRecipes: [
             {
-              recipientId: "root",
+              recipientId: 'root',
               recipes: [
                 {
                   ...activate,
-                  steps: [{ kind: "press" as const, key: "Space" }],
+                  steps: [{ kind: 'press' as const, key: 'Space' }],
                 },
               ],
             },
@@ -360,18 +367,16 @@ describe("provider evidence composition", () => {
         },
       ],
     };
-    expect(
-      composeProviderEvidence(conflicting, [recipeRegistration]),
-    ).toMatchObject({
+    expect(composeProviderEvidence(conflicting, [recipeRegistration])).toMatchObject({
       ok: false,
       problem: {
-        kind: "conflict",
-        message: expect.stringContaining("disagrees"),
+        kind: 'conflict',
+        message: expect.stringContaining('disagrees'),
       },
     });
   });
 
-  it("qualifies hit-grid observations without rewriting layout or clipping", () => {
+  it('qualifies hit-grid observations without rewriting layout or clipping', () => {
     const result = composeProviderEvidence(snapshot(), [registration]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -381,38 +386,36 @@ describe("provider evidence composition", () => {
       visibleRect: unknown,
     });
     expect(result.snapshot.hitGrid).toMatchObject({
-      status: "known",
-      value: { regions: [{ recipientId: "root" }] },
+      status: 'known',
+      value: { regions: [{ recipientId: 'root' }] },
     });
   });
 
-  it("fails closed when a negotiated provider is omitted or lost", () => {
+  it('fails closed when a negotiated provider is omitted or lost', () => {
     expect(
-      composeProviderEvidence({ ...snapshot(), providerEvidence: [] }, [
-        registration,
-      ]),
-    ).toMatchObject({ ok: false, problem: { kind: "lost" } });
+      composeProviderEvidence({ ...snapshot(), providerEvidence: [] }, [registration]),
+    ).toMatchObject({ ok: false, problem: { kind: 'lost' } });
     const lost = snapshot({
       providerEvidence: [
         {
-          providerId: "app.router",
-          sessionId: "s1",
+          providerId: 'app.router',
+          sessionId: 's1',
           revision: 3,
-          status: "lost",
-          reason: "router stopped",
+          status: 'lost',
+          reason: 'router stopped',
         },
       ],
     });
     expect(composeProviderEvidence(lost, [registration])).toMatchObject({
       ok: false,
       problem: {
-        kind: "lost",
-        message: expect.stringContaining("router stopped"),
+        kind: 'lost',
+        message: expect.stringContaining('router stopped'),
       },
     });
   });
 
-  it("rejects stale and undeclared evidence", () => {
+  it('rejects stale and undeclared evidence', () => {
     const base = snapshot();
     const stale = {
       ...base,
@@ -420,33 +423,33 @@ describe("provider evidence composition", () => {
     };
     expect(composeProviderEvidence(stale, [registration])).toMatchObject({
       ok: false,
-      problem: { kind: "violation", message: expect.stringContaining("stale") },
+      problem: { kind: 'violation', message: expect.stringContaining('stale') },
     });
     expect(composeProviderEvidence(snapshot(), [])).toMatchObject({
       ok: false,
       problem: {
-        kind: "violation",
-        message: expect.stringContaining("undeclared"),
+        kind: 'violation',
+        message: expect.stringContaining('undeclared'),
       },
     });
   });
 
-  it("allows a clickable subregion to differ from layout but rejects pointer ownership disagreement", () => {
+  it('allows a clickable subregion to differ from layout but rejects pointer ownership disagreement', () => {
     const distinctLayout = snapshot({
       nodes: [
         {
-          id: "root",
-          role: "button",
-          name: "Reject",
+          id: 'root',
+          role: 'button',
+          name: 'Reject',
           geometry: {
             displayed: unknown,
             intendedRect: {
-              status: "known",
+              status: 'known',
               value: { row: 0, column: 0, width: 20, height: 4 },
               evidence: frameworkEvidence,
             },
             visibleRect: {
-              status: "known",
+              status: 'known',
               value: { row: 0, column: 0, width: 20, height: 4 },
               evidence: frameworkEvidence,
             },
@@ -458,59 +461,56 @@ describe("provider evidence composition", () => {
     expect(composed.ok).toBe(true);
     if (composed.ok) {
       expect(composed.snapshot.nodes[0]?.geometry.intendedRect).toMatchObject({
-        status: "known",
+        status: 'known',
         value: { row: 0, column: 0, width: 20, height: 4 },
       });
     }
 
     const gridConflict = snapshot({
       hitGrid: {
-        status: "known",
+        status: 'known',
         evidence: frameworkEvidence,
         value: {
           regions: [
             {
-              recipientId: "root",
+              recipientId: 'root',
               rect: { row: 1, column: 1, width: 1, height: 1 },
             },
           ],
         },
       },
     });
-    expect(composeProviderEvidence(gridConflict, [registration])).toMatchObject(
-      {
-        ok: false,
-        problem: {
-          kind: "conflict",
-          message: expect.stringContaining("disagrees"),
-        },
+    expect(composeProviderEvidence(gridConflict, [registration])).toMatchObject({
+      ok: false,
+      problem: {
+        kind: 'conflict',
+        message: expect.stringContaining('disagrees'),
       },
-    );
+    });
   });
 
-  it("validates independently composed region and hit-test providers as one contract", () => {
+  it('validates independently composed region and hit-test providers as one contract', () => {
     const base = snapshot();
     const frame = base.providerEvidence![0]!;
-    if (frame.status !== "available")
-      throw new Error("fixture provider must be available");
+    if (frame.status !== 'available') throw new Error('fixture provider must be available');
     const regionsOnly: EvidenceProviderRegistration = {
-      id: "app.regions",
-      version: "1",
-      method: "native",
-      capabilities: ["pointer-regions"],
+      id: 'app.regions',
+      version: '1',
+      method: 'native',
+      capabilities: ['pointer-regions'],
     };
     const hitsOnly: EvidenceProviderRegistration = {
-      id: "app.hits",
-      version: "1",
-      method: "native",
-      capabilities: ["hit-test"],
+      id: 'app.hits',
+      version: '1',
+      method: 'native',
+      capabilities: ['hit-test'],
     };
     const providerEvidence = [
       {
         providerId: regionsOnly.id,
         sessionId: frame.sessionId,
         revision: frame.revision,
-        status: "available" as const,
+        status: 'available' as const,
         evidence: { ...frame.evidence, providerId: regionsOnly.id },
         pointerRegions: frame.pointerRegions,
       },
@@ -518,13 +518,13 @@ describe("provider evidence composition", () => {
         providerId: hitsOnly.id,
         sessionId: frame.sessionId,
         revision: frame.revision,
-        status: "available" as const,
+        status: 'available' as const,
         evidence: { ...frame.evidence, providerId: hitsOnly.id },
         pointerRegions: [],
         hitGrid: {
           regions: [
             {
-              recipientId: "root",
+              recipientId: 'root',
               rect: { row: 2, column: 4, width: 6, height: 1 },
             },
           ],
@@ -532,13 +532,10 @@ describe("provider evidence composition", () => {
       },
     ];
     expect(
-      composeProviderEvidence({ ...base, providerEvidence }, [
-        regionsOnly,
-        hitsOnly,
-      ]),
+      composeProviderEvidence({ ...base, providerEvidence }, [regionsOnly, hitsOnly]),
     ).toMatchObject({
       ok: true,
-      snapshot: { hitGrid: { status: "known" } },
+      snapshot: { hitGrid: { status: 'known' } },
     });
 
     const conflictingEvidence = [
@@ -548,7 +545,7 @@ describe("provider evidence composition", () => {
         hitGrid: {
           regions: [
             {
-              recipientId: "other",
+              recipientId: 'other',
               rect: { row: 2, column: 4, width: 6, height: 1 },
             },
           ],
@@ -556,15 +553,15 @@ describe("provider evidence composition", () => {
       },
     ];
     expect(
-      composeProviderEvidence(
-        { ...base, providerEvidence: conflictingEvidence },
-        [regionsOnly, hitsOnly],
-      ),
+      composeProviderEvidence({ ...base, providerEvidence: conflictingEvidence }, [
+        regionsOnly,
+        hitsOnly,
+      ]),
     ).toMatchObject({
       ok: false,
       problem: {
-        kind: "conflict",
-        message: expect.stringContaining("disagrees"),
+        kind: 'conflict',
+        message: expect.stringContaining('disagrees'),
       },
     });
   });
@@ -572,27 +569,26 @@ describe("provider evidence composition", () => {
   it("rejects evidence outside a provider's frozen capability declaration", () => {
     const base = snapshot();
     const frame = base.providerEvidence![0]!;
-    if (frame.status !== "available")
-      throw new Error("fixture provider must be available");
+    if (frame.status !== 'available') throw new Error('fixture provider must be available');
     const hitOnly: EvidenceProviderRegistration = {
       id: registration.id,
-      version: "1",
-      method: "native",
-      capabilities: ["hit-test"],
+      version: '1',
+      method: 'native',
+      capabilities: ['hit-test'],
     };
     expect(composeProviderEvidence(base, [hitOnly])).toMatchObject({
       ok: false,
       problem: {
-        kind: "violation",
-        message: expect.stringContaining("did not negotiate"),
+        kind: 'violation',
+        message: expect.stringContaining('did not negotiate'),
       },
     });
 
     const regionsOnly: EvidenceProviderRegistration = {
       id: registration.id,
-      version: "1",
-      method: "native",
-      capabilities: ["pointer-regions"],
+      version: '1',
+      method: 'native',
+      capabilities: ['pointer-regions'],
     };
     expect(
       composeProviderEvidence(
@@ -605,8 +601,8 @@ describe("provider evidence composition", () => {
     ).toMatchObject({
       ok: false,
       problem: {
-        kind: "violation",
-        message: expect.stringContaining("did not negotiate"),
+        kind: 'violation',
+        message: expect.stringContaining('did not negotiate'),
       },
     });
   });

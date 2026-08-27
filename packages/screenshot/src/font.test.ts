@@ -68,7 +68,7 @@ describe('lazy candidate loading', () => {
   it('does not open fallback collections when the primary face covers ASCII', () => {
     const fixture = candidateFixture({
       primary: fakeFont({ A: 'outline' }),
-      cjk: fakeFont({ '界': 'outline' }),
+      cjk: fakeFont({ 界: 'outline' }),
       emoji: fakeFont({ '⚠️': 'image' }),
     });
     const set = loadFontCandidates(['primary', 'cjk', 'emoji'], fixture.source);
@@ -81,7 +81,7 @@ describe('lazy candidate loading', () => {
   it('opens fallback faces in order only until a missing glyph is found', () => {
     const fixture = candidateFixture({
       primary: fakeFont({ A: 'outline' }),
-      cjk: fakeFont({ '界': 'outline' }),
+      cjk: fakeFont({ 界: 'outline' }),
       emoji: fakeFont({ '⚠️': 'image' }),
     });
     const set = loadFontCandidates(['primary', 'cjk', 'emoji'], fixture.source);
@@ -205,8 +205,14 @@ describe('colour glyphs', () => {
             id: 7,
             advanceWidth: 1000,
             layers: [
-              { glyph: { path: { toSVG: () => 'M0 0L10 0Z' } }, color: { red: 255, green: 0, blue: 0, alpha: 255 } },
-              { glyph: { path: { toSVG: () => 'M0 0L5 5Z' } }, color: { red: 0, green: 128, blue: 255, alpha: 128 } },
+              {
+                glyph: { path: { toSVG: () => 'M0 0L10 0Z' } },
+                color: { red: 255, green: 0, blue: 0, alpha: 255 },
+              },
+              {
+                glyph: { path: { toSVG: () => 'M0 0L5 5Z' } },
+                color: { red: 0, green: 128, blue: 255, alpha: 128 },
+              },
             ],
           }),
         } as never,
@@ -241,9 +247,9 @@ describe('real faces', () => {
     if (!fontsWithFaces.hasFace({ bold: true })) return;
     // Different faces mean different ids, and a genuinely different outline.
     expect(bold?.id).not.toBe(regular?.id);
-    expect(bold?.kind === 'outline' && regular?.kind === 'outline'
-      ? bold.path !== regular.path
-      : true).toBe(true);
+    expect(
+      bold?.kind === 'outline' && regular?.kind === 'outline' ? bold.path !== regular.path : true,
+    ).toBe(true);
   });
 });
 

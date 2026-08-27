@@ -1,5 +1,5 @@
 ---
-"@termwright/probe-tview": patch
+'@termwright/probe-tview': patch
 ---
 
 Compile the owned, add-only tcell marker capability only for native Windows

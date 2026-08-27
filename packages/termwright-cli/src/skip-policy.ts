@@ -28,7 +28,17 @@ interface PlatformDeviationFile {
 }
 
 const NODE_PLATFORMS = Object.freeze([
-  'aix', 'android', 'darwin', 'freebsd', 'haiku', 'linux', 'openbsd', 'sunos', 'win32', 'cygwin', 'netbsd',
+  'aix',
+  'android',
+  'darwin',
+  'freebsd',
+  'haiku',
+  'linux',
+  'openbsd',
+  'sunos',
+  'win32',
+  'cygwin',
+  'netbsd',
 ] as const satisfies readonly NodeJS.Platform[]);
 
 /**
@@ -45,34 +55,40 @@ export async function loadRepositorySkipDeclarations(
     const policy = parseSkipRules(applicability);
     for (const rule of policy.rules) {
       if (rule.platforms !== undefined && !rule.platforms.includes(platform)) continue;
-      declarations.push(Object.freeze({
-        id: rule.id,
-        file: rule.file,
-        ...(rule.suite === undefined ? {} : { suite: rule.suite }),
-        fullName: rule.fullName,
-        required: rule.required === true,
-      }));
+      declarations.push(
+        Object.freeze({
+          id: rule.id,
+          file: rule.file,
+          ...(rule.suite === undefined ? {} : { suite: rule.suite }),
+          fullName: rule.fullName,
+          required: rule.required === true,
+        }),
+      );
     }
   }
   const platformPolicy = await optionalJson(join(cwd, 'quality', 'platform-deviations.json'));
   if (platformPolicy !== undefined) {
     const registry = parsePlatformDeviations(platformPolicy);
     for (const deviation of registry.deviations) {
-      const applicable = deviation.predicate === 'win32' ? platform === 'win32' : platform !== 'win32';
+      const applicable =
+        deviation.predicate === 'win32' ? platform === 'win32' : platform !== 'win32';
       if (!applicable) continue;
       for (const [file, fullName] of deviation.skipPolicyTests ?? deviation.tests) {
-        declarations.push(Object.freeze({
-          id: `${deviation.id}:${file}:${fullName}`,
-          file,
-          fullName,
-          required: true,
-        }));
+        declarations.push(
+          Object.freeze({
+            id: `${deviation.id}:${file}:${fullName}`,
+            file,
+            fullName,
+            required: true,
+          }),
+        );
       }
     }
   }
   const ids = new Set<string>();
   for (const declaration of declarations) {
-    if (ids.has(declaration.id)) throw new TypeError(`duplicate skip declaration ${declaration.id}`);
+    if (ids.has(declaration.id))
+      throw new TypeError(`duplicate skip declaration ${declaration.id}`);
     ids.add(declaration.id);
   }
   return Object.freeze(declarations);
@@ -89,21 +105,35 @@ async function optionalJson(path: string): Promise<unknown | undefined> {
 
 function parseSkipRules(value: unknown): SkipRuleFile {
   if (!record(value) || value['version'] !== 1 || !Array.isArray(value['rules'])) {
-    throw new TypeError('quality/applicability-skips.json must contain version 1 and a rules array');
+    throw new TypeError(
+      'quality/applicability-skips.json must contain version 1 and a rules array',
+    );
   }
   for (const rule of value['rules']) {
-    if (!record(rule) || !nonEmpty(rule['id']) || !nonEmpty(rule['file']) || !nonEmpty(rule['fullName'])) {
+    if (
+      !record(rule) ||
+      !nonEmpty(rule['id']) ||
+      !nonEmpty(rule['file']) ||
+      !nonEmpty(rule['fullName'])
+    ) {
       throw new TypeError('each applicability skip needs non-empty id, file and fullName');
     }
     if (rule['required'] !== undefined && typeof rule['required'] !== 'boolean') {
       throw new TypeError(`applicability skip ${String(rule['id'])} has an invalid required flag`);
     }
     if (rule['suite'] !== undefined && !nonEmpty(rule['suite'])) {
-      throw new TypeError(`applicability skip ${String(rule['id'])} has an invalid exact suite scope`);
+      throw new TypeError(
+        `applicability skip ${String(rule['id'])} has an invalid exact suite scope`,
+      );
     }
-    if (rule['platforms'] !== undefined &&
-        (!Array.isArray(rule['platforms']) || !rule['platforms'].every((platform) =>
-          typeof platform === 'string' && NODE_PLATFORMS.includes(platform as NodeJS.Platform)))) {
+    if (
+      rule['platforms'] !== undefined &&
+      (!Array.isArray(rule['platforms']) ||
+        !rule['platforms'].every(
+          (platform) =>
+            typeof platform === 'string' && NODE_PLATFORMS.includes(platform as NodeJS.Platform),
+        ))
+    ) {
       throw new TypeError(`applicability skip ${String(rule['id'])} has invalid platforms`);
     }
   }
@@ -112,26 +142,37 @@ function parseSkipRules(value: unknown): SkipRuleFile {
 
 function parsePlatformDeviations(value: unknown): PlatformDeviationFile {
   if (!record(value) || value['version'] !== 1 || !Array.isArray(value['deviations'])) {
-    throw new TypeError('quality/platform-deviations.json must contain version 1 and a deviations array');
+    throw new TypeError(
+      'quality/platform-deviations.json must contain version 1 and a deviations array',
+    );
   }
   for (const deviation of value['deviations']) {
-    if (!record(deviation) || !nonEmpty(deviation['id']) ||
-        (deviation['predicate'] !== 'win32' && deviation['predicate'] !== 'non-win32') ||
-        !Array.isArray(deviation['tests'])) {
+    if (
+      !record(deviation) ||
+      !nonEmpty(deviation['id']) ||
+      (deviation['predicate'] !== 'win32' && deviation['predicate'] !== 'non-win32') ||
+      !Array.isArray(deviation['tests'])
+    ) {
       throw new TypeError('platform deviation has an invalid skip contract');
     }
     for (const test of deviation['tests']) {
       if (!Array.isArray(test) || test.length !== 2 || !test.every(nonEmpty)) {
-        throw new TypeError(`platform deviation ${String(deviation['id'])} has an invalid test reference`);
+        throw new TypeError(
+          `platform deviation ${String(deviation['id'])} has an invalid test reference`,
+        );
       }
     }
     if (deviation['skipPolicyTests'] !== undefined) {
       if (!Array.isArray(deviation['skipPolicyTests'])) {
-        throw new TypeError(`platform deviation ${String(deviation['id'])} has invalid exact skip-policy cases`);
+        throw new TypeError(
+          `platform deviation ${String(deviation['id'])} has invalid exact skip-policy cases`,
+        );
       }
       for (const test of deviation['skipPolicyTests']) {
         if (!Array.isArray(test) || test.length !== 2 || !test.every(nonEmpty)) {
-          throw new TypeError(`platform deviation ${String(deviation['id'])} has an invalid exact skip-policy reference`);
+          throw new TypeError(
+            `platform deviation ${String(deviation['id'])} has an invalid exact skip-policy reference`,
+          );
         }
       }
     }

@@ -20,7 +20,9 @@ describe('RunnerClient input acknowledgements', () => {
     const harness = new FakeHarness('input-session');
     const writes: string[] = [];
     let releaseFirst!: () => void;
-    const firstWrite = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const firstWrite = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
     const detach = server.attach({
       source: harness.asHarness(),
       async write(bytes) {
@@ -37,8 +39,12 @@ describe('RunnerClient input acknowledgements', () => {
     expect(writes).toEqual(['a']);
     let firstSettled = false;
     let secondSettled = false;
-    void first.then(() => { firstSettled = true; });
-    void second.then(() => { secondSettled = true; });
+    void first.then(() => {
+      firstSettled = true;
+    });
+    void second.then(() => {
+      secondSettled = true;
+    });
     await Promise.resolve();
     expect(firstSettled).toBe(false);
     expect(secondSettled).toBe(false);
@@ -61,7 +67,9 @@ describe('RunnerClient input acknowledgements', () => {
     });
 
     const client = await connectClient(server);
-    const failure = await client.sendInput('rejected-session', 'x').catch((error: unknown) => error);
+    const failure = await client
+      .sendInput('rejected-session', 'x')
+      .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(RunnerControlError);
     expect(failure).toMatchObject({ kind: 'rejected', message: 'input device closed' });
     detach();
@@ -95,7 +103,9 @@ describe('RunnerClient input acknowledgements', () => {
     servers.push(server);
     const harness = new FakeHarness('reconnected-session');
     let releaseWrite!: () => void;
-    const writeBarrier = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    const writeBarrier = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
     let writeStarted = false;
     const detach = server.attach({
       source: harness.asHarness(),

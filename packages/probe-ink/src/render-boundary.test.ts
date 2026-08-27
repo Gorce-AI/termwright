@@ -62,7 +62,9 @@ describe('Ink render boundary', () => {
     const boundaries = new RenderBoundaryQueue();
     const failure = boundaries.afterCurrentRender(
       async () => undefined,
-      () => { throw new Error('rerender failed'); },
+      () => {
+        throw new Error('rerender failed');
+      },
     );
 
     await expect(failure).rejects.toThrow('rerender failed');

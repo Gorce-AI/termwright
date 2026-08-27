@@ -511,6 +511,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm test -- --resource-profile ci --json -- --project=core
+          pnpm test -- --resource-profile ci --json -- --project=go-integration
           pnpm test -- --resource-profile ci --json -- --project=gherkin --project=mcp --project=screenshot --project=test --project=trace --project=ui
           pnpm test -- --resource-profile ci --json -- --project=conformance --project=ink --project=probe-ink --project=example-bubbletea-login --project=example-getting-started --project=example-ink-todo --project=example-opentui-form --project=example-ratatui-list --project=example-textual-notes --project=example-tview-menu
       - name: Certify the injected tview screen lifecycle under the race detector

@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
-import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { AppLogEvent, TerminalHarness } from '@termwright/driver';
 import { launchInkFixture } from './fixture.js';
 import { mountInk } from './mount.js';
@@ -26,14 +26,15 @@ import CounterApp from './testing/counter-app.mjs';
 
 const COMPONENT = new URL('./testing/counter-app.mjs', import.meta.url);
 const SIZE = { columns: 40, rows: 10 } as const;
-const fixtureIt = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
+const fixtureIt = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 const open: TerminalHarness[] = [];
 const directories: string[] = [];
 
 afterEach(async () => {
   for (const harness of open.splice(0)) await harness.close();
-  for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true });
+  for (const directory of directories.splice(0))
+    await rm(directory, { recursive: true, force: true });
 });
 
 /** A log file that exists before the session starts, as a real one would. */
@@ -46,7 +47,11 @@ async function logFile(): Promise<string> {
 }
 
 /** Resolves with the first log entry whose line matches, or rejects on timeout. */
-function nextMatchingLine(harness: TerminalHarness, needle: string, timeoutMs = 10_000): Promise<AppLogEvent> {
+function nextMatchingLine(
+  harness: TerminalHarness,
+  needle: string,
+  timeoutMs = 10_000,
+): Promise<AppLogEvent> {
   return new Promise<AppLogEvent>((resolve, reject) => {
     const seen: string[] = [];
     const finish = (settle: () => void): void => {

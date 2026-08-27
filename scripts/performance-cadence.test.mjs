@@ -1,19 +1,40 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
-const workflow = await readFile(new URL('../.github/workflows/performance.yml', import.meta.url), 'utf8');
-const collector = await readFile(new URL('./collect-quality-performance.mjs', import.meta.url), 'utf8');
-const checkpoint = await readFile(new URL('./quality-performance-checkpoint.mjs', import.meta.url), 'utf8');
+const workflow = await readFile(
+  new URL('../.github/workflows/performance.yml', import.meta.url),
+  'utf8',
+);
+const collector = await readFile(
+  new URL('./collect-quality-performance.mjs', import.meta.url),
+  'utf8',
+);
+const checkpoint = await readFile(
+  new URL('./quality-performance-checkpoint.mjs', import.meta.url),
+  'utf8',
+);
 const stressFixture = await readFile(
   new URL('../quality/stress/terminal-concurrency.test.ts', import.meta.url),
   'utf8',
 );
-const pairedComparator = await readFile(new URL('./compare-paired-performance.mjs', import.meta.url), 'utf8');
-const environment = await readFile(new URL('./performance-environment.mjs', import.meta.url), 'utf8');
-const observations = await readFile(new URL('./performance-observations.mjs', import.meta.url), 'utf8');
+const pairedComparator = await readFile(
+  new URL('./compare-paired-performance.mjs', import.meta.url),
+  'utf8',
+);
+const environment = await readFile(
+  new URL('./performance-environment.mjs', import.meta.url),
+  'utf8',
+);
+const observations = await readFile(
+  new URL('./performance-observations.mjs', import.meta.url),
+  'utf8',
+);
 const timing = await readFile(new URL('./quality-performance-timing.mjs', import.meta.url), 'utf8');
 const policy = await readFile(
-  new URL('../packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json', import.meta.url),
+  new URL(
+    '../packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json',
+    import.meta.url,
+  ),
   'utf8',
 );
 const charmFixture = await readFile(
@@ -43,14 +64,18 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain(`default: ${reference}`);
     expect(workflow).toContain('path: reference');
     expect(workflow).toContain('path: candidate');
-    expect(workflow).toContain("REFERENCE_SHA: ${{ inputs.reference_sha || 'bea638edc4589b3d4b15c4f87ed397de878ae40d' }}");
+    expect(workflow).toContain(
+      "REFERENCE_SHA: ${{ inputs.reference_sha || 'bea638edc4589b3d4b15c4f87ed397de878ae40d' }}",
+    );
     expect(workflow).toContain('CANDIDATE_SHA: ${{ github.sha }}');
     expect(workflow).toContain('test "$(git -C reference rev-parse HEAD)" = "$REFERENCE_SHA"');
     expect(workflow).toContain('test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"');
     expect(workflow).toContain('export GITHUB_SHA="$subject_sha"');
     expect(workflow).toContain('seal-performance-round.mjs');
     expect(workflow).toContain('--subject "$subject" --round "$round"');
-    expect(workflow).toContain('Precondition both subjects without retaining calibration as evidence');
+    expect(workflow).toContain(
+      'Precondition both subjects without retaining calibration as evidence',
+    );
     expect(workflow.match(/precondition reference "\$REFERENCE_SHA"/gu)).toHaveLength(2);
     expect(workflow.match(/precondition candidate "\$CANDIDATE_SHA"/gu)).toHaveLength(2);
     const rounds = [
@@ -66,7 +91,9 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain('timeout-minutes: 45');
     expect(workflow).toContain('--root reference \\');
     expect(workflow).toContain('--root candidate \\');
-    expect(workflow).toContain('cmp performance-results/reference-harness.json performance-results/candidate-harness.json');
+    expect(workflow).toContain(
+      'cmp performance-results/reference-harness.json performance-results/candidate-harness.json',
+    );
     expect(workflow).toContain('compare-paired-performance.mjs');
     expect(workflow.match(/--reference performance-results\/reference\//gu)).toHaveLength(2);
     expect(workflow.match(/--candidate performance-results\/candidate\//gu)).toHaveLength(2);
@@ -92,23 +119,29 @@ describe('performance observation cadence', () => {
     expect(collector).toContain('quality/soak/vitest.config.ts');
     expect(collector).toContain('quality/stress/vitest.config.ts');
     expect(collector).toContain('await observeTiming(soakArgs, args.cycles)');
-    expect(collector).toContain('const resourceSoak = await observeResources(soakArgs, undefined, args.cycles)');
-    expect(collector).toContain('stress = await observeResources([');
+    expect(collector).toContain(
+      'const resourceSoak = await observeResources(soakArgs, undefined, args.cycles)',
+    );
+    expect(collector).toMatch(/stress\s*=\s*await observeResources\(\s*\[/u);
     expect(collector).toContain('createQualityCheckpoint(16)');
     expect(collector).toContain('waitForQualityReady(checkpoint');
     expect(collector).toContain("publishQualityTerminal(checkpoint, { status: 'failure'");
     expect(collector).toContain("execute('/usr/bin/footprint'");
     expect(collector).toContain('peakMemoryFootprintBytes');
-    expect(collector).toContain('Math.max(resourceSoak.peakMemoryFootprintBytes, stress.peakMemoryFootprintBytes)');
+    expect(collector).toContain(
+      'Math.max(resourceSoak.peakMemoryFootprintBytes, stress.peakMemoryFootprintBytes)',
+    );
     expect(collector).toContain('summarizeQualityTiming(timingManifests)');
     expect(collector).toContain('hostReportRunIds(stdout, expectedRuns)');
     expect(collector).toContain('await readRunManifest(runsDir, runId)');
     expect(collector).toContain("record.state !== 'complete'");
     expect(collector).toContain('const manifestSha256 = sha256(raw)');
     expect(collector).toContain('RUN_HISTORY_COMMIT_VERSION} sha256:${manifestSha256}');
-    expect(collector).toContain("collectorSha256: sha256(collector)");
+    expect(collector).toContain('collectorSha256: sha256(collector)');
     expect(collector).toContain('githubCiProvenance(process.env, gitCommit)');
-    expect(observations).toContain('await validateQualityProvenance(quality.provenance, expectedSubjectSha)');
+    expect(observations).toContain(
+      'await validateQualityProvenance(quality.provenance, expectedSubjectSha)',
+    );
     expect(observations).toContain('quality provenance collector SHA-256 differs');
     expect(observations).toContain('quality provenance roles must use distinct host invocations');
     expect(collector).toContain('runDirectoryName(runId)');
@@ -120,15 +153,20 @@ describe('performance observation cadence', () => {
     expect(collector).not.toContain('peakRssBytes');
     expect(collector).not.toContain('pids.reduce((sum, pid) => sum + (table.get(pid)?.rssBytes');
     expect(collector).toContain('discoverProcesses');
-    expect(collector.indexOf('const discoveryInterval')).toBeLessThan(collector.indexOf('const memoryInterval'));
-    expect(checkpoint).toContain('The second read closes the read-before-watch lost-wakeup window.');
+    expect(collector.indexOf('const discoveryInterval')).toBeLessThan(
+      collector.indexOf('const memoryInterval'),
+    );
+    expect(checkpoint).toContain(
+      'The second read closes the read-before-watch lost-wakeup window.',
+    );
     expect(checkpoint).toContain('await rename(temporary, staged)');
     expect(checkpoint).toContain('await link(staged, path)');
-    expect(stressFixture).toContain('await Promise.all(sessions.map');
+    expect(stressFixture).toMatch(/await Promise\.all\(\s*sessions\.map/u);
     expect(stressFixture).toContain('await publishQualityReady(checkpoint, processPids)');
     expect(stressFixture).toContain('await waitForQualityTerminal(checkpoint,');
-    expect(stressFixture.indexOf('await waitForQualityTerminal(checkpoint,'))
-      .toBeLessThan(stressFixture.indexOf('// The fixture owns all sessions.'));
+    expect(stressFixture.indexOf('await waitForQualityTerminal(checkpoint,')).toBeLessThan(
+      stressFixture.indexOf('// The fixture owns all sessions.'),
+    );
   });
 
   it('keeps retries and reruns disabled while every regression fails the gate', () => {

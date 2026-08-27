@@ -18,12 +18,17 @@ import {
 import { createEvidenceProviderRegistry } from '@termwright/evidence-provider';
 import { connectProbe } from './index.js';
 
-async function endpoint(): Promise<{ path: string; metricsPath: string; dispose(): Promise<void> }> {
+async function endpoint(): Promise<{
+  path: string;
+  metricsPath: string;
+  dispose(): Promise<void>;
+}> {
   const directory = await mkdtemp(join(tmpdir(), 'termwright-probe-runtime-'));
   return {
-    path: process.platform === 'win32'
-      ? `\\\\.\\pipe\\termwright-runtime-${randomBytes(8).toString('hex')}`
-      : join(directory, 'probe.sock'),
+    path:
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\termwright-runtime-${randomBytes(8).toString('hex')}`
+        : join(directory, 'probe.sock'),
     metricsPath: join(directory, 'metrics.jsonl'),
     dispose: () => rm(directory, { recursive: true, force: true }),
   };
@@ -37,9 +42,24 @@ function snapshot(): SemanticSnapshot {
     columns: 80,
     rows: 24,
     rootIds: ['root'],
-    nodes: [{ id: 'root', role: 'application', name: '', geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } } }],
+    nodes: [
+      {
+        id: 'root',
+        role: 'application',
+        name: '',
+        geometry: {
+          displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+          intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+          visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+        },
+      },
+    ],
     coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }
 
@@ -58,14 +78,19 @@ describe('shared probe transport', () => {
           if (!parsed.ok) throw new Error(parsed.detail);
           messages.push(parsed.message);
           if (parsed.message.type === 'hello') {
-            socket.write(encodeFrame({
-                type: 'hello-ack',
-                protocol: PROTOCOL_ID,
-                sessionId: 's1',
-                limits: DEFAULT_LIMITS,
-                subscribe: 'snapshots',
-                marker: { enabled: true },
-              }, DEFAULT_LIMITS.maxFrameBytes));
+            socket.write(
+              encodeFrame(
+                {
+                  type: 'hello-ack',
+                  protocol: PROTOCOL_ID,
+                  sessionId: 's1',
+                  limits: DEFAULT_LIMITS,
+                  subscribe: 'snapshots',
+                  marker: { enabled: true },
+                },
+                DEFAULT_LIMITS.maxFrameBytes,
+              ),
+            );
           }
         }
       });
@@ -83,12 +108,15 @@ describe('shared probe transport', () => {
       family: 'pointer',
       capabilities: ['pointer-regions', 'hit-test'],
       observe: () => ({
-        pointerRegions: [{
-          recipient: { semanticId: 'root' },
-          regionBounds: { row: 1, column: 2, width: 4, height: 1 },
-          spans: [{ row: 1, from: 2, to: 6 }],
-        }],
-        hitTest: (column, row) => row === 1 && column >= 2 && column < 6 ? { semanticId: 'root' } : null,
+        pointerRegions: [
+          {
+            recipient: { semanticId: 'root' },
+            regionBounds: { row: 1, column: 2, width: 4, height: 1 },
+            spans: [{ row: 1, from: 2, to: 6 }],
+          },
+        ],
+        hitTest: (column, row) =>
+          row === 1 && column >= 2 && column < 6 ? { semanticId: 'root' } : null,
       }),
     });
 
@@ -121,13 +149,21 @@ describe('shared probe transport', () => {
       probe: { framework: 'ink', identityKind: 'stable' },
       providers: [{ id: 'app.router', version: '1', method: 'native' }],
     });
-    expect(messages.slice(1).map((message) => message.type)).toEqual(['snapshot', 'revision-commit']);
+    expect(messages.slice(1).map((message) => message.type)).toEqual([
+      'snapshot',
+      'revision-commit',
+    ]);
     expect(messages[1]).toMatchObject({
       type: 'snapshot',
       snapshot: {
-        providerEvidence: [{
-          providerId: 'app.router', sessionId: 's1', revision: 1, status: 'available',
-        }],
+        providerEvidence: [
+          {
+            providerId: 'app.router',
+            sessionId: 's1',
+            revision: 1,
+            status: 'available',
+          },
+        ],
       },
     });
     const payload = (marker as string).slice((marker as string).indexOf(';') + 1, -1);
@@ -146,7 +182,9 @@ describe('shared probe transport', () => {
       parentNormalizationMicrosecondsPerFrame: null,
     });
     expect(channel?.performanceMetrics().averageBytesPerFrame).toBeGreaterThan(0);
-    expect(channel?.performanceMetrics().averageSerializationMicrosecondsPerFrame).toBeGreaterThanOrEqual(0);
+    expect(
+      channel?.performanceMetrics().averageSerializationMicrosecondsPerFrame,
+    ).toBeGreaterThanOrEqual(0);
     const records = (await readFile(target.metricsPath, 'utf8'))
       .trim()
       .split('\n')
@@ -174,20 +212,22 @@ describe('shared probe transport', () => {
     });
     await new Promise<void>((resolve) => server.close(() => resolve()));
 
-    await expect(connectProbe({
-      endpoint: target.path,
-      token: 'secret',
-      probe: {
-        framework: 'ink',
-        probeVersion: '0.1.0',
-        identityKind: 'stable',
-        capabilities: [],
-      },
-      capabilities: ['tree'],
-      adapterName: 'test',
-      adapterVersion: '0.1.0',
-      handshakeTimeoutMs: 100,
-    })).resolves.toBeNull();
+    await expect(
+      connectProbe({
+        endpoint: target.path,
+        token: 'secret',
+        probe: {
+          framework: 'ink',
+          probeVersion: '0.1.0',
+          identityKind: 'stable',
+          capabilities: [],
+        },
+        capabilities: ['tree'],
+        adapterName: 'test',
+        adapterVersion: '0.1.0',
+        handshakeTimeoutMs: 100,
+      }),
+    ).resolves.toBeNull();
     await target.dispose();
   });
 
@@ -195,10 +235,16 @@ describe('shared probe transport', () => {
     // Constructor-level coverage avoids changing process-wide debug variables
     // and proves the disabled path never exposes an inferred average.
     const fake = {
-      on() { return this; },
-      removeAllListeners() { return this; },
+      on() {
+        return this;
+      },
+      removeAllListeners() {
+        return this;
+      },
       destroy() {},
-      write() { return true; },
+      write() {
+        return true;
+      },
     } as unknown as Socket;
     const channel = new (await import('./index.js')).ProbeChannel(
       fake,
@@ -217,8 +263,12 @@ describe('shared probe transport', () => {
   it('drops an oversized local publication without killing the negotiated channel', async () => {
     const writes: Uint8Array[] = [];
     const fake = {
-      on() { return this; },
-      removeAllListeners() { return this; },
+      on() {
+        return this;
+      },
+      removeAllListeners() {
+        return this;
+      },
       destroy() {},
       write(frame: Uint8Array) {
         writes.push(frame);
@@ -234,7 +284,18 @@ describe('shared probe transport', () => {
     );
     const oversized: SemanticSnapshot = {
       ...snapshot(),
-      nodes: [{ id: 'root', role: 'application', name: 'x'.repeat(2_048), geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } } }],
+      nodes: [
+        {
+          id: 'root',
+          role: 'application',
+          name: 'x'.repeat(2_048),
+          geometry: {
+            displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+            intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+            visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+          },
+        },
+      ],
     };
 
     expect(channel.publish(oversized)).toBeUndefined();

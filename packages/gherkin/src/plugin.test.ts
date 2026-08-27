@@ -15,7 +15,8 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const pairingRoot = resolve(here, '__fixtures__/pairing/features');
 const pairingFeature = resolve(pairingRoot, 'orders/create.feature');
-const relativeFixturePath = (path: string): string => relative(pairingRoot, path).split(sep).join('/');
+const relativeFixturePath = (path: string): string =>
+  relative(pairingRoot, path).split(sep).join('/');
 
 interface ConsumerFixtures {
   readonly account: { readonly name: string };
@@ -43,11 +44,13 @@ describe('resolvePairing', () => {
       ],
     });
 
-    expect(result.map(({ path, tier, scope }) => ({
-      path: relativeFixturePath(path),
-      tier,
-      scope,
-    }))).toEqual([
+    expect(
+      result.map(({ path, tier, scope }) => ({
+        path: relativeFixturePath(path),
+        tier,
+        scope,
+      })),
+    ).toEqual([
       { path: 'orders/create.ts', tier: 0, scope: 'filepath' },
       { path: 'orders/create/step_definitions/local.ts', tier: 1, scope: 'filepart' },
       { path: 'orders/step_definitions/parent.ts', tier: 2, scope: 'filepart' },
@@ -63,11 +66,10 @@ describe('resolvePairing', () => {
       stepDefinitions: ['[filepath].{ts,more.ts}', '[filepath].ts'],
     });
 
-    expect(result.map(({ path, tier }) => ({ path: relativeFixturePath(path), tier })))
-      .toEqual([
-        { path: 'orders/create.more.ts', tier: 0 },
-        { path: 'orders/create.ts', tier: 0 },
-      ]);
+    expect(result.map(({ path, tier }) => ({ path: relativeFixturePath(path), tier }))).toEqual([
+      { path: 'orders/create.more.ts', tier: 0 },
+      { path: 'orders/create.ts', tier: 0 },
+    ]);
   });
 });
 
@@ -91,10 +93,12 @@ describe('transformFeature', () => {
     const result = transformFeature({ source, uri: '/tmp/arithmetic.feature', glue: [] });
     const generatedLines = result.code.split('\n');
     const testLines = generatedLines
-      .map((line, index) => line.startsWith('test("adds examples [example ') ? index + 1 : undefined)
+      .map((line, index) =>
+        line.startsWith('test("adds examples [example ') ? index + 1 : undefined,
+      )
       .filter((line): line is number => line !== undefined);
     const stepLines = generatedLines
-      .map((line, index) => line.startsWith('await __runStep') ? index + 1 : undefined)
+      .map((line, index) => (line.startsWith('await __runStep') ? index + 1 : undefined))
       .filter((line): line is number => line !== undefined);
     const consumer = new SourceMapConsumer(result.map as unknown as RawSourceMap);
 
@@ -102,10 +106,12 @@ describe('transformFeature', () => {
     expect(result.code).toContain('test("adds examples [example 1]"');
     expect(result.code).toContain('test("adds examples [example 2]"');
     expect(result.scenarioLines).toEqual([6, 6]);
-    expect(testLines.map((line) => consumer.originalPositionFor({ line, column: 0 }).line))
-      .toEqual([6, 6]);
-    expect(stepLines.map((line) => consumer.originalPositionFor({ line, column: 0 }).line))
-      .toEqual([4, 7, 8, 4, 7, 8]);
+    expect(testLines.map((line) => consumer.originalPositionFor({ line, column: 0 }).line)).toEqual(
+      [6, 6],
+    );
+    expect(stepLines.map((line) => consumer.originalPositionFor({ line, column: 0 }).line)).toEqual(
+      [4, 7, 8, 4, 7, 8],
+    );
     expect(result.code).toContain('"keyword":"Given"');
     expect(result.code.match(/"background":true/g)).toHaveLength(2);
     expect(result.code).toContain('"kind":"gherkin-outline-example"');
@@ -129,17 +135,18 @@ describe('transformFeature', () => {
 `;
     const result = transformFeature({ source: ruleSource, uri: '/tmp/rules.feature', glue: [] });
     const generatedLines = result.code.split('\n');
-    const testLine = generatedLines.findIndex((line) =>
-      line.startsWith('test("rule examples [example 1]"')) + 1;
+    const testLine =
+      generatedLines.findIndex((line) => line.startsWith('test("rule examples [example 1]"')) + 1;
     const stepLines = generatedLines
-      .map((line, index) => line.startsWith('await __runStep') ? index + 1 : undefined)
+      .map((line, index) => (line.startsWith('await __runStep') ? index + 1 : undefined))
       .filter((line): line is number => line !== undefined);
     const consumer = new SourceMapConsumer(result.map as unknown as RawSourceMap);
 
     expect(result.scenarioLines).toEqual([7]);
     expect(consumer.originalPositionFor({ line: testLine, column: 0 }).line).toBe(7);
-    expect(stepLines.map((line) => consumer.originalPositionFor({ line, column: 0 }).line))
-      .toEqual([5, 8, 9]);
+    expect(stepLines.map((line) => consumer.originalPositionFor({ line, column: 0 }).line)).toEqual(
+      [5, 8, 9],
+    );
     expect(result.code).toContain(
       '"ancestors":[{"kind":"feature","title":"rules"},{"kind":"rule","title":"grouped behavior"}]',
     );
@@ -174,8 +181,8 @@ describe('transformFeature', () => {
       },
     });
 
-    expect(result.code).toContain("from \"termwright/test\"");
-    expect(result.code).toContain("from \"termwright/gherkin/runtime\"");
+    expect(result.code).toContain('from "termwright/test"');
+    expect(result.code).toContain('from "termwright/gherkin/runtime"');
     expect(result.code).not.toContain("from '@termwright/");
   });
 
@@ -210,12 +217,14 @@ describe('transformFeature', () => {
     { fixtureNames: ['arguments'], message: 'reserved' },
     { fixtureNames: ['app', 'app'], message: 'Duplicate' },
   ])('rejects unsafe generated fixture bindings: $fixtureNames', ({ fixtureNames, message }) => {
-    expect(() => transformFeature({
-      source: 'Feature: fixtures\n\n  Scenario: invalid\n    Given a value\n',
-      uri: '/tmp/invalid-fixtures.feature',
-      glue: [],
-      fixtureNames,
-    })).toThrow(message);
+    expect(() =>
+      transformFeature({
+        source: 'Feature: fixtures\n\n  Scenario: invalid\n    Given a value\n',
+        uri: '/tmp/invalid-fixtures.feature',
+        glue: [],
+        fixtureNames,
+      }),
+    ).toThrow(message);
   });
 
   test('filters native cases with Cucumber tag expressions', () => {
@@ -242,21 +251,24 @@ Feature: tagged
   });
 
   test('reports invalid tag expressions during collection', () => {
-    expect(() => transformFeature({
-      source: 'Feature: tagged\n\n  Scenario: selected\n    Given a value\n',
-      uri: '/tmp/tagged.feature',
-      glue: [],
-      tags: '@smoke and',
-    })).toThrow(/Expected operand/u);
+    expect(() =>
+      transformFeature({
+        source: 'Feature: tagged\n\n  Scenario: selected\n    Given a value\n',
+        uri: '/tmp/tagged.feature',
+        glue: [],
+        tags: '@smoke and',
+      }),
+    ).toThrow(/Expected operand/u);
   });
 });
 
 describe('gherkinPlugin', () => {
   test('managed discovery projects features onto the resolved Vitest source scope', () => {
     const plugin = gherkinPlugin({ includeFeatures: true });
-    const resolved = typeof plugin.configResolved === 'function'
-      ? plugin.configResolved
-      : plugin.configResolved?.handler;
+    const resolved =
+      typeof plugin.configResolved === 'function'
+        ? plugin.configResolved
+        : plugin.configResolved?.handler;
     const config = {
       root: pairingRoot,
       test: { include: ['custom/**/*.test.ts'] },
@@ -267,13 +279,15 @@ describe('gherkinPlugin', () => {
   });
 
   test('never widens exact files or nested include globs to the project root', () => {
-    expect(featureIncludesForVitest([
-      'packages/app/src/permission.test.ts',
-      'packages/app/src/**/*.spec.ts',
-      'packages/other/{unit,integration}/*.test.ts',
-      'packages/app/src/auth.feature',
-      '!packages/app/src/ignored.test.ts',
-    ])).toEqual([
+    expect(
+      featureIncludesForVitest([
+        'packages/app/src/permission.test.ts',
+        'packages/app/src/**/*.spec.ts',
+        'packages/other/{unit,integration}/*.test.ts',
+        'packages/app/src/auth.feature',
+        '!packages/app/src/ignored.test.ts',
+      ]),
+    ).toEqual([
       'packages/app/src/*.feature',
       'packages/app/src/**/*.feature',
       'packages/other/{unit,integration}/*.feature',
@@ -285,32 +299,40 @@ describe('gherkinPlugin', () => {
       featureRoot: pairingRoot,
       stepDefinitions: ['[filepath].{ts,tsx}', '[filepart]/step_definitions/*.{ts,tsx}'],
     });
-    const resolved = typeof plugin.configResolved === 'function'
-      ? plugin.configResolved
-      : plugin.configResolved?.handler;
-    (resolved as undefined | ((config: ResolvedConfig) => void))?.({ root: pairingRoot } as ResolvedConfig);
-    const transform = typeof plugin.transform === 'function'
-      ? plugin.transform
-      : plugin.transform?.handler;
+    const resolved =
+      typeof plugin.configResolved === 'function'
+        ? plugin.configResolved
+        : plugin.configResolved?.handler;
+    (resolved as undefined | ((config: ResolvedConfig) => void))?.({
+      root: pairingRoot,
+    } as ResolvedConfig);
+    const transform =
+      typeof plugin.transform === 'function' ? plugin.transform : plugin.transform?.handler;
     const addWatchFile = vi.fn();
     const source = await readFile(pairingFeature, 'utf8');
 
-    const transformed = await (transform as unknown as undefined | ((
-      this: { addWatchFile(path: string): void },
-      source: string,
-      id: string,
-    ) => Promise<{ code: string } | null>))?.call({ addWatchFile }, source, pairingFeature);
+    const transformed = await (
+      transform as unknown as
+        | undefined
+        | ((
+            this: { addWatchFile(path: string): void },
+            source: string,
+            id: string,
+          ) => Promise<{ code: string } | null>)
+    )?.call({ addWatchFile }, source, pairingFeature);
 
     expect(transformed?.code).toContain('@termwright/gherkin transformed');
-    await expect((transform as unknown as undefined | ((
-      this: { addWatchFile(path: string): void },
-      source: string,
-      id: string,
-    ) => Promise<unknown>))?.call(
-      { addWatchFile },
-      transformed?.code ?? '',
-      pairingFeature,
-    )).resolves.toBeNull();
+    await expect(
+      (
+        transform as unknown as
+          | undefined
+          | ((
+              this: { addWatchFile(path: string): void },
+              source: string,
+              id: string,
+            ) => Promise<unknown>)
+      )?.call({ addWatchFile }, transformed?.code ?? '', pairingFeature),
+    ).resolves.toBeNull();
 
     expect(addWatchFile.mock.calls.map(([path]) => path)).toEqual([
       pairingRoot,
@@ -320,12 +342,15 @@ describe('gherkinPlugin', () => {
       resolve(pairingRoot, 'step_definitions/root.ts'),
     ]);
 
-    const handleHotUpdate = typeof plugin.handleHotUpdate === 'function'
-      ? plugin.handleHotUpdate
-      : plugin.handleHotUpdate?.handler;
+    const handleHotUpdate =
+      typeof plugin.handleHotUpdate === 'function'
+        ? plugin.handleHotUpdate
+        : plugin.handleHotUpdate?.handler;
     const featureModule = { id: pairingFeature };
     const glueModule = { id: resolve(pairingRoot, 'orders/create.ts') };
-    const affected = await (handleHotUpdate as unknown as undefined | ((context: unknown) => unknown))?.({
+    const affected = await (
+      handleHotUpdate as unknown as undefined | ((context: unknown) => unknown)
+    )?.({
       file: glueModule.id,
       modules: [glueModule],
       server: { moduleGraph: { getModuleById: () => featureModule } },
@@ -345,26 +370,35 @@ describe('gherkinPlugin', () => {
         featureRoot: directory,
         stepDefinitions: ['[filepath].steps.ts'],
       });
-      const resolved = typeof plugin.configResolved === 'function'
-        ? plugin.configResolved
-        : plugin.configResolved?.handler;
-      (resolved as undefined | ((config: ResolvedConfig) => void))?.({ root: directory } as ResolvedConfig);
-      const transform = typeof plugin.transform === 'function'
-        ? plugin.transform
-        : plugin.transform?.handler;
-      await (transform as unknown as undefined | ((
-        this: { addWatchFile(path: string): void },
-        source: string,
-        id: string,
-      ) => Promise<unknown>))?.call({ addWatchFile: vi.fn() }, source, feature);
+      const resolved =
+        typeof plugin.configResolved === 'function'
+          ? plugin.configResolved
+          : plugin.configResolved?.handler;
+      (resolved as undefined | ((config: ResolvedConfig) => void))?.({
+        root: directory,
+      } as ResolvedConfig);
+      const transform =
+        typeof plugin.transform === 'function' ? plugin.transform : plugin.transform?.handler;
+      await (
+        transform as unknown as
+          | undefined
+          | ((
+              this: { addWatchFile(path: string): void },
+              source: string,
+              id: string,
+            ) => Promise<unknown>)
+      )?.call({ addWatchFile: vi.fn() }, source, feature);
       await writeFile(newGlue, 'export default [];\n');
 
-      const handleHotUpdate = typeof plugin.handleHotUpdate === 'function'
-        ? plugin.handleHotUpdate
-        : plugin.handleHotUpdate?.handler;
+      const handleHotUpdate =
+        typeof plugin.handleHotUpdate === 'function'
+          ? plugin.handleHotUpdate
+          : plugin.handleHotUpdate?.handler;
       const featureModule = { id: feature };
       const glueModule = { id: newGlue };
-      const affected = await (handleHotUpdate as unknown as undefined | ((context: unknown) => unknown))?.({
+      const affected = await (
+        handleHotUpdate as unknown as undefined | ((context: unknown) => unknown)
+      )?.({
         file: newGlue,
         modules: [glueModule],
         server: { moduleGraph: { getModuleById: () => featureModule } },
@@ -384,24 +418,38 @@ describe('gherkinPlugin', () => {
       const source = 'Feature: deletion\n\n  Scenario: deletes\n    Given glue\n';
       await writeFile(feature, source);
       await writeFile(glue, 'export default [];\n');
-      const plugin = gherkinPlugin({ featureRoot: directory, stepDefinitions: ['[filepath].steps.ts'] });
-      const resolved = typeof plugin.configResolved === 'function'
-        ? plugin.configResolved
-        : plugin.configResolved?.handler;
-      (resolved as undefined | ((config: ResolvedConfig) => void))?.({ root: directory } as ResolvedConfig);
-      const transform = typeof plugin.transform === 'function'
-        ? plugin.transform
-        : plugin.transform?.handler;
-      await (transform as unknown as undefined | ((
-        this: { addWatchFile(path: string): void }, source: string, id: string,
-      ) => Promise<unknown>))?.call({ addWatchFile: vi.fn() }, source, feature);
+      const plugin = gherkinPlugin({
+        featureRoot: directory,
+        stepDefinitions: ['[filepath].steps.ts'],
+      });
+      const resolved =
+        typeof plugin.configResolved === 'function'
+          ? plugin.configResolved
+          : plugin.configResolved?.handler;
+      (resolved as undefined | ((config: ResolvedConfig) => void))?.({
+        root: directory,
+      } as ResolvedConfig);
+      const transform =
+        typeof plugin.transform === 'function' ? plugin.transform : plugin.transform?.handler;
+      await (
+        transform as unknown as
+          | undefined
+          | ((
+              this: { addWatchFile(path: string): void },
+              source: string,
+              id: string,
+            ) => Promise<unknown>)
+      )?.call({ addWatchFile: vi.fn() }, source, feature);
       await rm(glue);
 
-      const handleHotUpdate = typeof plugin.handleHotUpdate === 'function'
-        ? plugin.handleHotUpdate
-        : plugin.handleHotUpdate?.handler;
+      const handleHotUpdate =
+        typeof plugin.handleHotUpdate === 'function'
+          ? plugin.handleHotUpdate
+          : plugin.handleHotUpdate?.handler;
       const featureModule = { id: feature };
-      const affected = await (handleHotUpdate as unknown as undefined | ((context: unknown) => unknown))?.({
+      const affected = await (
+        handleHotUpdate as unknown as undefined | ((context: unknown) => unknown)
+      )?.({
         file: glue,
         modules: [],
         server: { moduleGraph: { getModuleById: () => featureModule } },
@@ -426,23 +474,34 @@ describe('gherkinPlugin', () => {
         featureRoot: directory,
         stepDefinitions: ['[filepath].old.ts', '[filepath].new.ts'],
       });
-      const resolved = typeof plugin.configResolved === 'function'
-        ? plugin.configResolved
-        : plugin.configResolved?.handler;
-      (resolved as undefined | ((config: ResolvedConfig) => void))?.({ root: directory } as ResolvedConfig);
-      const transform = typeof plugin.transform === 'function'
-        ? plugin.transform
-        : plugin.transform?.handler;
-      await (transform as unknown as undefined | ((
-        this: { addWatchFile(path: string): void }, source: string, id: string,
-      ) => Promise<unknown>))?.call({ addWatchFile: vi.fn() }, source, feature);
+      const resolved =
+        typeof plugin.configResolved === 'function'
+          ? plugin.configResolved
+          : plugin.configResolved?.handler;
+      (resolved as undefined | ((config: ResolvedConfig) => void))?.({
+        root: directory,
+      } as ResolvedConfig);
+      const transform =
+        typeof plugin.transform === 'function' ? plugin.transform : plugin.transform?.handler;
+      await (
+        transform as unknown as
+          | undefined
+          | ((
+              this: { addWatchFile(path: string): void },
+              source: string,
+              id: string,
+            ) => Promise<unknown>)
+      )?.call({ addWatchFile: vi.fn() }, source, feature);
       await rename(oldGlue, newGlue);
 
-      const handleHotUpdate = typeof plugin.handleHotUpdate === 'function'
-        ? plugin.handleHotUpdate
-        : plugin.handleHotUpdate?.handler;
+      const handleHotUpdate =
+        typeof plugin.handleHotUpdate === 'function'
+          ? plugin.handleHotUpdate
+          : plugin.handleHotUpdate?.handler;
       const featureModule = { id: feature };
-      const affected = await (handleHotUpdate as unknown as undefined | ((context: unknown) => unknown))?.({
+      const affected = await (
+        handleHotUpdate as unknown as undefined | ((context: unknown) => unknown)
+      )?.({
         file: oldGlue,
         modules: [],
         server: { moduleGraph: { getModuleById: () => featureModule } },

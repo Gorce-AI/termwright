@@ -75,7 +75,11 @@ interface ToolResult {
   readonly _meta?: Record<string, { kind?: string; message?: string }>;
 }
 
-async function call(session: Session, name: string, args: Record<string, unknown>): Promise<ToolResult> {
+async function call(
+  session: Session,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
   return (await session.client.callTool({ name, arguments: args })) as ToolResult;
 }
 
@@ -98,7 +102,11 @@ async function launch(session: Session): Promise<{ terminal: string; pid: number
   // so the frame has to be waited for, with the tool an agent would use. The
   // last line of the fixture's frame, not its banner: waiting for the first
   // line would pass before the rest of the screen arrived.
-  const drawn = await call(session, 'terminal.wait_for', { terminal, wait: 'text', text: 'allow: PATH=' });
+  const drawn = await call(session, 'terminal.wait_for', {
+    terminal,
+    wait: 'text',
+    text: 'allow: PATH=',
+  });
   expect(drawn.isError, `the fixture never drew: ${JSON.stringify(drawn._meta)}`).toBeFalsy();
 
   const pid = await poll(() => {
@@ -136,7 +144,8 @@ function alive(pid: number): boolean {
 async function expectDies(pid: number, timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (alive(pid)) {
-    if (Date.now() >= deadline) throw new Error(`conformance: pid ${pid} outlived its owning session`);
+    if (Date.now() >= deadline)
+      throw new Error(`conformance: pid ${pid} outlived its owning session`);
     await delay(25);
   }
 }
@@ -149,9 +158,14 @@ function delay(ms: number): Promise<void> {
 }
 
 afterEach(async () => {
-  while (clients.length > 0) await clients.pop()?.close().catch(() => undefined);
+  while (clients.length > 0)
+    await clients
+      .pop()
+      ?.close()
+      .catch(() => undefined);
   while (servers.length > 0) await servers.pop()?.close();
-  while (directories.length > 0) await rm(directories.pop() as string, { recursive: true, force: true });
+  while (directories.length > 0)
+    await rm(directories.pop() as string, { recursive: true, force: true });
 });
 
 describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 }, () => {
@@ -159,29 +173,32 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
   // let this test hold part of the host's terminal capacity while waiting for
   // the rest, which nothing else can release; the group is declared so the
   // broker admits it atomically or not at all.
-  it.resources({ terminals: 3 })('gives each session its own terminals, launched in parallel', async () => {
-    const handle = await serve();
-    const sessions = await Promise.all([connect(handle), connect(handle), connect(handle)]);
-    expect(new Set(sessions.map((session) => session.sessionId)).size).toBe(3);
+  it.resources({ terminals: 3 })(
+    'gives each session its own terminals, launched in parallel',
+    async () => {
+      const handle = await serve();
+      const sessions = await Promise.all([connect(handle), connect(handle), connect(handle)]);
+      expect(new Set(sessions.map((session) => session.sessionId)).size).toBe(3);
 
-    // Launched concurrently on purpose: a shared counter or a shared store
-    // shows up as a collision here and nowhere else.
-    const launched = await Promise.all(sessions.map((session) => launch(session)));
-    expect(handle.registry.size).toBe(3);
-    expect(new Set(launched.map((entry) => entry.pid)).size).toBe(3);
+      // Launched concurrently on purpose: a shared counter or a shared store
+      // shows up as a collision here and nowhere else.
+      const launched = await Promise.all(sessions.map((session) => launch(session)));
+      expect(handle.registry.size).toBe(3);
+      expect(new Set(launched.map((entry) => entry.pid)).size).toBe(3);
 
-    // Each session numbers its own terminals from t1: the handles are per
-    // session, not global, so they collide by design and must not be confused.
-    expect(launched.map((entry) => entry.terminal)).toEqual(['t1', 't1', 't1']);
+      // Each session numbers its own terminals from t1: the handles are per
+      // session, not global, so they collide by design and must not be confused.
+      expect(launched.map((entry) => entry.terminal)).toEqual(['t1', 't1', 't1']);
 
-    for (const [index, session] of sessions.entries()) {
-      const snapshot = await call(session, 'terminal.snapshot', { terminal: 't1' });
-      expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
-      // Every session sees exactly one terminal, and it is its own.
-      const text = JSON.stringify(snapshot.structuredContent);
-      expect(text, `session ${index} saw an empty screen`).toContain('GENERIC READY');
-    }
-  });
+      for (const [index, session] of sessions.entries()) {
+        const snapshot = await call(session, 'terminal.snapshot', { terminal: 't1' });
+        expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
+        // Every session sees exactly one terminal, and it is its own.
+        const text = JSON.stringify(snapshot.structuredContent);
+        expect(text, `session ${index} saw an empty screen`).toContain('GENERIC READY');
+      }
+    },
+  );
 
   it.resources({ terminals: 2 })('does not let a handle or a ref cross sessions', async () => {
     const handle = await serve();
@@ -204,65 +221,76 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
   });
 
-  it.resources({ terminals: 2 })('kills exactly the children of the session that was deleted', async () => {
-    const handle = await serve();
-    const [first, second] = [await connect(handle), await connect(handle)];
-    const owned = await launch(first);
-    const other = await launch(second);
+  it.resources({ terminals: 2 })(
+    'kills exactly the children of the session that was deleted',
+    async () => {
+      const handle = await serve();
+      const [first, second] = [await connect(handle), await connect(handle)];
+      const owned = await launch(first);
+      const other = await launch(second);
 
-    expect(alive(owned.pid)).toBe(true);
-    expect(alive(other.pid)).toBe(true);
+      expect(alive(owned.pid)).toBe(true);
+      expect(alive(other.pid)).toBe(true);
 
-    const response = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
-      method: 'DELETE',
-      headers: authorization(handle, { 'mcp-session-id': first.sessionId }),
-    });
-    expect(response.status).toBe(204);
+      const response = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
+        method: 'DELETE',
+        headers: authorization(handle, { 'mcp-session-id': first.sessionId }),
+      });
+      expect(response.status).toBe(204);
 
-    // The deleted session's child is gone…
-    await expectDies(owned.pid);
-    expect(handle.registry.size).toBe(1);
+      // The deleted session's child is gone…
+      await expectDies(owned.pid);
+      expect(handle.registry.size).toBe(1);
 
-    // …and the survivor is untouched, not merely still registered: it answers.
-    expect(alive(other.pid)).toBe(true);
-    const snapshot = await call(second, 'terminal.snapshot', { terminal: 't1' });
-    expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
-    expect(JSON.stringify(snapshot.structuredContent)).toContain('GENERIC READY');
-  });
+      // …and the survivor is untouched, not merely still registered: it answers.
+      expect(alive(other.pid)).toBe(true);
+      const snapshot = await call(second, 'terminal.snapshot', { terminal: 't1' });
+      expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
+      expect(JSON.stringify(snapshot.structuredContent)).toContain('GENERIC READY');
+    },
+  );
 
-  it.resources({ terminals: 2 })('reclaims a session whose client went away, and spares one still working', async () => {
-    // Streamable HTTP never signals that a client vanished, so idleness is the
-    // only evidence a server has. The clock is injected rather than waited on:
-    // a test that slept out a real TTL would be slow *and* would still pass if
-    // the sweeper never ran on its own.
-    let clock = Date.now();
-    const handle = await serve({ idleTtlMs: 60_000, now: () => clock });
-    const [abandonedSession, busySession] = [await connect(handle), await connect(handle)];
-    const abandoned = await launch(abandonedSession);
-    const busy = await launch(busySession);
+  it.resources({ terminals: 2 })(
+    'reclaims a session whose client went away, and spares one still working',
+    async () => {
+      // Streamable HTTP never signals that a client vanished, so idleness is the
+      // only evidence a server has. The clock is injected rather than waited on:
+      // a test that slept out a real TTL would be slow *and* would still pass if
+      // the sweeper never ran on its own.
+      let clock = Date.now();
+      const handle = await serve({ idleTtlMs: 60_000, now: () => clock });
+      const [abandonedSession, busySession] = [await connect(handle), await connect(handle)];
+      const abandoned = await launch(abandonedSession);
+      const busy = await launch(busySession);
 
-    await abandonedSession.client.close();
+      await abandonedSession.client.close();
 
-    // Time passes for both sessions; only one of them keeps talking.
-    clock += 90_000;
-    const busyStillThere = await call(busySession, 'terminal.snapshot', { terminal: 't1' });
-    expect(busyStillThere.isError, `snapshot failed: ${JSON.stringify(busyStillThere._meta)}`).toBeFalsy();
+      // Time passes for both sessions; only one of them keeps talking.
+      clock += 90_000;
+      const busyStillThere = await call(busySession, 'terminal.snapshot', { terminal: 't1' });
+      expect(
+        busyStillThere.isError,
+        `snapshot failed: ${JSON.stringify(busyStillThere._meta)}`,
+      ).toBeFalsy();
 
-    const swept = await handle.registry.sweepIdle();
-    expect(swept).toEqual([abandonedSession.sessionId]);
+      const swept = await handle.registry.sweepIdle();
+      expect(swept).toEqual([abandonedSession.sessionId]);
 
-    // A full teardown, not just an unregistration: the child is gone and the
-    // slot is free. The leak this pinned before — a crashed agent costing a PTY
-    // and a session slot until the server exited — is closed.
-    await expectDies(abandoned.pid);
-    expect(handle.registry.get(abandonedSession.sessionId)).toBeUndefined();
-    expect(handle.registry.size).toBe(1);
+      // A full teardown, not just an unregistration: the child is gone and the
+      // slot is free. The leak this pinned before — a crashed agent costing a PTY
+      // and a session slot until the server exited — is closed.
+      await expectDies(abandoned.pid);
+      expect(handle.registry.get(abandonedSession.sessionId)).toBeUndefined();
+      expect(handle.registry.size).toBe(1);
 
-    // Working is what spares a session: the busy one keeps its child and still
-    // answers after the sweep.
-    expect(alive(busy.pid)).toBe(true);
-    expect((await call(busySession, 'terminal.snapshot', { terminal: 't1' })).isError).toBeFalsy();
-  });
+      // Working is what spares a session: the busy one keeps its child and still
+      // answers after the sweep.
+      expect(alive(busy.pid)).toBe(true);
+      expect(
+        (await call(busySession, 'terminal.snapshot', { terminal: 't1' })).isError,
+      ).toBeFalsy();
+    },
+  );
 
   it.resources({ terminals: 1 })('never expires a session when the ttl is disabled', async () => {
     let clock = Date.now();
@@ -335,10 +363,17 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
 
     // Only the first session's terminal is driven.
     await call(first, 'terminal.press', { terminal: 't1', keys: 'ArrowDown' });
-    const settled = await call(first, 'terminal.wait_for', { terminal: 't1', wait: 'text', text: '> Beta' });
+    const settled = await call(first, 'terminal.wait_for', {
+      terminal: 't1',
+      wait: 'text',
+      text: '> Beta',
+    });
     expect(settled.isError, `call failed: ${JSON.stringify(settled._meta)}`).toBeFalsy();
 
-    const changedFirst = await call(first, 'terminal.capture_since', { terminal: 't1', cursor: firstCursor });
+    const changedFirst = await call(first, 'terminal.capture_since', {
+      terminal: 't1',
+      cursor: firstCursor,
+    });
     const rowsFirst = changedFirst.structuredContent?.['changedRows'] as { text: string }[];
     expect(JSON.stringify(rowsFirst)).toContain('Beta');
 

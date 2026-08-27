@@ -7,7 +7,10 @@ const source = fileURLToPath(new URL('../../../assets/brand/termwright-icon.svg'
 const target = fileURLToPath(new URL('../dist/termwright-icon.svg', import.meta.url));
 await cp(source, target);
 
-const png = await sharp(await readFile(source)).resize(1024, 1024).png().toBuffer();
+const png = await sharp(await readFile(source))
+  .resize(1024, 1024)
+  .png()
+  .toBuffer();
 await writeFile(fileURLToPath(new URL('../dist/termwright-icon.png', import.meta.url)), png);
 
 const png2icons = createRequire(import.meta.url)('png2icons');

@@ -19,17 +19,14 @@ export async function verifyWindowsPtyVerdict(
   if (!/^certification-verdict(?:-[a-z0-9-]+)?\.json$/u.test(verdictName)) {
     throw new TypeError(`invalid Windows PTY verdict filename: ${verdictName}`);
   }
-  const verdict = JSON.parse(
-    await readFile(join(packageDirectory, verdictName), 'utf8'),
-  );
+  const verdict = JSON.parse(await readFile(join(packageDirectory, verdictName), 'utf8'));
   const manifestPath = join(packageDirectory, 'vendor', 'conpty-manifest.json');
 
   if (
     verdict.schemaVersion !== 4 ||
     verdict.platform !== 'win32' ||
     !['x64', 'arm64'].includes(verdict.architecture) ||
-    verdict.addonSha256 !==
-      (await digest(join(packageDirectory, 'termwright_pty.node'))) ||
+    verdict.addonSha256 !== (await digest(join(packageDirectory, 'termwright_pty.node'))) ||
     verdict.conptyManifestSha256 !== (await digest(manifestPath)) ||
     verdict.runtime?.provider !== 'vendored' ||
     verdict.runtime?.assetsValidated !== true ||
@@ -40,8 +37,7 @@ export async function verifyWindowsPtyVerdict(
     verdict.runtime?.orderedMarkerSemantics !==
       'marker-authoritative-after-behavioral-certification' ||
     !['x64', 'arm64'].includes(verdict.runtime?.selectedHostArchitecture) ||
-    (verdict.architecture === 'arm64' &&
-      verdict.runtime?.selectedHostArchitecture !== 'arm64') ||
+    (verdict.architecture === 'arm64' && verdict.runtime?.selectedHostArchitecture !== 'arm64') ||
     verdict.runtime?.coreExports !== true ||
     verdict.causal?.node !== true ||
     verdict.causal?.bun !== true ||

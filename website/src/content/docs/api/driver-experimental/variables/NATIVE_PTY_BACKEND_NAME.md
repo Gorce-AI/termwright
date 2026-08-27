@@ -11,6 +11,6 @@ editUrl: false
 
 # Variable: NATIVE\_PTY\_BACKEND\_NAME
 
-> `const` **NATIVE\_PTY\_BACKEND\_NAME**: `"termwright-native-pty"` = `"termwright-native-pty"`
+> `const` **NATIVE\_PTY\_BACKEND\_NAME**: `"termwright-native-pty"` = `'termwright-native-pty'`
 
-Defined in: [native-pty-backend.ts:41](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L41)
+Defined in: [native-pty-backend.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L35)

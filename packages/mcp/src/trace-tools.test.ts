@@ -80,7 +80,11 @@ class ScriptedSession {
 
   publish(tree: SemanticSnapshot): void {
     this.#tree = tree;
-    this.#emit('semantic-revision', { revision: tree.revision, timeMs: this.clock, snapshot: tree });
+    this.#emit('semantic-revision', {
+      revision: tree.revision,
+      timeMs: this.clock,
+      snapshot: tree,
+    });
   }
 
   exit(code: number): void {
@@ -102,7 +106,13 @@ function tree(revision: number, approveDisabled: boolean): SemanticSnapshot {
     rows: 6,
     rootIds: ['n1'],
     nodes: [
-      { id: 'n1', role: 'dialog', name: 'Permission', state: { modal: true }, geometry: unknownGeometry() },
+      {
+        id: 'n1',
+        role: 'dialog',
+        name: 'Permission',
+        state: { modal: true },
+        geometry: unknownGeometry(),
+      },
       {
         id: 'n2',
         parentId: 'n1',
@@ -113,7 +123,11 @@ function tree(revision: number, approveDisabled: boolean): SemanticSnapshot {
       },
     ],
     coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }
 
@@ -134,7 +148,10 @@ async function workspace(): Promise<string> {
 async function rewriteCommittedMember(path: string, name: string, body: string): Promise<void> {
   await writeFile(join(path, name), body, 'utf8');
   const commitPath = join(path, 'COMMITTED');
-  const commit = JSON.parse(await readFile(commitPath, 'utf8')) as { v: 1; checksums: Record<string, string> };
+  const commit = JSON.parse(await readFile(commitPath, 'utf8')) as {
+    v: 1;
+    checksums: Record<string, string>;
+  };
   commit.checksums[name] = createHash('sha256').update(body).digest('hex');
   await writeFile(commitPath, `${JSON.stringify(commit)}\n`, 'utf8');
 }
@@ -154,7 +171,11 @@ async function withLogs(path: string): Promise<string> {
     },
     { t: 2_600, castOffset: 2_600, source: 'file', label: 'app', message: 'INFO retrying' },
   ];
-  await rewriteCommittedMember(path, 'logs.jsonl', `${entries.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  await rewriteCommittedMember(
+    path,
+    'logs.jsonl',
+    `${entries.map((e) => JSON.stringify(e)).join('\n')}\n`,
+  );
   const metaPath = join(path, 'meta.json');
   const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
   meta['logs'] = { count: entries.length, sources: ['app', 'http'] };
@@ -207,7 +228,9 @@ interface ToolResult {
   readonly error: { kind: string; suggestion?: string } | undefined;
 }
 
-async function connectSession(): Promise<(name: string, args?: Record<string, unknown>) => Promise<ToolResult>> {
+async function connectSession(): Promise<
+  (name: string, args?: Record<string, unknown>) => Promise<ToolResult>
+> {
   const server = await serveInMemory();
   running.push(server);
   const client = new Client({ name: 'termwright-tests', version: '0.0.0' });
@@ -249,7 +272,11 @@ describe('replaying a recorded failure', () => {
     const overview = await call('trace.overview', { traceId: data['traceId'] });
 
     expect(overview.isError, overview.text).toBe(false);
-    const failed = overview.data['failedSteps'] as { index: number; title: string; error: string }[];
+    const failed = overview.data['failedSteps'] as {
+      index: number;
+      title: string;
+      error: string;
+    }[];
     expect(failed).toHaveLength(1);
     expect(failed[0]?.title).toBe('approves the request');
     expect(failed[0]?.error).toBe('the button stayed disabled');
@@ -327,7 +354,11 @@ describe('replaying a recorded failure', () => {
   it('rejects a backwards window', async () => {
     const call = await connectSession();
     const { data } = await call('trace.open', { path: await recordSample() });
-    const result = await call('trace.diff', { traceId: data['traceId'], fromMs: 2_000, toMs: 1_000 });
+    const result = await call('trace.diff', {
+      traceId: data['traceId'],
+      fromMs: 2_000,
+      toMs: 1_000,
+    });
     expect(result.error?.kind).toBe('usage');
   });
 });
@@ -477,7 +508,8 @@ describe('PNG screenshots of a reconstructed frame', () => {
       screenshotScale: 2,
     });
 
-    const at = (result: ToolResult): number => (result.data['screenshot'] as { width: number }).width;
+    const at = (result: ToolResult): number =>
+      (result.data['screenshot'] as { width: number }).width;
     // Each size is rounded from the fractional SVG width, so 2x is within a pixel.
     expect(at(double)).toBeGreaterThanOrEqual(at(single) * 2 - 2);
     expect(at(double)).toBeLessThanOrEqual(at(single) * 2 + 2);
@@ -528,7 +560,12 @@ describe('a crash recorded in the archive', () => {
       recentInputs: [{ timeMs: 2_400, kind: 'key', bytes: 1, preview: '\\r' }],
       diagnosticsTail: [
         { code: 'pairing-timeout', detail: 'no marker for revision 3', timeMs: 2_450 },
-        { code: 'mode-unverifiable', detail: 'embedding hides the mode', timeMs: 40, mode: 'focus' },
+        {
+          code: 'mode-unverifiable',
+          detail: 'embedding hides the mode',
+          timeMs: 40,
+          mode: 'focus',
+        },
       ],
       lastSemanticRevision: 2,
     };
@@ -608,7 +645,10 @@ describe('application logs in a recording', () => {
     expect(frame.isError, frame.text).toBe(false);
     const logs = frame.data['logs'] as { message: string; level?: string }[];
     // Everything up to that moment, not after it.
-    expect(logs.map((entry) => entry.message)).toEqual(['INFO booted', 'upstream refused the token']);
+    expect(logs.map((entry) => entry.message)).toEqual([
+      'INFO booted',
+      'upstream refused the token',
+    ]);
     expect(logs[1]?.level).toBe('error');
     expect(frame.text).toContain('upstream refused the token');
   });

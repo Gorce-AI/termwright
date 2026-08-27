@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: CellSnapshotMatcherOptions
 
-Defined in: [test/src/matchers.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L63)
+Defined in: [test/src/matchers.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L71)
 
 Options for [TermwrightMatchers.toMatchCellSnapshot](../termwrightmatchers/#tomatchcellsnapshot).
 
@@ -67,7 +67,7 @@ Names palette colors in the legend, so CI and laptop agree.
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [test/src/matchers.ts:49](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L49)
+Defined in: [test/src/matchers.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L57)
 
 Milliseconds to keep re-probing. Defaults to the `expect` timeout class.
 

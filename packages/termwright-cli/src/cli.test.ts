@@ -43,7 +43,10 @@ function harness(
       mcpArgs.push([...argv]);
       return overrides.mcpExit ?? EXIT_CODES.ok;
     },
-    launchDesktop: async () => ({ closed: new Promise<void>(() => undefined), close: async () => undefined }),
+    launchDesktop: async () => ({
+      closed: new Promise<void>(() => undefined),
+      close: async () => undefined,
+    }),
     openBrowser: async () => true,
     processContext: { isTty: false, env: {} },
     ui: {
@@ -70,10 +73,13 @@ function harness(
         runs.push(run);
         return {
           discover: async () => [],
-          run: () => ({ runId: 'run:00000000-0000-4000-8000-000000000001' as never, completed: Promise.resolve() }),
+          run: () => ({
+            runId: 'run:00000000-0000-4000-8000-000000000001' as never,
+            completed: Promise.resolve(),
+          }),
           stop: async () => undefined,
-subscribe: () => () => undefined,
-shutdown: async () => undefined,
+          subscribe: () => () => undefined,
+          shutdown: async () => undefined,
         };
       },
       waitForInterrupt: async () => undefined,
@@ -108,7 +114,10 @@ describe('informational commands', () => {
 
     const json = harness();
     await runCli(['--version', '--json'], json.deps);
-    expect(JSON.parse(json.out[0] as string)).toMatchObject({ name: 'termwright', version: CLI_VERSION });
+    expect(JSON.parse(json.out[0] as string)).toMatchObject({
+      name: 'termwright',
+      version: CLI_VERSION,
+    });
   });
 
   it('prints help listing every command', async () => {
@@ -254,7 +263,11 @@ describe('the native test command', () => {
       openTestHost: async (received: unknown) => {
         options.push(received);
         return {
-          requestRun: () => ({ invocationId: value.invocationId, runId: value.runId, completed: Promise.resolve(value) }),
+          requestRun: () => ({
+            invocationId: value.invocationId,
+            runId: value.runId,
+            completed: Promise.resolve(value),
+          }),
           watch: vi.fn(),
           close: async () => undefined,
         };
@@ -277,8 +290,9 @@ describe('the native test command', () => {
         GITHUB_SHA: 'b'.repeat(40),
       },
     });
-    expect((options[0] as { workerEnv: Record<string, string> }).workerEnv)
-      .not.toHaveProperty('UNRELATED_PROCESS_ENV');
+    expect((options[0] as { workerEnv: Record<string, string> }).workerEnv).not.toHaveProperty(
+      'UNRELATED_PROCESS_ENV',
+    );
   });
 
   it('repeats complete cycles in one host and fails on the worst run', async () => {
@@ -324,7 +338,9 @@ describe('the native test command', () => {
     expect(requestRun).toHaveBeenCalledTimes(2);
     expect(close).toHaveBeenCalledOnce();
     expect(JSON.parse(h.out[0] ?? '{}')).toMatchObject({
-      state: 'infrastructure-failed', requestedRuns: 50, completedRuns: 2,
+      state: 'infrastructure-failed',
+      requestedRuns: 50,
+      completedRuns: 2,
     });
   });
 
@@ -333,7 +349,11 @@ describe('the native test command', () => {
     const value = completion('skipped', 1);
     Object.assign(h.deps, {
       openTestHost: async () => ({
-        requestRun: () => ({ invocationId: value.invocationId, runId: value.runId, completed: Promise.resolve(value) }),
+        requestRun: () => ({
+          invocationId: value.invocationId,
+          runId: value.runId,
+          completed: Promise.resolve(value),
+        }),
         watch: vi.fn(),
         close: async () => undefined,
       }),
@@ -346,18 +366,24 @@ describe('the native test command', () => {
   it('prints a yellow mixed-skip verdict and certifies only an exact declaration match', async () => {
     const allowed = {
       ...completion('passed-with-skips', 1),
-      skips: [{
-        runnerTaskId: 'runner-task:00000000-0000-4000-8000-000000000001' as never,
-        nativeTaskId: 'native-skip',
-        file: '/repo/platform.test.ts',
-        fullName: 'platform case',
-      }],
+      skips: [
+        {
+          runnerTaskId: 'runner-task:00000000-0000-4000-8000-000000000001' as never,
+          nativeTaskId: 'native-skip',
+          file: '/repo/platform.test.ts',
+          fullName: 'platform case',
+        },
+      ],
       skipPolicy: { status: 'matched' as const, declarations: 1, issues: [] },
     };
     const h = harness();
     Object.assign(h.deps, {
       openTestHost: async () => ({
-        requestRun: () => ({ invocationId: allowed.invocationId, runId: allowed.runId, completed: Promise.resolve(allowed) }),
+        requestRun: () => ({
+          invocationId: allowed.invocationId,
+          runId: allowed.runId,
+          completed: Promise.resolve(allowed),
+        }),
         watch: vi.fn(),
         close: async () => undefined,
       }),
@@ -375,7 +401,11 @@ describe('the native test command', () => {
     const red = harness();
     Object.assign(red.deps, {
       openTestHost: async () => ({
-        requestRun: () => ({ invocationId: rejected.invocationId, runId: rejected.runId, completed: Promise.resolve(rejected) }),
+        requestRun: () => ({
+          invocationId: rejected.invocationId,
+          runId: rejected.runId,
+          completed: Promise.resolve(rejected),
+        }),
         watch: vi.fn(),
         close: async () => undefined,
       }),
@@ -399,7 +429,11 @@ describe('the native watch command', () => {
         return {
           requestRun: vi.fn(),
           watch: () => ({
-            initial: { invocationId: value.invocationId, runId: value.runId, completed: Promise.resolve(value) },
+            initial: {
+              invocationId: value.invocationId,
+              runId: value.runId,
+              completed: Promise.resolve(value),
+            },
             close: async () => undefined,
           }),
           close: async () => undefined,
@@ -409,18 +443,23 @@ describe('the native watch command', () => {
 
     expect(await runCli(['watch'], h.deps)).toBe(EXIT_CODES.ok);
     expect(options[0]).toMatchObject({ workerEnv: { TERMWRIGHT_REQUIRE_BUN: '1' } });
-    expect((options[0] as { workerEnv: Record<string, string> }).workerEnv)
-      .not.toHaveProperty('UNRELATED_PROCESS_ENV');
+    expect((options[0] as { workerEnv: Record<string, string> }).workerEnv).not.toHaveProperty(
+      'UNRELATED_PROCESS_ENV',
+    );
   });
 
   it('does not certify an all-skipped initial cycle', async () => {
     const h = harness();
     const value = {
       ...completion('skipped', 1),
-      skips: [{
-        runnerTaskId: 'runner-task:00000000-0000-4000-8000-000000000001' as never,
-        nativeTaskId: 'native-skip', file: '/repo/skipped.test.ts', fullName: 'skipped case',
-      }],
+      skips: [
+        {
+          runnerTaskId: 'runner-task:00000000-0000-4000-8000-000000000001' as never,
+          nativeTaskId: 'native-skip',
+          file: '/repo/skipped.test.ts',
+          fullName: 'skipped case',
+        },
+      ],
       skipPolicy: { status: 'mismatch' as const, declarations: 0, issues: ['undeclared skip'] },
     };
     const close = vi.fn(async () => undefined);
@@ -428,7 +467,11 @@ describe('the native watch command', () => {
       openTestHost: async () => ({
         requestRun: vi.fn(),
         watch: () => ({
-          initial: { invocationId: value.invocationId, runId: value.runId, completed: Promise.resolve(value) },
+          initial: {
+            invocationId: value.invocationId,
+            runId: value.runId,
+            completed: Promise.resolve(value),
+          },
           close,
         }),
         close,
@@ -437,7 +480,8 @@ describe('the native watch command', () => {
 
     expect(await runCli(['watch', '--json'], h.deps)).toBe(EXIT_CODES.assertion);
     expect(JSON.parse(h.out[0] ?? '{}')).toMatchObject({
-      state: 'skipped', watching: true,
+      state: 'skipped',
+      watching: true,
       skips: [{ nativeTaskId: 'native-skip' }],
       skipPolicy: { status: 'mismatch', issues: ['undeclared skip'] },
     });
@@ -469,7 +513,9 @@ describe('the ui command', () => {
     expect(h.out.join('\n')).toContain('http://127.0.0.1:5000/?token=abc');
     expect(h.runs).toHaveLength(1);
     expect(h.runs[0]).toMatchObject({
-      args: [], cwd: '/workspace', resourceProfile: 'local',
+      args: [],
+      cwd: '/workspace',
+      resourceProfile: 'local',
       workerEnv: { TERMWRIGHT_REQUIRE_BUN: '1' },
     });
     expect(h.runs[0]?.workerEnv).not.toHaveProperty('UNRELATED_PROCESS_ENV');
@@ -533,7 +579,9 @@ describe('the ui command', () => {
     const h = harness();
     const openBrowser = vi.fn(async () => true);
     Object.assign(h.deps, {
-      launchDesktop: async () => { throw new Error('host unavailable'); },
+      launchDesktop: async () => {
+        throw new Error('host unavailable');
+      },
       openBrowser,
       processContext: { isTty: true, env: {} },
     });
@@ -545,13 +593,18 @@ describe('the ui command', () => {
   it('closing the desktop window shuts down the watcher and server', async () => {
     const h = harness();
     let closeWindow: (() => void) | undefined;
-    const closed = new Promise<void>((resolve) => { closeWindow = resolve; });
+    const closed = new Promise<void>((resolve) => {
+      closeWindow = resolve;
+    });
     const shutdown = vi.fn(async () => undefined);
     const closeHost = vi.fn(async () => undefined);
     const ui = h.deps.ui as { startHost: CliDeps['ui']['startHost'] };
     ui.startHost = async () => ({
       discover: async () => [],
-      run: () => ({ runId: 'run:00000000-0000-4000-8000-000000000001' as never, completed: new Promise(() => undefined) }),
+      run: () => ({
+        runId: 'run:00000000-0000-4000-8000-000000000001' as never,
+        completed: new Promise(() => undefined),
+      }),
       stop: async () => undefined,
       subscribe: () => () => undefined,
       shutdown,
@@ -700,11 +753,18 @@ describe('the ui command', () => {
       discover: async () => [],
       run: (ids) => {
         void run(ids);
-        return { runId: 'run:00000000-0000-4000-8000-000000000001' as never, completed: new Promise<void>((resolve) => { released = resolve; }) };
+        return {
+          runId: 'run:00000000-0000-4000-8000-000000000001' as never,
+          completed: new Promise<void>((resolve) => {
+            released = resolve;
+          }),
+        };
       },
-      stop: async () => { await stop(); },
-subscribe: () => () => undefined,
-shutdown: async () => undefined,
+      stop: async () => {
+        await stop();
+      },
+      subscribe: () => () => undefined,
+      shutdown: async () => undefined,
     });
 
     const running = runCli(['ui'], h.deps);

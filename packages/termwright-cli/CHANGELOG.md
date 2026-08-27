@@ -9,7 +9,7 @@
   annotation SDKs, provenance-aware semantic trees, extended state and relations,
   compatibility metadata, inspector probe health, and retained/immediate-mode
   performance reporting.
-  
+
   This removes the legacy renderer-replacement and manual attachment APIs.
 
 ### Patch Changes

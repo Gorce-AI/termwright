@@ -1,4 +1,12 @@
-import { cloneElement, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import {
+  cloneElement,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from 'react';
 import { createPortal } from 'react-dom';
 
 type TooltipControlProps = {
@@ -8,7 +16,12 @@ type TooltipControlProps = {
   readonly 'aria-describedby'?: string;
 };
 
-export function Tooltip({ label, disabledReason, placement = 'auto', children }: {
+export function Tooltip({
+  label,
+  disabledReason,
+  placement = 'auto',
+  children,
+}: {
   readonly label: string;
   readonly disabledReason?: string;
   readonly placement?: 'auto' | 'right' | 'bottom';
@@ -32,9 +45,17 @@ export function Tooltip({ label, disabledReason, placement = 'auto', children }:
       ? origin.right + gap
       : placement === 'right'
         ? origin.left - tip.width - gap
-        : clamp(origin.left + origin.width / 2 - tip.width / 2, gap, window.innerWidth - tip.width - gap);
+        : clamp(
+            origin.left + origin.width / 2 - tip.width / 2,
+            gap,
+            window.innerWidth - tip.width - gap,
+          );
     const top = useRight
-      ? clamp(origin.top + origin.height / 2 - tip.height / 2, gap, window.innerHeight - tip.height - gap)
+      ? clamp(
+          origin.top + origin.height / 2 - tip.height / 2,
+          gap,
+          window.innerHeight - tip.height - gap,
+        )
       : belowFits
         ? origin.bottom + gap
         : origin.top - tip.height - gap;
@@ -44,21 +65,29 @@ export function Tooltip({ label, disabledReason, placement = 'auto', children }:
     'aria-label': children.props['aria-label'] ?? label,
     ...(visible ? { 'aria-describedby': id } : {}),
   });
-  return <span
-    className="tw-tooltip-anchor"
-    ref={anchor}
-    onPointerEnter={() => setVisible(true)}
-    onPointerLeave={() => setVisible(false)}
-    onFocusCapture={() => setVisible(true)}
-    onBlurCapture={() => setVisible(false)}
-    onKeyDownCapture={(event) => { if (event.key === 'Escape') setVisible(false); }}
-  >
-    {control}
-    {visible && typeof document !== 'undefined' ? createPortal(
-      <span ref={tooltip} id={id} role="tooltip" className="tw-tooltip" style={position}>{copy}</span>,
-      document.body,
-    ) : null}
-  </span>;
+  return (
+    <span
+      className="tw-tooltip-anchor"
+      ref={anchor}
+      onPointerEnter={() => setVisible(true)}
+      onPointerLeave={() => setVisible(false)}
+      onFocusCapture={() => setVisible(true)}
+      onBlurCapture={() => setVisible(false)}
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Escape') setVisible(false);
+      }}
+    >
+      {control}
+      {visible && typeof document !== 'undefined'
+        ? createPortal(
+            <span ref={tooltip} id={id} role="tooltip" className="tw-tooltip" style={position}>
+              {copy}
+            </span>,
+            document.body,
+          )
+        : null}
+    </span>
+  );
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

@@ -24,7 +24,7 @@ name differs from its visual decoration.
 
 ```ts
 await app.waitForText('Permission required');
-await expect(app.getByRole('button', {name: 'Approve'})).toBeAttached();
+await expect(app.getByRole('button', { name: 'Approve' })).toBeAttached();
 ```
 
 Use a screen assertion when the program has no semantic integration.
@@ -34,8 +34,8 @@ Use a screen assertion when the program has no semantic integration.
 Narrow by name or scope:
 
 ```ts
-const dialog = app.getByRole('dialog', {name: 'Delete note'});
-const confirm = app.getByRole('button', {name: 'Delete'}).within(dialog);
+const dialog = app.getByRole('dialog', { name: 'Delete note' });
+const confirm = app.getByRole('button', { name: 'Delete' }).within(dialog);
 ```
 
 Avoid `first()` unless position is the intended behavior. See

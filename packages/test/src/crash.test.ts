@@ -42,7 +42,11 @@ describe('collectCrashes', () => {
       { harness: source(report(), 'dead'), dir: 'out/dead.twtrace' },
     ]);
     expect(crashes).toHaveLength(1);
-    expect(crashes[0]).toMatchObject({ index: 1, sessionId: 'dead', tracePath: 'out/dead.twtrace' });
+    expect(crashes[0]).toMatchObject({
+      index: 1,
+      sessionId: 'dead',
+      tracePath: 'out/dead.twtrace',
+    });
   });
 
   it('is empty when nothing died', () => {
@@ -74,7 +78,9 @@ describe('formatCrashSection', () => {
 
   it('shows the last 15 lines and says how many it dropped', () => {
     const tail = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`);
-    const section = formatCrashSection(collectCrashes([{ harness: source(report({ screenTail: tail })) }]));
+    const section = formatCrashSection(
+      collectCrashes([{ harness: source(report({ screenTail: tail })) }]),
+    );
     expect(section).toContain('screen tail (last 15 of 40 lines):');
     expect(section).toContain('    line 40');
     expect(section).toContain('    line 26');
@@ -115,12 +121,18 @@ describe('toReportCrash', () => {
   });
 
   it('says nothing about a revision for a session that never had a tree', () => {
-    expect(toReportCrash(report({ lastSemanticTree: null }))).not.toHaveProperty('lastSemanticRevision');
+    expect(toReportCrash(report({ lastSemanticTree: null }))).not.toHaveProperty(
+      'lastSemanticRevision',
+    );
   });
 
   it('keeps the revision a diagnostic is about', () => {
     const payload = toReportCrash(
-      report({ diagnosticsTail: [{ code: 'protocol-violation', detail: 'bad frame', revision: 7, timeMs: 3 }] }),
+      report({
+        diagnosticsTail: [
+          { code: 'protocol-violation', detail: 'bad frame', revision: 7, timeMs: 3 },
+        ],
+      }),
     );
     expect(payload.diagnostics?.[0]).toEqual({
       code: 'protocol-violation',

@@ -22,7 +22,7 @@ policy issues, and aggregate policy result so an evidence reader can audit the
 decision without relying on attempt counters.
 
 ```ts
-import {beginRunManifest, readRunHistory} from '@termwright/run-history';
+import { beginRunManifest, readRunHistory } from '@termwright/run-history';
 
 const transaction = await beginRunManifest('.termwright/runs', start);
 await transaction.commit(manifest);

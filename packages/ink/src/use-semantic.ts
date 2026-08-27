@@ -47,8 +47,11 @@ export function useSemantic(
   // Cleanup belongs to unmount, not every update. React runs the cleanup of an
   // un-deped layout effect before the next onRender; deleting there creates a
   // one-commit hole exactly when the probe freezes the updated host tree.
-  useEffect(() => () => {
-    registration.current?.dispose();
-    registration.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      registration.current?.dispose();
+      registration.current = null;
+    },
+    [],
+  );
 }

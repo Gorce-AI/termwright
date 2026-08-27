@@ -1,9 +1,9 @@
 ---
-"@termwright/probe-charm": patch
-"@termwright/probe-go": patch
-"@termwright/probe-opentui": patch
-"@termwright/probe-tview": patch
-"termwright": patch
+'@termwright/probe-charm': patch
+'@termwright/probe-go': patch
+'@termwright/probe-opentui': patch
+'@termwright/probe-tview': patch
+'termwright': patch
 ---
 
 Commit semantic frames only at causal framework output boundaries. OpenTUI now

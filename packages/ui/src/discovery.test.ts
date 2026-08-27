@@ -33,15 +33,20 @@ describe('native host discovery', () => {
   });
 
   it('rejects duplicate native identities instead of silently deduplicating', async () => {
-    await expect(discoverTests({ cwd: '/repo', load: async () => [tests[0]!, tests[0]!] }))
-      .rejects.toThrow('duplicate/invalid id');
+    await expect(
+      discoverTests({ cwd: '/repo', load: async () => [tests[0]!, tests[0]!] }),
+    ).rejects.toThrow('duplicate/invalid id');
   });
 
   it('keeps collection failure distinct from an empty suite', async () => {
-    await expect(discoverTests({
-      cwd: '/repo',
-      load: async () => { throw new Error('collection failed'); },
-    })).rejects.toThrow('collection failed');
+    await expect(
+      discoverTests({
+        cwd: '/repo',
+        load: async () => {
+          throw new Error('collection failed');
+        },
+      }),
+    ).rejects.toThrow('collection failed');
     await expect(discoverTests({ cwd: '/repo', load: async () => [] })).resolves.toEqual([]);
   });
 
@@ -51,6 +56,8 @@ describe('native host discovery', () => {
       title: `t${index}`,
       file: '/repo/a.test.ts',
     }));
-    await expect(discoverTests({ cwd: '/repo', load: async () => many })).rejects.toThrow('exceeded');
+    await expect(discoverTests({ cwd: '/repo', load: async () => many })).rejects.toThrow(
+      'exceeded',
+    );
   });
 });

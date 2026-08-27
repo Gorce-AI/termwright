@@ -20,7 +20,11 @@ import {
 } from '../packages/protocol/src/index.js';
 import { probeInfo as inkProbeInfo } from '../packages/probe-ink/src/session.js';
 import { probeInfo as openTuiProbeInfo } from '../packages/probe-opentui/src/session.js';
-import { BUBBLETEA_MODULES, COMPANION_MODULES, capabilitiesFor } from '../packages/probe-charm/src/detect.js';
+import {
+  BUBBLETEA_MODULES,
+  COMPANION_MODULES,
+  capabilitiesFor,
+} from '../packages/probe-charm/src/detect.js';
 import { PROBE_VERSION as CHARM_PROBE_VERSION } from '../packages/probe-charm/src/launch.js';
 import {
   FRAMEWORK as TVIEW_FRAMEWORK,
@@ -226,15 +230,18 @@ function quotedValues(source: string): string[] {
 }
 
 function pythonTuple(source: string, name: string): string[] {
-  const body = new RegExp(`${name}\\s*=\\s*\\((?<body>[\\s\\S]*?)\\)`, 'u').exec(source)?.groups?.['body'];
+  const body = new RegExp(`${name}\\s*=\\s*\\((?<body>[\\s\\S]*?)\\)`, 'u').exec(source)?.groups?.[
+    'body'
+  ];
   if (body === undefined) throw new Error(`could not find Python tuple ${name}`);
   return quotedValues(body);
 }
 
 function tsArray(source: string, name: string): string[] {
-  const body = new RegExp(`const ${name}(?:\\s*:[^=]+)?\\s*=\\s*\\[(?<body>[\\s\\S]*?)\\]`, 'u').exec(source)?.groups?.[
-    'body'
-  ];
+  const body = new RegExp(
+    `const ${name}(?:\\s*:[^=]+)?\\s*=\\s*\\[(?<body>[\\s\\S]*?)\\]`,
+    'u',
+  ).exec(source)?.groups?.['body'];
   if (body === undefined) throw new Error(`could not find TypeScript array ${name}`);
   return quotedValues(body);
 }
@@ -260,8 +267,10 @@ const goCapabilityNames: Readonly<Record<string, string>> = {
 };
 
 function goCapabilities(source: string, type: 'Capability' | 'ProbeCapability'): string[] {
-  const body = new RegExp(`Capabilities:\\s*\\[\\]protocol\\.${type}\\{(?<body>[\\s\\S]*?)\\n\\s*\\}`, 'u').exec(source)
-    ?.groups?.['body'];
+  const body = new RegExp(
+    `Capabilities:\\s*\\[\\]protocol\\.${type}\\{(?<body>[\\s\\S]*?)\\n\\s*\\}`,
+    'u',
+  ).exec(source)?.groups?.['body'];
   if (body === undefined) throw new Error(`could not find Go ${type} handshake literal`);
   return [...body.matchAll(/protocol\.(\w+)/gu)].map((match) => {
     const name = match[1] as string;
@@ -322,7 +331,10 @@ describe('machine-readable framework compatibility registry', () => {
   it('reports intervention tiers, degradation and T3 debt per capability', () => {
     const ownedTviewUnits = [
       text('packages/probe-tview/assets/tview_probe.go.txt'),
-      text('packages/probe-tview/assets/tcell_marker_windows.go.txt').replace(/^\/\/go:build windows\n\n/u, ''),
+      text('packages/probe-tview/assets/tcell_marker_windows.go.txt').replace(
+        /^\/\/go:build windows\n\n/u,
+        '',
+      ),
     ].map((source) => `sha256:${createHash('sha256').update(source).digest('hex')}`);
     const addedDigests = new Set(
       [
@@ -343,19 +355,27 @@ describe('machine-readable framework compatibility registry', () => {
       expect(entry.instrumentation.t3DebtCount, `${entry.id}: T3 debt`).toBe(
         interventions.filter(({ tier }) => tier === 'T3').length,
       );
-      const addedTargets = interventions.flatMap(({ addedUnits }) => addedUnits.map(({ target }) => target));
-      expect(new Set(addedTargets).size, `${entry.id}: added-unit target uniqueness`).toBe(addedTargets.length);
+      const addedTargets = interventions.flatMap(({ addedUnits }) =>
+        addedUnits.map(({ target }) => target),
+      );
+      expect(new Set(addedTargets).size, `${entry.id}: added-unit target uniqueness`).toBe(
+        addedTargets.length,
+      );
 
       for (const intervention of interventions) {
-        expect(intervention.requiredSymbols.length, `${entry.id}/${intervention.capability}: symbols`).toBeGreaterThan(
-          0,
-        );
+        expect(
+          intervention.requiredSymbols.length,
+          `${entry.id}/${intervention.capability}: symbols`,
+        ).toBeGreaterThan(0);
         expect(
           intervention.conformanceSuites.length,
           `${entry.id}/${intervention.capability}: conformance`,
         ).toBeGreaterThan(0);
         for (const suite of intervention.conformanceSuites) {
-          expect(existsSync(join(root, suite)), `${entry.id}/${intervention.capability}: ${suite}`).toBe(true);
+          expect(
+            existsSync(join(root, suite)),
+            `${entry.id}/${intervention.capability}: ${suite}`,
+          ).toBe(true);
         }
         if (intervention.tier === 'T0') {
           expect(intervention.sourcePatching, `${entry.id}/${intervention.capability}`).toBe(false);
@@ -363,27 +383,41 @@ describe('machine-readable framework compatibility registry', () => {
         }
         if (intervention.tier === 'T1') {
           expect(intervention.sourcePatching, `${entry.id}/${intervention.capability}`).toBe(false);
-          expect(intervention.addedUnits.length, `${entry.id}/${intervention.capability}`).toBeGreaterThan(0);
+          expect(
+            intervention.addedUnits.length,
+            `${entry.id}/${intervention.capability}`,
+          ).toBeGreaterThan(0);
         }
         if (intervention.tier === 'T2') {
           expect(intervention.sourcePatching, `${entry.id}/${intervention.capability}`).toBe(true);
         }
         if (intervention.sourcePatching) {
-          expect(['T2', 'T3'], `${entry.id}/${intervention.capability}`).toContain(intervention.tier);
+          expect(['T2', 'T3'], `${entry.id}/${intervention.capability}`).toContain(
+            intervention.tier,
+          );
         }
         for (const unit of intervention.addedUnits) {
-          expect(addedDigests, `${entry.id}/${intervention.capability}: ${unit.target}`).toContain(unit.sourceDigest);
+          expect(addedDigests, `${entry.id}/${intervention.capability}: ${unit.target}`).toContain(
+            unit.sourceDigest,
+          );
         }
       }
 
       for (const capability of entry.instrumentation.degradedCapabilities) {
-        expect(PROBE_DEGRADED_CAPABILITIES, `${entry.id}: degraded ${capability}`).toContain(capability);
+        expect(PROBE_DEGRADED_CAPABILITIES, `${entry.id}: degraded ${capability}`).toContain(
+          capability,
+        );
         if ((SESSION_CAPABILITIES as readonly string[]).includes(capability)) {
-          expect(entry.capabilityGraph.unsupported, `${entry.id}: degraded ${capability}`).toContain(capability);
+          expect(
+            entry.capabilityGraph.unsupported,
+            `${entry.id}: degraded ${capability}`,
+          ).toContain(capability);
         }
       }
       if (entry.instrumentation.semanticClass === 'B') {
-        expect(entry.instrumentation.degradedCapabilities, `${entry.id}: class B`).toContain('intended-geometry');
+        expect(entry.instrumentation.degradedCapabilities, `${entry.id}: class B`).toContain(
+          'intended-geometry',
+        );
       }
     }
 
@@ -422,7 +456,9 @@ describe('machine-readable framework compatibility registry', () => {
       'ratatui',
       'charm',
     ]);
-    expect(new Set(registry.frameworks.map((entry) => entry.id)).size).toBe(registry.frameworks.length);
+    expect(new Set(registry.frameworks.map((entry) => entry.id)).size).toBe(
+      registry.frameworks.length,
+    );
 
     for (const entry of registry.frameworks) {
       expect(entry.versions.verified.length, `${entry.id}: verified versions`).toBeGreaterThan(0);
@@ -431,28 +467,38 @@ describe('machine-readable framework compatibility registry', () => {
       for (const capability of entry.probe.capabilities) {
         expect(PROBE_CAPABILITIES, `${entry.id}: ${capability}`).toContain(capability);
       }
-      expect(new Set(entry.probe.adapterCapabilities).size).toBe(entry.probe.adapterCapabilities.length);
+      expect(new Set(entry.probe.adapterCapabilities).size).toBe(
+        entry.probe.adapterCapabilities.length,
+      );
       for (const capability of entry.probe.adapterCapabilities) {
         expect(ADAPTER_CAPABILITIES, `${entry.id}: ${capability}`).toContain(capability);
-        expect(capabilityNode(`adapter.${capability as (typeof ADAPTER_CAPABILITIES)[number]}`)).toBeDefined();
+        expect(
+          capabilityNode(`adapter.${capability as (typeof ADAPTER_CAPABILITIES)[number]}`),
+        ).toBeDefined();
       }
       if (entry.probe.capabilities.includes('stable-identity')) {
         expect(entry.probe.identityKind, `${entry.id}: stable-identity coherence`).toBe('stable');
       }
       if (entry.annotations === null) {
-        expect(entry.probe.capabilities, `${entry.id}: annotation coherence`).not.toContain('annotations');
+        expect(entry.probe.capabilities, `${entry.id}: annotation coherence`).not.toContain(
+          'annotations',
+        );
       }
 
       const partitions = [
         ...entry.capabilityGraph.automatic,
-        ...entry.capabilityGraph.applicationIntegrated.flatMap((integration) => integration.capabilities),
+        ...entry.capabilityGraph.applicationIntegrated.flatMap(
+          (integration) => integration.capabilities,
+        ),
         ...entry.capabilityGraph.input.map(({ capability }) => capability),
         ...entry.capabilityGraph.unsupported,
       ];
       expect(partitions.slice().sort(), `${entry.id}: complete graph partition`).toEqual(
         [...SESSION_CAPABILITIES].sort(),
       );
-      expect(new Set(partitions).size, `${entry.id}: disjoint graph partition`).toBe(partitions.length);
+      expect(new Set(partitions).size, `${entry.id}: disjoint graph partition`).toBe(
+        partitions.length,
+      );
       for (const capability of partitions) capabilityNode(`session.${capability}`);
       for (const integration of entry.capabilityGraph.applicationIntegrated) {
         expect(EVIDENCE_PROVIDER_TYPES).toContain(integration.providerType);
@@ -467,7 +513,8 @@ describe('machine-readable framework compatibility registry', () => {
         }
       }
       for (const input of entry.capabilityGraph.input) {
-        for (const prerequisite of input.runtimePrerequisites) expect(RUNTIME_PREREQUISITES).toContain(prerequisite);
+        for (const prerequisite of input.runtimePrerequisites)
+          expect(RUNTIME_PREREQUISITES).toContain(prerequisite);
         for (const alternative of input.providerAlternatives) {
           expect(EVIDENCE_PROVIDER_TYPES).toContain(alternative.providerType);
           expect(alternative.sdks.length).toBeGreaterThan(0);
@@ -481,9 +528,12 @@ describe('machine-readable framework compatibility registry', () => {
           }
         }
       }
-      expect(entry.certification.adapterVersion, `${entry.id}: adapter version`).toBe(entry.probe.packageVersion);
+      expect(entry.certification.adapterVersion, `${entry.id}: adapter version`).toBe(
+        entry.probe.packageVersion,
+      );
       if (entry.versions.policy === 'capability') {
-        const compileCertified = entry.certification.strategy === 'compile-and-behavioral-capability';
+        const compileCertified =
+          entry.certification.strategy === 'compile-and-behavioral-capability';
         expect(entry.certification.ids, `${entry.id}: capability certification ids`).toEqual([
           `${entry.id}@${compileCertified ? 'compile-capability' : 'runtime-capability'}/${entry.probe.packageVersion}`,
         ]);
@@ -491,19 +541,28 @@ describe('machine-readable framework compatibility registry', () => {
           ['runtime-capability-and-behavior', 'compile-and-behavioral-capability'],
           `${entry.id}: capability certification`,
         ).toContain(entry.certification.strategy);
-        expect(entry.certification.checksumSources, `${entry.id}: capability checksums`).toEqual([]);
+        expect(entry.certification.checksumSources, `${entry.id}: capability checksums`).toEqual(
+          [],
+        );
       } else {
         expect(entry.certification.ids, `${entry.id}: certification ids`).toEqual(
-          entry.versions.verified.map((version) => `${entry.id}@${version}/${entry.probe.packageVersion}`),
+          entry.versions.verified.map(
+            (version) => `${entry.id}@${version}/${entry.probe.packageVersion}`,
+          ),
         );
       }
       if (entry.versions.policy === 'capability') {
         // Capability-certified runtime and compile-time integrations bind
         // observed behavior rather than an upstream framework byte profile.
       } else if (entry.certification.strategy === 'native-hook') {
-        expect(entry.certification.checksumSources, `${entry.id}: native hook checksums`).toEqual([]);
+        expect(entry.certification.checksumSources, `${entry.id}: native hook checksums`).toEqual(
+          [],
+        );
       } else {
-        expect(entry.certification.checksumSources.length, `${entry.id}: checksum linkage`).toBeGreaterThan(0);
+        expect(
+          entry.certification.checksumSources.length,
+          `${entry.id}: checksum linkage`,
+        ).toBeGreaterThan(0);
       }
       for (const source of entry.certification.checksumSources) {
         expect(existsSync(join(root, source)), `${entry.id}: ${source}`).toBe(true);
@@ -512,7 +571,9 @@ describe('machine-readable framework compatibility registry', () => {
             entry.certification.strategy,
           )
         ) {
-          expect(text(source), `${entry.id}: ${source} carries sha256 evidence`).toMatch(/sha256/iu);
+          expect(text(source), `${entry.id}: ${source} carries sha256 evidence`).toMatch(
+            /sha256/iu,
+          );
         }
       }
       const claims = new Map(entry.capabilityGraph.claims.map((claim) => [claim.id, claim.files]));
@@ -536,10 +597,15 @@ describe('machine-readable framework compatibility registry', () => {
       }
       for (const capability of entry.capabilityGraph.unsupported) {
         const remediation = capabilityRemediation(`session.${capability}`);
-        expect(remediation.message.length, `${entry.id}: remediation ${capability}`).toBeGreaterThan(10);
+        expect(
+          remediation.message.length,
+          `${entry.id}: remediation ${capability}`,
+        ).toBeGreaterThan(10);
         if (remediation.code === 'register-application-provider') {
           expect(
-            entry.capabilityGraph.applicationIntegrated.some(({ capabilities }) => capabilities.includes(capability)),
+            entry.capabilityGraph.applicationIntegrated.some(({ capabilities }) =>
+              capabilities.includes(capability),
+            ),
             `${entry.id}: impossible provider remediation ${capability}`,
           ).toBe(true);
         }
@@ -564,11 +630,16 @@ describe('machine-readable framework compatibility registry', () => {
         const producer = producerFor[capability];
         if (producer === undefined) continue;
         const raw = producer.replace(/^(?:adapter|probe)\./u, '');
-        const announced = producer.startsWith('adapter.') ? entry.probe.adapterCapabilities : entry.probe.capabilities;
+        const announced = producer.startsWith('adapter.')
+          ? entry.probe.adapterCapabilities
+          : entry.probe.capabilities;
         expect(announced, `${entry.id}: producer for ${capability}`).toContain(raw);
         expect(
           CAPABILITY_GRAPH.edges.some(
-            (edge) => edge.from === producer && edge.to === `session.${capability}` && edge.kind === 'produces',
+            (edge) =>
+              edge.from === producer &&
+              edge.to === `session.${capability}` &&
+              edge.kind === 'produces',
           ),
         ).toBe(true);
       }
@@ -608,13 +679,17 @@ describe('machine-readable framework compatibility registry', () => {
       );
       expect(integration?.capabilities).toEqual(['pointer-geometry', 'pointer-hit-testing']);
       expect(integration?.providerCapabilities).toEqual(['pointer-regions', 'hit-test']);
-      expect(entry.limitations.join(' ')).not.toMatch(/pointer actions are (?:unavailable|refused)/iu);
+      expect(entry.limitations.join(' ')).not.toMatch(
+        /pointer actions are (?:unavailable|refused)/iu,
+      );
     }
   });
 
   it('has no second framework matrix in protocol exports, language vectors, or website code', () => {
     expect(existsSync(join(root, 'packages/protocol/src/geometry-capabilities.ts'))).toBe(false);
-    expect(json<Record<string, unknown>>('clients/test-vectors/observations.json')).not.toHaveProperty('frameworks');
+    expect(
+      json<Record<string, unknown>>('clients/test-vectors/observations.json'),
+    ).not.toHaveProperty('frameworks');
     const websiteCheck = text('website/scripts/check-geometry-matrix.mjs');
     expect(websiteCheck).toContain('../../compatibility/registry.json');
     expect(websiteCheck).toContain('capabilityGraph');
@@ -664,16 +739,30 @@ describe('machine-readable framework compatibility registry', () => {
   });
 
   it('takes every probe package version from its publish manifest', () => {
-    expect(framework('ink').probe.packageVersion).toBe(packageVersion('packages/probe-ink/package.json'));
-    expect(framework('opentui').probe.packageVersion).toBe(packageVersion('packages/probe-opentui/package.json'));
-    expect(framework('textual').probe.packageVersion).toBe(projectVersion('clients/python/pyproject.toml'));
-    expect(framework('tview').probe.packageVersion).toBe(packageVersion('packages/probe-tview/package.json'));
-    expect(framework('ratatui').probe.packageVersion).toBe(projectVersion('clients/rust-probe/Cargo.toml'));
+    expect(framework('ink').probe.packageVersion).toBe(
+      packageVersion('packages/probe-ink/package.json'),
+    );
+    expect(framework('opentui').probe.packageVersion).toBe(
+      packageVersion('packages/probe-opentui/package.json'),
+    );
+    expect(framework('textual').probe.packageVersion).toBe(
+      projectVersion('clients/python/pyproject.toml'),
+    );
+    expect(framework('tview').probe.packageVersion).toBe(
+      packageVersion('packages/probe-tview/package.json'),
+    );
+    expect(framework('ratatui').probe.packageVersion).toBe(
+      projectVersion('clients/rust-probe/Cargo.toml'),
+    );
     const ratatuiAnnotations = framework('ratatui').annotations;
     expect(ratatuiAnnotations).not.toBeNull();
     expect(ratatuiAnnotations?.package).toBe('termwright-ratatui');
-    expect(ratatuiAnnotations?.packageVersion).toBe(projectVersion('clients/rust-ratatui/Cargo.toml'));
-    expect(framework('charm').probe.packageVersion).toBe(packageVersion('packages/probe-charm/package.json'));
+    expect(ratatuiAnnotations?.packageVersion).toBe(
+      projectVersion('clients/rust-ratatui/Cargo.toml'),
+    );
+    expect(framework('charm').probe.packageVersion).toBe(
+      packageVersion('packages/probe-charm/package.json'),
+    );
   });
 
   it('takes runtime floors from package and language manifests', () => {
@@ -684,14 +773,18 @@ describe('machine-readable framework compatibility registry', () => {
       expect(runtime(id, 'Node.js')).toBe(manifest.engines.node);
     }
 
-    const pythonFloor = /^requires-python\s*=\s*"([^"]+)"/mu.exec(text('clients/python/pyproject.toml'))?.[1];
+    const pythonFloor = /^requires-python\s*=\s*"([^"]+)"/mu.exec(
+      text('clients/python/pyproject.toml'),
+    )?.[1];
     expect(runtime('textual', 'CPython')).toBe(pythonFloor);
 
     const goFloor = /^go\s+([0-9.]+)/mu.exec(text('clients/go/go.mod'))?.[1];
     expect(runtime('tview', 'Go')).toBe(goFloor === undefined ? undefined : `>=${goFloor}`);
     expect(runtime('charm', 'Go')).toBe(goFloor === undefined ? undefined : `>=${goFloor}`);
 
-    const rustFloor = /^rust-version\s*=\s*"([^"]+)"/mu.exec(text('clients/rust-ratatui/Cargo.toml'))?.[1];
+    const rustFloor = /^rust-version\s*=\s*"([^"]+)"/mu.exec(
+      text('clients/rust-ratatui/Cargo.toml'),
+    )?.[1];
     expect(runtime('ratatui', 'Rust')).toBe(rustFloor === undefined ? undefined : `>=${rustFloor}`);
     expect(rustFloor).toBe('1.88');
 
@@ -723,7 +816,9 @@ describe('machine-readable framework compatibility registry', () => {
     });
     expect(ink.instrumentation).toEqual(expectedRuntimeInstrumentation(framework('ink')));
     const inkInstrument = text('packages/probe-ink/src/instrument.ts');
-    expect(framework('ink').probe.adapterCapabilities).toEqual(tsArray(inkInstrument, 'INK_CAPABILITIES'));
+    expect(framework('ink').probe.adapterCapabilities).toEqual(
+      tsArray(inkInstrument, 'INK_CAPABILITIES'),
+    );
 
     const opentui = openTuiProbeInfo();
     expect(framework('opentui').probe).toMatchObject({
@@ -733,9 +828,9 @@ describe('machine-readable framework compatibility registry', () => {
     });
     expect(opentui.instrumentation).toEqual(expectedRuntimeInstrumentation(framework('opentui')));
     const openTuiBootstrap = text('packages/probe-opentui/src/bootstrap.ts');
-    const certifiedCapabilities = /capabilities:\s*\[\.\.\.BASE_CAPABILITIES,\s*(?<extra>[\s\S]*?)\]/u.exec(
-      openTuiBootstrap,
-    )?.groups?.['extra'];
+    const certifiedCapabilities =
+      /capabilities:\s*\[\.\.\.BASE_CAPABILITIES,\s*(?<extra>[\s\S]*?)\]/u.exec(openTuiBootstrap)
+        ?.groups?.['extra'];
     if (certifiedCapabilities === undefined) {
       throw new Error('could not find OpenTUI certified adapter capabilities');
     }
@@ -760,13 +855,17 @@ describe('machine-readable framework compatibility registry', () => {
     }>('packages/probe-opentui/package.json');
     const certifiedOpenTui = json<{
       readonly profiles: readonly { readonly version: string }[];
-    }>('packages/probe-opentui/src/certified-runtime.json').profiles.map((profile) => profile.version);
+    }>('packages/probe-opentui/src/certified-runtime.json').profiles.map(
+      (profile) => profile.version,
+    );
     expect(framework('opentui').versions).toMatchObject({
       policy: 'exact',
       declared: certifiedOpenTui.join(' or '),
       verified: certifiedOpenTui,
     });
-    expect(certifiedOpenTui).toContain(openTuiManifest.devDependencies['@opentui/core']?.replace(/^\^/u, ''));
+    expect(certifiedOpenTui).toContain(
+      openTuiManifest.devDependencies['@opentui/core']?.replace(/^\^/u, ''),
+    );
 
     const pythonProject = text('clients/python/pyproject.toml');
     const declaredTextual = /textual = \["textual([^"\]]+)"\]/u.exec(pythonProject)?.[1];
@@ -781,7 +880,9 @@ describe('machine-readable framework compatibility registry', () => {
 
   it('matches Textual ProbeInfo and adapter capabilities', () => {
     const session = text('clients/python/src/termwright_probe/session.py');
-    expect(framework('textual').probe.capabilities).toEqual(pythonTuple(session, 'PROBE_CAPABILITIES'));
+    expect(framework('textual').probe.capabilities).toEqual(
+      pythonTuple(session, 'PROBE_CAPABILITIES'),
+    );
     const adapter = pythonTuple(session, 'TEXTUAL_CAPABILITIES');
     expect(framework('textual').probe.adapterCapabilities).toEqual(adapter);
     const expected = expectedRuntimeInstrumentation(framework('textual'));
@@ -802,9 +903,14 @@ describe('machine-readable framework compatibility registry', () => {
     expect(source).toContain('P:        protocol.ProvenanceFramework');
     expect(source).toContain('protocol.ProvenanceAnnotation');
     const expected = expectedRuntimeInstrumentation(entry);
-    expect(source).toMatch(new RegExp(`HighestTier:\\s+protocol\\.ProbeTier${expected.highestTier}`, 'u'));
-    expect(source).toMatch(new RegExp(`SemanticClass:\\s+protocol\\.ProbeSemanticClass${expected.semanticClass}`, 'u'));
-    for (const capability of expected.degradedCapabilities) expect(source).toContain(`"${capability}"`);
+    expect(source).toMatch(
+      new RegExp(`HighestTier:\\s+protocol\\.ProbeTier${expected.highestTier}`, 'u'),
+    );
+    expect(source).toMatch(
+      new RegExp(`SemanticClass:\\s+protocol\\.ProbeSemanticClass${expected.semanticClass}`, 'u'),
+    );
+    for (const capability of expected.degradedCapabilities)
+      expect(source).toContain(`"${capability}"`);
   });
 
   it('matches both Charm detection declarations and Go hello literals', () => {
@@ -819,18 +925,23 @@ describe('machine-readable framework compatibility registry', () => {
       expect(variant?.modules[1]?.name).toBe(COMPANION_MODULES[major][0]);
       const version = variant?.frameworkVersion;
       if (version === undefined) throw new Error(`registry has no Charm ${major} variant`);
-      const source = text(`packages/probe-charm/upstream-patches/bubbletea/${version}/add/termwright_probe.go`);
+      const source = text(
+        `packages/probe-charm/upstream-patches/bubbletea/${version}/add/termwright_probe.go`,
+      );
       expect(entry.probe.capabilities).toEqual(goCapabilities(source, 'ProbeCapability'));
       expect(entry.probe.adapterCapabilities).toEqual(goCapabilities(source, 'Capability'));
       expect(source).toContain('candidate.node.ID = "k:" + string(candidate.meta.Key)');
       expect(source).toContain('termwrightResolveRelations');
       expect(source).toContain('protocol.ProvenanceAnnotation');
       const expected = expectedRuntimeInstrumentation(entry);
-      expect(source).toMatch(new RegExp(`HighestTier:\\s+protocol\\.ProbeTier${expected.highestTier}`, 'u'));
+      expect(source).toMatch(
+        new RegExp(`HighestTier:\\s+protocol\\.ProbeTier${expected.highestTier}`, 'u'),
+      );
       expect(source).toMatch(
         new RegExp(`SemanticClass:\\s+protocol\\.ProbeSemanticClass${expected.semanticClass}`, 'u'),
       );
-      for (const capability of expected.degradedCapabilities) expect(source).toContain(`"${capability}"`);
+      for (const capability of expected.degradedCapabilities)
+        expect(source).toContain(`"${capability}"`);
     }
     expect(entry.annotations?.apis).toContain('annotate.SemanticKey');
   });
@@ -859,7 +970,9 @@ describe('machine-readable framework compatibility registry', () => {
     const facade = /const FRAMEWORK_CRATE: &str = "([^"]+)"/u.exec(launchSource)?.[1];
     expect(entry.frameworkPackage).toBe(facade);
     const launchTest = text('clients/rust-probe/tests/launch.rs');
-    const announcedVersion = /TERMWRIGHT_RATATUI_VERSION"\s*&&\s*value\s*==\s*"([^"]+)"/u.exec(launchTest)?.[1];
+    const announcedVersion = /TERMWRIGHT_RATATUI_VERSION"\s*&&\s*value\s*==\s*"([^"]+)"/u.exec(
+      launchTest,
+    )?.[1];
     expect(announcedVersion).toBeDefined();
     expect(entry.versions).toMatchObject({
       policy: 'exact',
@@ -868,7 +981,9 @@ describe('machine-readable framework compatibility registry', () => {
     });
 
     const sdkManifest = text('clients/rust-ratatui/Cargo.toml');
-    const sdkFrameworkVersion = /ratatui\s*=\s*\{\s*version\s*=\s*"=([^"]+)"/u.exec(sdkManifest)?.[1];
+    const sdkFrameworkVersion = /ratatui\s*=\s*\{\s*version\s*=\s*"=([^"]+)"/u.exec(
+      sdkManifest,
+    )?.[1];
     expect(sdkFrameworkVersion).toBe(announcedVersion);
     expect(entry.annotations).toMatchObject({
       package: 'termwright-ratatui',
@@ -877,8 +992,11 @@ describe('machine-readable framework compatibility registry', () => {
     });
 
     const probeSource = text('clients/rust-probe/src/lib.rs');
-    const capabilities = /capabilities:\s*vec!\[(?<body>[\s\S]*?)\]/u.exec(probeSource)?.groups?.['body'];
-    if (capabilities === undefined) throw new Error('could not find Ratatui ProbeInfo capabilities');
+    const capabilities = /capabilities:\s*vec!\[(?<body>[\s\S]*?)\]/u.exec(probeSource)?.groups?.[
+      'body'
+    ];
+    if (capabilities === undefined)
+      throw new Error('could not find Ratatui ProbeInfo capabilities');
     expect(entry.probe.capabilities).toEqual(quotedValues(capabilities));
     expect(probeSource).toContain('identity_kind: ProbeIdentityKind::FrameLocal');
     expect(entry.probe.identityKind).toBe('frame-local');
@@ -887,7 +1005,8 @@ describe('machine-readable framework compatibility registry', () => {
     expect(probeSource).toContain(`semantic_class: ProbeSemanticClass::${expected.semanticClass}`);
 
     const session = text('clients/rust-probe/src/session.rs');
-    const adapterBody = /options\.capabilities\s*=\s*vec!\[(?<body>[\s\S]*?)\];/u.exec(session)?.groups?.['body'];
+    const adapterBody = /options\.capabilities\s*=\s*vec!\[(?<body>[\s\S]*?)\];/u.exec(session)
+      ?.groups?.['body'];
     if (adapterBody === undefined) throw new Error('could not find Ratatui adapter capabilities');
     const rustNames: Readonly<Record<string, string>> = {
       Tree: 'tree',

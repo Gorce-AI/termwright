@@ -77,13 +77,17 @@ describe('createTraceWriter', () => {
     const dir = join(root, 'startup-replay.twtrace');
     const session = new FakeSession('startup-session');
     session.output('startup byte');
-    session.semantic(snapshot(1, [node({ id: 'boot', role: 'text', name: 'Booted' })], 'startup-session'));
+    session.semantic(
+      snapshot(1, [node({ id: 'boot', role: 'text', name: 'Booted' })], 'startup-session'),
+    );
     session.exit(0);
 
     const writer = createTraceWriter(session, { dir, now: session.now });
     await writer.finalize();
 
-    expect((await readCast(dir)).events.map((event) => event.data).join('')).toContain('startup byte');
+    expect((await readCast(dir)).events.map((event) => event.data).join('')).toContain(
+      'startup byte',
+    );
     const trace = await openTrace(dir);
     try {
       const semantics = [];
@@ -102,10 +106,30 @@ describe('createTraceWriter', () => {
     const session = new FakeSession('secret-session');
     const writer = createTraceWriter(session, { dir, now: session.now });
     session.input(secret, 'key');
-    session.semantic(snapshot(1, [node({
-      id: 'password', role: 'textbox', name: 'Password',
-      value: { status: 'known', value: secret, sensitivity: 'sensitive', evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app' } },
-    })], 'secret-session'));
+    session.semantic(
+      snapshot(
+        1,
+        [
+          node({
+            id: 'password',
+            role: 'textbox',
+            name: 'Password',
+            value: {
+              status: 'known',
+              value: secret,
+              sensitivity: 'sensitive',
+              evidence: {
+                source: 'application',
+                method: 'native',
+                strength: 'authoritative',
+                providerId: 'app',
+              },
+            },
+          }),
+        ],
+        'secret-session',
+      ),
+    );
     await writer.finalize();
     const semanticArtifact = await readFile(join(dir, TRACE_FILES.semantics), 'utf8');
     const eventArtifact = await readFile(join(dir, TRACE_FILES.events), 'utf8');
@@ -164,7 +188,12 @@ describe('createTraceWriter', () => {
     session.tick(50);
     session.input('ab', 'key');
     session.semantic(snapshot(7, [node({ id: 'n1', role: 'button', name: 'Submit' })], 'sess-1'));
-    writer.recordAction({ api: 'locator.click', selector: 'button', ref: 'semantic:n1@7', ok: true });
+    writer.recordAction({
+      api: 'locator.click',
+      selector: 'button',
+      ref: 'semantic:n1@7',
+      ok: true,
+    });
     session.tick(50);
     session.output('world');
     step.end('passed');
@@ -243,20 +272,29 @@ describe('createTraceWriter', () => {
     const dir = join(root, 'gherkin-step.twtrace');
     const session = new FakeSession();
     const writer = createTraceWriter(session, { dir, now: session.now });
-    writer.addStep('Given a terminal is running', {
-      stepId: 'tw-step-1',
-      gherkin: {
-        keyword: 'Given', text: 'a terminal is running',
-        source: { file: '/repo/demo.feature', line: 4, column: 5 },
-      },
-    }).end();
+    writer
+      .addStep('Given a terminal is running', {
+        stepId: 'tw-step-1',
+        gherkin: {
+          keyword: 'Given',
+          text: 'a terminal is running',
+          source: { file: '/repo/demo.feature', line: 4, column: 5 },
+        },
+      })
+      .end();
     await writer.finalize();
     const trace = await openTrace(dir);
     try {
-      expect(await trace.steps()).toMatchObject([{
-        stepId: 'tw-step-1',
-        gherkin: { keyword: 'Given', text: 'a terminal is running', source: { line: 4, column: 5 } },
-      }]);
+      expect(await trace.steps()).toMatchObject([
+        {
+          stepId: 'tw-step-1',
+          gherkin: {
+            keyword: 'Given',
+            text: 'a terminal is running',
+            source: { line: 4, column: 5 },
+          },
+        },
+      ]);
     } finally {
       await trace.close();
     }
@@ -372,13 +410,22 @@ describe('createTraceWriter', () => {
     const root = await workspace();
     const dir = join(root, 'input.twtrace');
     const session = new FakeSession();
-    const writer = createTraceWriter(session, { dir, now: session.now, artifactValuePolicy: 'raw' });
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      artifactValuePolicy: 'raw',
+    });
 
     session.input('\u0003', 'raw');
     await writer.finalize();
 
     const events = await readEvents(dir);
-    expect(events[0]).toMatchObject({ kind: 'input', inputKind: 'raw', dataB64: 'Aw==', recording: 'raw' });
+    expect(events[0]).toMatchObject({
+      kind: 'input',
+      inputKind: 'raw',
+      dataB64: 'Aw==',
+      recording: 'raw',
+    });
     const { events: castEvents } = await readCast(dir);
     expect(castEvents.some((event) => event.code === 'i')).toBe(false);
   });

@@ -11,9 +11,14 @@ afterEach(() => {
 function sink(): { lines: string[]; log: DebugLog } {
   const lines: string[] = [];
   let clock = 0;
-  const log = new DebugLog('abcdef0123456789', () => (clock += 1000), 'api', (line) => {
-    lines.push(line.trimEnd());
-  });
+  const log = new DebugLog(
+    'abcdef0123456789',
+    () => (clock += 1000),
+    'api',
+    (line) => {
+      lines.push(line.trimEnd());
+    },
+  );
   return { lines, log };
 }
 
@@ -53,7 +58,12 @@ describe('DebugLog', () => {
   it('renders diagnostics with their revision and wire code', () => {
     const { lines, log } = sink();
     log.diagnostic({ code: 'revision-superseded', detail: 'dropped', revision: 4, timeMs: 1 });
-    log.diagnostic({ code: 'protocol-violation', detail: 'closed', wireCode: 'limit-exceeded', timeMs: 2 });
+    log.diagnostic({
+      code: 'protocol-violation',
+      detail: 'closed',
+      wireCode: 'limit-exceeded',
+      timeMs: 2,
+    });
     expect(lines[0]).toContain('revision-superseded r4: dropped');
     expect(lines[1]).toContain('protocol-violation (limit-exceeded): closed');
   });
@@ -115,7 +125,11 @@ describe('instrument', () => {
       description: '#save',
       async click(): Promise<void> {},
     };
-    const wrapped = instrument({ getByTestId: (id: string) => ({ ...locator, description: `#${id}` }) }, log, 'harness');
+    const wrapped = instrument(
+      { getByTestId: (id: string) => ({ ...locator, description: `#${id}` }) },
+      log,
+      'harness',
+    );
 
     const found = wrapped.getByTestId('save');
     await found.click();

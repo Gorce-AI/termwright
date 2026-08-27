@@ -1,7 +1,7 @@
 ---
-"@termwright/ink": patch
-"@termwright/driver": patch
-"termwright": patch
+'@termwright/ink': patch
+'@termwright/driver': patch
+'termwright': patch
 ---
 
 Roll back partially acquired semantic and Ink control endpoints when

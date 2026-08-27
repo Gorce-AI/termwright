@@ -39,9 +39,7 @@ async function recordCrash(dir: string, options: { idleTimeLimit?: number } = {}
     now: session.now,
   });
 
-  session.semantic(
-    snapshot(3, [node({ id: 'n1', role: 'button', name: 'Retry' })], 'sess-crash'),
-  );
+  session.semantic(snapshot(3, [node({ id: 'n1', role: 'button', name: 'Retry' })], 'sess-crash'));
   session.output('starting');
   const step = writer.addStep('boot the server');
   session.tick(200);
@@ -76,11 +74,7 @@ describe('crash in the archive', () => {
       const crash = trace.meta.crash;
       expect(crash).toBeDefined();
       expect(crash?.exit).toEqual({ code: null, signal: 'SIGSEGV' });
-      expect(crash?.screenTail).toEqual([
-        'starting',
-        'panic: nil map',
-        'goroutine 1 [running]:',
-      ]);
+      expect(crash?.screenTail).toEqual(['starting', 'panic: nil map', 'goroutine 1 [running]:']);
       expect(crash?.lastSemanticRevision).toBe(3);
       expect(crash?.recentInputs).toHaveLength(2);
       expect(crash?.diagnosticsTail.map((entry) => entry.code)).toEqual([
@@ -183,9 +177,7 @@ describe('crash in the HTML report', () => {
     const { html } = await generateHtmlReport({
       outFile: join(root, 'report.html'),
       embedPlayer: false,
-      results: [
-        { id: 't1', title: 'boots', status: 'failed', tracePath: dir },
-      ],
+      results: [{ id: 't1', title: 'boots', status: 'failed', tracePath: dir }],
     });
 
     expect(html).toContain('<h3>Crash</h3>');

@@ -43,10 +43,16 @@ export interface ToolDefinition {
    * Args are typed `never` in the erased form so that any concrete handler is
    * assignable; the server passes the values zod already validated.
    */
-  readonly handler: (context: ToolContext, args: never) => Promise<ToolOutcome<Record<string, unknown>>>;
+  readonly handler: (
+    context: ToolContext,
+    args: never,
+  ) => Promise<ToolOutcome<Record<string, unknown>>>;
 }
 
-export function defineTool<I extends Record<string, z.ZodType>, O extends Record<string, z.ZodType>>(definition: {
+export function defineTool<
+  I extends Record<string, z.ZodType>,
+  O extends Record<string, z.ZodType>,
+>(definition: {
   readonly name: string;
   readonly title: string;
   readonly description: string;
@@ -68,4 +74,3 @@ export function defineTool<I extends Record<string, z.ZodType>, O extends Record
     handler: definition.handler as ToolDefinition['handler'],
   };
 }
-

@@ -24,7 +24,10 @@ import {
   type ResourceAttachment,
   type ResourceVector,
 } from '@termwright/resource-broker';
-import type { RemoteResourceLease, ResourceBrokerClient } from '@termwright/resource-broker/transport';
+import type {
+  RemoteResourceLease,
+  ResourceBrokerClient,
+} from '@termwright/resource-broker/transport';
 import { TestBudget, type AttemptBudgetReserves, type AttemptPhase } from './attempt-budget.js';
 
 export type { AttemptId, ExecutionId, RunnerTaskId } from '@termwright/protocol';
@@ -101,11 +104,13 @@ export interface AttemptEventRecorder {
 }
 
 const STORAGE_KEY = Symbol.for('termwright.test.attempt-context.v3');
-const globals = globalThis as typeof globalThis & { [STORAGE_KEY]?: AsyncLocalStorage<AttemptRuntime | undefined> };
+const globals = globalThis as typeof globalThis & {
+  [STORAGE_KEY]?: AsyncLocalStorage<AttemptRuntime | undefined>;
+};
 // The custom runner is loaded by Vitest's worker bootstrap while test modules
 // are transformed by Vite. They can therefore evaluate this module through two
 // module graphs in the same realm; Symbol.for keeps one authoritative carrier.
-const storage = globals[STORAGE_KEY] ??= new AsyncLocalStorage<AttemptRuntime | undefined>();
+const storage = (globals[STORAGE_KEY] ??= new AsyncLocalStorage<AttemptRuntime | undefined>());
 
 /** Creates opaque identities; neither titles nor file paths participate. */
 export function createAttemptContext(
@@ -122,8 +127,10 @@ export function createAttemptContext(
     readonly resourceReservation?: ResourceVector;
   },
 ): AttemptContext {
-  if (!Number.isInteger(repeat) || repeat < 0) throw new TypeError('repeat must be a non-negative integer');
-  if (!Number.isInteger(retry) || retry < 0) throw new TypeError('retry must be a non-negative integer');
+  if (!Number.isInteger(repeat) || repeat < 0)
+    throw new TypeError('repeat must be a non-negative integer');
+  if (!Number.isInteger(retry) || retry < 0)
+    throw new TypeError('retry must be a non-negative integer');
   const executionId = options.executionId ?? createRunId('execution');
   const { budget, broker, resourceProfile } = options;
   const attemptId = options.attemptId ?? createRunId('attempt');
@@ -187,11 +194,12 @@ function createAttemptResources(
       for (const resource of RESOURCE_CLASSES) {
         if (allocated[resource] + normalized[resource] > reservation[resource]) {
           const required = allocated[resource] + normalized[resource];
-          const guidance = resource === 'traceWriter'
-            ? ` Increase the declaration to test.resources({ traceWriters: ${required} }) if those writers must be live concurrently.`
-            : resource === 'nativeHostPressure'
-              ? ' Declare the intended exclusive pressure with test.resources({ hostPressure: \'exclusive\' }), or use nativeHost: \'exclusive\' for a terminal-backed native transport test.'
-              : ` Increase the declaration to test.resources({ terminals: ${required} }) if those terminals must be live concurrently.`;
+          const guidance =
+            resource === 'traceWriter'
+              ? ` Increase the declaration to test.resources({ traceWriters: ${required} }) if those writers must be live concurrently.`
+              : resource === 'nativeHostPressure'
+                ? " Declare the intended exclusive pressure with test.resources({ hostPressure: 'exclusive' }), or use nativeHost: 'exclusive' for a terminal-backed native transport test."
+                : ` Increase the declaration to test.resources({ terminals: ${required} }) if those terminals must be live concurrently.`;
           throw new ResourceBrokerError(
             'resource-unavailable',
             `attempt ${attemptId} requested ${resource} beyond its atomic test.resources() reservation ` +
@@ -226,17 +234,22 @@ function createAttemptResources(
     },
     releaseReservation(): Promise<boolean> {
       if (reservedLease === undefined) return Promise.resolve(true);
-      if (RESOURCE_CLASSES.some((resource) => allocated[resource] !== 0)) return Promise.resolve(false);
-      return reservedLease.then((admitted) => {
-        reservationRelease ??= admitted.release();
-        return reservationRelease;
-      }).then(() => true);
+      if (RESOURCE_CLASSES.some((resource) => allocated[resource] !== 0))
+        return Promise.resolve(false);
+      return reservedLease
+        .then((admitted) => {
+          reservationRelease ??= admitted.release();
+          return reservationRelease;
+        })
+        .then(() => true);
     },
   });
 }
 
 function normalizeVector(value: ResourceVector): Record<ResourceClass, number> {
-  const normalized = Object.fromEntries(RESOURCE_CLASSES.map((resource) => [resource, 0])) as Record<ResourceClass, number>;
+  const normalized = Object.fromEntries(
+    RESOURCE_CLASSES.map((resource) => [resource, 0]),
+  ) as Record<ResourceClass, number>;
   for (const resource of RESOURCE_CLASSES) {
     const amount = value[resource] ?? 0;
     if (!Number.isSafeInteger(amount) || amount < 0) {
@@ -256,7 +269,10 @@ export function createAttemptBudget(
   return new TestBudget(timeoutMs, reserves, now, deferred);
 }
 
-export function attemptOperationTimeout(requestedMs: number, phase: 'operation' | 'assertion' = 'operation'): number {
+export function attemptOperationTimeout(
+  requestedMs: number,
+  phase: 'operation' | 'assertion' = 'operation',
+): number {
   return currentAttemptContext().budget.operationTimeout(requestedMs, phase);
 }
 
@@ -305,7 +321,8 @@ export function currentAttemptRuntime(): AttemptRuntime {
 /** Installs the runner-owned journal projection for the active try. */
 export function installAttemptEventRecorder(recorder: AttemptEventRecorder): void {
   const runtime = currentAttemptRuntime();
-  if (runtime.events !== undefined) throw new Error('the current attempt already has an event recorder');
+  if (runtime.events !== undefined)
+    throw new Error('the current attempt already has an event recorder');
   runtime.events = recorder;
 }
 

@@ -76,11 +76,19 @@ export async function withinDeadline<T>(
       } catch (error) {
         cancellationError = error;
       }
-      finish(() => reject(cancellationError === undefined
-        ? deadlineError
-        : new AggregateError([deadlineError, cancellationError], 'deadline expiry and operation cancellation failed', {
-            cause: deadlineError,
-          })));
+      finish(() =>
+        reject(
+          cancellationError === undefined
+            ? deadlineError
+            : new AggregateError(
+                [deadlineError, cancellationError],
+                'deadline expiry and operation cancellation failed',
+                {
+                  cause: deadlineError,
+                },
+              ),
+        ),
+      );
     };
     const timer = remaining > 0 ? setTimeout(expire, remaining) : undefined;
     timer?.unref?.();

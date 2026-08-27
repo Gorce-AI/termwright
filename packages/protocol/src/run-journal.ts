@@ -92,32 +92,59 @@ export class RunEventJournal {
     this.#gapIdentity = Object.freeze({ invocationId: options.invocationId, runId: options.runId });
     this.#limits = options.limits ?? DEFAULT_RUN_EVENT_JOURNAL_LIMITS;
     for (const [name, value] of Object.entries(this.#limits)) {
-      if (!Number.isSafeInteger(value) || value < 1) throw new TypeError(`${name} must be a positive safe integer`);
+      if (!Number.isSafeInteger(value) || value < 1)
+        throw new TypeError(`${name} must be a positive safe integer`);
     }
   }
 
-  append(value: unknown, options: { readonly stateKey?: string } = {}): RunEventJournalAppendResult {
+  append(
+    value: unknown,
+    options: { readonly stateKey?: string } = {},
+  ): RunEventJournalAppendResult {
     const parsed = validateRunEvent(value);
     if (!parsed.ok) return parsed;
     const event = parsed.value;
-    if (event.identity.invocationId !== this.#invocationId || event.identity.runId !== this.#runId) {
+    if (
+      event.identity.invocationId !== this.#invocationId ||
+      event.identity.runId !== this.#runId
+    ) {
       return failure('stale-run', 'event belongs to another invocation or run');
     }
     if (event.eventClass === 'state' && !validStateKey(options.stateKey)) {
-      return failure('state-key-required', 'state events require a bounded explicit coalescing key');
+      return failure(
+        'state-key-required',
+        'state events require a bounded explicit coalescing key',
+      );
     }
-    if (event.eventClass === 'authoritative' && this.#count('authoritative') >= this.#limits.maxAuthoritativeEvents) {
-      return failure('journal-full', 'authoritative queue is full; flush before accepting more events');
+    if (
+      event.eventClass === 'authoritative' &&
+      this.#count('authoritative') >= this.#limits.maxAuthoritativeEvents
+    ) {
+      return failure(
+        'journal-full',
+        'authoritative queue is full; flush before accepting more events',
+      );
     }
-    if (event.eventClass === 'state' && !this.#currentState.has(options.stateKey!) && this.#currentState.size >= this.#limits.maxStateKeys) {
-      return failure('journal-full', 'state key queue is full; create a barrier and flush before accepting another key');
+    if (
+      event.eventClass === 'state' &&
+      !this.#currentState.has(options.stateKey!) &&
+      this.#currentState.size >= this.#limits.maxStateKeys
+    ) {
+      return failure(
+        'journal-full',
+        'state key queue is full; create a barrier and flush before accepting another key',
+      );
     }
     const ordered = this.#validator.accept(event);
     if (!ordered.ok) return ordered;
 
     const ordinal = this.#nextOrdinal;
     this.#nextOrdinal += 1;
-    const entry = Object.freeze({ ordinal, event, ...(options.stateKey === undefined ? {} : { stateKey: options.stateKey }) });
+    const entry = Object.freeze({
+      ordinal,
+      event,
+      ...(options.stateKey === undefined ? {} : { stateKey: options.stateKey }),
+    });
     if (event.eventClass === 'state') {
       const previous = this.#currentState.get(options.stateKey!);
       if (previous !== undefined) this.#removeEntry(previous);
@@ -127,8 +154,9 @@ export class RunEventJournal {
     }
     if (event.eventClass === 'diagnostic') {
       while (this.#count('diagnostic') >= this.#limits.maxDiagnosticEvents) {
-        const dropped = this.#entries.find((candidate) =>
-          candidate.event.eventClass === 'diagnostic' && candidate.ordinal > this.#sealedThrough,
+        const dropped = this.#entries.find(
+          (candidate) =>
+            candidate.event.eventClass === 'diagnostic' && candidate.ordinal > this.#sealedThrough,
         );
         if (dropped === undefined) {
           // A barrier froze every retained diagnostic. Drop the new event and
@@ -167,16 +195,25 @@ export class RunEventJournal {
     if (this.#flushActive) {
       throw new RangeError('another journal flush is already in progress');
     }
-    if (!Number.isSafeInteger(barrier.token) || this.#barriers.get(barrier.token) !== barrier.highWaterMark ||
-        !Number.isSafeInteger(barrier.highWaterMark) || barrier.highWaterMark < this.#flushedThrough || barrier.highWaterMark >= this.#nextOrdinal) {
+    if (
+      !Number.isSafeInteger(barrier.token) ||
+      this.#barriers.get(barrier.token) !== barrier.highWaterMark ||
+      !Number.isSafeInteger(barrier.highWaterMark) ||
+      barrier.highWaterMark < this.#flushedThrough ||
+      barrier.highWaterMark >= this.#nextOrdinal
+    ) {
       throw new RangeError('flush barrier is stale, forged or beyond the journal high-water mark');
     }
     const ordinary = this.#entries.filter((entry) => entry.ordinal <= barrier.highWaterMark);
     const gaps = this.#gaps.filter((gap) => gap.ordinal <= barrier.highWaterMark);
-    const batch = Object.freeze([
-      ...ordinary.map((entry) => ({ ordinal: entry.ordinal, event: entry.event })),
-      ...gaps.map((gap) => ({ ordinal: gap.ordinal, event: gap.event! })),
-    ].sort((left, right) => left.ordinal - right.ordinal).map(({ event }) => event));
+    const batch = Object.freeze(
+      [
+        ...ordinary.map((entry) => ({ ordinal: entry.ordinal, event: entry.event })),
+        ...gaps.map((gap) => ({ ordinal: gap.ordinal, event: gap.event! })),
+      ]
+        .sort((left, right) => left.ordinal - right.ordinal)
+        .map(({ event }) => event),
+    );
     this.#flushActive = true;
     try {
       await sink(batch);
@@ -207,7 +244,10 @@ export class RunEventJournal {
   }
 
   #count(eventClass: RunEvent['eventClass']): number {
-    return this.#entries.reduce((count, entry) => count + (entry.event.eventClass === eventClass ? 1 : 0), 0);
+    return this.#entries.reduce(
+      (count, entry) => count + (entry.event.eventClass === eventClass ? 1 : 0),
+      0,
+    );
   }
 
   #removeEntry(entry: JournalEntry): void {
@@ -252,6 +292,9 @@ function validStateKey(value: string | undefined): value is string {
   return value !== undefined && /^[a-zA-Z0-9][a-zA-Z0-9./:_-]{0,255}$/u.test(value);
 }
 
-function failure(code: RunEventJournalViolationCode, detail: string): Extract<RunEventJournalAppendResult, { readonly ok: false }> {
+function failure(
+  code: RunEventJournalViolationCode,
+  detail: string,
+): Extract<RunEventJournalAppendResult, { readonly ok: false }> {
   return Object.freeze({ ok: false, code, detail });
 }

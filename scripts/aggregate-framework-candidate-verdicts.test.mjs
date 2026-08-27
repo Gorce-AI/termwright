@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { aggregateCandidate, requiredPlatforms, writeTrustedPatchUpdates, writeTrustedRuntimeUpdate } from './aggregate-framework-candidate-verdicts.mjs';
+import {
+  aggregateCandidate,
+  requiredPlatforms,
+  writeTrustedPatchUpdates,
+  writeTrustedRuntimeUpdate,
+} from './aggregate-framework-candidate-verdicts.mjs';
 
 const revision = 'a'.repeat(40);
 const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -58,7 +63,8 @@ async function fixture(states, updateName = null, fixtureCandidate = candidate) 
         detail: `${platform} detail`,
       }),
     );
-    if (updateName !== null) await writeFile(join(directory, updateName, 'bundle.json'), '{"same":true}\n');
+    if (updateName !== null)
+      await writeFile(join(directory, updateName, 'bundle.json'), '{"same":true}\n');
   }
   return { inputs, output };
 }
@@ -75,15 +81,25 @@ describe('framework candidate platform aggregation', () => {
         path: `packages/probe-charm/upstream-patches/bubbletea/${version}/manifest.json`,
       },
     }));
-    const leases = new Map(candidates.map((entry) => [entry.version, Object.freeze({ sourceRoot: `/source/${entry.version}` })]));
+    const leases = new Map(
+      candidates.map((entry) => [
+        entry.version,
+        Object.freeze({ sourceRoot: `/source/${entry.version}` }),
+      ]),
+    );
     const materialize = vi.fn(async (entry) => leases.get(entry.version));
     const freshOutput = vi.fn(async (_output, name) => `/trusted/${name}`);
     const prepare = vi.fn(async () => []);
     const cleanup = vi.fn(async () => {});
 
-    await writeTrustedPatchUpdates({ candidates, output: '/trusted', sourceRevision: revision }, { materialize, freshOutput, prepare, cleanup });
+    await writeTrustedPatchUpdates(
+      { candidates, output: '/trusted', sourceRevision: revision },
+      { materialize, freshOutput, prepare, cleanup },
+    );
 
-    expect(materialize.mock.calls.map(([entry]) => entry.id)).toEqual(candidates.map((entry) => entry.id));
+    expect(materialize.mock.calls.map(([entry]) => entry.id)).toEqual(
+      candidates.map((entry) => entry.id),
+    );
     expect(prepare).toHaveBeenCalledTimes(1);
     expect(prepare).toHaveBeenCalledWith(
       candidates.map((entry, index) => ({
@@ -94,12 +110,21 @@ describe('framework candidate platform aggregation', () => {
         sourceRevision: revision,
       })),
     );
-    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(candidates.map((entry) => leases.get(entry.version)));
+    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(
+      candidates.map((entry) => leases.get(entry.version)),
+    );
 
     cleanup.mockClear();
     prepare.mockRejectedValueOnce(new Error('batch failed'));
-    await expect(writeTrustedPatchUpdates({ candidates, output: '/trusted', sourceRevision: revision }, { materialize, freshOutput, prepare, cleanup })).rejects.toThrow(/batch failed/u);
-    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(candidates.map((entry) => leases.get(entry.version)));
+    await expect(
+      writeTrustedPatchUpdates(
+        { candidates, output: '/trusted', sourceRevision: revision },
+        { materialize, freshOutput, prepare, cleanup },
+      ),
+    ).rejects.toThrow(/batch failed/u);
+    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(
+      candidates.map((entry) => leases.get(entry.version)),
+    );
 
     cleanup.mockClear();
     prepare.mockRejectedValueOnce(new Error('primary batch failure'));
@@ -108,13 +133,21 @@ describe('framework candidate platform aggregation', () => {
     });
     let failure;
     try {
-      await writeTrustedPatchUpdates({ candidates, output: '/trusted', sourceRevision: revision }, { materialize, freshOutput, prepare, cleanup });
+      await writeTrustedPatchUpdates(
+        { candidates, output: '/trusted', sourceRevision: revision },
+        { materialize, freshOutput, prepare, cleanup },
+      );
     } catch (error) {
       failure = error;
     }
-    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(candidates.map((entry) => leases.get(entry.version)));
+    expect(cleanup.mock.calls.map(([lease]) => lease)).toEqual(
+      candidates.map((entry) => leases.get(entry.version)),
+    );
     expect(failure).toBeInstanceOf(AggregateError);
-    expect(failure.errors.map((error) => error.message)).toEqual(['primary batch failure', ...candidates.map((entry) => `cleanup failed: /source/${entry.version}`)]);
+    expect(failure.errors.map((error) => error.message)).toEqual([
+      'primary batch failure',
+      ...candidates.map((entry) => `cleanup failed: /source/${entry.version}`),
+    ]);
 
     const acquisitionFailure = new Error('second materialization failed');
     materialize.mockImplementationOnce(async () => leases.get(candidates[0].version));
@@ -125,13 +158,19 @@ describe('framework candidate platform aggregation', () => {
     cleanup.mockRejectedValueOnce(new Error('first lease cleanup failed'));
     failure = undefined;
     try {
-      await writeTrustedPatchUpdates({ candidates, output: '/trusted', sourceRevision: revision }, { materialize, freshOutput, prepare, cleanup });
+      await writeTrustedPatchUpdates(
+        { candidates, output: '/trusted', sourceRevision: revision },
+        { materialize, freshOutput, prepare, cleanup },
+      );
     } catch (error) {
       failure = error;
     }
     expect(prepare).toHaveBeenCalledTimes(3);
     expect(cleanup).toHaveBeenCalledExactlyOnceWith(leases.get(candidates[0].version));
-    expect(failure.errors.map((error) => error.message)).toEqual(['second materialization failed', 'first lease cleanup failed']);
+    expect(failure.errors.map((error) => error.message)).toEqual([
+      'second materialization failed',
+      'first lease cleanup failed',
+    ]);
   });
 
   it('requires the exact bounded platform set for each integration mechanism', () => {
@@ -150,7 +189,13 @@ describe('framework candidate platform aggregation', () => {
 
   it('requires both OpenTUI platforms to be green', async () => {
     const { inputs, output } = await fixture({ linux: 'green', macos: 'red' });
-    const verdict = await aggregateCandidate({ candidate, slot: 0, inputs, output, sourceRevision: revision });
+    const verdict = await aggregateCandidate({
+      candidate,
+      slot: 0,
+      inputs,
+      output,
+      sourceRevision: revision,
+    });
 
     expect(verdict.state).toBe('red');
     expect(verdict.detail).toContain('[linux] green');
@@ -159,7 +204,13 @@ describe('framework candidate platform aggregation', () => {
 
   it('publishes one green verdict only when platform artifacts agree', async () => {
     const { inputs, output } = await fixture({ linux: 'green', macos: 'green' });
-    const verdict = await aggregateCandidate({ candidate, slot: 0, inputs, output, sourceRevision: revision });
+    const verdict = await aggregateCandidate({
+      candidate,
+      slot: 0,
+      inputs,
+      output,
+      sourceRevision: revision,
+    });
     const written = JSON.parse(await readFile(join(output, 'verdict-0.json'), 'utf8'));
 
     expect(verdict.state).toBe('green');
@@ -168,10 +219,14 @@ describe('framework candidate platform aggregation', () => {
 
   it('fails closed when a required platform artifact is absent or disagrees', async () => {
     const missing = await fixture({ linux: 'green' });
-    await expect(aggregateCandidate({ candidate, slot: 0, ...missing, sourceRevision: revision })).rejects.toThrow();
+    await expect(
+      aggregateCandidate({ candidate, slot: 0, ...missing, sourceRevision: revision }),
+    ).rejects.toThrow();
 
     const unexpected = await fixture({ linux: 'green', macos: 'green' }, runtimeUpdate);
-    await expect(aggregateCandidate({ candidate, slot: 0, ...unexpected, sourceRevision: revision })).rejects.toThrow(/unexpected artifact shape/u);
+    await expect(
+      aggregateCandidate({ candidate, slot: 0, ...unexpected, sourceRevision: revision }),
+    ).rejects.toThrow(/unexpected artifact shape/u);
   });
 
   it('preserves the executable resolution required by capability reconciliation', async () => {
@@ -182,10 +237,21 @@ describe('framework candidate platform aggregation', () => {
       mode: 'capability',
       capabilityStrategy: 'compile-conformance',
     };
-    const { inputs, output } = await fixture({ linux: 'green', windows: 'green' }, null, patchCandidate);
-    const executableResolution = { frameworkVersion: '0.43.0', modules: [{ name: 'github.com/rivo/tview', version: 'v0.43.0' }] };
+    const { inputs, output } = await fixture(
+      { linux: 'green', windows: 'green' },
+      null,
+      patchCandidate,
+    );
+    const executableResolution = {
+      frameworkVersion: '0.43.0',
+      modules: [{ name: 'github.com/rivo/tview', version: 'v0.43.0' }],
+    };
     for (const platform of ['linux', 'windows']) {
-      const verdictPath = join(inputs, `framework-candidate-result-0-${platform}`, 'verdict-0.json');
+      const verdictPath = join(
+        inputs,
+        `framework-candidate-result-0-${platform}`,
+        'verdict-0.json',
+      );
       await writeFile(
         verdictPath,
         JSON.stringify({
@@ -211,18 +277,29 @@ describe('framework candidate platform aggregation', () => {
     });
 
     expect(verdict.executableResolution).toEqual(executableResolution);
-    expect(JSON.parse(await readFile(join(output, 'verdict-0.json'), 'utf8')).executableResolution).toEqual(executableResolution);
+    expect(
+      JSON.parse(await readFile(join(output, 'verdict-0.json'), 'utf8')).executableResolution,
+    ).toEqual(executableResolution);
   });
 
   it('requires Linux and Windows tcell verdicts and turns either red result red', async () => {
     const red = await fixture({ linux: 'green', windows: 'red' }, null, tcellCandidate);
-    await expect(aggregateCandidate({ candidate: tcellCandidate, slot: 0, ...red, sourceRevision: revision })).resolves.toMatchObject({
+    await expect(
+      aggregateCandidate({ candidate: tcellCandidate, slot: 0, ...red, sourceRevision: revision }),
+    ).resolves.toMatchObject({
       state: 'red',
       detail: expect.stringContaining('[windows] red'),
     });
 
     const missing = await fixture({ linux: 'green' }, null, tcellCandidate);
-    await expect(aggregateCandidate({ candidate: tcellCandidate, slot: 0, ...missing, sourceRevision: revision })).rejects.toThrow();
+    await expect(
+      aggregateCandidate({
+        candidate: tcellCandidate,
+        slot: 0,
+        ...missing,
+        sourceRevision: revision,
+      }),
+    ).rejects.toThrow();
   });
 
   it('publishes a green tcell aggregate only for the required Linux and Windows conjunction', async () => {
@@ -240,21 +317,49 @@ describe('framework candidate platform aggregation', () => {
       await writeFile(path, JSON.stringify({ ...verdict, executableResolution }));
     }
 
-    await expect(aggregateCandidate({ candidate: tcellCandidate, slot: 0, ...exact, sourceRevision: revision })).resolves.toMatchObject({ state: 'green', executableResolution });
+    await expect(
+      aggregateCandidate({
+        candidate: tcellCandidate,
+        slot: 0,
+        ...exact,
+        sourceRevision: revision,
+      }),
+    ).resolves.toMatchObject({ state: 'green', executableResolution });
   });
 
   it('rejects a forged platform label even when the artifact directory name is trusted', async () => {
     const forged = await fixture({ linux: 'green', windows: 'green' }, null, tcellCandidate);
-    const windowsVerdict = join(forged.inputs, 'framework-candidate-result-0-windows', 'verdict-0.json');
+    const windowsVerdict = join(
+      forged.inputs,
+      'framework-candidate-result-0-windows',
+      'verdict-0.json',
+    );
     const document = JSON.parse(await readFile(windowsVerdict, 'utf8'));
     await writeFile(windowsVerdict, JSON.stringify({ ...document, platform: 'linux' }));
-    await expect(aggregateCandidate({ candidate: tcellCandidate, slot: 0, ...forged, sourceRevision: revision })).rejects.toThrow(/invalid or stale windows verdict/u);
+    await expect(
+      aggregateCandidate({
+        candidate: tcellCandidate,
+        slot: 0,
+        ...forged,
+        sourceRevision: revision,
+      }),
+    ).rejects.toThrow(/invalid or stale windows verdict/u);
   });
 
   it('rejects extra forged content even when one required platform is red', async () => {
     const forged = await fixture({ linux: 'green', windows: 'red' }, null, tcellCandidate);
-    await writeFile(join(forged.inputs, 'framework-candidate-result-0-windows', 'forged.json'), '{}');
-    await expect(aggregateCandidate({ candidate: tcellCandidate, slot: 0, ...forged, sourceRevision: revision })).rejects.toThrow(/unexpected artifact shape/u);
+    await writeFile(
+      join(forged.inputs, 'framework-candidate-result-0-windows', 'forged.json'),
+      '{}',
+    );
+    await expect(
+      aggregateCandidate({
+        candidate: tcellCandidate,
+        slot: 0,
+        ...forged,
+        sourceRevision: revision,
+      }),
+    ).rejects.toThrow(/unexpected artifact shape/u);
   });
 
   it('rejects a generated namespace from an untrusted green needs-patch process', async () => {
@@ -268,7 +373,11 @@ describe('framework candidate platform aggregation', () => {
     };
     const { inputs, output } = await fixture({ linux: 'green' }, updateName, patchCandidate);
     for (const platform of ['linux']) {
-      const verdictPath = join(inputs, `framework-candidate-result-0-${platform}`, 'verdict-0.json');
+      const verdictPath = join(
+        inputs,
+        `framework-candidate-result-0-${platform}`,
+        'verdict-0.json',
+      );
       const verdict = JSON.parse(await readFile(verdictPath, 'utf8'));
       await writeFile(
         verdictPath,
@@ -278,7 +387,15 @@ describe('framework candidate platform aggregation', () => {
         }),
       );
     }
-    await expect(aggregateCandidate({ candidate: patchCandidate, slot: 0, inputs, output, sourceRevision: revision })).rejects.toThrow(/unexpected artifact shape/u);
+    await expect(
+      aggregateCandidate({
+        candidate: patchCandidate,
+        slot: 0,
+        inputs,
+        output,
+        sourceRevision: revision,
+      }),
+    ).rejects.toThrow(/unexpected artifact shape/u);
   });
 
   it('rejects every extra artifact emitted by the untrusted Textual certifier process', async () => {
@@ -306,9 +423,13 @@ describe('framework candidate platform aggregation', () => {
         detail: 'linux detail',
       }),
     );
-    await expect(aggregateCandidate({ candidate: textual, slot: 0, inputs, output, sourceRevision: revision })).resolves.toMatchObject({ state: 'green' });
+    await expect(
+      aggregateCandidate({ candidate: textual, slot: 0, inputs, output, sourceRevision: revision }),
+    ).resolves.toMatchObject({ state: 'green' });
     await writeFile(join(directory, 'forged-uv.lock'), 'forged\n');
-    await expect(aggregateCandidate({ candidate: textual, slot: 0, inputs, output, sourceRevision: revision })).rejects.toThrow(/unexpected artifact shape/u);
+    await expect(
+      aggregateCandidate({ candidate: textual, slot: 0, inputs, output, sourceRevision: revision }),
+    ).rejects.toThrow(/unexpected artifact shape/u);
   });
 
   it('generates a runtime update only inside the trusted aggregate process', async () => {

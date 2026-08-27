@@ -9,24 +9,24 @@ one-off files and options in the test that uses them.
 ## Create an application fixture
 
 ```ts
-import {fileURLToPath} from 'node:url';
-import type {TerminalHarness} from 'termwright';
-import {expect, test as base} from 'termwright/test';
+import { fileURLToPath } from 'node:url';
+import type { TerminalHarness } from 'termwright';
+import { expect, test as base } from 'termwright/test';
 
 const editor = fileURLToPath(new URL('../editor.js', import.meta.url));
 
-const test = base.extend<{app: TerminalHarness}>({
-  app: async ({terminal}, use) => {
+const test = base.extend<{ app: TerminalHarness }>({
+  app: async ({ terminal }, use) => {
     const app = await terminal.launch({
       command: [process.execPath, editor],
-      files: {'config.json': '{}'},
+      files: { 'config.json': '{}' },
     });
     await app.waitForText('Ready');
     await use(app);
   },
 });
 
-test('saves on Ctrl+S', async ({app}) => {
+test('saves on Ctrl+S', async ({ app }) => {
   await app.press('Control+s');
   await expect(app).toHaveText('Saved');
 });
@@ -41,13 +41,13 @@ available while the custom fixture finishes its cleanup.
 Use `test.override()` to change launch defaults for a file or nested `describe`:
 
 ```ts
-import {describe} from 'vitest';
-import {test} from 'termwright/test';
+import { describe } from 'vitest';
+import { test } from 'termwright/test';
 
-test.override({termwrightOptions: {columns: 120, trace: 'on'}});
+test.override({ termwrightOptions: { columns: 120, trace: 'on' } });
 
 describe('wide layout', () => {
-  test.override({termwrightOptions: {columns: 200}});
+  test.override({ termwrightOptions: { columns: 200 } });
   // Tests here use 200 columns. Other tests in the file use 120.
 });
 ```
@@ -64,12 +64,12 @@ for the exact option surface.
 
 ## Choose where setup belongs
 
-| Setup | Recommended location |
-| --- | --- |
-| Files needed by one case | `terminal.launch({files})` in that case |
-| Shared project tree | `terminal.launch({template})` |
-| Reusable launch and login flow | `test.extend()` fixture |
-| Viewport or trace default for a suite | `test.override()` |
-| Project-wide default | `configureTermwright()` |
+| Setup                                 | Recommended location                    |
+| ------------------------------------- | --------------------------------------- |
+| Files needed by one case              | `terminal.launch({files})` in that case |
+| Shared project tree                   | `terminal.launch({template})`           |
+| Reusable launch and login flow        | `test.extend()` fixture                 |
+| Viewport or trace default for a suite | `test.override()`                       |
+| Project-wide default                  | `configureTermwright()`                 |
 
 See [Test files and isolation](../test-files/) for working-directory behavior.

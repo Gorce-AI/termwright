@@ -102,16 +102,16 @@ stderr rather than failing the run.
 
 It checks the five obligations an adapter has:
 
-| Obligation | What is asserted |
-|---|---|
-| Dormant rule | Without `TERMWRIGHT_ENDPOINT` it opens no channel and writes no marker; with `baseline`, byte-for-byte identical startup output |
-| Tree before input | Once the handshake completes and *before any input*, the tree is non-empty and has at least one node a locator could address. Opt out with `treeBeforeInput: {required: false, reason}` |
-| Handshake | `hello` first and once, correct protocol id, non-empty adapter identity, capabilities from the closed set |
-| Snapshot validity | Every publication is a complete v2 snapshot that passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions |
-| Revision ordering | For each revision: snapshot → `revision-commit` → a marker that verifies against the session token, markers strictly increasing |
-| Channel loss | Cutting the socket leaves the application rendering and alive, and the adapter does not reconnect |
-| Logs | An adapter that did not announce `logs` sends none. One that declares them in the registration must deliver a record whose `seq` is unique and increasing and whose message never appears on the terminal |
-| Conventions | The machine-checkable half of the protocol README's "Adapter semantics conventions": containers are not named from their content (rule 2), an annotated test id reaches the wire (rule 3), an empty textbox publishes `value: ''` and no value is derived outside `{textbox, progressbar}` or from a boolean (rule 5) |
+| Obligation        | What is asserted                                                                                                                                                                                                                                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dormant rule      | Without `TERMWRIGHT_ENDPOINT` it opens no channel and writes no marker; with `baseline`, byte-for-byte identical startup output                                                                                                                                                                                       |
+| Tree before input | Once the handshake completes and _before any input_, the tree is non-empty and has at least one node a locator could address. Opt out with `treeBeforeInput: {required: false, reason}`                                                                                                                               |
+| Handshake         | `hello` first and once, correct protocol id, non-empty adapter identity, capabilities from the closed set                                                                                                                                                                                                             |
+| Snapshot validity | Every publication is a complete v2 snapshot that passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions                                                                                                                                                                 |
+| Revision ordering | For each revision: snapshot → `revision-commit` → a marker that verifies against the session token, markers strictly increasing                                                                                                                                                                                       |
+| Channel loss      | Cutting the socket leaves the application rendering and alive, and the adapter does not reconnect                                                                                                                                                                                                                     |
+| Logs              | An adapter that did not announce `logs` sends none. One that declares them in the registration must deliver a record whose `seq` is unique and increasing and whose message never appears on the terminal                                                                                                             |
+| Conventions       | The machine-checkable half of the protocol README's "Adapter semantics conventions": containers are not named from their content (rule 2), an annotated test id reaches the wire (rule 3), an empty textbox publishes `value: ''` and no value is derived outside `{textbox, progressbar}` or from a boolean (rule 5) |
 
 `await` it at the top level: `vitest` is imported dynamically so the package can
 also be used from a plain script.
@@ -121,12 +121,12 @@ also be used from a plain script.
 `CONFORMANCE_FIXTURES` returns absolute paths to programs you can launch with
 `node <path>`:
 
-| Fixture | Purpose | Dependencies |
-|---|---|---|
-| `generic()` | Uninstrumented app: menu, colours, mouse/paste/focus modes, Unicode, alternate screen, scrollback (§20.1) | none |
-| `prompt()` | Shell-shaped app emitting OSC 133 marks; `--marks=off` suppresses them, `--work=<ms>` sets the command duration | none |
-| `adversarialPeer()` | Raw wire peer; takes a scenario name as `argv[2]` (§20.3) | none |
-| `inkProbe()` | Ordinary `ink.render` app launched through the zero-config Ink probe | `ink`, `react`, `@termwright/probe-ink` |
+| Fixture             | Purpose                                                                                                         | Dependencies                            |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `generic()`         | Uninstrumented app: menu, colours, mouse/paste/focus modes, Unicode, alternate screen, scrollback (§20.1)       | none                                    |
+| `prompt()`          | Shell-shaped app emitting OSC 133 marks; `--marks=off` suppresses them, `--work=<ms>` sets the command duration | none                                    |
+| `adversarialPeer()` | Raw wire peer; takes a scenario name as `argv[2]` (§20.3)                                                       | none                                    |
+| `inkProbe()`        | Ordinary `ink.render` app launched through the zero-config Ink probe                                            | `ink`, `react`, `@termwright/probe-ink` |
 
 The first three import nothing at all — the adversarial peer re-derives the
 framing and the marker MAC from the specification rather than importing

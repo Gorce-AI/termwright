@@ -26,7 +26,10 @@ async function fixture() {
   await writeFile(baseline, 'baseline', 'utf8');
   await chmod(instrumented, 0o755);
   await chmod(baseline, 0o755);
-  const digest = async (path) => createHash('sha256').update(await readFile(path)).digest('hex');
+  const digest = async (path) =>
+    createHash('sha256')
+      .update(await readFile(path))
+      .digest('hex');
   const contract = join(root, 'contract.json');
   const value = {
     schemaVersion: 1,

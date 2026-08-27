@@ -106,7 +106,9 @@ test('recorded session', async ({ terminal, step }) => {
   });
 
   it('honours a custom variable name', () => {
-    const source = generateTestSource([{ kind: 'launch', command: ['ls'], t: 0 }], { variable: 'cli' });
+    const source = generateTestSource([{ kind: 'launch', command: ['ls'], t: 0 }], {
+      variable: 'cli',
+    });
     expect(source).toContain('const cli = await terminal.launch(');
   });
 });

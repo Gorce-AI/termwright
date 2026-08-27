@@ -197,7 +197,10 @@ const CANDIDATES: readonly Candidate[] = [
   decset(1002, 'mouse tracking: drag — what the mouse fixtures enable'),
   decset(1006, 'SGR mouse encoding; without it coordinates are unusable past column 95'),
   decset(2004, 'bracketed paste: a mode the driver reports and paste() depends on'),
-  decset(1004, 'focus reporting — contested: reported both as swallowed and as enabled by the host'),
+  decset(
+    1004,
+    'focus reporting — contested: reported both as swallowed and as enabled by the host',
+  ),
   decset(1, 'application cursor keys, which decides what an arrow key must send'),
   {
     // Not a DECSET: the keypad modes are bare escapes, and a terminal that
@@ -216,7 +219,11 @@ const CANDIDATES: readonly Candidate[] = [
   },
   // Switched back immediately: on the alternate screen the sentinels and
   // PROBE-DONE would be written to a buffer this test never reads.
-  decset(1049, 'alternate screen — believed to work, since semantic fixtures render', `${ESC}[?1049l`),
+  decset(
+    1049,
+    'alternate screen — believed to work, since semantic fixtures render',
+    `${ESC}[?1049l`,
+  ),
 ];
 
 /**
@@ -258,7 +265,8 @@ function renderTable(verdicts: readonly Verdict[]): string {
   const mark = (value: boolean | null): string =>
     value === null ? 'n/a  ' : value ? 'yes  ' : 'NO   ';
   const rows = verdicts.map(
-    (v) => `  ${v.name.padEnd(18)} transport=${mark(v.transport)} parsed=${mark(v.parsed)} leaked=${mark(v.leaked)}`,
+    (v) =>
+      `  ${v.name.padEnd(18)} transport=${mark(v.transport)} parsed=${mark(v.parsed)} leaked=${mark(v.leaked)}`,
   );
   return [`[escape probe] platform=${process.platform}`, ...rows].join('\n');
 }
@@ -374,7 +382,10 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
         );
       });
 
-      await settle(() => gridText(terminal).includes('MOUSE ON'), () => queue);
+      await settle(
+        () => gridText(terminal).includes('MOUSE ON'),
+        () => queue,
+      );
       // mouse-app enables 1000 and 1006 and nothing else, so focusReporting
       // here answers a question the escape table cannot: whether the host
       // turns focus reporting on by itself. A driver that believes an
@@ -385,7 +396,10 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
 
       // Exactly the bytes a click sends, written past every capability gate.
       pty.write(Buffer.from('\x1b[<0;1;1M\x1b[<0;1;1m', 'binary'));
-      await settle(() => /MOUSE press|RAW:/.test(gridText(terminal)), () => queue);
+      await settle(
+        () => /MOUSE press|RAW:/.test(gridText(terminal)),
+        () => queue,
+      );
 
       const screen = gridText(terminal);
       sawInput = /MOUSE press b=0/.test(screen);
@@ -400,53 +414,68 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
   });
 });
 
-describe.skipIf(!ptyAvailable())('application key modes through a real pty', { timeout: 30_000 }, () => {
-  it('reports what a child in application mode receives for an arrow key', async () => {
-    // The escape table showed `?1h` and `ESC =` not reaching the emulator on
-    // Windows, which leaves the driver unable to tell which arrow encoding the
-    // program wants. Whether that is a real defect depends on the other
-    // direction: if the terminal rewrites what we write to match the mode it
-    // kept for itself, the program gets the right bytes anyway.
-    const { terminal } = createTerminal({ columns: 60, rows: 10, scrollback: 0 });
-    let pty: PtyProcess | undefined;
-    try {
-      pty = createNativePtyBackend().spawn({
-        command: [process.execPath, join(FIXTURES, 'appkeys-app.mjs')],
-        env: environment(),
-        columns: 60,
-        rows: 10,
-      });
-      let queue: Promise<void> = Promise.resolve();
-      pty.onData((chunk) => {
-        queue = queue.then(
-          () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
+describe.skipIf(!ptyAvailable())(
+  'application key modes through a real pty',
+  { timeout: 30_000 },
+  () => {
+    it('reports what a child in application mode receives for an arrow key', async () => {
+      // The escape table showed `?1h` and `ESC =` not reaching the emulator on
+      // Windows, which leaves the driver unable to tell which arrow encoding the
+      // program wants. Whether that is a real defect depends on the other
+      // direction: if the terminal rewrites what we write to match the mode it
+      // kept for itself, the program gets the right bytes anyway.
+      const { terminal } = createTerminal({ columns: 60, rows: 10, scrollback: 0 });
+      let pty: PtyProcess | undefined;
+      try {
+        pty = createNativePtyBackend().spawn({
+          command: [process.execPath, join(FIXTURES, 'appkeys-app.mjs')],
+          env: environment(),
+          columns: 60,
+          rows: 10,
+        });
+        let queue: Promise<void> = Promise.resolve();
+        pty.onData((chunk) => {
+          queue = queue.then(
+            () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
+          );
+        });
+
+        await settle(
+          () => gridText(terminal).includes('APPKEYS ON'),
+          () => queue,
         );
-      });
+        const modes = `applicationCursorKeys=${terminal.modes.applicationCursorKeysMode} applicationKeypad=${terminal.modes.applicationKeypadMode}`;
 
-      await settle(() => gridText(terminal).includes('APPKEYS ON'), () => queue);
-      const modes = `applicationCursorKeys=${terminal.modes.applicationCursorKeysMode} applicationKeypad=${terminal.modes.applicationKeypadMode}`;
+        // Normal-mode Up, which is what the driver sends when it believes the
+        // program is not in application mode.
+        pty.write(Buffer.from('\x1b[A', 'binary'));
+        await settle(
+          () => /GOT:/u.test(gridText(terminal)),
+          () => queue,
+        );
+        // Application-mode Up, for comparison.
+        pty.write(Buffer.from('\x1bOA', 'binary'));
+        await settle(
+          () => (gridText(terminal).match(/GOT:/gu) ?? []).length >= 2,
+          () => queue,
+        );
 
-      // Normal-mode Up, which is what the driver sends when it believes the
-      // program is not in application mode.
-      pty.write(Buffer.from('\x1b[A', 'binary'));
-      await settle(() => /GOT:/u.test(gridText(terminal)), () => queue);
-      // Application-mode Up, for comparison.
-      pty.write(Buffer.from('\x1bOA', 'binary'));
-      await settle(() => (gridText(terminal).match(/GOT:/gu) ?? []).length >= 2, () => queue);
-
-      const received = [...gridText(terminal).matchAll(/GOT:([0-9a-f ]+)/gu)].map((m) => m[1]?.trim());
-      console.log(
-        `[appkeys probe] platform=${process.platform} ${modes}\n` +
-          `  sent 1b 5b 41 (CSI A)  -> child got: ${received[0] ?? 'nothing'}\n` +
-          `  sent 1b 4f 41 (SS3 A)  -> child got: ${received[1] ?? 'nothing'}`,
-      );
-      expect(gridText(terminal)).toContain('APPKEYS ON');
-    } finally {
-      pty?.dispose();
-      terminal.dispose();
-    }
-  });
-});
+        const received = [...gridText(terminal).matchAll(/GOT:([0-9a-f ]+)/gu)].map((m) =>
+          m[1]?.trim(),
+        );
+        console.log(
+          `[appkeys probe] platform=${process.platform} ${modes}\n` +
+            `  sent 1b 5b 41 (CSI A)  -> child got: ${received[0] ?? 'nothing'}\n` +
+            `  sent 1b 4f 41 (SS3 A)  -> child got: ${received[1] ?? 'nothing'}`,
+        );
+        expect(gridText(terminal)).toContain('APPKEYS ON');
+      } finally {
+        pty?.dispose();
+        terminal.dispose();
+      }
+    });
+  },
+);
 
 describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_000 }, () => {
   nativePressureIt('reports the gap when the output pipe is slower than the commit', async () => {
@@ -483,7 +512,11 @@ describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_00
           () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
         );
       });
-      await settle(() => gaps.length >= renders, () => queue, 60_000);
+      await settle(
+        () => gaps.length >= renders,
+        () => queue,
+        60_000,
+      );
     } finally {
       pty?.dispose();
     }
@@ -500,109 +533,120 @@ describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_00
     terminal.dispose();
   });
 
-  nativePressureIt('reports how far behind a commit marker falls when renders come back to back', async () => {
-    // Why this exists: on Windows a flood leaves the revision chain stalled
-    // with markers expiring, and two explanations fit — the terminal delays
-    // the marker past the pairing window, or the driver simply cannot drink
-    // that fast. The added latency below separates them, and the byte ratio
-    // says whether the terminal is handing us more than the child wrote.
-    const renders = 200;
-    const { terminal } = createTerminal({ columns: 80, rows: 24, scrollback: 0 });
+  nativePressureIt(
+    'reports how far behind a commit marker falls when renders come back to back',
+    async () => {
+      // Why this exists: on Windows a flood leaves the revision chain stalled
+      // with markers expiring, and two explanations fit — the terminal delays
+      // the marker past the pairing window, or the driver simply cannot drink
+      // that fast. The added latency below separates them, and the byte ratio
+      // says whether the terminal is handing us more than the child wrote.
+      const renders = 200;
+      const { terminal } = createTerminal({ columns: 80, rows: 24, scrollback: 0 });
 
-    interface Sighting {
-      readonly seq: number;
-      /** Child clock, ms since its start. */
-      readonly childMs: number;
-      /** Driver clock, ms since this test started reading. */
-      readonly driverMs: number;
-    }
-    const sightings: Sighting[] = [];
-    const readingFrom = performance.now();
-    terminal.parser.registerOscHandler(7777, (data) => {
-      const seq = Number(/seq=(\d+)/u.exec(data)?.[1] ?? Number.NaN);
-      const childMs = Number(/t=([\d.]+)/u.exec(data)?.[1] ?? Number.NaN);
-      if (Number.isFinite(seq) && Number.isFinite(childMs)) {
-        sightings.push({ seq, childMs, driverMs: performance.now() - readingFrom });
+      interface Sighting {
+        readonly seq: number;
+        /** Child clock, ms since its start. */
+        readonly childMs: number;
+        /** Driver clock, ms since this test started reading. */
+        readonly driverMs: number;
       }
-      return true;
-    });
-
-    // When the bytes of each marker landed, before the emulator saw them. The
-    // gap between this and the sighting is ours, not the terminal's.
-    const rawAt = new Map<number, number>();
-    let tail = '';
-    const scanRaw = (chunk: Uint8Array): void => {
-      tail = (tail + Buffer.from(chunk).toString('binary')).slice(-4096);
-      for (const match of tail.matchAll(/seq=(\d+);t=[\d.]+/gu)) {
-        const seq = Number(match[1]);
-        if (!rawAt.has(seq)) rawAt.set(seq, performance.now() - readingFrom);
-      }
-    };
-
-    let bytesReceived = 0;
-    let pty: PtyProcess | undefined;
-    try {
-      pty = createNativePtyBackend().spawn({
-        command: [process.execPath, join(FIXTURES, 'flood-probe-app.mjs')],
-        env: { ...environment(), TERMWRIGHT_FLOOD_RENDERS: String(renders) },
-        columns: 80,
-        rows: 24,
+      const sightings: Sighting[] = [];
+      const readingFrom = performance.now();
+      terminal.parser.registerOscHandler(7777, (data) => {
+        const seq = Number(/seq=(\d+)/u.exec(data)?.[1] ?? Number.NaN);
+        const childMs = Number(/t=([\d.]+)/u.exec(data)?.[1] ?? Number.NaN);
+        if (Number.isFinite(seq) && Number.isFinite(childMs)) {
+          sightings.push({ seq, childMs, driverMs: performance.now() - readingFrom });
+        }
+        return true;
       });
-      let queue: Promise<void> = Promise.resolve();
-      pty.onData((chunk) => {
-        bytesReceived += chunk.length;
-        scanRaw(chunk);
-        queue = queue.then(
-          () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
+
+      // When the bytes of each marker landed, before the emulator saw them. The
+      // gap between this and the sighting is ours, not the terminal's.
+      const rawAt = new Map<number, number>();
+      let tail = '';
+      const scanRaw = (chunk: Uint8Array): void => {
+        tail = (tail + Buffer.from(chunk).toString('binary')).slice(-4096);
+        for (const match of tail.matchAll(/seq=(\d+);t=[\d.]+/gu)) {
+          const seq = Number(match[1]);
+          if (!rawAt.has(seq)) rawAt.set(seq, performance.now() - readingFrom);
+        }
+      };
+
+      let bytesReceived = 0;
+      let pty: PtyProcess | undefined;
+      try {
+        pty = createNativePtyBackend().spawn({
+          command: [process.execPath, join(FIXTURES, 'flood-probe-app.mjs')],
+          env: { ...environment(), TERMWRIGHT_FLOOD_RENDERS: String(renders) },
+          columns: 80,
+          rows: 24,
+        });
+        let queue: Promise<void> = Promise.resolve();
+        pty.onData((chunk) => {
+          bytesReceived += chunk.length;
+          scanRaw(chunk);
+          queue = queue.then(
+            () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
+          );
+        });
+
+        await settle(
+          () => sightings.length >= renders,
+          () => queue,
+          60_000,
         );
-      });
+      } finally {
+        pty?.dispose();
+      }
 
-      await settle(() => sightings.length >= renders, () => queue, 60_000);
-    } finally {
-      pty?.dispose();
-    }
+      // Latency the transport added, measured against the first marker so the
+      // two clocks never have to agree on an origin.
+      const first = sightings[0];
+      const quantiles = (values: readonly number[]): string => {
+        const sorted = [...values].sort((a, b) => a - b);
+        const at = (f: number): number => sorted[Math.floor((sorted.length - 1) * f)] ?? 0;
+        return `p50=${at(0.5).toFixed(0)} p90=${at(0.9).toFixed(0)} max=${at(1).toFixed(0)}`;
+      };
+      const relative = (arrival: (s: Sighting) => number | undefined, base: number): number[] =>
+        first === undefined
+          ? []
+          : sightings.flatMap((s) => {
+              const value = arrival(s);
+              return value === undefined ? [] : [value - base - (s.childMs - first.childMs)];
+            });
+      const firstRaw = rawAt.get(first?.seq ?? 0) ?? 0;
+      const bytesWritten = renders * (40 * 60);
 
-    // Latency the transport added, measured against the first marker so the
-    // two clocks never have to agree on an origin.
-    const first = sightings[0];
-    const quantiles = (values: readonly number[]): string => {
-      const sorted = [...values].sort((a, b) => a - b);
-      const at = (f: number): number => sorted[Math.floor((sorted.length - 1) * f)] ?? 0;
-      return `p50=${at(0.5).toFixed(0)} p90=${at(0.9).toFixed(0)} max=${at(1).toFixed(0)}`;
-    };
-    const relative = (arrival: (s: Sighting) => number | undefined, base: number): number[] =>
-      first === undefined
-        ? []
-        : sightings.flatMap((s) => {
-            const value = arrival(s);
-            return value === undefined ? [] : [value - base - (s.childMs - first.childMs)];
-          });
-    const firstRaw = rawAt.get(first?.seq ?? 0) ?? 0;
-    const bytesWritten = renders * (40 * 60);
+      console.log(
+        [
+          `[flood probe] platform=${process.platform} renders=${renders} seen=${sightings.length}`,
+          // Two latencies, because they have different owners. 'bytes' is what
+          // the terminal delayed; 'parsed' also carries our own write queue, and
+          // it is 'parsed' that the pairing timeout races.
+          `  added latency ms, bytes:  ${quantiles(relative((s) => rawAt.get(s.seq), firstRaw))}`,
+          `  added latency ms, parsed: ${quantiles(relative((s) => s.driverMs, first?.driverMs ?? 0))}`,
+          `  bytes: child~${bytesWritten} received=${bytesReceived} ratio=${(bytesReceived / bytesWritten).toFixed(2)}`,
+          `  wall ms: ${(sightings.at(-1)?.driverMs ?? 0).toFixed(0)}`,
+        ].join('\n'),
+      );
 
-    console.log(
-      [
-        `[flood probe] platform=${process.platform} renders=${renders} seen=${sightings.length}`,
-        // Two latencies, because they have different owners. 'bytes' is what
-        // the terminal delayed; 'parsed' also carries our own write queue, and
-        // it is 'parsed' that the pairing timeout races.
-        `  added latency ms, bytes:  ${quantiles(relative((s) => rawAt.get(s.seq), firstRaw))}`,
-        `  added latency ms, parsed: ${quantiles(relative((s) => s.driverMs, first?.driverMs ?? 0))}`,
-        `  bytes: child~${bytesWritten} received=${bytesReceived} ratio=${(bytesReceived / bytesWritten).toFixed(2)}`,
-        `  wall ms: ${(sightings.at(-1)?.driverMs ?? 0).toFixed(0)}`,
-      ].join('\n'),
-    );
-
-    // Deliberately not a throughput assertion: how fast a terminal can be
-    // driven is a measurement, and pinning it here would turn a slow runner
-    // into a failing driver. Only the probe's own sanity is asserted.
-    expect(sightings.length).toBeGreaterThan(0);
-    terminal.dispose();
-  });
+      // Deliberately not a throughput assertion: how fast a terminal can be
+      // driven is a measurement, and pinning it here would turn a slow runner
+      // into a failing driver. Only the probe's own sanity is asserted.
+      expect(sightings.length).toBeGreaterThan(0);
+      terminal.dispose();
+    },
+  );
 });
 
 /** Polls a condition, draining the emulator's write chain between attempts. */
-async function settle(done: () => boolean, drain: () => Promise<void>, timeoutMs = 5_000): Promise<void> {
+async function settle(
+  done: () => boolean,
+  drain: () => Promise<void>,
+  timeoutMs = 5_000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     await drain();

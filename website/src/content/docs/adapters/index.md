@@ -9,26 +9,26 @@ state, relationships, and the physical facts that framework can observe.
 
 ## Do you need an integration?
 
-| You want to test | Integration required? |
-| --- | --- |
-| Rendered text, cells, colors, keyboard input, paste, resize, exit, signals | No |
-| `getByRole()`, `getByLabel()`, semantic state, semantic snapshots | Yes |
-| Semantic pointer actions | Yes, and the framework must expose exact hit testing |
-| Framework-specific values or relationships | Usually; annotations may also be needed |
+| You want to test                                                           | Integration required?                                |
+| -------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Rendered text, cells, colors, keyboard input, paste, resize, exit, signals | No                                                   |
+| `getByRole()`, `getByLabel()`, semantic state, semantic snapshots          | Yes                                                  |
+| Semantic pointer actions                                                   | Yes, and the framework must expose exact hit testing |
+| Framework-specific values or relationships                                 | Usually; annotations may also be needed              |
 
 Start without an integration if screen-level behavior is enough. Add one when
 semantic locators make the test clearer or when you need framework state.
 
 ## Choose your framework
 
-| Framework | Integration | Semantic identity | Viewport visibility | Exact pointer recipient |
-| --- | --- | --- | --- | --- |
-| [Ink](ink/) | `@termwright/probe-ink` | stable | unsupported | unsupported |
-| [OpenTUI](opentui/) | `@termwright/probe-opentui` | stable | unsupported | unsupported |
-| [Textual](textual/) | Python `termwright` probe | stable | supported | supported |
-| [tview](tview/) | `@termwright/probe-tview` instrumented build | stable | unsupported | unsupported |
-| [Ratatui](ratatui/) | `termwright-probe-ratatui` instrumented build | frame-local by default | unsupported | unsupported |
-| [Bubble Tea / Bubbles](bubbletea/) | `@termwright/probe-charm` instrumented build | frame-local by default | unsupported | unsupported |
+| Framework                          | Integration                                   | Semantic identity      | Viewport visibility | Exact pointer recipient |
+| ---------------------------------- | --------------------------------------------- | ---------------------- | ------------------- | ----------------------- |
+| [Ink](ink/)                        | `@termwright/probe-ink`                       | stable                 | unsupported         | unsupported             |
+| [OpenTUI](opentui/)                | `@termwright/probe-opentui`                   | stable                 | unsupported         | unsupported             |
+| [Textual](textual/)                | Python `termwright` probe                     | stable                 | supported           | supported               |
+| [tview](tview/)                    | `@termwright/probe-tview` instrumented build  | stable                 | unsupported         | unsupported             |
+| [Ratatui](ratatui/)                | `termwright-probe-ratatui` instrumented build | frame-local by default | unsupported         | unsupported             |
+| [Bubble Tea / Bubbles](bubbletea/) | `@termwright/probe-charm` instrumented build  | frame-local by default | unsupported         | unsupported             |
 
 The generated [compatibility reference](../reference/compatibility/) is the
 source of truth for exact versions, runtimes, packages, and limitations.
@@ -62,9 +62,9 @@ Write one test that waits for the initial screen and asserts an element by
 role:
 
 ```ts
-const app = await terminal.launch({command});
+const app = await terminal.launch({ command });
 await app.waitForText('Permission required');
-await expect(app.getByRole('button', {name: 'Approve'})).toBeAttached();
+await expect(app.getByRole('button', { name: 'Approve' })).toBeAttached();
 ```
 
 Then inspect `await app.settled()` or the Runner inspector. Do not infer a

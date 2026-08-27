@@ -63,7 +63,16 @@ export interface UiGherkinStep {
 /** Counters closing a run. */
 export interface UiRunSummary {
   /** Canonical terminal verdict; counters alone cannot represent declarative skips. */
-  readonly verdict: 'passed' | 'passed-with-skips' | 'failed' | 'flaky' | 'skipped' | 'cancelled' | 'crashed' | 'infrastructure-failed' | 'incomplete';
+  readonly verdict:
+    | 'passed'
+    | 'passed-with-skips'
+    | 'failed'
+    | 'flaky'
+    | 'skipped'
+    | 'cancelled'
+    | 'crashed'
+    | 'infrastructure-failed'
+    | 'incomplete';
   readonly total: number;
   readonly passed: number;
   readonly failed: number;
@@ -116,7 +125,11 @@ export interface UiActionability {
   readonly sequence: number;
   readonly requirements: readonly UiActionRequirement[];
   readonly strategy?: string;
-  readonly reason?: { readonly code: string; readonly message: string; readonly targetRef?: LocatorRef };
+  readonly reason?: {
+    readonly code: string;
+    readonly message: string;
+    readonly targetRef?: LocatorRef;
+  };
 }
 
 /** server → client. */
@@ -151,7 +164,13 @@ export type ServerMessage =
       readonly columns: number;
       readonly rows: number;
     }
-  | { readonly v: 1; readonly type: 'run-start'; readonly runId: string; readonly mode: UiServerMode; readonly startedAt: number }
+  | {
+      readonly v: 1;
+      readonly type: 'run-start';
+      readonly runId: string;
+      readonly mode: UiServerMode;
+      readonly startedAt: number;
+    }
   | {
       readonly v: 1;
       readonly type: 'test-start';
@@ -229,7 +248,12 @@ export type ServerMessage =
   | { readonly v: 1; readonly type: 'run-end'; readonly summary: UiRunSummary }
   | { readonly v: 1; readonly type: 'run-cancelled'; readonly stoppedAt: number }
   | { readonly v: 1; readonly type: 'run-cancel-failed'; readonly error: string }
-  | { readonly v: 1; readonly type: 'run-infrastructure-failed'; readonly runId: string; readonly error: string }
+  | {
+      readonly v: 1;
+      readonly type: 'run-infrastructure-failed';
+      readonly runId: string;
+      readonly error: string;
+    }
   | {
       readonly v: 1;
       readonly type: 'diagnostic-gap';
@@ -296,9 +320,27 @@ export type ServerMessage =
 
 /** client → server. */
 export type ClientMessage =
-  | { readonly v: 1; readonly type: 'pick'; readonly sessionId: string; readonly enabled?: boolean; readonly requestId?: string }
-  | { readonly v: 1; readonly type: 'input'; readonly sessionId: string; readonly dataB64: string; readonly requestId?: string }
-  | { readonly v: 1; readonly type: 'inspect-actionability'; readonly requestId: string; readonly sessionId: string; readonly nodeId: string };
+  | {
+      readonly v: 1;
+      readonly type: 'pick';
+      readonly sessionId: string;
+      readonly enabled?: boolean;
+      readonly requestId?: string;
+    }
+  | {
+      readonly v: 1;
+      readonly type: 'input';
+      readonly sessionId: string;
+      readonly dataB64: string;
+      readonly requestId?: string;
+    }
+  | {
+      readonly v: 1;
+      readonly type: 'inspect-actionability';
+      readonly requestId: string;
+      readonly sessionId: string;
+      readonly nodeId: string;
+    };
 
 /** Any message on the socket, in either direction. */
 export type UiMessage = ServerMessage | ClientMessage;
@@ -426,7 +468,8 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
   switch (value.type) {
     case 'tests-discovered': {
       const tests = value['tests'];
-      if (!Array.isArray(tests)) throw new UiProtocolError('tests-discovered: tests must be an array');
+      if (!Array.isArray(tests))
+        throw new UiProtocolError('tests-discovered: tests must be an array');
       return {
         v: 1,
         type: 'tests-discovered',
@@ -455,7 +498,11 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       };
     }
     case 'collection-failed':
-      return { v: 1, type: 'collection-failed', error: requireBoundedString(value, 'error', 'collection-failed') };
+      return {
+        v: 1,
+        type: 'collection-failed',
+        error: requireBoundedString(value, 'error', 'collection-failed'),
+      };
     case 'session': {
       for (const removedField of ['adapter', 'probe', 'capabilities'] as const) {
         if (value[removedField] !== undefined) {
@@ -473,9 +520,10 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       ) {
         throw new UiProtocolError('session: adapterStatus is invalid');
       }
-      const contract = value['contract'] === undefined
-        ? undefined
-        : parseEffectiveSessionContract(value['contract']);
+      const contract =
+        value['contract'] === undefined
+          ? undefined
+          : parseEffectiveSessionContract(value['contract']);
       if (adapterStatus !== undefined && contract?.framework == null) {
         throw new UiProtocolError('session: adapterStatus requires a framework contract');
       }
@@ -548,9 +596,11 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         throw new UiProtocolError('step: stepId must be a string');
       }
       const t = value['t'];
-      if (t !== undefined && typeof t !== 'number') throw new UiProtocolError('step: t must be a number');
+      if (t !== undefined && typeof t !== 'number')
+        throw new UiProtocolError('step: t must be a number');
       const error = value['error'];
-      if (error !== undefined && typeof error !== 'string') throw new UiProtocolError('step: error must be a string');
+      if (error !== undefined && typeof error !== 'string')
+        throw new UiProtocolError('step: error must be a string');
       const gherkin = parseGherkinStep(value['gherkin']);
       return {
         v: 1,
@@ -635,7 +685,8 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       const optionalText = (key: string): Record<string, string> => {
         const found = value[key];
         if (found === undefined) return {};
-        if (typeof found !== 'string') throw new UiProtocolError(`action-start: ${key} must be a string`);
+        if (typeof found !== 'string')
+          throw new UiProtocolError(`action-start: ${key} must be a string`);
         return { [key]: found };
       };
       return {
@@ -655,7 +706,8 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       if (kind !== 'action' && kind !== 'assert') {
         throw new UiProtocolError('action: kind must be action or assert');
       }
-      if (typeof value['ok'] !== 'boolean') throw new UiProtocolError('action: ok must be a boolean');
+      if (typeof value['ok'] !== 'boolean')
+        throw new UiProtocolError('action: ok must be a boolean');
       const optionalText = (key: string): Record<string, string> => {
         const found = value[key];
         if (found === undefined) return {};
@@ -665,15 +717,29 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       const optionalRef = (): { ref?: LocatorRef } => {
         const found = value['ref'];
         if (found === undefined) return {};
-        if (typeof found !== 'string' || !/^(?:semantic:[^@\s]+|screen:\d+,\d+,\d+,\d+)@\d+$/u.test(found)) {
-          throw new UiProtocolError('action: ref must be an explicitly semantic or screen locator ref');
+        if (
+          typeof found !== 'string' ||
+          !/^(?:semantic:[^@\s]+|screen:\d+,\d+,\d+,\d+)@\d+$/u.test(found)
+        ) {
+          throw new UiProtocolError(
+            'action: ref must be an explicitly semantic or screen locator ref',
+          );
         }
         return { ref: found as LocatorRef };
       };
-      const actionPlan = value['actionPlan'] === undefined ? undefined : parseUiActionPlan(value['actionPlan']);
-      const actionability = value['actionability'] === undefined ? undefined : parseUiActionability(value['actionability']);
-      if (actionability !== undefined && (kind !== 'action' || value['ok'] || actionability.actionable)) {
-        throw new UiProtocolError('action: actionability is only valid for a rejected driver action');
+      const actionPlan =
+        value['actionPlan'] === undefined ? undefined : parseUiActionPlan(value['actionPlan']);
+      const actionability =
+        value['actionability'] === undefined
+          ? undefined
+          : parseUiActionability(value['actionability']);
+      if (
+        actionability !== undefined &&
+        (kind !== 'action' || value['ok'] || actionability.actionable)
+      ) {
+        throw new UiProtocolError(
+          'action: actionability is only valid for a rejected driver action',
+        );
       }
       return {
         v: 1,
@@ -695,12 +761,22 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
     }
     case 'actionability-inspection': {
       const resultsValue = value['results'];
-      const error = value['error'] === undefined ? undefined : requireBoundedString(value, 'error', 'actionability-inspection');
-      if (resultsValue !== undefined && (!Array.isArray(resultsValue) || resultsValue.length !== 4)) {
-        throw new UiProtocolError('actionability-inspection: results must contain four planner explanations');
+      const error =
+        value['error'] === undefined
+          ? undefined
+          : requireBoundedString(value, 'error', 'actionability-inspection');
+      if (
+        resultsValue !== undefined &&
+        (!Array.isArray(resultsValue) || resultsValue.length !== 4)
+      ) {
+        throw new UiProtocolError(
+          'actionability-inspection: results must contain four planner explanations',
+        );
       }
       if ((resultsValue === undefined) === (error === undefined)) {
-        throw new UiProtocolError('actionability-inspection: exactly one of results or error is required');
+        throw new UiProtocolError(
+          'actionability-inspection: exactly one of results or error is required',
+        );
       }
       const results = resultsValue?.map((entry) => parseUiActionability(entry));
       return {
@@ -721,9 +797,10 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       if (typeof value['ok'] !== 'boolean') {
         throw new UiProtocolError('control-result: ok must be a boolean');
       }
-      const error = value['error'] === undefined
-        ? undefined
-        : requireBoundedString(value, 'error', 'control-result');
+      const error =
+        value['error'] === undefined
+          ? undefined
+          : requireBoundedString(value, 'error', 'control-result');
       if (value['ok'] === (error !== undefined)) {
         throw new UiProtocolError('control-result: error is required exactly when ok is false');
       }
@@ -739,7 +816,12 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
     case 'app-log': {
       const log = parseAppLog(value);
       if (log === null) throw new UiProtocolError('app-log: needs a finite t and a message');
-      return { v: 1, type: 'app-log', sessionId: requireString(value, 'sessionId', 'app-log'), ...log };
+      return {
+        v: 1,
+        type: 'app-log',
+        sessionId: requireString(value, 'sessionId', 'app-log'),
+        ...log,
+      };
     }
     case 'run-end': {
       const summary = value['summary'];
@@ -747,7 +829,19 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         throw new UiProtocolError('run-end: summary must be an object');
       }
       const record = summary as Record<string, unknown>;
-      if (!['passed', 'passed-with-skips', 'failed', 'flaky', 'skipped', 'cancelled', 'crashed', 'infrastructure-failed', 'incomplete'].includes(String(record['verdict']))) {
+      if (
+        ![
+          'passed',
+          'passed-with-skips',
+          'failed',
+          'flaky',
+          'skipped',
+          'cancelled',
+          'crashed',
+          'infrastructure-failed',
+          'incomplete',
+        ].includes(String(record['verdict']))
+      ) {
         throw new UiProtocolError('run-end: summary.verdict must be a terminal run verdict');
       }
       for (const key of ['total', 'passed', 'failed', 'skipped', 'flaky', 'durationMs']) {
@@ -796,56 +890,103 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
 }
 
 function parseUiActionability(value: unknown): UiActionability {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new UiProtocolError('action.actionability must be an object');
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new UiProtocolError('action.actionability must be an object');
   const record = value as Record<string, unknown>;
-  if (typeof record['actionable'] !== 'boolean') throw new UiProtocolError('action.actionability actionable must be boolean');
+  if (typeof record['actionable'] !== 'boolean')
+    throw new UiProtocolError('action.actionability actionable must be boolean');
   const sequence = requireNumber(record, 'sequence', 'action.actionability');
-  if (!Number.isSafeInteger(sequence) || sequence < 0) throw new UiProtocolError('action.actionability sequence must be a non-negative integer');
+  if (!Number.isSafeInteger(sequence) || sequence < 0)
+    throw new UiProtocolError('action.actionability sequence must be a non-negative integer');
   const requirementsValue = record['requirements'];
-  if (!Array.isArray(requirementsValue) || requirementsValue.length > 128) throw new UiProtocolError('action.actionability requirements must be a bounded array');
+  if (!Array.isArray(requirementsValue) || requirementsValue.length > 128)
+    throw new UiProtocolError('action.actionability requirements must be a bounded array');
   const requirements = requirementsValue.map((value, index) => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new UiProtocolError(`action.actionability.requirements[${index}] must be an object`);
+    if (typeof value !== 'object' || value === null || Array.isArray(value))
+      throw new UiProtocolError(`action.actionability.requirements[${index}] must be an object`);
     const requirement = value as Record<string, unknown>;
     const verdict = requirement['verdict'];
     const observation = requirement['observation'];
-    if (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid verdict`);
-    if (observation !== 'known' && observation !== 'absent' && observation !== 'unknown' && observation !== 'unsupported') throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid observation`);
+    if (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive')
+      throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid verdict`);
+    if (
+      observation !== 'known' &&
+      observation !== 'absent' &&
+      observation !== 'unknown' &&
+      observation !== 'unsupported'
+    )
+      throw new UiProtocolError(
+        `action.actionability.requirements[${index}] has invalid observation`,
+      );
     const target = requirement['target'];
-    if (target !== undefined && typeof target !== 'string') throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid target`);
-    const requirementEvidence = requirement['evidence'] === undefined ? undefined : parseEvidence(requirement['evidence'], `action.actionability.requirements[${index}]`);
-    validateUiRequirementEvidence(observation, requirementEvidence, `action.actionability.requirements[${index}]`);
-    const requirementKind = requireBoundedString(requirement, 'kind', `action.actionability.requirements[${index}]`);
-    if (!UI_ACTION_REQUIREMENT_KINDS.has(requirementKind)) throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid kind`);
+    if (target !== undefined && typeof target !== 'string')
+      throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid target`);
+    const requirementEvidence =
+      requirement['evidence'] === undefined
+        ? undefined
+        : parseEvidence(requirement['evidence'], `action.actionability.requirements[${index}]`);
+    validateUiRequirementEvidence(
+      observation,
+      requirementEvidence,
+      `action.actionability.requirements[${index}]`,
+    );
+    const requirementKind = requireBoundedString(
+      requirement,
+      'kind',
+      `action.actionability.requirements[${index}]`,
+    );
+    if (!UI_ACTION_REQUIREMENT_KINDS.has(requirementKind))
+      throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid kind`);
     return {
       kind: requirementKind,
-      ...(target === undefined ? {} : { target }), verdict, observation,
+      ...(target === undefined ? {} : { target }),
+      verdict,
+      observation,
       ...(requirementEvidence === undefined ? {} : { evidence: requirementEvidence }),
     } as UiActionRequirement;
   });
   const rawReason = record['reason'];
   let reason: UiActionability['reason'];
   if (rawReason !== undefined) {
-    if (typeof rawReason !== 'object' || rawReason === null || Array.isArray(rawReason)) throw new UiProtocolError('action.actionability reason must be an object');
+    if (typeof rawReason !== 'object' || rawReason === null || Array.isArray(rawReason))
+      throw new UiProtocolError('action.actionability reason must be an object');
     const item = rawReason as Record<string, unknown>;
     const targetRef = item['targetRef'];
-    if (targetRef !== undefined && (typeof targetRef !== 'string' || !/^(?:semantic:[^@\s]+|screen:\d+,\d+,\d+,\d+)@\d+$/u.test(targetRef))) {
-      throw new UiProtocolError('action.actionability reason targetRef must be an explicitly semantic or screen locator ref');
+    if (
+      targetRef !== undefined &&
+      (typeof targetRef !== 'string' ||
+        !/^(?:semantic:[^@\s]+|screen:\d+,\d+,\d+,\d+)@\d+$/u.test(targetRef))
+    ) {
+      throw new UiProtocolError(
+        'action.actionability reason targetRef must be an explicitly semantic or screen locator ref',
+      );
     }
-    reason = { code: requireBoundedString(item, 'code', 'action.actionability.reason'), message: requireBoundedString(item, 'message', 'action.actionability.reason'), ...(targetRef === undefined ? {} : { targetRef: targetRef as LocatorRef }) };
+    reason = {
+      code: requireBoundedString(item, 'code', 'action.actionability.reason'),
+      message: requireBoundedString(item, 'message', 'action.actionability.reason'),
+      ...(targetRef === undefined ? {} : { targetRef: targetRef as LocatorRef }),
+    };
   }
-  if (record['actionable'] === false && reason === undefined) throw new UiProtocolError('action.actionability rejected result requires reason');
+  if (record['actionable'] === false && reason === undefined)
+    throw new UiProtocolError('action.actionability rejected result requires reason');
   const strategy = record['strategy'];
-  if (strategy !== undefined && typeof strategy !== 'string') throw new UiProtocolError('action.actionability strategy must be a string');
+  if (strategy !== undefined && typeof strategy !== 'string')
+    throw new UiProtocolError('action.actionability strategy must be a string');
   return {
-    actionable: record['actionable'], kind: requireBoundedString(record, 'kind', 'action.actionability'),
-    contractId: requireBoundedString(record, 'contractId', 'action.actionability'), sequence, requirements,
-    ...(strategy === undefined ? {} : { strategy }), ...(reason === undefined ? {} : { reason }),
+    actionable: record['actionable'],
+    kind: requireBoundedString(record, 'kind', 'action.actionability'),
+    contractId: requireBoundedString(record, 'contractId', 'action.actionability'),
+    sequence,
+    requirements,
+    ...(strategy === undefined ? {} : { strategy }),
+    ...(reason === undefined ? {} : { reason }),
   };
 }
 
 function parseGherkinStep(value: unknown): UiGherkinStep | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== 'object' || value === null) throw new UiProtocolError('step: gherkin must be an object');
+  if (typeof value !== 'object' || value === null)
+    throw new UiProtocolError('step: gherkin must be an object');
   const record = value as Record<string, unknown>;
   const sourceValue = record['source'];
   if (typeof sourceValue !== 'object' || sourceValue === null) {
@@ -875,7 +1016,8 @@ function parsePriorFailures(value: unknown): readonly UiPriorFailure[] | undefin
   }
   let previous = 0;
   return value.map((entry) => {
-    if (typeof entry !== 'object' || entry === null) throw new UiProtocolError('test-end: invalid prior failure');
+    if (typeof entry !== 'object' || entry === null)
+      throw new UiProtocolError('test-end: invalid prior failure');
     const record = entry as Record<string, unknown>;
     const attempt = record['attempt'];
     const errors = record['errors'];
@@ -886,7 +1028,8 @@ function parsePriorFailures(value: unknown): readonly UiPriorFailure[] | undefin
       throw new UiProtocolError('test-end: prior failure errors must be a bounded non-empty array');
     }
     const parsed = errors.map((error) => {
-      if (typeof error !== 'string' || error === '') throw new UiProtocolError('test-end: prior failure errors must be strings');
+      if (typeof error !== 'string' || error === '')
+        throw new UiProtocolError('test-end: prior failure errors must be strings');
       return error.slice(0, MAX_UI_WIRE_STRING_LENGTH);
     });
     previous = attempt as number;
@@ -899,10 +1042,7 @@ export const MAX_UI_WIRE_STRING_LENGTH = 256;
 
 const UI_ACTION_REQUIREMENT_KINDS: ReadonlySet<string> = new Set(CONDITION_KINDS);
 
-function parseDiscoveredProvider(
-  value: unknown,
-  context: string,
-): DiscoveredTest['provider'] {
+function parseDiscoveredProvider(value: unknown, context: string): DiscoveredTest['provider'] {
   if (value === undefined) return undefined;
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new UiProtocolError(`${context}: provider must be an object`);
@@ -976,9 +1116,22 @@ function parseDiscoveredSource(value: unknown, context: string): DiscoveredTestS
 }
 
 const EVIDENCE_SOURCES = new Set(['framework', 'application', 'terminal', 'recognizer', 'driver']);
-const EVIDENCE_METHODS = new Set(['native', 'instrumented', 'declared', 'correlated', 'measured', 'derived', 'heuristic']);
+const EVIDENCE_METHODS = new Set([
+  'native',
+  'instrumented',
+  'declared',
+  'correlated',
+  'measured',
+  'derived',
+  'heuristic',
+]);
 const EVIDENCE_STRENGTHS = new Set(['authoritative', 'diagnostic']);
-const UNSUPPORTED_REASONS = new Set(['not-negotiated', 'framework-unobservable', 'terminal-unobservable', 'provider-required']);
+const UNSUPPORTED_REASONS = new Set([
+  'not-negotiated',
+  'framework-unobservable',
+  'terminal-unobservable',
+  'provider-required',
+]);
 
 function parseUiActionPlan(value: unknown): UiActionPlan {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -1000,8 +1153,14 @@ function parseUiActionPlan(value: unknown): UiActionPlan {
     }
     const device: 'keyboard' | 'mouse' = rawDevice;
     const rawModifiers = operation['modifiers'];
-    if (rawModifiers !== undefined && (device !== 'mouse' || !Array.isArray(rawModifiers) ||
-        rawModifiers.some((modifier) => modifier !== 'shift' && modifier !== 'alt' && modifier !== 'control'))) {
+    if (
+      rawModifiers !== undefined &&
+      (device !== 'mouse' ||
+        !Array.isArray(rawModifiers) ||
+        rawModifiers.some(
+          (modifier) => modifier !== 'shift' && modifier !== 'alt' && modifier !== 'control',
+        ))
+    ) {
       throw new UiProtocolError(`action.actionPlan.operations[${index}] has invalid modifiers`);
     }
     const modifiers = rawModifiers as ('shift' | 'alt' | 'control')[] | undefined;
@@ -1030,7 +1189,12 @@ function parseUiActionPlan(value: unknown): UiActionPlan {
     if (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') {
       throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid verdict`);
     }
-    if (observation !== 'known' && observation !== 'absent' && observation !== 'unknown' && observation !== 'unsupported') {
+    if (
+      observation !== 'known' &&
+      observation !== 'absent' &&
+      observation !== 'unknown' &&
+      observation !== 'unsupported'
+    ) {
       throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid observation`);
     }
     const checkedVerdict: 'satisfied' | 'unsatisfied' | 'inconclusive' = verdict;
@@ -1039,21 +1203,34 @@ function parseUiActionPlan(value: unknown): UiActionPlan {
     if (target !== undefined && typeof target !== 'string') {
       throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid target`);
     }
-    const requirementEvidence = requirement['evidence'] === undefined
-      ? undefined
-      : parseEvidence(requirement['evidence'], `action.actionPlan.requirements[${index}]`);
-    validateUiRequirementEvidence(checkedObservation, requirementEvidence, `action.actionPlan.requirements[${index}]`);
-    const requirementKind = requireBoundedString(requirement, 'kind', `action.actionPlan.requirements[${index}]`);
-    if (!UI_ACTION_REQUIREMENT_KINDS.has(requirementKind)) throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid kind`);
+    const requirementEvidence =
+      requirement['evidence'] === undefined
+        ? undefined
+        : parseEvidence(requirement['evidence'], `action.actionPlan.requirements[${index}]`);
+    validateUiRequirementEvidence(
+      checkedObservation,
+      requirementEvidence,
+      `action.actionPlan.requirements[${index}]`,
+    );
+    const requirementKind = requireBoundedString(
+      requirement,
+      'kind',
+      `action.actionPlan.requirements[${index}]`,
+    );
+    if (!UI_ACTION_REQUIREMENT_KINDS.has(requirementKind))
+      throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid kind`);
     return {
       kind: requirementKind,
-      ...(target === undefined ? {} : { target }), verdict: checkedVerdict, observation: checkedObservation,
+      ...(target === undefined ? {} : { target }),
+      verdict: checkedVerdict,
+      observation: checkedObservation,
       ...(requirementEvidence === undefined ? {} : { evidence: requirementEvidence }),
     };
   });
-  const physicalEvidence = record['physicalEvidence'] === undefined
-    ? undefined
-    : parseEvidence(record['physicalEvidence'], 'action.actionPlan.physicalEvidence');
+  const physicalEvidence =
+    record['physicalEvidence'] === undefined
+      ? undefined
+      : parseEvidence(record['physicalEvidence'], 'action.actionPlan.physicalEvidence');
   if (physicalEvidence !== undefined && physicalEvidence.strength !== 'authoritative') {
     throw new UiProtocolError('action.actionPlan.physicalEvidence must be authoritative');
   }
@@ -1078,7 +1255,11 @@ function parseEvidence(value: unknown, context: string): EvidenceProvenance {
   const source = requireBoundedString(record, 'source', context);
   const method = requireBoundedString(record, 'method', context);
   const strength = requireBoundedString(record, 'strength', context);
-  if (!EVIDENCE_SOURCES.has(source) || !EVIDENCE_METHODS.has(method) || !EVIDENCE_STRENGTHS.has(strength)) {
+  if (
+    !EVIDENCE_SOURCES.has(source) ||
+    !EVIDENCE_METHODS.has(method) ||
+    !EVIDENCE_STRENGTHS.has(strength)
+  ) {
     throw new UiProtocolError(`${context}: invalid evidence provenance`);
   }
   return {
@@ -1101,7 +1282,9 @@ function validateUiRequirementEvidence(
     throw new UiProtocolError(`${context}: absent observation requires authoritative evidence`);
   }
   if ((observation === 'unknown' || observation === 'unsupported') && evidence !== undefined) {
-    throw new UiProtocolError(`${context}: unsettled/unsupported observation must not claim evidence`);
+    throw new UiProtocolError(
+      `${context}: unsettled/unsupported observation must not claim evidence`,
+    );
   }
 }
 
@@ -1110,21 +1293,31 @@ function parseEffectiveSessionContract(value: unknown): EffectiveSessionContract
     throw new UiProtocolError('session.contract must be an object');
   }
   const record = value as Record<string, unknown>;
-  if (record['protocol'] !== 'termwright/2') throw new UiProtocolError('session.contract protocol must be termwright/2');
+  if (record['protocol'] !== 'termwright/2')
+    throw new UiProtocolError('session.contract protocol must be termwright/2');
   const epoch = requireNumber(record, 'epoch', 'session.contract');
-  if (!Number.isInteger(epoch) || epoch < 0) throw new UiProtocolError('session.contract epoch must be a non-negative integer');
+  if (!Number.isInteger(epoch) || epoch < 0)
+    throw new UiProtocolError('session.contract epoch must be a non-negative integer');
 
   const frameworkValue = record['framework'];
   let framework: EffectiveSessionContract['framework'] = null;
   if (frameworkValue !== null) {
-    if (typeof frameworkValue !== 'object' || frameworkValue === null || Array.isArray(frameworkValue)) {
+    if (
+      typeof frameworkValue !== 'object' ||
+      frameworkValue === null ||
+      Array.isArray(frameworkValue)
+    ) {
       throw new UiProtocolError('session.contract framework must be an object or null');
     }
     const candidate = frameworkValue as Record<string, unknown>;
     const instrumentationValue = candidate['instrumentation'];
     let instrumentation: NonNullable<EffectiveSessionContract['framework']>['instrumentation'];
     if (instrumentationValue !== undefined) {
-      if (typeof instrumentationValue !== 'object' || instrumentationValue === null || Array.isArray(instrumentationValue)) {
+      if (
+        typeof instrumentationValue !== 'object' ||
+        instrumentationValue === null ||
+        Array.isArray(instrumentationValue)
+      ) {
         throw new UiProtocolError('session.contract.framework.instrumentation must be an object');
       }
       const declared = instrumentationValue as Record<string, unknown>;
@@ -1132,31 +1325,61 @@ function parseEffectiveSessionContract(value: unknown): EffectiveSessionContract
       const semanticClass = declared['semanticClass'];
       const degradedCapabilities = declared['degradedCapabilities'];
       if (!PROBE_INJECTION_TIERS.includes(highestTier as (typeof PROBE_INJECTION_TIERS)[number])) {
-        throw new UiProtocolError('session.contract.framework.instrumentation has invalid highestTier');
+        throw new UiProtocolError(
+          'session.contract.framework.instrumentation has invalid highestTier',
+        );
       }
-      if (!PROBE_SEMANTIC_CLASSES.includes(semanticClass as (typeof PROBE_SEMANTIC_CLASSES)[number])) {
-        throw new UiProtocolError('session.contract.framework.instrumentation has invalid semanticClass');
+      if (
+        !PROBE_SEMANTIC_CLASSES.includes(semanticClass as (typeof PROBE_SEMANTIC_CLASSES)[number])
+      ) {
+        throw new UiProtocolError(
+          'session.contract.framework.instrumentation has invalid semanticClass',
+        );
       }
-      if (!Array.isArray(degradedCapabilities) || degradedCapabilities.length > PROBE_DEGRADED_CAPABILITIES.length ||
-          new Set(degradedCapabilities).size !== degradedCapabilities.length ||
-          !degradedCapabilities.every((item) => PROBE_DEGRADED_CAPABILITIES.includes(item as (typeof PROBE_DEGRADED_CAPABILITIES)[number]))) {
-        throw new UiProtocolError('session.contract.framework.instrumentation has invalid degradedCapabilities');
+      if (
+        !Array.isArray(degradedCapabilities) ||
+        degradedCapabilities.length > PROBE_DEGRADED_CAPABILITIES.length ||
+        new Set(degradedCapabilities).size !== degradedCapabilities.length ||
+        !degradedCapabilities.every((item) =>
+          PROBE_DEGRADED_CAPABILITIES.includes(
+            item as (typeof PROBE_DEGRADED_CAPABILITIES)[number],
+          ),
+        )
+      ) {
+        throw new UiProtocolError(
+          'session.contract.framework.instrumentation has invalid degradedCapabilities',
+        );
       }
-      if (semanticClass === 'B' &&
-          (!degradedCapabilities.includes('intended-geometry') || !degradedCapabilities.includes('clipped-geometry'))) {
-        throw new UiProtocolError('session.contract.framework.instrumentation semantic class B requires geometry degradations');
+      if (
+        semanticClass === 'B' &&
+        (!degradedCapabilities.includes('intended-geometry') ||
+          !degradedCapabilities.includes('clipped-geometry'))
+      ) {
+        throw new UiProtocolError(
+          'session.contract.framework.instrumentation semantic class B requires geometry degradations',
+        );
       }
       instrumentation = Object.freeze({
         highestTier: highestTier as (typeof PROBE_INJECTION_TIERS)[number],
         semanticClass: semanticClass as (typeof PROBE_SEMANTIC_CLASSES)[number],
-        degradedCapabilities: Object.freeze([...degradedCapabilities]) as readonly ProbeDegradedCapabilityId[],
+        degradedCapabilities: Object.freeze([
+          ...degradedCapabilities,
+        ]) as readonly ProbeDegradedCapabilityId[],
       });
     }
     framework = {
       name: requireBoundedString(candidate, 'name', 'session.contract.framework'),
       version: requireBoundedString(candidate, 'version', 'session.contract.framework'),
-      adapterVersion: requireBoundedString(candidate, 'adapterVersion', 'session.contract.framework'),
-      certificationId: requireBoundedString(candidate, 'certificationId', 'session.contract.framework'),
+      adapterVersion: requireBoundedString(
+        candidate,
+        'adapterVersion',
+        'session.contract.framework',
+      ),
+      certificationId: requireBoundedString(
+        candidate,
+        'certificationId',
+        'session.contract.framework',
+      ),
       ...(instrumentation === undefined ? {} : { instrumentation }),
     };
   }
@@ -1165,61 +1388,110 @@ function parseEffectiveSessionContract(value: unknown): EffectiveSessionContract
   if (!Array.isArray(providersValue) || providersValue.length > 32) {
     throw new UiProtocolError('session.contract providers must be a bounded array');
   }
-  const providers: EffectiveSessionContract['providers'][number][] = providersValue.map((providerValue, index) => {
-    if (typeof providerValue !== 'object' || providerValue === null || Array.isArray(providerValue)) {
-      throw new UiProtocolError(`session.contract.providers[${index}] must be an object`);
-    }
-    const provider = providerValue as Record<string, unknown>;
-    const kind = provider['kind'];
-    const base = {
-      id: requireBoundedString(provider, 'id', `session.contract.providers[${index}]`),
-      version: requireBoundedString(provider, 'version', `session.contract.providers[${index}]`),
-    };
-    if (kind === 'framework' || kind === 'terminal') return { ...base, kind };
-    if (kind !== 'application') throw new UiProtocolError(`session.contract.providers[${index}] has invalid kind`);
-    const method = provider['method'];
-    if (method !== 'native' && method !== 'declared') throw new UiProtocolError(`session.contract.providers[${index}] has invalid method`);
-    const capabilities = provider['capabilities'];
-    if (!Array.isArray(capabilities) || capabilities.length > EVIDENCE_PROVIDER_CAPABILITIES.length ||
+  const providers: EffectiveSessionContract['providers'][number][] = providersValue.map(
+    (providerValue, index) => {
+      if (
+        typeof providerValue !== 'object' ||
+        providerValue === null ||
+        Array.isArray(providerValue)
+      ) {
+        throw new UiProtocolError(`session.contract.providers[${index}] must be an object`);
+      }
+      const provider = providerValue as Record<string, unknown>;
+      const kind = provider['kind'];
+      const base = {
+        id: requireBoundedString(provider, 'id', `session.contract.providers[${index}]`),
+        version: requireBoundedString(provider, 'version', `session.contract.providers[${index}]`),
+      };
+      if (kind === 'framework' || kind === 'terminal') return { ...base, kind };
+      if (kind !== 'application')
+        throw new UiProtocolError(`session.contract.providers[${index}] has invalid kind`);
+      const method = provider['method'];
+      if (method !== 'native' && method !== 'declared')
+        throw new UiProtocolError(`session.contract.providers[${index}] has invalid method`);
+      const capabilities = provider['capabilities'];
+      if (
+        !Array.isArray(capabilities) ||
+        capabilities.length > EVIDENCE_PROVIDER_CAPABILITIES.length ||
         new Set(capabilities).size !== capabilities.length ||
-        !capabilities.every((item) => EVIDENCE_PROVIDER_CAPABILITIES.includes(item as (typeof EVIDENCE_PROVIDER_CAPABILITIES)[number])) ||
-        (capabilities.includes('hit-test') && !capabilities.includes('pointer-regions'))) {
-      throw new UiProtocolError(`session.contract.providers[${index}] has invalid capabilities`);
-    }
-    return { ...base, kind, method, capabilities };
-  });
+        !capabilities.every((item) =>
+          EVIDENCE_PROVIDER_CAPABILITIES.includes(
+            item as (typeof EVIDENCE_PROVIDER_CAPABILITIES)[number],
+          ),
+        ) ||
+        (capabilities.includes('hit-test') && !capabilities.includes('pointer-regions'))
+      ) {
+        throw new UiProtocolError(`session.contract.providers[${index}] has invalid capabilities`);
+      }
+      return { ...base, kind, method, capabilities };
+    },
+  );
   const providerIds = new Set(providers.map((provider) => provider.id));
-  if (providerIds.size !== providers.length) throw new UiProtocolError('session.contract providers contain duplicate ids');
+  if (providerIds.size !== providers.length)
+    throw new UiProtocolError('session.contract providers contain duplicate ids');
 
   const capabilitiesValue = record['capabilities'];
-  if (typeof capabilitiesValue !== 'object' || capabilitiesValue === null || Array.isArray(capabilitiesValue)) {
+  if (
+    typeof capabilitiesValue !== 'object' ||
+    capabilitiesValue === null ||
+    Array.isArray(capabilitiesValue)
+  ) {
     throw new UiProtocolError('session.contract capabilities must be an object');
   }
   const capabilityRecord = capabilitiesValue as Record<string, unknown>;
-  if (Object.keys(capabilityRecord).length !== SESSION_CAPABILITIES.length ||
-      Object.keys(capabilityRecord).some((id) => !SESSION_CAPABILITIES.includes(id as (typeof SESSION_CAPABILITIES)[number]))) {
-    throw new UiProtocolError('session.contract capabilities must contain exactly the closed capability set');
+  if (
+    Object.keys(capabilityRecord).length !== SESSION_CAPABILITIES.length ||
+    Object.keys(capabilityRecord).some(
+      (id) => !SESSION_CAPABILITIES.includes(id as (typeof SESSION_CAPABILITIES)[number]),
+    )
+  ) {
+    throw new UiProtocolError(
+      'session.contract capabilities must contain exactly the closed capability set',
+    );
   }
-  const capabilities = Object.fromEntries(SESSION_CAPABILITIES.map((id) => {
-    const raw = capabilityRecord[id];
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-      throw new UiProtocolError(`session.contract capability ${id} must be an object`);
-    }
-    const availability = raw as Record<string, unknown>;
-    if (availability['status'] === 'supported') {
-      return [id, { status: 'supported', evidence: parseEvidence(availability['evidence'], `session.contract.capabilities.${id}`) }];
-    }
-    if (availability['status'] !== 'unsupported' || !UNSUPPORTED_REASONS.has(availability['reason'] as string)) {
-      throw new UiProtocolError(`session.contract capability ${id} has invalid availability`);
-    }
-    return [id, { status: 'unsupported', reason: availability['reason'] }];
-  })) as unknown as EffectiveSessionContract['capabilities'];
+  const capabilities = Object.fromEntries(
+    SESSION_CAPABILITIES.map((id) => {
+      const raw = capabilityRecord[id];
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        throw new UiProtocolError(`session.contract capability ${id} must be an object`);
+      }
+      const availability = raw as Record<string, unknown>;
+      if (availability['status'] === 'supported') {
+        return [
+          id,
+          {
+            status: 'supported',
+            evidence: parseEvidence(
+              availability['evidence'],
+              `session.contract.capabilities.${id}`,
+            ),
+          },
+        ];
+      }
+      if (
+        availability['status'] !== 'unsupported' ||
+        !UNSUPPORTED_REASONS.has(availability['reason'] as string)
+      ) {
+        throw new UiProtocolError(`session.contract capability ${id} has invalid availability`);
+      }
+      return [id, { status: 'unsupported', reason: availability['reason'] }];
+    }),
+  ) as unknown as EffectiveSessionContract['capabilities'];
   for (const availability of Object.values(capabilities)) {
     if (availability.status !== 'supported') continue;
-    const expectedKind = availability.evidence.source === 'framework' || availability.evidence.source === 'terminal' || availability.evidence.source === 'application'
-      ? availability.evidence.source
-      : null;
-    if (expectedKind !== null && !providers.some((provider) => provider.id === availability.evidence.providerId && provider.kind === expectedKind)) {
+    const expectedKind =
+      availability.evidence.source === 'framework' ||
+      availability.evidence.source === 'terminal' ||
+      availability.evidence.source === 'application'
+        ? availability.evidence.source
+        : null;
+    if (
+      expectedKind !== null &&
+      !providers.some(
+        (provider) =>
+          provider.id === availability.evidence.providerId && provider.kind === expectedKind,
+      )
+    ) {
       throw new UiProtocolError('session.contract capability evidence names an unknown provider');
     }
   }
@@ -1303,7 +1575,11 @@ function requirePositiveInteger(value: Record<string, unknown>, key: string, typ
   return found;
 }
 
-function requireNonNegativeInteger(value: Record<string, unknown>, key: string, type: string): number {
+function requireNonNegativeInteger(
+  value: Record<string, unknown>,
+  key: string,
+  type: string,
+): number {
   const found = requireNumber(value, key, type);
   if (!Number.isSafeInteger(found) || found < 0) {
     throw new UiProtocolError(`${type}: ${key} must be a non-negative integer`);

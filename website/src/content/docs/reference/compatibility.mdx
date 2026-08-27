@@ -30,36 +30,77 @@ are admitted by detected capabilities plus their executable conformance suites.
   <tbody>
     {registry.frameworks.map((entry) => (
       <tr>
-        <td><a href={`#${entry.id}`}>{entry.name}</a></td>
         <td>
-          <code>{entry.versions.declared}</code><br />
+          <a href={`#${entry.id}`}>{entry.name}</a>
+        </td>
+        <td>
+          <code>{entry.versions.declared}</code>
+          <br />
           verified: <code>{entry.versions.verified.join(', ')}</code>
         </td>
-        <td>{entry.runtimes.map((runtime) => <><code>{runtime.name} {runtime.version}</code><br /></>)}</td>
-        <td><code>{entry.probe.package} {entry.probe.packageVersion}</code></td>
         <td>
-          class: <code>{entry.instrumentation.semanticClass}</code><br />
-          T3 debt: <code>{entry.instrumentation.t3DebtCount}</code><br />
+          {entry.runtimes.map((runtime) => (
+            <>
+              <code>
+                {runtime.name} {runtime.version}
+              </code>
+              <br />
+            </>
+          ))}
+        </td>
+        <td>
+          <code>
+            {entry.probe.package} {entry.probe.packageVersion}
+          </code>
+        </td>
+        <td>
+          class: <code>{entry.instrumentation.semanticClass}</code>
+          <br />
+          T3 debt: <code>{entry.instrumentation.t3DebtCount}</code>
+          <br />
           {entry.instrumentation.interventions.map((item) => (
-            <><code>{item.capability}: {item.tier}</code><br /></>
+            <>
+              <code>
+                {item.capability}: {item.tier}
+              </code>
+              <br />
+            </>
           ))}
           degraded: <code>{entry.instrumentation.degradedCapabilities.join(', ') || 'none'}</code>
         </td>
         <td>
-          identity: <code>{entry.probe.identityKind}</code><br />
-          {entry.probe.capabilities.length === 0
-            ? 'none'
-            : <code>{entry.probe.capabilities.join(', ')}</code>}
+          identity: <code>{entry.probe.identityKind}</code>
+          <br />
+          {entry.probe.capabilities.length === 0 ? (
+            'none'
+          ) : (
+            <code>{entry.probe.capabilities.join(', ')}</code>
+          )}
         </td>
         <td>
-          automatic: <code>{entry.capabilityGraph.automatic.join(', ') || 'none'}</code><br />
-          application-integrated: <code>{entry.capabilityGraph.applicationIntegrated.flatMap((item) => item.capabilities).join(', ') || 'none'}</code><br />
+          automatic: <code>{entry.capabilityGraph.automatic.join(', ') || 'none'}</code>
+          <br />
+          application-integrated:{' '}
+          <code>
+            {entry.capabilityGraph.applicationIntegrated
+              .flatMap((item) => item.capabilities)
+              .join(', ') || 'none'}
+          </code>
+          <br />
           unsupported: <code>{entry.capabilityGraph.unsupported.join(', ') || 'none'}</code>
         </td>
         <td>
-          {entry.annotations === null
-            ? 'none'
-            : <><code>{entry.annotations.package} {entry.annotations.packageVersion}</code><br />{entry.annotations.apis.join(', ')}</>}
+          {entry.annotations === null ? (
+            'none'
+          ) : (
+            <>
+              <code>
+                {entry.annotations.package} {entry.annotations.packageVersion}
+              </code>
+              <br />
+              {entry.annotations.apis.join(', ')}
+            </>
+          )}
         </td>
       </tr>
     ))}
@@ -73,6 +114,7 @@ executable exact-version combination is listed in the registry and below.
 ## Details and limits
 
 {registry.frameworks.map((entry) => (
+
   <section>
     <h3 id={entry.id}>{entry.name}</h3>
     <p>

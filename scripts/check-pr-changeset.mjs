@@ -13,7 +13,8 @@ export function isPublishablePackagePath(path) {
   const relativePath = path.split('/').slice(2).join('/');
   const filename = path.slice(path.lastIndexOf('/') + 1);
   if (nonPublishableSegment.test(`/${relativePath}`)) return false;
-  if (testModule.test(filename) || testConfig.test(filename) || filename.endsWith('.snap')) return false;
+  if (testModule.test(filename) || testConfig.test(filename) || filename.endsWith('.snap'))
+    return false;
   if (/^(?:CHANGELOG|README)(?:\.[^.]+)?\.md$/iu.test(filename)) return false;
   return true;
 }
@@ -33,7 +34,11 @@ export function isConsumableChangesetPath(path) {
 export async function changedFiles(base, head, args, cwd, runGit = execFile) {
   // Report both sides of a rename. Otherwise moving production code to a
   // test-looking destination could hide the deleted publishable path.
-  const { stdout } = await runGit('git', ['diff', '--name-only', '-z', '--no-renames', ...args, base, head, '--'], { cwd });
+  const { stdout } = await runGit(
+    'git',
+    ['diff', '--name-only', '-z', '--no-renames', ...args, base, head, '--'],
+    { cwd },
+  );
   return stdout.split('\0').filter(Boolean);
 }
 
@@ -41,9 +46,12 @@ async function main() {
   const base = process.env['BASE'];
   const head = process.env['HEAD'];
   if (base === undefined || head === undefined) throw new Error('BASE and HEAD are required');
-  const packagePaths = (await changedFiles(base, head, [])).filter((path) => path.startsWith('packages/'));
-  const addedChangesets = (await changedFiles(base, head, ['--diff-filter=A']))
-    .filter(isConsumableChangesetPath);
+  const packagePaths = (await changedFiles(base, head, [])).filter((path) =>
+    path.startsWith('packages/'),
+  );
+  const addedChangesets = (await changedFiles(base, head, ['--diff-filter=A'])).filter(
+    isConsumableChangesetPath,
+  );
   const decision = changesetDecision(packagePaths, addedChangesets);
 
   if (decision.publishable.length === 0) {
@@ -54,7 +62,9 @@ async function main() {
     console.log(`changeset present:\n${addedChangesets.join('\n')}`);
     return;
   }
-  console.error('::error::this PR changes published package contents but adds no changeset. Run `pnpm changeset`, or use the release exemption only for an intentional non-versioned change.');
+  console.error(
+    '::error::this PR changes published package contents but adds no changeset. Run `pnpm changeset`, or use the release exemption only for an intentional non-versioned change.',
+  );
   console.error(`Publishable files:\n${decision.publishable.join('\n')}`);
   process.exitCode = 1;
 }

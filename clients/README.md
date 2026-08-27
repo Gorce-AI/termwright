@@ -3,14 +3,14 @@
 Non-JavaScript implementations of the termwright semantic side-channel, plus
 the shared vectors that keep them honest.
 
-| Directory | Package | What it covers |
-|---|---|---|
-| [`python/`](python) | `termwright` 0.2.0 (PyPI) | protocol client + automatic Textual probe + annotation SDK |
-| [`go/`](go) | `github.com/gorce-ai/termwright/clients/go` v0.2.0 | protocol client + Go annotation SDK |
-| [`rust/`](rust) | `termwright-protocol` 0.2.0 (crates.io) | protocol client |
-| [`rust-probe/`](rust-probe) | `termwright-probe-ratatui` 0.2.0 | exact-version Ratatui build probe |
-| [`rust-ratatui/`](rust-ratatui) | `termwright-ratatui` 0.2.0 | author-intent SDK for custom Ratatui widgets |
-| [`test-vectors/`](test-vectors) | — | cross-language conformance fixtures |
+| Directory                       | Package                                            | What it covers                                             |
+| ------------------------------- | -------------------------------------------------- | ---------------------------------------------------------- |
+| [`python/`](python)             | `termwright` 0.2.0 (PyPI)                          | protocol client + automatic Textual probe + annotation SDK |
+| [`go/`](go)                     | `github.com/gorce-ai/termwright/clients/go` v0.2.0 | protocol client + Go annotation SDK                        |
+| [`rust/`](rust)                 | `termwright-protocol` 0.2.0 (crates.io)            | protocol client                                            |
+| [`rust-probe/`](rust-probe)     | `termwright-probe-ratatui` 0.2.0                   | exact-version Ratatui build probe                          |
+| [`rust-ratatui/`](rust-ratatui) | `termwright-ratatui` 0.2.0                         | author-intent SDK for custom Ratatui widgets               |
+| [`test-vectors/`](test-vectors) | —                                                  | cross-language conformance fixtures                        |
 
 The normative implementation is the TypeScript package `@termwright/protocol`
 in `packages/protocol`. These clients are ports, not forks: where they differ
@@ -48,11 +48,11 @@ assertable test state.
 Each client bridges its ecosystem's standard logger, so application code does
 not change:
 
-| Client | Bridge | Install |
-|---|---|---|
-| Python | `logging.Handler` | `install_log_handler(client, logger)` |
-| Go | `slog.Handler` | `slog.New(protocol.NewSlogHandler(client, nil))` |
-| Rust | `tracing` Layer (feature `tracing`) | `registry().with(TermwrightLayer::new(client))` |
+| Client | Bridge                              | Install                                          |
+| ------ | ----------------------------------- | ------------------------------------------------ |
+| Python | `logging.Handler`                   | `install_log_handler(client, logger)`            |
+| Go     | `slog.Handler`                      | `slog.New(protocol.NewSlogHandler(client, nil))` |
+| Rust   | `tracing` Layer (feature `tracing`) | `registry().with(TermwrightLayer::new(client))`  |
 
 Four rules the clients enforce for you:
 
@@ -65,7 +65,7 @@ Four rules the clients enforce for you:
 - **A drop leaves a gap.** Every attempt consumes a sequence number, delivered
   or not, so a hole in `seq` tells the driver records died in the adapter
   rather than in transit. Renumbering would hide exactly what the counter
-  exists to report — which is why the counter advances *before* the budget is
+  exists to report — which is why the counter advances _before_ the budget is
   consulted, not after.
 - **The adapter owns `seq`.** The log channel is open to more than one
   publisher, and two of them can pick the same number in good faith, so the
@@ -126,13 +126,13 @@ pnpm --filter @termwright/protocol build
 node clients/test-vectors/generate.mjs
 ```
 
-| File | Asserts |
-|---|---|
-| `constants.json` | protocol id, framing/marker sizes, closed role, action and capability sets, both limit sets, env var names |
-| `framing.json` | exact frame bytes per message, multi-frame and byte-at-a-time decoding, seven hostile frames with their violation codes |
-| `marker.json` | seven marker sequences byte for byte (including a non-ASCII token), ten forgeries that must not verify |
-| `snapshots.json` | five valid trees, 24 invalid ones with their validation codes |
-| `messages.json` | both directions, accept and reject, with the wire error taxonomy |
+| File             | Asserts                                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `constants.json` | protocol id, framing/marker sizes, closed role, action and capability sets, both limit sets, env var names              |
+| `framing.json`   | exact frame bytes per message, multi-frame and byte-at-a-time decoding, seven hostile frames with their violation codes |
+| `marker.json`    | seven marker sequences byte for byte (including a non-ASCII token), ten forgeries that must not verify                  |
+| `snapshots.json` | five valid trees, 24 invalid ones with their validation codes                                                           |
+| `messages.json`  | both directions, accept and reject, with the wire error taxonomy                                                        |
 
 Cases marked `"optional": true` depend on a JSON parser that preserves lone
 surrogates. Python detects them; Go and Rust replace them with U+FFFD before
@@ -145,10 +145,10 @@ Vectors prove the protocol layer; the producer contract is proven by
 a subprocess and observes only bytes and frames. Each probe uses an application
 that imports no Termwright integration:
 
-| Probe | Example | Ready text | Interaction | Quit |
-|---|---|---|---|---|
+| Probe   | Example                             | Ready text            | Interaction            | Quit                    |
+| ------- | ----------------------------------- | --------------------- | ---------------------- | ----------------------- |
 | Textual | `python/examples/permission_app.py` | `Permission required` | `\t` → `focus: reject` | `\x11` (Ctrl+Q), exit 0 |
-| tview | `go/examples/permission/` | `Permission required` | `\t` → `focus: reject` | `\x03` (Ctrl+C), exit 0 |
+| tview   | `go/examples/permission/`           | `Permission required` | `\t` → `focus: reject` | `\x03` (Ctrl+C), exit 0 |
 
 The quit keys differ per framework, and neither is `q`: both examples carry a
 text field, and once it holds the focus a printable key is typed into it rather
@@ -160,8 +160,14 @@ Both were measured under a PTY from every focus position.
 await runAdapterConformance({
   name: 'termwright (Textual)',
   spawn: () => ({
-    command: ['python', '-m', 'termwright_probe', '--', 'python',
-      'clients/python/examples/permission_app.py'],
+    command: [
+      'python',
+      '-m',
+      'termwright_probe',
+      '--',
+      'python',
+      'clients/python/examples/permission_app.py',
+    ],
   }),
   ready: 'Permission required',
   interaction: { input: '\t', expect: 'focus: reject' },

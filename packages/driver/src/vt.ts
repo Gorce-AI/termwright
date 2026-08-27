@@ -22,7 +22,12 @@
  * now forwards all of those families; OSC 8487 remains the one cross-platform
  * encoding certified end to end.
  */
-import { createTerminal, loadSerializeAddon, type Terminal, type TerminalProfile } from '@termwright/vt';
+import {
+  createTerminal,
+  loadSerializeAddon,
+  type Terminal,
+  type TerminalProfile,
+} from '@termwright/vt';
 import { MARKER_OSC_CODE, type CursorInfo } from '@termwright/protocol';
 import type { TerminalModes } from './api.js';
 import { captureRows } from './screen.js';
@@ -64,7 +69,6 @@ interface ObservableVtState {
 type PendingObservationEvent =
   | { readonly kind: 'revision'; readonly revision: number }
   | { readonly kind: 'marker'; readonly payload: string; readonly screenRevision: number };
-
 
 /** Options for {@link VtScreen}. */
 export interface VtOptions {
@@ -164,7 +168,12 @@ export class VtScreen {
     cursorVisible: true,
     cursorShape: undefined,
   };
-  #shell: { lastMark: string | null; lastExitCode: number | null; cwd: string | null; bellCount: number } = {
+  #shell: {
+    lastMark: string | null;
+    lastExitCode: number | null;
+    cwd: string | null;
+    bellCount: number;
+  } = {
     lastMark: null,
     lastExitCode: null,
     cwd: null,
@@ -333,7 +342,11 @@ export class VtScreen {
       bracketedPaste: m.bracketedPasteMode,
       applicationCursorKeys: m.applicationCursorKeysMode,
       applicationKeypad: m.applicationKeypadMode,
-      focusReporting: known ? (m.sendFocusMode ? ('on' as const) : ('off' as const)) : ('unknown' as const),
+      focusReporting: known
+        ? m.sendFocusMode
+          ? ('on' as const)
+          : ('off' as const)
+        : ('unknown' as const),
       synchronizedOutput: m.synchronizedOutputMode,
     });
   }
@@ -416,15 +429,17 @@ export class VtScreen {
     let styled = false;
     for (const span of spans) {
       if (
-        span.row < 0
-        || span.row >= rows
-        || span.from < 0
-        || span.to < span.from
-        || span.to > columns
-      ) return 'span-out-of-range';
+        span.row < 0 ||
+        span.row >= rows ||
+        span.from < 0 ||
+        span.to < span.from ||
+        span.to > columns
+      )
+        return 'span-out-of-range';
       for (let column = span.from; column < span.to; column += 1) {
         const index = span.row * columns + column;
-        if ((this.#cellLastGlyphRevision[index] ?? this.#revision) > revision) return 'glyphs-changed';
+        if ((this.#cellLastGlyphRevision[index] ?? this.#revision) > revision)
+          return 'glyphs-changed';
         if ((this.#cellLastChangedRevision[index] ?? this.#revision) > revision) styled = true;
       }
     }
@@ -584,7 +599,9 @@ export class VtScreen {
     // those characters is still aimed at them; a changed glyph is a different
     // matter. Collapsing the two makes every recolour look like the target
     // moved.
-    const glyphs = captured.flatMap((row) => row.cells.map((cell) => `${cell.char}\u0000${cell.width}`));
+    const glyphs = captured.flatMap((row) =>
+      row.cells.map((cell) => `${cell.char}\u0000${cell.width}`),
+    );
     const structural = [
       this.terminal.cols,
       this.terminal.rows,
@@ -634,12 +651,13 @@ export class VtScreen {
     if (before.structural === after.structural && changedCells.length === 0) return;
 
     this.#revision += 1;
-    const global = before.columns !== after.columns
-      || before.rows !== after.rows
-      || before.buffer !== after.buffer
-      || before.viewportY !== after.viewportY
-      || before.baseY !== after.baseY
-      || before.retainedFloor !== after.retainedFloor;
+    const global =
+      before.columns !== after.columns ||
+      before.rows !== after.rows ||
+      before.buffer !== after.buffer ||
+      before.viewportY !== after.viewportY ||
+      before.baseY !== after.baseY ||
+      before.retainedFloor !== after.retainedFloor;
     if (global) {
       this.#globalCoordinateRevision = this.#revision;
       this.#cellLastChangedRevision = Array.from(

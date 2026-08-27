@@ -1,5 +1,3 @@
 {
-  "recommendations": [
-    "CucumberOpen.cucumber-official"
-  ]
+  "recommendations": ["CucumberOpen.cucumber-official"]
 }

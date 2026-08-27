@@ -24,29 +24,29 @@ binds semantic compatibility to unrelated bytes and generated file layout.
 
 ## Complete old-to-new datum map
 
-| Required datum | Old/current source | Classification and use | Runtime/public result |
-|---|---|---|---|
-| committed `rootNode` | transformed `renderer.js` argument | semantic truth: hierarchy and identity | **Parity for React commits:** `FiberRoot.containerInfo` is the identical `ink-root` |
-| hierarchy/text/style | root DOM reached through renderer hook | semantic truth | **Parity for ordinary commits:** walk the same Ink DOM |
-| Yoga geometry | root DOM frozen by renderer capture | layout truth | **Ordinary parity; resize and transient Static fail** |
-| role and ARIA state | DOM `internal_accessibility` | semantic truth | **Parity:** role and checked/disabled/expanded/selected/etc. survive |
-| accessible name / `aria-label` | source React props; label replaces content in screen-reader mode | semantic truth | **Fiber POC only:** normal host DOM drops it; `memoizedProps` correlates through host `stateNode` |
-| `aria-hidden` | source React props | semantic truth | **Fiber POC only:** normal host DOM drops it |
-| focus identity | Ink `FocusContext` / hook state | interaction state | **No replacement:** behavior is tested, host DOM has no focus owner |
-| render boundary | exact capture plus public `onRender` | lifecycle truth | **Partial:** `onRender` is causal; React commit is later and absent for resize |
-| React commit timing | unused by old path | conformance signal | available after Ink `onRender`, not authoritative publication |
-| semantic revision timing | session pairs exact capture, publication and marker | causal contract | no React-only replacement |
-| terminal flush boundary | `waitUntilRenderFlush()` plus tracked stdout | visual/causal truth | public signal retained; React commit says nothing about PTY application |
-| live `output` | transformed renderer result | row positioning artifact | not replaced; PTY should become visual truth after differential proof |
-| `outputHeight` | transformed renderer result | live-region origin | ordinary Yoga agrees; resize makes React snapshot stale |
-| `staticOutput` / static rows | transformed result and retained Static subtree | retention contract | **Failure:** callback sees detached, zero-height Static |
-| screen-reader flag | transformed renderer argument | output configuration | explicit option/environment observable; exact output still required |
-| interactive mode | resolved private Ink field | environment-resolved configuration | explicit option known; omitted-option TTY/pipe result now measured, but no public resolved-value hook exists |
-| alternate-screen mode | resolved private Ink field | terminal placement | explicit option plus terminal buffer evidence; removal unproven |
-| debug mode | private render options | terminal placement | explicit public option available |
-| stdout, TTY, rows | render options plus transformed window-size context | configuration/geometry | public wrapped stdout supplies them |
-| columns | public stdout, indirectly Yoga width | configuration/geometry | public stdout; resize tested but invalidates React snapshot |
-| stderr and stderr TTY | public render option; absent from exact hooks | configuration, not semantic truth | public wrapped stderr; Fiber is unnecessary |
+| Required datum                 | Old/current source                                               | Classification and use                 | Runtime/public result                                                                                        |
+| ------------------------------ | ---------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| committed `rootNode`           | transformed `renderer.js` argument                               | semantic truth: hierarchy and identity | **Parity for React commits:** `FiberRoot.containerInfo` is the identical `ink-root`                          |
+| hierarchy/text/style           | root DOM reached through renderer hook                           | semantic truth                         | **Parity for ordinary commits:** walk the same Ink DOM                                                       |
+| Yoga geometry                  | root DOM frozen by renderer capture                              | layout truth                           | **Ordinary parity; resize and transient Static fail**                                                        |
+| role and ARIA state            | DOM `internal_accessibility`                                     | semantic truth                         | **Parity:** role and checked/disabled/expanded/selected/etc. survive                                         |
+| accessible name / `aria-label` | source React props; label replaces content in screen-reader mode | semantic truth                         | **Fiber POC only:** normal host DOM drops it; `memoizedProps` correlates through host `stateNode`            |
+| `aria-hidden`                  | source React props                                               | semantic truth                         | **Fiber POC only:** normal host DOM drops it                                                                 |
+| focus identity                 | Ink `FocusContext` / hook state                                  | interaction state                      | **No replacement:** behavior is tested, host DOM has no focus owner                                          |
+| render boundary                | exact capture plus public `onRender`                             | lifecycle truth                        | **Partial:** `onRender` is causal; React commit is later and absent for resize                               |
+| React commit timing            | unused by old path                                               | conformance signal                     | available after Ink `onRender`, not authoritative publication                                                |
+| semantic revision timing       | session pairs exact capture, publication and marker              | causal contract                        | no React-only replacement                                                                                    |
+| terminal flush boundary        | `waitUntilRenderFlush()` plus tracked stdout                     | visual/causal truth                    | public signal retained; React commit says nothing about PTY application                                      |
+| live `output`                  | transformed renderer result                                      | row positioning artifact               | not replaced; PTY should become visual truth after differential proof                                        |
+| `outputHeight`                 | transformed renderer result                                      | live-region origin                     | ordinary Yoga agrees; resize makes React snapshot stale                                                      |
+| `staticOutput` / static rows   | transformed result and retained Static subtree                   | retention contract                     | **Failure:** callback sees detached, zero-height Static                                                      |
+| screen-reader flag             | transformed renderer argument                                    | output configuration                   | explicit option/environment observable; exact output still required                                          |
+| interactive mode               | resolved private Ink field                                       | environment-resolved configuration     | explicit option known; omitted-option TTY/pipe result now measured, but no public resolved-value hook exists |
+| alternate-screen mode          | resolved private Ink field                                       | terminal placement                     | explicit option plus terminal buffer evidence; removal unproven                                              |
+| debug mode                     | private render options                                           | terminal placement                     | explicit public option available                                                                             |
+| stdout, TTY, rows              | render options plus transformed window-size context              | configuration/geometry                 | public wrapped stdout supplies them                                                                          |
+| columns                        | public stdout, indirectly Yoga width                             | configuration/geometry                 | public stdout; resize tested but invalidates React snapshot                                                  |
+| stderr and stderr TTY          | public render option; absent from exact hooks                    | configuration, not semantic truth      | public wrapped stderr; Fiber is unnecessary                                                                  |
 
 `output`, `staticOutput` and `outputHeight` are not semantic truth merely because
 the old path exposed them. The migration may remove them only after the
@@ -139,7 +139,7 @@ Measured gaps which block removal of exact instrumentation:
    `onRender` from reconciler `resetAfterCommit`; React invokes
    `onCommitFiberRoot` only after that callback returns. The observed order is
    `exact renderer capture -> exact frame context -> Ink onRender -> React
-   commit observer`.
+commit observer`.
 2. **Resize is not a React commit.** A stdout resize recomputes Yoga and emits
    `onRender`, but no `onCommitFiberRoot` occurs. The exact/public boundary saw
    width 16 while the last React commit snapshot still had width 24.
@@ -169,31 +169,31 @@ is not claimed.
 
 This table distinguishes completed tests from the planned removal gate.
 
-| Contract/scenario | Evidence now | Status for removing exact path |
-|---|---|---|
-| `containerInfo` identity | real Ink Node test, Bun process and same-renderer differential | pass |
-| component-only mount / nested custom components | real host hierarchy differential | pass for host tree |
-| rerender / component replacement | exact/runtime comparison | pass for ordinary commits |
-| rapid consecutive rerenders | final authoritative tree comparison | pass; not a pending-stdout race proof |
-| several roots | real differential | discovery passes; teardown isolation fails |
-| several Ink renderers / foreign renderer | deterministic bridge unit tests | pass at hook layer |
-| existing hook composition | ids, prototype properties, callback `this`, repeated install, throwing callback and frozen-target refusal | pass for tested surface |
-| role / ARIA state | real Box role/state equality | pass |
-| name / `aria-hidden` | real Fiber `memoizedProps` -> host `stateNode` POC | experimental only |
-| screen-reader separation | explicit screen-reader differential | partial; exact output remains |
-| Yoga on ordinary commit | exact/runtime host facts | pass |
-| clipping/wrapping/visible rect | exact/runtime comparison over the identical host nodes | relative intended/visible rect parity; absolute viewport placement still requires exact output + terminal evidence |
-| stdout resize | causal resize and flush | fail: no React commit, stale snapshot |
-| `<Static>` retention | pre/post callback comparison | fail: detached and zero-height |
-| unmount | real Fiber callbacks | fail: public callback cannot identify root |
-| focus / `useInput` | causal callback promises and committed host output | behavior proven; semantic focus source absent |
-| explicit interactive/alternate/debug | frame-context plus captured inline/normal/alternate/debug stdout and clear/rerender behavior | terminal behavior measured; it is absent from React host data |
-| resolved interactive default | omitted-option TTY and pipe differential | resolved values measured; public replacement still missing because CI policy is private |
-| terminal flush / revision authority | public flush plus existing session tests | React-only replacement fails |
-| `DEV=true` | isolated Node processes compare bytes and trap socket connect | pass for 7.1.1; Termwright does not set DEV |
-| Bun | real unskipped Bun bridge process | pass locally; CI must provide Bun |
-| pending stdout plus next commit/resize/unmount | deterministic `RenderBoundaryQueue` causal tests with deferred promises | queue contract passes without clocks; full Ink/PTY integration remains covered only by ordinary flush tests |
-| traversal performance | real 513-node Ink host tree, 100 `observeInkTree` + JSON serialization iterations | measured; no timing threshold, numbers below |
+| Contract/scenario                               | Evidence now                                                                                              | Status for removing exact path                                                                                     |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `containerInfo` identity                        | real Ink Node test, Bun process and same-renderer differential                                            | pass                                                                                                               |
+| component-only mount / nested custom components | real host hierarchy differential                                                                          | pass for host tree                                                                                                 |
+| rerender / component replacement                | exact/runtime comparison                                                                                  | pass for ordinary commits                                                                                          |
+| rapid consecutive rerenders                     | final authoritative tree comparison                                                                       | pass; not a pending-stdout race proof                                                                              |
+| several roots                                   | real differential                                                                                         | discovery passes; teardown isolation fails                                                                         |
+| several Ink renderers / foreign renderer        | deterministic bridge unit tests                                                                           | pass at hook layer                                                                                                 |
+| existing hook composition                       | ids, prototype properties, callback `this`, repeated install, throwing callback and frozen-target refusal | pass for tested surface                                                                                            |
+| role / ARIA state                               | real Box role/state equality                                                                              | pass                                                                                                               |
+| name / `aria-hidden`                            | real Fiber `memoizedProps` -> host `stateNode` POC                                                        | experimental only                                                                                                  |
+| screen-reader separation                        | explicit screen-reader differential                                                                       | partial; exact output remains                                                                                      |
+| Yoga on ordinary commit                         | exact/runtime host facts                                                                                  | pass                                                                                                               |
+| clipping/wrapping/visible rect                  | exact/runtime comparison over the identical host nodes                                                    | relative intended/visible rect parity; absolute viewport placement still requires exact output + terminal evidence |
+| stdout resize                                   | causal resize and flush                                                                                   | fail: no React commit, stale snapshot                                                                              |
+| `<Static>` retention                            | pre/post callback comparison                                                                              | fail: detached and zero-height                                                                                     |
+| unmount                                         | real Fiber callbacks                                                                                      | fail: public callback cannot identify root                                                                         |
+| focus / `useInput`                              | causal callback promises and committed host output                                                        | behavior proven; semantic focus source absent                                                                      |
+| explicit interactive/alternate/debug            | frame-context plus captured inline/normal/alternate/debug stdout and clear/rerender behavior              | terminal behavior measured; it is absent from React host data                                                      |
+| resolved interactive default                    | omitted-option TTY and pipe differential                                                                  | resolved values measured; public replacement still missing because CI policy is private                            |
+| terminal flush / revision authority             | public flush plus existing session tests                                                                  | React-only replacement fails                                                                                       |
+| `DEV=true`                                      | isolated Node processes compare bytes and trap socket connect                                             | pass for 7.1.1; Termwright does not set DEV                                                                        |
+| Bun                                             | real unskipped Bun bridge process                                                                         | pass locally; CI must provide Bun                                                                                  |
+| pending stdout plus next commit/resize/unmount  | deterministic `RenderBoundaryQueue` causal tests with deferred promises                                   | queue contract passes without clocks; full Ink/PTY integration remains covered only by ordinary flush tests        |
+| traversal performance                           | real 513-node Ink host tree, 100 `observeInkTree` + JSON serialization iterations                         | measured; no timing threshold, numbers below                                                                       |
 
 ### Reproducible runtime measurement
 

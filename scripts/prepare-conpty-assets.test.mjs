@@ -56,10 +56,10 @@ describe('the pinned ConPTY asset extractor', () => {
       ['build/native/runtimes/x64/OpenConsole.exe', 'HOST'],
       ['ignored.txt', 'NO'],
     ]);
-    const result = extractZipEntries(archive, new Set([
-      'runtimes/win-x64/native/conpty.dll',
-      'build/native/runtimes/x64/OpenConsole.exe',
-    ]));
+    const result = extractZipEntries(
+      archive,
+      new Set(['runtimes/win-x64/native/conpty.dll', 'build/native/runtimes/x64/OpenConsole.exe']),
+    );
     expect([...result]).toEqual([
       ['runtimes/win-x64/native/conpty.dll', Buffer.from('DLL')],
       ['build/native/runtimes/x64/OpenConsole.exe', Buffer.from('HOST')],
@@ -111,10 +111,16 @@ describe('the pinned ConPTY asset extractor', () => {
     try {
       await writeFile(archivePath, archive);
       const manifest = await prepareConptyAssets({
-        architecture: 'x64', destination, archivePath, lock,
+        architecture: 'x64',
+        destination,
+        archivePath,
+        lock,
       });
-      expect((await readdir(destination, { recursive: true }))
-        .map((path) => path.replaceAll('\\', '/')).sort()).toEqual([
+      expect(
+        (await readdir(destination, { recursive: true }))
+          .map((path) => path.replaceAll('\\', '/'))
+          .sort(),
+      ).toEqual([
         'LICENSE.microsoft-terminal.txt',
         'SBOM.spdx.json',
         'THIRD_PARTY_NOTICES.md',
@@ -129,19 +135,26 @@ describe('the pinned ConPTY asset extractor', () => {
       expect(manifest).toMatchObject({ assets: assetDigests, metadata: lock.metadata.x64 });
       const sbom = JSON.parse(await readFile(join(destination, 'SBOM.spdx.json'), 'utf8'));
       expect(sbom.packages[0]).toMatchObject({ filesAnalyzed: true });
-      expect(sbom.packages[0].externalRefs[0].referenceLocator)
-        .toBe('pkg:nuget/Microsoft.Windows.Console.ConPTY@test-version');
-      expect(sbom.files.map((file) => [file.fileName, file.checksums[0].checksumValue]))
-        .toEqual(Object.entries(assetDigests).map(([path, digest]) => [`./${path}`, digest]));
+      expect(sbom.packages[0].externalRefs[0].referenceLocator).toBe(
+        'pkg:nuget/Microsoft.Windows.Console.ConPTY@test-version',
+      );
+      expect(sbom.files.map((file) => [file.fileName, file.checksums[0].checksumValue])).toEqual(
+        Object.entries(assetDigests).map(([path, digest]) => [`./${path}`, digest]),
+      );
 
       const rejectedDestination = join(root, 'rejected-vendor');
       await mkdir(rejectedDestination);
       await writeFile(join(rejectedDestination, 'sentinel'), 'unchanged');
       const badLock = structuredClone(lock);
       badLock.metadata.x64['SBOM.spdx.json'] = '0'.repeat(64);
-      await expect(prepareConptyAssets({
-        architecture: 'x64', destination: rejectedDestination, archivePath, lock: badLock,
-      })).rejects.toThrow(/generated ConPTY metadata SHA-256 mismatch/u);
+      await expect(
+        prepareConptyAssets({
+          architecture: 'x64',
+          destination: rejectedDestination,
+          archivePath,
+          lock: badLock,
+        }),
+      ).rejects.toThrow(/generated ConPTY metadata SHA-256 mismatch/u);
       expect(await readdir(rejectedDestination)).toEqual(['sentinel']);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -151,10 +164,12 @@ describe('the pinned ConPTY asset extractor', () => {
 
 describe('the ConPTY staging boundary', () => {
   it('allows only the native build vendor directory', () => {
-    expect(assertSafeStageDestination('packages/pty/build/Release/vendor'))
-      .toMatch(/packages[/\\]pty[/\\]build[/\\]Release[/\\]vendor$/u);
+    expect(assertSafeStageDestination('packages/pty/build/Release/vendor')).toMatch(
+      /packages[/\\]pty[/\\]build[/\\]Release[/\\]vendor$/u,
+    );
     expect(() => assertSafeStageDestination('.')).toThrow(/non-build ConPTY destination/u);
-    expect(() => assertSafeStageDestination('packages/pty-win32-x64/vendor'))
-      .toThrow(/non-build ConPTY destination/u);
+    expect(() => assertSafeStageDestination('packages/pty-win32-x64/vendor')).toThrow(
+      /non-build ConPTY destination/u,
+    );
   });
 });

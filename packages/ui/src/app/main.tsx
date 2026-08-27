@@ -13,4 +13,8 @@ const inline = readInlinePayload();
 const client = inline === undefined ? new RunnerClient(bootstrapRunnerToken()) : undefined;
 const source = inline === undefined ? (client as RunnerClient) : new InlineDataSource(inline);
 
-createRoot(host).render(<PreferencesProvider><TermwrightApp source={source} {...(client === undefined ? {} : { client })} /></PreferencesProvider>);
+createRoot(host).render(
+  <PreferencesProvider>
+    <TermwrightApp source={source} {...(client === undefined ? {} : { client })} />
+  </PreferencesProvider>,
+);

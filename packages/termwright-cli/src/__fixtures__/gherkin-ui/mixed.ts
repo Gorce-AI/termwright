@@ -8,12 +8,19 @@ import { After, Before, Given, Then, When, defineSteps } from '@termwright/gherk
 
 const semanticApp = join(
   dirname(fileURLToPath(import.meta.url)),
-  '..', '..', '..', '..',
-  'driver', 'test-fixtures', 'semantic-app.mjs',
+  '..',
+  '..',
+  '..',
+  '..',
+  'driver',
+  'test-fixtures',
+  'semantic-app.mjs',
 );
 
 configureTermwright({
-  outputDir: process.env['TERMWRIGHT_GHERKIN_UI_OUTPUT'] ?? join(tmpdir(), 'termwright-gherkin-ui-artifacts'),
+  outputDir:
+    process.env['TERMWRIGHT_GHERKIN_UI_OUTPUT'] ??
+    join(tmpdir(), 'termwright-gherkin-ui-artifacts'),
 });
 
 function app(world: Record<string, unknown>): TerminalHarness {
@@ -30,7 +37,8 @@ export default defineSteps(
     });
   }),
   After(({ world }) => {
-    if (world['hookReady'] !== true) throw new Error('Before hook did not initialize this scenario');
+    if (world['hookReady'] !== true)
+      throw new Error('Before hook did not initialize this scenario');
   }),
   Given('a permission terminal is running', async ({ terminal, world }) => {
     const effects = process.env['TERMWRIGHT_GHERKIN_UI_EFFECTS'];

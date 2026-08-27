@@ -16,7 +16,9 @@ class DelayedBindServer extends EventEmitter {
   close(callback: (error?: Error) => void): this {
     this.closeStates.push(this.listening);
     if (!this.listening) {
-      const error = Object.assign(new Error('server is not running'), { code: 'ERR_SERVER_NOT_RUNNING' });
+      const error = Object.assign(new Error('server is not running'), {
+        code: 'ERR_SERVER_NOT_RUNNING',
+      });
       callback(error);
       return this;
     }
@@ -36,8 +38,9 @@ describe('control server bind ownership', () => {
     const server = new DelayedBindServer();
     const bind = bindControlServer(server, 'delayed-address');
 
-    await expect(withinDeadline(bind, performance.now() - 1, 'bind deadline expired'))
-      .rejects.toThrow('bind deadline expired');
+    await expect(
+      withinDeadline(bind, performance.now() - 1, 'bind deadline expired'),
+    ).rejects.toThrow('bind deadline expired');
     const rolledBack = bind.rollback();
     expect(server.closeStates).toEqual([false]);
 

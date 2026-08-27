@@ -42,10 +42,12 @@ function machFixture(cpu, minimum = (13 << 16) | (5 << 8)) {
 describe('native PTY prebuild architecture guard', () => {
   it('seals the complete x64 and ARM64 ConPTY runtime inventories', async () => {
     const packages = fileURLToPath(new URL('../packages/', import.meta.url));
-    await expect(verifyWindowsConptyBundle(join(packages, 'pty-win32-x64'), 'x64'))
-      .resolves.toBeUndefined();
-    await expect(verifyWindowsConptyBundle(join(packages, 'pty-win32-arm64'), 'arm64'))
-      .resolves.toBeUndefined();
+    await expect(
+      verifyWindowsConptyBundle(join(packages, 'pty-win32-x64'), 'x64'),
+    ).resolves.toBeUndefined();
+    await expect(
+      verifyWindowsConptyBundle(join(packages, 'pty-win32-arm64'), 'arm64'),
+    ).resolves.toBeUndefined();
   });
 
   it('rejects modified legal and SBOM metadata', async () => {
@@ -56,8 +58,9 @@ describe('native PTY prebuild architecture guard', () => {
       await cp(join(packages, 'pty-win32-x64'), candidate, { recursive: true });
       const sbom = join(candidate, 'vendor', 'SBOM.spdx.json');
       await writeFile(sbom, `${await readFile(sbom, 'utf8')}\n`);
-      await expect(verifyWindowsConptyBundle(candidate, 'x64'))
-        .rejects.toThrow(/metadata SHA-256 mismatch/u);
+      await expect(verifyWindowsConptyBundle(candidate, 'x64')).rejects.toThrow(
+        /metadata SHA-256 mismatch/u,
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -72,21 +75,25 @@ describe('native PTY prebuild architecture guard', () => {
     expect(() => verifyBinaryArchitecture(elfFixture(62), 'linux', 'x64')).not.toThrow();
     expect(() => verifyBinaryArchitecture(elfFixture(183), 'linux', 'arm64')).not.toThrow();
     expect(() => verifyBinaryArchitecture(machFixture(0x01000007), 'darwin', 'x64')).not.toThrow();
-    expect(() => verifyBinaryArchitecture(machFixture(0x0100000c), 'darwin', 'arm64')).not.toThrow();
+    expect(() =>
+      verifyBinaryArchitecture(machFixture(0x0100000c), 'darwin', 'arm64'),
+    ).not.toThrow();
   });
 
   it('rejects a binary packaged for another platform or architecture', () => {
-    expect(() => verifyBinaryArchitecture(peFixture(0x8664), 'win32', 'arm64')).toThrow(/wrong PE/u);
+    expect(() => verifyBinaryArchitecture(peFixture(0x8664), 'win32', 'arm64')).toThrow(
+      /wrong PE/u,
+    );
     expect(() => verifyBinaryArchitecture(elfFixture(62), 'linux', 'arm64')).toThrow(/wrong ELF/u);
-    expect(() => verifyBinaryArchitecture(machFixture(0x0100000c), 'darwin', 'x64')).toThrow(/wrong Mach-O/u);
+    expect(() => verifyBinaryArchitecture(machFixture(0x0100000c), 'darwin', 'x64')).toThrow(
+      /wrong Mach-O/u,
+    );
   });
 
   it('rejects a Darwin binary whose deployment target drifted from 13.5', () => {
-    expect(() => verifyBinaryArchitecture(
-      machFixture(0x0100000c, 15 << 16),
-      'darwin',
-      'arm64',
-    )).toThrow(/targets macOS 15\.0\.0, expected 13\.5\.0/u);
+    expect(() =>
+      verifyBinaryArchitecture(machFixture(0x0100000c, 15 << 16), 'darwin', 'arm64'),
+    ).toThrow(/targets macOS 15\.0\.0, expected 13\.5\.0/u);
   });
 
   it('rejects Linux symbols above the documented Ubuntu 22.04 ABI floor', () => {
@@ -105,10 +112,14 @@ describe('native PTY prebuild architecture guard', () => {
       await mkdir(join(root, 'packages', 'pty-darwin-arm64'), { recursive: true });
       await cp(fileURLToPath(new URL('./check-prebuild.mjs', import.meta.url)), script);
       const executableScript = await realpath(script);
-      await expect(execute(process.execPath, [executableScript, 'darwin', 'arm64', '--allow-missing'])).resolves.toMatchObject({
+      await expect(
+        execute(process.execPath, [executableScript, 'darwin', 'arm64', '--allow-missing']),
+      ).resolves.toMatchObject({
         stdout: expect.stringContaining('is absent (not built in this tree)'),
       });
-      await expect(execute(process.execPath, [executableScript, 'darwin', 'arm64'])).rejects.toMatchObject({ code: 1 });
+      await expect(
+        execute(process.execPath, [executableScript, 'darwin', 'arm64']),
+      ).rejects.toMatchObject({ code: 1 });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

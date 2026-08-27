@@ -52,7 +52,7 @@ addon explicitly activated, plus the serialize addon.
 
 **Why.** Terminal emulation is a deep pit of edge cases — wide characters,
 combining marks, scroll regions, alternate buffers, mode handling. xterm.js is
-the emulator with the widest real-world exposure, and it is the *same engine*
+the emulator with the widest real-world exposure, and it is the _same engine_
 the [runner UI](../../tools/runner-ui/) renders with, so what a test asserts and
 what a human sees cannot diverge.
 
@@ -77,7 +77,7 @@ never a data carrier**.
 is subject to terminal parsing, size limits, and interleaving with the
 application's own writes — and any program that echoes bytes could inject one.
 
-**Why a marker at all.** Without it there is no way to know *which screen* a
+**Why a marker at all.** Without it there is no way to know _which screen_ a
 tree describes. The marker is emitted after the last byte of its frame, so the
 driver publishes a revision only when it holds both the tree and the grid state
 at that marker. This is Neovim's `flush` semantics, and it is what makes waits
@@ -111,7 +111,7 @@ start avoids a second migration later, and the schemas are the single source
 from which `agent-context` and the agent-skill package are generated — so a
 documented parameter cannot drift from a real one.
 
-**Also decided here.** Session state is keyed by MCP session id in *our*
+**Also decided here.** Session state is keyed by MCP session id in _our_
 registry, not inside transport objects, which is what makes stdio and Streamable
 HTTP interchangeable and keeps the ceilings in one place.
 

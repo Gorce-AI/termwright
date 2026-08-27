@@ -9,7 +9,15 @@
  * per test, into the directory that already exists only for that test.
  */
 
-import { cpSync, lstatSync, mkdirSync, readlinkSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  lstatSync,
+  mkdirSync,
+  readlinkSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 /** File contents to write. A string is written as UTF-8. */
@@ -47,9 +55,11 @@ export function seedDirectory(directory: string, options: SeedOptions): readonly
   const root = resolve(directory);
   const written: string[] = [];
 
-  const template = typeof options.template === 'string' ? { from: options.template } : options.template;
+  const template =
+    typeof options.template === 'string' ? { from: options.template } : options.template;
   if (template !== undefined) {
-    const target = template.into === undefined ? root : safeJoin(root, template.into, 'template.into');
+    const target =
+      template.into === undefined ? root : safeJoin(root, template.into, 'template.into');
     const source = resolve(root, template.from);
     validateTemplateSymlinks(source);
     mkdirSync(target, { recursive: true });
@@ -108,13 +118,19 @@ function assertNoSymlinkTraversal(root: string, target: string, what: string): v
 
 function escapes(root: string, target: string): boolean {
   const path = relative(root, target);
-  return path === '..' || path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(path);
+  return (
+    path === '..' ||
+    path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+    isAbsolute(path)
+  );
 }
 
 /** Joins a declared path onto the root, refusing anything that escapes it. */
 function safeJoin(root: string, path: string, what: string): string {
   if (isAbsolute(path)) {
-    throw new TypeError(`${what}: ${JSON.stringify(path)} must be relative to the test's directory`);
+    throw new TypeError(
+      `${what}: ${JSON.stringify(path)} must be relative to the test's directory`,
+    );
   }
   const target = resolve(join(root, path));
   const inside = relative(root, target);

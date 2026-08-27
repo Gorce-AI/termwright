@@ -100,10 +100,7 @@ export async function renderAnsiToHtml(
 }
 
 /** Row indices whose text or styling differs between two rendered screens. */
-export function changedRows(
-  before: RenderedScreen,
-  after: RenderedScreen,
-): ReadonlySet<number> {
+export function changedRows(before: RenderedScreen, after: RenderedScreen): ReadonlySet<number> {
   const changed = new Set<number>();
   const count = Math.max(before.lines.length, after.lines.length);
   for (let row = 0; row < count; row += 1) {
@@ -190,12 +187,7 @@ function sameStyle(a: CellStyle, b: CellStyle): boolean {
   );
 }
 
-function wrap(
-  text: string,
-  style: CellStyle,
-  foreground: string,
-  background: string,
-): string {
+function wrap(text: string, style: CellStyle, foreground: string, background: string): string {
   const declarations: string[] = [];
   if (style.fg !== foreground) declarations.push(`color:${style.fg}`);
   if (style.bg !== background) declarations.push(`background:${style.bg}`);

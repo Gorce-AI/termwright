@@ -1,15 +1,12 @@
-import {execFile} from 'node:child_process';
-import {cp, mkdir, mkdtemp, readFile, realpath, rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {dirname, join} from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {promisify} from 'node:util';
-import {afterEach, describe, expect} from 'vitest';
-import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
-import {
-  launchTerminal,
-  type TerminalHarness,
-} from '@termwright/driver';
+import { execFile } from 'node:child_process';
+import { cp, mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { launchTerminal, type TerminalHarness } from '@termwright/driver';
 import {
   createNativePtyBackend,
   nativePtyAvailable,
@@ -17,23 +14,15 @@ import {
   type PtyBackend,
   type PtyProcess,
 } from '@termwright/driver/experimental';
-import {goTestCapability} from '../../../scripts/test-support/go-toolchain.mjs';
-import {
-  compilerUnitTargetsForPlatform,
-  prepareInstrumentedBuild,
-} from './launch.js';
+import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
+import { compilerUnitTargetsForPlatform, prepareInstrumentedBuild } from './launch.js';
 
-const it = resourceAwareIt.resources({terminals: 1, traceWriters: 0, hostPressure: 'exclusive'});
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0, hostPressure: 'exclusive' });
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, 'testing', 'fixture-app');
 const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
-const PROBE_SOURCE = join(
-  here,
-  '..',
-  'assets',
-  'tview_probe.go.txt',
-);
+const PROBE_SOURCE = join(here, '..', 'assets', 'tview_probe.go.txt');
 
 const hasGo = await goTestCapability(
   async () => {
@@ -77,7 +66,7 @@ afterEach(async () => {
   // suppress cleanup evidence.
   const closed = await Promise.allSettled(owned.map((session) => session.close()));
   const removed = await Promise.allSettled(
-    ownedRoots.map((dir) => rm(dir, {recursive: true, force: true})),
+    ownedRoots.map((dir) => rm(dir, { recursive: true, force: true })),
   );
   const results = [...closed, ...removed];
   const failures = results.flatMap((result) =>
@@ -95,15 +84,15 @@ async function fixture(options: {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-tview-t1-')));
   roots.push(dir);
   const app = join(dir, 'app');
-  await mkdir(app, {recursive: true});
-  await cp(FIXTURE, app, {recursive: true});
+  await mkdir(app, { recursive: true });
+  await cp(FIXTURE, app, { recursive: true });
   await run(
     'go',
     ['mod', 'edit', `-replace=github.com/gorce-ai/termwright/clients/go=${await realpath(CLIENT)}`],
-    {cwd: app},
+    { cwd: app },
   );
-  await run('go', ['mod', 'tidy'], {cwd: app});
-  if (options.vendor) await run('go', ['mod', 'vendor'], {cwd: app});
+  await run('go', ['mod', 'tidy'], { cwd: app });
+  if (options.vendor) await run('go', ['mod', 'vendor'], { cwd: app });
 
   const binary = join(dir, `app-binary${executableSuffix}`);
   const env: NodeJS.ProcessEnv = {
@@ -115,16 +104,10 @@ async function fixture(options: {
       : {}),
   };
   const prepared = options.instrumented
-    ? await prepareInstrumentedBuild({moduleDir: app, outputDir: join(dir, 'tool'), env})
+    ? await prepareInstrumentedBuild({ moduleDir: app, outputDir: join(dir, 'tool'), env })
     : null;
-  const args = [
-    'build',
-    ...(prepared?.goArgs ?? []),
-    '-o',
-    binary,
-    '.',
-  ];
-  await run('go', args, {cwd: app, env: prepared?.env ?? env});
+  const args = ['build', ...(prepared?.goArgs ?? []), '-o', binary, '.'];
+  await run('go', args, { cwd: app, env: prepared?.env ?? env });
   return binary;
 }
 
@@ -157,7 +140,9 @@ function byteCapturingBackend(): ByteCapture {
     const encoded = Buffer.from(boundary);
     if (captured().indexOf(encoded) >= 0) return;
     if (exitError !== undefined) throw exitError;
-    await new Promise<void>((resolve, reject) => waiters.add({boundary: encoded, resolve, reject}));
+    await new Promise<void>((resolve, reject) =>
+      waiters.add({ boundary: encoded, resolve, reject }),
+    );
   };
   return {
     allBytes: captured,
@@ -167,9 +152,11 @@ function byteCapturingBackend(): ByteCapture {
       const encodedBegin = Buffer.from(begin);
       const encodedEnd = Buffer.from(end);
       const start = bytes.indexOf(encodedBegin);
-      if (start < 0) throw new Error(`tview transaction begin was not observed: ${JSON.stringify(begin)}`);
+      if (start < 0)
+        throw new Error(`tview transaction begin was not observed: ${JSON.stringify(begin)}`);
       const endOffset = bytes.indexOf(encodedEnd, start + encodedBegin.length);
-      if (endOffset < 0) throw new Error(`tview transaction end was not observed: ${JSON.stringify(end)}`);
+      if (endOffset < 0)
+        throw new Error(`tview transaction end was not observed: ${JSON.stringify(end)}`);
       return bytes.subarray(start + encodedBegin.length, endOffset);
     },
     backend: {
@@ -177,7 +164,7 @@ function byteCapturingBackend(): ByteCapture {
       spawn(options): PtyProcess {
         const process = upstream.spawn({
           ...options,
-          env: {...options.env, TERMWRIGHT_ENDPOINT: '', TERMWRIGHT_TOKEN: ''},
+          env: { ...options.env, TERMWRIGHT_ENDPOINT: '', TERMWRIGHT_TOKEN: '' },
         });
         const listeners = new Set<(data: Uint8Array) => void>();
         const pending: Uint8Array[] = [];
@@ -221,32 +208,32 @@ function syncBoundary(redraw: number, phase: 'begin' | 'end'): string {
 
 describe.skipIf(!runnable)('tview T0+T1 injection', () => {
   it('applies the add-only unit and publishes the retained tree after Show', async () => {
-    const binary = await fixture({instrumented: true});
-    const app = await launchTerminal({command: [binary], columns: 80, rows: 24});
+    const binary = await fixture({ instrumented: true });
+    const app = await launchTerminal({ command: [binary], columns: 80, rows: 24 });
     sessions.push(app);
     await app.waitForText('readme.md');
     await waitForPairedSemanticRevision(app, 1);
     expect(app.semanticTree()?.v).toBe(2);
-    expect(await app.getByRole('list', {name: 'Files'}).count()).toBe(1);
-    expect(await app.getByRole('button', {name: 'Save'}).count()).toBe(1);
+    expect(await app.getByRole('list', { name: 'Files' }).count()).toBe(1);
+    expect(await app.getByRole('button', { name: 'Save' }).count()).toBe(1);
     expect(app.contract()?.framework?.instrumentation).toEqual(
-      expect.objectContaining({highestTier: 'T1', semanticClass: 'A'}),
+      expect.objectContaining({ highestTier: 'T1', semanticClass: 'A' }),
     );
     expect(app.contract()?.framework?.version).toBe('v0.42.0');
   }, 120_000);
 
   it('injects the same package unit in Go vendor mode', async () => {
-    const binary = await fixture({instrumented: true, vendor: true});
-    const app = await launchTerminal({command: [binary], columns: 80, rows: 24});
+    const binary = await fixture({ instrumented: true, vendor: true });
+    const app = await launchTerminal({ command: [binary], columns: 80, rows: 24 });
     sessions.push(app);
     await app.waitForText('readme.md');
     await waitForPairedSemanticRevision(app, 1);
-    expect(await app.getByRole('list', {name: 'Files'}).count()).toBe(1);
+    expect(await app.getByRole('list', { name: 'Files' }).count()).toBe(1);
   }, 120_000);
 
   it('is byte-for-byte non-interfering for a causally bounded dormant transaction', async () => {
-    const plain = await fixture({instrumented: false});
-    const injected = await fixture({instrumented: true});
+    const plain = await fixture({ instrumented: false });
+    const injected = await fixture({ instrumented: true });
     const captures = [byteCapturingBackend(), byteCapturingBackend()];
     for (const [index, binary] of [plain, injected].entries()) {
       const app = await launchTerminalWithBackend({
@@ -264,31 +251,37 @@ describe.skipIf(!runnable)('tview T0+T1 injection', () => {
       await app.press('r');
       await captures[index]!.waitFor(syncBoundary(2, 'end'));
       await app.press('q');
-      expect(await app.waitForExit()).toMatchObject({code: 0});
+      expect(await app.waitForExit()).toMatchObject({ code: 0 });
       await app.close();
     }
     const reference = captures[0]!.transaction(syncBoundary(2, 'begin'), syncBoundary(2, 'end'));
     expect(reference.includes(Buffer.from('redraw:2'))).toBe(true);
     expect(reference.length).toBeGreaterThan(Buffer.byteLength('redraw:2'));
-    expect(captures[1]!.transaction(syncBoundary(2, 'begin'), syncBoundary(2, 'end'))).toEqual(reference);
+    expect(captures[1]!.transaction(syncBoundary(2, 'begin'), syncBoundary(2, 'end'))).toEqual(
+      reference,
+    );
     for (const capture of captures) {
       expect(capture.allBytes().includes(Buffer.from('\u001b]8487;'))).toBe(false);
     }
   }, 120_000);
 });
 
-it.skipIf(!hasGo)('fails closed when an active build omitted compiler injection', async () => {
-  const binary = await fixture({instrumented: false});
-  await expect(
-    run(binary, [], {
-      env: {
-        ...process.env,
-        TERMWRIGHT_ENDPOINT: '/definitely/missing/termwright.sock',
-        TERMWRIGHT_TOKEN: 'active-but-not-injected',
-      },
-    }),
-  ).rejects.toMatchObject({code: 2});
-}, 120_000);
+it.skipIf(!hasGo)(
+  'fails closed when an active build omitted compiler injection',
+  async () => {
+    const binary = await fixture({ instrumented: false });
+    await expect(
+      run(binary, [], {
+        env: {
+          ...process.env,
+          TERMWRIGHT_ENDPOINT: '/definitely/missing/termwright.sock',
+          TERMWRIGHT_TOKEN: 'active-but-not-injected',
+        },
+      }),
+    ).rejects.toMatchObject({ code: 2 });
+  },
+  120_000,
+);
 
 it('uses one decorated Show boundary without a source mutation lifecycle seam', async () => {
   const source = await readFile(PROBE_SOURCE, 'utf8');

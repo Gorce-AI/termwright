@@ -13,7 +13,7 @@ editUrl: false
 
 > **defineSteps**\<`Fixtures`\>(...`definitions`): [`GherkinDefinitions`](../../type-aliases/gherkindefinitions/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:176](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L176)
+Defined in: [definitions.ts:192](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L192)
 
 Creates the default export of a paired glue module.
 

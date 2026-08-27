@@ -26,8 +26,8 @@ const schemas = treeSchemas(DEFAULT_LIMITS);
  * schema but missing from the interface fails to compile here, which is the
  * half of the drift a runtime test cannot catch early.
  */
-export const SEMANTIC_NODE_KEYS: readonly (Exclude<keyof SemanticNode, 'geometry'>)[] = Object.freeze(
-  schemas.nodeKeys as readonly (Exclude<keyof SemanticNode, 'geometry'>)[],
+export const SEMANTIC_NODE_KEYS: readonly Exclude<keyof SemanticNode, 'geometry'>[] = Object.freeze(
+  schemas.nodeKeys as readonly Exclude<keyof SemanticNode, 'geometry'>[],
 );
 
 /** Every field name on `SemanticState`. */

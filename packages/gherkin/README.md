@@ -59,9 +59,13 @@ the generated Vitest callback can request them statically:
 import { describe, expect, test as base } from '@termwright/test';
 
 export { describe, expect };
-export interface ProjectFixtures { account: { name: string } }
+export interface ProjectFixtures {
+  account: { name: string };
+}
 export const test = base.extend<ProjectFixtures>({
-  account: async ({}, use) => { await use({ name: 'Ada' }); },
+  account: async ({}, use) => {
+    await use({ name: 'Ada' });
+  },
 });
 ```
 

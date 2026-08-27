@@ -19,18 +19,41 @@ describe('shared local transport primitives', () => {
   it('validates typed request and response envelopes once', () => {
     expect(LocalTransportError).toBeTypeOf('function');
     expect(LocalJsonDecoder).toBeTypeOf('function');
-    expect(parseRequestEnvelope({ v: 1, type: 'hello', requestId: 'r1', token: 'x' }, 1))
-      .toMatchObject({ type: 'hello', requestId: 'r1', token: 'x' });
-    expect(parseResponseEnvelope(responseEnvelope(1, 'r1', true, { ready: true }), 1))
-      .toMatchObject({ type: 'response', requestId: 'r1', ok: true, result: { ready: true } });
-    expect(() => parseResponseEnvelope({ v: 1, type: 'response', requestId: 'r1', ok: true }, 1))
-      .toThrow(/missing result/u);
-    expect(() => parseResponseEnvelope({
-      v: 1, type: 'response', requestId: 'r1', ok: true, result: null, error: { code: 'smuggled' },
-    }, 1)).toThrow(/cannot contain error/u);
-    expect(() => parseResponseEnvelope({
-      v: 1, type: 'response', requestId: 'r1', ok: false, error: null, result: { smuggled: true },
-    }, 1)).toThrow(/cannot contain result/u);
+    expect(
+      parseRequestEnvelope({ v: 1, type: 'hello', requestId: 'r1', token: 'x' }, 1),
+    ).toMatchObject({ type: 'hello', requestId: 'r1', token: 'x' });
+    expect(
+      parseResponseEnvelope(responseEnvelope(1, 'r1', true, { ready: true }), 1),
+    ).toMatchObject({ type: 'response', requestId: 'r1', ok: true, result: { ready: true } });
+    expect(() =>
+      parseResponseEnvelope({ v: 1, type: 'response', requestId: 'r1', ok: true }, 1),
+    ).toThrow(/missing result/u);
+    expect(() =>
+      parseResponseEnvelope(
+        {
+          v: 1,
+          type: 'response',
+          requestId: 'r1',
+          ok: true,
+          result: null,
+          error: { code: 'smuggled' },
+        },
+        1,
+      ),
+    ).toThrow(/cannot contain error/u);
+    expect(() =>
+      parseResponseEnvelope(
+        {
+          v: 1,
+          type: 'response',
+          requestId: 'r1',
+          ok: false,
+          error: null,
+          result: { smuggled: true },
+        },
+        1,
+      ),
+    ).toThrow(/cannot contain result/u);
   });
 
   it('generates bounded tokens and compares exact string contents', () => {
@@ -48,14 +71,16 @@ describe('shared local transport primitives', () => {
   });
 
   it('aborts endpoint startup and leaves no listener behind', async () => {
-    const endpoint = process.platform === 'win32'
-      ? `\\\\.\\pipe\\termwright-shared-abort-${randomUUID()}`
-      : join(tmpdir(), `termwright-shared-abort-${randomUUID()}.sock`);
+    const endpoint =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\termwright-shared-abort-${randomUUID()}`
+        : join(tmpdir(), `termwright-shared-abort-${randomUUID()}.sock`);
     const controller = new AbortController();
     controller.abort(new Error('cancelled before listen'));
     const server = createServer();
-    await expect(bindLocalEndpoint({ server, name: 'shared', endpoint, signal: controller.signal }))
-      .rejects.toThrow('cancelled before listen');
+    await expect(
+      bindLocalEndpoint({ server, name: 'shared', endpoint, signal: controller.signal }),
+    ).rejects.toThrow('cancelled before listen');
     expectEndpointClosed(server, endpoint);
   });
 

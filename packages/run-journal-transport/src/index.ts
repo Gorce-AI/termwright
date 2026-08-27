@@ -27,7 +27,8 @@ const MAX_REQUESTS_PER_CONNECTION = 100_000;
 const HANDSHAKE_TIMEOUT_MS = 5_000;
 
 export class RunJournalTransportError extends Error {
-  readonly code: 'authentication-failed' | 'connection-closed' | 'protocol-error' | 'stale-worker' | 'timeout';
+  readonly code:
+    'authentication-failed' | 'connection-closed' | 'protocol-error' | 'stale-worker' | 'timeout';
   constructor(code: RunJournalTransportError['code'], message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'RunJournalTransportError';
@@ -92,8 +93,11 @@ export async function startRunJournalServer(
   options.signal?.throwIfAborted();
   parseRunId('run', options.runId);
   let token: string;
-  try { token = createLocalToken(options.token); }
-  catch (error) { throw protocol('journal token must contain 32..512 characters', error); }
+  try {
+    token = createLocalToken(options.token);
+  } catch (error) {
+    throw protocol('journal token must contain 32..512 characters', error);
+  }
   const ids = new RunIdFactory();
   const connections = new Set<Connection>();
   const drainingConnections = new Set<Connection>();
@@ -104,7 +108,10 @@ export async function startRunJournalServer(
 
   const server = (dependencies.createServer ?? createServer)();
   server.on('connection', (socket) => {
-    if (closing || connections.size >= MAX_CONNECTIONS) { socket.destroy(); return; }
+    if (closing || connections.size >= MAX_CONNECTIONS) {
+      socket.destroy();
+      return;
+    }
     socket.setNoDelay(true);
     const connection: Connection = {
       socket,
@@ -120,18 +127,20 @@ export async function startRunJournalServer(
     drainingConnections.add(connection);
     const decoder = new LocalJsonDecoder(MAX_FRAME_BYTES, (message) => {
       const requestId = failureRequestId(message);
-      connection.chain = connection.chain.then(async () => {
-        if (connection.failed) return;
-        await dispatch(connection, message);
-      }).catch((error: unknown) => {
-        if (connection.failed || connection.closed) return;
-        connection.failed = true;
-        endWithLocalFrame(
-          connection.socket,
-          responseEnvelope(VERSION, requestId, false, wireError(error)),
-          MAX_FRAME_BYTES,
-        );
-      });
+      connection.chain = connection.chain
+        .then(async () => {
+          if (connection.failed) return;
+          await dispatch(connection, message);
+        })
+        .catch((error: unknown) => {
+          if (connection.failed || connection.closed) return;
+          connection.failed = true;
+          endWithLocalFrame(
+            connection.socket,
+            responseEnvelope(VERSION, requestId, false, wireError(error)),
+            MAX_FRAME_BYTES,
+          );
+        });
     });
     Object.defineProperty(connection, 'decoder', { value: decoder });
     connections.add(connection);
@@ -141,7 +150,11 @@ export async function startRunJournalServer(
     }, HANDSHAKE_TIMEOUT_MS);
     connection.handshakeTimer.unref?.();
     socket.on('data', (chunk) => {
-      try { decoder.push(chunk); } catch (error) { socket.destroy(error as Error); }
+      try {
+        decoder.push(chunk);
+      } catch (error) {
+        socket.destroy(error as Error);
+      }
     });
     socket.once('close', () => closeConnection(connection));
     socket.once('error', () => closeConnection(connection));
@@ -158,17 +171,24 @@ export async function startRunJournalServer(
     if (connection.identity === null) {
       if (type !== 'hello') throw protocol('hello must be the first message');
       const presented = text(message.token, 'token', 512);
-      if (!sameLocalSecret(token, presented)) throw new RunJournalTransportError('authentication-failed', 'journal token rejected');
+      if (!sameLocalSecret(token, presented))
+        throw new RunJournalTransportError('authentication-failed', 'journal token rejected');
       const runId = parseRunId('run', message.runId);
       if (runId !== options.runId) throw protocol('journal run id does not match server');
       const workerId = text(message.workerId, 'workerId', 256);
       const workerEpoch = integer(message.workerEpoch, 'workerEpoch');
       const previous = workers.get(workerId);
       if (previous !== undefined && workerEpoch <= previous.epoch) {
-        throw new RunJournalTransportError('stale-worker', `worker ${workerId} epoch ${workerEpoch} is stale`);
+        throw new RunJournalTransportError(
+          'stale-worker',
+          `worker ${workerId} epoch ${workerEpoch} is stale`,
+        );
       }
       connection.identity = Object.freeze({ runId, workerId, workerEpoch });
-      connection.binding = Object.freeze({ producerId: ids.create('producer'), producerEpoch: workerEpoch });
+      connection.binding = Object.freeze({
+        producerId: ids.create('producer'),
+        producerEpoch: workerEpoch,
+      });
       workers.set(workerId, { epoch: workerEpoch, connection });
       if (connection.handshakeTimer !== undefined) clearTimeout(connection.handshakeTimer);
       connection.handshakeTimer = undefined;
@@ -183,9 +203,16 @@ export async function startRunJournalServer(
       const binding = connection.binding as RunJournalProducerBinding;
       const current = workers.get(connection.identity.workerId);
       if (current?.connection !== connection || current.epoch !== connection.identity.workerEpoch) {
-        throw new RunJournalTransportError('stale-worker', 'event came from a superseded worker incarnation');
+        throw new RunJournalTransportError(
+          'stale-worker',
+          'event came from a superseded worker incarnation',
+        );
       }
-      if (event.identity.runId !== options.runId || event.producerId !== binding.producerId || event.epoch !== binding.producerEpoch) {
+      if (
+        event.identity.runId !== options.runId ||
+        event.producerId !== binding.producerId ||
+        event.epoch !== binding.producerEpoch
+      ) {
         throw protocol('event producer/run binding does not match authenticated worker');
       }
       try {
@@ -211,8 +238,12 @@ export async function startRunJournalServer(
     if (connection.handshakeTimer !== undefined) clearTimeout(connection.handshakeTimer);
     const drain = connection.chain;
     void drain.then(
-      () => { if (connection.chain === drain) drainingConnections.delete(connection); },
-      () => { if (connection.chain === drain) drainingConnections.delete(connection); },
+      () => {
+        if (connection.chain === drain) drainingConnections.delete(connection);
+      },
+      () => {
+        if (connection.chain === drain) drainingConnections.delete(connection);
+      },
     );
   }
 
@@ -244,18 +275,27 @@ export async function startRunJournalServer(
   });
 }
 
-export async function connectRunJournalWorker(options: RunJournalWorkerIdentity & {
-  readonly endpoint: string;
-  readonly token: string;
-  readonly handshakeDeadline: number;
-}): Promise<RunJournalClient> {
+export async function connectRunJournalWorker(
+  options: RunJournalWorkerIdentity & {
+    readonly endpoint: string;
+    readonly token: string;
+    readonly handshakeDeadline: number;
+  },
+): Promise<RunJournalClient> {
   const now = monotonicEpochNow();
   if (!Number.isFinite(options.handshakeDeadline) || options.handshakeDeadline <= now) {
     throw new RunJournalTransportError('timeout', 'journal handshake deadline expired');
   }
   const socket = connect(options.endpoint);
   socket.setNoDelay(true);
-  const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer?: ReturnType<typeof setTimeout> }>();
+  const pending = new Map<
+    string,
+    {
+      resolve(value: unknown): void;
+      reject(error: Error): void;
+      timer?: ReturnType<typeof setTimeout>;
+    }
+  >();
   let sequence = 0;
   let closed = false;
   let serial = Promise.resolve();
@@ -287,28 +327,51 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
     pending.clear();
   };
   socket.on('data', (chunk) => {
-    try { decoder.push(chunk); }
-    catch (error) { fail(journalTransportError(error, 'invalid journal frame')); }
+    try {
+      decoder.push(chunk);
+    } catch (error) {
+      fail(journalTransportError(error, 'invalid journal frame'));
+    }
   });
-  socket.once('error', (error) => fail(new RunJournalTransportError('connection-closed', error.message, { cause: error })));
-  socket.once('close', () => fail(new RunJournalTransportError('connection-closed', 'journal connection closed')));
+  socket.once('error', (error) =>
+    fail(new RunJournalTransportError('connection-closed', error.message, { cause: error })),
+  );
+  socket.once('close', () =>
+    fail(new RunJournalTransportError('connection-closed', 'journal connection closed')),
+  );
 
-  const request = (type: string, fields: Record<string, unknown>, deadline?: number): Promise<unknown> => {
-    if (closed) return Promise.reject(new RunJournalTransportError('connection-closed', 'journal client is closed'));
+  const request = (
+    type: string,
+    fields: Record<string, unknown>,
+    deadline?: number,
+  ): Promise<unknown> => {
+    if (closed)
+      return Promise.reject(
+        new RunJournalTransportError('connection-closed', 'journal client is closed'),
+      );
     const requestId = `request:${++sequence}`;
     return new Promise((resolve, reject) => {
-      const pendingRequest: { resolve(value: unknown): void; reject(error: Error): void; timer?: ReturnType<typeof setTimeout> } = { resolve, reject };
+      const pendingRequest: {
+        resolve(value: unknown): void;
+        reject(error: Error): void;
+        timer?: ReturnType<typeof setTimeout>;
+      } = { resolve, reject };
       if (deadline !== undefined) {
         const delay = deadline - monotonicEpochNow();
-        if (delay <= 0) { reject(new RunJournalTransportError('timeout', `${type} deadline expired`)); return; }
-        pendingRequest.timer = setTimeout(() => fail(
-          new RunJournalTransportError('timeout', `${type} deadline expired`),
-        ), delay);
+        if (delay <= 0) {
+          reject(new RunJournalTransportError('timeout', `${type} deadline expired`));
+          return;
+        }
+        pendingRequest.timer = setTimeout(
+          () => fail(new RunJournalTransportError('timeout', `${type} deadline expired`)),
+          delay,
+        );
         pendingRequest.timer.unref?.();
       }
       pending.set(requestId, pendingRequest);
-      try { write(socket, { v: VERSION, type, requestId, ...fields }); }
-      catch (error) {
+      try {
+        write(socket, { v: VERSION, type, requestId, ...fields });
+      } catch (error) {
         pending.delete(requestId);
         if (pendingRequest.timer !== undefined) clearTimeout(pendingRequest.timer);
         reject(error);
@@ -322,9 +385,15 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
         cleanup();
         reject(new RunJournalTransportError('timeout', 'journal connect deadline expired'));
       }, options.handshakeDeadline - monotonicEpochNow());
-    timer.unref?.();
-      const onConnect = (): void => { cleanup(); resolve(); };
-      const onError = (error: Error): void => { cleanup(); reject(error); };
+      timer.unref?.();
+      const onConnect = (): void => {
+        cleanup();
+        resolve();
+      };
+      const onError = (error: Error): void => {
+        cleanup();
+        reject(error);
+      };
       const cleanup = (): void => {
         clearTimeout(timer);
         socket.removeListener('connect', onConnect);
@@ -333,19 +402,35 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
       socket.once('connect', onConnect);
       socket.once('error', onError);
     });
-    const hello = record(await request('hello', {
-      token: options.token, runId: options.runId, workerId: options.workerId, workerEpoch: options.workerEpoch,
-    }, options.handshakeDeadline), 'hello response');
+    const hello = record(
+      await request(
+        'hello',
+        {
+          token: options.token,
+          runId: options.runId,
+          workerId: options.workerId,
+          workerEpoch: options.workerEpoch,
+        },
+        options.handshakeDeadline,
+      ),
+      'hello response',
+    );
     const binding = Object.freeze({
       producerId: parseRunId('producer', hello.producerId),
       producerEpoch: integer(hello.producerEpoch, 'producerEpoch'),
     });
-    const identity = Object.freeze({ runId: options.runId, workerId: options.workerId, workerEpoch: options.workerEpoch });
+    const identity = Object.freeze({
+      runId: options.runId,
+      workerId: options.workerId,
+      workerEpoch: options.workerEpoch,
+    });
     return Object.freeze({
       identity,
       binding,
       append(event: RunEvent, deadline: number): Promise<void> {
-        const operation = serial.then(async () => { await request('append', { event }, deadline); });
+        const operation = serial.then(async () => {
+          await request('append', { event }, deadline);
+        });
         serial = operation.catch(() => undefined);
         return operation;
       },
@@ -372,15 +457,20 @@ export async function connectRunJournalWorker(options: RunJournalWorkerIdentity 
 }
 
 function write(socket: Socket, message: unknown): void {
-  try { writeLocalFrame(socket, message, MAX_FRAME_BYTES); }
-  catch (error) { throw journalTransportError(error, 'journal frame could not be written'); }
+  try {
+    writeLocalFrame(socket, message, MAX_FRAME_BYTES);
+  } catch (error) {
+    throw journalTransportError(error, 'journal frame could not be written');
+  }
 }
 function respond(socket: Socket, requestId: string, ok: boolean, result: unknown): void {
   write(socket, responseEnvelope(VERSION, requestId, ok, result));
 }
 function wireError(error: unknown): Record<string, string> {
-  return { code: error instanceof RunJournalTransportError ? error.code : 'protocol-error',
-    message: error instanceof Error ? error.message : 'unknown journal failure' };
+  return {
+    code: error instanceof RunJournalTransportError ? error.code : 'protocol-error',
+    message: error instanceof Error ? error.message : 'unknown journal failure',
+  };
 }
 function failureRequestId(value: unknown): string {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'connection';
@@ -392,28 +482,45 @@ function failureRequestId(value: unknown): string {
 function errorFromWire(value: unknown): RunJournalTransportError {
   const error = record(value, 'response.error');
   const code = text(error.code, 'error.code', 64);
-  const allowed = ['authentication-failed', 'connection-closed', 'protocol-error', 'stale-worker', 'timeout'] as const;
-  const typed = allowed.includes(code as (typeof allowed)[number]) ? code as (typeof allowed)[number] : 'protocol-error';
+  const allowed = [
+    'authentication-failed',
+    'connection-closed',
+    'protocol-error',
+    'stale-worker',
+    'timeout',
+  ] as const;
+  const typed = allowed.includes(code as (typeof allowed)[number])
+    ? (code as (typeof allowed)[number])
+    : 'protocol-error';
   return new RunJournalTransportError(typed, text(error.message, 'error.message', 4_096));
 }
 function record(value: unknown, name: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw protocol(`${name} must be an object`);
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw protocol(`${name} must be an object`);
   return value as Record<string, unknown>;
 }
 function text(value: unknown, name: string, max: number): string {
-  if (typeof value !== 'string' || value.length === 0 || value.length > max) throw protocol(`${name} is invalid`);
+  if (typeof value !== 'string' || value.length === 0 || value.length > max)
+    throw protocol(`${name} is invalid`);
   return value;
 }
 function integer(value: unknown, name: string): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw protocol(`${name} is invalid`);
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+    throw protocol(`${name} is invalid`);
   return value;
 }
 function protocol(message: string, cause?: unknown): RunJournalTransportError {
-  return new RunJournalTransportError('protocol-error', message, cause === undefined ? undefined : { cause });
+  return new RunJournalTransportError(
+    'protocol-error',
+    message,
+    cause === undefined ? undefined : { cause },
+  );
 }
 function journalTransportError(error: unknown, fallback: string): RunJournalTransportError {
   if (error instanceof RunJournalTransportError) return error;
   if (error instanceof LocalTransportError) return protocol(error.message, error);
   return protocol(fallback, error);
 }
-function monotonicEpochNow(): number { return performance.timeOrigin + performance.now(); }
+function monotonicEpochNow(): number {
+  return performance.timeOrigin + performance.now();
+}

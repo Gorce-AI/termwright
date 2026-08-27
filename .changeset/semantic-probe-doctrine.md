@@ -1,12 +1,12 @@
 ---
-"@termwright/driver": minor
-"@termwright/probe-charm": minor
-"@termwright/probe-go": minor
-"@termwright/probe-ink": minor
-"@termwright/probe-opentui": minor
-"@termwright/probe-tview": minor
-"@termwright/protocol": minor
-"@termwright/ui": minor
+'@termwright/driver': minor
+'@termwright/probe-charm': minor
+'@termwright/probe-go': minor
+'@termwright/probe-ink': minor
+'@termwright/probe-opentui': minor
+'@termwright/probe-tview': minor
+'@termwright/protocol': minor
+'@termwright/ui': minor
 ---
 
 Expose and validate per-run semantic probe intervention metadata, including the

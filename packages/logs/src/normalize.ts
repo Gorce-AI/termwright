@@ -293,9 +293,7 @@ export function normalizeLogRecord(input: LogInput, options: NormalizeOptions): 
   );
   const logger = input.logger ?? input.name;
   const revision =
-    typeof input.revision === 'number' &&
-    Number.isSafeInteger(input.revision) &&
-    input.revision > 0
+    typeof input.revision === 'number' && Number.isSafeInteger(input.revision) && input.revision > 0
       ? input.revision
       : undefined;
 

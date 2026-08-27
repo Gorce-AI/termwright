@@ -1,6 +1,6 @@
 ---
-"@termwright/driver": patch
-"termwright": patch
+'@termwright/driver': patch
+'termwright': patch
 ---
 
 Decompose terminal sessions into independently tested process, evidence,

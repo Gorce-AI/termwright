@@ -21,10 +21,7 @@ import {
   connectResourceBrokerWorker,
   type ResourceBrokerClient,
 } from '@termwright/resource-broker/transport';
-import {
-  connectRunJournalWorker,
-  type RunJournalClient,
-} from '@termwright/run-journal-transport';
+import { connectRunJournalWorker, type RunJournalClient } from '@termwright/run-journal-transport';
 import {
   activateAttemptContext,
   clearAttemptContext,
@@ -37,7 +34,11 @@ import {
   type AttemptContext,
   type ExecutionId,
 } from './attempt-context.js';
-import { DEFAULT_ATTEMPT_BUDGET_RESERVES, type AttemptBudgetReserves, type AttemptPhase } from './attempt-budget.js';
+import {
+  DEFAULT_ATTEMPT_BUDGET_RESERVES,
+  type AttemptBudgetReserves,
+  type AttemptPhase,
+} from './attempt-budget.js';
 import {
   assertCertifiedVitestRuntime,
   CERTIFIED_VITEST_VERSION,
@@ -108,13 +109,15 @@ const journalConnections = new Map<string, Promise<WorkerJournal>>();
 installTerminalLaunchResourceProvider(async () => {
   const attempt = currentAttemptContext();
   const profile = attempt.resources.profile;
-  const lease = await attempt.resources.acquire(Object.freeze({
-    ...profile,
-    ptySession: Math.max(1, profile.ptySession ?? 0),
-    externalProcess: Math.max(1, profile.externalProcess ?? 0),
-    semanticEndpoint: Math.max(1, profile.semanticEndpoint ?? 0),
-    nativeHostPressure: Math.max(1, profile.nativeHostPressure ?? 0),
-  }));
+  const lease = await attempt.resources.acquire(
+    Object.freeze({
+      ...profile,
+      ptySession: Math.max(1, profile.ptySession ?? 0),
+      externalProcess: Math.max(1, profile.externalProcess ?? 0),
+      semanticEndpoint: Math.max(1, profile.semanticEndpoint ?? 0),
+      nativeHostPressure: Math.max(1, profile.nativeHostPressure ?? 0),
+    }),
+  );
   return Object.freeze({
     attach: async (sessionId: string): Promise<void> => {
       await lease.attach([
@@ -190,7 +193,9 @@ export class TermwrightTestRunner extends VitestTestRunner {
     super(...arguments_);
     this.#hostContext = validateHostContext(this.injectValue(TERMWRIGHT_RUNNER_CONTEXT_KEY));
     if (this.config.sequence.hooks === 'parallel') {
-      throw new Error('Termwright certified execution requires ordered hooks; sequence.hooks="parallel" is unsupported');
+      throw new Error(
+        'Termwright certified execution requires ordered hooks; sequence.hooks="parallel" is unsupported',
+      );
     }
     this.onCleanupWorkerContext(async () => {
       await closeWorkerTransports(
@@ -200,7 +205,9 @@ export class TermwrightTestRunner extends VitestTestRunner {
     });
   }
 
-  override async onBeforeRunTask(test: Parameters<VitestTestRunner['onBeforeRunTask']>[0]): Promise<void> {
+  override async onBeforeRunTask(
+    test: Parameters<VitestTestRunner['onBeforeRunTask']>[0],
+  ): Promise<void> {
     // Every attempt starts on the real clock. A test that installs fake timers
     // restores them in its own teardown, which is exactly the code a timeout
     // skips — the body is abandoned where it stands. The hijacked clock is a
@@ -214,14 +221,20 @@ export class TermwrightTestRunner extends VitestTestRunner {
     if (identity === undefined) task.mode = 'skip';
     else {
       taskIdentities.set(test as object, identity);
-      const [broker, journal] = await Promise.all([brokerFor(this.#hostContext), journalFor(this.#hostContext)]);
+      const [broker, journal] = await Promise.all([
+        brokerFor(this.#hostContext),
+        journalFor(this.#hostContext),
+      ]);
       taskBrokers.set(test as object, broker);
       taskJournals.set(test as object, journal);
     }
     await super.onBeforeRunTask(test);
   }
 
-  override async onBeforeTryTask(test: Parameters<VitestTestRunner['onBeforeTryTask']>[0], ordinal?: unknown): Promise<void> {
+  override async onBeforeTryTask(
+    test: Parameters<VitestTestRunner['onBeforeTryTask']>[0],
+    ordinal?: unknown,
+  ): Promise<void> {
     const native = certifiedTryOrdinal(ordinal);
     const task = test as NativeRunnerTask;
     const identity = taskIdentities.get(test as object);
@@ -229,9 +242,11 @@ export class TermwrightTestRunner extends VitestTestRunner {
       throw new Error(`TermwrightTestHost did not assign native runner task ${task.id}`);
     }
     const broker = taskBrokers.get(test as object);
-    if (broker === undefined) throw new Error(`Termwright worker broker was not connected for ${task.id}`);
+    if (broker === undefined)
+      throw new Error(`Termwright worker broker was not connected for ${task.id}`);
     const journal = taskJournals.get(test as object);
-    if (journal === undefined) throw new Error(`Termwright worker journal was not connected for ${task.id}`);
+    if (journal === undefined)
+      throw new Error(`Termwright worker journal was not connected for ${task.id}`);
     let byRepeat = executions.get(test as object);
     if (byRepeat === undefined) {
       byRepeat = new Map();
@@ -243,13 +258,14 @@ export class TermwrightTestRunner extends VitestTestRunner {
       byRepeat.set(native.repeats, executionId);
     }
     const attemptId = createRunId('attempt');
-    const reservationAdmission = identity.resourceReservation === undefined
-      ? undefined
-      : broker.acquire({
-          attemptId,
-          resources: identity.resourceReservation,
-          deadline: this.#hostContext.broker.admissionDeadline,
-        });
+    const reservationAdmission =
+      identity.resourceReservation === undefined
+        ? undefined
+        : broker.acquire({
+            attemptId,
+            resources: identity.resourceReservation,
+            deadline: this.#hostContext.broker.admissionDeadline,
+          });
     if (reservationAdmission !== undefined) {
       // The engine invokes onBeforeTryTask before beforeEach and before the
       // timeout-wrapped authored callback. This is the exact-certified
@@ -264,27 +280,34 @@ export class TermwrightTestRunner extends VitestTestRunner {
       undefined,
       reservationAdmission !== undefined,
     );
-    const context = createAttemptContext({
-      invocationId: this.#hostContext.invocationId,
-      runId: this.#hostContext.runId,
-      nativeTaskId: task.id,
-      ...identity,
-    }, native.repeats, native.retry, {
-      executionId,
-      attemptId,
-      // Vitest's task timeout bounds the authored callback. Its exact
-      // runner executes fixture cleanup/onFinished afterwards under hook
-      // budgets. Give that mandatory lifecycle phase only the explicit
-      // teardown reserve: operation/diagnostic/trace cutoffs remain before the
-      // authored callback deadline, while attempt.finished can still commit.
-      budget,
-      broker,
-      resourceProfile: this.#hostContext.broker.resourceProfile,
-      ...(reservationAdmission === undefined ? {} : {
-        reservedLease: reservationAdmission,
-        resourceReservation: identity.resourceReservation,
-      }),
-    });
+    const context = createAttemptContext(
+      {
+        invocationId: this.#hostContext.invocationId,
+        runId: this.#hostContext.runId,
+        nativeTaskId: task.id,
+        ...identity,
+      },
+      native.repeats,
+      native.retry,
+      {
+        executionId,
+        attemptId,
+        // Vitest's task timeout bounds the authored callback. Its exact
+        // runner executes fixture cleanup/onFinished afterwards under hook
+        // budgets. Give that mandatory lifecycle phase only the explicit
+        // teardown reserve: operation/diagnostic/trace cutoffs remain before the
+        // authored callback deadline, while attempt.finished can still commit.
+        budget,
+        broker,
+        resourceProfile: this.#hostContext.broker.resourceProfile,
+        ...(reservationAdmission === undefined
+          ? {}
+          : {
+              reservedLease: reservationAdmission,
+              resourceReservation: identity.resourceReservation,
+            }),
+      },
+    );
     activateAttemptContext(context);
     const attemptEvents = createAttemptEventRecorder(
       context,
@@ -298,15 +321,24 @@ export class TermwrightTestRunner extends VitestTestRunner {
         await reservationAdmission;
         budget.start();
       }
-      await journal.client.append(journal.producer.emit({
-        eventClass: 'authoritative',
-        type: 'attempt.started',
-        identity: attemptIdentity(context),
-        payload: { nativeTaskId: task.id, repeat: native.repeats, retry: native.retry },
-      }), eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'operation'));
+      await journal.client.append(
+        journal.producer.emit({
+          eventClass: 'authoritative',
+          type: 'attempt.started',
+          identity: attemptIdentity(context),
+          payload: { nativeTaskId: task.id, repeat: native.repeats, retry: native.retry },
+        }),
+        eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'operation'),
+      );
       started = true;
-      installAttemptFinalizer(test as NativeAttemptTask, context, journal, attemptEvents, this.config.sequence.hooks,
-        this.#hostContext.journal.acknowledgementTimeoutMs);
+      installAttemptFinalizer(
+        test as NativeAttemptTask,
+        context,
+        journal,
+        attemptEvents,
+        this.config.sequence.hooks,
+        this.#hostContext.journal.acknowledgementTimeoutMs,
+      );
       super.onBeforeTryTask(test);
     } catch (error) {
       // Close the attempt this method opened. Everything after the started
@@ -316,25 +348,30 @@ export class TermwrightTestRunner extends VitestTestRunner {
       // succeed, the report showed no failing test to explain it. The failure
       // is still rethrown; the journal simply stops being incomplete.
       if (started) {
-        await journal.client.append(journal.producer.emit({
-          eventClass: 'authoritative',
-          type: 'attempt.finished',
-          identity: attemptIdentity(context),
-          payload: {
-            state: 'failed',
-            nativeTaskId: task.id,
-            repeat: native.repeats,
-            retry: native.retry,
-          },
-        }), eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'cleanup')).catch((closeError: unknown) => {
-          // Do not swallow this. The previous version did, and the run then
-          // reported an attempt with only its start and no reason anywhere —
-          // the evidence for why was thrown away by the recovery path itself.
-          process.stderr.write(
-            `termwright: attempt ${context.attemptId} (${task.id}) failed setup and could not be closed: ` +
-            `${closeError instanceof Error ? closeError.message : String(closeError)}\n`,
-          );
-        });
+        await journal.client
+          .append(
+            journal.producer.emit({
+              eventClass: 'authoritative',
+              type: 'attempt.finished',
+              identity: attemptIdentity(context),
+              payload: {
+                state: 'failed',
+                nativeTaskId: task.id,
+                repeat: native.repeats,
+                retry: native.retry,
+              },
+            }),
+            eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'cleanup'),
+          )
+          .catch((closeError: unknown) => {
+            // Do not swallow this. The previous version did, and the run then
+            // reported an attempt with only its start and no reason anywhere —
+            // the evidence for why was thrown away by the recovery path itself.
+            process.stderr.write(
+              `termwright: attempt ${context.attemptId} (${task.id}) failed setup and could not be closed: ` +
+                `${closeError instanceof Error ? closeError.message : String(closeError)}\n`,
+            );
+          });
       }
       const admitted = await reservationAdmission?.catch(() => undefined);
       await admitted?.release().catch(() => undefined);
@@ -343,7 +380,9 @@ export class TermwrightTestRunner extends VitestTestRunner {
     }
   }
 
-  override async onAfterRunTask(test: Parameters<VitestTestRunner['onAfterRunTask']>[0]): Promise<void> {
+  override async onAfterRunTask(
+    test: Parameters<VitestTestRunner['onAfterRunTask']>[0],
+  ): Promise<void> {
     // Vitest awaits this once per test, after the retry loop, outside every
     // try. An attempt still open here escaped its own finalizer, and leaving
     // it open makes the whole run uncertifiable over one test — with nothing
@@ -354,7 +393,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
         await close().catch((error: unknown) => {
           process.stderr.write(
             `termwright: an attempt for ${(test as NativeRunnerTask).id} could not be closed at task end: ` +
-            `${error instanceof Error ? error.message : String(error)}\n`,
+              `${error instanceof Error ? error.message : String(error)}\n`,
           );
         });
       }
@@ -373,7 +412,17 @@ export class TermwrightTestRunner extends VitestTestRunner {
 }
 
 export function validateHostContext(value: unknown): TermwrightRunnerContext {
-  if (!plainDataObject(value, ['invocationId', 'runId', 'tasks', 'budgetReserves', 'broker', 'journal'])) return invalidHostContext();
+  if (
+    !plainDataObject(value, [
+      'invocationId',
+      'runId',
+      'tasks',
+      'budgetReserves',
+      'broker',
+      'journal',
+    ])
+  )
+    return invalidHostContext();
   const record = value as Record<string, unknown>;
   if (!plainDataObject(record['tasks'])) {
     return invalidHostContext();
@@ -382,14 +431,26 @@ export function validateHostContext(value: unknown): TermwrightRunnerContext {
   const runId = parseRunId('run', record['runId']);
   const entries = Object.entries(record['tasks'] as Record<string, unknown>);
   if (entries.length > MAX_HOST_TASKS) return invalidHostContext();
-  const tasks: Record<string, TermwrightHostTaskIdentity> = Object.create(null) as Record<string, TermwrightHostTaskIdentity>;
+  const tasks: Record<string, TermwrightHostTaskIdentity> = Object.create(null) as Record<
+    string,
+    TermwrightHostTaskIdentity
+  >;
   const runnerTaskIds = new Set<string>();
   const specIds = new Set<string>();
   for (const [nativeId, rawIdentity] of entries) {
     if (nativeId === '' || nativeId.length > MAX_NATIVE_TASK_ID_LENGTH) return invalidHostContext();
-    if (!plainDataObject(rawIdentity, [
-      'runnerTaskId', 'projectId', 'specId', 'shardId', 'file', 'fullName', 'resourceReservation',
-    ])) return invalidHostContext();
+    if (
+      !plainDataObject(rawIdentity, [
+        'runnerTaskId',
+        'projectId',
+        'specId',
+        'shardId',
+        'file',
+        'fullName',
+        'resourceReservation',
+      ])
+    )
+      return invalidHostContext();
     const identity = rawIdentity as Record<string, unknown>;
     const runnerTaskId = parseRunId('runner-task', identity['runnerTaskId']);
     const specId = parseRunId('spec', identity['specId']);
@@ -402,7 +463,9 @@ export function validateHostContext(value: unknown): TermwrightRunnerContext {
       specId,
       file: boundedString(identity['file'], 'task file', 4_096),
       fullName: boundedString(identity['fullName'], 'task full name', 16_384),
-      ...(identity['shardId'] === undefined ? {} : { shardId: parseRunId('shard', identity['shardId']) }),
+      ...(identity['shardId'] === undefined
+        ? {}
+        : { shardId: parseRunId('shard', identity['shardId']) }),
       ...(identity['resourceReservation'] === undefined
         ? {}
         : { resourceReservation: validateResourceVector(identity['resourceReservation']) }),
@@ -422,26 +485,58 @@ export function validateHostContext(value: unknown): TermwrightRunnerContext {
 }
 
 function validateJournal(value: unknown): TermwrightRunnerJournalContext {
-  if (!plainDataObject(value, ['endpoint', 'token', 'handshakeTimeoutMs', 'acknowledgementTimeoutMs', 'binding'])) return invalidHostContext();
+  if (
+    !plainDataObject(value, [
+      'endpoint',
+      'token',
+      'handshakeTimeoutMs',
+      'acknowledgementTimeoutMs',
+      'binding',
+    ])
+  )
+    return invalidHostContext();
   const record = value as Record<string, unknown>;
   const endpoint = boundedString(record['endpoint'], 'journal endpoint', 4_096);
   const token = boundedString(record['token'], 'journal token', 512);
-  if (token.length < 32 || record['binding'] !== 'host-assigned-worker') return invalidHostContext();
+  if (token.length < 32 || record['binding'] !== 'host-assigned-worker')
+    return invalidHostContext();
   const handshakeTimeoutMs = record['handshakeTimeoutMs'];
-  if (typeof handshakeTimeoutMs !== 'number' || !Number.isSafeInteger(handshakeTimeoutMs) || handshakeTimeoutMs <= 0) {
+  if (
+    typeof handshakeTimeoutMs !== 'number' ||
+    !Number.isSafeInteger(handshakeTimeoutMs) ||
+    handshakeTimeoutMs <= 0
+  ) {
     return invalidHostContext();
   }
   const acknowledgementTimeoutMs = record['acknowledgementTimeoutMs'];
-  if (typeof acknowledgementTimeoutMs !== 'number' || !Number.isSafeInteger(acknowledgementTimeoutMs) ||
-      acknowledgementTimeoutMs <= 0) return invalidHostContext();
-  return Object.freeze({ endpoint, token, handshakeTimeoutMs, acknowledgementTimeoutMs,
-    binding: 'host-assigned-worker' });
+  if (
+    typeof acknowledgementTimeoutMs !== 'number' ||
+    !Number.isSafeInteger(acknowledgementTimeoutMs) ||
+    acknowledgementTimeoutMs <= 0
+  )
+    return invalidHostContext();
+  return Object.freeze({
+    endpoint,
+    token,
+    handshakeTimeoutMs,
+    acknowledgementTimeoutMs,
+    binding: 'host-assigned-worker',
+  });
 }
 
 function validateBroker(value: unknown): TermwrightRunnerBrokerContext {
-  if (!plainDataObject(value, [
-    'endpoint', 'token', 'workerEpoch', 'workerIdPrefix', 'handshakeTimeoutMs', 'admissionDeadline', 'resourceProfile',
-  ])) return invalidHostContext();
+  if (
+    !plainDataObject(value, [
+      'endpoint',
+      'token',
+      'workerEpoch',
+      'workerIdPrefix',
+      'handshakeTimeoutMs',
+      'admissionDeadline',
+      'resourceProfile',
+    ])
+  )
+    return invalidHostContext();
   const record = value as Record<string, unknown>;
   const endpoint = boundedString(record['endpoint'], 'broker endpoint', 4_096);
   const token = boundedString(record['token'], 'broker token', 512);
@@ -449,22 +544,43 @@ function validateBroker(value: unknown): TermwrightRunnerBrokerContext {
   const workerIdPrefix = boundedString(record['workerIdPrefix'], 'worker id prefix', 128);
   if (!nonNegativeInteger(record['workerEpoch'])) return invalidHostContext();
   const handshakeTimeoutMs = record['handshakeTimeoutMs'];
-  if (typeof handshakeTimeoutMs !== 'number' || !Number.isSafeInteger(handshakeTimeoutMs) || handshakeTimeoutMs <= 0) {
+  if (
+    typeof handshakeTimeoutMs !== 'number' ||
+    !Number.isSafeInteger(handshakeTimeoutMs) ||
+    handshakeTimeoutMs <= 0
+  ) {
     return invalidHostContext();
   }
   const admissionDeadline = record['admissionDeadline'];
-  if (typeof admissionDeadline !== 'number' || !Number.isFinite(admissionDeadline) || admissionDeadline <= 0) {
+  if (
+    typeof admissionDeadline !== 'number' ||
+    !Number.isFinite(admissionDeadline) ||
+    admissionDeadline <= 0
+  ) {
     return invalidHostContext();
   }
   const admissionDelay = admissionDeadline - (performance.timeOrigin + performance.now());
   if (admissionDelay > MAX_RUNTIME_TIMER_MS) return invalidHostContext();
   const resourceProfile = validateResourceVector(record['resourceProfile']);
-  return Object.freeze({ endpoint, token, workerIdPrefix, workerEpoch: record['workerEpoch'], handshakeTimeoutMs,
-    admissionDeadline, resourceProfile });
+  return Object.freeze({
+    endpoint,
+    token,
+    workerIdPrefix,
+    workerEpoch: record['workerEpoch'],
+    handshakeTimeoutMs,
+    admissionDeadline,
+    resourceProfile,
+  });
 }
 
 function validateResourceVector(value: unknown): ResourceVector {
-  const keys = ['ptySession', 'externalProcess', 'semanticEndpoint', 'nativeHostPressure', 'traceWriter'] as const;
+  const keys = [
+    'ptySession',
+    'externalProcess',
+    'semanticEndpoint',
+    'nativeHostPressure',
+    'traceWriter',
+  ] as const;
   if (!plainDataObject(value, keys)) return invalidHostContext();
   const record = value as Record<string, unknown>;
   const result: Partial<Record<(typeof keys)[number], number>> = {};
@@ -479,11 +595,13 @@ function validateResourceVector(value: unknown): ResourceVector {
 
 function validateBudgetReserves(value: unknown): AttemptBudgetReserves | undefined {
   if (value === undefined) return undefined;
-  if (!plainDataObject(value, ['diagnosticsMs', 'traceFlushMs', 'teardownMs'])) return invalidHostContext();
+  if (!plainDataObject(value, ['diagnosticsMs', 'traceFlushMs', 'teardownMs']))
+    return invalidHostContext();
   const record = value as Record<string, unknown>;
   for (const key of ['diagnosticsMs', 'traceFlushMs', 'teardownMs'] as const) {
     const number = record[key];
-    if (typeof number !== 'number' || !Number.isFinite(number) || number < 0) return invalidHostContext();
+    if (typeof number !== 'number' || !Number.isFinite(number) || number < 0)
+      return invalidHostContext();
   }
   return Object.freeze({
     diagnosticsMs: record['diagnosticsMs'] as number,
@@ -608,7 +726,8 @@ function installAttemptFinalizer(
 ): void {
   let finalized = false;
   const emit = async (state: 'passed' | 'failed' | 'skipped'): Promise<void> => {
-    if (finalized) throw new Error(`attempt ${context.attemptId} terminal event was requested more than once`);
+    if (finalized)
+      throw new Error(`attempt ${context.attemptId} terminal event was requested more than once`);
     finalized = true;
     forgetOpenAttempt(test, context.attemptId);
     // This is the authoritative lifecycle commit after all user and fixture
@@ -651,7 +770,10 @@ function installAttemptFinalizer(
       },
     });
     try {
-      await journal.client.append(terminal, eventDeadline(context, acknowledgementTimeoutMs, 'cleanup'));
+      await journal.client.append(
+        terminal,
+        eventDeadline(context, acknowledgementTimeoutMs, 'cleanup'),
+      );
     } catch (error) {
       // The barrier that reports an unfinished attempt cannot tell whether
       // this append failed or never ran, and those want opposite fixes. The
@@ -659,7 +781,7 @@ function installAttemptFinalizer(
       // failure is still raised, this only makes it attributable.
       process.stderr.write(
         `termwright: attempt ${context.attemptId} could not commit its terminal event ` +
-        `(${context.nativeTaskId}): ${error instanceof Error ? error.message : String(error)}\n`,
+          `(${context.nativeTaskId}): ${error instanceof Error ? error.message : String(error)}\n`,
       );
       throw error;
     }
@@ -686,7 +808,7 @@ function installAttemptFinalizer(
       // say on stderr what the state actually was. The error still propagates.
       process.stderr.write(
         `termwright: attempt ${context.attemptId} (${context.nativeTaskId}) reached cleanup unsettled: ` +
-        `${error instanceof Error ? error.message : String(error)}\n`,
+          `${error instanceof Error ? error.message : String(error)}\n`,
       );
       await emit('failed').catch(() => undefined);
       throw error;
@@ -696,13 +818,13 @@ function installAttemptFinalizer(
       return;
     }
     const afterFailures = async (): Promise<void> => emit('failed');
-    const hooks = test.onFailed ??= [];
+    const hooks = (test.onFailed ??= []);
     // Vitest reverses stack hooks. Install at the opposite end so this runs
     // after every user onTestFailed callback, including callbacks that throw.
     if (sequence === 'stack') hooks.unshift(afterFailures);
     else hooks.push(afterFailures);
   };
-  const hooks = test.onFinished ??= [];
+  const hooks = (test.onFinished ??= []);
   // onFinished is hard-coded to stack order by the engine. Inserting first
   // makes the authoritative finalizer execute last, after user callbacks.
   hooks.unshift(afterCleanup);
@@ -802,10 +924,15 @@ function attemptTerminalState(test: NativeAttemptTask): 'passed' | 'failed' | 's
   if (test.result?.pending === true || test.result?.state === 'skip') return 'skipped';
   if (test.result?.state === 'pass') return 'passed';
   if (test.result?.state === 'fail') return 'failed';
-  throw new Error(`Vitest attempt ${test.id} reached cleanup with unsettled state ${String(test.result?.state)}`);
+  throw new Error(
+    `Vitest attempt ${test.id} reached cleanup with unsettled state ${String(test.result?.state)}`,
+  );
 }
 
-function workerIdentity(context: TermwrightRunnerBrokerContext): { readonly workerId: string; readonly workerEpoch: number } {
+function workerIdentity(context: TermwrightRunnerBrokerContext): {
+  readonly workerId: string;
+  readonly workerEpoch: number;
+} {
   // The exact engine assigns both values in its worker bootstrap. Combining
   // them with PID distinguishes process and thread pools without random ids.
   const pool = exactWorkerOrdinal('VITEST_POOL_ID');
@@ -819,7 +946,9 @@ function workerIdentity(context: TermwrightRunnerBrokerContext): { readonly work
 function exactWorkerOrdinal(name: 'VITEST_POOL_ID' | 'VITEST_WORKER_ID'): number {
   const value = process.env[name];
   if (value === undefined || !/^(?:0|[1-9][0-9]*)$/u.test(value)) {
-    throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} did not publish ${name}; worker identity is unavailable`);
+    throw new Error(
+      `Vitest ${CERTIFIED_VITEST_VERSION} did not publish ${name}; worker identity is unavailable`,
+    );
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error(`${name} exceeds the safe integer range`);
@@ -827,11 +956,15 @@ function exactWorkerOrdinal(name: 'VITEST_POOL_ID' | 'VITEST_WORKER_ID'): number
 }
 
 function boundedString(value: unknown, _label: string, max: number): string {
-  if (typeof value !== 'string' || value.length === 0 || value.length > max) return invalidHostContext();
+  if (typeof value !== 'string' || value.length === 0 || value.length > max)
+    return invalidHostContext();
   return value;
 }
 
-function plainDataObject(value: unknown, allowedKeys?: readonly string[]): value is Record<string, unknown> {
+function plainDataObject(
+  value: unknown,
+  allowedKeys?: readonly string[],
+): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return false;

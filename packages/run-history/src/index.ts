@@ -19,12 +19,25 @@ export const RUN_MANIFEST_VERSION = 3 as const;
 export const RUN_HISTORY_COMMIT_VERSION = 1 as const;
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 
-export type NativeRunStatus = 'passed' | 'passed-with-skips' | 'failed' | 'flaky' | 'skipped' | 'cancelled' | 'crashed' | 'infrastructure-failed' | 'incomplete';
+export type NativeRunStatus =
+  | 'passed'
+  | 'passed-with-skips'
+  | 'failed'
+  | 'flaky'
+  | 'skipped'
+  | 'cancelled'
+  | 'crashed'
+  | 'infrastructure-failed'
+  | 'incomplete';
 export interface RunStartProvenance {
   readonly invocationId: InvocationId;
   readonly runId: RunId;
   readonly startedAt: number;
-  readonly engine: { readonly name: 'vitest'; readonly version: string; readonly certification: string };
+  readonly engine: {
+    readonly name: 'vitest';
+    readonly version: string;
+    readonly certification: string;
+  };
   readonly runtime: { readonly node: string; readonly platform: string; readonly arch: string };
   readonly resources: {
     readonly profile: string;
@@ -41,7 +54,12 @@ export interface RunStartProvenance {
     readonly finalizationReserveMs: number;
   };
   readonly ci: Readonly<Record<string, string>>;
-  readonly git: null | { readonly commit: string; readonly message: string; readonly author: string; readonly branch: string };
+  readonly git: null | {
+    readonly commit: string;
+    readonly message: string;
+    readonly author: string;
+    readonly branch: string;
+  };
 }
 export interface NativeRunAttempt {
   readonly attemptId: AttemptId;
@@ -80,9 +98,24 @@ export interface RunManifest extends RunStartProvenance {
 }
 export type RunHistoryRecord =
   | { readonly state: 'complete'; readonly runId: RunId; readonly manifest: RunManifest }
-  | { readonly state: 'incomplete'; readonly runId: RunId; readonly start: RunStartProvenance; readonly reason: string }
-  | { readonly state: 'corrupt'; readonly runId: RunId | null; readonly directory: string; readonly reason: string }
-  | { readonly state: 'unsupported-version'; readonly runId: RunId | null; readonly directory: string; readonly version: number | null };
+  | {
+      readonly state: 'incomplete';
+      readonly runId: RunId;
+      readonly start: RunStartProvenance;
+      readonly reason: string;
+    }
+  | {
+      readonly state: 'corrupt';
+      readonly runId: RunId | null;
+      readonly directory: string;
+      readonly reason: string;
+    }
+  | {
+      readonly state: 'unsupported-version';
+      readonly runId: RunId | null;
+      readonly directory: string;
+      readonly version: number | null;
+    };
 
 export interface RunManifestTransaction {
   readonly start: RunStartProvenance;
@@ -116,23 +149,33 @@ export async function beginRunManifest(
   const finalPath = join(runsDir, finalName);
   const stagingPath = join(runsDir, `.staging-${finalName}`);
   if (await writer.exists(finalPath)) throw new Error(`run history collision for ${start.runId}`);
-  try { await writer.mkdir(stagingPath); }
-  catch (error) { throw new Error(`run history collision for ${start.runId}`, { cause: error }); }
+  try {
+    await writer.mkdir(stagingPath);
+  } catch (error) {
+    throw new Error(`run history collision for ${start.runId}`, { cause: error });
+  }
   await writer.writeExclusive(join(stagingPath, 'start.json'), json(start));
   let state: 'open' | 'prepared' | 'committed' = 'open';
   let preparedPath: string | undefined;
   const prepare = async (manifest: RunManifest): Promise<void> => {
     if (state !== 'open') throw new Error(`run ${start.runId} manifest transaction is ${state}`);
     validateManifest(manifest);
-    if (manifest.runId !== start.runId || manifest.invocationId !== start.invocationId || manifest.startedAt !== start.startedAt) {
+    if (
+      manifest.runId !== start.runId ||
+      manifest.invocationId !== start.invocationId ||
+      manifest.startedAt !== start.startedAt
+    ) {
       throw new Error('run manifest identity/start provenance changed during execution');
     }
     const body = json(manifest);
     if (Buffer.byteLength(body, 'utf8') > MAX_MANIFEST_BYTES) {
-      throw new RangeError(`run manifest exceeds the ${MAX_MANIFEST_BYTES}-byte transactional limit`);
+      throw new RangeError(
+        `run manifest exceeds the ${MAX_MANIFEST_BYTES}-byte transactional limit`,
+      );
     }
     const parsed = parseManifest(body);
-    if (parsed.state !== 'complete') throw new Error(`run manifest failed round-trip validation: ${parsed.state}`);
+    if (parsed.state !== 'complete')
+      throw new Error(`run manifest failed round-trip validation: ${parsed.state}`);
     await writer.writeExclusive(join(stagingPath, 'manifest.json'), body);
     const digest = createHash('sha256').update(body).digest('hex');
     await writer.writeExclusive(join(stagingPath, 'COMMITTED'), commitMarker(digest));
@@ -145,8 +188,11 @@ export async function beginRunManifest(
       throw new Error(`run ${start.runId} manifest transaction is not prepared`);
     }
     if (await writer.exists(finalPath)) throw new Error(`run history collision for ${start.runId}`);
-    try { await writer.rename(stagingPath, finalPath); }
-    catch (error) { throw new Error(`cannot atomically commit run ${start.runId}`, { cause: error }); }
+    try {
+      await writer.rename(stagingPath, finalPath);
+    } catch (error) {
+      throw new Error(`cannot atomically commit run ${start.runId}`, { cause: error });
+    }
     state = 'committed';
     await writer.syncDirectory(runsDir);
     return preparedPath;
@@ -162,15 +208,22 @@ export async function beginRunManifest(
   });
 }
 
-export async function readRunHistory(runsDir: string, limit = 100): Promise<readonly RunHistoryRecord[]> {
+export async function readRunHistory(
+  runsDir: string,
+  limit = 100,
+): Promise<readonly RunHistoryRecord[]> {
   let entries;
-  try { entries = await readdir(runsDir, { withFileTypes: true }); }
-  catch (error) {
+  try {
+    entries = await readdir(runsDir, { withFileTypes: true });
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
-  const records = await Promise.all(entries.filter((entry) => entry.isDirectory()).map((entry) =>
-    readDirectory(runsDir, entry.name)));
+  const records = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => readDirectory(runsDir, entry.name)),
+  );
   return records.sort((a, b) => startedAt(b) - startedAt(a)).slice(0, limit);
 }
 
@@ -185,17 +238,41 @@ export async function readRunManifest(runsDir: string, runId: RunId): Promise<Ru
 
 export function parseManifest(raw: string): RunHistoryRecord {
   let value: unknown;
-  try { value = JSON.parse(raw); }
-  catch { return { state: 'corrupt', runId: null, directory: '', reason: 'manifest is truncated or invalid JSON' }; }
-  if (!object(value)) return { state: 'corrupt', runId: null, directory: '', reason: 'manifest root is not an object' };
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return {
+      state: 'corrupt',
+      runId: null,
+      directory: '',
+      reason: 'manifest is truncated or invalid JSON',
+    };
+  }
+  if (!object(value))
+    return {
+      state: 'corrupt',
+      runId: null,
+      directory: '',
+      reason: 'manifest root is not an object',
+    };
   const version = typeof value.v === 'number' ? value.v : null;
   const runId = safeRunId(value.runId);
-  if (version !== RUN_MANIFEST_VERSION) return { state: 'unsupported-version', runId, directory: '', version };
+  if (version !== RUN_MANIFEST_VERSION)
+    return { state: 'unsupported-version', runId, directory: '', version };
   try {
     validateManifest(value as unknown as RunManifest);
-    return { state: 'complete', runId: (value as unknown as RunManifest).runId, manifest: value as unknown as RunManifest };
+    return {
+      state: 'complete',
+      runId: (value as unknown as RunManifest).runId,
+      manifest: value as unknown as RunManifest,
+    };
   } catch (error) {
-    return { state: 'corrupt', runId, directory: '', reason: error instanceof Error ? error.message : String(error) };
+    return {
+      state: 'corrupt',
+      runId,
+      directory: '',
+      reason: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -207,39 +284,76 @@ async function readDirectory(runsDir: string, directory: string): Promise<RunHis
   const runId = object(start) ? safeRunId(start.runId) : runIdFromDirectory(encoded);
   if (staging) {
     if (object(start) && runId !== null) {
-      try { validateStart(start as unknown as RunStartProvenance); return { state: 'incomplete', runId, start: start as unknown as RunStartProvenance, reason: 'transaction has no atomic commit' }; }
-      catch { /* corrupt below */ }
+      try {
+        validateStart(start as unknown as RunStartProvenance);
+        return {
+          state: 'incomplete',
+          runId,
+          start: start as unknown as RunStartProvenance,
+          reason: 'transaction has no atomic commit',
+        };
+      } catch {
+        /* corrupt below */
+      }
     }
-    return { state: 'corrupt', runId, directory, reason: 'staging transaction has invalid start provenance' };
+    return {
+      state: 'corrupt',
+      runId,
+      directory,
+      reason: 'staging transaction has invalid start provenance',
+    };
   }
   const raw = await readText(join(path, 'manifest.json'));
   const marker = await readText(join(path, 'COMMITTED'));
-  if (raw === null || marker === null) return { state: 'corrupt', runId, directory, reason: 'committed directory lacks manifest or marker' };
+  if (raw === null || marker === null)
+    return {
+      state: 'corrupt',
+      runId,
+      directory,
+      reason: 'committed directory lacks manifest or marker',
+    };
   const commit = /^termwright-run-history-v([0-9]+) sha256:([0-9a-f]{64})$/u.exec(marker.trim());
-  if (commit === null) return { state: 'corrupt', runId, directory, reason: 'commit marker is invalid' };
+  if (commit === null)
+    return { state: 'corrupt', runId, directory, reason: 'commit marker is invalid' };
   const commitVersion = Number(commit[1]);
   if (commitVersion !== RUN_HISTORY_COMMIT_VERSION) {
     return { state: 'unsupported-version', runId, directory, version: commitVersion };
   }
   const digest = createHash('sha256').update(raw).digest('hex');
-  if (commit[2] !== digest) return { state: 'corrupt', runId, directory, reason: 'commit digest does not match manifest' };
+  if (commit[2] !== digest)
+    return { state: 'corrupt', runId, directory, reason: 'commit digest does not match manifest' };
   const parsed = parseManifest(raw);
   if (parsed.state === 'complete' && parsed.runId !== runIdFromDirectory(directory)) {
-    return { state: 'corrupt', runId: parsed.runId, directory, reason: 'directory identity differs from manifest RunId' };
+    return {
+      state: 'corrupt',
+      runId: parsed.runId,
+      directory,
+      reason: 'directory identity differs from manifest RunId',
+    };
   }
-  if (parsed.state === 'corrupt' || parsed.state === 'unsupported-version') return { ...parsed, directory };
+  if (parsed.state === 'corrupt' || parsed.state === 'unsupported-version')
+    return { ...parsed, directory };
   return parsed;
 }
 
 function validateStart(value: RunStartProvenance): void {
-  parseRunId('invocation', value.invocationId); parseRunId('run', value.runId);
+  parseRunId('invocation', value.invocationId);
+  parseRunId('run', value.runId);
   finite(value.startedAt, 'startedAt');
-  if (value.engine?.name !== 'vitest' || !text(value.engine.version) || !text(value.engine.certification)) throw new TypeError('invalid engine provenance');
-  if (!text(value.runtime?.node) || !text(value.runtime?.platform) || !text(value.runtime?.arch)) throw new TypeError('invalid runtime provenance');
+  if (
+    value.engine?.name !== 'vitest' ||
+    !text(value.engine.version) ||
+    !text(value.engine.certification)
+  )
+    throw new TypeError('invalid engine provenance');
+  if (!text(value.runtime?.node) || !text(value.runtime?.platform) || !text(value.runtime?.arch))
+    throw new TypeError('invalid runtime provenance');
   if (!text(value.resources?.profile)) throw new TypeError('invalid resource profile');
-  if (!text(value.resources?.scheduler?.pool) ||
-      !positiveInteger(value.resources.scheduler.maxWorkers) ||
-      typeof value.resources.scheduler.fileParallelism !== 'boolean') {
+  if (
+    !text(value.resources?.scheduler?.pool) ||
+    !positiveInteger(value.resources.scheduler.maxWorkers) ||
+    typeof value.resources.scheduler.fileParallelism !== 'boolean'
+  ) {
     throw new TypeError('invalid resource scheduler');
   }
   validateNumberRecord(value.resources?.capacities, 'resource capacities');
@@ -251,8 +365,14 @@ function validateStart(value: RunStartProvenance): void {
   }
   validateStringRecord(value.ci, 'CI provenance');
   if (value.git !== null) {
-    if (!object(value.git) || !text(value.git.commit) || !text(value.git.message) ||
-        !text(value.git.author) || !text(value.git.branch)) throw new TypeError('invalid Git provenance');
+    if (
+      !object(value.git) ||
+      !text(value.git.commit) ||
+      !text(value.git.message) ||
+      !text(value.git.author) ||
+      !text(value.git.branch)
+    )
+      throw new TypeError('invalid Git provenance');
   }
 }
 function validateManifest(value: RunManifest): void {
@@ -260,24 +380,58 @@ function validateManifest(value: RunManifest): void {
   if (value.v !== RUN_MANIFEST_VERSION) throw new TypeError('unsupported manifest version');
   finite(value.finishedAt, 'finishedAt');
   finite(value.durationMs, 'durationMs');
-  if (!['passed','passed-with-skips','failed','flaky','skipped','cancelled','crashed','infrastructure-failed','incomplete'].includes(value.status)) throw new TypeError('invalid run status');
-  if (!Array.isArray(value.specs) || !Array.isArray(value.attempts) || !Array.isArray(value.events)) {
+  if (
+    ![
+      'passed',
+      'passed-with-skips',
+      'failed',
+      'flaky',
+      'skipped',
+      'cancelled',
+      'crashed',
+      'infrastructure-failed',
+      'incomplete',
+    ].includes(value.status)
+  )
+    throw new TypeError('invalid run status');
+  if (
+    !Array.isArray(value.specs) ||
+    !Array.isArray(value.attempts) ||
+    !Array.isArray(value.events)
+  ) {
     throw new TypeError('specs/attempts/events must be arrays');
   }
   const specs = new Map<RunnerTaskId, NativeRunSpec>();
   const specIds = new Set<SpecId>();
   for (const spec of value.specs) {
-    parseRunId('runner-task', spec.runnerTaskId); parseRunId('project', spec.projectId); parseRunId('spec', spec.specId);
-    if (!text(spec.nativeTaskId) || !text(spec.file) || !text(spec.fullName) ||
-        specs.has(spec.runnerTaskId) || specIds.has(spec.specId)) throw new TypeError('invalid or duplicate run spec');
-    specs.set(spec.runnerTaskId, spec); specIds.add(spec.specId);
+    parseRunId('runner-task', spec.runnerTaskId);
+    parseRunId('project', spec.projectId);
+    parseRunId('spec', spec.specId);
+    if (
+      !text(spec.nativeTaskId) ||
+      !text(spec.file) ||
+      !text(spec.fullName) ||
+      specs.has(spec.runnerTaskId) ||
+      specIds.has(spec.specId)
+    )
+      throw new TypeError('invalid or duplicate run spec');
+    specs.set(spec.runnerTaskId, spec);
+    specIds.add(spec.specId);
   }
   const attemptIds = new Set<AttemptId>();
   for (const attempt of value.attempts) {
-    parseRunId('attempt', attempt.attemptId); parseRunId('execution', attempt.executionId);
-    parseRunId('runner-task', attempt.runnerTaskId); parseRunId('project', attempt.projectId); parseRunId('spec', attempt.specId);
-    if (!text(attempt.nativeTaskId) || !nonNegativeInteger(attempt.repeat) || !nonNegativeInteger(attempt.retry) ||
-        !['passed','failed','skipped','incomplete'].includes(attempt.status)) throw new TypeError('invalid attempt');
+    parseRunId('attempt', attempt.attemptId);
+    parseRunId('execution', attempt.executionId);
+    parseRunId('runner-task', attempt.runnerTaskId);
+    parseRunId('project', attempt.projectId);
+    parseRunId('spec', attempt.specId);
+    if (
+      !text(attempt.nativeTaskId) ||
+      !nonNegativeInteger(attempt.repeat) ||
+      !nonNegativeInteger(attempt.retry) ||
+      !['passed', 'failed', 'skipped', 'incomplete'].includes(attempt.status)
+    )
+      throw new TypeError('invalid attempt');
     finite(attempt.startedAfterRunMs, 'attempt.startedAfterRunMs');
     if (attempt.startedAfterRunMs > value.durationMs) {
       throw new TypeError('attempt.startedAfterRunMs exceeds run durationMs');
@@ -295,23 +449,44 @@ function validateManifest(value: RunManifest): void {
     if (attemptIds.has(attempt.attemptId)) throw new TypeError('duplicate AttemptId');
     attemptIds.add(attempt.attemptId);
     const spec = specs.get(attempt.runnerTaskId);
-    if (spec === undefined || spec.projectId !== attempt.projectId || spec.specId !== attempt.specId ||
-        spec.nativeTaskId !== attempt.nativeTaskId) throw new TypeError('attempt identity does not match its native spec');
+    if (
+      spec === undefined ||
+      spec.projectId !== attempt.projectId ||
+      spec.specId !== attempt.specId ||
+      spec.nativeTaskId !== attempt.nativeTaskId
+    )
+      throw new TypeError('attempt identity does not match its native spec');
   }
   for (const event of value.events) {
     const parsed = validateRunEvent(event);
-    if (!parsed.ok) throw new TypeError(`invalid run journal event: ${parsed.code}: ${parsed.detail}`);
-    if (parsed.value.identity.invocationId !== value.invocationId || parsed.value.identity.runId !== value.runId) {
+    if (!parsed.ok)
+      throw new TypeError(`invalid run journal event: ${parsed.code}: ${parsed.detail}`);
+    if (
+      parsed.value.identity.invocationId !== value.invocationId ||
+      parsed.value.identity.runId !== value.runId
+    ) {
       throw new TypeError('run journal event identity differs from manifest');
     }
   }
   const stream = new RunEventStreamValidator();
   const journalAttempts = new Map<string, { readonly start: RunEvent; finish?: RunEvent }>();
-  const attemptHierarchies = new Map<string, Pick<RunEvent['identity'], 'executionId' | 'runnerTaskId' | 'projectId' | 'specId'>>();
+  const attemptHierarchies = new Map<
+    string,
+    Pick<RunEvent['identity'], 'executionId' | 'runnerTaskId' | 'projectId' | 'specId'>
+  >();
   const finishedAttempts = new Set<string>();
-  const sessions = new Map<string, { readonly attemptId: string; readonly start: number; finish?: number }>();
-  const steps = new Map<string, { readonly attemptId: string; readonly start: number; finish?: number }>();
-  const actions = new Map<string, { readonly attemptId: string; readonly sessionId: string; finish?: number }>();
+  const sessions = new Map<
+    string,
+    { readonly attemptId: string; readonly start: number; finish?: number }
+  >();
+  const steps = new Map<
+    string,
+    { readonly attemptId: string; readonly start: number; finish?: number }
+  >();
+  const actions = new Map<
+    string,
+    { readonly attemptId: string; readonly sessionId: string; finish?: number }
+  >();
   let terminalIndex = -1;
   let terminalState: string | undefined;
   let persistenceFailureIndex = -1;
@@ -321,7 +496,8 @@ function validateManifest(value: RunManifest): void {
   let skipPolicy: Readonly<Record<string, unknown>> | undefined;
   for (const [index, event] of value.events.entries()) {
     const accepted = stream.accept(event);
-    if (!accepted.ok) throw new TypeError(`invalid run journal ordering: ${accepted.code}: ${accepted.detail}`);
+    if (!accepted.ok)
+      throw new TypeError(`invalid run journal ordering: ${accepted.code}: ${accepted.detail}`);
     const attemptId = event.identity.attemptId;
     if (attemptId !== undefined) {
       if (finishedAttempts.has(attemptId)) {
@@ -335,15 +511,31 @@ function validateManifest(value: RunManifest): void {
           projectId: event.identity.projectId,
           specId: event.identity.specId,
         });
-      } else if (event.identity.executionId !== hierarchy.executionId ||
-          event.identity.runnerTaskId !== hierarchy.runnerTaskId ||
-          event.identity.projectId !== hierarchy.projectId || event.identity.specId !== hierarchy.specId) {
+      } else if (
+        event.identity.executionId !== hierarchy.executionId ||
+        event.identity.runnerTaskId !== hierarchy.runnerTaskId ||
+        event.identity.projectId !== hierarchy.projectId ||
+        event.identity.specId !== hierarchy.specId
+      ) {
         throw new TypeError(`attempt ${attemptId} event hierarchy changed`);
       }
     }
     if (event.type === 'run.state' && object(event.payload)) {
       const state = event.payload['state'];
-      if (typeof state === 'string' && ['passed','passed-with-skips','failed','flaky','skipped','cancelled','crashed','infrastructure-failed','incomplete'].includes(state)) {
+      if (
+        typeof state === 'string' &&
+        [
+          'passed',
+          'passed-with-skips',
+          'failed',
+          'flaky',
+          'skipped',
+          'cancelled',
+          'crashed',
+          'infrastructure-failed',
+          'incomplete',
+        ].includes(state)
+      ) {
         terminalIndex = index;
         terminalState = state;
       }
@@ -351,8 +543,13 @@ function validateManifest(value: RunManifest): void {
     if (event.type === 'run.persistence-failed') persistenceFailureIndex = index;
     if (event.type === 'run.skip-declaration') {
       const payload = object(event.payload) ? event.payload : {};
-      if (!text(payload['id']) || !text(payload['file']) || !text(payload['fullName']) ||
-          (payload['suite'] !== undefined && !text(payload['suite'])) || typeof payload['required'] !== 'boolean') {
+      if (
+        !text(payload['id']) ||
+        !text(payload['file']) ||
+        !text(payload['fullName']) ||
+        (payload['suite'] !== undefined && !text(payload['suite'])) ||
+        typeof payload['required'] !== 'boolean'
+      ) {
         throw new TypeError('run.skip-declaration has invalid exact policy evidence');
       }
       skipDeclarations += 1;
@@ -360,24 +557,33 @@ function validateManifest(value: RunManifest): void {
       const task = event.identity.runnerTaskId;
       const spec = task === undefined ? undefined : specs.get(task);
       const payload = object(event.payload) ? event.payload : {};
-      if (spec === undefined || event.identity.projectId !== spec.projectId || event.identity.specId !== spec.specId ||
-          payload['nativeTaskId'] !== spec.nativeTaskId || payload['file'] !== spec.file || payload['fullName'] !== spec.fullName) {
+      if (
+        spec === undefined ||
+        event.identity.projectId !== spec.projectId ||
+        event.identity.specId !== spec.specId ||
+        payload['nativeTaskId'] !== spec.nativeTaskId ||
+        payload['file'] !== spec.file ||
+        payload['fullName'] !== spec.fullName
+      ) {
         throw new TypeError('test.skipped identity differs from its native spec');
       }
       skippedTests += 1;
     } else if (event.type === 'run.skip-policy-issue') {
       const payload = object(event.payload) ? event.payload : {};
-      if (!text(payload['detail'])) throw new TypeError('run.skip-policy-issue lacks bounded detail');
+      if (!text(payload['detail']))
+        throw new TypeError('run.skip-policy-issue lacks bounded detail');
       skipPolicyIssues += 1;
     } else if (event.type === 'run.skip-policy') {
-      if (skipPolicy !== undefined || !object(event.payload)) throw new TypeError('run.skip-policy must occur exactly once');
+      if (skipPolicy !== undefined || !object(event.payload))
+        throw new TypeError('run.skip-policy must occur exactly once');
       skipPolicy = event.payload;
     }
     if (event.type === 'attempt.started' || event.type === 'attempt.finished') {
       if (attemptId === undefined) throw new TypeError(`${event.type} lacks AttemptId`);
       const observed = journalAttempts.get(attemptId);
       if (event.type === 'attempt.started') {
-        if (observed !== undefined) throw new TypeError(`attempt ${attemptId} starts more than once in journal`);
+        if (observed !== undefined)
+          throw new TypeError(`attempt ${attemptId} starts more than once in journal`);
         journalAttempts.set(attemptId, { start: event });
       } else {
         if (observed === undefined || observed.finish !== undefined) {
@@ -396,7 +602,12 @@ function validateManifest(value: RunManifest): void {
     } else if (event.type === 'session.finished') {
       const sessionId = event.identity.sessionId;
       const session = sessionId === undefined ? undefined : sessions.get(sessionId);
-      if (attemptId === undefined || session === undefined || session.attemptId !== attemptId || session.finish !== undefined) {
+      if (
+        attemptId === undefined ||
+        session === undefined ||
+        session.attemptId !== attemptId ||
+        session.finish !== undefined
+      ) {
         throw new TypeError('session.finished lacks one matching session.started');
       }
       session.finish = index;
@@ -410,7 +621,12 @@ function validateManifest(value: RunManifest): void {
     } else if (event.type === 'step.finished') {
       const stepId = event.identity.stepId;
       const step = stepId === undefined ? undefined : steps.get(stepId);
-      if (attemptId === undefined || step === undefined || step.attemptId !== attemptId || step.finish !== undefined) {
+      if (
+        attemptId === undefined ||
+        step === undefined ||
+        step.attemptId !== attemptId ||
+        step.finish !== undefined
+      ) {
         throw new TypeError('step.finished lacks one matching step.started');
       }
       step.finish = index;
@@ -421,7 +637,8 @@ function validateManifest(value: RunManifest): void {
         throw new TypeError(`${event.type} lacks AttemptId/SessionId/ActionId`);
       }
       const session = sessions.get(sessionId);
-      if (session === undefined || session.attemptId !== attemptId) throw new TypeError(`${event.type} references an unknown session`);
+      if (session === undefined || session.attemptId !== attemptId)
+        throw new TypeError(`${event.type} references an unknown session`);
       const action = actions.get(actionId);
       if (event.type === 'action.started') {
         if (action !== undefined) throw new TypeError(`action ${actionId} starts more than once`);
@@ -431,32 +648,47 @@ function validateManifest(value: RunManifest): void {
         // authoritative terminal receipt still defines the action identity.
         actions.set(actionId, { attemptId, sessionId, finish: index });
       } else {
-        if (action.attemptId !== attemptId || action.sessionId !== sessionId || action.finish !== undefined) {
+        if (
+          action.attemptId !== attemptId ||
+          action.sessionId !== sessionId ||
+          action.finish !== undefined
+        ) {
           throw new TypeError(`action ${actionId} has conflicting terminal identity`);
         }
         action.finish = index;
       }
     }
   }
-  if (journalAttempts.size !== value.attempts.length) throw new TypeError('attempt index differs from canonical journal');
-  for (const attempt of value.attempts) validateAttemptAgainstJournal(attempt, journalAttempts.get(attempt.attemptId));
+  if (journalAttempts.size !== value.attempts.length)
+    throw new TypeError('attempt index differs from canonical journal');
+  for (const attempt of value.attempts)
+    validateAttemptAgainstJournal(attempt, journalAttempts.get(attempt.attemptId));
   for (const [sessionId, session] of sessions) {
-    if (session.finish === undefined) throw new TypeError(`session ${sessionId} has no session.finished`);
+    if (session.finish === undefined)
+      throw new TypeError(`session ${sessionId} has no session.finished`);
   }
   for (const [stepId, step] of steps) {
     if (step.finish === undefined) throw new TypeError(`step ${stepId} has no step.finished`);
   }
   for (const [actionId, action] of actions) {
-    if (action.finish === undefined) throw new TypeError(`action ${actionId} has no action.finished receipt`);
+    if (action.finish === undefined)
+      throw new TypeError(`action ${actionId} has no action.finished receipt`);
   }
-  if (terminalState === undefined) throw new TypeError('canonical run journal has no terminal run.state');
-  if (skipPolicy === undefined || skipPolicy['status'] !== (skipPolicyIssues === 0 ? 'matched' : 'mismatch') ||
-      skipPolicy['declarations'] !== skipDeclarations || skipPolicy['observed'] !== skippedTests ||
-      skipPolicy['issues'] !== skipPolicyIssues) {
+  if (terminalState === undefined)
+    throw new TypeError('canonical run journal has no terminal run.state');
+  if (
+    skipPolicy === undefined ||
+    skipPolicy['status'] !== (skipPolicyIssues === 0 ? 'matched' : 'mismatch') ||
+    skipPolicy['declarations'] !== skipDeclarations ||
+    skipPolicy['observed'] !== skippedTests ||
+    skipPolicy['issues'] !== skipPolicyIssues
+  ) {
     throw new TypeError('run lacks complete canonical skip-policy evidence');
   }
-  if ((value.status === 'passed-with-skips' && skippedTests === 0) ||
-      (value.status === 'passed' && skippedTests > 0)) {
+  if (
+    (value.status === 'passed-with-skips' && skippedTests === 0) ||
+    (value.status === 'passed' && skippedTests > 0)
+  ) {
     throw new TypeError('run verdict differs from its observed skip evidence');
   }
   if (value.status === 'incomplete') {
@@ -472,48 +704,110 @@ function validateAttemptAgainstJournal(
   attempt: NativeRunAttempt,
   observed: { readonly start: RunEvent; readonly finish?: RunEvent } | undefined,
 ): void {
-  if (observed === undefined) throw new TypeError(`attempt ${attempt.attemptId} is absent from canonical journal`);
+  if (observed === undefined)
+    throw new TypeError(`attempt ${attempt.attemptId} is absent from canonical journal`);
   const start = observed.start;
   const payload = object(start.payload) ? start.payload : {};
-  if (start.identity.executionId !== attempt.executionId || start.identity.runnerTaskId !== attempt.runnerTaskId ||
-      start.identity.projectId !== attempt.projectId || start.identity.specId !== attempt.specId ||
-      payload['nativeTaskId'] !== attempt.nativeTaskId || payload['repeat'] !== attempt.repeat || payload['retry'] !== attempt.retry) {
-    throw new TypeError(`attempt ${attempt.attemptId} index identity differs from canonical journal`);
+  if (
+    start.identity.executionId !== attempt.executionId ||
+    start.identity.runnerTaskId !== attempt.runnerTaskId ||
+    start.identity.projectId !== attempt.projectId ||
+    start.identity.specId !== attempt.specId ||
+    payload['nativeTaskId'] !== attempt.nativeTaskId ||
+    payload['repeat'] !== attempt.repeat ||
+    payload['retry'] !== attempt.retry
+  ) {
+    throw new TypeError(
+      `attempt ${attempt.attemptId} index identity differs from canonical journal`,
+    );
   }
   const finish = observed.finish;
   if (finish === undefined) {
-    if (attempt.status !== 'incomplete' || attempt.finishedAfterRunMs !== null || attempt.durationMs !== null) {
+    if (
+      attempt.status !== 'incomplete' ||
+      attempt.finishedAfterRunMs !== null ||
+      attempt.durationMs !== null
+    ) {
       throw new TypeError(`unfinished attempt ${attempt.attemptId} is not indexed as incomplete`);
     }
     return;
   }
   const finishPayload = object(finish.payload) ? finish.payload : {};
-  if (finish.identity.executionId !== attempt.executionId || finish.identity.runnerTaskId !== attempt.runnerTaskId ||
-      finish.identity.projectId !== attempt.projectId || finish.identity.specId !== attempt.specId ||
-      finishPayload['nativeTaskId'] !== attempt.nativeTaskId || finishPayload['repeat'] !== attempt.repeat ||
-      finishPayload['retry'] !== attempt.retry || finishPayload['state'] !== attempt.status ||
-      attempt.finishedAfterRunMs === null ||
-      attempt.durationMs !== Math.max(0, finish.monotonicTime - start.monotonicTime)) {
-    throw new TypeError(`attempt ${attempt.attemptId} terminal index differs from canonical journal`);
+  if (
+    finish.identity.executionId !== attempt.executionId ||
+    finish.identity.runnerTaskId !== attempt.runnerTaskId ||
+    finish.identity.projectId !== attempt.projectId ||
+    finish.identity.specId !== attempt.specId ||
+    finishPayload['nativeTaskId'] !== attempt.nativeTaskId ||
+    finishPayload['repeat'] !== attempt.repeat ||
+    finishPayload['retry'] !== attempt.retry ||
+    finishPayload['state'] !== attempt.status ||
+    attempt.finishedAfterRunMs === null ||
+    attempt.durationMs !== Math.max(0, finish.monotonicTime - start.monotonicTime)
+  ) {
+    throw new TypeError(
+      `attempt ${attempt.attemptId} terminal index differs from canonical journal`,
+    );
   }
 }
 /** Canonical, injective and Windows-safe directory mapping for a canonical RunId. */
-export function runDirectoryName(runId: RunId): string { parseRunId('run', runId); return runId.replace(':', '_'); }
-function runIdFromDirectory(value: string): RunId | null { return safeRunId(value.replace(/^run_/, 'run:')); }
-function safeRunId(value: unknown): RunId | null { try { return parseRunId('run', value); } catch { return null; } }
-function json(value: unknown): string { return `${JSON.stringify(value, null, 2)}\n`; }
+export function runDirectoryName(runId: RunId): string {
+  parseRunId('run', runId);
+  return runId.replace(':', '_');
+}
+function runIdFromDirectory(value: string): RunId | null {
+  return safeRunId(value.replace(/^run_/, 'run:'));
+}
+function safeRunId(value: unknown): RunId | null {
+  try {
+    return parseRunId('run', value);
+  } catch {
+    return null;
+  }
+}
+function json(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
 async function durableWrite(path: string, body: string): Promise<void> {
   const file = await open(path, 'wx');
-  try { await file.writeFile(body, 'utf8'); await file.sync(); } finally { await file.close(); }
+  try {
+    await file.writeFile(body, 'utf8');
+    await file.sync();
+  } finally {
+    await file.close();
+  }
 }
-async function readText(path: string): Promise<string | null> { try { const s = await stat(path); if (s.size > MAX_MANIFEST_BYTES) return null; return await readFile(path, 'utf8'); } catch { return null; } }
-async function readJson(path: string): Promise<unknown> { const raw = await readText(path); if (raw === null) return null; try { return JSON.parse(raw); } catch { return null; } }
+async function readText(path: string): Promise<string | null> {
+  try {
+    const s = await stat(path);
+    if (s.size > MAX_MANIFEST_BYTES) return null;
+    return await readFile(path, 'utf8');
+  } catch {
+    return null;
+  }
+}
+async function readJson(path: string): Promise<unknown> {
+  const raw = await readText(path);
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 async function exists(path: string): Promise<boolean> {
-  try { await stat(path); return true; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
 }
 export const NODE_RUN_MANIFEST_WRITER = Object.freeze<RunManifestWriter>({
-  async mkdir(path, options) { await mkdir(path, options); },
+  async mkdir(path, options) {
+    await mkdir(path, options);
+  },
   exists,
   writeExclusive: durableWrite,
   async syncDirectory(path) {
@@ -530,22 +824,43 @@ export const NODE_RUN_MANIFEST_WRITER = Object.freeze<RunManifestWriter>({
       await directory?.close();
     }
   },
-  async rename(source, destination) { await rename(source, destination); },
+  async rename(source, destination) {
+    await rename(source, destination);
+  },
 });
-function object(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
-function text(value: unknown): value is string { return typeof value === 'string' && value.length > 0; }
-function finite(value: unknown, name: string): asserts value is number { if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new TypeError(`${name} is invalid`); }
-function nonNegativeInteger(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) >= 0; }
-function positiveInteger(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) > 0; }
+function object(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function text(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+function finite(value: unknown, name: string): asserts value is number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    throw new TypeError(`${name} is invalid`);
+}
+function nonNegativeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+function positiveInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
+}
 function validateNumberRecord(value: unknown, name: string): void {
   if (!object(value) || Object.keys(value).length > 256) throw new TypeError(`invalid ${name}`);
-  for (const [key, entry] of Object.entries(value)) if (!text(key) || !nonNegativeInteger(entry)) throw new TypeError(`invalid ${name}`);
+  for (const [key, entry] of Object.entries(value))
+    if (!text(key) || !nonNegativeInteger(entry)) throw new TypeError(`invalid ${name}`);
 }
 function validateStringRecord(value: unknown, name: string): void {
   if (!object(value) || Object.keys(value).length > 256) throw new TypeError(`invalid ${name}`);
-  for (const [key, entry] of Object.entries(value)) if (!text(key) || !text(entry) || entry.length > 16_384) throw new TypeError(`invalid ${name}`);
+  for (const [key, entry] of Object.entries(value))
+    if (!text(key) || !text(entry) || entry.length > 16_384) throw new TypeError(`invalid ${name}`);
 }
-function startedAt(record: RunHistoryRecord): number { return record.state === 'complete' ? record.manifest.startedAt : record.state === 'incomplete' ? record.start.startedAt : 0; }
+function startedAt(record: RunHistoryRecord): number {
+  return record.state === 'complete'
+    ? record.manifest.startedAt
+    : record.state === 'incomplete'
+      ? record.start.startedAt
+      : 0;
+}
 function commitMarker(digest: string): string {
   return `termwright-run-history-v${RUN_HISTORY_COMMIT_VERSION} sha256:${digest}\n`;
 }

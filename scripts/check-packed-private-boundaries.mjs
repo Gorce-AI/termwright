@@ -13,8 +13,9 @@ const manifests = new Map();
 for (const directory of readdirSync(packagesRoot).sort()) {
   const path = join(packagesRoot, directory, 'package.json');
   let manifest;
-  try { manifest = JSON.parse(readFileSync(path, 'utf8')); }
-  catch (error) {
+  try {
+    manifest = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (error) {
     if (error?.code === 'ENOENT') continue;
     throw error;
   }
@@ -27,29 +28,42 @@ for (const [name, { manifest }] of manifests) {
   if (manifest.private === true) continue;
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
     for (const dependency of Object.keys(manifest[field] ?? {})) {
-      if (privatePackages.has(dependency)) errors.push(`${name} has runtime ${field} on private ${dependency}`);
+      if (privatePackages.has(dependency))
+        errors.push(`${name} has runtime ${field} on private ${dependency}`);
     }
   }
 }
 
 for (const directory of ['resource-broker', 'run-journal-transport']) {
   const dist = join(packagesRoot, directory, 'dist');
-  for (const file of readdirSync(dist).filter((name) => name.endsWith('.js') || name.endsWith('.d.ts'))) {
+  for (const file of readdirSync(dist).filter(
+    (name) => name.endsWith('.js') || name.endsWith('.d.ts'),
+  )) {
     const source = readFileSync(join(dist, file), 'utf8');
     for (const privatePackage of privatePackages) {
-      if (source.includes(`from \"${privatePackage}\"`) || source.includes(`from '${privatePackage}'`)) {
+      if (
+        source.includes(`from \"${privatePackage}\"`) ||
+        source.includes(`from '${privatePackage}'`)
+      ) {
         errors.push(`packages/${directory}/dist/${file} imports private ${privatePackage}`);
       }
     }
   }
 }
 
-const brokerVitest = readFileSync(join(packagesRoot, 'resource-broker', 'dist', 'vitest.js'), 'utf8');
+const brokerVitest = readFileSync(
+  join(packagesRoot, 'resource-broker', 'dist', 'vitest.js'),
+  'utf8',
+);
 if (!/from\s+["']vitest["']/u.test(brokerVitest)) {
-  errors.push('packages/resource-broker/dist/vitest.js must externalize the caller\'s Vitest singleton');
+  errors.push(
+    "packages/resource-broker/dist/vitest.js must externalize the caller's Vitest singleton",
+  );
 }
 if (Buffer.byteLength(brokerVitest) > 32 * 1024) {
-  errors.push('packages/resource-broker/dist/vitest.js unexpectedly contains a bundled test runtime');
+  errors.push(
+    'packages/resource-broker/dist/vitest.js unexpectedly contains a bundled test runtime',
+  );
 }
 
 if (errors.length > 0) {
@@ -61,32 +75,53 @@ const work = mkdtempSync(join(tmpdir(), 'termwright-private-boundaries-'));
 try {
   const pnpmCli = process.env.npm_execpath;
   if (!pnpmCli) throw new Error('npm_execpath is missing; run this check through pnpm');
-  const archives = Object.fromEntries(['protocol', 'resource-broker', 'run-journal-transport'].map((directory) => {
-    const output = execFileSync(process.execPath, [pnpmCli, '--dir', `packages/${directory}`, 'pack', '--pack-destination', work], {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'inherit'],
-    }).trim().split(/\r?\n/u).at(-1);
-    if (!output) throw new Error(`pnpm pack produced no archive for ${directory}`);
-    return [directory, output];
-  }));
-  const dependencies = Object.fromEntries(Object.entries(archives).map(([directory, archive]) => [
-    `@termwright/${directory}`,
-    `file:${archive}`,
-  ]));
+  const archives = Object.fromEntries(
+    ['protocol', 'resource-broker', 'run-journal-transport'].map((directory) => {
+      const output = execFileSync(
+        process.execPath,
+        [pnpmCli, '--dir', `packages/${directory}`, 'pack', '--pack-destination', work],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'inherit'],
+        },
+      )
+        .trim()
+        .split(/\r?\n/u)
+        .at(-1);
+      if (!output) throw new Error(`pnpm pack produced no archive for ${directory}`);
+      return [directory, output];
+    }),
+  );
+  const dependencies = Object.fromEntries(
+    Object.entries(archives).map(([directory, archive]) => [
+      `@termwright/${directory}`,
+      `file:${archive}`,
+    ]),
+  );
   dependencies.vitest = '4.1.11';
-  writeFileSync(join(work, 'package.json'), `${JSON.stringify({
-    private: true,
-    type: 'module',
-    dependencies,
-    pnpm: { overrides: { '@termwright/protocol': dependencies['@termwright/protocol'] } },
-  }, null, 2)}\n`);
+  writeFileSync(
+    join(work, 'package.json'),
+    `${JSON.stringify(
+      {
+        private: true,
+        type: 'module',
+        dependencies,
+        pnpm: { overrides: { '@termwright/protocol': dependencies['@termwright/protocol'] } },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   execFileSync(process.execPath, [pnpmCli, '--dir', work, 'install', '--ignore-scripts'], {
     cwd: root,
     stdio: 'inherit',
   });
   const consumer = join(work, 'consumer.mjs');
-  writeFileSync(consumer, "await import('@termwright/resource-broker/transport');\nawait import('@termwright/resource-broker/vitest');\nawait import('@termwright/run-journal-transport');\n");
+  writeFileSync(
+    consumer,
+    "await import('@termwright/resource-broker/transport');\nawait import('@termwright/resource-broker/vitest');\nawait import('@termwright/run-journal-transport');\n",
+  );
   execFileSync(process.execPath, [consumer], { cwd: work, stdio: 'inherit' });
 } finally {
   rmSync(work, { recursive: true, force: true });

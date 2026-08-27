@@ -33,9 +33,7 @@ async function recordSample(dir: string): Promise<void> {
     now: session.now,
   });
 
-  session.semantic(
-    snapshot(1, [node({ id: 'n1', role: 'button', name: 'Submit' })], 'sess-r'),
-  );
+  session.semantic(snapshot(1, [node({ id: 'n1', role: 'button', name: 'Submit' })], 'sess-r'));
   session.output('first');
   const first = writer.addStep('first step');
   session.tick(1_000);
@@ -81,7 +79,10 @@ describe('openTrace', () => {
 
     const futureDir = join(root, 'future-status.twtrace');
     await recordSample(futureDir);
-    const meta = JSON.parse(await readFile(join(futureDir, TRACE_FILES.meta), 'utf8')) as Record<string, unknown>;
+    const meta = JSON.parse(await readFile(join(futureDir, TRACE_FILES.meta), 'utf8')) as Record<
+      string,
+      unknown
+    >;
     await rewriteCommittedMember(futureDir, TRACE_FILES.meta, JSON.stringify({ ...meta, v: 99 }));
     expect((await inspectTrace(futureDir)).status).toBe('unsupported-version');
   });
@@ -248,7 +249,13 @@ describe('zip container', () => {
     const destination = join(root, 'restored.twtrace');
     const members = await unpackTrace(zipPath, destination);
     expect([...members].sort()).toEqual(
-      [TRACE_FILES.meta, TRACE_FILES.cast, TRACE_FILES.events, TRACE_FILES.semantics, TRACE_FILES.commit].sort(),
+      [
+        TRACE_FILES.meta,
+        TRACE_FILES.cast,
+        TRACE_FILES.events,
+        TRACE_FILES.semantics,
+        TRACE_FILES.commit,
+      ].sort(),
     );
     const restored = await openTrace(destination);
     expect(restored.meta.sessionId).toBe('sess-r');

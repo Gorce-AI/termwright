@@ -6,7 +6,7 @@ import {
   TextRenderable,
 } from '@opentui/core';
 
-const renderer = await createCliRenderer({exitOnCtrlC: true, targetFps: 30});
+const renderer = await createCliRenderer({ exitOnCtrlC: true, targetFps: 30 });
 const form = new BoxRenderable(renderer, {
   id: 'release-form',
   border: true,

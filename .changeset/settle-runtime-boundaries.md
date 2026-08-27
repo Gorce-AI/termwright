@@ -1,9 +1,9 @@
 ---
-"@termwright/driver": patch
-"@termwright/desktop-host": patch
-"@termwright/probe-ink": patch
-"@termwright/run-history": patch
-"termwright": patch
+'@termwright/driver': patch
+'@termwright/desktop-host': patch
+'@termwright/probe-ink': patch
+'@termwright/run-history': patch
+'termwright': patch
 ---
 
 Keep shared probe build outputs immutable while the Native Host is running,

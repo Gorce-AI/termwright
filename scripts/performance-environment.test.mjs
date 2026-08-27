@@ -26,27 +26,39 @@ describe('performance environment qualification', () => {
         bun: { qualified: '1.2.15', resolved: '1.2.15' },
       },
     });
-    expect(() => validatePerformanceEnvironment(descriptor, {
-      platform: 'darwin', arch: 'arm64', nodeVersion: '24.7.0',
-    })).not.toThrow();
+    expect(() =>
+      validatePerformanceEnvironment(descriptor, {
+        platform: 'darwin',
+        arch: 'arm64',
+        nodeVersion: '24.7.0',
+      }),
+    ).not.toThrow();
   });
 
   it('rejects the Go 1.24 seed and every other mismatched toolchain class', () => {
-    expect(() => qualifyPerformanceEnvironment(runnerClass, {
-      ...observed,
-      goVersion: '1.24.4',
-    })).toThrow(/requires goLine=1\.25, observed 1\.24/u);
-    expect(() => qualifyPerformanceEnvironment(runnerClass, {
-      ...observed,
-      bunVersion: '1.2.14',
-    })).toThrow(/requires bunVersion=1\.2\.15/u);
+    expect(() =>
+      qualifyPerformanceEnvironment(runnerClass, {
+        ...observed,
+        goVersion: '1.24.4',
+      }),
+    ).toThrow(/requires goLine=1\.25, observed 1\.24/u);
+    expect(() =>
+      qualifyPerformanceEnvironment(runnerClass, {
+        ...observed,
+        bunVersion: '1.2.14',
+      }),
+    ).toThrow(/requires bunVersion=1\.2\.15/u);
   });
 
   it('rejects non-canonical qualified fields even when resolved versions are valid', () => {
     const descriptor = qualifyPerformanceEnvironment(runnerClass, observed);
     descriptor.toolchains.go.qualified = '1.24';
-    expect(() => validatePerformanceEnvironment(descriptor, {
-      platform: 'darwin', arch: 'arm64', nodeVersion: '24.7.0',
-    })).toThrow(/go qualification is not canonical/u);
+    expect(() =>
+      validatePerformanceEnvironment(descriptor, {
+        platform: 'darwin',
+        arch: 'arm64',
+        nodeVersion: '24.7.0',
+      }),
+    ).toThrow(/go qualification is not canonical/u);
   });
 });

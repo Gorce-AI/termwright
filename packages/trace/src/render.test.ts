@@ -23,10 +23,10 @@ describe('renderAnsiToHtml', () => {
   });
 
   it('renders bold, italic and underline attributes', async () => {
-    const screen = await renderAnsiToHtml(
-      `${ESC}[1mB${ESC}[0m${ESC}[3mI${ESC}[0m${ESC}[4mU`,
-      { columns: 5, rows: 1 },
-    );
+    const screen = await renderAnsiToHtml(`${ESC}[1mB${ESC}[0m${ESC}[3mI${ESC}[0m${ESC}[4mU`, {
+      columns: 5,
+      rows: 1,
+    });
     const html = screen.lines[0]?.html ?? '';
     expect(html).toContain('font-weight:700');
     expect(html).toContain('font-style:italic');

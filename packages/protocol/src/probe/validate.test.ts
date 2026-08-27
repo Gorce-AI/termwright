@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LIMITS, type ProtocolLimits } from '../limits.js';
 import { PROBE_CAPABILITIES, PROVENANCE_SOURCES, type ProbeFrame } from './ir.js';
-import {
-  validateProbeAnnotations,
-  validateProbeFrame,
-  validateProbeInfo,
-} from './validate.js';
+import { validateProbeAnnotations, validateProbeFrame, validateProbeInfo } from './validate.js';
 
 function object(id: string, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -93,21 +89,32 @@ describe('validateProbeInfo', () => {
     if (!result.ok) return;
     expect(Object.isFrozen(result.info.instrumentation)).toBe(true);
     expect(Object.isFrozen(result.info.instrumentation?.degradedCapabilities)).toBe(true);
-    expect(validateProbeInfo({
-      ...info,
-      instrumentation: { highestTier: 'T4', semanticClass: 'A', degradedCapabilities: [] },
-    }).ok).toBe(false);
-    expect(validateProbeInfo({
-      ...info,
-      instrumentation: { highestTier: 'T3', semanticClass: 'A', degradedCapabilities: ['telepathy'] },
-    }).ok).toBe(false);
-    expect(validateProbeInfo({
-      ...info,
-      instrumentation: {
-        highestTier: 'T3', semanticClass: 'A',
-        degradedCapabilities: ['intended-geometry', 'intended-geometry'],
-      },
-    }).ok).toBe(false);
+    expect(
+      validateProbeInfo({
+        ...info,
+        instrumentation: { highestTier: 'T4', semanticClass: 'A', degradedCapabilities: [] },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateProbeInfo({
+        ...info,
+        instrumentation: {
+          highestTier: 'T3',
+          semanticClass: 'A',
+          degradedCapabilities: ['telepathy'],
+        },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateProbeInfo({
+        ...info,
+        instrumentation: {
+          highestTier: 'T3',
+          semanticClass: 'A',
+          degradedCapabilities: ['intended-geometry', 'intended-geometry'],
+        },
+      }).ok,
+    ).toBe(false);
   });
 
   it('accepts a narrow named degradation without disabling the broader session capability', () => {
@@ -126,12 +133,16 @@ describe('validateProbeInfo', () => {
   });
 
   it('requires both geometry degradations for semantic class B', () => {
-    expect(validateProbeInfo({
-      ...info,
-      instrumentation: {
-        highestTier: 'T3', semanticClass: 'B', degradedCapabilities: ['intended-geometry'],
-      },
-    }).ok).toBe(false);
+    expect(
+      validateProbeInfo({
+        ...info,
+        instrumentation: {
+          highestTier: 'T3',
+          semanticClass: 'B',
+          degradedCapabilities: ['intended-geometry'],
+        },
+      }).ok,
+    ).toBe(false);
   });
 
   it('keeps the capability set closed', () => {
@@ -162,7 +173,12 @@ describe('validateProbeFrame — shape', () => {
         frame: 7,
         objects: [],
         operations: [
-          { kind: 'render', ordinal: 0, frameworkType: 'List', intendedRect: { row: 0, column: 0, width: 10, height: 4 } },
+          {
+            kind: 'render',
+            ordinal: 0,
+            frameworkType: 'List',
+            intendedRect: { row: 0, column: 0, width: 10, height: 4 },
+          },
           { kind: 'render', ordinal: 1, frameworkType: 'Block' },
         ],
       }),
@@ -196,16 +212,20 @@ describe('validateProbeFrame — shape', () => {
   });
 
   it('rejects a bad identity kind', () => {
-    expect(codeOf(frame({ objects: [object('a', { identity: { kind: 'guessed', value: 'a' } })] }))).toBe(
-      'schema',
-    );
+    expect(
+      codeOf(frame({ objects: [object('a', { identity: { kind: 'guessed', value: 'a' } })] })),
+    ).toBe('schema');
   });
 
   it('rejects an unsafe rectangle', () => {
     expect(
       codeOf(
         frame({
-          objects: [object('a', { geometry: { intendedRect: { row: 0.5, column: 0, width: 1, height: 1 } } })],
+          objects: [
+            object('a', {
+              geometry: { intendedRect: { row: 0.5, column: 0, width: 1, height: 1 } },
+            }),
+          ],
         }),
       ),
     ).toBe('bad-rect');
@@ -236,7 +256,9 @@ describe('validateProbeFrame — internal consistency', () => {
   });
 
   it('accepts a parent that is in the frame', () => {
-    expect(codeOf(frame({ objects: [object('root'), object('a', { parent: 'root' })] }))).toBe('ok');
+    expect(codeOf(frame({ objects: [object('root'), object('a', { parent: 'root' })] }))).toBe(
+      'ok',
+    );
   });
 
   it('rejects a self-parented object', () => {
@@ -246,9 +268,9 @@ describe('validateProbeFrame — internal consistency', () => {
   it('rejects a field that is both reported and declared unobservable', () => {
     // The whole point of the three-valued model is that this cannot happen: a
     // fact cannot be observed and unobservable at once.
-    expect(
-      codeOf(frame({ objects: [object('a', { text: 'hi', unobservable: ['text'] })] })),
-    ).toBe('schema');
+    expect(codeOf(frame({ objects: [object('a', { text: 'hi', unobservable: ['text'] })] }))).toBe(
+      'schema',
+    );
     expect(
       codeOf(
         frame({
@@ -277,9 +299,9 @@ describe('validateProbeFrame — internal consistency', () => {
   });
 
   it('rejects a repeated unobservable field', () => {
-    expect(codeOf(frame({ objects: [object('a', { unobservable: ['focused', 'focused'] })] }))).toBe(
-      'duplicate-id',
-    );
+    expect(
+      codeOf(frame({ objects: [object('a', { unobservable: ['focused', 'focused'] })] })),
+    ).toBe('duplicate-id');
   });
 
   it('rejects an unknown unobservable field name', () => {
@@ -312,32 +334,50 @@ describe('validateProbeFrame — selection facts stay apart', () => {
 
   it('keeps framework accessibility and developer intent in separate channels', () => {
     expect(
-      codeOf(frame({
-        objects: [object('a', {
-          accessibility: { role: 'button' },
-          annotations: {
-            role: 'dialog',
-            name: 'Deploy',
-            description: 'Production deployment',
-            testId: 'deploy',
-            extended: { environment: 'production', retries: 2, flags: [true, null] },
-            actions: ['activate'],
-            labelledBy: ['label'],
-            describedBy: ['help'],
-          },
-        })],
-      })),
+      codeOf(
+        frame({
+          objects: [
+            object('a', {
+              accessibility: { role: 'button' },
+              annotations: {
+                role: 'dialog',
+                name: 'Deploy',
+                description: 'Production deployment',
+                testId: 'deploy',
+                extended: { environment: 'production', retries: 2, flags: [true, null] },
+                actions: ['activate'],
+                labelledBy: ['label'],
+                describedBy: ['help'],
+              },
+            }),
+          ],
+        }),
+      ),
     ).toBe('ok');
   });
 
   it('rejects physical facts smuggled through an annotation', () => {
-    expect(codeOf(frame({ objects: [object('a', { annotations: { focused: true } })] }))).toBe('schema');
-    expect(codeOf(frame({ objects: [object('a', { annotations: { value: 'forged' } })] }))).toBe('schema');
-    expect(codeOf(frame({ objects: [object('a', { annotations: { bounds: { row: 0, column: 0, width: 1, height: 1 } } })] }))).toBe('schema');
+    expect(codeOf(frame({ objects: [object('a', { annotations: { focused: true } })] }))).toBe(
+      'schema',
+    );
+    expect(codeOf(frame({ objects: [object('a', { annotations: { value: 'forged' } })] }))).toBe(
+      'schema',
+    );
+    expect(
+      codeOf(
+        frame({
+          objects: [
+            object('a', { annotations: { bounds: { row: 0, column: 0, width: 1, height: 1 } } }),
+          ],
+        }),
+      ),
+    ).toBe('schema');
   });
 
   it('will not take an index where a text range belongs', () => {
-    expect(codeOf(frame({ objects: [object('a', { state: { textSelection: 3 } })] }))).toBe('schema');
+    expect(codeOf(frame({ objects: [object('a', { state: { textSelection: 3 } })] }))).toBe(
+      'schema',
+    );
   });
 });
 
@@ -378,8 +418,12 @@ describe('validateProbeAnnotations', () => {
   it('returns a deeply frozen annotation under the negotiated limits', () => {
     const result = validateProbeAnnotations(
       {
-        name: 'Deploy', actions: ['activate'], extended: { target: 'production' },
-        inputRecipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] }],
+        name: 'Deploy',
+        actions: ['activate'],
+        extended: { target: 'production' },
+        inputRecipes: [
+          { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+        ],
       },
       DEFAULT_LIMITS,
     );
@@ -388,7 +432,9 @@ describe('validateProbeAnnotations', () => {
       name: 'Deploy',
       actions: ['activate'],
       extended: { target: 'production' },
-      inputRecipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] }],
+      inputRecipes: [
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+      ],
     });
     expect(Object.isFrozen(result.annotations)).toBe(true);
     expect(Object.isFrozen(result.annotations.extended)).toBe(true);
@@ -402,12 +448,22 @@ describe('validateProbeAnnotations', () => {
       { extended: cyclic },
       { name: 'x'.repeat(DEFAULT_LIMITS.maxStringBytes + 1) },
       { focused: true },
-      { inputRecipes: [{ action: 'focus', requiresFocus: true, steps: [{ kind: 'press', key: 'Tab' }] }] },
-      { inputRecipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'insert-action-value' }] }] },
-      { inputRecipes: [
-        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
-        { action: 'activate', requiresFocus: false, steps: [{ kind: 'press', key: 'Space' }] },
-      ] },
+      {
+        inputRecipes: [
+          { action: 'focus', requiresFocus: true, steps: [{ kind: 'press', key: 'Tab' }] },
+        ],
+      },
+      {
+        inputRecipes: [
+          { action: 'activate', requiresFocus: true, steps: [{ kind: 'insert-action-value' }] },
+        ],
+      },
+      {
+        inputRecipes: [
+          { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+          { action: 'activate', requiresFocus: false, steps: [{ kind: 'press', key: 'Space' }] },
+        ],
+      },
     ]) {
       expect(() => validateProbeAnnotations(value, DEFAULT_LIMITS)).not.toThrow();
       expect(validateProbeAnnotations(value, DEFAULT_LIMITS).ok).toBe(false);
@@ -428,10 +484,7 @@ describe('validateProbeAnnotations', () => {
 
   it('uses short validator constants and enforces the negotiated frame ceiling', () => {
     expect(
-      validateProbeAnnotations(
-        { name: 'x' },
-        { ...DEFAULT_LIMITS, maxStringBytes: 1 },
-      ).ok,
+      validateProbeAnnotations({ name: 'x' }, { ...DEFAULT_LIMITS, maxStringBytes: 1 }).ok,
     ).toBe(true);
     const result = validateProbeAnnotations(
       { extended: { payload: 'x'.repeat(8_192) } },

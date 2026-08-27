@@ -11,11 +11,23 @@ describe('greenfield application reducer identities', () => {
   it('makes bounded diagnostic loss visible and cumulative', () => {
     let state = appReducer(initialAppState, {
       type: 'message',
-      message: { v: 1, type: 'diagnostic-gap', source: 'ui-hub', droppedMessages: 7, droppedBytes: 1_024 },
+      message: {
+        v: 1,
+        type: 'diagnostic-gap',
+        source: 'ui-hub',
+        droppedMessages: 7,
+        droppedBytes: 1_024,
+      },
     });
     state = appReducer(state, {
       type: 'message',
-      message: { v: 1, type: 'diagnostic-gap', source: 'live-session-producer', droppedMessages: 2, droppedBytes: 64 },
+      message: {
+        v: 1,
+        type: 'diagnostic-gap',
+        source: 'live-session-producer',
+        droppedMessages: 2,
+        droppedBytes: 64,
+      },
     });
 
     expect(state.run.diagnosticGaps).toBe(9);
@@ -66,7 +78,11 @@ describe('greenfield application reducer identities', () => {
       executions: [history],
       selectedExecutionId: history.executionId,
     };
-    state = appReducer(state, { type: 'replay-loading', executionId: history.executionId, traceRef: history.traceRef as string });
+    state = appReducer(state, {
+      type: 'replay-loading',
+      executionId: history.executionId,
+      traceRef: history.traceRef as string,
+    });
     state = appReducer(state, {
       type: 'replay-loaded',
       executionId: history.executionId,
@@ -90,16 +106,48 @@ describe('greenfield application reducer identities', () => {
       executions: [history],
       selectedExecutionId: history.executionId,
       evidence: {
-        kind: 'replay', runId: 'history-run', executionId: history.executionId,
-        replay: { traceRef: history.traceRef as string, overview: overview(history.traceRef as string, 'history-session'), frames: emptyFrames, commands: [], traceState: emptyTraceState, logs: emptyLogs, timeMs: 0, playing: false, speed: 1, loading: false, error: null },
+        kind: 'replay',
+        runId: 'history-run',
+        executionId: history.executionId,
+        replay: {
+          traceRef: history.traceRef as string,
+          overview: overview(history.traceRef as string, 'history-session'),
+          frames: emptyFrames,
+          commands: [],
+          traceState: emptyTraceState,
+          logs: emptyLogs,
+          timeMs: 0,
+          playing: false,
+          speed: 1,
+          loading: false,
+          error: null,
+        },
       },
     };
     state = appReducer(state, { type: 'run-requested', targets: [history.caseKey] });
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 } });
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'new-runtime', runnerTaskId: history.caseKey, title: 'case', file: '/repo/case.test.ts', startedAt: 2 } });
+    state = appReducer(state, {
+      type: 'message',
+      message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 },
+    });
+    state = appReducer(state, {
+      type: 'message',
+      message: {
+        v: 1,
+        type: 'test-start',
+        id: 'new-runtime',
+        runnerTaskId: history.caseKey,
+        title: 'case',
+        file: '/repo/case.test.ts',
+        startedAt: 2,
+      },
+    });
 
     expect(state.selectedExecutionId).toBe('run:test:new-runtime:1');
-    expect(state.evidence).toEqual({ kind: 'live', runId: 'run:test', executionId: 'run:test:new-runtime:1' });
+    expect(state.evidence).toEqual({
+      kind: 'live',
+      runId: 'run:test',
+      executionId: 'run:test:new-runtime:1',
+    });
     expect(state.selectedSessionId).toBeNull();
     expect(state.pendingRunTargets).toBeNull();
   });
@@ -107,22 +155,65 @@ describe('greenfield application reducer identities', () => {
   it('keeps the requested scope after the pending latch clears and resets it for a background run', () => {
     const selected = 'runner-task:a';
     let state = appReducer(initialAppState, { type: 'run-requested', targets: [selected] });
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 10 } });
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'runtime-a', runnerTaskId: selected, title: 'suite > A', file: '/repo/a.test.ts', startedAt: 10 } });
+    state = appReducer(state, {
+      type: 'message',
+      message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 10 },
+    });
+    state = appReducer(state, {
+      type: 'message',
+      message: {
+        v: 1,
+        type: 'test-start',
+        id: 'runtime-a',
+        runnerTaskId: selected,
+        title: 'suite > A',
+        file: '/repo/a.test.ts',
+        startedAt: 10,
+      },
+    });
     expect(state.pendingRunTargets).toBeNull();
     expect(state.run.requestedTargets).toEqual([selected]);
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-end', summary: { verdict: 'passed', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } } });
+    state = appReducer(state, {
+      type: 'message',
+      message: {
+        v: 1,
+        type: 'run-end',
+        summary: {
+          verdict: 'passed',
+          total: 1,
+          passed: 1,
+          failed: 0,
+          skipped: 0,
+          flaky: 0,
+          durationMs: 1,
+        },
+      },
+    });
     expect(state.run.requestedTargets).toEqual([selected]);
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 20 } });
+    state = appReducer(state, {
+      type: 'message',
+      message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 20 },
+    });
     expect(state.run.requestedTargets).toBeNull();
   });
 
   it('preserves the yellow verdict independently of attempt counters', () => {
-    const state = appReducer(initialAppState, { type: 'message', message: {
-      v: 1,
-      type: 'run-end',
-      summary: { verdict: 'passed-with-skips', total: 2, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 1 },
-    } });
+    const state = appReducer(initialAppState, {
+      type: 'message',
+      message: {
+        v: 1,
+        type: 'run-end',
+        summary: {
+          verdict: 'passed-with-skips',
+          total: 2,
+          passed: 1,
+          failed: 0,
+          skipped: 0,
+          flaky: 0,
+          durationMs: 1,
+        },
+      },
+    });
     expect(state.run.summary?.verdict).toBe('passed-with-skips');
   });
 
@@ -149,25 +240,57 @@ describe('greenfield application reducer identities', () => {
     state = start(state, 'same-runtime', 'same-session', 1);
     state = appReducer(state, {
       type: 'message',
-      message: { v: 1, type: 'action-start', actionId: 'a1', api: 'press', t: 10, testId: 'same-runtime', sessionId: 'same-session' },
+      message: {
+        v: 1,
+        type: 'action-start',
+        actionId: 'a1',
+        api: 'press',
+        t: 10,
+        testId: 'same-runtime',
+        sessionId: 'same-session',
+      },
     });
     const oldExecution = state.executions[0] as ExecutionCase;
 
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 } });
+    state = appReducer(state, {
+      type: 'message',
+      message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 },
+    });
     state = start(state, 'same-runtime', 'same-session', 2);
     state = appReducer(state, {
       type: 'message',
-      message: { v: 1, type: 'action-start', actionId: 'a1', api: 'press', t: 20, testId: 'same-runtime', sessionId: 'same-session' },
+      message: {
+        v: 1,
+        type: 'action-start',
+        actionId: 'a1',
+        api: 'press',
+        t: 20,
+        testId: 'same-runtime',
+        sessionId: 'same-session',
+      },
     });
     state = appReducer(state, {
       type: 'message',
-      message: { v: 1, type: 'action', actionId: 'a1', kind: 'action', api: 'press', t: 30, ok: false, testId: 'same-runtime', sessionId: 'same-session' },
+      message: {
+        v: 1,
+        type: 'action',
+        actionId: 'a1',
+        kind: 'action',
+        api: 'press',
+        t: 30,
+        ok: false,
+        testId: 'same-runtime',
+        sessionId: 'same-session',
+      },
     });
 
     expect(state.executions).toHaveLength(2);
     expect(state.executions[0]).toEqual(oldExecution);
     expect(state.executions[1]?.nodes).toHaveLength(1);
-    expect(state.executions[1]?.nodes[0]).toMatchObject({ status: 'failed', nodeId: 'action:same-session:a1' });
+    expect(state.executions[1]?.nodes[0]).toMatchObject({
+      status: 'failed',
+      nodeId: 'action:same-session:a1',
+    });
   });
 
   it('keeps identical action ids from two sessions as separate rows', () => {
@@ -178,12 +301,28 @@ describe('greenfield application reducer identities', () => {
     state = start(state, 'runtime', 'session-a', 1);
     state = appReducer(state, {
       type: 'message',
-      message: { v: 1, type: 'session', sessionId: 'session-b', testId: 'runtime', terminalProfile: 'default', columns: 80, rows: 24 },
+      message: {
+        v: 1,
+        type: 'session',
+        sessionId: 'session-b',
+        testId: 'runtime',
+        terminalProfile: 'default',
+        columns: 80,
+        rows: 24,
+      },
     });
     for (const sessionId of ['session-a', 'session-b']) {
       state = appReducer(state, {
         type: 'message',
-        message: { v: 1, type: 'action-start', actionId: 'a1', api: 'press', t: 10, testId: 'runtime', sessionId },
+        message: {
+          v: 1,
+          type: 'action-start',
+          actionId: 'a1',
+          api: 'press',
+          t: 10,
+          testId: 'runtime',
+          sessionId,
+        },
       });
     }
     expect(state.executions[0]?.nodes.map((node) => node.nodeId)).toEqual([
@@ -199,20 +338,57 @@ describe('greenfield application reducer identities', () => {
     };
     state = start(state, 'runtime-a', 'session-a', 1);
     expect(state.selectedSessionId).toBe('run:1:session-a');
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-end', id: 'runtime-a', status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 } });
     state = appReducer(state, {
       type: 'message',
-      message: { v: 1, type: 'test-start', id: 'runtime-b', runnerTaskId: 'runner-task:b', title: 'case without terminal', file: '/repo/b.test.ts', startedAt: 2 },
+      message: {
+        v: 1,
+        type: 'test-end',
+        id: 'runtime-a',
+        status: 'passed',
+        durationMs: 1,
+        flaky: false,
+        lostLogRecords: 0,
+      },
+    });
+    state = appReducer(state, {
+      type: 'message',
+      message: {
+        v: 1,
+        type: 'test-start',
+        id: 'runtime-b',
+        runnerTaskId: 'runner-task:b',
+        title: 'case without terminal',
+        file: '/repo/b.test.ts',
+        startedAt: 2,
+      },
     });
     expect(state.selectedSessionId).toBeNull();
     expect(state.selectedExecutionId).toBe('run:1:runtime-b:1');
-    expect(state.evidence).toEqual({ kind: 'live', runId: 'run:1', executionId: 'run:1:runtime-b:1' });
+    expect(state.evidence).toEqual({
+      kind: 'live',
+      runId: 'run:1',
+      executionId: 'run:1:runtime-b:1',
+    });
   });
 
   it('keeps the selected running case when another concurrent case starts', () => {
-    let state: AppState = { ...initialAppState, run: { ...initialAppState.run, runId: 'run:1', status: 'running' } };
+    let state: AppState = {
+      ...initialAppState,
+      run: { ...initialAppState.run, runId: 'run:1', status: 'running' },
+    };
     state = start(state, 'runtime-a', 'session-a', 1);
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'runtime-b', runnerTaskId: 'runner-task:b', title: 'case b', file: '/repo/b.test.ts', startedAt: 2 } });
+    state = appReducer(state, {
+      type: 'message',
+      message: {
+        v: 1,
+        type: 'test-start',
+        id: 'runtime-b',
+        runnerTaskId: 'runner-task:b',
+        title: 'case b',
+        file: '/repo/b.test.ts',
+        startedAt: 2,
+      },
+    });
     expect(state.selectedExecutionId).toBe('run:1:runtime-a:1');
     expect(state.selectedSessionId).toBe('run:1:session-a');
     expect(state.executions.map((test) => test.status)).toEqual(['running', 'running']);
@@ -266,35 +442,89 @@ describe('greenfield application reducer identities', () => {
 
   it('replaces a selected replay identity with an explicit loading/error state', () => {
     const first = execution('history-a', 'runtime-a', 'session-a');
-    const second = { ...execution('history-b', 'runtime-b', 'session-b'), executionId: 'history-b:runtime-b:1', traceRef: '/tmp/b.twtrace' };
+    const second = {
+      ...execution('history-b', 'runtime-b', 'session-b'),
+      executionId: 'history-b:runtime-b:1',
+      traceRef: '/tmp/b.twtrace',
+    };
     let state: AppState = {
       ...initialAppState,
       executions: [first, second],
       selectedExecutionId: first.executionId,
       evidence: {
-        kind: 'replay', runId: 'history-a', executionId: first.executionId,
-        replay: { traceRef: first.traceRef as string, overview: overview(first.traceRef as string, 'session-a'), frames: emptyFrames, commands: [{ id: 'a', kind: 'action', label: 'old replay action', t: 1, depth: 0 }], traceState: emptyTraceState, logs: emptyLogs, timeMs: 0, playing: false, speed: 1, loading: false, error: null },
+        kind: 'replay',
+        runId: 'history-a',
+        executionId: first.executionId,
+        replay: {
+          traceRef: first.traceRef as string,
+          overview: overview(first.traceRef as string, 'session-a'),
+          frames: emptyFrames,
+          commands: [{ id: 'a', kind: 'action', label: 'old replay action', t: 1, depth: 0 }],
+          traceState: emptyTraceState,
+          logs: emptyLogs,
+          timeMs: 0,
+          playing: false,
+          speed: 1,
+          loading: false,
+          error: null,
+        },
       },
     };
     state = appReducer(state, { type: 'select-execution', executionId: second.executionId });
-    expect(state.evidence).toEqual({ kind: 'live', runId: 'history-b', executionId: second.executionId });
+    expect(state.evidence).toEqual({
+      kind: 'live',
+      runId: 'history-b',
+      executionId: second.executionId,
+    });
     expect(nodesForSelected(state)).toEqual([]);
-    state = appReducer(state, { type: 'replay-loading', executionId: second.executionId, traceRef: '/tmp/b.twtrace' });
-    expect(state.evidence).toEqual({ kind: 'replay-loading', runId: 'history-b', executionId: second.executionId, traceRef: '/tmp/b.twtrace' });
-    state = appReducer(state, { type: 'replay-error', executionId: second.executionId, traceRef: '/tmp/b.twtrace', error: 'trace not found' });
-    expect(state.evidence).toEqual({ kind: 'replay-error', runId: 'history-b', executionId: second.executionId, traceRef: '/tmp/b.twtrace', error: 'trace not found' });
+    state = appReducer(state, {
+      type: 'replay-loading',
+      executionId: second.executionId,
+      traceRef: '/tmp/b.twtrace',
+    });
+    expect(state.evidence).toEqual({
+      kind: 'replay-loading',
+      runId: 'history-b',
+      executionId: second.executionId,
+      traceRef: '/tmp/b.twtrace',
+    });
+    state = appReducer(state, {
+      type: 'replay-error',
+      executionId: second.executionId,
+      traceRef: '/tmp/b.twtrace',
+      error: 'trace not found',
+    });
+    expect(state.evidence).toEqual({
+      kind: 'replay-error',
+      runId: 'history-b',
+      executionId: second.executionId,
+      traceRef: '/tmp/b.twtrace',
+      error: 'trace not found',
+    });
     expect(nodesForSelected(state)).toEqual([]);
   });
 
   it('keeps native retry history on one settled execution', () => {
-    let state: AppState = { ...initialAppState, run: { ...initialAppState.run, runId: 'run:retry', status: 'running' } };
+    let state: AppState = {
+      ...initialAppState,
+      run: { ...initialAppState.run, runId: 'run:retry', status: 'running' },
+    };
     state = start(state, 'retry-runtime', 'retry-session', 1);
     state = appReducer(state, {
       type: 'message',
       message: {
-        v: 1, type: 'test-end', id: 'retry-runtime', status: 'passed', durationMs: 90, flaky: true,
-        lostLogRecords: 0, attempt: 3,
-        priorFailures: [{ attempt: 1, errors: ['first failure'] }, { attempt: 2, errors: ['second failure'] }],
+        v: 1,
+        type: 'test-end',
+        id: 'retry-runtime',
+        status: 'passed',
+        durationMs: 90,
+        flaky: true,
+        lostLogRecords: 0,
+        attempt: 3,
+        priorFailures: [
+          { attempt: 1, errors: ['first failure'] },
+          { attempt: 2, errors: ['second failure'] },
+        ],
       },
     });
     expect(state.executions).toHaveLength(1);
@@ -309,11 +539,28 @@ describe('greenfield application reducer identities', () => {
 function start(state: AppState, runtimeId: string, sessionId: string, startedAt: number): AppState {
   let next = appReducer(state, {
     type: 'message',
-    message: { v: 1, type: 'test-start', id: runtimeId, runnerTaskId: `runner-task:${runtimeId}`, title: 'case', file: '/repo/case.test.ts', startedAt, sessionId },
+    message: {
+      v: 1,
+      type: 'test-start',
+      id: runtimeId,
+      runnerTaskId: `runner-task:${runtimeId}`,
+      title: 'case',
+      file: '/repo/case.test.ts',
+      startedAt,
+      sessionId,
+    },
   });
   next = appReducer(next, {
     type: 'message',
-    message: { v: 1, type: 'session', sessionId, testId: runtimeId, terminalProfile: 'default', columns: 80, rows: 24 },
+    message: {
+      v: 1,
+      type: 'session',
+      sessionId,
+      testId: runtimeId,
+      terminalProfile: 'default',
+      columns: 80,
+      rows: 24,
+    },
   });
   return next;
 }

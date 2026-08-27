@@ -9,10 +9,7 @@ Native-host integrations can install it with
 `pnpm add @termwright/run-journal-transport`.
 
 ```ts
-import {
-  connectRunJournalWorker,
-  startRunJournalServer,
-} from '@termwright/run-journal-transport';
+import { connectRunJournalWorker, startRunJournalServer } from '@termwright/run-journal-transport';
 
 const server = await startRunJournalServer({
   runId,

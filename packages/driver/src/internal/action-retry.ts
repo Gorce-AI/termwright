@@ -5,12 +5,13 @@ import { Deadline, type MonotonicClock as Clock, systemMonotonicClock } from './
 
 export interface ActionRetryContext {
   checkpoint(): ObservationStamp;
-  actionObservationState?(): 'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
+  actionObservationState?():
+    'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
   /** Wall-clock deadline retained at the session boundary; the budget itself is monotonic. */
   waitForChange(deadline: number): Promise<void>;
   actionObservationWait?(
     actionId: string,
-    state: "parser-in-flight" | "semantic-frame-open" | "pairing-pending",
+    state: 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending',
   ): void;
 }
 
@@ -36,12 +37,15 @@ function relevantObservationChanged(
   const targetRef = error.actionability?.reason?.targetRef ?? error.actionability?.intent.targetRef;
   return targetRef?.startsWith('screen:') === true
     ? left.screenRevision !== right.screenRevision
-    : left.semanticRevision !== right.semanticRevision || left.pairedScreenRevision !== right.pairedScreenRevision;
+    : left.semanticRevision !== right.semanticRevision ||
+        left.pairedScreenRevision !== right.pairedScreenRevision;
 }
 
 function recoverable(error: unknown): error is StaleSnapshotError | NotActionableError {
-  return error instanceof StaleSnapshotError ||
-    (error instanceof NotActionableError && error.transient !== null);
+  return (
+    error instanceof StaleSnapshotError ||
+    (error instanceof NotActionableError && error.transient !== null)
+  );
 }
 
 /** One monotonic budget for resolution, planning, retry waits and first input. */
@@ -53,7 +57,9 @@ export class ActionRetryController {
 
   constructor(timeoutMs: number, clock: MonotonicClock = () => systemMonotonicClock.now()) {
     if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
-      throw new RangeError(`action timeout must be a finite non-negative number, received ${String(timeoutMs)}`);
+      throw new RangeError(
+        `action timeout must be a finite non-negative number, received ${String(timeoutMs)}`,
+      );
     }
     this.#clock = clock;
     const deadlineClock: Clock = { now: clock };
@@ -74,11 +80,7 @@ export class ActionRetryController {
     assertBeforeActionInput(this.deadline, diagnostics, this.#clock);
   }
 
-  async retry(
-    error: unknown,
-    ctx: ActionRetryContext,
-    actionId?: string,
-  ): Promise<void> {
+  async retry(error: unknown, ctx: ActionRetryContext, actionId?: string): Promise<void> {
     if (!recoverable(error) || this.expired()) throw error;
 
     // A stale plan proves a newer observation already exists. Re-plan once

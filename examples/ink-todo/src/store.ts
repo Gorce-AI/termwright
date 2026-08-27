@@ -8,7 +8,15 @@
  * afterwards, without the app knowing a test exists.
  */
 
-import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  fsyncSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 
 export interface Todo {
   readonly id: number;

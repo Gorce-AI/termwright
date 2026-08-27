@@ -9,9 +9,7 @@
  */
 
 export type CommandLineErrorCode =
-  | 'dangling-escape'
-  | 'unclosed-single-quote'
-  | 'unclosed-double-quote';
+  'dangling-escape' | 'unclosed-single-quote' | 'unclosed-double-quote';
 
 /** A syntax error that the recorder can show directly beside the command. */
 export class CommandLineSyntaxError extends Error {

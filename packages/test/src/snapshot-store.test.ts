@@ -23,9 +23,14 @@ const directories: string[] = [];
 
 function identity() {
   return {
-    invocationId: createRunId('invocation'), runId: createRunId('run'), projectId: createRunId('project'),
-    specId: createRunId('spec'), runnerTaskId: createRunId('runner-task'), nativeTaskId: 'snapshot-unit',
-    file: '/repo/snapshot.test.ts', fullName: 'snapshot unit',
+    invocationId: createRunId('invocation'),
+    runId: createRunId('run'),
+    projectId: createRunId('project'),
+    specId: createRunId('spec'),
+    runnerTaskId: createRunId('runner-task'),
+    nativeTaskId: 'snapshot-unit',
+    file: '/repo/snapshot.test.ts',
+    fullName: 'snapshot unit',
   } as const;
 }
 
@@ -37,7 +42,8 @@ function workspace(): string {
 
 afterEach(() => {
   resetSnapshotCache();
-  while (directories.length > 0) rmSync(directories.pop() as string, { recursive: true, force: true });
+  while (directories.length > 0)
+    rmSync(directories.pop() as string, { recursive: true, force: true });
 });
 
 describe('snapshotFilePath', () => {
@@ -118,7 +124,9 @@ describe('resolveUpdateMode', () => {
   });
 
   it('rejects an unknown mode instead of guessing', () => {
-    expect(() => resolveUpdateMode({ TERMWRIGHT_UPDATE_SNAPSHOTS: 'yes' })).toThrow(/must be all \| changed/u);
+    expect(() => resolveUpdateMode({ TERMWRIGHT_UPDATE_SNAPSHOTS: 'yes' })).toThrow(
+      /must be all \| changed/u,
+    );
   });
 });
 
@@ -146,11 +154,17 @@ describe('key allocation', () => {
     const values = await Promise.all([
       runWithAttemptContext(first, async () => {
         await Promise.resolve();
-        return [nextSnapshotKey('same title', 'semantic'), nextSnapshotKey('same title', 'semantic')];
+        return [
+          nextSnapshotKey('same title', 'semantic'),
+          nextSnapshotKey('same title', 'semantic'),
+        ];
       }),
       runWithAttemptContext(second, async () => {
         await Promise.resolve();
-        return [nextSnapshotKey('same title', 'semantic'), nextSnapshotKey('same title', 'semantic')];
+        return [
+          nextSnapshotKey('same title', 'semantic'),
+          nextSnapshotKey('same title', 'semantic'),
+        ];
       }),
     ]);
     expect(values).toEqual([
@@ -217,7 +231,11 @@ describe('pruneObsoleteSnapshots', () => {
 
   it('says nothing about a snapshot file that does not exist', () => {
     const file = join(workspace(), 'absent.test.ts.tw-cells.yaml');
-    expect(pruneObsoleteSnapshots(file, declared, 'all')).toEqual({ file, keys: [], removed: false });
+    expect(pruneObsoleteSnapshots(file, declared, 'all')).toEqual({
+      file,
+      keys: [],
+      removed: false,
+    });
     expect(existsSync(file)).toBe(false);
   });
 });

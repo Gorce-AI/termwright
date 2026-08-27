@@ -2,9 +2,5 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src", "types": ["node"] },
   "include": ["src"],
-  "exclude": [
-    "src/app",
-    "src/browser-client.ts",
-    "src/**/*.e2e.ts"
-  ]
+  "exclude": ["src/app", "src/browser-client.ts", "src/**/*.e2e.ts"]
 }

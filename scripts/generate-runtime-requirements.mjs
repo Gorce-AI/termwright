@@ -21,7 +21,9 @@ export function renderRuntimeRequirements(manifest) {
   if (typeof vitestVersion !== 'string' || !/^\d+\.\d+\.\d+$/u.test(vitestVersion)) {
     throw new TypeError('package.json devDependencies.vitest must be an exact version');
   }
-  const nodeMajors = [...nodeRange.matchAll(/\^(\d+)(?:\.\d+){0,2}/gu)].map((match) => Number(match[1]));
+  const nodeMajors = [...nodeRange.matchAll(/\^(\d+)(?:\.\d+){0,2}/gu)].map((match) =>
+    Number(match[1]),
+  );
   if (nodeMajors.length === 0 || nodeMajors.some((major) => !Number.isSafeInteger(major))) {
     throw new TypeError('package.json engines.node must name supported caret major lines');
   }
@@ -49,7 +51,10 @@ function renderDocument(document, generated, path) {
   if (start === -1 || end === -1 || end < start) {
     throw new Error(`${path}: missing or invalid runtime requirement markers`);
   }
-  if (document.indexOf(START, start + START.length) !== -1 || document.indexOf(END, end + END.length) !== -1) {
+  if (
+    document.indexOf(START, start + START.length) !== -1 ||
+    document.indexOf(END, end + END.length) !== -1
+  ) {
     throw new Error(`${path}: runtime requirement markers must occur exactly once`);
   }
   return `${document.slice(0, start + START.length)}\n${generated}\n${document.slice(end)}`;

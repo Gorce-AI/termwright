@@ -43,21 +43,24 @@ export class RenderBoundaryQueue {
       // Ink exposes no cancellation API. Keep the uncancellable flush owned
       // and observed until it settles, while `stop()` rejects the public
       // operation immediately so teardown cannot hang on an upstream flush.
-      void flush.then(() => {
-        this.#preparing.delete(boundary);
-        if (this.#stopped) return;
-        this.#pending.push(boundary);
-        try {
-          mutate(boundary.generation);
-        } catch (error) {
-          const index = this.#pending.indexOf(boundary);
-          if (index !== -1) this.#pending.splice(index, 1);
+      void flush.then(
+        () => {
+          this.#preparing.delete(boundary);
+          if (this.#stopped) return;
+          this.#pending.push(boundary);
+          try {
+            mutate(boundary.generation);
+          } catch (error) {
+            const index = this.#pending.indexOf(boundary);
+            if (index !== -1) this.#pending.splice(index, 1);
+            reject(asError(error));
+          }
+        },
+        (error: unknown) => {
+          this.#preparing.delete(boundary);
           reject(asError(error));
-        }
-      }, (error: unknown) => {
-        this.#preparing.delete(boundary);
-        reject(asError(error));
-      });
+        },
+      );
     });
   }
 

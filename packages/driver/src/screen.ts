@@ -168,7 +168,8 @@ export function captureText(vt: VtScreen): string {
  * shape that `captureScreen` would have put at that coordinate.
  */
 export function captureCell(vt: VtScreen, row: number, column: number): CellSnapshot {
-  if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || column < 0) return EMPTY_CELL;
+  if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || column < 0)
+    return EMPTY_CELL;
   if (row >= vt.rows) return EMPTY_CELL;
   const buffer = vt.terminal.buffer.active;
   const line = buffer.getLine(buffer.viewportY + row);
