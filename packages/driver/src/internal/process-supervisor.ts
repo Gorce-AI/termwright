@@ -354,7 +354,7 @@ export class ProcessSupervisor {
         this.#exitTreeConfirmedGone = gone;
         if (!gone) exitTreeFailures.push(new ProcessLifecycleError(
           'cleanup-failed',
-          `process group ${this.#pty.pid} remained alive after root exit and hard kill before the shutdown deadline`,
+          `process group ${this.#pty.pid} was not confirmed gone after root exit and hard kill before the shutdown deadline`,
         ));
       }
       failures.push(...exitTreeFailures);

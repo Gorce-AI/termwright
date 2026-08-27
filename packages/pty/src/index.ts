@@ -317,12 +317,20 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
           if (!writeEpoch.isCurrent(event.generation)) return;
           for (const listener of [...drainListeners]) listener();
           return;
-        case "error":
-          fatalError ??= Object.assign(new Error(event.message), {
+        case "error": {
+          const code = getSystemErrorName(-event.code);
+          const guidance = code === "EMFILE"
+            ? " Raise this process's open-file limit (for example with `ulimit -n`) and retry."
+            : code === "ENFILE"
+              ? " The host-wide open-file table is exhausted; raise the system limit or reduce concurrent processes."
+              : "";
+          fatalError ??= Object.assign(new Error(`${event.message}${guidance}`), {
+            code,
             errno: event.code,
           });
           for (const listener of [...errorListeners]) listener(fatalError);
           return;
+        }
       }
     },
   );

@@ -116,6 +116,30 @@ describe("the native PTY driver adapter", () => {
     expect(observed).toBe(refusal);
   });
 
+  it("preserves the native tree-probe failure behind unsupported state", () => {
+    let fail: ((error: Error) => void) | undefined;
+    const session = fakeSession({
+      onError(listener) { fail = listener; return () => undefined; },
+      treeState: () => "unsupported",
+    });
+    const process = createNativePtyBackend(() => session, "linux").spawn({
+      command: ["/app"], env: {}, columns: 80, rows: 24,
+    });
+    const error = Object.assign(new Error("drain(PTY process group) failed: Too many open files"), {
+      code: "EMFILE",
+      errno: 24,
+    });
+    fail?.(error);
+
+    let observed: unknown;
+    try {
+      process.treeState?.();
+    } catch (failure) {
+      observed = failure;
+    }
+    expect(observed).toBe(error);
+  });
+
   it("disposes the session and all four native subscriptions exactly once", () => {
     const releases = [vi.fn(), vi.fn(), vi.fn(), vi.fn()];
     const session = fakeSession({
