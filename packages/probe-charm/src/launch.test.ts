@@ -139,6 +139,8 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     const moduleCache = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-modcache-')));
     const env = {
       ...process.env,
+      // Go otherwise makes unpacked module directories read-only; keeping this
+      // isolated cache writable lets Windows remove it atomically in `finally`.
       GOFLAGS: '-modcacherw',
       GOMODCACHE: moduleCache,
       GONOSUMDB: '*',
