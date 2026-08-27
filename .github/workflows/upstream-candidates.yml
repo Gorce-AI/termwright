@@ -89,7 +89,7 @@ jobs:
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: framework-candidate-registry
+          name: framework-candidate-result-registry
           path: upstream-candidates/candidate-registry.json
           if-no-files-found: error
           retention-days: 30
@@ -161,7 +161,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: framework-candidate-registry
+          name: framework-candidate-result-registry
           path: upstream-candidates
       - name: Initialize red verdict before setup
         env:
@@ -174,7 +174,7 @@ jobs:
             --registry upstream-candidates/candidate-registry.json \
             --candidate "$CANDIDATE_ID" \
             --platform "$CANDIDATE_PLATFORM" \
-            --output "candidate-verdict/verdict-$CANDIDATE_SLOT.json"
+            --output "candidate-verdict/verdict-$CANDIDATE_SLOT-$CANDIDATE_PLATFORM.json"
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         if: matrix.platform == 'windows'
@@ -229,15 +229,16 @@ jobs:
             --registry upstream-candidates/candidate-registry.json \
             --candidate "$CANDIDATE_ID" \
             --platform "$CANDIDATE_PLATFORM" \
-            --output "candidate-verdict/verdict-$CANDIDATE_SLOT.json"
+            --output "candidate-verdict/verdict-$CANDIDATE_SLOT-$CANDIDATE_PLATFORM.json"
 
       - name: Candidate summary
         if: always()
         env:
+          CANDIDATE_PLATFORM: ${{ matrix.platform }}
           CANDIDATE_SLOT: ${{ matrix.slot }}
         run: |
           jq -r '"### \(.candidateId)\n\nState: **\(.state)**\n\n\(.detail)"' \
-            "candidate-verdict/verdict-$CANDIDATE_SLOT.json" >> "$GITHUB_STEP_SUMMARY"
+            "candidate-verdict/verdict-$CANDIDATE_SLOT-$CANDIDATE_PLATFORM.json" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
@@ -281,7 +282,7 @@ jobs:
           enable-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: framework-candidate-registry
+          name: framework-candidate-result-registry
           path: upstream-candidates
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:

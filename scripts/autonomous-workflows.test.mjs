@@ -44,6 +44,12 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain(
       'name: framework-candidate-result-${{ matrix.slot }}-${{ matrix.platform }}',
     );
+    expect(workflow).toContain(
+      '"candidate-verdict/verdict-$CANDIDATE_SLOT-$CANDIDATE_PLATFORM.json"',
+    );
+    expect(workflow.match(/verdict-\$CANDIDATE_SLOT-\$CANDIDATE_PLATFORM\.json/gu)).toHaveLength(3);
+    expect(workflow).toContain('name: framework-candidate-result-registry');
+    expect(workflow).not.toContain('merge-multiple: true');
     expect(workflow).toContain('name: framework-verdict-aggregate');
     expect(workflow).toContain('aggregate-framework-candidate-verdicts.mjs');
     expect(workflow).toContain('--assessments compatibility/candidate-assessments.json');
@@ -76,6 +82,8 @@ describe('autonomous workflow security', () => {
       new URL('./autonomous-release-coordinator.mjs', import.meta.url),
       'utf8',
     );
+    expect(workflow.match(/--name framework-candidate-result-registry/gu)).toHaveLength(2);
+    expect(workflow).not.toContain('--name framework-candidate-registry');
     const reconciler = await readFile(
       new URL('./reconcile-framework-candidates.mjs', import.meta.url),
       'utf8',
@@ -141,6 +149,10 @@ describe('autonomous workflow security', () => {
     expect(notify).toContain("needs.reconcile.result != 'success'");
     expect(notify).not.toContain("github.event.workflow_run.conclusion != 'success'");
     expect(notify).toContain('.user.login == "github-actions[bot]"');
+    expect(notify).toContain('gh label create upstream-compatibility --repo "$GITHUB_REPOSITORY"');
+    expect(notify).toContain('gh issue reopen "$number" --repo "$GITHUB_REPOSITORY"');
+    expect(notify).toContain('gh issue edit "$number" --repo "$GITHUB_REPOSITORY"');
+    expect(notify).toContain('gh issue create --repo "$GITHUB_REPOSITORY"');
     expect(workflow).toContain('[compatibility] daily certification workflow failed');
     expect(workflow).toContain('could not complete trusted artifact reconciliation');
     const reconcile = jobBlock(workflow, 'reconcile');
