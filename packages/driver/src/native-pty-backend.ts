@@ -81,13 +81,13 @@ export function createNativePtyBackend(
         }
         for (const listener of [...dataListeners]) listener(data);
       });
-      const releaseExit = session.onExit((status) => {
-        exitStatus = status;
-        for (const listener of [...exitListeners]) listener(status);
-      });
       const releaseError = session.onError((error) => {
         fatalError ??= error;
         for (const listener of [...errorListeners]) listener(fatalError);
+      });
+      const releaseExit = session.onExit((status) => {
+        exitStatus = status;
+        for (const listener of [...exitListeners]) listener(status);
       });
       const releaseDrain = session.onDrain(() => {
         for (const listener of [...drainListeners]) listener();
@@ -171,7 +171,9 @@ export function createNativePtyBackend(
           return () => drainListeners.delete(listener);
         },
         treeState(): 'alive' | 'gone' | 'unsupported' {
-          return session.treeState();
+          const state = session.treeState();
+          if (state === 'unsupported' && fatalError !== undefined) throw fatalError;
+          return state;
         },
         dispose(): void {
           if (disposed) return;

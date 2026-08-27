@@ -193,6 +193,46 @@ bool DrainDarwinProcessGroup(pid_t group, int wake_descriptor, int* error) {
 #endif
 
 #if defined(__linux__)
+enum class LinuxProcStatResult { kPresent, kGone, kError };
+
+LinuxProcStatResult ReadLinuxProcStat(pid_t candidate, char* state,
+                                      int* process_group, int* error) {
+  const std::string path = "/proc/" + std::to_string(candidate) + "/stat";
+  FILE* stat = std::fopen(path.c_str(), "r");
+  if (stat == nullptr) {
+    if (errno == ENOENT) return LinuxProcStatResult::kGone;
+    *error = errno;
+    return LinuxProcStatResult::kError;
+  }
+
+  char record[4096];
+  errno = 0;
+  const bool read = std::fgets(record, sizeof(record), stat) != nullptr;
+  const int read_error = errno;
+  std::fclose(stat);
+  if (!read) {
+    *error = read_error == 0 ? EIO : read_error;
+    return LinuxProcStatResult::kError;
+  }
+
+  // comm is parenthesized but may itself contain ')', so fields after it
+  // begin at the final closing parenthesis: state, parent pid, process group.
+  const char* closing = std::strrchr(record, ')');
+  int parent = 0;
+  if (closing == nullptr ||
+      std::sscanf(closing + 2, "%c %d %d", state, &parent, process_group) != 3) {
+    *error = EPROTO;
+    return LinuxProcStatResult::kError;
+  }
+  (void)parent;
+  return LinuxProcStatResult::kPresent;
+}
+
+void CloseDescriptors(std::vector<int>* descriptors) {
+  for (int descriptor : *descriptors) close(descriptor);
+  descriptors->clear();
+}
+
 bool CaptureLiveLinuxProcessGroup(pid_t group, std::vector<int>* pidfds, int* error) {
   DIR* processes = opendir("/proc");
   if (processes == nullptr) {
@@ -206,14 +246,27 @@ bool CaptureLiveLinuxProcessGroup(pid_t group, std::vector<int>* pidfds, int* er
     if (entry == nullptr) {
       if (errno == 0) break;
       *error = errno;
-      for (int descriptor : *pidfds) close(descriptor);
-      pidfds->clear();
+      CloseDescriptors(pidfds);
       closedir(processes);
       return false;
     }
     char* end = nullptr;
     const long candidate = std::strtol(entry->d_name, &end, 10);
     if (candidate <= 0 || end == entry->d_name || *end != '\0') continue;
+
+    char state = '\0';
+    int process_group = 0;
+    LinuxProcStatResult stat_result = ReadLinuxProcStat(
+        static_cast<pid_t>(candidate), &state, &process_group, error);
+    if (stat_result == LinuxProcStatResult::kGone) continue;
+    if (stat_result == LinuxProcStatResult::kError) {
+      CloseDescriptors(pidfds);
+      closedir(processes);
+      return false;
+    }
+    // Do not make ownership of our process tree depend on the ability to open
+    // pidfds for every unrelated process in the host's /proc namespace.
+    if (process_group != group) continue;
 
 #if defined(SYS_pidfd_open)
     const int descriptor = static_cast<int>(syscall(SYS_pidfd_open, candidate, 0));
@@ -224,59 +277,35 @@ bool CaptureLiveLinuxProcessGroup(pid_t group, std::vector<int>* pidfds, int* er
     if (descriptor < 0) {
       if (errno == ESRCH) continue;
       *error = errno;
-      for (int opened : *pidfds) close(opened);
-      pidfds->clear();
+      CloseDescriptors(pidfds);
       closedir(processes);
       return false;
     }
 
-    const std::string path = "/proc/" + std::to_string(candidate) + "/stat";
-    FILE* stat = std::fopen(path.c_str(), "r");
-    if (stat == nullptr) {
-      const int code = errno;
-      close(descriptor);
-      if (code == ENOENT) continue;
-      *error = code;
-      for (int descriptor : *pidfds) close(descriptor);
-      pidfds->clear();
-      closedir(processes);
-      return false;
-    }
-    char record[4096];
-    errno = 0;
-    const bool read = std::fgets(record, sizeof(record), stat) != nullptr;
-    const int read_error = errno;
-    std::fclose(stat);
-    if (!read) {
-      close(descriptor);
-      *error = read_error == 0 ? EIO : read_error;
-      for (int descriptor : *pidfds) close(descriptor);
-      pidfds->clear();
-      closedir(processes);
-      return false;
-    }
-
-    // comm is parenthesized but may itself contain ')', so fields after it
-    // begin at the final closing parenthesis: state, parent pid, process group.
-    const char* closing = std::strrchr(record, ')');
-    char state = '\0';
-    int parent = 0;
-    int process_group = 0;
-    if (closing == nullptr ||
-        std::sscanf(closing + 2, "%c %d %d", &state, &parent, &process_group) != 3) {
-      close(descriptor);
-      *error = EPROTO;
-      for (int descriptor : *pidfds) close(descriptor);
-      pidfds->clear();
-      closedir(processes);
-      return false;
-    }
-    (void)parent;
-    if (process_group != group) {
+    // pidfd_open pins the candidate identity. Re-read the numeric /proc entry
+    // afterwards and retain the descriptor only if it still names a member of
+    // our group; this closes the PID-reuse race between discovery and pinning.
+    char confirmed_state = '\0';
+    int confirmed_process_group = 0;
+    stat_result = ReadLinuxProcStat(static_cast<pid_t>(candidate),
+                                    &confirmed_state,
+                                    &confirmed_process_group, error);
+    if (stat_result == LinuxProcStatResult::kGone) {
       close(descriptor);
       continue;
     }
-    if (state == 'Z' || state == 'X' || state == 'x') {
+    if (stat_result == LinuxProcStatResult::kError) {
+      close(descriptor);
+      CloseDescriptors(pidfds);
+      closedir(processes);
+      return false;
+    }
+    if (confirmed_process_group != group) {
+      close(descriptor);
+      continue;
+    }
+    if (confirmed_state == 'Z' || confirmed_state == 'X' ||
+        confirmed_state == 'x') {
       pollfd completion = {descriptor, static_cast<short>(POLLIN | POLLHUP), 0};
       int ready;
       do {
@@ -286,8 +315,7 @@ bool CaptureLiveLinuxProcessGroup(pid_t group, std::vector<int>* pidfds, int* er
           (ready > 0 && (completion.revents & (POLLERR | POLLNVAL)) != 0)) {
         *error = ready == -1 ? errno : EIO;
         close(descriptor);
-        for (int opened : *pidfds) close(opened);
-        pidfds->clear();
+        CloseDescriptors(pidfds);
         closedir(processes);
         return false;
       }
@@ -303,8 +331,7 @@ bool CaptureLiveLinuxProcessGroup(pid_t group, std::vector<int>* pidfds, int* er
   }
   if (closedir(processes) != 0) {
     *error = errno;
-    for (int descriptor : *pidfds) close(descriptor);
-    pidfds->clear();
+    CloseDescriptors(pidfds);
     return false;
   }
   return true;

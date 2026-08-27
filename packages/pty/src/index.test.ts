@@ -534,6 +534,32 @@ describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', 
     session.handle.dispose();
   });
 
+  it.runIf(process.platform === 'linux')('does not open pidfds for foreign process groups', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'termwright-pidfd-filter-'));
+    try {
+      const executable = join(directory, 'pidfd-foreign-denial');
+      const source = fileURLToPath(new URL('./fixtures/pidfd-foreign-denial.c', import.meta.url));
+      const fixture = fileURLToPath(
+        new URL('./fixtures/pidfd-foreign-denial.mjs', import.meta.url),
+      );
+      const compiled = spawnSync('cc', [source, '-o', executable], { encoding: 'utf8' });
+      if (compiled.status !== 0) {
+        throw new Error(
+          `fixture compilation failed (${String(compiled.status)}): ${compiled.stderr}`,
+        );
+      }
+
+      const result = spawnSync(executable, [process.execPath, fixture], {
+        cwd: process.cwd(),
+        env: environment(),
+        encoding: 'utf8',
+      });
+      expect(result.status, result.stderr).toBe(0);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it.runIf(process.platform === 'linux')(
     'waits for worker threads after their process leader becomes a zombie',
     async () => {
