@@ -33,9 +33,10 @@ export interface FakeDriver {
 
 export async function startFakeDriver(): Promise<FakeDriver> {
   const directory = await mkdtemp(join(tmpdir(), 'termwright-ink-driver-'));
-  const endpoint = process.platform === 'win32'
-    ? `\\\\.\\pipe\\termwright-ink-${randomBytes(8).toString('hex')}`
-    : join(directory, 'semantic.sock');
+  const endpoint =
+    process.platform === 'win32'
+      ? `\\\\.\\pipe\\termwright-ink-${randomBytes(8).toString('hex')}`
+      : join(directory, 'semantic.sock');
   const token = generateToken();
   const sessionId = 'ink-session';
   const snapshots: SemanticSnapshot[] = [];
@@ -71,14 +72,19 @@ export async function startFakeDriver(): Promise<FakeDriver> {
         const message = parsed.message;
         if (message.type === 'hello') {
           hello = message;
-          socket.write(encodeFrame({
-            type: 'hello-ack',
-            protocol: message.protocol,
-            sessionId,
-            limits: DEFAULT_LIMITS,
-            subscribe: 'snapshots',
-            marker: { enabled: true },
-          }, DEFAULT_LIMITS.maxFrameBytes));
+          socket.write(
+            encodeFrame(
+              {
+                type: 'hello-ack',
+                protocol: message.protocol,
+                sessionId,
+                limits: DEFAULT_LIMITS,
+                subscribe: 'snapshots',
+                marker: { enabled: true },
+              },
+              DEFAULT_LIMITS.maxFrameBytes,
+            ),
+          );
           notify();
         } else if (message.type === 'snapshot') {
           snapshots.push(message.snapshot);
@@ -96,14 +102,20 @@ export async function startFakeDriver(): Promise<FakeDriver> {
     });
   });
 
-  const until = async (predicate: () => boolean, timeoutMs: number, what: string): Promise<void> => {
+  const until = async (
+    predicate: () => boolean,
+    timeoutMs: number,
+    what: string,
+  ): Promise<void> => {
     if (predicate()) return;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new Error(
-          `fake Ink driver: timed out waiting for ${what}`
-          + (rejection === undefined ? '' : `; rejected ${rejection}`),
-        ));
+        reject(
+          new Error(
+            `fake Ink driver: timed out waiting for ${what}` +
+              (rejection === undefined ? '' : `; rejected ${rejection}`),
+          ),
+        );
       }, timeoutMs);
       const check = (): void => {
         if (!predicate()) {

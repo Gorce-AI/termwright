@@ -47,7 +47,14 @@ describe('flooding', () => {
   it('does not let a flood starve the lifecycle messages a timeline needs', () => {
     const hub = new UiHub({ maxMessages: 50 });
     hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 0 });
-    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
+    hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 't1',
+      title: 'login',
+      file: '/repo/a.test.ts',
+      startedAt: 1,
+    });
     for (let index = 0; index < 5_000; index += 1) hub.publish(chunk(1_024, index));
     const kinds = hub.backlog.map((message) => message.type);
     expect(kinds[0]).toBe('run-start');

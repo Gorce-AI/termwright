@@ -39,7 +39,9 @@ publishLog({ level: 'warn', message: 'cache miss', attrs: { key: 'user:42' } });
 
 // Expensive context? Guard it — the thunk never runs without a listener.
 publishLog(() => ({ level: 'debug', message: expensiveDump() }));
-if (hasLogSubscribers()) { /* ... */ }
+if (hasLogSubscribers()) {
+  /* ... */
+}
 
 // --- In the harness: collect records. ---
 const records: LogRecord[] = [];

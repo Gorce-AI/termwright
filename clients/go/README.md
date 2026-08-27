@@ -62,14 +62,14 @@ returns before allocating or installing a hook. Build it through
 `@termwright/probe-tview`:
 
 ```ts
-import { prepareInstrumentedBuild } from "@termwright/probe-tview";
+import { prepareInstrumentedBuild } from '@termwright/probe-tview';
 
-const build = await prepareInstrumentedBuild({ moduleDir: "path/to/app" });
-await execFile("go", ["build", ...build.goArgs, "-o", "app-binary", "."], {
-  cwd: "path/to/app",
+const build = await prepareInstrumentedBuild({ moduleDir: 'path/to/app' });
+await execFile('go', ['build', ...build.goArgs, '-o', 'app-binary', '.'], {
+  cwd: 'path/to/app',
   env: build.env,
 });
-await launchTerminal({ command: ["./app-binary"] });
+await launchTerminal({ command: ['./app-binary'] });
 ```
 
 The prepared build uses Go's official `-toolexec` hook to compile Termwright's

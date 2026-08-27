@@ -1,33 +1,33 @@
 :root {
-	--sl-color-accent-low: #102f2a;
-	--sl-color-accent: #58e6b0;
-	--sl-color-accent-high: #c5fbea;
+  --sl-color-accent-low: #102f2a;
+  --sl-color-accent: #58e6b0;
+  --sl-color-accent-high: #c5fbea;
 }
 
 :root[data-theme='light'] {
-	--sl-color-accent-low: #d8f6eb;
-	--sl-color-accent: #087a59;
-	--sl-color-accent-high: #063c2e;
+  --sl-color-accent-low: #d8f6eb;
+  --sl-color-accent: #087a59;
+  --sl-color-accent-high: #063c2e;
 }
 
 /* The brand must remain legible independently of the accent text token. */
 :root[data-theme='dark'] .site-title {
-	color: #f8fafc;
+  color: #f8fafc;
 }
 
 :root[data-theme='light'] .site-title {
-	color: #11152b;
+  color: #11152b;
 }
 
 /* Terminal transcripts in the docs: keep them monospaced and unwrapped so the
    grid a reader sees matches the grid a test asserts on. */
 .terminal-frame {
-	overflow-x: auto;
-	font-family: var(--sl-font-mono);
-	font-size: var(--sl-text-sm);
-	line-height: 1.35;
-	border: 1px solid var(--sl-color-gray-5);
-	border-radius: 0.25rem;
-	padding: 0.75rem 1rem;
-	background: var(--sl-color-black);
+  overflow-x: auto;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  line-height: 1.35;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.25rem;
+  padding: 0.75rem 1rem;
+  background: var(--sl-color-black);
 }

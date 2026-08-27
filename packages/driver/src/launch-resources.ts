@@ -15,7 +15,9 @@ const globals = globalThis as typeof globalThis & {
 };
 
 /** Installs the native host's worker-local admission provider. @internal */
-export function installTerminalLaunchResourceProvider(provider: TerminalLaunchResourceProvider): () => void {
+export function installTerminalLaunchResourceProvider(
+  provider: TerminalLaunchResourceProvider,
+): () => void {
   const previous = globals[PROVIDER_KEY];
   globals[PROVIDER_KEY] = provider;
   return () => {

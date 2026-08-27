@@ -40,7 +40,9 @@ const MAX_LINES_PER_WINDOW = 250;
 type PollScheduler = (poll: () => Promise<void>) => () => void;
 
 const schedulePoll: PollScheduler = (poll) => {
-  const timer = setInterval(() => { void poll(); }, POLL_MS);
+  const timer = setInterval(() => {
+    void poll();
+  }, POLL_MS);
   timer.unref?.();
   return () => clearInterval(timer);
 };
@@ -96,7 +98,11 @@ export class LogTailer {
   #polling: Promise<void> | null = null;
   #closePromise: Promise<void> | null = null;
 
-  constructor(sources: readonly AppLogSource[], hooks: LogTailHooks, scheduler: PollScheduler = schedulePoll) {
+  constructor(
+    sources: readonly AppLogSource[],
+    hooks: LogTailHooks,
+    scheduler: PollScheduler = schedulePoll,
+  ) {
     this.#hooks = hooks;
     this.#schedule = scheduler;
     this.#states = sources.map((source) => ({
@@ -166,10 +172,15 @@ export class LogTailer {
 
     const failures: unknown[] = [];
     for (const state of this.#states) {
-      try { await state.handle?.close(); } catch (error) { failures.push(error); }
+      try {
+        await state.handle?.close();
+      } catch (error) {
+        failures.push(error);
+      }
       state.handle = null;
     }
-    if (failures.length > 0) throw new AggregateError(failures, 'failed to close application log sources');
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'failed to close application log sources');
   }
 
   async #poll(): Promise<void> {
@@ -190,9 +201,14 @@ export class LogTailer {
     if (this.#stopped || this.#polling !== null) return;
     this.#polling = this.#poll()
       .catch((error: unknown) => {
-        this.#hooks.onDiagnostic('log-source', `log poll failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.#hooks.onDiagnostic(
+          'log-source',
+          `log poll failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
       })
-      .finally(() => { this.#polling = null; });
+      .finally(() => {
+        this.#polling = null;
+      });
     await this.#polling;
   }
 

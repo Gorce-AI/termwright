@@ -78,7 +78,11 @@ export class StaleSnapshotError extends TermwrightError {
 
 /** Strict-mode violation: a locator matched more than one node. */
 export class AmbiguousLocatorError extends TermwrightError {
-  constructor(message: string, candidates: readonly ResolvedTarget[], diagnostics: ErrorDiagnostics) {
+  constructor(
+    message: string,
+    candidates: readonly ResolvedTarget[],
+    diagnostics: ErrorDiagnostics,
+  ) {
     super('ambiguous-locator', message, { ...diagnostics, candidates });
   }
 }

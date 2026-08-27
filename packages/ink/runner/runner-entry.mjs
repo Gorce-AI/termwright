@@ -70,7 +70,11 @@ function parsePayload(raw) {
   if (payload.props === null || typeof payload.props !== 'object' || Array.isArray(payload.props)) {
     fail('payload.props must be a JSON object');
   }
-  if (typeof payload.maxFps !== 'number' || !Number.isFinite(payload.maxFps) || payload.maxFps <= 0) {
+  if (
+    typeof payload.maxFps !== 'number' ||
+    !Number.isFinite(payload.maxFps) ||
+    payload.maxFps <= 0
+  ) {
     fail('payload.maxFps must be a positive number');
   }
   return payload;
@@ -122,7 +126,10 @@ function connectControlChannel(app, Component) {
       return;
     }
     if (message.v !== 1) {
-      reply(message.commandId, { type: 'error', detail: `unsupported control message version ${JSON.stringify(message.v)}` });
+      reply(message.commandId, {
+        type: 'error',
+        detail: `unsupported control message version ${JSON.stringify(message.v)}`,
+      });
       return;
     }
     if (!Number.isSafeInteger(message.commandId) || message.commandId <= 0) {
@@ -130,10 +137,17 @@ function connectControlChannel(app, Component) {
       return;
     }
     if (message.type !== 'rerender') {
-      reply(message.commandId, { type: 'error', detail: `unknown control message type ${JSON.stringify(message.type)}` });
+      reply(message.commandId, {
+        type: 'error',
+        detail: `unknown control message type ${JSON.stringify(message.type)}`,
+      });
       return;
     }
-    if (message.props === null || typeof message.props !== 'object' || Array.isArray(message.props)) {
+    if (
+      message.props === null ||
+      typeof message.props !== 'object' ||
+      Array.isArray(message.props)
+    ) {
       reply(message.commandId, { type: 'error', detail: 'rerender props must be a JSON object' });
       return;
     }
@@ -148,16 +162,18 @@ function connectControlChannel(app, Component) {
       if (typeof flushNextRender !== 'function') {
         throw new Error('the Ink probe does not expose a semantic render boundary');
       }
-      const semanticRevision = await flushNextRender.call(
-        app,
-        () => app.rerender(createElement(Component, message.props)),
+      const semanticRevision = await flushNextRender.call(app, () =>
+        app.rerender(createElement(Component, message.props)),
       );
       if (!Number.isSafeInteger(semanticRevision) || semanticRevision <= 0) {
         throw new Error('the Ink probe returned an invalid semantic revision');
       }
       reply(message.commandId, { type: 'ok', semanticRevision });
     } catch (error) {
-      reply(message.commandId, { type: 'error', detail: error instanceof Error ? error.message : String(error) });
+      reply(message.commandId, {
+        type: 'error',
+        detail: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 
@@ -195,7 +211,9 @@ let module;
 try {
   module = await import(payload.module);
 } catch (error) {
-  fail(`cannot import ${payload.module}: ${error instanceof Error ? error.message : String(error)}`);
+  fail(
+    `cannot import ${payload.module}: ${error instanceof Error ? error.message : String(error)}`,
+  );
 }
 
 const Component = module[payload.exportName];
@@ -221,6 +239,8 @@ try {
   await app.waitUntilExit();
   process.exit(0);
 } catch (error) {
-  process.stderr.write(`termwright fixture: ${error instanceof Error ? error.stack : String(error)}\n`);
+  process.stderr.write(
+    `termwright fixture: ${error instanceof Error ? error.stack : String(error)}\n`,
+  );
   process.exit(EXIT_INTERNAL);
 }

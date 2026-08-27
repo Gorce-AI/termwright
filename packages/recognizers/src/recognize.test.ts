@@ -8,7 +8,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LIMITS, validateSnapshot, type ProbeFrame, type ProbeObject } from '@termwright/protocol';
+import {
+  DEFAULT_LIMITS,
+  validateSnapshot,
+  type ProbeFrame,
+  type ProbeObject,
+} from '@termwright/protocol';
 import { recognize, type RecognizeContext } from './recognize.js';
 
 const context: RecognizeContext = {
@@ -49,10 +54,7 @@ describe('role resolution, in the normative order', () => {
   it('keeps an unrecognised widget as generic rather than dropping it', () => {
     // This is what D1 exists for: an application's own subclass survives with
     // its bounds, text and children, findable by what the framework called it.
-    const snapshot = recognize(
-      frameOf(object({ num: 1, frameworkType: 'PaymentPanel' })),
-      context,
-    );
+    const snapshot = recognize(frameOf(object({ num: 1, frameworkType: 'PaymentPanel' })), context);
 
     expect(snapshot.nodes[0]?.role).toBe('generic');
     expect(snapshot.nodes[0]?.frameworkType).toBe('PaymentPanel');
@@ -100,11 +102,13 @@ describe('role resolution, in the normative order', () => {
 
   it('attributes Ink aria metadata to the framework, not to an author annotation', () => {
     const snapshot = recognize(
-      frameOf(object({
-        num: 1,
-        frameworkType: 'ink-box',
-        accessibility: { role: 'button' },
-      })),
+      frameOf(
+        object({
+          num: 1,
+          frameworkType: 'ink-box',
+          accessibility: { role: 'button' },
+        }),
+      ),
       { ...context, framework: 'ink' },
     );
 
@@ -139,9 +143,15 @@ describe('developer intent merge', () => {
       role: 'textbox',
       name: 'Domain input',
       description: 'Provided by the application',
-      value: expect.objectContaining({ status: 'known', value: 'physical', sensitivity: 'sensitive' }),
+      value: expect.objectContaining({
+        status: 'known',
+        value: 'physical',
+        sensitivity: 'sensitive',
+      }),
       geometry: expect.objectContaining({
-        intendedRect: expect.objectContaining({ value: { row: 3, column: 4, width: 12, height: 1 } }),
+        intendedRect: expect.objectContaining({
+          value: { row: 3, column: 4, width: 12, height: 1 },
+        }),
       }),
       state: { focused: true },
       extended: { environment: 'production' },
@@ -295,12 +305,9 @@ describe('naming', () => {
   });
 });
 
-describe('physical facts stay the framework\'s', () => {
+describe("physical facts stay the framework's", () => {
   it('publishes authoritative absence for both geometry observations when display is false', () => {
-    const snapshot = recognize(
-      frameOf(object({ num: 1, state: { displayed: false } })),
-      context,
-    );
+    const snapshot = recognize(frameOf(object({ num: 1, state: { displayed: false } })), context);
 
     expect(snapshot.nodes[0]?.geometry).toMatchObject({
       displayed: { status: 'known', value: false },
@@ -321,7 +328,10 @@ describe('physical facts stay the framework\'s', () => {
       context,
     );
 
-    expect(snapshot.nodes[0]?.geometry?.intendedRect).toMatchObject({ status: 'known', value: { row: 2, column: 3, width: 10, height: 4 } });
+    expect(snapshot.nodes[0]?.geometry?.intendedRect).toMatchObject({
+      status: 'known',
+      value: { row: 2, column: 3, width: 10, height: 4 },
+    });
     expect(snapshot.nodes[0]?.px?.['geometry']).toBe('framework');
   });
 
@@ -354,8 +364,15 @@ describe('physical facts stay the framework\'s', () => {
       context,
     );
 
-    expect(snapshot.nodes[0]?.geometry?.intendedRect).toMatchObject({ status: 'known', value: { row: 30, column: 3, width: 10, height: 4 } });
-    expect(snapshot.nodes[0]?.geometry?.visibleRect).toEqual({ status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' });
+    expect(snapshot.nodes[0]?.geometry?.intendedRect).toMatchObject({
+      status: 'known',
+      value: { row: 30, column: 3, width: 10, height: 4 },
+    });
+    expect(snapshot.nodes[0]?.geometry?.visibleRect).toEqual({
+      status: 'unsupported',
+      capability: 'clipped-geometry',
+      reason: 'framework-unobservable',
+    });
     expect(snapshot.nodes[0]?.state).toBeUndefined();
     expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
   });
@@ -382,8 +399,15 @@ describe('physical facts stay the framework\'s', () => {
     );
 
     expect(snapshot.nodes[0]?.value).toEqual({
-      status: 'known', value: '', sensitivity: 'sensitive',
-      evidence: { source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'opentui' },
+      status: 'known',
+      value: '',
+      sensitivity: 'sensitive',
+      evidence: {
+        source: 'framework',
+        method: 'instrumented',
+        strength: 'authoritative',
+        providerId: 'opentui',
+      },
     });
   });
 
@@ -402,9 +426,7 @@ describe('physical facts stay the framework\'s', () => {
 
   it('carries observed accessibility states into the semantic wire', () => {
     const snapshot = recognize(
-      frameOf(
-        object({ num: 1, state: { selected: true, busy: false, multiline: true } }),
-      ),
+      frameOf(object({ num: 1, state: { selected: true, busy: false, multiline: true } })),
       context,
     );
 
@@ -458,13 +480,15 @@ describe('structure', () => {
 describe('the protocol accepts what this produces', () => {
   it('emits qualified facts without turning intended geometry into visibility', () => {
     const snapshot = recognize(
-      frameOf(object({
-        num: 1,
-        frameworkType: 'ink-box',
-        geometry: { intendedRect: { row: 1, column: 2, width: 10, height: 2 } },
-        state: { displayed: true },
-        unobservable: ['visibleRect', 'paintOrder'],
-      })),
+      frameOf(
+        object({
+          num: 1,
+          frameworkType: 'ink-box',
+          geometry: { intendedRect: { row: 1, column: 2, width: 10, height: 2 } },
+          state: { displayed: true },
+          unobservable: ['visibleRect', 'paintOrder'],
+        }),
+      ),
       { ...context, framework: 'ink' },
     );
 
@@ -472,11 +496,15 @@ describe('the protocol accepts what this produces', () => {
       v: 2,
       coordinateSpace: { status: 'known', value: 'viewport-cells' },
       hitGrid: { status: 'unsupported' },
-      nodes: [{ geometry: {
-        displayed: { status: 'known', value: true },
-        intendedRect: { status: 'known', value: { row: 1, column: 2, width: 10, height: 2 } },
-        visibleRect: { status: 'unsupported' },
-      } }],
+      nodes: [
+        {
+          geometry: {
+            displayed: { status: 'known', value: true },
+            intendedRect: { status: 'known', value: { row: 1, column: 2, width: 10, height: 2 } },
+            visibleRect: { status: 'unsupported' },
+          },
+        },
+      ],
     });
     expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
   });
@@ -484,7 +512,11 @@ describe('the protocol accepts what this produces', () => {
   it('validates a realistic tree end to end', () => {
     const snapshot = recognize(
       frameOf(
-        object({ num: 1, frameworkType: 'RootRenderable', geometry: { intendedRect: { row: 0, column: 0, width: 80, height: 24 } } }),
+        object({
+          num: 1,
+          frameworkType: 'RootRenderable',
+          geometry: { intendedRect: { row: 0, column: 0, width: 80, height: 24 } },
+        }),
         object({
           num: 2,
           parent: '1',

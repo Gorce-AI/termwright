@@ -23,12 +23,12 @@ versions fail closed before the probe advertises semantic capabilities.
 A launcher composes the command; this package never spawns anything.
 
 ```ts
-import {withProbe} from '@termwright/probe-opentui';
+import { withProbe } from '@termwright/probe-opentui';
 
-const {command} = withProbe('bun', ['bun', 'app.ts']);
+const { command } = withProbe('bun', ['bun', 'app.ts']);
 // ['bun', '--preload', '/…/bun-preload.js', 'app.ts']
 
-await launchTerminal({command, env: {TERMWRIGHT_ENDPOINT: endpoint, TERMWRIGHT_TOKEN: token}});
+await launchTerminal({ command, env: { TERMWRIGHT_ENDPOINT: endpoint, TERMWRIGHT_TOKEN: token } });
 ```
 
 Under Node the flag is `--import` instead, because the probe is ESM. Node gets

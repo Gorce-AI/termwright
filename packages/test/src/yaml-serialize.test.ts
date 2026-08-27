@@ -43,7 +43,9 @@ describe('serializeSemanticSnapshot', () => {
   });
 
   it('emits false and unset states as nothing at all', () => {
-    const tree = snapshot([node('n1', 'button', 'Save', { state: { focused: false, disabled: true } })]);
+    const tree = snapshot([
+      node('n1', 'button', 'Save', { state: { focused: false, disabled: true } }),
+    ]);
     expect(serializeSemanticSnapshot(tree)).toBe('- button "Save" [disabled]\n');
   });
 
@@ -67,15 +69,16 @@ describe('serializeSemanticSnapshot', () => {
   });
 
   it('serializes what is inside a node when the root is excluded', () => {
-    expect(serializeSemanticSnapshot(permissionDialog(), { rootId: 'n1', includeRoot: false })).toBe(
-      [
-        '- text "Allow bash to run?"',
-        '- button "Approve" [focused]',
-        '- button "Reject"',
-        '',
-      ].join('\n'),
+    expect(
+      serializeSemanticSnapshot(permissionDialog(), { rootId: 'n1', includeRoot: false }),
+    ).toBe(
+      ['- text "Allow bash to run?"', '- button "Approve" [focused]', '- button "Reject"', ''].join(
+        '\n',
+      ),
     );
-    expect(serializeSemanticSnapshot(permissionDialog(), { rootId: 'n3', includeRoot: false })).toBe('');
+    expect(
+      serializeSemanticSnapshot(permissionDialog(), { rootId: 'n3', includeRoot: false }),
+    ).toBe('');
   });
 
   it('serializes a subtree when a root is named', () => {

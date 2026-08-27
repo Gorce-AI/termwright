@@ -5,10 +5,7 @@ import type { ProbeChannel } from '@termwright/probe-runtime';
 import type { Instance, RenderOptions } from 'ink';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { wrapInkRender, type InkModule } from './instrument.js';
-import {
-  INK_FRAME_CONTEXT,
-  INK_RENDER_CAPTURE,
-} from './instrumentation.js';
+import { INK_FRAME_CONTEXT, INK_RENDER_CAPTURE } from './instrumentation.js';
 import type { InkReconcilerInstrumentation } from './react-commit-bridge.js';
 
 const env = {
@@ -19,10 +16,7 @@ const env = {
 const holder = globalThis as typeof globalThis & {
   __REACT_DEVTOOLS_GLOBAL_HOOK__?: unknown;
 };
-const originalHook = Object.getOwnPropertyDescriptor(
-  holder,
-  '__REACT_DEVTOOLS_GLOBAL_HOOK__',
-);
+const originalHook = Object.getOwnPropertyDescriptor(holder, '__REACT_DEVTOOLS_GLOBAL_HOOK__');
 const originalDev = process.env['DEV'];
 
 afterEach(() => {
@@ -80,12 +74,15 @@ describe('Ink render instrumentation transaction', () => {
     const reconciler = registeringReconciler();
     const channel = lifecycleChannel();
     const connector = vi.fn(async () => channel.value);
-    const instance = wrapInkRender(fakeInk(() => raw), {
-      env,
-      certifiedHarness: true,
-      reconciler,
-      connect: connector,
-    })(createElement('ink-text', null, 'application'), {
+    const instance = wrapInkRender(
+      fakeInk(() => raw),
+      {
+        env,
+        certifiedHarness: true,
+        reconciler,
+        connect: connector,
+      },
+    )(createElement('ink-text', null, 'application'), {
       stdout: tty(),
       stderr: tty(),
       patchConsole: false,
@@ -115,15 +112,22 @@ describe('Ink render instrumentation transaction', () => {
       report = resolve;
     });
     let channelOpen = true;
-    const close = vi.fn(() => { channelOpen = false; });
-    const connector = vi.fn(async () => ({
-      fail(code: string, message: string) {
-        channelOpen = false;
-        report([code, message]);
-      },
-      get isOpen() { return channelOpen; },
-      close,
-    }) as unknown as ProbeChannel);
+    const close = vi.fn(() => {
+      channelOpen = false;
+    });
+    const connector = vi.fn(
+      async () =>
+        ({
+          fail(code: string, message: string) {
+            channelOpen = false;
+            report([code, message]);
+          },
+          get isOpen() {
+            return channelOpen;
+          },
+          close,
+        }) as unknown as ProbeChannel,
+    );
     const reconciler: InkReconcilerInstrumentation = {
       injectIntoDevTools: vi.fn(() => false),
     };
@@ -162,7 +166,9 @@ describe('Ink render instrumentation transaction', () => {
     const stderr = tty();
     const originalWrite = stdout.write;
     const applicationError = new Error('application render failed');
-    const render = vi.fn(() => { throw applicationError; });
+    const render = vi.fn(() => {
+      throw applicationError;
+    });
     const connector = vi.fn(async () => null);
     const reconciler = registeringReconciler();
     const wrapped = wrapInkRender(fakeInk(render), {
@@ -232,14 +238,21 @@ describe('Ink render instrumentation transaction', () => {
       report = resolve;
     });
     let channelOpen = true;
-    const connector = vi.fn(async () => ({
-      fail(code: string, message: string) {
-        channelOpen = false;
-        report([code, message]);
-      },
-      get isOpen() { return channelOpen; },
-      close() { channelOpen = false; },
-    }) as unknown as ProbeChannel);
+    const connector = vi.fn(
+      async () =>
+        ({
+          fail(code: string, message: string) {
+            channelOpen = false;
+            report([code, message]);
+          },
+          get isOpen() {
+            return channelOpen;
+          },
+          close() {
+            channelOpen = false;
+          },
+        }) as unknown as ProbeChannel,
+    );
     const wrapped = wrapInkRender(fakeInk(render), {
       env: { ...env, DEV: 'true' },
       certifiedHarness: true,
@@ -247,11 +260,13 @@ describe('Ink render instrumentation transaction', () => {
       connect: connector,
     });
 
-    expect(wrapped(createElement('ink-text'), {
-      stdout: tty(),
-      stderr: tty(),
-      patchConsole: false,
-    })).toBe(raw);
+    expect(
+      wrapped(createElement('ink-text'), {
+        stdout: tty(),
+        stderr: tty(),
+        patchConsole: false,
+      }),
+    ).toBe(raw);
     expect(render).toHaveBeenCalledOnce();
     expect(reconciler.injectIntoDevTools).not.toHaveBeenCalled();
     await expect(reported).resolves.toEqual([
@@ -311,8 +326,10 @@ function deferred<T>(): {
   readonly resolve: (value: T | PromiseLike<T>) => void;
 } {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((settle) => { resolve = settle; });
-  return {promise, resolve};
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
 }
 
 function lifecycleChannel(): {
@@ -329,7 +346,9 @@ function lifecycleChannel(): {
   });
   return {
     value: {
-      get isOpen() { return open; },
+      get isOpen() {
+        return open;
+      },
       fail,
       close() {
         if (!open) return;

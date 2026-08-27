@@ -21,7 +21,9 @@ describe('PTY lease ownership', () => {
     const raced = pool.request();
     first();
     raced.cancel();
-    await expect(raced.promise.then((lease) => lease.claim())).rejects.toThrow('cancelled before claim');
+    await expect(raced.promise.then((lease) => lease.claim())).rejects.toThrow(
+      'cancelled before claim',
+    );
 
     const next = pool.request();
     const releaseNext = (await next.promise).claim();
@@ -35,7 +37,9 @@ describe('PTY lease ownership', () => {
     request.cancel();
     const next = pool.request();
     let granted = false;
-    void next.promise.then(() => { granted = true; });
+    void next.promise.then(() => {
+      granted = true;
+    });
     await Promise.resolve();
     expect(granted).toBe(false);
 

@@ -36,12 +36,14 @@ function verifyLinuxSymbolFloor(view) {
   for (const [family, maximum] of Object.entries(LINUX_SYMBOL_FLOORS)) {
     const pattern = new RegExp(`${family.replace('++', '\\+\\+')}_([0-9]+(?:\\.[0-9]+)+)`, 'gu');
     const versions = [...strings.matchAll(pattern)].map((match) =>
-      match[1].split('.').map((part) => Number.parseInt(part, 10)));
+      match[1].split('.').map((part) => Number.parseInt(part, 10)),
+    );
     if (versions.length === 0) {
       throw new Error(`linux prebuild declares no ${family} symbol versions`);
     }
     const newest = versions.reduce((current, candidate) =>
-      compareVersion(candidate, current) > 0 ? candidate : current);
+      compareVersion(candidate, current) > 0 ? candidate : current,
+    );
     if (compareVersion(newest, maximum) > 0) {
       throw new Error(
         `linux prebuild requires ${family}_${newest.join('.')}, above Ubuntu 22.04 floor ${family}_${maximum.join('.')}`,
@@ -88,23 +90,34 @@ export function verifyBinaryArchitecture(bytes, platform, architecture) {
       throw new Error(`${platform}-${architecture} prebuild is not a PE image`);
     }
     const peOffset = view.readUInt32LE(0x3c);
-    if (peOffset > view.length - 6 || view.toString('latin1', peOffset, peOffset + 4) !== 'PE\0\0' ||
-        view.readUInt16LE(peOffset + 4) !== WINDOWS_MACHINE[architecture]) {
+    if (
+      peOffset > view.length - 6 ||
+      view.toString('latin1', peOffset, peOffset + 4) !== 'PE\0\0' ||
+      view.readUInt16LE(peOffset + 4) !== WINDOWS_MACHINE[architecture]
+    ) {
       throw new Error(`${platform}-${architecture} prebuild has the wrong PE architecture`);
     }
     return;
   }
   if (platform === 'linux') {
-    if (view.length < 20 || view[0] !== 0x7f || view.toString('ascii', 1, 4) !== 'ELF' ||
-        view[5] !== 1 || view.readUInt16LE(18) !== ELF_MACHINE[architecture]) {
+    if (
+      view.length < 20 ||
+      view[0] !== 0x7f ||
+      view.toString('ascii', 1, 4) !== 'ELF' ||
+      view[5] !== 1 ||
+      view.readUInt16LE(18) !== ELF_MACHINE[architecture]
+    ) {
       throw new Error(`${platform}-${architecture} prebuild has the wrong ELF architecture`);
     }
     verifyLinuxSymbolFloor(view);
     return;
   }
   if (platform === 'darwin') {
-    if (view.length < 8 || view.readUInt32LE(0) !== 0xfeedfacf ||
-        view.readUInt32LE(4) !== MACH_CPU[architecture]) {
+    if (
+      view.length < 8 ||
+      view.readUInt32LE(0) !== 0xfeedfacf ||
+      view.readUInt32LE(4) !== MACH_CPU[architecture]
+    ) {
       throw new Error(`${platform}-${architecture} prebuild has the wrong Mach-O architecture`);
     }
     verifyMacOsMinimumVersion(view);
@@ -118,7 +131,8 @@ async function filesBelow(directory, prefix = '') {
   const files = [];
   for (const entry of entries) {
     const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
-    if (entry.isDirectory()) files.push(...await filesBelow(join(directory, entry.name), relative));
+    if (entry.isDirectory())
+      files.push(...(await filesBelow(join(directory, entry.name), relative)));
     else if (entry.isFile()) files.push(relative);
     else throw new Error(`Windows ConPTY bundle contains a non-file entry: ${relative}`);
   }
@@ -130,7 +144,11 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
   const vendor = join(packageDirectory, 'vendor');
   const assets = CONPTY_LOCK.assets[architecture];
   const metadata = CONPTY_LOCK.metadata[architecture];
-  const expected = [...Object.keys(assets), ...Object.keys(metadata), 'conpty-manifest.json'].sort();
+  const expected = [
+    ...Object.keys(assets),
+    ...Object.keys(metadata),
+    'conpty-manifest.json',
+  ].sort();
   let actual;
   try {
     actual = (await filesBelow(vendor)).sort();
@@ -145,11 +163,15 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
   const lockedAssetDigests = Object.fromEntries(
     Object.entries(assets).map(([relative, asset]) => [relative, asset.sha256]),
   );
-  if (manifest.package !== CONPTY_LOCK.package || manifest.version !== CONPTY_LOCK.version ||
-      manifest.sourceSha256 !== CONPTY_LOCK.sha256 || manifest.architecture !== architecture ||
-      manifest.mode !== 'ordered-vt-passthrough' ||
-      JSON.stringify(manifest.assets) !== JSON.stringify(lockedAssetDigests) ||
-      JSON.stringify(manifest.metadata) !== JSON.stringify(metadata)) {
+  if (
+    manifest.package !== CONPTY_LOCK.package ||
+    manifest.version !== CONPTY_LOCK.version ||
+    manifest.sourceSha256 !== CONPTY_LOCK.sha256 ||
+    manifest.architecture !== architecture ||
+    manifest.mode !== 'ordered-vt-passthrough' ||
+    JSON.stringify(manifest.assets) !== JSON.stringify(lockedAssetDigests) ||
+    JSON.stringify(manifest.metadata) !== JSON.stringify(metadata)
+  ) {
     throw new Error('Windows ConPTY bundle manifest does not match the pinned runtime');
   }
   for (const [relative, asset] of Object.entries(assets)) {
@@ -158,8 +180,11 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
     if (digest !== asset.sha256 || manifest.assets?.[relative] !== digest) {
       throw new Error(`Windows ConPTY bundle SHA-256 mismatch: ${relative}`);
     }
-    const assetArchitecture = relative.startsWith('arm64/') ? 'arm64' :
-      relative.startsWith('x64/') ? 'x64' : architecture;
+    const assetArchitecture = relative.startsWith('arm64/')
+      ? 'arm64'
+      : relative.startsWith('x64/')
+        ? 'x64'
+        : architecture;
     verifyBinaryArchitecture(bytes, 'win32', assetArchitecture);
   }
   for (const [relative, expectedDigest] of Object.entries(metadata)) {
@@ -171,16 +196,23 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
   }
   const sbom = JSON.parse(await readFile(join(vendor, 'SBOM.spdx.json'), 'utf8'));
   const described = sbom.packages?.find((entry) => entry.SPDXID === 'SPDXRef-Package-ConPTY');
-  const sbomFiles = new Map((sbom.files ?? []).map((entry) => [
-    entry.fileName?.replace(/^\.\//u, ''),
-    entry.checksums?.find((checksum) => checksum.algorithm === 'SHA256')?.checksumValue,
-  ]));
-  if (described?.name !== CONPTY_LOCK.package || described.versionInfo !== CONPTY_LOCK.version ||
-      described.filesAnalyzed !== true ||
-      !described.externalRefs?.some((entry) =>
+  const sbomFiles = new Map(
+    (sbom.files ?? []).map((entry) => [
+      entry.fileName?.replace(/^\.\//u, ''),
+      entry.checksums?.find((checksum) => checksum.algorithm === 'SHA256')?.checksumValue,
+    ]),
+  );
+  if (
+    described?.name !== CONPTY_LOCK.package ||
+    described.versionInfo !== CONPTY_LOCK.version ||
+    described.filesAnalyzed !== true ||
+    !described.externalRefs?.some(
+      (entry) =>
         entry.referenceType === 'purl' &&
-        entry.referenceLocator === `pkg:nuget/${CONPTY_LOCK.package}@${CONPTY_LOCK.version}`) ||
-      Object.entries(assets).some(([relative, asset]) => sbomFiles.get(relative) !== asset.sha256)) {
+        entry.referenceLocator === `pkg:nuget/${CONPTY_LOCK.package}@${CONPTY_LOCK.version}`,
+    ) ||
+    Object.entries(assets).some(([relative, asset]) => sbomFiles.get(relative) !== asset.sha256)
+  ) {
     throw new Error('Windows ConPTY SBOM does not describe the sealed binary payload');
   }
 }
@@ -197,9 +229,10 @@ async function discoveredTargets() {
 async function main(argv) {
   const allowMissing = argv.includes('--allow-missing');
   const named = argv.filter((value) => !value.startsWith('--'));
-  const targets = argv.includes('--all') || named.length === 0
-    ? await discoveredTargets()
-    : [`${named[0]}-${named[1]}`];
+  const targets =
+    argv.includes('--all') || named.length === 0
+      ? await discoveredTargets()
+      : [`${named[0]}-${named[1]}`];
   if (targets.length === 0) throw new Error('no PTY prebuild packages found');
 
   let missing = 0;

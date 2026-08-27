@@ -42,7 +42,12 @@ import type {
   TextLocatorOptions,
   WaitOptions,
 } from '@termwright/driver';
-import type { EffectiveSessionContract, ObservationStamp, SemanticRole, SemanticSnapshot } from '@termwright/protocol';
+import type {
+  EffectiveSessionContract,
+  ObservationStamp,
+  SemanticRole,
+  SemanticSnapshot,
+} from '@termwright/protocol';
 
 /** Forwards the whole of {@link TerminalHarness} to a session. */
 export abstract class ForwardingHarness implements TerminalHarness {
@@ -105,7 +110,9 @@ export abstract class ForwardingHarness implements TerminalHarness {
     return this.session.checkpoint();
   }
 
-  waitForCheckpointChange(options: { readonly after: ObservationStamp } & WaitOptions): Promise<ObservationStamp> {
+  waitForCheckpointChange(
+    options: { readonly after: ObservationStamp } & WaitOptions,
+  ): Promise<ObservationStamp> {
     return this.session.waitForCheckpointChange(options);
   }
 

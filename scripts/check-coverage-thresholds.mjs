@@ -12,7 +12,9 @@ const thresholds = Object.freeze({
   lines: 90.31,
 });
 
-const summary = JSON.parse(await readFile(new URL('../coverage/coverage-summary.json', import.meta.url), 'utf8'));
+const summary = JSON.parse(
+  await readFile(new URL('../coverage/coverage-summary.json', import.meta.url), 'utf8'),
+);
 const failures = Object.entries(thresholds).flatMap(([metric, floor]) => {
   const actual = summary.total?.[metric]?.pct;
   if (typeof actual !== 'number') return [`coverage summary has no numeric total.${metric}.pct`];

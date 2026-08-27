@@ -19,7 +19,7 @@ lease tokens fail closed. A lease reports attached process/session identities
 and must be released explicitly.
 
 ```ts
-import {ResourceBroker} from '@termwright/resource-broker';
+import { ResourceBroker } from '@termwright/resource-broker';
 
 const broker = new ResourceBroker({
   runId,
@@ -31,17 +31,17 @@ const broker = new ResourceBroker({
   },
 });
 
-broker.registerWorker({runId, workerId: 'worker-1', workerEpoch: 1});
+broker.registerWorker({ runId, workerId: 'worker-1', workerEpoch: 1 });
 const lease = await broker.acquire({
   runId,
   workerId: 'worker-1',
   workerEpoch: 1,
   attemptId,
-  resources: {ptySession: 1, externalProcess: 1},
+  resources: { ptySession: 1, externalProcess: 1 },
   deadline,
 });
 
-await lease.attach([{resource: 'externalProcess', pid: child.pid}]);
+await lease.attach([{ resource: 'externalProcess', pid: child.pid }]);
 await lease.release();
 ```
 

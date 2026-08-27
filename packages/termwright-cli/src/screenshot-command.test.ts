@@ -137,7 +137,11 @@ describe('capturing a moment of a recording', () => {
 
   it('scales the image without changing what it shows', async () => {
     const trace = await buildTrace();
-    const one = await captureScreenshot({ trace, atMs: 0, out: join(await mkdtemp(join(tmpdir(), 'tw-1-')), 'a.png') });
+    const one = await captureScreenshot({
+      trace,
+      atMs: 0,
+      out: join(await mkdtemp(join(tmpdir(), 'tw-1-')), 'a.png'),
+    });
     const two = await captureScreenshot({
       trace,
       atMs: 0,
@@ -197,7 +201,10 @@ describe('capturing a moment of a recording', () => {
     // propagation of the renderer's result, so its test uses that boundary
     // instead of making every CLI run enumerate a host-dependent font set.
     const out = join(await mkdtemp(join(tmpdir(), 'tw-pua-')), 'pua.png');
-    const result = await captureScreenshot({ trace: await buildTrace(`gap ${fallback} here`), out });
+    const result = await captureScreenshot({
+      trace: await buildTrace(`gap ${fallback} here`),
+      out,
+    });
 
     expect(receivedFallbackFrame).toBe(true);
     expect(result.fallbackCharacters).toEqual([fallback]);

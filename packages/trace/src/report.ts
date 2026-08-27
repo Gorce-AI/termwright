@@ -15,13 +15,7 @@ import type { SemanticSnapshot } from '@termwright/protocol';
 import { openTrace, type TraceReader, type TraceState } from './reader.js';
 import { changedRows, escapeHtml, renderAnsiToHtml, type RenderedScreen } from './render.js';
 import { diffSemanticSnapshots, type SemanticDiff } from './semantic-diff.js';
-import type {
-  ActionEvent,
-  StepStatus,
-  StepSummary,
-  TraceCrash,
-  TraceLogEntry,
-} from './types.js';
+import type { ActionEvent, StepStatus, StepSummary, TraceCrash, TraceLogEntry } from './types.js';
 
 /** Explicit before/after screens, when the caller already has them. */
 export interface VisualDiffInput {
@@ -192,7 +186,11 @@ interface TestSection {
   readonly result: ReportTestResult;
   readonly steps: readonly StepSummary[];
   readonly failingStep: StepSummary | null;
-  readonly visual: { before: RenderedScreen; after: RenderedScreen; labels: [string, string] } | null;
+  readonly visual: {
+    before: RenderedScreen;
+    after: RenderedScreen;
+    labels: [string, string];
+  } | null;
   readonly semantic: SemanticDiff | null;
   readonly crash: TraceCrash | null;
   /** Entries around the failure, for the Logs section. */
@@ -255,9 +253,7 @@ async function buildSection(
     // `failingStep` falls back to the last step for the player's start point;
     // the log window needs the step that actually failed, or none at all.
     const failedStep =
-      result.status === 'failed'
-        ? (steps.find((step) => step.status === 'failed') ?? null)
-        : null;
+      result.status === 'failed' ? (steps.find((step) => step.status === 'failed') ?? null) : null;
     const { logs, notableLogs } = await loadLogs(trace, failedStep, options);
 
     return {
@@ -392,11 +388,7 @@ async function loadCast(
   const header = await trace.castHeader();
   lines.push(JSON.stringify(header));
   for await (const event of trace.castEvents()) {
-    const line = JSON.stringify([
-      Math.round(event.interval * 1e6) / 1e6,
-      event.code,
-      event.data,
-    ]);
+    const line = JSON.stringify([Math.round(event.interval * 1e6) / 1e6, event.code, event.data]);
     bytes += line.length;
     if (bytes > limit) {
       return {
@@ -525,21 +517,29 @@ function renderSection(section: TestSection): string {
 }
 
 function renderAttempts(attempts: readonly ReportTestAttempt[]): string {
-  const items = attempts.map((attempt) => {
-    const reasons = attempt.errors.length === 0
-      ? ''
-      : `<pre class="tw-error">${escapeHtml(attempt.errors
-          .map((error) => error.stack === undefined ? error.message : `${error.message}\n${error.stack}`)
-          .join('\n\n'))}</pre>`;
-    const traces = attempt.tracePaths === undefined || attempt.tracePaths.length === 0
-      ? ''
-      : `<p class="tw-note">trace${attempt.tracePaths.length === 1 ? '' : 's'}: ${attempt.tracePaths
-          .map((path) => `<code class="tw-path">${escapeHtml(path)}</code>`)
-          .join(', ')}</p>`;
-    return `<li><strong>Attempt ${attempt.attempt}</strong> — ${attempt.status}${
-      attempt.durationMs === undefined ? '' : ` · ${formatMs(attempt.durationMs)}`
-    }${reasons}${traces}</li>`;
-  }).join('\n      ');
+  const items = attempts
+    .map((attempt) => {
+      const reasons =
+        attempt.errors.length === 0
+          ? ''
+          : `<pre class="tw-error">${escapeHtml(
+              attempt.errors
+                .map((error) =>
+                  error.stack === undefined ? error.message : `${error.message}\n${error.stack}`,
+                )
+                .join('\n\n'),
+            )}</pre>`;
+      const traces =
+        attempt.tracePaths === undefined || attempt.tracePaths.length === 0
+          ? ''
+          : `<p class="tw-note">trace${attempt.tracePaths.length === 1 ? '' : 's'}: ${attempt.tracePaths
+              .map((path) => `<code class="tw-path">${escapeHtml(path)}</code>`)
+              .join(', ')}</p>`;
+      return `<li><strong>Attempt ${attempt.attempt}</strong> — ${attempt.status}${
+        attempt.durationMs === undefined ? '' : ` · ${formatMs(attempt.durationMs)}`
+      }${reasons}${traces}</li>`;
+    })
+    .join('\n      ');
   return `<section class="tw-block"><h3>Attempts · ${attempts.length}</h3><ol class="tw-attempts">${items}</ol></section>`;
 }
 
@@ -676,7 +676,9 @@ function renderCrash(crash: CrashPanel): string {
       .map(
         (entry) =>
           `<li><code>${escapeHtml(entry.code)}</code> ${escapeHtml(entry.detail)}${
-            entry.revision === undefined ? '' : ` <span class="tw-note">rev ${entry.revision}</span>`
+            entry.revision === undefined
+              ? ''
+              : ` <span class="tw-note">rev ${entry.revision}</span>`
           }</li>`,
       )
       .join('\n      ');
@@ -744,7 +746,9 @@ function renderTimeline(
     ...failedActions.map((action) => ({
       at: action.castOffset,
       html: `<tr class="tw-action-failed"><td>${escapeHtml(action.api)}${
-        action.selector === undefined ? '' : ` <span class="tw-note">${escapeHtml(action.selector)}</span>`
+        action.selector === undefined
+          ? ''
+          : ` <span class="tw-note">${escapeHtml(action.selector)}</span>`
       }</td><td>${escapeHtml(action.error ?? 'failed')}</td><td>${formatMs(
         action.castOffset,
       )}</td></tr>`,
@@ -829,7 +833,10 @@ function loadPlayerAssets(): PlayerAssets | null {
         require.resolve('asciinema-player/dist/bundle/asciinema-player.min.js'),
         'utf8',
       ),
-      css: readFileSync(require.resolve('asciinema-player/dist/bundle/asciinema-player.css'), 'utf8'),
+      css: readFileSync(
+        require.resolve('asciinema-player/dist/bundle/asciinema-player.css'),
+        'utf8',
+      ),
     };
   } catch {
     playerAssets = null;

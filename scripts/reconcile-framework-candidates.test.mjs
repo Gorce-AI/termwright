@@ -52,7 +52,9 @@ describe('framework candidate reconciliation', () => {
   });
 
   it('renders a deterministic exact peer range for every certified hook version', () => {
-    expect(renderExactPeerRange(['7.2.0', '7.1.1', '7.1.2', '7.1.1'])).toBe('7.1.1 || 7.1.2 || 7.2.0');
+    expect(renderExactPeerRange(['7.2.0', '7.1.1', '7.1.2', '7.1.1'])).toBe(
+      '7.1.1 || 7.1.2 || 7.2.0',
+    );
     expect(() => renderExactPeerRange([])).toThrow(/at least one version/u);
   });
 
@@ -105,7 +107,10 @@ describe('framework candidate reconciliation', () => {
     recordVerifiedFrameworkVersion(compatibility, next);
     recordVerifiedFrameworkVersion(compatibility, next);
 
-    expect(compatibility.frameworks[0].certification.ids).toEqual(['opentui@0.5.3/0.2.0', 'opentui@0.5.4/0.2.0']);
+    expect(compatibility.frameworks[0].certification.ids).toEqual([
+      'opentui@0.5.3/0.2.0',
+      'opentui@0.5.4/0.2.0',
+    ]);
     expect(compatibility.frameworks[0].instrumentation.variants).toEqual([
       {
         id: 'opentui-0.5.3',
@@ -150,7 +155,9 @@ describe('framework candidate reconciliation', () => {
       state: 'green',
       detail: 'ok',
     };
-    const first = reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [verdict]);
+    const first = reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [
+      verdict,
+    ]);
     const second = reconcile({ candidates: [candidate] }, first.ledger, [verdict]);
     expect(first.ledger.streams.example).toHaveLength(1);
     expect(second.ledger).toEqual(first.ledger);
@@ -188,7 +195,9 @@ describe('framework candidate reconciliation', () => {
     expect(result.plan.issues[0]).toMatchObject({ owner: 'owner' });
     expect(result.plan.issues[0].body).toContain('https://github.com/owner/repo/actions/runs/1');
     expect(result.plan.issues[0].body).toContain('Certification revision: `1`');
-    expect(result.plan.issues[0].body).toContain('increment `certificationRevision` for stream `example`');
+    expect(result.plan.issues[0].body).toContain(
+      'increment `certificationRevision` for stream `example`',
+    );
   });
 
   it('records red assessments separately while promoting green candidates in the same batch', () => {
@@ -365,7 +374,9 @@ describe('framework candidate reconciliation', () => {
         owner: 'owner',
       },
     );
-    expect(result.plan.issues[0].body).toContain('Review the failed capability and behavioral evidence');
+    expect(result.plan.issues[0].body).toContain(
+      'Review the failed capability and behavioral evidence',
+    );
     expect(result.plan.issues[0].body).toContain('Integration mode: `hook`');
     expect(result.plan.issues[0].body).toContain('Hook strategy: `runtime`');
     expect(result.plan.issues[0].body).toContain('do not allowlist the version');
@@ -428,7 +439,9 @@ describe('framework candidate reconciliation', () => {
         owner: 'owner',
       },
     );
-    expect(result.plan.issues[0].body).toContain('explicitly repin the trusted Go toolchain to >= 1.26.0');
+    expect(result.plan.issues[0].body).toContain(
+      'explicitly repin the trusted Go toolchain to >= 1.26.0',
+    );
     expect(result.plan.issues[0].body).not.toContain('Prepare an exact checksummed patch');
   });
 
@@ -493,7 +506,9 @@ describe('framework candidate reconciliation', () => {
       sourceRevision: 'a'.repeat(40),
       strictArtifacts: true,
     };
-    expect(() => reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [], context)).toThrow(/artifact set is incomplete/u);
+    expect(() =>
+      reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [], context),
+    ).toThrow(/artifact set is incomplete/u);
     expect(() =>
       reconcile(
         { candidates: [candidate] },
@@ -694,6 +709,12 @@ describe('framework candidate reconciliation', () => {
         chunkSha256: 'legacy',
       }),
     ).toThrow(/immutable/u);
-    expect(() => addCertifiedRuntimeProfile(document, { ...runtimeCandidate, frameworkId: 'ink' }, { version: '0.5.4' })).toThrow(/another framework/u);
+    expect(() =>
+      addCertifiedRuntimeProfile(
+        document,
+        { ...runtimeCandidate, frameworkId: 'ink' },
+        { version: '0.5.4' },
+      ),
+    ).toThrow(/another framework/u);
   });
 });

@@ -16,7 +16,9 @@ const python = pythonWithTextual();
 const script = fileURLToPath(new URL('../app/notes_app.py', import.meta.url));
 const runnable = python !== null && (await ptyAvailable());
 if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !runnable) {
-  throw new Error('Textual example requires Python with Textual/termwright and a working pseudo-terminal');
+  throw new Error(
+    'Textual example requires Python with Textual/termwright and a working pseudo-terminal',
+  );
 }
 
 /** `python` is non-null wherever this command is used. */
@@ -41,7 +43,9 @@ describe.skipIf(!runnable)('the notes app', () => {
     await expect(draft).toHaveText('v2 pointer');
   });
 
-  test('refuses a covered v2 pointer target instead of firing through the modal', async ({ terminal }) => {
+  test('refuses a covered v2 pointer target instead of firing through the modal', async ({
+    terminal,
+  }) => {
     const app = await terminal.launch({ command });
     await app.waitForText('write the release notes');
     await app.getByRole('button', { name: 'Delete' }).activate();
@@ -54,7 +58,9 @@ describe.skipIf(!runnable)('the notes app', () => {
     // even stronger than an overlapping recipient: the point is absent, and
     // input still must fail closed.
     expect(hit.receivesEvents).toMatchObject({ status: 'absent' });
-    await expect(covered.click({ timeout: 0 })).rejects.toThrow(/matched 0 nodes|not laid out|cannot receive/u);
+    await expect(covered.click({ timeout: 0 })).rejects.toThrow(
+      /matched 0 nodes|not laid out|cannot receive/u,
+    );
     await expect(app.getByRole('dialog')).toBeVisible();
   });
 
@@ -98,8 +104,12 @@ describe.skipIf(!runnable)('the notes app', () => {
     // Textual nests its dialog in layout containers, so a scoped pattern would
     // have to spell them out; what this test means is simply that Cancel holds
     // the focus, so an accidental Enter deletes nothing.
-    await expect(app.getByRole('button', { name: 'Cancel' }).within(app.getByRole('dialog'))).toBeFocused();
-    await expect(app.getByRole('button', { name: 'Delete' }).within(app.getByRole('dialog'))).not.toBeFocused();
+    await expect(
+      app.getByRole('button', { name: 'Cancel' }).within(app.getByRole('dialog')),
+    ).toBeFocused();
+    await expect(
+      app.getByRole('button', { name: 'Delete' }).within(app.getByRole('dialog')),
+    ).not.toBeFocused();
 
     await step('dismiss it with Escape', async () => {
       await app.press('Escape');

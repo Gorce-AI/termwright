@@ -29,7 +29,7 @@ false — nothing violates a format that is not there — and it cost the CLI a
 correct exit code: a mistyped path came out as "termwright broke" instead of
 "you typed the wrong path". `TermwrightErrorCode` gained `not-found` for it.
 
-The line is *"is this a `.twtrace` at all?"* versus *"it is one, and it lies"*:
+The line is _"is this a `.twtrace` at all?"_ versus _"it is one, and it lies"_:
 
 - `not-found` — the path holds nothing, holds something that is not an archive,
   or `packTrace` was pointed at a directory without `meta.json`.
@@ -38,7 +38,7 @@ The line is *"is this a `.twtrace` at all?"* versus *"it is one, and it lies"*:
   profile.
 
 The interesting case is a file that exists but does not unzip, which stays a
-protocol violation. It could be a mistyped path *or* a truncated CI artifact,
+protocol violation. It could be a mistyped path _or_ a truncated CI artifact,
 and the costs are asymmetric: telling someone to check their path when they are
 holding a damaged artifact sends them to the wrong place entirely, while the
 reverse mistake only makes them look twice at a path they can already see.
@@ -55,7 +55,7 @@ here:
   were removed and idle gaps compressed.
 
 `hide()`/`show()` windows drop `o`/`i` cast events entirely. Markers, semantic
-snapshots and step events are *kept* — they are not screen data, and losing them
+snapshots and step events are _kept_ — they are not screen data, and losing them
 would break the step list — but they collapse onto the window's start.
 
 Idle trimming is applied at `finalize()`, not while recording, so the same
@@ -112,7 +112,7 @@ Two things are stored differently from the driver's `CrashReport`:
   `TraceReader.crashSemantic()` resolves it.
 
 `events.jsonl` gets a `crash` line carrying only the exit, the screen-tail row
-count and the revision — enough to see *that* it happened while scanning the
+count and the revision — enough to see _that_ it happened while scanning the
 log, without putting a screen tail on a line in a file meant to be streamed.
 
 `screenTail` is verbatim terminal output, secrets included, and the driver's
@@ -158,7 +158,7 @@ disagree is one to survive rather than believe — so `stateAt().logs` streams
 `logs.jsonl` like `logs()` does, and both report what the file actually holds.
 
 The same gate existed in the runner UI and was removed there for the same
-reason, which suggests the shape invites it. If a consumer needs to *detect*
+reason, which suggests the shape invites it. If a consumer needs to _detect_
 the disagreement rather than just survive it, the rule the UI settled on is
 worth reusing instead of inventing a third: **the counter is a claim about the
 file, the records on disk are the evidence** — report the larger of the two as
@@ -170,7 +170,7 @@ already has `meta.logs.count` and `logs()`.
 ### Eviction is counted at the end, not on the next event
 
 The driver's team flagged a bug pattern worth checking for: a counter
-accumulated during rate limiting and reported *when the next event arrives*
+accumulated during rate limiting and reported _when the next event arrives_
 loses the last window whenever a flood ends the session — exactly when the
 number matters.
 
@@ -194,7 +194,7 @@ action would record that action twice, and its TSDoc says so.
 Two properties of the event worth remembering:
 
 - **It arrives after the action finished**, so `t` is the completion time and
-  the bytes the action sent appear *earlier* on the timeline than the action
+  the bytes the action sent appear _earlier_ on the timeline than the action
   entry. Anything drawing a "this action caused that output" relationship has to
   read backwards. There is a test asserting the `input`-then-`action` order so
   nobody "fixes" it into the intuitive one.
@@ -221,7 +221,7 @@ Two properties of the event worth remembering:
 
 ### `fflate` for the zip container (not `node:zlib`)
 
-`node:zlib` only produces raw deflate/gzip *streams*. A `.twtrace` that
+`node:zlib` only produces raw deflate/gzip _streams_. A `.twtrace` that
 transports as a single file has to be a real **zip container** — local file
 headers, a central directory, an end-of-central-directory record — so that CI
 artifacts, the runner UI's file picker and `unzip` on any machine can all open

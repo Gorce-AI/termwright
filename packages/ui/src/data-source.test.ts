@@ -8,14 +8,27 @@ import {
   type InlinePayload,
 } from './data-source.js';
 
-const record = (t: number) => ({ t, source: 'adapter' as const, level: 'info' as const, message: `line ${t}` });
+const record = (t: number) => ({
+  t,
+  source: 'adapter' as const,
+  level: 'info' as const,
+  message: `line ${t}`,
+});
 
 const payload = (count: number): InlinePayload => ({
   v: 1,
   state: { mode: 'post-mortem', project, sessions: [], trace: null, record: null },
   frames: { frames: [], truncated: false, durationMs: 1_000, revisions: [] },
   commands: { commands: [], incomplete: false },
-  traceState: { timeMs: 0, castPrefixB64: '', columns: 80, rows: 24, revision: null, snapshot: null, step: null },
+  traceState: {
+    timeMs: 0,
+    castPrefixB64: '',
+    columns: 80,
+    rows: 24,
+    revision: null,
+    snapshot: null,
+    step: null,
+  },
   logs: {
     records: Array.from({ length: count }, (_, index) => record(index * 10)),
     hasMoreBefore: false,
@@ -63,7 +76,9 @@ describe('an inline source', () => {
     const source = new InlineDataSource(payload(500));
 
     const latest = await source.traceLogs({ limit: 10 });
-    expect(latest.records.map((entry) => entry.t)).toEqual([4900, 4910, 4920, 4930, 4940, 4950, 4960, 4970, 4980, 4990]);
+    expect(latest.records.map((entry) => entry.t)).toEqual([
+      4900, 4910, 4920, 4930, 4940, 4950, 4960, 4970, 4980, 4990,
+    ]);
     expect(latest.hasMoreBefore).toBe(true);
     expect(latest.hasMoreAfter).toBe(false);
 

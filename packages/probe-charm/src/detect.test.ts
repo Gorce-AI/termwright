@@ -26,10 +26,14 @@ const run = promisify(execFile);
 const goIt = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 async function goAvailable(): Promise<boolean> {
-  return goTestCapability(async () => {
-    await run('go', ['version']);
-    return true;
-  }, false, 'Go certification toolchain');
+  return goTestCapability(
+    async () => {
+      await run('go', ['version']);
+      return true;
+    },
+    false,
+    'Go certification toolchain',
+  );
 }
 
 const hasGo = await goAvailable();
@@ -69,7 +73,13 @@ describe('what each major can promise', () => {
     // destroys the fragment→region mapping on the way. v2 has possible future
     // attribution channels, but this patch set has not wired either one.
     for (const major of ['v1', 'v2'] as const) {
-      expect(capabilitiesFor(major)).toEqual(['tree', 'states', 'focus-state', 'actions', 'render-revisions']);
+      expect(capabilitiesFor(major)).toEqual([
+        'tree',
+        'states',
+        'focus-state',
+        'actions',
+        'render-revisions',
+      ]);
       expect(capabilitiesFor(major)).not.toContain('intended-geometry');
       expect(capabilitiesFor(major)).not.toContain('clipped-geometry');
       expect(reportsGeometry(major)).toBe(false);
@@ -78,48 +88,64 @@ describe('what each major can promise', () => {
 });
 
 describe.skipIf(!hasGo)('against a real toolchain', () => {
-  goIt('recognises a v1 project', async () => {
-    const dir = await moduleRequiring([
-      'github.com/charmbracelet/bubbletea v1.3.10',
-      'github.com/charmbracelet/bubbles v1.0.0',
-    ]);
+  goIt(
+    'recognises a v1 project',
+    async () => {
+      const dir = await moduleRequiring([
+        'github.com/charmbracelet/bubbletea v1.3.10',
+        'github.com/charmbracelet/bubbles v1.0.0',
+      ]);
 
-    const flavour = await detectCharmFlavour(dir);
+      const flavour = await detectCharmFlavour(dir);
 
-    expect(flavour.major).toBe('v1');
-    expect(flavour.module).toBe('github.com/charmbracelet/bubbletea');
-    expect(flavour.version).toBe('v1.3.10');
-    expect(flavour.companions['github.com/charmbracelet/bubbles']).toBe('v1.0.0');
-  }, 300_000);
+      expect(flavour.major).toBe('v1');
+      expect(flavour.module).toBe('github.com/charmbracelet/bubbletea');
+      expect(flavour.version).toBe('v1.3.10');
+      expect(flavour.companions['github.com/charmbracelet/bubbles']).toBe('v1.0.0');
+    },
+    300_000,
+  );
 
-  goIt('recognises a v2 project under its vanity path', async () => {
-    const dir = await moduleRequiring([
-      'charm.land/bubbletea/v2 v2.0.8',
-      'charm.land/lipgloss/v2 v2.0.6',
-    ]);
+  goIt(
+    'recognises a v2 project under its vanity path',
+    async () => {
+      const dir = await moduleRequiring([
+        'charm.land/bubbletea/v2 v2.0.8',
+        'charm.land/lipgloss/v2 v2.0.6',
+      ]);
 
-    const flavour = await detectCharmFlavour(dir);
+      const flavour = await detectCharmFlavour(dir);
 
-    expect(flavour.major).toBe('v2');
-    expect(flavour.version).toBe('v2.0.8');
-    expect(flavour.companions['charm.land/lipgloss/v2']).toBe('v2.0.6');
-  }, 300_000);
+      expect(flavour.major).toBe('v2');
+      expect(flavour.version).toBe('v2.0.8');
+      expect(flavour.companions['charm.land/lipgloss/v2']).toBe('v2.0.6');
+    },
+    300_000,
+  );
 
-  goIt('says a project is not Charm rather than guessing a major', async () => {
-    const dir = await moduleRequiring(['github.com/rivo/tview v0.42.0']);
+  goIt(
+    'says a project is not Charm rather than guessing a major',
+    async () => {
+      const dir = await moduleRequiring(['github.com/rivo/tview v0.42.0']);
 
-    await expect(detectCharmFlavour(dir)).rejects.toThrow(CharmDetectionError);
-    await expect(detectCharmFlavour(dir)).rejects.toThrow(/does not require Bubble Tea/u);
-  }, 300_000);
+      await expect(detectCharmFlavour(dir)).rejects.toThrow(CharmDetectionError);
+      await expect(detectCharmFlavour(dir)).rejects.toThrow(/does not require Bubble Tea/u);
+    },
+    300_000,
+  );
 
-  goIt('refuses a project that pulls in both majors', async () => {
-    // Legal in Go, since the paths are unrelated modules, and hopeless here:
-    // two event loops and no way to attribute a frame to one of them.
-    const dir = await moduleRequiring([
-      'github.com/charmbracelet/bubbletea v1.3.10',
-      'charm.land/bubbletea/v2 v2.0.8',
-    ]);
+  goIt(
+    'refuses a project that pulls in both majors',
+    async () => {
+      // Legal in Go, since the paths are unrelated modules, and hopeless here:
+      // two event loops and no way to attribute a frame to one of them.
+      const dir = await moduleRequiring([
+        'github.com/charmbracelet/bubbletea v1.3.10',
+        'charm.land/bubbletea/v2 v2.0.8',
+      ]);
 
-    await expect(detectCharmFlavour(dir)).rejects.toThrow(/requires both Bubble Tea majors/u);
-  }, 300_000);
+      await expect(detectCharmFlavour(dir)).rejects.toThrow(/requires both Bubble Tea majors/u);
+    },
+    300_000,
+  );
 });

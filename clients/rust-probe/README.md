@@ -82,20 +82,20 @@ a finding from `docs/architecture/audit/ratatui.md`, not a to-do — with one
 correction the audit could not have made, marked below: it measured the public
 API from outside the crate, and a patch runs inside it.
 
-| Fact | Reported? |
-|---|---|
-| widget type | yes, from `core::any::type_name` — a hint, never a role |
-| the rectangle a widget was drawn into | yes, as `intendedRect` |
-| its clipped visible rectangle | **no** — `visibleRect` is unsupported |
-| identity across frames | **no** — ids are frame-local and carry the frame number |
-| parent/child structure | **partial, exact** — ordinary calls are flat; nested `Annotated` RAII boundaries preserve hierarchy only when real call nesting proves it |
-| number of items in a list, and their text | **yes, but only from inside** — `List::items` is `pub(crate)`, so this is reachable from the patched `ratatui-widgets` and from nowhere else |
-| which row is selected | yes, read *after* the render, because rendering clamps the state to what was actually drawn |
-| scroll extent | **no** — `ScrollbarState`'s `content_length()` is a setter returning `Self`; only `get_position()` reads |
-| author annotations | **yes, opt-in** — `termwright-ratatui::Annotated<W>` adds intent, relationships and optional stable semantic identity to a custom widget render |
+| Fact                                      | Reported?                                                                                                                                       |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| widget type                               | yes, from `core::any::type_name` — a hint, never a role                                                                                         |
+| the rectangle a widget was drawn into     | yes, as `intendedRect`                                                                                                                          |
+| its clipped visible rectangle             | **no** — `visibleRect` is unsupported                                                                                                           |
+| identity across frames                    | **no** — ids are frame-local and carry the frame number                                                                                         |
+| parent/child structure                    | **partial, exact** — ordinary calls are flat; nested `Annotated` RAII boundaries preserve hierarchy only when real call nesting proves it       |
+| number of items in a list, and their text | **yes, but only from inside** — `List::items` is `pub(crate)`, so this is reachable from the patched `ratatui-widgets` and from nowhere else    |
+| which row is selected                     | yes, read _after_ the render, because rendering clamps the state to what was actually drawn                                                     |
+| scroll extent                             | **no** — `ScrollbarState`'s `content_length()` is a setter returning `Self`; only `get_position()` reads                                        |
+| author annotations                        | **yes, opt-in** — `termwright-ratatui::Annotated<W>` adds intent, relationships and optional stable semantic identity to a custom widget render |
 
 Because fresh-pointer ownership is unavailable, the driver refuses pointer
-actions against these nodes. `intendedRect` is where a widget *asked* to draw;
+actions against these nodes. `intendedRect` is where a widget _asked_ to draw;
 a later write may own those cells, so it is not a hit-test result.
 Drive Ratatui applications with keyboard input.
 

@@ -79,7 +79,8 @@ export function mergeOptions(
     columns: call.columns ?? suite.columns ?? config.columns,
     rows: call.rows ?? suite.rows ?? config.rows,
     terminalProfile: call.terminalProfile ?? suite.terminalProfile ?? config.terminalProfile,
-    requiredCapabilities: call.requiredCapabilities ?? suite.requiredCapabilities ?? config.requiredCapabilities,
+    requiredCapabilities:
+      call.requiredCapabilities ?? suite.requiredCapabilities ?? config.requiredCapabilities,
     env: { ...baseEnv, ...config.env, ...(suite.env ?? {}), ...(call.env ?? {}) },
     timeouts: { ...configTimeouts, ...strip(suiteTimeouts), ...strip(call.timeouts ?? {}) },
     trace: call.trace ?? suite.trace ?? config.trace,
@@ -89,5 +90,7 @@ export function mergeOptions(
 
 /** Drops explicit `undefined`s so a later layer does not erase an earlier one. */
 function strip<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as Partial<T>;
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
 }

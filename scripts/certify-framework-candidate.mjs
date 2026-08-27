@@ -8,8 +8,21 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { canonicalJson, compareVersions, downloadVerifiedNpmTarball, resolveNpmSource, trustedGoEnvironment } from './discover-framework-candidates.mjs';
-import { digestTree, materializeCandidateSource, preparePatchBundle, proposeCompatibilityUpdate, recordExecutableVariant, removeMaterializedCandidateSource } from './prepare-framework-candidate.mjs';
+import {
+  canonicalJson,
+  compareVersions,
+  downloadVerifiedNpmTarball,
+  resolveNpmSource,
+  trustedGoEnvironment,
+} from './discover-framework-candidates.mjs';
+import {
+  digestTree,
+  materializeCandidateSource,
+  preparePatchBundle,
+  proposeCompatibilityUpdate,
+  recordExecutableVariant,
+  removeMaterializedCandidateSource,
+} from './prepare-framework-candidate.mjs';
 import { pnpmInvocation } from './package-manager-command.mjs';
 import { finishWithCleanups } from './cleanup-resources.mjs';
 import { safeExtractTarGz } from './safe-tar.mjs';
@@ -30,7 +43,9 @@ export function candidateExecutableName(platform = certificationPlatform()) {
 
 export function assertRustTestDiscovered(stdout, test, candidateId) {
   if (!String(stdout).split(/\r?\n/u).includes(`${test}: test`)) {
-    throw new Error(`${candidateId}: certification test ${test} was not discovered by the Rust test harness`);
+    throw new Error(
+      `${candidateId}: certification test ${test} was not discovered by the Rust test harness`,
+    );
   }
 }
 
@@ -67,7 +82,9 @@ async function run(command, args, env = process.env, cwd = root) {
     const stderr = typeof error?.stderr === 'string' ? error.stderr : '';
     process.stdout.write(stdout);
     process.stderr.write(stderr);
-    const detail = [error instanceof Error ? error.message : String(error), stdout, stderr].filter(Boolean).join('\n');
+    const detail = [error instanceof Error ? error.message : String(error), stdout, stderr]
+      .filter(Boolean)
+      .join('\n');
     throw new Error(detail, { cause: error });
   }
 }
@@ -89,7 +106,8 @@ async function packageRootForEntry(entry, expectedName) {
       // Keep walking to the package boundary.
     }
     const parent = dirname(directory);
-    if (parent === directory) throw new Error(`installed npm package ${expectedName} has no reachable package.json`);
+    if (parent === directory)
+      throw new Error(`installed npm package ${expectedName} has no reachable package.json`);
     directory = parent;
   }
 }
@@ -100,7 +118,9 @@ export async function installedDependencyFrom(parentDirectory, dependencyName) {
   for (;;) {
     const dependencyDirectory = join(directory, 'node_modules', ...segments);
     try {
-      const manifest = JSON.parse(await readFile(join(dependencyDirectory, 'package.json'), 'utf8'));
+      const manifest = JSON.parse(
+        await readFile(join(dependencyDirectory, 'package.json'), 'utf8'),
+      );
       // pnpm links a dependency into its parent's virtual node_modules. Its own
       // dependencies are siblings of the real package location, not siblings
       // of that lexical alias, so recursive lookup must follow the real path.
@@ -109,7 +129,8 @@ export async function installedDependencyFrom(parentDirectory, dependencyName) {
       // Node's lookup walks ancestor node_modules directories, including peers.
     }
     const parent = dirname(directory);
-    if (parent === directory) throw new Error(`installed npm graph cannot resolve ${dependencyName}`);
+    if (parent === directory)
+      throw new Error(`installed npm graph cannot resolve ${dependencyName}`);
     directory = parent;
   }
 }
@@ -122,7 +143,8 @@ function installedDeclarations(manifest) {
     ['optional', manifest.optionalDependencies ?? {}],
   ]) {
     for (const [name, requested] of Object.entries(values)) {
-      if (type === 'dependency' && Object.hasOwn(manifest.optionalDependencies ?? {}, name)) continue;
+      if (type === 'dependency' && Object.hasOwn(manifest.optionalDependencies ?? {}, name))
+        continue;
       declarations.set(`${type}\0${name}`, {
         name,
         requested,
@@ -131,7 +153,9 @@ function installedDeclarations(manifest) {
       });
     }
   }
-  return [...declarations.values()].sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type));
+  return [...declarations.values()].sort(
+    (a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type),
+  );
 }
 
 export function packageContentDigestForEntries(files) {
@@ -141,14 +165,20 @@ export function packageContentDigestForEntries(files) {
 async function packageContentDigest(directory) {
   const files = [];
   const visit = async (current) => {
-    for (const entry of (await readdir(current, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of (await readdir(current, { withFileTypes: true })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
       const path = join(current, entry.name);
       // npm tarballs do not own package-manager launchers. pnpm materializes
       // these below an installed package when one of its dependencies exposes
       // a bin, so comparing them with archive contents would reject an exact
       // install. No other node_modules content is exempt: bundled dependencies
       // and unexpected installed bytes remain part of the digest.
-      if (entry.isDirectory() && relative(directory, path).split(sep).join('/') === 'node_modules/.bin') continue;
+      if (
+        entry.isDirectory() &&
+        relative(directory, path).split(sep).join('/') === 'node_modules/.bin'
+      )
+        continue;
       if (entry.isDirectory()) await visit(path);
       else if (entry.isFile())
         files.push({
@@ -184,17 +214,23 @@ async function verifyMaterializedBinLaunchers(packageDirectory, expectedNames, c
   const seen = new Set();
   for (const entry of entries) {
     if (!entry.isFile() && !entry.isSymbolicLink()) {
-      throw new Error(`${candidateId}: installed package-manager bin entry is not a file: ${entry.name}`);
+      throw new Error(
+        `${candidateId}: installed package-manager bin entry is not a file: ${entry.name}`,
+      );
     }
     const baseName = entry.name.replace(/\.(?:cmd|ps1)$/u, '');
     if (!expected.has(baseName)) {
-      throw new Error(`${candidateId}: installed package-manager bin entry is undeclared: ${entry.name}`);
+      throw new Error(
+        `${candidateId}: installed package-manager bin entry is undeclared: ${entry.name}`,
+      );
     }
     seen.add(baseName);
   }
   const missing = [...expected].filter((name) => !seen.has(name));
   if (missing.length > 0) {
-    throw new Error(`${candidateId}: installed package-manager bin entries are missing: ${missing.join(', ')}`);
+    throw new Error(
+      `${candidateId}: installed package-manager bin entries are missing: ${missing.join(', ')}`,
+    );
   }
 }
 
@@ -208,12 +244,16 @@ async function verifiedNpmPackageDigest(source, fetchImpl) {
   )
     throw new Error('npm package source is not checksum-bound');
   const response = await fetchImpl(source.tarball);
-  if (!response.ok) throw new Error(`${source.tarball}: artifact download failed with ${response.status}`);
+  if (!response.ok)
+    throw new Error(`${source.tarball}: artifact download failed with ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
-  if (createHash('sha512').update(bytes).digest('base64') !== source.integrity.slice('sha512-'.length)) {
+  if (
+    createHash('sha512').update(bytes).digest('base64') !== source.integrity.slice('sha512-'.length)
+  ) {
     throw new Error(`${source.tarball}: sha512 did not match discovered evidence`);
   }
-  if (sha256(bytes) !== source.tarballSha256) throw new Error(`${source.tarball}: sha256 did not match discovered evidence`);
+  if (sha256(bytes) !== source.tarballSha256)
+    throw new Error(`${source.tarball}: sha256 did not match discovered evidence`);
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-npm-package-'));
   try {
     await safeExtractTarGz(bytes, scratch, { stripComponents: 1 });
@@ -224,33 +264,52 @@ async function verifiedNpmPackageDigest(source, fetchImpl) {
 }
 
 /** Prove that pnpm executed the checksum-resolved graph recorded at discovery. */
-export async function verifyInstalledNpmClosure(candidate, probeDirectory, { fetchImpl = fetch } = {}) {
-  if (candidate.source?.closureComplete !== true) throw new Error(`${candidate.id}: candidate closure is incomplete`);
-  const expectedNodes = new Map(candidate.source.dependencyClosure.map((node) => [`${node.name}@${node.version}`, node]));
+export async function verifyInstalledNpmClosure(
+  candidate,
+  probeDirectory,
+  { fetchImpl = fetch } = {},
+) {
+  if (candidate.source?.closureComplete !== true)
+    throw new Error(`${candidate.id}: candidate closure is incomplete`);
+  const expectedNodes = new Map(
+    candidate.source.dependencyClosure.map((node) => [`${node.name}@${node.version}`, node]),
+  );
   const probeRequire = createRequire(join(probeDirectory, 'package.json'));
   const rootEntry = probeRequire.resolve(candidate.package);
   const rootPackage = await packageRootForEntry(rootEntry, candidate.package);
   if (rootPackage.manifest.version !== candidate.version) {
-    throw new Error(`${candidate.id}: installed root is ${rootPackage.manifest.version}, expected ${candidate.version}`);
+    throw new Error(
+      `${candidate.id}: installed root is ${rootPackage.manifest.version}, expected ${candidate.version}`,
+    );
   }
   const rootExpectedDigest = await verifiedNpmPackageDigest(candidate.source, fetchImpl);
   if ((await packageContentDigest(rootPackage.directory)) !== rootExpectedDigest) {
-    throw new Error(`${candidate.id}: installed root content does not match the checksum-verified tarball`);
+    throw new Error(
+      `${candidate.id}: installed root content does not match the checksum-verified tarball`,
+    );
   }
   const reachableExpected = new Set();
   const visitExpected = (edges) => {
     for (const edge of edges) {
       const key = `${edge.packageName}@${edge.version}`;
       const expected = expectedNodes.get(key);
-      if (expected === undefined) throw new Error(`${candidate.id}: expected npm closure contains an unresolved edge to ${key}`);
+      if (expected === undefined)
+        throw new Error(
+          `${candidate.id}: expected npm closure contains an unresolved edge to ${key}`,
+        );
       if (reachableExpected.has(key)) continue;
       reachableExpected.add(key);
       visitExpected(expected.dependencies);
     }
   };
   visitExpected(candidate.source.dependencyRoots);
-  const unreachableExpected = [...expectedNodes.keys()].filter((key) => !reachableExpected.has(key));
-  if (unreachableExpected.length > 0) throw new Error(`${candidate.id}: expected npm closure contains unreachable nodes: ${unreachableExpected.join(', ')}`);
+  const unreachableExpected = [...expectedNodes.keys()].filter(
+    (key) => !reachableExpected.has(key),
+  );
+  if (unreachableExpected.length > 0)
+    throw new Error(
+      `${candidate.id}: expected npm closure contains unreachable nodes: ${unreachableExpected.join(', ')}`,
+    );
   const visited = new Set();
   const visitedNodes = new Set();
   const visit = async (parent, expectedEdges) => {
@@ -260,7 +319,9 @@ export async function verifyInstalledNpmClosure(candidate, probeDirectory, { fet
       .map(({ packageName: _packageName, version: _version, ...declaration }) => declaration)
       .sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type));
     if (canonicalJson(actualDeclarations) !== canonicalJson(normalizedExpected)) {
-      throw new Error(`${candidate.id}: installed declarations changed for ${parent.manifest.name}@${parent.manifest.version}`);
+      throw new Error(
+        `${candidate.id}: installed declarations changed for ${parent.manifest.name}@${parent.manifest.version}`,
+      );
     }
     for (const edge of expectedEdges) {
       let child;
@@ -268,22 +329,32 @@ export async function verifyInstalledNpmClosure(candidate, probeDirectory, { fet
         child = await installedDependencyFrom(parent.directory, edge.name);
       } catch (error) {
         if (edge.type === 'optional' || edge.optionalPeer === true) continue;
-        throw new Error(`${candidate.id}: installed graph cannot resolve ${edge.name} from ${parent.manifest.name}`, { cause: error });
+        throw new Error(
+          `${candidate.id}: installed graph cannot resolve ${edge.name} from ${parent.manifest.name}`,
+          { cause: error },
+        );
       }
       if (child.manifest.name !== edge.packageName) {
-        throw new Error(`${candidate.id}: installed ${edge.name} resolved package ${String(child.manifest.name)}, expected ${edge.packageName}`);
+        throw new Error(
+          `${candidate.id}: installed ${edge.name} resolved package ${String(child.manifest.name)}, expected ${edge.packageName}`,
+        );
       }
       if (child.manifest.version !== edge.version) {
-        throw new Error(`${candidate.id}: installed ${edge.name} resolved ${child.manifest.version}, expected ${edge.version}`);
+        throw new Error(
+          `${candidate.id}: installed ${edge.name} resolved ${child.manifest.version}, expected ${edge.version}`,
+        );
       }
       for (const name of declaredBinNames(child.manifest)) expectedBinNames.add(name);
       const key = `${child.manifest.name}@${child.manifest.version}`;
       const expected = expectedNodes.get(key);
-      if (expected === undefined) throw new Error(`${candidate.id}: installed graph contains unbound ${key}`);
+      if (expected === undefined)
+        throw new Error(`${candidate.id}: installed graph contains unbound ${key}`);
       if (!visitedNodes.has(key)) {
         const expectedDigest = await verifiedNpmPackageDigest(expected, fetchImpl);
         if ((await packageContentDigest(child.directory)) !== expectedDigest) {
-          throw new Error(`${candidate.id}: installed ${key} content does not match the checksum-verified tarball`);
+          throw new Error(
+            `${candidate.id}: installed ${key} content does not match the checksum-verified tarball`,
+          );
         }
         visitedNodes.add(key);
       }
@@ -303,7 +374,8 @@ export async function verifyInstalledNpmClosure(candidate, probeDirectory, { fet
 }
 
 export async function deriveHookInstrumentationProfile(candidate, archiveBytes, sourceRevision) {
-  if (candidate.frameworkId !== 'ink' || candidate.hookStrategy !== 'exact-source') throw new Error(`${candidate.id}: no deterministic exact-source hook profile generator`);
+  if (candidate.frameworkId !== 'ink' || candidate.hookStrategy !== 'exact-source')
+    throw new Error(`${candidate.id}: no deterministic exact-source hook profile generator`);
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-hook-source-'));
   await safeExtractTarGz(archiveBytes, scratch, { stripComponents: 1 });
   const binding = {
@@ -326,24 +398,38 @@ export async function deriveHookInstrumentationProfile(candidate, archiveBytes, 
 }
 
 function withoutSha256Prefix(value) {
-  return typeof value === 'string' && value.startsWith('sha256:') ? value.slice('sha256:'.length) : value;
+  return typeof value === 'string' && value.startsWith('sha256:')
+    ? value.slice('sha256:'.length)
+    : value;
 }
 
 export function verifyCandidateEvidence(candidate, report, behavioralCertification) {
   if (behavioralCertification?.passed !== true) {
-    throw new Error(`${candidate.id}: patch report is not behaviorally certified for stable publication`);
+    throw new Error(
+      `${candidate.id}: patch report is not behaviorally certified for stable publication`,
+    );
   }
-  const evidence = report.candidates?.find((entry) => entry.module === candidate.package && entry.upstreamVersion === candidate.version);
-  if (evidence === undefined) throw new Error(`${candidate.id}: patch certifier produced no exact candidate evidence`);
+  const evidence = report.candidates?.find(
+    (entry) => entry.module === candidate.package && entry.upstreamVersion === candidate.version,
+  );
+  if (evidence === undefined)
+    throw new Error(`${candidate.id}: patch certifier produced no exact candidate evidence`);
   if (candidate.registry === 'go') {
     if (
       evidence.material?.sum !== candidate.source.sum ||
       evidence.material?.goModSum !== candidate.source.goModSum ||
       withoutSha256Prefix(evidence.material?.zipDigest) !== candidate.source.zipSha256
     )
-      throw new Error(`${candidate.id}: certified Go source does not match the discovered checksums`);
-  } else if (withoutSha256Prefix(evidence.material?.checksum) !== candidate.source.checksum || withoutSha256Prefix(evidence.material?.archiveDigest) !== candidate.source.checksum)
-    throw new Error(`${candidate.id}: certified crates.io source does not match the discovered checksum`);
+      throw new Error(
+        `${candidate.id}: certified Go source does not match the discovered checksums`,
+      );
+  } else if (
+    withoutSha256Prefix(evidence.material?.checksum) !== candidate.source.checksum ||
+    withoutSha256Prefix(evidence.material?.archiveDigest) !== candidate.source.checksum
+  )
+    throw new Error(
+      `${candidate.id}: certified crates.io source does not match the discovered checksum`,
+    );
 }
 
 export async function verifyPreparedUpdateInvariant({ directory, bundle, patchTreeDigest }) {
@@ -357,13 +443,17 @@ export async function verifyPreparedUpdateInvariant({ directory, bundle, patchTr
 
 export function candidateToolchainBlock(candidate, approvedGoVersion) {
   if (candidate.source?.toolchainSupported !== false) return null;
-  if (typeof candidate.source.requiredGoVersion !== 'string') throw new Error(`${candidate.id}: unsupported toolchain evidence has no required Go version`);
+  if (typeof candidate.source.requiredGoVersion !== 'string')
+    throw new Error(`${candidate.id}: unsupported toolchain evidence has no required Go version`);
   return `${candidate.id}: requires Go >= ${candidate.source.requiredGoVersion}; trusted certification is pinned to Go ${approvedGoVersion}`;
 }
 
 export async function assertCandidateSemanticSession(session, candidateId) {
   const contract = await session.settled();
-  if (contract.capabilities['semantic-tree'].status !== 'supported' || session.semanticTree()?.v !== 2) {
+  if (
+    contract.capabilities['semantic-tree'].status !== 'supported' ||
+    session.semanticTree()?.v !== 2
+  ) {
     throw new Error(`${candidateId}: candidate application produced no supported semantic tree`);
   }
 }
@@ -373,8 +463,16 @@ export function selectCharmCandidateComposition(candidate, patchSets, tea, bubbl
     throw new Error(`${candidate.id}: unsupported Charm module candidate`);
   }
   const capabilityCandidate =
-    candidate.mode === 'capability' && candidate.package === bubbles && candidate.capability === 'bubbles-private-state' && candidate.capabilityStrategy === 'compile-conformance';
-  if (!capabilityCandidate && !patchSets.some((entry) => entry.name === candidate.package && entry.version === candidate.version)) {
+    candidate.mode === 'capability' &&
+    candidate.package === bubbles &&
+    candidate.capability === 'bubbles-private-state' &&
+    candidate.capabilityStrategy === 'compile-conformance';
+  if (
+    !capabilityCandidate &&
+    !patchSets.some(
+      (entry) => entry.name === candidate.package && entry.version === candidate.version,
+    )
+  ) {
     throw new Error(`${candidate.id}: exact candidate patch declaration is missing`);
   }
   const latest = (module) =>
@@ -385,23 +483,36 @@ export function selectCharmCandidateComposition(candidate, patchSets, tea, bubbl
   const teaVersion = candidate.package === tea ? candidate.version : latest(tea);
   const bubblesVersion = candidate.package === bubbles ? candidate.version : latest(bubbles);
   if (teaVersion === undefined || bubblesVersion === undefined) {
-    throw new Error(`${candidate.id}: no exact certified Charm companion exists for candidate-specific behavior`);
+    throw new Error(
+      `${candidate.id}: no exact certified Charm companion exists for candidate-specific behavior`,
+    );
   }
   return { teaVersion, bubblesVersion };
 }
 
 export function isSupportedCompileCapabilityCandidate(candidate) {
-  if (candidate.mode !== 'capability' || candidate.capabilityStrategy !== 'compile-conformance') return false;
+  if (candidate.mode !== 'capability' || candidate.capabilityStrategy !== 'compile-conformance')
+    return false;
   if (candidate.frameworkId === 'tview') {
     return (
-      (candidate.package === 'github.com/rivo/tview' && candidate.capability === 'tview-private-state') ||
-      (candidate.package === 'github.com/gdamore/tcell/v2' && candidate.capability === 'tcell-same-writer-marker')
+      (candidate.package === 'github.com/rivo/tview' &&
+        candidate.capability === 'tview-private-state') ||
+      (candidate.package === 'github.com/gdamore/tcell/v2' &&
+        candidate.capability === 'tcell-same-writer-marker')
     );
   }
-  return candidate.frameworkId === 'charm' && ['github.com/charmbracelet/bubbles', 'charm.land/bubbles/v2'].includes(candidate.package) && candidate.capability === 'bubbles-private-state';
+  return (
+    candidate.frameworkId === 'charm' &&
+    ['github.com/charmbracelet/bubbles', 'charm.land/bubbles/v2'].includes(candidate.package) &&
+    candidate.capability === 'bubbles-private-state'
+  );
 }
 
-export async function bindLocalTermwrightGoClient(moduleDir, env = process.env, clientDir = join(root, 'clients/go')) {
+export async function bindLocalTermwrightGoClient(
+  moduleDir,
+  env = process.env,
+  clientDir = join(root, 'clients/go'),
+) {
   const canonicalClientDir = await realpath(clientDir);
   await run(
     'go',
@@ -431,27 +542,58 @@ export async function certifyGoCandidateBehavior(candidate) {
     }
     launcherPackage = join(root, 'packages/probe-tview/dist/index.js');
     await run('cp', ['-R', `${join(root, 'packages/probe-tview/src/testing/fixture-app')}/.`, app]);
-    await run('go', ['mod', 'edit', `-require=${candidate.package}@${candidate.version}`], env, app);
+    await run(
+      'go',
+      ['mod', 'edit', `-require=${candidate.package}@${candidate.version}`],
+      env,
+      app,
+    );
     await bindLocalTermwrightGoClient(app, env);
   } else if (candidate.frameworkId === 'charm') {
     launcherPackage = join(root, 'packages/probe-charm/dist/index.js');
     const v2 = candidate.package.startsWith('charm.land/');
     const tea = v2 ? 'charm.land/bubbletea/v2' : 'github.com/charmbracelet/bubbletea';
     const bubbles = v2 ? 'charm.land/bubbles/v2' : 'github.com/charmbracelet/bubbles';
-    const compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
-    const patchSets = compatibility.frameworks.find((entry) => entry.id === 'charm')?.instrumentation?.patchSets;
-    if (!Array.isArray(patchSets)) throw new Error(`${candidate.id}: certified Charm patch declarations are missing`);
-    const { teaVersion, bubblesVersion } = selectCharmCandidateComposition(candidate, patchSets, tea, bubbles);
+    const compatibility = JSON.parse(
+      await readFile(join(root, 'compatibility/registry.json'), 'utf8'),
+    );
+    const patchSets = compatibility.frameworks.find((entry) => entry.id === 'charm')
+      ?.instrumentation?.patchSets;
+    if (!Array.isArray(patchSets))
+      throw new Error(`${candidate.id}: certified Charm patch declarations are missing`);
+    const { teaVersion, bubblesVersion } = selectCharmCandidateComposition(
+      candidate,
+      patchSets,
+      tea,
+      bubbles,
+    );
     source = v2
       ? `package main\nimport (\n "fmt"\n tea "${tea}"\n "${bubbles}/spinner"\n)\ntype model struct { Spinner spinner.Model }\nfunc initial() model { return model{Spinner:spinner.New()} }\nfunc (m model) Init() tea.Cmd { return m.Spinner.Tick }\nfunc (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { var c tea.Cmd; m.Spinner,c=m.Spinner.Update(msg); return m,c }\nfunc (m model) View() tea.View { return tea.NewView(fmt.Sprintf("candidate %s",m.Spinner.View())) }\nfunc main(){ _,_ = tea.NewProgram(initial()).Run() }\n`
       : `package main\nimport (\n "fmt"\n tea "${tea}"\n "${bubbles}/spinner"\n)\ntype model struct { Spinner spinner.Model }\nfunc initial() model { return model{Spinner:spinner.New()} }\nfunc (m model) Init() tea.Cmd { return m.Spinner.Tick }\nfunc (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { var c tea.Cmd; m.Spinner,c=m.Spinner.Update(msg); return m,c }\nfunc (m model) View() string { return fmt.Sprintf("candidate %s\\n",m.Spinner.View()) }\nfunc main(){ if _,err:=tea.NewProgram(initial()).Run(); err!=nil { panic(err) } }\n`;
-    await writeFile(join(app, 'go.mod'), `module example.com/termwright-candidate\n\ngo 1.25\n\nrequire (\n\t${tea} ${teaVersion}\n\t${bubbles} ${bubblesVersion}\n)\n`);
+    await writeFile(
+      join(app, 'go.mod'),
+      `module example.com/termwright-candidate\n\ngo 1.25\n\nrequire (\n\t${tea} ${teaVersion}\n\t${bubbles} ${bubblesVersion}\n)\n`,
+    );
     await writeFile(join(app, 'main.go'), source);
   } else throw new Error(`${candidate.id}: no candidate-specific Go behavioral profile`);
   await run('go', ['mod', 'tidy'], env, app);
   if (candidate.frameworkId === 'tview') {
-    frameworkVersion = (await run('go', ['list', '-m', '-f', '{{.Version}}', 'github.com/rivo/tview'], { ...env, GOWORK: 'off' }, app)).stdout.trim();
-    const tcellVersion = (await run('go', ['list', '-m', '-f', '{{.Version}}', 'github.com/gdamore/tcell/v2'], { ...env, GOWORK: 'off' }, app)).stdout.trim();
+    frameworkVersion = (
+      await run(
+        'go',
+        ['list', '-m', '-f', '{{.Version}}', 'github.com/rivo/tview'],
+        { ...env, GOWORK: 'off' },
+        app,
+      )
+    ).stdout.trim();
+    const tcellVersion = (
+      await run(
+        'go',
+        ['list', '-m', '-f', '{{.Version}}', 'github.com/gdamore/tcell/v2'],
+        { ...env, GOWORK: 'off' },
+        app,
+      )
+    ).stdout.trim();
     tviewModules = [
       { name: 'github.com/rivo/tview', version: frameworkVersion },
       { name: 'github.com/gdamore/tcell/v2', version: tcellVersion },
@@ -477,11 +619,15 @@ export async function certifyGoCandidateBehavior(candidate) {
     if (candidate.frameworkId === 'tview') {
       await session.getByRole('button', { name: 'Save' }).waitFor({ state: 'attached' });
       const initial = await session.waitForCommittedObservation();
-      if (initial.semanticRevision === null) throw new Error(`${candidate.id}: initial semantic tree has no committed revision`);
+      if (initial.semanticRevision === null)
+        throw new Error(`${candidate.id}: initial semantic tree has no committed revision`);
       await session.press('r');
       await session.waitForText('status: ready redraw:1');
       const redrawn = await session.waitForCommittedObservation();
-      if (redrawn.semanticRevision === null || redrawn.semanticRevision <= initial.semanticRevision) {
+      if (
+        redrawn.semanticRevision === null ||
+        redrawn.semanticRevision <= initial.semanticRevision
+      ) {
         throw new Error(`${candidate.id}: causal redraw did not publish a newer semantic tree`);
       }
       await assertCandidateSemanticSession(session, candidate.id);
@@ -491,7 +637,9 @@ export async function certifyGoCandidateBehavior(candidate) {
       await spinner.waitFor({ state: 'attached' });
       const state = await spinner.semanticState();
       if (!Number.isSafeInteger(state?.positionInSet) || !Number.isSafeInteger(state?.setSize)) {
-        throw new Error(`${candidate.id}: Bubbles private spinner state was not observed through the compiled owned accessor contract`);
+        throw new Error(
+          `${candidate.id}: Bubbles private spinner state was not observed through the compiled owned accessor contract`,
+        );
       }
     }
   } finally {
@@ -511,29 +659,47 @@ export async function certifyGoCandidateBehavior(candidate) {
               optional: true,
             })),
         ];
-  if (!Array.isArray(modules) || (candidate.frameworkId === 'tview' && typeof frameworkVersion !== 'string')) {
+  if (
+    !Array.isArray(modules) ||
+    (candidate.frameworkId === 'tview' && typeof frameworkVersion !== 'string')
+  ) {
     throw new Error(`${candidate.id}: executable framework resolution is incomplete`);
   }
-  if (!modules.some((module) => module.name === candidate.package && module.version === candidate.version)) {
+  if (
+    !modules.some(
+      (module) => module.name === candidate.package && module.version === candidate.version,
+    )
+  ) {
     throw new Error(`${candidate.id}: exact candidate was not on the executed instrumented path`);
   }
   return {
     passed: true,
     resolution: {
-      frameworkVersion: candidate.frameworkId === 'tview' ? frameworkVersion : prepared.flavour.version,
+      frameworkVersion:
+        candidate.frameworkId === 'tview' ? frameworkVersion : prepared.flavour.version,
       modules,
     },
   };
 }
 
 export async function certifyRustCandidateBehavior(candidate) {
-  if (candidate.frameworkId !== 'ratatui' || !['ratatui-core', 'ratatui-widgets', 'ratatui-crossterm'].includes(candidate.package))
+  if (
+    candidate.frameworkId !== 'ratatui' ||
+    !['ratatui-core', 'ratatui-widgets', 'ratatui-crossterm'].includes(candidate.package)
+  )
     throw new Error(`${candidate.id}: no candidate-specific Rust behavioral profile`);
-  const compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
+  const compatibility = JSON.parse(
+    await readFile(join(root, 'compatibility/registry.json'), 'utf8'),
+  );
   const framework = compatibility.frameworks.find((entry) => entry.id === 'ratatui');
-  const currentVariant = framework?.instrumentation?.variants?.slice().sort((left, right) => compareVersions(right.frameworkVersion, left.frameworkVersion))[0];
-  if (currentVariant === undefined) throw new Error(`${candidate.id}: no certified Ratatui framework variant exists`);
-  const versions = Object.fromEntries(currentVariant.modules.map((module) => [module.name, module.version]));
+  const currentVariant = framework?.instrumentation?.variants
+    ?.slice()
+    .sort((left, right) => compareVersions(right.frameworkVersion, left.frameworkVersion))[0];
+  if (currentVariant === undefined)
+    throw new Error(`${candidate.id}: no certified Ratatui framework variant exists`);
+  const versions = Object.fromEntries(
+    currentVariant.modules.map((module) => [module.name, module.version]),
+  );
   versions[candidate.package] = candidate.version;
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-rust-behavior-'));
   await mkdir(join(scratch, 'src'));
@@ -557,7 +723,14 @@ export async function certifyRustCandidateBehavior(candidate) {
       : candidate.package === 'ratatui-core'
         ? 'an_annotated_custom_widget_merges_full_intent_without_physical_overrides'
         : 'crossterm_commits_after_frame_bytes_on_the_exact_same_writer';
-  const testCommand = ['test', '--manifest-path', 'clients/rust-probe/Cargo.toml', '--test', 'patchset', test];
+  const testCommand = [
+    'test',
+    '--manifest-path',
+    'clients/rust-probe/Cargo.toml',
+    '--test',
+    'patchset',
+    test,
+  ];
   const listed = await run('cargo', [...testCommand, '--', '--list', '--format', 'terse'], env);
   assertRustTestDiscovered(listed.stdout, test, candidate.id);
   await run('cargo', [...testCommand, '--', '--exact', '--nocapture'], env);
@@ -588,20 +761,36 @@ async function main(argv) {
     else if (argv[i] === '--initialize-only') initializeOnly = true;
     else throw new Error(`unknown argument ${argv[i]}`);
   }
-  if (registryPath === undefined || candidateId === undefined || output === undefined || expectedPlatform === undefined) {
+  if (
+    registryPath === undefined ||
+    candidateId === undefined ||
+    output === undefined ||
+    expectedPlatform === undefined
+  ) {
     throw new Error('--registry, --candidate, --platform and --output are required');
   }
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
   const candidate = registry.candidates.find((entry) => entry.id === candidateId);
   if (candidate === undefined) throw new Error(`candidate registry has no ${candidateId}`);
   const revision = process.env.GITHUB_SHA ?? 'local-unpinned';
-  await writeVerdict(output, candidate, 'red', 'Certification did not complete; inspect the job log.', revision);
+  await writeVerdict(
+    output,
+    candidate,
+    'red',
+    'Certification did not complete; inspect the job log.',
+    revision,
+  );
   const actualPlatform = certificationPlatform();
   if (expectedPlatform !== actualPlatform) {
-    throw new Error(`${candidate.id}: expected ${expectedPlatform} certification but host is ${actualPlatform}`);
+    throw new Error(
+      `${candidate.id}: expected ${expectedPlatform} certification but host is ${actualPlatform}`,
+    );
   }
   if (initializeOnly) return;
-  const toolchainBlock = candidateToolchainBlock(candidate, process.env.TERMWRIGHT_UPSTREAM_GO_VERSION ?? 'unknown');
+  const toolchainBlock = candidateToolchainBlock(
+    candidate,
+    process.env.TERMWRIGHT_UPSTREAM_GO_VERSION ?? 'unknown',
+  );
   if (toolchainBlock !== null) {
     await writeVerdict(output, candidate, 'red', toolchainBlock, revision);
     throw new Error(toolchainBlock);
@@ -613,7 +802,10 @@ async function main(argv) {
       }
       const behavioral = await certifyGoCandidateBehavior(candidate);
       await runPnpm(['run', 'test:compatibility']);
-      await runPnpm(['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' });
+      await runPnpm(
+        ['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'],
+        { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' },
+      );
       await writeVerdict(
         output,
         candidate,
@@ -624,7 +816,13 @@ async function main(argv) {
       );
       return;
     } catch (error) {
-      await writeVerdict(output, candidate, 'red', error instanceof Error ? error.message : String(error), revision);
+      await writeVerdict(
+        output,
+        candidate,
+        'red',
+        error instanceof Error ? error.message : String(error),
+        revision,
+      );
       throw error;
     }
   }
@@ -632,12 +830,20 @@ async function main(argv) {
     try {
       if (candidate.registry === 'npm') {
         if (candidate.source.closureComplete !== true)
-          throw new Error(`${candidate.id}: production dependency closure is not fully pinned: ${JSON.stringify(candidate.source.unresolvedDependencyDeclarations ?? [])}`);
+          throw new Error(
+            `${candidate.id}: production dependency closure is not fully pinned: ${JSON.stringify(candidate.source.unresolvedDependencyDeclarations ?? [])}`,
+          );
         if (candidate.monitorDependencyClosure === true) {
-          const current = await resolveNpmSource({ id: candidate.streamId, monitorDependencyClosure: true }, candidate.source, { reuseSource: candidate.source });
-          if (current.closureDigest !== candidate.source.closureDigest) throw new Error(`${candidate.id}: npm dependency closure changed after discovery`);
+          const current = await resolveNpmSource(
+            { id: candidate.streamId, monitorDependencyClosure: true },
+            candidate.source,
+            { reuseSource: candidate.source },
+          );
+          if (current.closureDigest !== candidate.source.closureDigest)
+            throw new Error(`${candidate.id}: npm dependency closure changed after discovery`);
         }
-        const probe = candidate.frameworkId === 'ink' ? '@termwright/probe-ink' : '@termwright/probe-opentui';
+        const probe =
+          candidate.frameworkId === 'ink' ? '@termwright/probe-ink' : '@termwright/probe-opentui';
         const material = await mkdtemp(join(tmpdir(), 'termwright-npm-candidate-'));
         const archive = join(material, 'candidate.tgz');
         const archiveBytes = await downloadVerifiedNpmTarball(candidate.source);
@@ -674,14 +880,24 @@ async function main(argv) {
           TERMWRIGHT_CERTIFICATION_HOOK_PROFILE: JSON.stringify(runtimeProfile),
           TERMWRIGHT_REQUIRE_RATATUI: '1',
         };
-        const previous = Object.fromEntries(Object.keys(certificationEnv).map((key) => [key, process.env[key]]));
+        const previous = Object.fromEntries(
+          Object.keys(certificationEnv).map((key) => [key, process.env[key]]),
+        );
         Object.assign(process.env, certificationEnv);
         try {
           if (candidate.hookStrategy === 'exact-source') {
-            const instrumentation = await import(pathToFileURL(join(root, `packages/probe-${candidate.frameworkId}/dist/instrumentation.js`)).href);
+            const instrumentation = await import(
+              pathToFileURL(
+                join(root, `packages/probe-${candidate.frameworkId}/dist/instrumentation.js`),
+              ).href
+            );
             if (
-              instrumentation.instrumentInkRenderer('ink/build/renderer.js', profile.sources.renderer) === undefined ||
-              instrumentation.instrumentInkCore('ink/build/ink.js', profile.sources.core) === undefined
+              instrumentation.instrumentInkRenderer(
+                'ink/build/renderer.js',
+                profile.sources.renderer,
+              ) === undefined ||
+              instrumentation.instrumentInkCore('ink/build/ink.js', profile.sources.core) ===
+                undefined
             ) {
               throw new Error(`${candidate.id}: exact Ink transform anchors no longer apply`);
             }
@@ -692,21 +908,59 @@ async function main(argv) {
             else process.env[key] = value;
           }
         }
-        await runPnpm(['--filter', probe, 'add', '--save-dev', '--save-exact', '--lockfile=false', '--ignore-scripts', archive], certificationEnv);
+        await runPnpm(
+          [
+            '--filter',
+            probe,
+            'add',
+            '--save-dev',
+            '--save-exact',
+            '--lockfile=false',
+            '--ignore-scripts',
+            archive,
+          ],
+          certificationEnv,
+        );
         if (candidate.monitorDependencyClosure === true) {
-          await verifyInstalledNpmClosure(candidate, join(root, `packages/probe-${candidate.frameworkId}`));
+          await verifyInstalledNpmClosure(
+            candidate,
+            join(root, `packages/probe-${candidate.frameworkId}`),
+          );
         }
         if (candidate.frameworkId === 'opentui') await run('bun', ['--version'], certificationEnv);
         await runPnpm(['--filter', probe, 'run', 'test'], certificationEnv);
-        await runPnpm(['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], certificationEnv);
+        await runPnpm(
+          [
+            '--filter',
+            '@termwright/conformance',
+            'run',
+            'conformance',
+            '--require-no-skipped-areas',
+          ],
+          certificationEnv,
+        );
       } else if (candidate.registry === 'pypi') {
-        await run('python', ['-m', 'pip', 'install', `${candidate.source.url}#sha256=${candidate.source.sha256}`]);
+        await run('python', [
+          '-m',
+          'pip',
+          'install',
+          `${candidate.source.url}#sha256=${candidate.source.sha256}`,
+        ]);
         const certificationEnv = {
           ...process.env,
           TERMWRIGHT_REQUIRE_RATATUI: '1',
         };
         await run('python', ['-m', 'pytest', 'clients/python/tests'], certificationEnv);
-        await runPnpm(['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], certificationEnv);
+        await runPnpm(
+          [
+            '--filter',
+            '@termwright/conformance',
+            'run',
+            'conformance',
+            '--require-no-skipped-areas',
+          ],
+          certificationEnv,
+        );
       } else {
         throw new Error(`${candidate.id}: unsupported hook registry ${candidate.registry}`);
       }
@@ -719,7 +973,13 @@ async function main(argv) {
       );
       return;
     } catch (error) {
-      await writeVerdict(output, candidate, 'red', error instanceof Error ? error.message : String(error), revision);
+      await writeVerdict(
+        output,
+        candidate,
+        'red',
+        error instanceof Error ? error.message : String(error),
+        revision,
+      );
       throw error;
     }
   }
@@ -759,34 +1019,77 @@ async function main(argv) {
       await mkdir(dirname(targetDirectory), { recursive: true });
       await run('cp', ['-R', prepared.destination, targetDirectory]);
       const registryPath = join(root, 'compatibility/registry.json');
-      proposedRegistry = proposeCompatibilityUpdate(JSON.parse(await readFile(registryPath, 'utf8')), candidate, prepared.manifest);
+      proposedRegistry = proposeCompatibilityUpdate(
+        JSON.parse(await readFile(registryPath, 'utf8')),
+        candidate,
+        prepared.manifest,
+      );
       await writeFile(registryPath, canonicalJson(proposedRegistry));
     } else if (candidate.patch.status === 'ready') {
       const registryPath = join(root, 'compatibility/registry.json');
       const manifest = JSON.parse(await readFile(join(root, candidate.patch.path), 'utf8'));
-      proposedRegistry = proposeCompatibilityUpdate(JSON.parse(await readFile(registryPath, 'utf8')), candidate, manifest);
+      proposedRegistry = proposeCompatibilityUpdate(
+        JSON.parse(await readFile(registryPath, 'utf8')),
+        candidate,
+        manifest,
+      );
       await writeFile(registryPath, canonicalJson(proposedRegistry));
     } else {
       throw new Error(`${candidate.id}: unsupported patch state ${candidate.patch.status}`);
     }
     const evidenceDirectory = await mkdtemp(join(tmpdir(), 'termwright-patch-evidence-'));
-    await run('node', ['scripts/certify-upstream-patches.mjs', '--ecosystem', candidate.ecosystem, '--source-revision', revision, '--output', evidenceDirectory]);
+    await run('node', [
+      'scripts/certify-upstream-patches.mjs',
+      '--ecosystem',
+      candidate.ecosystem,
+      '--source-revision',
+      revision,
+      '--output',
+      evidenceDirectory,
+    ]);
     const behavioral =
-      candidate.registry === 'go' ? await certifyGoCandidateBehavior(candidate) : candidate.registry === 'crates.io' ? await certifyRustCandidateBehavior(candidate) : { passed: false };
-    verifyCandidateEvidence(candidate, JSON.parse(await readFile(join(evidenceDirectory, 'candidate-report.json'), 'utf8')), behavioral);
+      candidate.registry === 'go'
+        ? await certifyGoCandidateBehavior(candidate)
+        : candidate.registry === 'crates.io'
+          ? await certifyRustCandidateBehavior(candidate)
+          : { passed: false };
+    verifyCandidateEvidence(
+      candidate,
+      JSON.parse(await readFile(join(evidenceDirectory, 'candidate-report.json'), 'utf8')),
+      behavioral,
+    );
     proposedRegistry = recordExecutableVariant(proposedRegistry, candidate, behavioral.resolution);
     await writeFile(join(root, 'compatibility/registry.json'), canonicalJson(proposedRegistry));
     await runPnpm(['run', 'test:compatibility']);
-    await runPnpm(['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'], { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' });
+    await runPnpm(
+      ['--filter', '@termwright/conformance', 'run', 'conformance', '--require-no-skipped-areas'],
+      { ...process.env, TERMWRIGHT_REQUIRE_RATATUI: '1' },
+    );
     if (preparedUpdate !== undefined) await verifyPreparedUpdateInvariant(preparedUpdate);
-    await writeVerdict(output, candidate, 'green', 'Exact source, deterministic patching, candidate-specific real-process behavior, and full conformance passed.', revision, behavioral.resolution);
+    await writeVerdict(
+      output,
+      candidate,
+      'green',
+      'Exact source, deterministic patching, candidate-specific real-process behavior, and full conformance passed.',
+      revision,
+      behavioral.resolution,
+    );
   } catch (error) {
-    await writeVerdict(output, candidate, 'red', error instanceof Error ? error.message : String(error), revision);
+    await writeVerdict(
+      output,
+      candidate,
+      'red',
+      error instanceof Error ? error.message : String(error),
+      revision,
+    );
     throw error;
   }
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

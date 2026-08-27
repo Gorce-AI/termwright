@@ -13,11 +13,7 @@ import {
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
 
 export type LocalTransportErrorCode =
-  | 'frame-encoding'
-  | 'frame-malformed'
-  | 'frame-oversized'
-  | 'invalid-envelope'
-  | 'invalid-token';
+  'frame-encoding' | 'frame-malformed' | 'frame-oversized' | 'invalid-envelope' | 'invalid-token';
 
 export class LocalTransportError extends Error {
   readonly code: LocalTransportErrorCode;
@@ -115,7 +111,8 @@ export function parseRequestEnvelope(
   limits: { readonly type?: number; readonly requestId?: number } = {},
 ): RequestEnvelope {
   const message = object(value, 'message');
-  if (message.v !== version) throw new LocalTransportError('invalid-envelope', 'unsupported transport version');
+  if (message.v !== version)
+    throw new LocalTransportError('invalid-envelope', 'unsupported transport version');
   boundedText(message.type, 'message.type', limits.type ?? 64);
   boundedText(message.requestId, 'message.requestId', limits.requestId ?? 256);
   return message as RequestEnvelope;
@@ -152,9 +149,11 @@ export function responseEnvelope(
   ok: boolean,
   payload: unknown,
 ): ResponseEnvelope {
-  return Object.freeze(ok
-    ? { v: version, type: 'response' as const, requestId, ok, result: payload }
-    : { v: version, type: 'response' as const, requestId, ok, error: payload });
+  return Object.freeze(
+    ok
+      ? { v: version, type: 'response' as const, requestId, ok, result: payload }
+      : { v: version, type: 'response' as const, requestId, ok, error: payload },
+  );
 }
 
 export function createLocalToken(provided?: string, randomToken?: () => string): string {
@@ -186,9 +185,10 @@ export async function bindLocalEndpoint(options: {
   readonly signal?: AbortSignal;
 }): Promise<BoundLocalEndpoint> {
   options.signal?.throwIfAborted();
-  const allocated = options.endpoint === undefined
-    ? await allocateEndpoint(options.name)
-    : { endpoint: options.endpoint, cleanup: undefined };
+  const allocated =
+    options.endpoint === undefined
+      ? await allocateEndpoint(options.name)
+      : { endpoint: options.endpoint, cleanup: undefined };
   if (options.signal?.aborted === true) {
     await allocated.cleanup?.();
     options.signal.throwIfAborted();
@@ -212,14 +212,17 @@ export async function bindLocalEndpoint(options: {
 function localError(error: unknown): LocalTransportError {
   if (error instanceof LocalTransportError) return error;
   if (error instanceof ProtocolViolation) {
-    const code: LocalTransportErrorCode = error.code === 'frame-encoding'
-      ? 'frame-encoding'
-      : error.code === 'frame-oversized'
-        ? 'frame-oversized'
-        : 'frame-malformed';
+    const code: LocalTransportErrorCode =
+      error.code === 'frame-encoding'
+        ? 'frame-encoding'
+        : error.code === 'frame-oversized'
+          ? 'frame-oversized'
+          : 'frame-malformed';
     return new LocalTransportError(code, error.message, { cause: error });
   }
-  return new LocalTransportError('frame-malformed', 'local transport framing failed', { cause: error });
+  return new LocalTransportError('frame-malformed', 'local transport framing failed', {
+    cause: error,
+  });
 }
 
 function object(value: unknown, name: string): Readonly<Record<string, unknown>> {
@@ -244,7 +247,8 @@ async function allocateEndpoint(name: string): Promise<{
     throw new LocalTransportError('invalid-envelope', 'endpoint name is invalid');
   }
   const suffix = randomBytes(12).toString('hex');
-  if (process.platform === 'win32') return { endpoint: `\\\\.\\pipe\\termwright-${name}-${suffix}` };
+  if (process.platform === 'win32')
+    return { endpoint: `\\\\.\\pipe\\termwright-${name}-${suffix}` };
   const directory = await mkdtemp(join(tmpdir(), `termwright-${name}-`));
   return {
     endpoint: join(directory, `${name}.sock`),
@@ -254,8 +258,14 @@ async function allocateEndpoint(name: string): Promise<{
 
 function listen(server: Server, endpoint: string, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const onError = (error: Error): void => { cleanup(); reject(error); };
-    const onListening = (): void => { cleanup(); resolve(); };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+    const onListening = (): void => {
+      cleanup();
+      resolve();
+    };
     const onClose = (): void => {
       cleanup();
       reject(signal?.reason ?? new Error('local server closed before listening'));
@@ -280,11 +290,16 @@ function listen(server: Server, endpoint: string, signal?: AbortSignal): Promise
 async function closeEndpoint(server: Server, cleanup?: () => Promise<void>): Promise<void> {
   const cleanups: Promise<void>[] = [];
   if (server.listening) {
-    cleanups.push(new Promise((resolve, reject) =>
-      server.close((error) => error === undefined ? resolve() : reject(error))));
+    cleanups.push(
+      new Promise((resolve, reject) =>
+        server.close((error) => (error === undefined ? resolve() : reject(error))),
+      ),
+    );
   }
   if (cleanup !== undefined) cleanups.push(cleanup());
   const results = await Promise.allSettled(cleanups);
-  const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
   if (failures.length > 0) throw new AggregateError(failures, 'local endpoint cleanup failed');
 }

@@ -9,7 +9,7 @@ the semantic tree published by your application or framework integration;
 rejects composition across those domains.
 
 ```ts
-const save = app.getByRole('button', {name: 'Save'});
+const save = app.getByRole('button', { name: 'Save' });
 await save.activate();
 ```
 
@@ -18,13 +18,13 @@ element appears and pass it to a retrying assertion.
 
 ## Recommended locator order
 
-| Locator | Use when |
-| --- | --- |
-| `getByRole(role, {name})` | The element has user-facing meaning. This is the normal choice. |
-| `getByLabel(text)` | A form control is identified by its label. |
-| `getByText(text)` | Visible text is the behavior under test, not just a way to reach a control. |
-| `getByTestId(id)` | The application has no stable user-facing identity for the element. |
-| `locator(selector)` | You need a structural or framework-specific selector. |
+| Locator                   | Use when                                                                    |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `getByRole(role, {name})` | The element has user-facing meaning. This is the normal choice.             |
+| `getByLabel(text)`        | A form control is identified by its label.                                  |
+| `getByText(text)`         | Visible text is the behavior under test, not just a way to reach a control. |
+| `getByTestId(id)`         | The application has no stable user-facing identity for the element.         |
+| `locator(selector)`       | You need a structural or framework-specific selector.                       |
 
 Programs without a semantic tree do not support these locators. Use
 `getByScreenText()`, cell assertions, and terminal-level input instead.
@@ -32,9 +32,9 @@ Programs without a semantic tree do not support these locators. Use
 ## Locate by role and name
 
 ```ts
-const approve = app.getByRole('button', {name: 'Approve'});
+const approve = app.getByRole('button', { name: 'Approve' });
 const anyDialog = app.getByRole('dialog');
-const matchingItem = app.getByRole('listitem', {name: /release/i});
+const matchingItem = app.getByRole('listitem', { name: /release/i });
 ```
 
 Use an exact string for a stable accessible name. Use a regular expression when
@@ -44,7 +44,7 @@ Framework-specific filtering is available for integrations that retain a
 native component type:
 
 ```ts
-const pane = app.getByRole('generic', {frameworkType: 'ScrollView'});
+const pane = app.getByRole('generic', { frameworkType: 'ScrollView' });
 ```
 
 Treat this as specialized integration code. A role and name survive framework
@@ -98,10 +98,8 @@ semantic state, role descendants, or semantic filters.
 Use `within()` when the same control appears in more than one region:
 
 ```ts
-const dialog = app.getByRole('dialog', {name: 'Delete note'});
-const confirm = app
-  .getByRole('button', {name: 'Delete'})
-  .within(dialog);
+const dialog = app.getByRole('dialog', { name: 'Delete note' });
+const confirm = app.getByRole('button', { name: 'Delete' }).within(dialog);
 
 await confirm.activate();
 ```

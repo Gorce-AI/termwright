@@ -23,7 +23,11 @@ import type { CrashProjection } from './crash.js';
 export type ErrorKind = TermwrightErrorCode | 'usage' | 'no-session' | 'internal';
 
 /** The kinds this layer adds; everything else comes from the driver. */
-export const MCP_ERROR_KINDS = ['usage', 'no-session', 'internal'] as const satisfies readonly ErrorKind[];
+export const MCP_ERROR_KINDS = [
+  'usage',
+  'no-session',
+  'internal',
+] as const satisfies readonly ErrorKind[];
 
 /** CLI exit codes (CONTRACTS.md §MCP). */
 export const EXIT_CODES = Object.freeze({
@@ -147,7 +151,9 @@ export function renderErrorPayload(payload: ErrorPayload): string {
   if (payload.suggestion !== undefined) parts.push(`suggestion: ${payload.suggestion}`);
   if (payload.semanticTree !== undefined) parts.push(`semanticTree: ${payload.semanticTree}`);
   if (payload.candidates !== undefined) {
-    parts.push(`candidates:\n${payload.candidates.map((candidate) => `  - ${candidate}`).join('\n')}`);
+    parts.push(
+      `candidates:\n${payload.candidates.map((candidate) => `  - ${candidate}`).join('\n')}`,
+    );
   }
   if (payload.screenExcerpt !== undefined) parts.push(`screen:\n${payload.screenExcerpt}`);
   if (payload.crash !== undefined) parts.push(renderCrash(payload.crash));

@@ -22,7 +22,9 @@ export function qualifyPerformanceEnvironment(runnerClass, observed) {
     bunVersion: observed.bunVersion,
   })) {
     if (actual !== expected[name]) {
-      throw new Error(`performance runner class ${runnerClass} requires ${name}=${expected[name]}, observed ${String(actual)}`);
+      throw new Error(
+        `performance runner class ${runnerClass} requires ${name}=${expected[name]}, observed ${String(actual)}`,
+      );
     }
   }
   if (typeof observed.runnerImage !== 'string' || observed.runnerImage.length === 0) {
@@ -58,12 +60,19 @@ export function validatePerformanceEnvironment(value, runtime = undefined) {
     bunVersion: value.toolchains?.bun?.resolved,
   };
   const qualified = qualifyPerformanceEnvironment(value.class, observed);
-  if (qualified.runner.platform !== value.runner?.platform || qualified.runner.arch !== value.runner?.arch) {
-    throw new Error('performance environment descriptor runtime does not match its recorded runner');
+  if (
+    qualified.runner.platform !== value.runner?.platform ||
+    qualified.runner.arch !== value.runner?.arch
+  ) {
+    throw new Error(
+      'performance environment descriptor runtime does not match its recorded runner',
+    );
   }
   for (const name of ['node', 'go', 'bun']) {
-    if (qualified.toolchains[name].qualified !== value.toolchains?.[name]?.qualified
-      || qualified.toolchains[name].resolved !== value.toolchains?.[name]?.resolved) {
+    if (
+      qualified.toolchains[name].qualified !== value.toolchains?.[name]?.qualified ||
+      qualified.toolchains[name].resolved !== value.toolchains?.[name]?.resolved
+    ) {
       throw new Error(`performance environment descriptor ${name} qualification is not canonical`);
     }
   }
@@ -96,17 +105,27 @@ function majorMinor(version) {
 }
 
 async function main(argv) {
-  const options = Object.fromEntries(Array.from({ length: argv.length / 2 }, (_, index) => [
-    argv[index * 2]?.replace(/^--/u, ''), argv[index * 2 + 1],
-  ]));
+  const options = Object.fromEntries(
+    Array.from({ length: argv.length / 2 }, (_, index) => [
+      argv[index * 2]?.replace(/^--/u, ''),
+      argv[index * 2 + 1],
+    ]),
+  );
   if (argv.length !== 6 || !options.class || !options.runner || !options.output) {
-    throw new Error('usage: performance-environment.mjs --class <class> --runner <image> --output <path>');
+    throw new Error(
+      'usage: performance-environment.mjs --class <class> --runner <image> --output <path>',
+    );
   }
   const descriptor = await observePerformanceEnvironment(options.class, options.runner);
   await writeFile(resolve(options.output), `${JSON.stringify(descriptor, null, 2)}\n`, 'utf8');
-  process.stdout.write(`performance environment ${descriptor.class} written to ${options.output}\n`);
+  process.stdout.write(
+    `performance environment ${descriptor.class} written to ${options.output}\n`,
+  );
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   await main(process.argv.slice(2));
 }

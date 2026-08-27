@@ -38,7 +38,13 @@ import {
 } from './ui-command.js';
 import { CLI_NAME, CLI_VERSION } from './version.js';
 import { formatDoctor, runDoctor, type DoctorReport } from './doctor.js';
-import { TERMWRIGHT_RESOURCE_PROFILES, TermwrightTestHost, describeFailure, type RunCompletion, type TermwrightTestHostOptions } from './test-host.js';
+import {
+  TERMWRIGHT_RESOURCE_PROFILES,
+  TermwrightTestHost,
+  describeFailure,
+  type RunCompletion,
+  type TermwrightTestHostOptions,
+} from './test-host.js';
 
 export type { CliIo };
 
@@ -64,7 +70,9 @@ export interface CliDeps {
   };
   readonly doctor: (cwd: string) => Promise<DoctorReport>;
   /** Certified native host factory; injectable so CLI unit tests spawn no workers. */
-  readonly openTestHost?: (options: TermwrightTestHostOptions) => Promise<Pick<TermwrightTestHost, 'requestRun' | 'watch' | 'close'>>;
+  readonly openTestHost?: (
+    options: TermwrightTestHostOptions,
+  ) => Promise<Pick<TermwrightTestHost, 'requestRun' | 'watch' | 'close'>>;
 }
 
 /** The real collaborators. */
@@ -179,7 +187,9 @@ function applyTagFilter(tags: string | undefined): void {
  * This is configuration, not a secret boundary: Vitest workers intentionally
  * inherit the CLI process environment as well (including PATH/toolchains).
  */
-function testWorkerEnv(env: Readonly<Record<string, string | undefined>>): Readonly<Record<string, string>> {
+function testWorkerEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): Readonly<Record<string, string>> {
   const workerEnv: Record<string, string> = {};
   for (const key of [
     'TERMWRIGHT_REQUIRE_BUN',
@@ -226,25 +236,31 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
     (worst, completion) => worseRunState(worst, completion.state),
     'passed',
   );
-  const skipPolicyMatched = completions.every((completion) => completion.skipPolicy.status === 'matched');
+  const skipPolicyMatched = completions.every(
+    (completion) => completion.skipPolicy.status === 'matched',
+  );
   if (json) {
-    deps.io.out(JSON.stringify({
-      invocationId: completions[0]?.invocationId,
-      state,
-      requestedRuns: args.runs,
-      completedRuns: completions.length,
-      skipPolicy: skipPolicyMatched ? 'matched' : 'mismatch',
-      resourceProfile: args.resourceProfile,
-      runs: completions.map((completion) => ({
-        runId: completion.runId,
-        state: completion.state,
-        tests: completion.catalog?.tests.length ?? 0,
-        failures: completion.failures,
-        skips: completion.skips,
-        skipPolicy: completion.skipPolicy,
-        ...(completion.error === undefined ? {} : { infrastructureError: describeFailure(completion.error) }),
-      })),
-    }));
+    deps.io.out(
+      JSON.stringify({
+        invocationId: completions[0]?.invocationId,
+        state,
+        requestedRuns: args.runs,
+        completedRuns: completions.length,
+        skipPolicy: skipPolicyMatched ? 'matched' : 'mismatch',
+        resourceProfile: args.resourceProfile,
+        runs: completions.map((completion) => ({
+          runId: completion.runId,
+          state: completion.state,
+          tests: completion.catalog?.tests.length ?? 0,
+          failures: completion.failures,
+          skips: completion.skips,
+          skipPolicy: completion.skipPolicy,
+          ...(completion.error === undefined
+            ? {}
+            : { infrastructureError: describeFailure(completion.error) }),
+        })),
+      }),
+    );
   } else {
     for (const [index, completion] of completions.entries()) {
       for (const failure of completion.failures) {
@@ -253,10 +269,11 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
       }
       for (const skip of completion.skips) deps.io.err(`SKIP ${skip.file} > ${skip.fullName}`);
       for (const issue of completion.skipPolicy.issues) deps.io.err(`SKIP POLICY ${issue}`);
-      if (completion.error !== undefined) deps.io.err(`INFRASTRUCTURE ${describeFailure(completion.error)}`);
+      if (completion.error !== undefined)
+        deps.io.err(`INFRASTRUCTURE ${describeFailure(completion.error)}`);
       deps.io.out(
         `termwright ${completion.state} — run ${completion.runId} ` +
-        `(${completion.catalog?.tests.length ?? 0} tests, resources: ${args.resourceProfile}, cycle: ${index + 1}/${args.runs})`,
+          `(${completion.catalog?.tests.length ?? 0} tests, resources: ${args.resourceProfile}, cycle: ${index + 1}/${args.runs})`,
       );
     }
   }
@@ -265,13 +282,24 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
   // missing toolchain, or platform-wide skip turn a CI lane falsely green.
   if (state === 'passed' && skipPolicyMatched) return EXIT_CODES.ok;
   if (state === 'passed-with-skips' && skipPolicyMatched) return EXIT_CODES.ok;
-  if (state === 'failed' || state === 'flaky' || state === 'skipped' ||
-      state === 'passed-with-skips' || !skipPolicyMatched) return EXIT_CODES.assertion;
+  if (
+    state === 'failed' ||
+    state === 'flaky' ||
+    state === 'skipped' ||
+    state === 'passed-with-skips' ||
+    !skipPolicyMatched
+  )
+    return EXIT_CODES.assertion;
   return EXIT_CODES.internal;
 }
 
 function isInfrastructureState(state: RunCompletion['state']): boolean {
-  return state === 'infrastructure-failed' || state === 'incomplete' || state === 'crashed' || state === 'cancelled';
+  return (
+    state === 'infrastructure-failed' ||
+    state === 'incomplete' ||
+    state === 'crashed' ||
+    state === 'cancelled'
+  );
 }
 
 async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
@@ -296,9 +324,15 @@ async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): P
     reportWatchCompletion(initial, deps, json, true);
     worst = worseRunState(worst, initial.state);
     skipPolicyMatched &&= initial.skipPolicy.status === 'matched';
-    if (initial.state === 'infrastructure-failed' || initial.state === 'incomplete') return EXIT_CODES.internal;
+    if (initial.state === 'infrastructure-failed' || initial.state === 'incomplete')
+      return EXIT_CODES.internal;
     await deps.ui.waitForInterrupt(new AbortController().signal);
-    if (worst === 'infrastructure-failed' || worst === 'incomplete' || worst === 'crashed' || worst === 'cancelled') {
+    if (
+      worst === 'infrastructure-failed' ||
+      worst === 'incomplete' ||
+      worst === 'crashed' ||
+      worst === 'cancelled'
+    ) {
       return EXIT_CODES.internal;
     }
     return worst === 'failed' || worst === 'flaky' || worst === 'skipped' || !skipPolicyMatched
@@ -310,29 +344,48 @@ async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): P
   }
 }
 
-function reportWatchCompletion(completion: RunCompletion, deps: CliDeps, json: boolean, initial: boolean): void {
+function reportWatchCompletion(
+  completion: RunCompletion,
+  deps: CliDeps,
+  json: boolean,
+  initial: boolean,
+): void {
   if (json) {
-    deps.io.out(JSON.stringify({
-      invocationId: completion.invocationId,
-      runId: completion.runId,
-      state: completion.state,
-      watching: true,
-      skips: completion.skips,
-      skipPolicy: completion.skipPolicy,
-    }));
+    deps.io.out(
+      JSON.stringify({
+        invocationId: completion.invocationId,
+        runId: completion.runId,
+        state: completion.state,
+        watching: true,
+        skips: completion.skips,
+        skipPolicy: completion.skipPolicy,
+      }),
+    );
     return;
   }
   for (const skip of completion.skips) deps.io.err(`SKIP ${skip.file} > ${skip.fullName}`);
   for (const issue of completion.skipPolicy.issues) deps.io.err(`SKIP POLICY ${issue}`);
-  deps.io.out(initial
-    ? `termwright watch ${completion.invocationId} — initial ${completion.runId}: ${completion.state}`
-    : `termwright watch — ${completion.runId}: ${completion.state}`);
+  deps.io.out(
+    initial
+      ? `termwright watch ${completion.invocationId} — initial ${completion.runId}: ${completion.state}`
+      : `termwright watch — ${completion.runId}: ${completion.state}`,
+  );
 }
 
-function worseRunState(left: RunCompletion['state'], right: RunCompletion['state']): RunCompletion['state'] {
+function worseRunState(
+  left: RunCompletion['state'],
+  right: RunCompletion['state'],
+): RunCompletion['state'] {
   const severity: Record<RunCompletion['state'], number> = {
-    passed: 0, 'passed-with-skips': 1, skipped: 2, cancelled: 3, flaky: 4, failed: 5,
-    crashed: 6, incomplete: 7, 'infrastructure-failed': 8,
+    passed: 0,
+    'passed-with-skips': 1,
+    skipped: 2,
+    cancelled: 3,
+    flaky: 4,
+    failed: 5,
+    crashed: 6,
+    incomplete: 7,
+    'infrastructure-failed': 8,
   };
   return severity[right] > severity[left] ? right : left;
 }
@@ -447,7 +500,9 @@ async function emitScreenshot(args: ParsedArgs, deps: CliDeps, json: boolean): P
     return EXIT_CODES.ok;
   }
 
-  deps.io.out(`wrote ${result.path} (${result.width}×${result.height}, ${result.chosen} at ${result.timeMs}ms)`);
+  deps.io.out(
+    `wrote ${result.path} (${result.width}×${result.height}, ${result.chosen} at ${result.timeMs}ms)`,
+  );
   if (result.fallbackCharacters.length > 0) {
     // Not "these are blank" — with the font fallback on, which is how this
     // command renders, the rasteriser draws them from the fonts installed
@@ -457,7 +512,7 @@ async function emitScreenshot(args: ParsedArgs, deps: CliDeps, json: boolean): P
     const characters = result.fallbackCharacters.join(' ');
     deps.io.err(
       `  ${result.fallbackCharacters.length} character(s) had no embedded glyph (${characters}); ` +
-        'the rasteriser drew them with this machine\'s fonts, so another machine may render them ' +
+        "the rasteriser drew them with this machine's fonts, so another machine may render them " +
         'differently — and finding those fonts is what made this capture slow',
     );
   }
@@ -492,13 +547,17 @@ async function emitReport(args: ParsedArgs, deps: CliDeps, json: boolean): Promi
     deps.io.out(`  the recording is cut: ${result.cut.frames} frames left out to fit the budget`);
   }
   if (result.cut.logs > 0) {
-    deps.io.out(`  the log is cut: the ${result.cut.logs} oldest records left out to fit the budget`);
+    deps.io.out(
+      `  the log is cut: the ${result.cut.logs} oldest records left out to fit the budget`,
+    );
   }
   return EXIT_CODES.ok;
 }
 
 async function launchUi(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
-  const announce = async (ready: Omit<UiResult, 'runnerExitCode'>): Promise<DesktopHostHandle | undefined> => {
+  const announce = async (
+    ready: Omit<UiResult, 'runnerExitCode'>,
+  ): Promise<DesktopHostHandle | undefined> => {
     if (json) {
       deps.io.out(JSON.stringify({ url: ready.url, port: ready.port, mode: ready.mode }));
       return undefined;
@@ -520,7 +579,9 @@ async function launchUi(args: ParsedArgs, deps: CliDeps, json: boolean): Promise
 
     const hostname = new URL(ready.url).hostname;
     if (hostname !== '127.0.0.1' && hostname !== '[::1]') {
-      deps.io.err('the desktop runner only accepts loopback URLs; use --browser or open the URL above');
+      deps.io.err(
+        'the desktop runner only accepts loopback URLs; use --browser or open the URL above',
+      );
       return undefined;
     }
     try {
@@ -551,7 +612,9 @@ async function launchUi(args: ParsedArgs, deps: CliDeps, json: boolean): Promise
 async function launch(
   args: ParsedArgs,
   deps: CliDeps,
-  announce: (ready: Omit<UiResult, 'runnerExitCode'>) => void | DesktopHostHandle | Promise<void | DesktopHostHandle>,
+  announce: (
+    ready: Omit<UiResult, 'runnerExitCode'>,
+  ) => void | DesktopHostHandle | Promise<void | DesktopHostHandle>,
 ): Promise<UiResult> {
   const request = {
     trace: args.trace,
@@ -623,7 +686,9 @@ function usageText(): string {
   return [
     `${CLI_NAME} ${CLI_VERSION} — testing terminal programs by role and name`,
     '',
-    ...documentedCommands().map(([name, doc]) => `  ${name.padEnd(NAME_COLUMN - 2)}${doc.headline}`),
+    ...documentedCommands().map(
+      ([name, doc]) => `  ${name.padEnd(NAME_COLUMN - 2)}${doc.headline}`,
+    ),
     '',
     `  ${CLI_NAME} mcp usage`.padEnd(NAME_COLUMN + 14) + 'the MCP tool cheat sheet, for agents.',
     `  ${CLI_NAME} --help`.padEnd(NAME_COLUMN + 14) + 'the same list with every flag.',

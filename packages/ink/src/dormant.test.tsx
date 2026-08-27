@@ -63,9 +63,15 @@ describe('process hygiene', () => {
   });
 
   it('gives each mount its own session, with no cross-talk', async () => {
-    const first = await mountInk(createElement(CounterApp, { label: 'First' }), { columns: 30, rows: 8 });
+    const first = await mountInk(createElement(CounterApp, { label: 'First' }), {
+      columns: 30,
+      rows: 8,
+    });
     open.push(first);
-    const second = await mountInk(createElement(CounterApp, { label: 'Second' }), { columns: 30, rows: 8 });
+    const second = await mountInk(createElement(CounterApp, { label: 'Second' }), {
+      columns: 30,
+      rows: 8,
+    });
     open.push(second);
 
     expect(first.sessionId).not.toBe(second.sessionId);

@@ -15,13 +15,20 @@ export interface SensitiveValue {
   readonly value: string;
 }
 
-export interface PublicValue { readonly sensitivity: 'public'; readonly value: string }
+export interface PublicValue {
+  readonly sensitivity: 'public';
+  readonly value: string;
+}
 /** Plain strings remain executable but are conservatively sensitive at artifact boundaries. */
 export type ExecutableValue = string | PublicValue | SensitiveValue;
 
 export type RecordedValue =
   | { readonly status: 'known'; readonly value: string; readonly sensitivity: ValueSensitivity }
-  | { readonly status: 'withheld'; readonly reason: 'artifact-policy'; readonly sensitivity: ValueSensitivity | 'unknown' };
+  | {
+      readonly status: 'withheld';
+      readonly reason: 'artifact-policy';
+      readonly sensitivity: ValueSensitivity | 'unknown';
+    };
 
 export function sensitive(value: string): SensitiveValue {
   return Object.freeze({ sensitivity: 'sensitive', value });
@@ -53,15 +60,25 @@ export function projectSemanticSnapshotForArtifact(
 ): SemanticSnapshot {
   return Object.freeze({
     ...snapshot,
-    nodes: Object.freeze(snapshot.nodes.map((node) => {
-      const value = node.value;
-      if (value?.status !== 'known' || policy === 'raw' || (policy === 'redacted' && value.sensitivity === 'public')) {
-        return Object.freeze({ ...node });
-      }
-      return Object.freeze({
-        ...node,
-        value: Object.freeze({ status: 'withheld' as const, reason: 'artifact-policy' as const, sensitivity: value.sensitivity }),
-      });
-    })),
+    nodes: Object.freeze(
+      snapshot.nodes.map((node) => {
+        const value = node.value;
+        if (
+          value?.status !== 'known' ||
+          policy === 'raw' ||
+          (policy === 'redacted' && value.sensitivity === 'public')
+        ) {
+          return Object.freeze({ ...node });
+        }
+        return Object.freeze({
+          ...node,
+          value: Object.freeze({
+            status: 'withheld' as const,
+            reason: 'artifact-policy' as const,
+            sensitivity: value.sensitivity,
+          }),
+        });
+      }),
+    ),
   });
 }

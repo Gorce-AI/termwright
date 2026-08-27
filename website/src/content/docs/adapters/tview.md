@@ -15,14 +15,14 @@ npm install --save-dev @termwright/probe-tview
 ```
 
 ```ts
-import {prepareInstrumentedBuild} from '@termwright/probe-tview';
+import { prepareInstrumentedBuild } from '@termwright/probe-tview';
 
-const build = await prepareInstrumentedBuild({moduleDir: appDirectory});
+const build = await prepareInstrumentedBuild({ moduleDir: appDirectory });
 await execFile('go', ['build', ...build.goArgs, '-o', binaryPath, '.'], {
   cwd: appDirectory,
-  env: {...process.env, ...build.env},
+  env: { ...process.env, ...build.env },
 });
-const app = await terminal.launch({command: [binaryPath]});
+const app = await terminal.launch({ command: [binaryPath] });
 ```
 
 Add one dormant lifecycle attachment to the application:

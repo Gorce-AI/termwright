@@ -8,12 +8,12 @@
  * boundary in exactly the way the adapter channel is.
  */
 
-import { Buffer } from "node:buffer";
-import { z } from "zod";
-import type { ProtocolLimits } from "../limits.js";
-import type { ValidationErrorCode } from "../validate.js";
-import { ProtocolViolation } from "../errors.js";
-import { encodeFrame, projectDto } from "../framing.js";
+import { Buffer } from 'node:buffer';
+import { z } from 'zod';
+import type { ProtocolLimits } from '../limits.js';
+import type { ValidationErrorCode } from '../validate.js';
+import { ProtocolViolation } from '../errors.js';
+import { encodeFrame, projectDto } from '../framing.js';
 import {
   PROBE_CAPABILITIES,
   PROBE_DEGRADED_CAPABILITIES,
@@ -23,8 +23,8 @@ import {
   type ProbeAnnotations,
   type ProbeFrame,
   type ProbeInfo,
-} from "./ir.js";
-import { PHYSICAL_INPUT_RECIPE_ACTIONS, SEMANTIC_ACTIONS } from "../roles.js";
+} from './ir.js';
+import { PHYSICAL_INPUT_RECIPE_ACTIONS, SEMANTIC_ACTIONS } from '../roles.js';
 
 /** Structured result: never throws hostile data onward. */
 export type ProbeValidationResult =
@@ -44,28 +44,17 @@ export type ProbeAnnotationValidationResult =
       readonly detail: string;
     };
 
-function fail(
-  code: ValidationErrorCode,
-  detail: string,
-): ProbeValidationResult {
+function fail(code: ValidationErrorCode, detail: string): ProbeValidationResult {
   return { ok: false, code, detail };
 }
 
-const safeInt = z
-  .number()
-  .refine(Number.isSafeInteger, "expected a safe integer");
+const safeInt = z.number().refine(Number.isSafeInteger, 'expected a safe integer');
 const nonNegative = z
   .number()
-  .refine(
-    (n) => Number.isSafeInteger(n) && n >= 0,
-    "expected a non-negative safe integer",
-  );
+  .refine((n) => Number.isSafeInteger(n) && n >= 0, 'expected a non-negative safe integer');
 const positive = z
   .number()
-  .refine(
-    (n) => Number.isSafeInteger(n) && n > 0,
-    "expected a positive safe integer",
-  );
+  .refine((n) => Number.isSafeInteger(n) && n > 0, 'expected a positive safe integer');
 
 const cache = new WeakMap<ProtocolLimits, z.ZodType>();
 
@@ -73,7 +62,7 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
   const text = z
     .string()
     .refine(
-      (s) => Buffer.byteLength(s, "utf8") <= limits.maxStringBytes,
+      (s) => Buffer.byteLength(s, 'utf8') <= limits.maxStringBytes,
       `expected at most ${limits.maxStringBytes} UTF-8 bytes`,
     );
 
@@ -85,7 +74,7 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
   });
 
   const identity = z.strictObject({
-    kind: z.enum(["stable", "frame-local"]),
+    kind: z.enum(['stable', 'frame-local']),
     value: text.min(1),
   });
 
@@ -98,7 +87,7 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
         .finite()
         .refine(
           (value) => Math.abs(value) <= Number.MAX_SAFE_INTEGER,
-          "expected a finite JSON number in the safe range",
+          'expected a finite JSON number in the safe range',
         ),
       text,
       z.array(extendedValue).max(limits.maxRelationTargets),
@@ -124,30 +113,28 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
       steps: z
         .array(
           z.union([
-            z.strictObject({ kind: z.literal("press"), key: text.min(1) }),
-            z.strictObject({ kind: z.literal("insert-action-value") }),
+            z.strictObject({ kind: z.literal('press'), key: text.min(1) }),
+            z.strictObject({ kind: z.literal('insert-action-value') }),
           ]),
         )
         .min(1)
         .max(limits.maxRelationTargets),
     })
     .superRefine((recipe, context) => {
-      const inserts = recipe.steps.filter(
-        ({ kind }) => kind === "insert-action-value",
-      ).length;
+      const inserts = recipe.steps.filter(({ kind }) => kind === 'insert-action-value').length;
       if (
-        (recipe.action === "setValue" && inserts !== 1) ||
-        (recipe.action !== "setValue" && inserts !== 0)
+        (recipe.action === 'setValue' && inserts !== 1) ||
+        (recipe.action !== 'setValue' && inserts !== 0)
       ) {
         context.addIssue({
-          code: "custom",
-          message: "setValue requires exactly one insert-action-value step",
+          code: 'custom',
+          message: 'setValue requires exactly one insert-action-value step',
         });
       }
-      if (recipe.action === "focus" && recipe.requiresFocus) {
+      if (recipe.action === 'focus' && recipe.requiresFocus) {
         context.addIssue({
-          code: "custom",
-          message: "focus recipe cannot require focus",
+          code: 'custom',
+          message: 'focus recipe cannot require focus',
         });
       }
     });
@@ -155,12 +142,10 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
     .array(inputRecipe)
     .max(PHYSICAL_INPUT_RECIPE_ACTIONS.length)
     .superRefine((recipes, context) => {
-      if (
-        new Set(recipes.map(({ action }) => action)).size !== recipes.length
-      ) {
+      if (new Set(recipes.map(({ action }) => action)).size !== recipes.length) {
         context.addIssue({
-          code: "custom",
-          message: "input recipe actions must be unique",
+          code: 'custom',
+          message: 'input recipe actions must be unique',
         });
       }
     });
@@ -168,7 +153,7 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
   const state = z.strictObject({
     focused: z.boolean().optional(),
     disabled: z.boolean().optional(),
-    checked: z.union([z.boolean(), z.literal("mixed")]).optional(),
+    checked: z.union([z.boolean(), z.literal('mixed')]).optional(),
     expanded: z.boolean().optional(),
     readonly: z.boolean().optional(),
     selected: z.boolean().optional(),
@@ -178,17 +163,11 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
     multiselectable: z.boolean().optional(),
     displayed: z.boolean().optional(),
     value: text.optional(),
-    valueSensitivity: z.enum(["public", "sensitive"]).optional(),
+    valueSensitivity: z.enum(['public', 'sensitive']).optional(),
     selectedIndex: nonNegative.optional(),
-    textSelection: z
-      .strictObject({ start: nonNegative, end: nonNegative })
-      .optional(),
-    scroll: z
-      .strictObject({ row: nonNegative, column: nonNegative })
-      .optional(),
-    scrollExtent: z
-      .strictObject({ rows: nonNegative, columns: nonNegative })
-      .optional(),
+    textSelection: z.strictObject({ start: nonNegative, end: nonNegative }).optional(),
+    scroll: z.strictObject({ row: nonNegative, column: nonNegative }).optional(),
+    scrollExtent: z.strictObject({ rows: nonNegative, columns: nonNegative }).optional(),
   });
 
   const object = z.strictObject({
@@ -217,23 +196,18 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
         testId: text.optional(),
         description: text.optional(),
         extended: extended.optional(),
-        actions: z
-          .array(z.enum(SEMANTIC_ACTIONS))
-          .max(SEMANTIC_ACTIONS.length)
-          .optional(),
+        actions: z.array(z.enum(SEMANTIC_ACTIONS)).max(SEMANTIC_ACTIONS.length).optional(),
         inputRecipes: inputRecipes.optional(),
         labelledBy: relations.optional(),
         describedBy: relations.optional(),
       })
       .superRefine((annotations, context) => {
         const intents = new Set(annotations.actions ?? []);
-        for (const [index, recipe] of (
-          annotations.inputRecipes ?? []
-        ).entries()) {
+        for (const [index, recipe] of (annotations.inputRecipes ?? []).entries()) {
           if (!intents.has(recipe.action)) {
             context.addIssue({
-              code: "custom",
-              path: ["inputRecipes", index, "action"],
+              code: 'custom',
+              path: ['inputRecipes', index, 'action'],
               message: `input recipe '${recipe.action}' requires the matching semantic action intent`,
             });
           }
@@ -248,7 +222,7 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
   });
 
   const operation = z.strictObject({
-    kind: z.enum(["render", "layout"]),
+    kind: z.enum(['render', 'layout']),
     ordinal: nonNegative,
     target: identity.optional(),
     frameworkType: text.optional(),
@@ -275,17 +249,17 @@ export const probeInfoSchema = z.strictObject({
   framework: z.string().min(1).max(128),
   frameworkVersion: z.string().max(128).optional(),
   probeVersion: z.string().min(1).max(128),
-  identityKind: z.enum(["stable", "frame-local"]),
-  capabilities: z
-    .array(z.enum(PROBE_CAPABILITIES))
-    .max(PROBE_CAPABILITIES.length),
-  instrumentation: z.strictObject({
-    highestTier: z.enum(PROBE_INJECTION_TIERS),
-    semanticClass: z.enum(PROBE_SEMANTIC_CLASSES),
-    degradedCapabilities: z
-      .array(z.enum(PROBE_DEGRADED_CAPABILITIES))
-      .max(PROBE_DEGRADED_CAPABILITIES.length),
-  }).optional(),
+  identityKind: z.enum(['stable', 'frame-local']),
+  capabilities: z.array(z.enum(PROBE_CAPABILITIES)).max(PROBE_CAPABILITIES.length),
+  instrumentation: z
+    .strictObject({
+      highestTier: z.enum(PROBE_INJECTION_TIERS),
+      semanticClass: z.enum(PROBE_SEMANTIC_CLASSES),
+      degradedCapabilities: z
+        .array(z.enum(PROBE_DEGRADED_CAPABILITIES))
+        .max(PROBE_DEGRADED_CAPABILITIES.length),
+    })
+    .optional(),
 });
 
 /**
@@ -304,33 +278,30 @@ export function validateProbeInfo(
   const parsed = probeInfoSchema.safeParse(value);
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
-    const where =
-      issue.path.length > 0 ? issue.path.map(String).join(".") : "<root>";
+    const where = issue.path.length > 0 ? issue.path.map(String).join('.') : '<root>';
     return { ok: false, detail: `${where}: ${issue.message}` };
   }
   const info = parsed.data as ProbeInfo;
   const degraded = info.instrumentation?.degradedCapabilities;
   if (degraded !== undefined && new Set(degraded).size !== degraded.length) {
-    return { ok: false, detail: "instrumentation.degradedCapabilities: duplicate capability" };
+    return { ok: false, detail: 'instrumentation.degradedCapabilities: duplicate capability' };
   }
   if (
-    info.instrumentation?.semanticClass === "B" &&
-    (!degraded?.includes("intended-geometry") || !degraded.includes("clipped-geometry"))
-  ) {
-    return {
-      ok: false,
-      detail: "semantic class B must declare both 'intended-geometry' and 'clipped-geometry' as degraded",
-    };
-  }
-  if (
-    info.identityKind === "frame-local" &&
-    info.capabilities.includes("stable-identity")
+    info.instrumentation?.semanticClass === 'B' &&
+    (!degraded?.includes('intended-geometry') || !degraded.includes('clipped-geometry'))
   ) {
     return {
       ok: false,
       detail:
+        "semantic class B must declare both 'intended-geometry' and 'clipped-geometry' as degraded",
+    };
+  }
+  if (info.identityKind === 'frame-local' && info.capabilities.includes('stable-identity')) {
+    return {
+      ok: false,
+      detail:
         "a probe declaring identityKind 'frame-local' must not claim the 'stable-identity' " +
-        "capability: nothing in an immediate-mode frame survives to be correlated",
+        'capability: nothing in an immediate-mode frame survives to be correlated',
     };
   }
   return {
@@ -338,12 +309,14 @@ export function validateProbeInfo(
     info: Object.freeze({
       ...info,
       capabilities: Object.freeze([...info.capabilities]),
-      ...(info.instrumentation === undefined ? {} : {
-        instrumentation: Object.freeze({
-          ...info.instrumentation,
-          degradedCapabilities: Object.freeze([...info.instrumentation.degradedCapabilities]),
-        }),
-      }),
+      ...(info.instrumentation === undefined
+        ? {}
+        : {
+            instrumentation: Object.freeze({
+              ...info.instrumentation,
+              degradedCapabilities: Object.freeze([...info.instrumentation.degradedCapabilities]),
+            }),
+          }),
     }),
   };
 }
@@ -362,47 +335,37 @@ export function validateProbeInfo(
  * `maxSnapshotBytes` apply.
  * @returns `{ ok: true, frame }` deep-frozen, or a typed failure. Never throws.
  */
-export function validateProbeFrame(
-  value: unknown,
-  limits: ProtocolLimits,
-): ProbeValidationResult {
+export function validateProbeFrame(value: unknown, limits: ProtocolLimits): ProbeValidationResult {
   let projected: unknown;
   try {
     projected = projectDto<unknown>(value, limits.maxDepth);
   } catch (error) {
     if (error instanceof ProtocolViolation) {
-      return fail(
-        error.code === "dto-depth" ? "depth" : "schema",
-        error.message,
-      );
+      return fail(error.code === 'dto-depth' ? 'depth' : 'schema', error.message);
     }
-    return fail("schema", "value could not be projected into a plain DTO");
+    return fail('schema', 'value could not be projected into a plain DTO');
   }
 
   const serialised = JSON.stringify(projected);
-  if (serialised === undefined)
-    return fail("schema", "probe frame is not a JSON object");
-  const bytes = Buffer.byteLength(serialised, "utf8");
+  if (serialised === undefined) return fail('schema', 'probe frame is not a JSON object');
+  const bytes = Buffer.byteLength(serialised, 'utf8');
   if (bytes > limits.maxSnapshotBytes) {
-    return fail(
-      "bytes",
-      `probe frame is ${bytes} bytes, ceiling is ${limits.maxSnapshotBytes}`,
-    );
+    return fail('bytes', `probe frame is ${bytes} bytes, ceiling is ${limits.maxSnapshotBytes}`);
   }
 
   const parsed = frameSchema(limits).safeParse(projected);
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
     const path = issue.path.map(String);
-    const where = path.length > 0 ? path.join(".") : "<root>";
+    const where = path.length > 0 ? path.join('.') : '<root>';
     const code: ValidationErrorCode =
-      path.includes("intendedRect") || path.includes("visibleRect")
-        ? "bad-rect"
-        : path.includes("frame")
-          ? "revision"
-          : issue.code === "too_big"
-            ? "count"
-            : "schema";
+      path.includes('intendedRect') || path.includes('visibleRect')
+        ? 'bad-rect'
+        : path.includes('frame')
+          ? 'revision'
+          : issue.code === 'too_big'
+            ? 'count'
+            : 'schema';
     return fail(code, `${where}: ${issue.message}`);
   }
 
@@ -411,10 +374,7 @@ export function validateProbeFrame(
   const seen = new Set<string>();
   for (const object of frame.objects) {
     if (seen.has(object.identity.value)) {
-      return fail(
-        "duplicate-id",
-        `identity ${object.identity.value} appears twice in the frame`,
-      );
+      return fail('duplicate-id', `identity ${object.identity.value} appears twice in the frame`);
     }
     seen.add(object.identity.value);
   }
@@ -422,19 +382,16 @@ export function validateProbeFrame(
   for (const object of frame.objects) {
     if (object.parent !== undefined && !seen.has(object.parent)) {
       return fail(
-        "missing-parent",
+        'missing-parent',
         `object ${object.identity.value} names parent ${object.parent}, which is not in the frame`,
       );
     }
     if (object.parent === object.identity.value) {
-      return fail("cycle", `object ${object.identity.value} is its own parent`);
+      return fail('cycle', `object ${object.identity.value} is its own parent`);
     }
-    if (
-      object.state?.valueSensitivity !== undefined &&
-      object.state.value === undefined
-    ) {
+    if (object.state?.valueSensitivity !== undefined && object.state.value === undefined) {
       return fail(
-        "schema",
+        'schema',
         `object ${object.identity.value} classifies a semantic value it did not report`,
       );
     }
@@ -443,23 +400,20 @@ export function validateProbeFrame(
     if (unobservable === undefined) continue;
     const declared = new Set<string>(unobservable);
     if (declared.size !== unobservable.length) {
-      return fail(
-        "duplicate-id",
-        `object ${object.identity.value} repeats an unobservable field`,
-      );
+      return fail('duplicate-id', `object ${object.identity.value} repeats an unobservable field`);
     }
     // Reporting a value while calling the field unobservable is a contradiction,
     // and the whole point of the three-valued model is that it cannot happen.
     for (const [field, present] of [
-      ["text", object.text !== undefined],
-      ["parent", object.parent !== undefined],
-      ["intendedRect", object.geometry?.intendedRect !== undefined],
-      ["visibleRect", object.geometry?.visibleRect !== undefined],
-      ["paintOrder", object.paintOrder !== undefined],
+      ['text', object.text !== undefined],
+      ['parent', object.parent !== undefined],
+      ['intendedRect', object.geometry?.intendedRect !== undefined],
+      ['visibleRect', object.geometry?.visibleRect !== undefined],
+      ['paintOrder', object.paintOrder !== undefined],
     ] as const) {
       if (declared.has(field) && present) {
         return fail(
-          "schema",
+          'schema',
           `object ${object.identity.value} reports ${field} and also declares it unobservable`,
         );
       }
@@ -467,7 +421,7 @@ export function validateProbeFrame(
     for (const [field, value_] of Object.entries(object.state ?? {})) {
       if (declared.has(field) && value_ !== undefined) {
         return fail(
-          "schema",
+          'schema',
           `object ${object.identity.value} reports state.${field} and also declares it unobservable`,
         );
       }
@@ -498,22 +452,21 @@ export function validateProbeAnnotations(
       frame: 1,
       objects: [
         {
-          identity: { kind: "stable", value: "a" },
-          frameworkType: "A",
+          identity: { kind: 'stable', value: 'a' },
+          frameworkType: 'A',
           annotations: value,
         },
       ],
     },
     limits,
   );
-  if (!result.ok)
-    return { ok: false, code: result.code, detail: result.detail };
+  if (!result.ok) return { ok: false, code: result.code, detail: result.detail };
   const annotations = result.frame.objects[0]?.annotations;
   if (annotations === undefined) {
     return {
       ok: false,
-      code: "schema",
-      detail: "annotations: expected an annotation object",
+      code: 'schema',
+      detail: 'annotations: expected an annotation object',
     };
   }
   try {
@@ -526,13 +479,8 @@ export function validateProbeAnnotations(
     return {
       ok: false,
       code:
-        error instanceof ProtocolViolation && error.code === "frame-oversized"
-          ? "bytes"
-          : "schema",
-      detail:
-        error instanceof Error
-          ? error.message
-          : "annotations could not be framed",
+        error instanceof ProtocolViolation && error.code === 'frame-oversized' ? 'bytes' : 'schema',
+      detail: error instanceof Error ? error.message : 'annotations could not be framed',
     };
   }
   return { ok: true, annotations };

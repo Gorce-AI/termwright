@@ -110,7 +110,9 @@ describe('VtScreen', () => {
     await screen.write('\x1b[1;1HTARGET\x1b[6;1Hspin 0');
     const targetRevision = screen.revision;
     await screen.write('\x1b[6;1H\x1b[33mspin 1\x1b[m');
-    expect(screen.regionChangeSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe('unchanged');
+    expect(screen.regionChangeSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(
+      'unchanged',
+    );
   });
 
   it('names a coordinate move rather than blaming the region for it', async () => {
@@ -401,7 +403,11 @@ describe('grid matching', () => {
     expect(red).toHaveLength(1);
     expect(red[0]?.column).toBe(0);
 
-    const all = matchGrid(rows, { kind: 'generic', text: textMatcher('ERROR', true), description: 'test' });
+    const all = matchGrid(rows, {
+      kind: 'generic',
+      text: textMatcher('ERROR', true),
+      description: 'test',
+    });
     expect(all).toHaveLength(2);
   });
 

@@ -33,24 +33,33 @@ if (process.env['TW_WRAP_STDOUT_WRITE'] === '1') {
   } as typeof process.stdout.write;
   process.stdout.write = wrappedWrite;
 }
-const applicationStdout = process.env['TW_CUSTOM_STDOUT'] === '1'
-  ? Object.assign(new PassThrough(), { isTTY: true, columns: 80, rows: 24 })
-  : undefined;
+const applicationStdout =
+  process.env['TW_CUSTOM_STDOUT'] === '1'
+    ? Object.assign(new PassThrough(), { isTTY: true, columns: 80, rows: 24 })
+    : undefined;
 applicationStdout?.pipe(process.stdout);
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   targetFps: 30,
-  ...(applicationStdout === undefined ? {} : { stdout: applicationStdout as unknown as NodeJS.WriteStream }),
+  ...(applicationStdout === undefined
+    ? {}
+    : { stdout: applicationStdout as unknown as NodeJS.WriteStream }),
 });
 
 if (process.env['TW_STDOUT_IDENTITY_ORACLE'] === '1') {
   const observable = renderer as unknown as { readonly stdout: unknown };
-  writeSync(3, `${JSON.stringify({ stdoutIsProcessStdout: observable.stdout === process.stdout })}\n`);
+  writeSync(
+    3,
+    `${JSON.stringify({ stdoutIsProcessStdout: observable.stdout === process.stdout })}\n`,
+  );
 }
 if (process.env['TW_WRAP_STDOUT_WRITE'] === '1') {
   const observable = renderer as unknown as { readonly realStdoutWrite: unknown };
-  writeSync(3, `${JSON.stringify({ rendererCapturedWrapper: observable.realStdoutWrite === wrappedWrite })}\n`);
+  writeSync(
+    3,
+    `${JSON.stringify({ rendererCapturedWrapper: observable.realStdoutWrite === wrappedWrite })}\n`,
+  );
 }
 
 const panel = new BoxRenderable(renderer, {
@@ -90,11 +99,13 @@ const log = new ScrollBoxRenderable(renderer, {
 });
 
 for (let line = 1; line <= 10; line += 1) {
-  log.add(new TextRenderable(renderer, {
-    id: `activity-${line}`,
-    content: `Activity ${line}`,
-    height: 1,
-  }));
+  log.add(
+    new TextRenderable(renderer, {
+      id: `activity-${line}`,
+      content: `Activity ${line}`,
+      height: 1,
+    }),
+  );
 }
 
 panel.add(label);
@@ -112,10 +123,13 @@ const tick = (): void => {
     renderer.destroy();
     process.stdout.write('', () => {
       if (process.env['TW_WRAP_STDOUT_WRITE'] === '1') {
-        writeSync(3, `${JSON.stringify({
-          wrapperRestoredAfterDestroy: process.stdout.write === wrappedWrite,
-          wrappedWriteCalls,
-        })}\n`);
+        writeSync(
+          3,
+          `${JSON.stringify({
+            wrapperRestoredAfterDestroy: process.stdout.write === wrappedWrite,
+            wrappedWriteCalls,
+          })}\n`,
+        );
       }
       process.exit(0);
     });

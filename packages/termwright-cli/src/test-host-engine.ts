@@ -10,7 +10,14 @@ import {
   assertCertifiedVitestRuntime,
 } from '@termwright/test/vitest-engine';
 import type { UserConsoleLog } from 'vitest';
-import { createVitest, parseCLI, type Reporter, type TestCase, type TestRunResult, type Vitest } from 'vitest/node';
+import {
+  createVitest,
+  parseCLI,
+  type Reporter,
+  type TestCase,
+  type TestRunResult,
+  type Vitest,
+} from 'vitest/node';
 import { RunIdFactory, type TerminalRunState } from '@termwright/protocol';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
 import { uiVitestViteOverrides } from './ui-vitest-config.js';
@@ -76,7 +83,9 @@ export async function createCertifiedVitestEngine(options: CertifiedVitestEngine
   readonly filters: readonly string[];
 }> {
   assertCertifiedVitestRuntime();
-  const parsed = parseCLI(['vitest', 'run', ...(options.vitestArgs ?? [])], { allowUnknownOptions: true });
+  const parsed = parseCLI(['vitest', 'run', ...(options.vitestArgs ?? [])], {
+    allowUnknownOptions: true,
+  });
   const runner = createRequire(import.meta.url).resolve('@termwright/test/runner');
   const bootstrapIds = new RunIdFactory();
   const bootstrapContext: TermwrightRunnerContext = {
@@ -100,20 +109,24 @@ export async function createCertifiedVitestEngine(options: CertifiedVitestEngine
       binding: 'host-assigned-worker',
     },
   };
-  const vitest = await createVitest('test', {
-    ...parsed.options,
-    env: { ...(parsed.options.env ?? {}), ...(options.workerEnv ?? {}) },
-    root: options.cwd,
-    watch: false,
-    run: true,
-    ...vitestSchedulerOverrides(options.resourceProfile.scheduler),
-    includeTaskLocation: true,
-    runner,
-    provide: {
-      ...(parsed.options.provide ?? {}),
-      [TERMWRIGHT_RUNNER_CONTEXT_KEY]: bootstrapContext,
+  const vitest = await createVitest(
+    'test',
+    {
+      ...parsed.options,
+      env: { ...(parsed.options.env ?? {}), ...(options.workerEnv ?? {}) },
+      root: options.cwd,
+      watch: false,
+      run: true,
+      ...vitestSchedulerOverrides(options.resourceProfile.scheduler),
+      includeTaskLocation: true,
+      runner,
+      provide: {
+        ...(parsed.options.provide ?? {}),
+        [TERMWRIGHT_RUNNER_CONTEXT_KEY]: bootstrapContext,
+      },
     },
-  }, uiVitestViteOverrides());
+    uiVitestViteOverrides(),
+  );
   removeEmbeddedDefaultReporter(vitest);
   await vitest.standalone();
   return {
@@ -126,8 +139,17 @@ export async function createCertifiedVitestEngine(options: CertifiedVitestEngine
 }
 
 const VITEST_CATALOGUE_SELECTORS = Object.freeze([
-  'changed', 'config', 'dir', 'exclude', 'include', 'project', 'related', 'shard',
-  'tags', 'tagsFilter', 'testNamePattern',
+  'changed',
+  'config',
+  'dir',
+  'exclude',
+  'include',
+  'project',
+  'related',
+  'shard',
+  'tags',
+  'tagsFilter',
+  'testNamePattern',
 ] as const);
 
 /** Classifies only selection-affecting CLI input; execution/reporting flags preserve the full catalogue. */
@@ -136,16 +158,22 @@ export function vitestCatalogueScope(
   options: Readonly<Record<string, unknown>>,
 ): 'full' | 'targeted' {
   if (filters.length > 0) return 'targeted';
-  return VITEST_CATALOGUE_SELECTORS.some((key) => options[key] !== undefined && options[key] !== false)
+  return VITEST_CATALOGUE_SELECTORS.some(
+    (key) => options[key] !== undefined && options[key] !== false,
+  )
     ? 'targeted'
     : 'full';
 }
 
 /** Removes only Vitest's implicit human reporter; explicit reporters retain order. */
-export function removeEmbeddedDefaultReporter(vitest: Pick<Vitest, 'version'> & { readonly reporters?: Reporter[] }): void {
-  if (!Array.isArray(vitest.reporters)) throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} reporter surface changed`);
+export function removeEmbeddedDefaultReporter(
+  vitest: Pick<Vitest, 'version'> & { readonly reporters?: Reporter[] },
+): void {
+  if (!Array.isArray(vitest.reporters))
+    throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} reporter surface changed`);
   for (let index = vitest.reporters.length - 1; index >= 0; index -= 1) {
-    if (vitest.reporters[index]?.constructor?.name === 'DefaultReporter') vitest.reporters.splice(index, 1);
+    if (vitest.reporters[index]?.constructor?.name === 'DefaultReporter')
+      vitest.reporters.splice(index, 1);
   }
 }
 
@@ -179,17 +207,20 @@ export function classifyVitestResult(
   if (missing.length > 0 || duplicates.length > 0) {
     throw new Error(
       `Vitest result does not exactly cover the selected native tasks: ` +
-      `${missing.length} missing${missing.length === 0 ? '' : ` (${missing.join(', ')})`}, ` +
-      `${duplicates.length} duplicated${duplicates.length === 0 ? '' : ` (${duplicates.join(', ')})`}`,
+        `${missing.length} missing${missing.length === 0 ? '' : ` (${missing.join(', ')})`}, ` +
+        `${duplicates.length} duplicated${duplicates.length === 0 ? '' : ` (${duplicates.join(', ')})`}`,
     );
   }
   if (tests.length === 0) return 'skipped';
   if (tests.every((testCase) => testCase.result().state === 'skipped')) return 'skipped';
   if (tests.some((testCase) => testCase.result().state === 'failed')) return 'failed';
-  if (tests.some((testCase) => {
-    const native = testCase.result() as { readonly state: string; readonly retryCount?: number };
-    return native.state === 'passed' && (native.retryCount ?? 0) > 0;
-  })) return 'flaky';
+  if (
+    tests.some((testCase) => {
+      const native = testCase.result() as { readonly state: string; readonly retryCount?: number };
+      return native.state === 'passed' && (native.retryCount ?? 0) > 0;
+    })
+  )
+    return 'flaky';
   if (tests.some((testCase) => testCase.result().state === 'skipped')) return 'passed-with-skips';
   return 'passed';
 }
@@ -206,11 +237,14 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
     this.version = vitest.version;
     this.catalogueScope = catalogueScope;
     assertCertifiedVitestRuntime(this.version);
-    const reporter: Reporter = { onUserConsoleLog: (log) => {
-      for (const listener of this.#consoleListeners) listener(log);
-    } };
+    const reporter: Reporter = {
+      onUserConsoleLog: (log) => {
+        for (const listener of this.#consoleListeners) listener(log);
+      },
+    };
     const reporters = (vitest as Vitest & { readonly reporters?: Reporter[] }).reporters;
-    if (!Array.isArray(reporters)) throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} reporter surface changed`);
+    if (!Array.isArray(reporters))
+      throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} reporter surface changed`);
     if (!(vitest.state.leakSet instanceof Set)) {
       throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} async-leak state surface changed`);
     }
@@ -218,17 +252,25 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
   }
 
   setRunnerContext(context: TermwrightRunnerContext): void {
-    (this.#vitest.provide as (key: string, value: unknown) => void)(TERMWRIGHT_RUNNER_CONTEXT_KEY, context);
+    (this.#vitest.provide as (key: string, value: unknown) => void)(
+      TERMWRIGHT_RUNNER_CONTEXT_KEY,
+      context,
+    );
   }
 
   async collect(filters: readonly string[]): Promise<EngineCollection> {
     const result = await this.#runAndDrainWorkers(() => this.#vitest.collect([...filters]));
-    return { result, tests: result.testModules.flatMap((module) => [...module.children.allTests()]) };
+    return {
+      result,
+      tests: result.testModules.flatMap((module) => [...module.children.allTests()]),
+    };
   }
 
   async run(nativeModuleIds: ReadonlySet<string>): Promise<TestRunResult> {
     const specifications = await this.#vitest.globTestSpecifications([...nativeModuleIds]);
-    return await this.#runAndDrainWorkers(() => this.#vitest.runTestSpecifications(specifications, true));
+    return await this.#runAndDrainWorkers(() =>
+      this.#vitest.runTestSpecifications(specifications, true),
+    );
   }
 
   /**
@@ -260,9 +302,14 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
     let teardownFailed = false;
     let teardownError: unknown;
     if (pool !== undefined) {
-      try { await pool.close(); }
-      catch (error) { teardownFailed = true; teardownError = error; }
-      finally { runtime.pool = undefined; }
+      try {
+        await pool.close();
+      } catch (error) {
+        teardownFailed = true;
+        teardownError = error;
+      } finally {
+        runtime.pool = undefined;
+      }
     }
     if (operationFailed) {
       if (teardownFailed) {
@@ -283,7 +330,10 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
     const observedLeaks = new Map<string, VitestAsyncLeak>();
     for (const leak of this.#vitest.state.leakSet) {
       const evidence = leak as VitestAsyncLeak;
-      observedLeaks.set(`${evidence.type}\0${evidence.filename}\0${evidence.projectName ?? ''}`, evidence);
+      observedLeaks.set(
+        `${evidence.type}\0${evidence.filename}\0${evidence.projectName ?? ''}`,
+        evidence,
+      );
     }
     // Vitest owns the detailed stack reporter. Keep canonical host evidence
     // bounded: embedding every captured async-hook stack in an AggregateError
@@ -291,25 +341,40 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
     // a secondary journal validation failure.
     const leakGroups = [...observedLeaks.values()];
     const reportedGroups = leakGroups.slice(0, 8);
-    const asyncLeakErrors = observedLeaks.size === 0 ? [] : [new Error(
-      `Vitest detected ${this.#vitest.state.leakSet.size} async leak(s) across ` +
-      reportedGroups.map((evidence) => {
-        const project = evidence.projectName === undefined ? '' : ` in project ${evidence.projectName}`;
-        return `${evidence.type} from ${evidence.filename}${project}`;
-      }).join('; ') + (leakGroups.length > reportedGroups.length
-        ? `; ${leakGroups.length - reportedGroups.length} additional source group(s)`
-        : ''),
-    )];
+    const asyncLeakErrors =
+      observedLeaks.size === 0
+        ? []
+        : [
+            new Error(
+              `Vitest detected ${this.#vitest.state.leakSet.size} async leak(s) across ` +
+                reportedGroups
+                  .map((evidence) => {
+                    const project =
+                      evidence.projectName === undefined
+                        ? ''
+                        : ` in project ${evidence.projectName}`;
+                    return `${evidence.type} from ${evidence.filename}${project}`;
+                  })
+                  .join('; ') +
+                (leakGroups.length > reportedGroups.length
+                  ? `; ${leakGroups.length - reportedGroups.length} additional source group(s)`
+                  : ''),
+            ),
+          ];
     const unhandledErrors = [...this.#vitest.state.getUnhandledErrors(), ...asyncLeakErrors];
-    if (unhandledErrors.length === result.unhandledErrors.length &&
-        unhandledErrors.every((error, index) => error === result.unhandledErrors[index])) {
+    if (
+      unhandledErrors.length === result.unhandledErrors.length &&
+      unhandledErrors.every((error, index) => error === result.unhandledErrors[index])
+    ) {
       return result;
     }
     return { ...result, unhandledErrors };
   }
 
   async cancel(): Promise<void> {
-    await this.#vitest.cancelCurrentRun('termwright-host-cancel' as Parameters<Vitest['cancelCurrentRun']>[0]);
+    await this.#vitest.cancelCurrentRun(
+      'termwright-host-cancel' as Parameters<Vitest['cancelCurrentRun']>[0],
+    );
   }
 
   onSourceChange(listener: (file: string) => void): () => void {
@@ -330,5 +395,7 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
     return () => this.#consoleListeners.delete(listener);
   }
 
-  async close(): Promise<void> { await this.#vitest.close(); }
+  async close(): Promise<void> {
+    await this.#vitest.close();
+  }
 }

@@ -19,10 +19,21 @@ describe('native host preflight', () => {
 
   it('names a missing required toolchain and the command that failed', async () => {
     const missing = Object.assign(new Error('spawn go ENOENT'), { code: 'ENOENT' });
-    const deps = fakeDeps({ exec: async () => { throw missing; } });
-    await expect(preflightTestHost(input({
-      requiredToolchains: [{ name: 'Go', commands: [['go', 'version']] }],
-    }), deps)).rejects.toThrow(/required toolchain "Go" is unavailable \(go version: ENOENT: spawn go ENOENT\)/u);
+    const deps = fakeDeps({
+      exec: async () => {
+        throw missing;
+      },
+    });
+    await expect(
+      preflightTestHost(
+        input({
+          requiredToolchains: [{ name: 'Go', commands: [['go', 'version']] }],
+        }),
+        deps,
+      ),
+    ).rejects.toThrow(
+      /required toolchain "Go" is unavailable \(go version: ENOENT: spawn go ENOENT\)/u,
+    );
   });
 
   it('accepts the first working cross-platform command alternative', async () => {
@@ -32,24 +43,39 @@ describe('native host preflight', () => {
         return {};
       },
     });
-    await expect(preflightTestHost(input({
-      requiredToolchains: [{
-        name: 'Python',
-        commands: [['python3', '--version'], ['python', '--version']],
-      }],
-    }), deps)).resolves.toBeUndefined();
+    await expect(
+      preflightTestHost(
+        input({
+          requiredToolchains: [
+            {
+              name: 'Python',
+              commands: [
+                ['python3', '--version'],
+                ['python', '--version'],
+              ],
+            },
+          ],
+        }),
+        deps,
+      ),
+    ).resolves.toBeUndefined();
     expect(deps.execFile).toHaveBeenCalledTimes(2);
   });
 
   it('merges a toolchain probe environment with the inherited process environment', async () => {
     const deps = fakeDeps();
-    await preflightTestHost(input({
-      requiredToolchains: [{
-        name: 'repository-local Python client',
-        commands: [['python', '-c', 'import termwright']],
-        env: { PYTHONPATH: '/repo/clients/python/src' },
-      }],
-    }), deps);
+    await preflightTestHost(
+      input({
+        requiredToolchains: [
+          {
+            name: 'repository-local Python client',
+            commands: [['python', '-c', 'import termwright']],
+            env: { PYTHONPATH: '/repo/clients/python/src' },
+          },
+        ],
+      }),
+      deps,
+    );
     expect(deps.execFile).toHaveBeenCalledWith(
       'python',
       ['-c', 'import termwright'],
@@ -65,16 +91,21 @@ describe('native host preflight', () => {
   it('aggregates disk and toolchain failures in declaration order', async () => {
     const deps = fakeDeps({
       freeBytes: 1n,
-      exec: async (command) => { throw Object.assign(new Error(`missing ${command}`), { code: 'ENOENT' }); },
+      exec: async (command) => {
+        throw Object.assign(new Error(`missing ${command}`), { code: 'ENOENT' });
+      },
     });
     let failure: unknown;
     try {
-      await preflightTestHost(input({
-        requiredToolchains: [
-          { name: 'Go', commands: [['go', 'version']] },
-          { name: 'Rust', commands: [['rustc', '--version']] },
-        ],
-      }), deps);
+      await preflightTestHost(
+        input({
+          requiredToolchains: [
+            { name: 'Go', commands: [['go', 'version']] },
+            { name: 'Rust', commands: [['rustc', '--version']] },
+          ],
+        }),
+        deps,
+      );
     } catch (error) {
       failure = error;
     }
@@ -100,7 +131,9 @@ describe('native host preflight', () => {
 
   it('allows callers to explicitly disable only the disk floor', async () => {
     const deps = fakeDeps({ freeBytes: 0n });
-    await expect(preflightTestHost(input({ minimumFreeDiskBytes: 0n }), deps)).resolves.toBeUndefined();
+    await expect(
+      preflightTestHost(input({ minimumFreeDiskBytes: 0n }), deps),
+    ).resolves.toBeUndefined();
     expect(deps.statfs).not.toHaveBeenCalled();
   });
 });
@@ -113,10 +146,12 @@ function input(preflight: Parameters<typeof preflightTestHost>[0]['preflight'] =
   };
 }
 
-function fakeDeps(options: {
-  readonly freeBytes?: bigint;
-  readonly exec?: (command: string) => Promise<Record<string, never>>;
-} = {}): TermwrightPreflightDeps {
+function fakeDeps(
+  options: {
+    readonly freeBytes?: bigint;
+    readonly exec?: (command: string) => Promise<Record<string, never>>;
+  } = {},
+): TermwrightPreflightDeps {
   return {
     statfs: vi.fn(async () => ({ bavail: options.freeBytes ?? 2n * GIB, bsize: 1n })),
     execFile: vi.fn(async (command) => options.exec?.(command) ?? {}),

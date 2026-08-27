@@ -9,7 +9,12 @@ export interface RecorderDraft {
   readonly busy: boolean;
 }
 
-export function RecordStartDialog({ draft, onChange, onStart, onClose }: {
+export function RecordStartDialog({
+  draft,
+  onChange,
+  onStart,
+  onClose,
+}: {
   readonly draft: RecorderDraft;
   readonly onChange: (draft: RecorderDraft) => void;
   readonly onStart: () => void;
@@ -20,19 +25,94 @@ export function RecordStartDialog({ draft, onChange, onStart, onClose }: {
   useModalFocus(dialog, initial, onClose, draft.busy);
   return (
     <div className="tw-dialog-backdrop" role="presentation">
-      <section ref={dialog} className="tw-dialog" role="dialog" aria-modal="true" aria-labelledby="tw-record-title">
-        <header><div><span className="tw-eyebrow">interactive authoring</span><h2 id="tw-record-title">Record a terminal test</h2></div><Tooltip label="Close recorder" disabledReason="Wait for the recorder to finish launching."><button type="button" className="tw-dialog-close" aria-label="Close recorder" disabled={draft.busy} onClick={onClose}><X aria-hidden="true" /></button></Tooltip></header>
-        <p>Launch a command without a shell. Termwright captures typing and semantic actions, then lets you review the generated test before anything is saved.</p>
-        <label>Command<input ref={initial} value={draft.command} aria-invalid={draft.error !== null} onChange={(event) => onChange({ ...draft, command: event.currentTarget.value, error: null })} placeholder={'node "app with spaces.js"'} /></label>
-        <label>Save destination<input value={draft.outFile} onChange={(event) => onChange({ ...draft, outFile: event.currentTarget.value })} placeholder="tests/recorded.test.ts" /></label>
-        {draft.error === null ? null : <p className="tw-dialog-error" role="alert">{draft.error}</p>}
-        <footer><button type="button" className="tw-secondary-button" disabled={draft.busy} onClick={onClose}>Cancel</button><button type="button" className="tw-primary-button" disabled={draft.busy || draft.command.trim() === ''} onClick={onStart}>{draft.busy ? 'Launching…' : 'Start recording'}</button></footer>
+      <section
+        ref={dialog}
+        className="tw-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tw-record-title"
+      >
+        <header>
+          <div>
+            <span className="tw-eyebrow">interactive authoring</span>
+            <h2 id="tw-record-title">Record a terminal test</h2>
+          </div>
+          <Tooltip
+            label="Close recorder"
+            disabledReason="Wait for the recorder to finish launching."
+          >
+            <button
+              type="button"
+              className="tw-dialog-close"
+              aria-label="Close recorder"
+              disabled={draft.busy}
+              onClick={onClose}
+            >
+              <X aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </header>
+        <p>
+          Launch a command without a shell. Termwright captures typing and semantic actions, then
+          lets you review the generated test before anything is saved.
+        </p>
+        <label>
+          Command
+          <input
+            ref={initial}
+            value={draft.command}
+            aria-invalid={draft.error !== null}
+            onChange={(event) =>
+              onChange({ ...draft, command: event.currentTarget.value, error: null })
+            }
+            placeholder={'node "app with spaces.js"'}
+          />
+        </label>
+        <label>
+          Save destination
+          <input
+            value={draft.outFile}
+            onChange={(event) => onChange({ ...draft, outFile: event.currentTarget.value })}
+            placeholder="tests/recorded.test.ts"
+          />
+        </label>
+        {draft.error === null ? null : (
+          <p className="tw-dialog-error" role="alert">
+            {draft.error}
+          </p>
+        )}
+        <footer>
+          <button
+            type="button"
+            className="tw-secondary-button"
+            disabled={draft.busy}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="tw-primary-button"
+            disabled={draft.busy || draft.command.trim() === ''}
+            onClick={onStart}
+          >
+            {draft.busy ? 'Launching…' : 'Start recording'}
+          </button>
+        </footer>
       </section>
     </div>
   );
 }
 
-export function RecordReviewDialog({ source, outFile, error, busy, onSave, onCopy, onDiscard }: {
+export function RecordReviewDialog({
+  source,
+  outFile,
+  error,
+  busy,
+  onSave,
+  onCopy,
+  onDiscard,
+}: {
   readonly source: string;
   readonly outFile: string;
   readonly error: string | null;
@@ -46,21 +126,55 @@ export function RecordReviewDialog({ source, outFile, error, busy, onSave, onCop
   useModalFocus(dialog, initial, onDiscard, busy);
   return (
     <div className="tw-dialog-backdrop" role="presentation">
-      <section ref={dialog} className="tw-dialog tw-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="tw-review-title">
-        <header><div><span className="tw-eyebrow">review before writing</span><h2 id="tw-review-title">Generated test</h2></div><span className="tw-rec-badge"><i /> REC complete</span></header>
-        <pre className="tw-generated-source"><code>{source}</code></pre>
-        {error === null ? null : <p className="tw-dialog-error" role="alert">{error}</p>}
+      <section
+        ref={dialog}
+        className="tw-dialog tw-dialog-wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tw-review-title"
+      >
+        <header>
+          <div>
+            <span className="tw-eyebrow">review before writing</span>
+            <h2 id="tw-review-title">Generated test</h2>
+          </div>
+          <span className="tw-rec-badge">
+            <i /> REC complete
+          </span>
+        </header>
+        <pre className="tw-generated-source">
+          <code>{source}</code>
+        </pre>
+        {error === null ? null : (
+          <p className="tw-dialog-error" role="alert">
+            {error}
+          </p>
+        )}
         <footer>
-          <button type="button" className="tw-secondary-button" disabled={busy} onClick={onDiscard}><Trash2 aria-hidden="true" size={14} /> Discard</button>
-          <button type="button" className="tw-secondary-button" disabled={busy} onClick={onCopy}><Copy aria-hidden="true" size={14} /> Copy</button>
-          <button ref={initial} type="button" className="tw-primary-button" disabled={busy} onClick={onSave}><Save aria-hidden="true" size={14} /> {busy ? 'Saving…' : `Save${outFile === '' ? '…' : ` to ${outFile}`}`}</button>
+          <button type="button" className="tw-secondary-button" disabled={busy} onClick={onDiscard}>
+            <Trash2 aria-hidden="true" size={14} /> Discard
+          </button>
+          <button type="button" className="tw-secondary-button" disabled={busy} onClick={onCopy}>
+            <Copy aria-hidden="true" size={14} /> Copy
+          </button>
+          <button
+            ref={initial}
+            type="button"
+            className="tw-primary-button"
+            disabled={busy}
+            onClick={onSave}
+          >
+            <Save aria-hidden="true" size={14} />{' '}
+            {busy ? 'Saving…' : `Save${outFile === '' ? '…' : ` to ${outFile}`}`}
+          </button>
         </footer>
       </section>
     </div>
   );
 }
 
-const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
 
 /** Keeps keyboard focus inside a recorder decision and restores it afterward. */
 function useModalFocus(
@@ -85,8 +199,9 @@ function useModalFocus(
         return;
       }
       if (event.key !== 'Tab') return;
-      const focusable = [...(container.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])]
-        .filter((element) => element.getClientRects().length > 0);
+      const focusable = [
+        ...(container.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []),
+      ].filter((element) => element.getClientRects().length > 0);
       if (focusable.length === 0) {
         event.preventDefault();
         return;

@@ -48,7 +48,9 @@ function packageRoot(): string {
     }
     const parent = dirname(directory);
     if (parent === directory) {
-      throw new Error('@termwright/conformance: could not locate the package root from this module');
+      throw new Error(
+        '@termwright/conformance: could not locate the package root from this module',
+      );
     }
     directory = parent;
   }
@@ -106,11 +108,17 @@ export function pythonWith(
 ): string | null {
   const script = `import ${modules.join(', ')}, sys; print(sys.executable)`;
   for (const candidate of ['python3', 'python']) {
-    if (!commandAvailable([candidate, '-c', `import ${modules.join(', ')}`], {
-      quiet: true,
-      ...(extraEnv === undefined ? {} : { env: extraEnv }),
-    })) continue;
-    const resolved = spawnSync(candidate, ['-c', script], { encoding: 'utf8', env: environment(extraEnv) });
+    if (
+      !commandAvailable([candidate, '-c', `import ${modules.join(', ')}`], {
+        quiet: true,
+        ...(extraEnv === undefined ? {} : { env: extraEnv }),
+      })
+    )
+      continue;
+    const resolved = spawnSync(candidate, ['-c', script], {
+      encoding: 'utf8',
+      env: environment(extraEnv),
+    });
     const path = (resolved.stdout ?? '').trim();
     if (resolved.status === 0 && path.length > 0) return path;
   }
@@ -209,9 +217,12 @@ async function waitForStart(
       bytes === 0
         ? `it produced no output at all${exit === null ? ' and is still running' : `; it exited ${JSON.stringify(exit)}`}`
         : `it produced ${bytes} bytes but never drew ${String(ready)}`;
-    throw new Error(`conformance: ${fixture.split('/').pop() ?? fixture} did not start — ${detail}`, {
-      cause: error,
-    });
+    throw new Error(
+      `conformance: ${fixture.split('/').pop() ?? fixture} did not start — ${detail}`,
+      {
+        cause: error,
+      },
+    );
   } finally {
     off();
   }
@@ -298,9 +309,7 @@ export async function disableMouseReporting(terminal: TerminalHarness): Promise<
  * Asks the child to enable focus reporting and waits until DECSET 1004 is
  * observed through owned checkpoint changes.
  */
-export async function enableFocusReporting(
-  terminal: TerminalHarness,
-): Promise<void> {
+export async function enableFocusReporting(terminal: TerminalHarness): Promise<void> {
   await terminal.press('f');
   await waitForTerminal(terminal, () => terminal.screen().modes.focusReporting === 'on');
 }
@@ -339,7 +348,10 @@ export async function settledRevision(
     if (performance.now() - progressed > stallMs) return seen;
     const remaining = Math.max(0, stallMs - (performance.now() - progressed));
     try {
-      checkpoint = await terminal.waitForCheckpointChange({ after: checkpoint, timeout: remaining });
+      checkpoint = await terminal.waitForCheckpointChange({
+        after: checkpoint,
+        timeout: remaining,
+      });
     } catch {
       return seen;
     }

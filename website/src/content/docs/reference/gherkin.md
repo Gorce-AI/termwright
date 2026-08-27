@@ -26,8 +26,8 @@ official Cucumber packages shipped as one compatible dependency set.
 Step definitions are inert values in a default export:
 
 ```ts
-import type {TerminalHarness} from 'termwright';
-import {Given, Then, When, defineParameterType, defineSteps} from 'termwright/gherkin';
+import type { TerminalHarness } from 'termwright';
+import { Given, Then, When, defineParameterType, defineSteps } from 'termwright/gherkin';
 
 const priority = defineParameterType({
   name: 'priority',
@@ -37,13 +37,13 @@ const priority = defineParameterType({
 
 export default defineSteps(
   priority,
-  Given('a {priority} priority command', ({world}, value) => {
+  Given('a {priority} priority command', ({ world }, value) => {
     world.priority = value;
   }),
-  When(/I press (.+)/, async ({world}, key) => {
+  When(/I press (.+)/, async ({ world }, key) => {
     await (world.app as TerminalHarness).press(String(key));
   }),
-  Then('the command starts', async ({expect, world}) => {
+  Then('the command starts', async ({ expect, world }) => {
     await expect(world.app as TerminalHarness).toHaveText('running');
   }),
 );

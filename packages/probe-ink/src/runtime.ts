@@ -12,6 +12,10 @@ export type EnvSource = Readonly<Record<string, string | undefined>>;
 export function isInstrumented(env: EnvSource): boolean {
   const endpoint = env[ENV_ENDPOINT];
   const token = env[ENV_TOKEN];
-  return typeof endpoint === 'string' && endpoint.length > 0
-    && typeof token === 'string' && token.length > 0;
+  return (
+    typeof endpoint === 'string' &&
+    endpoint.length > 0 &&
+    typeof token === 'string' &&
+    token.length > 0
+  );
 }

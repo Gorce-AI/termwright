@@ -3,17 +3,11 @@ import {
   ptyAvailable as nativeBindingAvailable,
   ptyUnavailableReason as nativeBindingUnavailableReason,
   spawnPty as spawnNativePty,
-} from "@termwright/pty";
-import type { ExitStatus } from "./api.js";
-import { EarlyPtyOutput } from "./internal/early-pty-output.js";
-import { ProcessLifecycleError } from "./internal/process-supervisor.js";
-import type {
-  PtyBackend,
-  PtyProcess,
-  PtySignal,
-  PtySpawnOptions,
-  PtyUnsubscribe,
-} from "./pty.js";
+} from '@termwright/pty';
+import type { ExitStatus } from './api.js';
+import { EarlyPtyOutput } from './internal/early-pty-output.js';
+import { ProcessLifecycleError } from './internal/process-supervisor.js';
+import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
 
 export interface NativePtySessionHandle {
   readonly pid: number;
@@ -22,7 +16,7 @@ export interface NativePtySessionHandle {
   write(data: Uint8Array): void;
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
-  treeState(): "alive" | "gone" | "unsupported";
+  treeState(): 'alive' | 'gone' | 'unsupported';
   onData(listener: (data: Uint8Array) => void): () => void;
   onExit(listener: (status: ExitStatus) => void): () => void;
   onError(listener: (error: Error) => void): () => void;
@@ -38,16 +32,16 @@ export type NativePtySpawn = (options: {
   readonly rows: number;
 }) => NativePtySessionHandle;
 
-export const NATIVE_PTY_BACKEND_NAME = "termwright-native-pty";
+export const NATIVE_PTY_BACKEND_NAME = 'termwright-native-pty';
 
 /** Loads and validates the native binding without creating an unowned PTY. */
 export function nativePtyAvailable(): boolean {
-  return process.env["TERMWRIGHT_SKIP_PTY"] !== "1" && nativeBindingAvailable();
+  return process.env['TERMWRIGHT_SKIP_PTY'] !== '1' && nativeBindingAvailable();
 }
 
 /** Exact loader diagnostic from the native package, when availability is false. */
 export function nativePtyUnavailableReason(): string | undefined {
-  if (process.env["TERMWRIGHT_SKIP_PTY"] === "1") return "TERMWRIGHT_SKIP_PTY=1";
+  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return 'TERMWRIGHT_SKIP_PTY=1';
   return nativeBindingUnavailableReason();
 }
 
@@ -63,7 +57,7 @@ export function createNativePtyBackend(
   return {
     name: NATIVE_PTY_BACKEND_NAME,
     spawn(options: PtySpawnOptions): PtyProcess {
-      const env = { ...options.env, TERM: options.term ?? options.env.TERM ?? "xterm-256color" };
+      const env = { ...options.env, TERM: options.term ?? options.env.TERM ?? 'xterm-256color' };
       const session = spawn({
         command: options.command,
         ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
@@ -100,13 +94,15 @@ export function createNativePtyBackend(
       });
 
       return {
-        get pid(): number { return session.pid; },
+        get pid(): number {
+          return session.pid;
+        },
         lifecycle: {
-          tree: platform === "win32" ? "conpty-console" : "posix-process-group",
-          outputDrain: "eof",
+          tree: platform === 'win32' ? 'conpty-console' : 'posix-process-group',
+          outputDrain: 'eof',
         },
         write(data): void {
-          if (disposed) throw new Error("native PTY input is closed");
+          if (disposed) throw new Error('native PTY input is closed');
           session.write(data);
         },
         resize(columns, rows): void {
@@ -116,12 +112,12 @@ export function createNativePtyBackend(
           if (disposed) return;
           if (!session.signal(signal)) {
             throw new ProcessLifecycleError(
-              "unsupported-signal",
+              'unsupported-signal',
               `the native PTY backend cannot deliver ${signal} on ${platform}`,
             );
           }
         },
-        ...(platform !== "win32"
+        ...(platform !== 'win32'
           ? {
               // The native waitid(WNOWAIT) watcher already kills descendants
               // before reaping the root. There is no JS-time PGID operation.
@@ -130,9 +126,9 @@ export function createNativePtyBackend(
           : {}),
         async hardKillTree(signal: AbortSignal): Promise<void> {
           signal.throwIfAborted();
-          if (!disposed && !session.signal("KILL")) {
+          if (!disposed && !session.signal('KILL')) {
             throw new ProcessLifecycleError(
-              "cleanup-failed",
+              'cleanup-failed',
               `the native PTY backend could not terminate its tree on ${platform}`,
             );
           }
@@ -150,9 +146,10 @@ export function createNativePtyBackend(
         onExit(listener): PtyUnsubscribe {
           exitListeners.add(listener);
           const observed = exitStatus;
-          if (observed !== undefined) queueMicrotask(() => {
-            if (exitListeners.has(listener)) listener(observed);
-          });
+          if (observed !== undefined)
+            queueMicrotask(() => {
+              if (exitListeners.has(listener)) listener(observed);
+            });
           return () => exitListeners.delete(listener);
         },
         outputEnded: session.outputEnded,
@@ -163,16 +160,17 @@ export function createNativePtyBackend(
         onWriteError(listener): PtyUnsubscribe {
           errorListeners.add(listener);
           const observed = fatalError;
-          if (observed !== undefined) queueMicrotask(() => {
-            if (errorListeners.has(listener)) listener(observed);
-          });
+          if (observed !== undefined)
+            queueMicrotask(() => {
+              if (errorListeners.has(listener)) listener(observed);
+            });
           return () => errorListeners.delete(listener);
         },
         onWriteDrain(listener): PtyUnsubscribe {
           drainListeners.add(listener);
           return () => drainListeners.delete(listener);
         },
-        treeState(): "alive" | "gone" | "unsupported" {
+        treeState(): 'alive' | 'gone' | 'unsupported' {
           return session.treeState();
         },
         dispose(): void {
@@ -197,7 +195,8 @@ export function createNativePtyBackend(
           errorListeners.clear();
           drainListeners.clear();
           if (errors.length === 1) throw errors[0];
-          if (errors.length > 1) throw new AggregateError(errors, "multiple native PTY disposal failures");
+          if (errors.length > 1)
+            throw new AggregateError(errors, 'multiple native PTY disposal failures');
         },
       };
     },

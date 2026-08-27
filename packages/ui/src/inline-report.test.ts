@@ -15,9 +15,17 @@ async function fakeApp(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'tw-app-'));
   const { writeFile, mkdir } = await import('node:fs/promises');
   await mkdir(join(directory, 'assets'), { recursive: true });
-  await writeFile(join(directory, 'assets', 'app.js'), 'console.log("viewer", "./assets/icon.svg");\n', 'utf8');
+  await writeFile(
+    join(directory, 'assets', 'app.js'),
+    'console.log("viewer", "./assets/icon.svg");\n',
+    'utf8',
+  );
   await writeFile(join(directory, 'assets', 'app.css'), '.pane { color: red }\n', 'utf8');
-  await writeFile(join(directory, 'assets', 'icon.svg'), '<svg viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>\n', 'utf8');
+  await writeFile(
+    join(directory, 'assets', 'icon.svg'),
+    '<svg viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>\n',
+    'utf8',
+  );
   await writeFile(
     join(directory, 'index.html'),
     '<!doctype html><html><head><link rel="stylesheet" href="/assets/app.css"></head>' +
@@ -80,7 +88,9 @@ describe('the payload a report carries', () => {
 describe('the emitted file', () => {
   it('is one document with nothing left to fetch', async () => {
     const path = join(await outDir(), 'report.html');
-    const result = await writeInlineReport(await buildFixtureTrace(), path, { appDir: await fakeApp() });
+    const result = await writeInlineReport(await buildFixtureTrace(), path, {
+      appDir: await fakeApp(),
+    });
 
     const html = await readFile(result.path, 'utf8');
     expect(html).toContain('console.log("viewer"'); // the bundle, inlined
@@ -101,9 +111,24 @@ describe('the emitted file', () => {
       state: { mode: 'post-mortem', project, sessions: [], trace: null, record: null },
       frames: { frames: [], truncated: false, durationMs: 0, revisions: [] },
       commands: { commands: [], incomplete: false },
-      traceState: { timeMs: 0, castPrefixB64: '', columns: 80, rows: 24, revision: null, snapshot: null, step: null },
+      traceState: {
+        timeMs: 0,
+        castPrefixB64: '',
+        columns: 80,
+        rows: 24,
+        revision: null,
+        snapshot: null,
+        step: null,
+      },
       logs: {
-        records: [{ t: 0, source: 'adapter', level: 'error', message: 'oops </script><script>alert(1)</script>' }],
+        records: [
+          {
+            t: 0,
+            source: 'adapter',
+            level: 'error',
+            message: 'oops </script><script>alert(1)</script>',
+          },
+        ],
         hasMoreBefore: false,
         hasMoreAfter: false,
         total: 1,

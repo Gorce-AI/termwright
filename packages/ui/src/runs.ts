@@ -60,9 +60,24 @@ export interface RunManifest {
 
 export type RunSummaryEntry =
   | (Omit<RunManifest, 'tests'> & { readonly testCount: number })
-  | { readonly state: 'incomplete'; readonly id: string; readonly startedAt: number; readonly reason: string }
-  | { readonly state: 'corrupt'; readonly id: string; readonly runId: string | null; readonly reason: string }
-  | { readonly state: 'unsupported-version'; readonly id: string; readonly runId: string | null; readonly version: number | null };
+  | {
+      readonly state: 'incomplete';
+      readonly id: string;
+      readonly startedAt: number;
+      readonly reason: string;
+    }
+  | {
+      readonly state: 'corrupt';
+      readonly id: string;
+      readonly runId: string | null;
+      readonly reason: string;
+    }
+  | {
+      readonly state: 'unsupported-version';
+      readonly id: string;
+      readonly runId: string | null;
+      readonly version: number | null;
+    };
 
 export type RunDetail = RunManifest | Exclude<RunSummaryEntry, { readonly state: 'complete' }>;
 
@@ -74,8 +89,11 @@ export async function readRunHistory(runsDir: string): Promise<readonly RunSumma
 /** Reads one canonical RunId without accepting directory or legacy timestamp ids. */
 export async function readRunManifest(runsDir: string, id: string): Promise<RunDetail> {
   let runId: RunId;
-  try { runId = parseRunId('run', id); }
-  catch { return { state: 'corrupt', id, runId: null, reason: 'invalid canonical RunId' }; }
+  try {
+    runId = parseRunId('run', id);
+  } catch {
+    return { state: 'corrupt', id, runId: null, reason: 'invalid canonical RunId' };
+  }
   return projectDetail(await readNativeRunManifest(runsDir, runId));
 }
 
@@ -88,20 +106,38 @@ function projectSummary(record: RunHistoryRecord): RunSummaryEntry {
 
 function projectDetail(record: RunHistoryRecord): RunDetail {
   switch (record.state) {
-    case 'complete': return projectComplete(record.manifest);
+    case 'complete':
+      return projectComplete(record.manifest);
     case 'incomplete':
-      return { state: 'incomplete', id: record.runId, startedAt: record.start.startedAt, reason: record.reason };
+      return {
+        state: 'incomplete',
+        id: record.runId,
+        startedAt: record.start.startedAt,
+        reason: record.reason,
+      };
     case 'corrupt':
-      return { state: 'corrupt', id: record.runId ?? record.directory, runId: record.runId, reason: record.reason };
+      return {
+        state: 'corrupt',
+        id: record.runId ?? record.directory,
+        runId: record.runId,
+        reason: record.reason,
+      };
     case 'unsupported-version':
-      return { state: 'unsupported-version', id: record.runId ?? record.directory, runId: record.runId, version: record.version };
+      return {
+        state: 'unsupported-version',
+        id: record.runId ?? record.directory,
+        runId: record.runId,
+        version: record.version,
+      };
   }
 }
 
 function projectComplete(manifest: NativeRunManifest): RunManifest {
-  const skippedTasks = new Set(manifest.events
-    .filter((event) => event.type === 'test.skipped' && event.identity.runnerTaskId !== undefined)
-    .map((event) => event.identity.runnerTaskId!));
+  const skippedTasks = new Set(
+    manifest.events
+      .filter((event) => event.type === 'test.skipped' && event.identity.runnerTaskId !== undefined)
+      .map((event) => event.identity.runnerTaskId!),
+  );
   const attemptsByTask = new Map<string, NativeRunAttempt[]>();
   for (const attempt of manifest.attempts) {
     const attempts = attemptsByTask.get(attempt.runnerTaskId) ?? [];
@@ -125,7 +161,8 @@ function projectComplete(manifest: NativeRunManifest): RunManifest {
       file: spec.file,
       status: final?.status ?? (skippedTasks.has(spec.runnerTaskId) ? 'skipped' : 'not-run'),
       durationMs: sumDuration(nativeAttempts),
-      flaky: final?.status === 'passed' && nativeAttempts.some((attempt) => attempt.status === 'failed'),
+      flaky:
+        final?.status === 'passed' && nativeAttempts.some((attempt) => attempt.status === 'failed'),
       attempts,
     };
   });

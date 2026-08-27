@@ -18,7 +18,7 @@ instead.
 ## Programmatic launch
 
 ```ts
-import {launchDesktopHost} from '@termwright/desktop-host';
+import { launchDesktopHost } from '@termwright/desktop-host';
 
 const host = await launchDesktopHost({
   url: 'http://127.0.0.1:43121/?token=<unguessable-runner-token>',

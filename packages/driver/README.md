@@ -33,7 +33,7 @@ Framework adapters and Termwright infrastructure may use the explicitly
 experimental subpath:
 
 ```ts
-import {createNativePtyBackend, type PtyBackend} from '@termwright/driver/experimental';
+import { createNativePtyBackend, type PtyBackend } from '@termwright/driver/experimental';
 ```
 
 The experimental tier contains PTY/backend selection, terminal encoders,
@@ -43,10 +43,7 @@ re-exported from the root or from `termwright`; ordinary tests should not use it
 Framework adapters that own a backend launch it through the same tier:
 
 ```ts
-import {
-  createNativePtyBackend,
-  launchTerminalWithBackend,
-} from '@termwright/driver/experimental';
+import { createNativePtyBackend, launchTerminalWithBackend } from '@termwright/driver/experimental';
 
 const terminal = await launchTerminalWithBackend({
   command: ['node', 'app.js'],
@@ -57,24 +54,24 @@ const terminal = await launchTerminalWithBackend({
 ## Usage
 
 ```ts
-import { launchTerminal, TermwrightError } from "@termwright/driver";
+import { launchTerminal, TermwrightError } from '@termwright/driver';
 
 const terminal = await launchTerminal({
-  command: ["node", "app.js"],
+  command: ['node', 'app.js'],
   columns: 100,
   rows: 30,
 });
 
 // Generic observation works for any program.
-await terminal.waitForText("Ready");
+await terminal.waitForText('Ready');
 console.log(terminal.screen().text());
 console.log(terminal.screen().cell(0, 0).fg);
 
 // Semantic locators work only when the frozen contract proves a semantic tree.
 const contract = await terminal.settled();
-if (contract.capabilities["semantic-tree"].status === "supported") {
+if (contract.capabilities['semantic-tree'].status === 'supported') {
   console.log(contract.framework);
-  const approve = terminal.getByRole("button", { name: "Approve" });
+  const approve = terminal.getByRole('button', { name: 'Approve' });
 
   // Evidence-qualified observations preserve unknown and unsupported instead
   // of inventing a boolean or rectangle.
@@ -86,27 +83,25 @@ if (contract.capabilities["semantic-tree"].status === "supported") {
   const receipt = await approve.activate(); // 'click' | 'focus-enter' | 'focus-space'
   console.log(receipt.plan.strategy);
 
-  await terminal.locator("dialog button#reject").click();
+  await terminal.locator('dialog button#reject').click();
 }
 
 // Stable refs can be turned back into locators across later frames.
-const target = await terminal.getByRole("button").first().resolve();
-if (target.identity === "stable")
-  await terminal.locatorForRef(target.ref).click();
+const target = await terminal.getByRole('button').first().resolve();
+if (target.identity === 'stable') await terminal.locatorForRef(target.ref).click();
 
 // Keyboard, paste and resize honor the modes the child actually enabled.
-await terminal.press("Control+K Control+U");
-await terminal.paste("multi\nline");
+await terminal.press('Control+K Control+U');
+await terminal.paste('multi\nline');
 await terminal.resize({ columns: 80, rows: 24 });
 
 try {
-  await terminal.waitForText("never", { timeout: 500 });
+  await terminal.waitForText('never', { timeout: 500 });
 } catch (error) {
-  if (error instanceof TermwrightError)
-    console.log(error.code, error.toString());
+  if (error instanceof TermwrightError) console.log(error.code, error.toString());
 }
 
-await terminal.signal("INT");
+await terminal.signal('INT');
 console.log(await terminal.waitForExit());
 await terminal.close();
 ```
@@ -152,8 +147,8 @@ one it used:
 
 ```ts
 const terminal = await launchTerminal({
-  command: ["node", "app.js"],
-  terminalProfile: "iterm2-ambiguous-wide", // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
+  command: ['node', 'app.js'],
+  terminalProfile: 'iterm2-ambiguous-wide', // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
 });
 console.log(terminal.terminalProfile);
 ```
@@ -220,9 +215,9 @@ tree. `settled()` resolves only after the frozen verdict is usable:
 
 ```ts
 const contract = await terminal.settled();
-if (contract.capabilities["semantic-tree"].status === "supported") {
+if (contract.capabilities['semantic-tree'].status === 'supported') {
   // the tree is published, not merely promised
-  await terminal.getByRole("button", { name: "Approve" }).click();
+  await terminal.getByRole('button', { name: 'Approve' }).click();
 }
 ```
 
@@ -237,12 +232,10 @@ as everything else:
 
 ```ts
 const terminal = await launchTerminal({
-  command: ["node", "app.js"],
-  logs: [{ path: "/tmp/app.log", label: "app" }],
+  command: ['node', 'app.js'],
+  logs: [{ path: '/tmp/app.log', label: 'app' }],
 });
-terminal.events.on("app-log", (entry) =>
-  console.log(entry.label, entry.path, entry.line),
-);
+terminal.events.on('app-log', (entry) => console.log(entry.label, entry.path, entry.line));
 ```
 
 A file that does not exist yet is waited for (programs create their log on first
@@ -275,7 +268,7 @@ asking for it leaves a `CrashReport`:
 ```ts
 const status = await terminal.waitForExit();
 const report = terminal.crashReport(); // null for a clean exit, close() or signal()
-console.log(report?.screenTail.join("\n")); // the stack trace or panic
+console.log(report?.screenTail.join('\n')); // the stack trace or panic
 console.log(report?.recentInputs); // what was sent just before
 console.log(report?.lastSemanticTree); // the last paired revision, if any
 ```

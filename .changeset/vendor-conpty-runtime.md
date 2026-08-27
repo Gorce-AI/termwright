@@ -1,13 +1,13 @@
 ---
-"@termwright/pty": minor
-"@termwright/pty-win32-arm64": minor
-"@termwright/pty-win32-x64": minor
-"@termwright/driver": minor
-"@termwright/conformance": minor
-"@termwright/probe-tview": minor
-"@termwright/probe-ink": minor
-"@termwright/probe-opentui": minor
-"@termwright/probe-charm": minor
+'@termwright/pty': minor
+'@termwright/pty-win32-arm64': minor
+'@termwright/pty-win32-x64': minor
+'@termwright/driver': minor
+'@termwright/conformance': minor
+'@termwright/probe-tview': minor
+'@termwright/probe-ink': minor
+'@termwright/probe-opentui': minor
+'@termwright/probe-charm': minor
 ---
 
 Ship and verify a pinned modern Microsoft ConPTY runtime on Windows so semantic

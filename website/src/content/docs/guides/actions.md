@@ -8,22 +8,22 @@ action that matches how the application is used.
 
 ## Recommended approach
 
-| Need | Use |
-| --- | --- |
-| Activate the current control | `locator.activate()` |
-| Send a key or chord | `app.press()` or `locator.press()` |
-| Type normal text | `app.type()` or `locator.type()` |
-| Insert clipboard-style text | `app.paste()` |
-| Click an exact semantic target | `locator.click()` when hit testing is supported |
-| Click empty space or a canvas cell | `app.mouse.click({row, column})` |
-| Scroll a pointer-aware region | `locator.wheel()` |
-| Change terminal dimensions | `app.resize()` |
-| Send raw bytes | `app.write()` as a low-level escape hatch |
+| Need                               | Use                                             |
+| ---------------------------------- | ----------------------------------------------- |
+| Activate the current control       | `locator.activate()`                            |
+| Send a key or chord                | `app.press()` or `locator.press()`              |
+| Type normal text                   | `app.type()` or `locator.type()`                |
+| Insert clipboard-style text        | `app.paste()`                                   |
+| Click an exact semantic target     | `locator.click()` when hit testing is supported |
+| Click empty space or a canvas cell | `app.mouse.click({row, column})`                |
+| Scroll a pointer-aware region      | `locator.wheel()`                               |
+| Change terminal dimensions         | `app.resize()`                                  |
+| Send raw bytes                     | `app.write()` as a low-level escape hatch       |
 
 ## Activate a control
 
 ```ts
-const save = app.getByRole('button', {name: 'Save'});
+const save = app.getByRole('button', { name: 'Save' });
 const receipt = await save.activate();
 ```
 
@@ -54,14 +54,14 @@ time to render between them and leaves clearer trace evidence:
 
 ```ts
 await app.press('ArrowDown');
-await expect(app.getByRole('listitem', {name: 'Settings'})).toHaveState({selected: true});
+await expect(app.getByRole('listitem', { name: 'Settings' })).toHaveState({ selected: true });
 await app.press('Enter');
 ```
 
 ## Type and paste text
 
 ```ts
-await app.getByRole('textbox', {name: 'Name'}).type('release');
+await app.getByRole('textbox', { name: 'Name' }).type('release');
 await app.paste('multiple\nlines');
 ```
 
@@ -71,9 +71,9 @@ including bracketed paste when the application enables it.
 ## Click and drag
 
 ```ts
-await app.getByRole('button', {name: 'Approve'}).click();
-await app.getByRole('button', {name: 'Open menu'}).click({modifiers: ['control']});
-await source.dragTo(destination, {steps: 12});
+await app.getByRole('button', { name: 'Approve' }).click();
+await app.getByRole('button', { name: 'Open menu' }).click({ modifiers: ['control'] });
+await source.dragTo(destination, { steps: 12 });
 ```
 
 Pointer actions require terminal mouse reporting plus authoritative ownership.
@@ -87,7 +87,7 @@ Use `hitTest()` to inspect support and the recipient:
 
 ```ts
 const hit = await approve.hitTest();
-expect(hit.receivesEvents).toMatchObject({status: 'known', value: true});
+expect(hit.receivesEvents).toMatchObject({ status: 'known', value: true });
 ```
 
 See the [framework compatibility matrix](../../reference/compatibility/) before
@@ -99,10 +99,10 @@ appropriate for empty space, outside-click behavior, terminal canvases, and
 mouse-capture tests:
 
 ```ts
-await app.mouse.click({row: 3, column: 20, modifiers: ['shift']});
+await app.mouse.click({ row: 3, column: 20, modifiers: ['shift'] });
 await app.mouse.drag({
-  from: {row: 4, column: 2},
-  to: {row: 9, column: 30},
+  from: { row: 4, column: 2 },
+  to: { row: 9, column: 30 },
   steps: 16,
 });
 ```
@@ -110,7 +110,7 @@ await app.mouse.drag({
 ## Scroll
 
 ```ts
-await list.wheel({deltaY: 3});
+await list.wheel({ deltaY: 3 });
 ```
 
 The application must have mouse tracking enabled. For keyboard-driven TUIs,
@@ -119,8 +119,8 @@ prefer the same navigation keys a user would press.
 ## Resize the terminal
 
 ```ts
-const receipt = await app.resize({columns: 120, rows: 40});
-expect(receipt.requested).toEqual({columns: 120, rows: 40});
+const receipt = await app.resize({ columns: 120, rows: 40 });
+expect(receipt.requested).toEqual({ columns: 120, rows: 40 });
 ```
 
 The receipt records the screen revision before and after the resize. Assert the

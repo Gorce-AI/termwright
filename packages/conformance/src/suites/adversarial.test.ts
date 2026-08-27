@@ -211,43 +211,52 @@ const REJECTED: readonly { readonly scenario: string; readonly wireError: string
 ];
 
 describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
-  it.each(REJECTED)('rejects $scenario as $wireError and keeps the session', async ({ scenario, wireError }) => {
-    const terminal = await arm(scenario);
-    expect(terminal.semanticTree()?.revision).toBe(1);
+  it.each(REJECTED)(
+    'rejects $scenario as $wireError and keeps the session',
+    async ({ scenario, wireError }) => {
+      const terminal = await arm(scenario);
+      expect(terminal.semanticTree()?.revision).toBe(1);
 
-    await fire(terminal);
-    await expect.poll(() => codes(terminal)).toContain('protocol-violation');
+      await fire(terminal);
+      await expect.poll(() => codes(terminal)).toContain('protocol-violation');
 
-    // The retained tree stays inspectable as historical evidence, but new
-    // semantic operations fail closed after the provider violated its contract.
-    expect(terminal.semanticTree()?.revision).toBe(1);
-    const semanticError = (await rejection(terminal.getByRole('button').textContent())) as TermwrightError;
-    expect(semanticError.code).toBe('protocol-violation');
-    expect(semanticTreeSupported(terminal)).toBe(true);
+      // The retained tree stays inspectable as historical evidence, but new
+      // semantic operations fail closed after the provider violated its contract.
+      expect(terminal.semanticTree()?.revision).toBe(1);
+      const semanticError = (await rejection(
+        terminal.getByRole('button').textContent(),
+      )) as TermwrightError;
+      expect(semanticError.code).toBe('protocol-violation');
+      expect(semanticTreeSupported(terminal)).toBe(true);
 
-    // The session says why it closed the channel, in its own log.
-    expect(codes(terminal)).toContain('adapter-attached');
-    const violation = entriesFor(terminal, 'protocol-violation')[0];
-    expect(violation, `no protocol-violation recorded for ${scenario}`).toBeDefined();
-    // Both ends of the same contract: the driver logged the wire code it chose,
-    // and the adapter received that exact code. The second half was
-    // unassertable until the driver stopped destroying the socket in the same
-    // turn as the write — a reading peer is now always told why.
-    expect(violation?.wireCode).toBe(wireError);
-    await terminal.waitForText(`PEER GOT ERROR ${wireError}`);
-    expect(violation?.timeMs).toBeGreaterThan(0);
-    await expectSurvives(terminal);
-  });
+      // The session says why it closed the channel, in its own log.
+      expect(codes(terminal)).toContain('adapter-attached');
+      const violation = entriesFor(terminal, 'protocol-violation')[0];
+      expect(violation, `no protocol-violation recorded for ${scenario}`).toBeDefined();
+      // Both ends of the same contract: the driver logged the wire code it chose,
+      // and the adapter received that exact code. The second half was
+      // unassertable until the driver stopped destroying the socket in the same
+      // turn as the write — a reading peer is now always told why.
+      expect(violation?.wireCode).toBe(wireError);
+      await terminal.waitForText(`PEER GOT ERROR ${wireError}`);
+      expect(violation?.timeMs).toBeGreaterThan(0);
+      await expectSurvives(terminal);
+    },
+  );
 
   it('refuses a handshake with the wrong token and settles as generic', async () => {
     const terminal = await arm('bad-token');
 
     expect(semanticTreeSupported(terminal)).toBe(false);
     expect(terminal.semanticTree()).toBeNull();
-    await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-token');
+    await expect
+      .poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode)
+      .toBe('bad-token');
     await terminal.waitForText('PEER GOT ERROR bad-token');
 
-    const error = (await rejection(terminal.getByRole('button').resolve({ timeout: 500 }))) as TermwrightError;
+    const error = (await rejection(
+      terminal.getByRole('button').resolve({ timeout: 500 }),
+    )) as TermwrightError;
     expect(error.code).toBe('protocol-violation');
     expect(entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-token');
     // A refused handshake never attached, so nothing may claim it did.
@@ -260,7 +269,9 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
 
   it('refuses an unsupported protocol version', async () => {
     const terminal = await arm('bad-version');
-    await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-version');
+    await expect
+      .poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode)
+      .toBe('bad-version');
     await terminal.waitForText('PEER GOT ERROR bad-version');
     expect(semanticTreeSupported(terminal)).toBe(false);
     await expectSurvives(terminal);
@@ -268,7 +279,9 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
 
   it('refuses traffic that arrives before the handshake', async () => {
     const terminal = await arm('no-hello');
-    await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('malformed');
+    await expect
+      .poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode)
+      .toBe('malformed');
     await terminal.waitForText('PEER GOT ERROR malformed');
     expect(semanticTreeSupported(terminal)).toBe(false);
     expect(terminal.semanticTree()).toBeNull();
@@ -312,10 +325,11 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     // for the diagnostic itself: screen stability cannot prove that the later
     // socket frame containing revision 2 has been consumed, especially under
     // ConPTY where output and the control socket are scheduled very unevenly.
-    await expect.poll(
-      () => entriesFor(terminal, 'revision-dropped').map((entry) => entry.revision),
-      { timeout: 10_000 },
-    ).toContain(2);
+    await expect
+      .poll(() => entriesFor(terminal, 'revision-dropped').map((entry) => entry.revision), {
+        timeout: 10_000,
+      })
+      .toContain(2);
     await expectSurvives(terminal);
   });
 
@@ -326,12 +340,16 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     // it has already received, so the wait covers delivery, the drain and the
     // window — and has room left for the quiet period a further change to that
     // barrier would add.
-    await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');
+    await expect
+      .poll(() => codes(terminal), { timeout: 10_000 })
+      .toContain('revision-pairing-watchdog');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
     // The unpaired half names itself, so a half-published revision cannot be
     // mistaken for one that was never sent.
-    expect(entriesFor(terminal, 'revision-pairing-watchdog').map((entry) => entry.revision)).toContain(5);
+    expect(
+      entriesFor(terminal, 'revision-pairing-watchdog').map((entry) => entry.revision),
+    ).toContain(5);
     // The watchdog releases heuristic quiet only. Semantic observations stay
     // fail-closed because the retained newer marker proves that tree revision
     // 1 may no longer describe the visible screen.
@@ -346,10 +364,14 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await fire(terminal);
     // The unpaired half expires; the driver keeps the last complete revision.
     // Same budget, same reason as the marker case above.
-    await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');
+    await expect
+      .poll(() => codes(terminal), { timeout: 10_000 })
+      .toContain('revision-pairing-watchdog');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
-    expect(entriesFor(terminal, 'revision-pairing-watchdog').map((entry) => entry.revision)).toContain(4);
+    expect(
+      entriesFor(terminal, 'revision-pairing-watchdog').map((entry) => entry.revision),
+    ).toContain(4);
 
     // `revision-commit` is advisory: the peer announced revision 4 and the
     // driver recorded the announcement, but only a marker commits a render.
@@ -398,7 +420,9 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
 
     // Eviction is bounded and honest: old lines are gone and say so.
     expect(terminal.scrollback.retainedFloor).toBeGreaterThan(0);
-    const truncated = await rejection(Promise.resolve().then(() => terminal.scrollback.text({ from: 0 })));
+    const truncated = await rejection(
+      Promise.resolve().then(() => terminal.scrollback.text({ from: 0 })),
+    );
     expect((truncated as TermwrightError).code).toBe('history-truncated');
     // 99 trees with no markers behind them: the pairing ceiling has to evict,
     // and has to say which revisions it evicted rather than leaking them.
@@ -468,7 +492,9 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
   it('refuses a second adapter without disturbing the first', async () => {
     const terminal = await arm('second-connection');
     await fire(terminal);
-    await expect.poll(() => entriesFor(terminal, 'adapter-capability').at(-1)?.wireCode).toBe('internal');
+    await expect
+      .poll(() => entriesFor(terminal, 'adapter-capability').at(-1)?.wireCode)
+      .toBe('internal');
     await terminal.waitForText('PEER SECOND GOT ERROR internal');
 
     // The session keeps the adapter it already had: a refused newcomer is not

@@ -43,15 +43,12 @@ export const SEMANTIC_ACTIONS = [
 
 export type SemanticAction = (typeof SEMANTIC_ACTIONS)[number];
 
-export const PHYSICAL_INPUT_RECIPE_ACTIONS = [
-  'focus', 'activate', 'toggle', 'setValue',
-] as const;
+export const PHYSICAL_INPUT_RECIPE_ACTIONS = ['focus', 'activate', 'toggle', 'setValue'] as const;
 export type PhysicalInputRecipeAction = (typeof PHYSICAL_INPUT_RECIPE_ACTIONS)[number];
 
 /** Data-only physical input recipe; integrations never receive an execution callback. */
 export type PhysicalInputRecipeStep =
-  | { readonly kind: 'press'; readonly key: string }
-  | { readonly kind: 'insert-action-value' };
+  { readonly kind: 'press'; readonly key: string } | { readonly kind: 'insert-action-value' };
 
 export interface PhysicalInputRecipe {
   readonly action: PhysicalInputRecipeAction;

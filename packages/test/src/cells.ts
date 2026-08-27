@@ -23,7 +23,12 @@ export interface CellSnapshotOptions {
 }
 
 const ATTRIBUTE_KEYS: readonly (keyof CellAttributes)[] = [
-  'bold', 'dim', 'italic', 'underline', 'inverse', 'strikethrough',
+  'bold',
+  'dim',
+  'italic',
+  'underline',
+  'inverse',
+  'strikethrough',
 ];
 
 /**
@@ -37,7 +42,10 @@ const ATTRIBUTE_KEYS: readonly (keyof CellAttributes)[] = [
  * └────────────────────┘
  * ```
  */
-export function serializeScreen(screen: Pick<ScreenSnapshot, 'columns' | 'rows' | 'cell'>, options: CellSnapshotOptions = {}): string {
+export function serializeScreen(
+  screen: Pick<ScreenSnapshot, 'columns' | 'rows' | 'cell'>,
+  options: CellSnapshotOptions = {},
+): string {
   const rows = readRows(screen);
   const visible = options.trimTrailingRows === false ? rows : trimTrailing(rows);
   const lines =
@@ -92,7 +100,10 @@ function frame(rows: readonly Row[], columns: number, viewportRows: number): str
 }
 
 /** One line per run of identically styled, non-default cells. */
-function describeStyles(screen: Pick<ScreenSnapshot, 'columns' | 'rows' | 'cell'>, palette: ColorPalette | undefined): string[] {
+function describeStyles(
+  screen: Pick<ScreenSnapshot, 'columns' | 'rows' | 'cell'>,
+  palette: ColorPalette | undefined,
+): string[] {
   const lines: string[] = [];
   for (let row = 0; row < screen.rows; row += 1) {
     let start = -1;

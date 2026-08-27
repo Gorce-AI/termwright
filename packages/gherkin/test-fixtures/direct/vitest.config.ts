@@ -6,15 +6,17 @@ import ProviderReporter from './provider-reporter.js';
 
 export default defineConfig({
   root: resolve(import.meta.dirname, '../../../..'),
-  plugins: [gherkinPlugin<ProjectFixtures>({
-    featureRoot: 'packages/gherkin/test-fixtures/direct/features',
-    stepDefinitions: ['[filepath].steps.{ts,tsx,mts}'],
-    fixtureNames: ['projectFixture'],
-    generatedImports: {
-      test: resolve(import.meta.dirname, 'fixtures.ts'),
-      runtime: '@termwright/gherkin/runtime',
-    },
-  })],
+  plugins: [
+    gherkinPlugin<ProjectFixtures>({
+      featureRoot: 'packages/gherkin/test-fixtures/direct/features',
+      stepDefinitions: ['[filepath].steps.{ts,tsx,mts}'],
+      fixtureNames: ['projectFixture'],
+      generatedImports: {
+        test: resolve(import.meta.dirname, 'fixtures.ts'),
+        runtime: '@termwright/gherkin/runtime',
+      },
+    }),
+  ],
   resolve: {
     alias: [
       {

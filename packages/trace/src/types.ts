@@ -238,13 +238,7 @@ export interface TraceCrash {
 
 /** Kind discriminator of {@link TraceEvent}. */
 export type TraceEventKind =
-  | 'input'
-  | 'resize'
-  | 'step-start'
-  | 'step-end'
-  | 'action'
-  | 'assert'
-  | 'crash';
+  'input' | 'resize' | 'step-start' | 'step-end' | 'action' | 'assert' | 'crash';
 
 /** Terminal state of a recorded test step. */
 export type StepStatus = 'passed' | 'failed' | 'skipped';
@@ -273,10 +267,11 @@ interface InputEventBase extends TraceEventBase {
   readonly inputKind: 'key' | 'mouse' | 'paste' | 'raw';
 }
 
-export type InputEvent = InputEventBase & (
-  | { readonly dataB64: string; readonly recording: 'raw' }
-  | { readonly recording: 'withheld'; readonly withheldReason: 'artifact-policy' }
-);
+export type InputEvent = InputEventBase &
+  (
+    | { readonly dataB64: string; readonly recording: 'raw' }
+    | { readonly recording: 'withheld'; readonly withheldReason: 'artifact-policy' }
+  );
 
 /** Viewport resize. */
 export interface ResizeEvent extends TraceEventBase {
@@ -381,13 +376,7 @@ export interface CrashEvent extends TraceEventBase {
 
 /** One line of `events.jsonl`. */
 export type TraceEvent =
-  | InputEvent
-  | ResizeEvent
-  | StepStartEvent
-  | StepEndEvent
-  | ActionEvent
-  | AssertEvent
-  | CrashEvent;
+  InputEvent | ResizeEvent | StepStartEvent | StepEndEvent | ActionEvent | AssertEvent | CrashEvent;
 
 /** One line of `semantics.jsonl`. */
 export interface SemanticRecord {

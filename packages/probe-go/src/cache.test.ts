@@ -62,9 +62,9 @@ describe('the key', () => {
 
 describe('the location', () => {
   it('prefers TERMWRIGHT_CACHE_DIR, then XDG, then home', () => {
-    expect(cacheRoot({ TERMWRIGHT_CACHE_DIR: '/explicit', XDG_CACHE_HOME: '/xdg', HOME: '/home' })).toBe(
-      '/explicit',
-    );
+    expect(
+      cacheRoot({ TERMWRIGHT_CACHE_DIR: '/explicit', XDG_CACHE_HOME: '/xdg', HOME: '/home' }),
+    ).toBe('/explicit');
     expect(cacheRoot({ XDG_CACHE_HOME: '/xdg', HOME: '/home' })).toBe(join('/xdg', 'termwright'));
     expect(cacheRoot({ HOME: '/home' })).toBe(join('/home', '.cache', 'termwright'));
   });

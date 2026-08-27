@@ -36,19 +36,25 @@ describe('upstream patch candidate declarations', () => {
     const { declarations } = await loadDeclarations(root);
     const matched = crossCheckDeclarations(patchSets, declarations);
 
-    expect(matched.map(({ manifest }) => `${manifest.framework}@${manifest.frameworkVersion}`))
-      .toEqual([...declarations.keys()].sort());
-    for (const candidate of matched) await expect(validatePatchSetFiles(candidate)).resolves.toBeDefined();
+    expect(
+      matched.map(({ manifest }) => `${manifest.framework}@${manifest.frameworkVersion}`),
+    ).toEqual([...declarations.keys()].sort());
+    for (const candidate of matched)
+      await expect(validatePatchSetFiles(candidate)).resolves.toBeDefined();
   });
 
   it('refuses a manifest whose patch-set version drifted from the declaration', async () => {
     const patchSets = await discoverPatchSets(root);
     const { declarations } = await loadDeclarations(root);
     const first = patchSets[0];
-    const changed = { ...first, manifest: { ...first.manifest, patchSetVersion: first.manifest.patchSetVersion + 1 } };
+    const changed = {
+      ...first,
+      manifest: { ...first.manifest, patchSetVersion: first.manifest.patchSetVersion + 1 },
+    };
 
-    expect(() => crossCheckDeclarations([changed, ...patchSets.slice(1)], declarations))
-      .toThrow(/declares patch-set/u);
+    expect(() => crossCheckDeclarations([changed, ...patchSets.slice(1)], declarations)).toThrow(
+      /declares patch-set/u,
+    );
   });
 });
 
@@ -60,30 +66,38 @@ describe('fail-closed local artifacts', () => {
     const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
     await appendFile(join(directory, manifest.added[0].source), '\n// tampered\n');
 
-    await expect(validatePatchSetFiles({ manifest, patchSetDir: directory }))
-      .rejects.toThrow(/hashes .* expected/u);
+    await expect(validatePatchSetFiles({ manifest, patchSetDir: directory })).rejects.toThrow(
+      /hashes .* expected/u,
+    );
   });
 
   it('rejects traversal, duplicate targets and malformed digests', () => {
-    expect(() => validateManifestShape({
-      framework: 'example.invalid/framework',
-      frameworkVersion: 'v1.0.0',
-      patchSetVersion: 1,
-      patched: [{
-        path: '../outside.go',
-        patch: 'patches/file.patch',
-        sha256Before: `sha256:${'0'.repeat(64)}`,
-        sha256After: `sha256:${'1'.repeat(64)}`,
-      }],
-      added: [],
-    })).toThrow(CertificationError);
+    expect(() =>
+      validateManifestShape({
+        framework: 'example.invalid/framework',
+        frameworkVersion: 'v1.0.0',
+        patchSetVersion: 1,
+        patched: [
+          {
+            path: '../outside.go',
+            patch: 'patches/file.patch',
+            sha256Before: `sha256:${'0'.repeat(64)}`,
+            sha256After: `sha256:${'1'.repeat(64)}`,
+          },
+        ],
+        added: [],
+      }),
+    ).toThrow(CertificationError);
   });
 
   it('rejects two clean runs whose complete output digests differ', () => {
-    expect(() => assertDeterministicRuns('candidate',
-      { outputTreeDigest: `sha256:${'0'.repeat(64)}` },
-      { outputTreeDigest: `sha256:${'1'.repeat(64)}` },
-    )).toThrow(/different results/u);
+    expect(() =>
+      assertDeterministicRuns(
+        'candidate',
+        { outputTreeDigest: `sha256:${'0'.repeat(64)}` },
+        { outputTreeDigest: `sha256:${'1'.repeat(64)}` },
+      ),
+    ).toThrow(/different results/u);
   });
 });
 
@@ -115,14 +129,19 @@ describe('failure evidence', () => {
       failure: { phase: 'workflow-bootstrap' },
     });
     await expect(readFile(join(directory, 'candidate-provenance.json'), 'utf8')).rejects.toThrow();
-    expect(JSON.parse(await readFile(join(directory, 'candidate-report.json'), 'utf8'))).toEqual(report);
+    expect(JSON.parse(await readFile(join(directory, 'candidate-report.json'), 'utf8'))).toEqual(
+      report,
+    );
   });
 
   it('redacts repository, temporary and unrelated absolute paths from a failure', async () => {
     const directory = await temporary();
-    const unrelated = process.platform === 'win32' ? 'C:\\Users\\runner\\cache' : '/home/runner/cache';
+    const unrelated =
+      process.platform === 'win32' ? 'C:\\Users\\runner\\cache' : '/home/runner/cache';
     const sanitized = sanitizeFailureMessage(
-      new Error(`failed under ${directory}/source, ${unrelated}/module and file://${unrelated}/archive`),
+      new Error(
+        `failed under ${directory}/source, ${unrelated}/module and file://${unrelated}/archive`,
+      ),
       root,
       join(directory, 'output'),
     );
@@ -131,8 +150,12 @@ describe('failure evidence', () => {
     expect(sanitized).not.toContain(unrelated);
     expect(sanitized).toContain('file://<absolute-path>');
 
-    await expect(certify({ root: directory, outputDir: join(directory, 'output') })).rejects.toThrow();
-    const report = JSON.parse(await readFile(join(directory, 'output/candidate-report.json'), 'utf8'));
+    await expect(
+      certify({ root: directory, outputDir: join(directory, 'output') }),
+    ).rejects.toThrow();
+    const report = JSON.parse(
+      await readFile(join(directory, 'output/candidate-report.json'), 'utf8'),
+    );
     expect(report.state).toBe('failed');
     expect(report.failure.message).not.toContain(directory);
   });
@@ -147,16 +170,21 @@ describe('candidate provenance', () => {
         { id: 'compatibility-registry-runtime-drift', status: 'pass' },
         { id: 'existing-tests:@termwright/probe-go', status: 'pass' },
       ],
-      toolchains: { node: { version: 'v22.0.0' }, go: { version: 'go version go1.24 linux/amd64' } },
-      candidates: [{
-        id: 'example@v1.0.0#1',
-        module: 'example',
-        upstreamVersion: 'v1.0.0',
-        patchSetPath: 'patches/example',
-        patchSetDigest: digest,
-        material: { source: 'go-module', upstreamTreeDigest: digest, zipDigest: digest },
-        output: { outputTreeDigest: digest },
-      }],
+      toolchains: {
+        node: { version: 'v22.0.0' },
+        go: { version: 'go version go1.24 linux/amd64' },
+      },
+      candidates: [
+        {
+          id: 'example@v1.0.0#1',
+          module: 'example',
+          upstreamVersion: 'v1.0.0',
+          patchSetPath: 'patches/example',
+          patchSetDigest: digest,
+          material: { source: 'go-module', upstreamTreeDigest: digest, zipDigest: digest },
+          output: { outputTreeDigest: digest },
+        },
+      ],
     };
 
     const statement = provenance(report, 'revision', digest, digest);
@@ -164,7 +192,9 @@ describe('candidate provenance', () => {
       'compatibility-registry-runtime-drift',
       'existing-tests:@termwright/probe-go',
     ]);
-    expect(statement.predicate.buildDefinition.internalParameters.toolchains).toEqual(report.toolchains);
+    expect(statement.predicate.buildDefinition.internalParameters.toolchains).toEqual(
+      report.toolchains,
+    );
     expect(statement.predicate.buildDefinition.resolvedDependencies).toContainEqual({
       uri: 'file:patches/example',
       digest: { sha256: 'a'.repeat(64) },

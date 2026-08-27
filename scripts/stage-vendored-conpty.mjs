@@ -35,7 +35,8 @@ export async function stageVendoredConpty({ architecture, destination }) {
     const output = join(destinationRoot, relativePath);
     await mkdir(dirname(output), { recursive: true });
     await copyFile(input, output);
-    if (sha256(await readFile(output)) !== digest) throw new Error(`staged ConPTY asset changed: ${relativePath}`);
+    if (sha256(await readFile(output)) !== digest)
+      throw new Error(`staged ConPTY asset changed: ${relativePath}`);
   }
   for (const [filename, digest] of Object.entries(manifest.metadata)) {
     const input = join(source, filename);
@@ -43,9 +44,13 @@ export async function stageVendoredConpty({ architecture, destination }) {
     if (sha256(bytes) !== digest) throw new Error(`source ConPTY metadata changed: ${filename}`);
     const output = join(destinationRoot, filename);
     await copyFile(input, output);
-    if (sha256(await readFile(output)) !== digest) throw new Error(`staged ConPTY metadata changed: ${filename}`);
+    if (sha256(await readFile(output)) !== digest)
+      throw new Error(`staged ConPTY metadata changed: ${filename}`);
   }
-  await copyFile(join(source, 'conpty-manifest.json'), join(destinationRoot, 'conpty-manifest.json'));
+  await copyFile(
+    join(source, 'conpty-manifest.json'),
+    join(destinationRoot, 'conpty-manifest.json'),
+  );
   return manifest;
 }
 

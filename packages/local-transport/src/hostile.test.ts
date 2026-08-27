@@ -18,8 +18,11 @@ function framedBody(body: Uint8Array): Uint8Array {
 }
 
 function code(operation: () => void): string {
-  try { operation(); }
-  catch (error) { return error instanceof LocalTransportError ? error.code : `unexpected:${String(error)}`; }
+  try {
+    operation();
+  } catch (error) {
+    return error instanceof LocalTransportError ? error.code : `unexpected:${String(error)}`;
+  }
   return 'no-throw';
 }
 
@@ -28,14 +31,16 @@ describe('shared hostile local framing', () => {
     const decoder = new LocalJsonDecoder(64 * 1024, () => undefined);
     expect(code(() => decoder.push(header(0xffff_ffff)))).toBe('frame-oversized');
     expect(decoder.buffered).toBe(0);
-    expect(code(() => decoder.push(framedBody(new TextEncoder().encode('{}')))))
-      .toBe('frame-malformed');
+    expect(code(() => decoder.push(framedBody(new TextEncoder().encode('{}'))))).toBe(
+      'frame-malformed',
+    );
   });
 
   it('uses fatal UTF-8 decoding rather than replacement characters', () => {
     const decoder = new LocalJsonDecoder(1024, () => undefined);
-    expect(code(() => decoder.push(framedBody(new Uint8Array([0x22, 0xff, 0x22])))))
-      .toBe('frame-encoding');
+    expect(code(() => decoder.push(framedBody(new Uint8Array([0x22, 0xff, 0x22]))))).toBe(
+      'frame-encoding',
+    );
   });
 
   it('bounds a partial frame before allocating an attacker-declared body', () => {
@@ -61,7 +66,8 @@ describe('shared hostile local framing', () => {
     const messages: unknown[] = [];
     const decoder = new LocalJsonDecoder(64, (message) => messages.push(message));
     const frames = Array.from({ length: 100 }, (_, index) =>
-      framedBody(new TextEncoder().encode(JSON.stringify({ index }))));
+      framedBody(new TextEncoder().encode(JSON.stringify({ index }))),
+    );
     const length = frames.reduce((sum, frame) => sum + frame.length, 0);
     const chunk = new Uint8Array(length);
     let offset = 0;
@@ -77,9 +83,11 @@ describe('shared hostile local framing', () => {
 
   it('rejects prototype-bearing JSON at the shared DTO boundary', () => {
     const decoder = new LocalJsonDecoder(1024, () => undefined);
-    expect(code(() => decoder.push(framedBody(
-      new TextEncoder().encode('{"__proto__":{"polluted":true}}'),
-    )))).toBe('frame-malformed');
+    expect(
+      code(() =>
+        decoder.push(framedBody(new TextEncoder().encode('{"__proto__":{"polluted":true}}'))),
+      ),
+    ).toBe('frame-malformed');
     expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
   });
 });

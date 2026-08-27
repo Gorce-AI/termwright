@@ -8,7 +8,9 @@ function missing() {
 describe('fresh-checkout test host preparation', () => {
   it('does nothing when the compiled host already exists', async () => {
     const build = vi.fn();
-    await expect(ensureTestHost({ accessFile: async () => {}, build, verify: async () => [] })).resolves.toBe(false);
+    await expect(
+      ensureTestHost({ accessFile: async () => {}, build, verify: async () => [] }),
+    ).resolves.toBe(false);
     expect(build).not.toHaveBeenCalled();
   });
 
@@ -29,18 +31,24 @@ describe('fresh-checkout test host preparation', () => {
   it('does not treat permission and I/O failures as a missing build', async () => {
     const denied = Object.assign(new Error('denied'), { code: 'EACCES' });
     const build = vi.fn();
-    await expect(ensureTestHost({
-      accessFile: async () => { throw denied; },
-      build,
-      verify: async () => [],
-    })).rejects.toBe(denied);
+    await expect(
+      ensureTestHost({
+        accessFile: async () => {
+          throw denied;
+        },
+        build,
+        verify: async () => [],
+      }),
+    ).rejects.toBe(denied);
     expect(build).not.toHaveBeenCalled();
   });
 
   it('rebuilds an existing host when its source or artifact fingerprint is stale', async () => {
     let fresh = false;
-    const build = vi.fn(async () => { fresh = true; });
-    const verify = vi.fn(async () => fresh ? [] : ['workspace build sources changed']);
+    const build = vi.fn(async () => {
+      fresh = true;
+    });
+    const verify = vi.fn(async () => (fresh ? [] : ['workspace build sources changed']));
 
     await expect(ensureTestHost({ accessFile: async () => {}, build, verify })).resolves.toBe(true);
     expect(build).toHaveBeenCalledOnce();
@@ -56,7 +64,9 @@ describe('fresh-checkout test host preparation', () => {
     ],
   ])('self-heals a generated manifest with %s', async (_label, initialError) => {
     let built = false;
-    const build = vi.fn(async () => { built = true; });
+    const build = vi.fn(async () => {
+      built = true;
+    });
     const verify = vi.fn(async () => {
       if (!built) throw initialError;
       return [];
@@ -72,29 +82,37 @@ describe('fresh-checkout test host preparation', () => {
       'declared production artifact is missing: /tmp/packages/fixture/dist/index.js',
     );
     const build = vi.fn(async () => undefined);
-    const verify = vi.fn()
+    const verify = vi
+      .fn()
       .mockRejectedValueOnce(missingArtifact)
       .mockRejectedValueOnce(missingArtifact);
 
-    await expect(ensureTestHost({ accessFile: async () => {}, build, verify }))
-      .rejects.toThrow(/workspace build completed without a readable supported immutable manifest/u);
+    await expect(ensureTestHost({ accessFile: async () => {}, build, verify })).rejects.toThrow(
+      /workspace build completed without a readable supported immutable manifest/u,
+    );
     expect(build).toHaveBeenCalledOnce();
     expect(verify).toHaveBeenCalledTimes(2);
   });
 
   it('fails closed when a build does not refresh its manifest', async () => {
-    await expect(ensureTestHost({
-      accessFile: async () => {},
-      build: async () => undefined,
-      verify: async () => ['artifact changed after the build'],
-    })).rejects.toThrow(/completed without a fresh immutable manifest.*artifact changed/u);
+    await expect(
+      ensureTestHost({
+        accessFile: async () => {},
+        build: async () => undefined,
+        verify: async () => ['artifact changed after the build'],
+      }),
+    ).rejects.toThrow(/completed without a fresh immutable manifest.*artifact changed/u);
   });
 
   it('fails closed when rebuild leaves a malformed generated manifest', async () => {
-    await expect(ensureTestHost({
-      accessFile: async () => {},
-      build: async () => undefined,
-      verify: async () => { throw new SyntaxError('Unexpected end of JSON input'); },
-    })).rejects.toThrow(/completed without a readable supported immutable manifest/u);
+    await expect(
+      ensureTestHost({
+        accessFile: async () => {},
+        build: async () => undefined,
+        verify: async () => {
+          throw new SyntaxError('Unexpected end of JSON input');
+        },
+      }),
+    ).rejects.toThrow(/completed without a readable supported immutable manifest/u);
   });
 });

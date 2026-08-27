@@ -1,12 +1,12 @@
 ---
-"@termwright/driver": minor
-"@termwright/pty": minor
-"@termwright/pty-darwin-arm64": minor
-"@termwright/pty-darwin-x64": minor
-"@termwright/pty-linux-arm64": minor
-"@termwright/pty-linux-x64": minor
-"@termwright/pty-win32-arm64": minor
-"@termwright/pty-win32-x64": minor
+'@termwright/driver': minor
+'@termwright/pty': minor
+'@termwright/pty-darwin-arm64': minor
+'@termwright/pty-darwin-x64': minor
+'@termwright/pty-linux-arm64': minor
+'@termwright/pty-linux-x64': minor
+'@termwright/pty-win32-arm64': minor
+'@termwright/pty-win32-x64': minor
 ---
 
 Replace node-pty and the separate ConPTY loader with one Termwright-owned native

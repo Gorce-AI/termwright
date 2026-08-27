@@ -7,7 +7,12 @@
 import type { Rect, SemanticNode, SemanticSnapshot, SemanticState } from '@termwright/protocol';
 import type { CellAttributes, CellColor, CellSnapshot } from './api.js';
 import type { CapturedRow } from './screen.js';
-import { matchesText, type GenericQuery, type SemanticStep, type StylePredicates } from './selectors.js';
+import {
+  matchesText,
+  type GenericQuery,
+  type SemanticStep,
+  type StylePredicates,
+} from './selectors.js';
 
 /** Node index derived once per accepted snapshot. */
 export class SemanticIndex {
@@ -195,7 +200,11 @@ export function colorMatches(color: CellColor, spec: string): boolean {
     if (hex.length !== 6) return false;
     const value = Number.parseInt(hex, 16);
     if (Number.isNaN(value)) return false;
-    return color.r === ((value >> 16) & 0xff) && color.g === ((value >> 8) & 0xff) && color.b === (value & 0xff);
+    return (
+      color.r === ((value >> 16) & 0xff) &&
+      color.g === ((value >> 8) & 0xff) &&
+      color.b === (value & 0xff)
+    );
   }
   const named = NAMED_COLORS[normalized];
   const index = named ?? (/^\d+$/u.test(normalized) ? Number(normalized) : undefined);
@@ -224,7 +233,9 @@ function findRanges(text: string, query: GenericQuery): [number, number][] {
   const ranges: [number, number][] = [];
   const matcher = query.text;
   if (matcher.kind === 'regex') {
-    const flags = matcher.source.flags.includes('g') ? matcher.source.flags : `${matcher.source.flags}g`;
+    const flags = matcher.source.flags.includes('g')
+      ? matcher.source.flags
+      : `${matcher.source.flags}g`;
     const regex = new RegExp(matcher.source.source, flags);
     for (;;) {
       const match = regex.exec(text);
@@ -273,7 +284,10 @@ export function matchGrid(
       if (startColumn === undefined || endColumnCell === undefined) continue;
       const endCell = row.cells[endColumnCell];
       const width = endColumnCell + (endCell?.width === 2 ? 2 : 1) - startColumn;
-      if (scope != null && (startColumn < scope.column || startColumn + width > scope.column + scope.width)) {
+      if (
+        scope != null &&
+        (startColumn < scope.column || startColumn + width > scope.column + scope.width)
+      ) {
         continue;
       }
       if (query.style !== undefined) {

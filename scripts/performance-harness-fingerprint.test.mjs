@@ -44,40 +44,56 @@ describe('paired performance harness fingerprint', () => {
   it('changes when one methodology byte changes', async () => {
     const copy = await copyHarness();
     const before = await fingerprintPerformanceHarness({ root: copy });
-    const target = PERFORMANCE_HARNESS_FILES.find((path) => path.endsWith('quality-performance-timing.mjs'));
-    if (target === undefined) throw new Error('timing harness is absent from the fingerprint contract');
+    const target = PERFORMANCE_HARNESS_FILES.find((path) =>
+      path.endsWith('quality-performance-timing.mjs'),
+    );
+    if (target === undefined)
+      throw new Error('timing harness is absent from the fingerprint contract');
     await writeFile(join(copy, target), `${await readFile(join(copy, target), 'utf8')}\n`, 'utf8');
     const after = await fingerprintPerformanceHarness({ root: copy });
     expect(after.sha256).not.toBe(before.sha256);
-    expect(after.files.find((entry) => entry.path === target)?.sha256)
-      .not.toBe(before.files.find((entry) => entry.path === target)?.sha256);
+    expect(after.files.find((entry) => entry.path === target)?.sha256).not.toBe(
+      before.files.find((entry) => entry.path === target)?.sha256,
+    );
   });
 
   it('fails closed for a missing file or any missing, extra or duplicate expectation', async () => {
     const copy = await copyHarness();
     await unlink(join(copy, PERFORMANCE_HARNESS_FILES[0]));
-    await expect(fingerprintPerformanceHarness({ root: copy })).rejects.toThrow(/missing or unreadable/u);
+    await expect(fingerprintPerformanceHarness({ root: copy })).rejects.toThrow(
+      /missing or unreadable/u,
+    );
 
-    await expect(fingerprintPerformanceHarness({
-      root,
-      expectedFiles: PERFORMANCE_HARNESS_FILES.slice(1),
-    })).rejects.toThrow(/expected-file contract differs/u);
-    await expect(fingerprintPerformanceHarness({
-      root,
-      expectedFiles: [...PERFORMANCE_HARNESS_FILES, 'extra-methodology-file'],
-    })).rejects.toThrow(/expected-file contract differs/u);
-    await expect(fingerprintPerformanceHarness({
-      root,
-      expectedFiles: [...PERFORMANCE_HARNESS_FILES, PERFORMANCE_HARNESS_FILES[0]],
-    })).rejects.toThrow(/expected-file contract differs/u);
+    await expect(
+      fingerprintPerformanceHarness({
+        root,
+        expectedFiles: PERFORMANCE_HARNESS_FILES.slice(1),
+      }),
+    ).rejects.toThrow(/expected-file contract differs/u);
+    await expect(
+      fingerprintPerformanceHarness({
+        root,
+        expectedFiles: [...PERFORMANCE_HARNESS_FILES, 'extra-methodology-file'],
+      }),
+    ).rejects.toThrow(/expected-file contract differs/u);
+    await expect(
+      fingerprintPerformanceHarness({
+        root,
+        expectedFiles: [...PERFORMANCE_HARNESS_FILES, PERFORMANCE_HARNESS_FILES[0]],
+      }),
+    ).rejects.toThrow(/expected-file contract differs/u);
   });
 
   it('excludes the production subject and dependency lockfile', () => {
     expect(PERFORMANCE_HARNESS_FILES).not.toContain('pnpm-lock.yaml');
     expect(PERFORMANCE_HARNESS_FILES).not.toContain('scripts/performance-harness-fingerprint.mjs');
     expect(PERFORMANCE_HARNESS_FILES).not.toContain('scripts/performance-observations.mjs');
-    expect(PERFORMANCE_HARNESS_FILES.some((path) => path.startsWith('packages/driver/'))).toBe(false);
-    expect(PERFORMANCE_HARNESS_FILES.some((path) => path.startsWith('packages/protocol/'))).toBe(false);
+    expect(PERFORMANCE_HARNESS_FILES.some((path) => path.startsWith('packages/driver/'))).toBe(
+      false,
+    );
+    expect(PERFORMANCE_HARNESS_FILES.some((path) => path.startsWith('packages/protocol/'))).toBe(
+      false,
+    );
     expect(PERFORMANCE_HARNESS_FILES.some((path) => path.startsWith('packages/test/'))).toBe(false);
   });
 });

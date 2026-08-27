@@ -7,7 +7,9 @@ const crash: ReportCrash = { exit: { code: 1, signal: null }, screenTail: [], ti
 describe('buildTaskMeta', () => {
   it('says nothing when there is nothing to say', () => {
     expect(buildTaskMeta({})).toBeUndefined();
-    expect(buildTaskMeta({ traces: [], obsoleteSnapshots: [], crashes: [], lostLogRecords: 0 })).toBeUndefined();
+    expect(
+      buildTaskMeta({ traces: [], obsoleteSnapshots: [], crashes: [], lostLogRecords: 0 }),
+    ).toBeUndefined();
   });
 
   it('carries the lost-record count so a green run can still report it', () => {
@@ -26,30 +28,34 @@ describe('buildTaskMeta', () => {
     expect(
       buildTaskMeta({
         traces: ['out/a.twtrace'],
-        attemptFailures: [{
-          executionId: 'execution:e1' as import('./attempt-context.js').ExecutionId,
-          attemptId: 'attempt:a1' as import('./attempt-context.js').AttemptId,
-          repeat: 0,
-          retry: 0,
-          attempt: 1,
-          errors: [{ message: 'not ready', stack: 'at retry' }],
-          traceRefs: ['out/retry-1.twtrace'],
-        }],
+        attemptFailures: [
+          {
+            executionId: 'execution:e1' as import('./attempt-context.js').ExecutionId,
+            attemptId: 'attempt:a1' as import('./attempt-context.js').AttemptId,
+            repeat: 0,
+            retry: 0,
+            attempt: 1,
+            errors: [{ message: 'not ready', stack: 'at retry' }],
+            traceRefs: ['out/retry-1.twtrace'],
+          },
+        ],
         obsoleteSnapshots: ['renamed 1'],
         crashes: [crash],
         lostLogRecords: 3,
       }),
     ).toEqual({
       traces: ['out/a.twtrace'],
-      attemptFailures: [{
-        executionId: 'execution:e1',
-        attemptId: 'attempt:a1',
-        repeat: 0,
-        retry: 0,
-        attempt: 1,
-        errors: [{ message: 'not ready', stack: 'at retry' }],
-        traceRefs: ['out/retry-1.twtrace'],
-      }],
+      attemptFailures: [
+        {
+          executionId: 'execution:e1',
+          attemptId: 'attempt:a1',
+          repeat: 0,
+          retry: 0,
+          attempt: 1,
+          errors: [{ message: 'not ready', stack: 'at retry' }],
+          traceRefs: ['out/retry-1.twtrace'],
+        },
+      ],
       obsoleteSnapshots: ['renamed 1'],
       crashes: [crash],
       lostLogRecords: 3,

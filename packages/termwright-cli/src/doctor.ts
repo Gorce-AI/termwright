@@ -44,9 +44,10 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
     checks.push({
       name: 'Vitest',
       status: version === CERTIFIED_VITEST_VERSION ? 'pass' : 'fail',
-      detail: version === CERTIFIED_VITEST_VERSION
-        ? `${version} (exact-certified engine)`
-        : `${version}; Termwright requires exactly ${CERTIFIED_VITEST_VERSION}`,
+      detail:
+        version === CERTIFIED_VITEST_VERSION
+          ? `${version} (exact-certified engine)`
+          : `${version}; Termwright requires exactly ${CERTIFIED_VITEST_VERSION}`,
     });
   } catch {
     checks.push({ name: 'Vitest', status: 'fail', detail: 'not resolvable from this project' });
@@ -54,8 +55,9 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
 
   checks.push(await checkPty());
 
-  const locale = [process.env['LC_ALL'], process.env['LC_CTYPE'], process.env['LANG']]
-    .find((value) => value !== undefined && value !== '');
+  const locale = [process.env['LC_ALL'], process.env['LC_CTYPE'], process.env['LANG']].find(
+    (value) => value !== undefined && value !== '',
+  );
   const utf8 = locale !== undefined && /utf-?8/iu.test(locale);
   checks.push({
     name: 'UTF-8 locale',
@@ -71,7 +73,11 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
       detail: 'musl detected; some native framework integrations publish fewer capabilities',
     });
   } else {
-    checks.push({ name: 'Platform', status: 'pass', detail: `${process.platform} ${process.arch}` });
+    checks.push({
+      name: 'Platform',
+      status: 'pass',
+      detail: `${process.platform} ${process.arch}`,
+    });
   }
 
   return Object.freeze({
@@ -94,26 +100,37 @@ async function checkPty(): Promise<DoctorCheck> {
   let pty: ReturnType<ReturnType<typeof createNativePtyBackend>['spawn']> | undefined;
   try {
     pty = createNativePtyBackend().spawn({
-      command: [process.execPath, '-e', "process.stdout.write('termwright-doctor'); process.exit(0)"],
+      command: [
+        process.execPath,
+        '-e',
+        "process.stdout.write('termwright-doctor'); process.exit(0)",
+      ],
       env: inheritedSpawnEnv(),
       columns: 20,
       rows: 4,
     });
     const proc = pty;
     const text: Uint8Array[] = [];
-    const result = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('PTY smoke timed out')), 2_000);
-      proc.onData((data) => text.push(data));
-      proc.onExit((status) => {
-        clearTimeout(timer);
-        resolve(status);
-      });
-    });
+    const result = await new Promise<{ code: number | null; signal: string | null }>(
+      (resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('PTY smoke timed out')), 2_000);
+        proc.onData((data) => text.push(data));
+        proc.onExit((status) => {
+          clearTimeout(timer);
+          resolve(status);
+        });
+      },
+    );
     const output = new TextDecoder().decode(Buffer.concat(text.map((part) => Buffer.from(part))));
-    if (result.code !== 0 || !output.includes('termwright-doctor')) throw new Error(`unexpected PTY result ${String(result.code)}`);
+    if (result.code !== 0 || !output.includes('termwright-doctor'))
+      throw new Error(`unexpected PTY result ${String(result.code)}`);
     return { name: 'PTY backend', status: 'pass', detail: 'spawn, output and exit verified' };
   } catch (error) {
-    return { name: 'PTY backend', status: 'fail', detail: error instanceof Error ? error.message : String(error) };
+    return {
+      name: 'PTY backend',
+      status: 'fail',
+      detail: error instanceof Error ? error.message : String(error),
+    };
   } finally {
     pty?.dispose();
   }
@@ -125,12 +142,17 @@ async function checkWritable(cwd: string): Promise<DoctorCheck> {
     await rm(directory, { recursive: true, force: true });
     return { name: 'Artifact directory', status: 'pass', detail: cwd };
   } catch (error) {
-    return { name: 'Artifact directory', status: 'fail', detail: error instanceof Error ? error.message : String(error) };
+    return {
+      name: 'Artifact directory',
+      status: 'fail',
+      detail: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
 function libcFamily(): string | undefined {
-  const report = process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined;
+  const report = process.report?.getReport() as
+    { header?: { glibcVersionRuntime?: string } } | undefined;
   return report?.header?.glibcVersionRuntime === undefined ? 'musl' : 'glibc';
 }
 

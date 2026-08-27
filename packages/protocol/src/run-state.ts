@@ -68,14 +68,26 @@ export function canTransitionRunState(from: RunState, to: RunState): boolean {
 
 export type RunStateTransitionResult =
   | { readonly ok: true; readonly from: RunState; readonly to: RunState }
-  | { readonly ok: false; readonly code: 'invalid-run-state' | 'illegal-run-transition'; readonly detail: string };
+  | {
+      readonly ok: false;
+      readonly code: 'invalid-run-state' | 'illegal-run-transition';
+      readonly detail: string;
+    };
 
 export function validateRunStateTransition(from: unknown, to: unknown): RunStateTransitionResult {
   if (!isRunState(from) || !isRunState(to)) {
-    return Object.freeze({ ok: false, code: 'invalid-run-state', detail: 'run state is outside the closed Termwright vocabulary' });
+    return Object.freeze({
+      ok: false,
+      code: 'invalid-run-state',
+      detail: 'run state is outside the closed Termwright vocabulary',
+    });
   }
   if (!canTransitionRunState(from, to)) {
-    return Object.freeze({ ok: false, code: 'illegal-run-transition', detail: `run cannot transition from ${from} to ${to}` });
+    return Object.freeze({
+      ok: false,
+      code: 'illegal-run-transition',
+      detail: `run cannot transition from ${from} to ${to}`,
+    });
   }
   return Object.freeze({ ok: true, from, to });
 }

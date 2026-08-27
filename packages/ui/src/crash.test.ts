@@ -11,7 +11,9 @@ const valid = {
     { timeMs: 1_700, kind: 'key', bytes: 1, preview: '\\r' },
     { timeMs: 1_750, kind: 'paste', bytes: 64 },
   ],
-  diagnosticsTail: [{ code: 'protocol-violation', detail: 'frame too large', revision: 7, timeMs: 1_790 }],
+  diagnosticsTail: [
+    { code: 'protocol-violation', detail: 'frame too large', revision: 7, timeMs: 1_790 },
+  ],
 };
 
 describe('parseCrash', () => {
@@ -74,7 +76,11 @@ describe('parseCrash', () => {
       ...valid,
       screenTail: Array.from({ length: 50_000 }, (_, index) => 'x'.repeat(10_000) + String(index)),
       recentInputs: Array.from({ length: 5_000 }, () => ({ timeMs: 1, kind: 'key', bytes: 1 })),
-      diagnosticsTail: Array.from({ length: 5_000 }, () => ({ code: 'noise', detail: 'y'.repeat(10_000), timeMs: 1 })),
+      diagnosticsTail: Array.from({ length: 5_000 }, () => ({
+        code: 'noise',
+        detail: 'y'.repeat(10_000),
+        timeMs: 1,
+      })),
     });
     expect(crash?.screenTail.length).toBe(500);
     expect(crash?.screenTail[0]?.length).toBe(4_096);

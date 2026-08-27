@@ -93,12 +93,12 @@ version across every registry.
 
 One release commit receives:
 
-| Tag | Purpose |
-| --- | --- |
-| `@termwright/<package>@X.Y.Z` | npm package source |
-| `termwright@X.Y.Z` | umbrella npm package source |
-| `protocol/vX.Y.Z` | release anchor and GitHub Release |
-| `clients/go/vX.Y.Z` | Go module version |
+| Tag                           | Purpose                           |
+| ----------------------------- | --------------------------------- |
+| `@termwright/<package>@X.Y.Z` | npm package source                |
+| `termwright@X.Y.Z`            | umbrella npm package source       |
+| `protocol/vX.Y.Z`             | release anchor and GitHub Release |
+| `clients/go/vX.Y.Z`           | Go module version                 |
 
 Tags are created as one atomic push after all verification passes.
 
@@ -141,11 +141,11 @@ error—never restore the inbox conhost as a fallback.
 Registry publisher configuration is a one-time repository setup, not part of a
 release:
 
-| Registry | Packages | Trusted workflow | Environment |
-| --- | --- | --- | --- |
-| npm | every public package | `release.yml` | `npm-publish` |
-| PyPI | `termwright` | `release.yml` | `pypi-publish` |
-| crates.io | all three Rust crates | `release.yml` | `crates-publish` |
+| Registry  | Packages              | Trusted workflow | Environment      |
+| --------- | --------------------- | ---------------- | ---------------- |
+| npm       | every public package  | `release.yml`    | `npm-publish`    |
+| PyPI      | `termwright`          | `release.yml`    | `pypi-publish`   |
+| crates.io | all three Rust crates | `release.yml`    | `crates-publish` |
 
 The environments restrict deployment identity. For unattended operation they
 must not add a required-review prompt. The workflow needs `id-token: write`

@@ -30,7 +30,7 @@ const { terminal, profile } = createTerminal({
 const serialize = loadSerializeAddon(terminal);
 terminal.write('│ boxes line up only if both ends agree │');
 
-console.log(profile.id);                   // record this with the session
+console.log(profile.id); // record this with the session
 console.log(terminal.unicode.activeVersion); // the same id: ask a terminal what it is
 console.log(Object.keys(TERMINAL_PROFILES));
 ```
@@ -58,11 +58,11 @@ package exists to prevent.
 Terminals disagree about a handful of things that decide whether a bordered box
 lines up. A profile is a named set of answers to exactly those questions:
 
-| Switch | What it decides |
-|---|---|
-| `unicodeVersion` | which width tables apply |
-| `ambiguousWide` | whether East Asian Ambiguous characters take one column or two |
-| `variationSelectors` | whether `❤️` (VS16) is one column or two |
+| Switch                     | What it decides                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| `unicodeVersion`           | which width tables apply                                                              |
+| `ambiguousWide`            | whether East Asian Ambiguous characters take one column or two                        |
+| `variationSelectors`       | whether `❤️` (VS16) is one column or two                                              |
 | `reflowCursorLineOnResize` | whether the cursor's line reflows when the terminal resizes (wrapped lines always do) |
 
 Three profiles ship, because they cover the three answers real terminals give:
@@ -73,7 +73,7 @@ Three profiles ship, because they cover the three answers real terminals give:
 - **`iterm2-ambiguous-wide`** — ambiguous characters take two columns, the way
   iTerm2 answers when configured for CJK.
 
-Naming one after kitty means *this is how kitty answers*, not *this is kitty*.
+Naming one after kitty means _this is how kitty answers_, not _this is kitty_.
 A profile is a set of switches that reproduces how terminals differ; it is not
 an emulation of any particular one, and it is not trying to become one.
 
@@ -91,7 +91,7 @@ hang the test suite of everyone who imported this package. Shipping three
 profiles that work beats shipping four when the fourth freezes the room.
 
 `reflowCursorLineOnResize` is named for exactly what it reaches. xterm.js always
-reflows *wrapped* lines; the only choice it offers is the cursor's line, and the
+reflows _wrapped_ lines; the only choice it offers is the cursor's line, and the
 field says so rather than promising reflow control it does not have.
 
 ## Why the factory, and not just a shared config
@@ -99,8 +99,8 @@ field says so rather than promising reflow control it does not have.
 The bug that prompted this package: the driver loaded the Unicode 11 addon and
 the replay did not, so a session measured a character at Unicode 11 widths and
 its own replay measured the same bytes at Unicode 6 — silently, and only visibly
-when a box drifted by one column. A shared *config* would not have fixed that;
-only a shared *factory* makes it impossible to forget.
+when a box drifted by one column. A shared _config_ would not have fixed that;
+only a shared _factory_ makes it impossible to forget.
 
 The factory also absorbs one upstream trap: `@xterm/headless` and its addons are
 CJS-only despite shipping `.mjs` builds, so they must be imported through their

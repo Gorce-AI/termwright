@@ -92,11 +92,15 @@ describe('verifyMarkerPayload', () => {
   });
 
   it('rejects a MAC minted with a different token', () => {
-    expect(verifyMarkerPayload(payloadOf(encodeMarker('other-token', SESSION, 5)), TOKEN, SESSION)).toBeNull();
+    expect(
+      verifyMarkerPayload(payloadOf(encodeMarker('other-token', SESSION, 5)), TOKEN, SESSION),
+    ).toBeNull();
   });
 
   it('rejects a MAC bound to a different session', () => {
-    expect(verifyMarkerPayload(payloadOf(encodeMarker(TOKEN, 'session-2', 5)), TOKEN, SESSION)).toBeNull();
+    expect(
+      verifyMarkerPayload(payloadOf(encodeMarker(TOKEN, 'session-2', 5)), TOKEN, SESSION),
+    ).toBeNull();
   });
 
   it('rejects a MAC replayed onto a different revision', () => {

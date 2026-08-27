@@ -95,15 +95,34 @@ describe('hostile framing', () => {
 const ROOMY = Object.freeze({ ...DEFAULT_LIMITS, maxSnapshotBytes: 64 * MB });
 
 function wireNode(node: Record<string, unknown>): Record<string, unknown> {
-  return { geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } }, ...node };
+  return {
+    geometry: {
+      displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    },
+    ...node,
+  };
 }
 
-function wireSnapshot(nodes: readonly Record<string, unknown>[], rootIds: readonly string[]): Record<string, unknown> {
+function wireSnapshot(
+  nodes: readonly Record<string, unknown>[],
+  rootIds: readonly string[],
+): Record<string, unknown> {
   return {
-    v: 2, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds,
+    v: 2,
+    sessionId: 's',
+    revision: 1,
+    columns: 80,
+    rows: 24,
+    rootIds,
     nodes: nodes.map(wireNode),
     coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }
 
@@ -113,10 +132,7 @@ describe('hostile snapshots', () => {
     for (let i = 0; i < 50_000; i += 1) {
       nodes.push({ id: `n${i}`, parentId: 'root', role: 'text', name: 'x' });
     }
-    const result = validateSnapshot(
-      wireSnapshot(nodes, ['root']),
-      DEFAULT_LIMITS,
-    );
+    const result = validateSnapshot(wireSnapshot(nodes, ['root']), DEFAULT_LIMITS);
     expect(result.ok ? 'ok' : result.code).toBe('bytes');
   });
 
@@ -125,22 +141,22 @@ describe('hostile snapshots', () => {
     for (let i = 0; i < 50_000; i += 1) {
       nodes.push({ id: `n${i}`, parentId: 'root', role: 'text', name: 'x' });
     }
-    const result = validateSnapshot(
-      wireSnapshot(nodes, ['root']),
-      ROOMY,
-    );
+    const result = validateSnapshot(wireSnapshot(nodes, ['root']), ROOMY);
     expect(result.ok ? 'ok' : result.code).toBe('count');
   });
 
   it('rejects a deep parent chain at the depth ceiling', () => {
     const nodes: Record<string, unknown>[] = [{ id: 'n0', role: 'region', name: 'n0' }];
     for (let i = 1; i < 5_000; i += 1) {
-      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', frameworkType: 'Fixture', name: 'x' });
+      nodes.push({
+        id: `n${i}`,
+        parentId: `n${i - 1}`,
+        role: 'generic',
+        frameworkType: 'Fixture',
+        name: 'x',
+      });
     }
-    const result = validateSnapshot(
-      wireSnapshot(nodes, ['n0']),
-      DEFAULT_LIMITS,
-    );
+    const result = validateSnapshot(wireSnapshot(nodes, ['n0']), DEFAULT_LIMITS);
     expect(result.ok ? 'ok' : result.code).toBe('depth');
   });
 
@@ -154,7 +170,11 @@ describe('hostile snapshots', () => {
       rootIds: ['root'],
       nodes: [wireNode({ id: 'root', role: 'region', name: 'A'.repeat(2 * MB) })],
       coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-      hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+      hitGrid: {
+        status: 'unsupported',
+        capability: 'pointer-hit-grid',
+        reason: 'framework-unobservable',
+      },
     };
     const result = validateSnapshot(snapshot, DEFAULT_LIMITS);
     expect(result.ok ? 'ok' : result.code).toBe('bytes');
@@ -172,24 +192,16 @@ describe('hostile snapshots', () => {
         name: 'x',
       });
     }
-    const result = validateSnapshot(
-      wireSnapshot(nodes, []),
-      { ...ROOMY, maxNodes: size },
-    );
+    const result = validateSnapshot(wireSnapshot(nodes, []), { ...ROOMY, maxNodes: size });
     expect(result.ok ? 'ok' : result.code).toBe('cycle');
   });
 
   it('validates a snapshot at the node ceiling in bounded memory', () => {
-    const nodes: Record<string, unknown>[] = [
-      { id: 'root', role: 'region', name: 'main' },
-    ];
+    const nodes: Record<string, unknown>[] = [{ id: 'root', role: 'region', name: 'main' }];
     for (let i = 0; i < DEFAULT_LIMITS.maxNodes - 1; i += 1) {
       nodes.push({ id: `n${i}`, parentId: 'root', role: 'text', name: `row ${i}` });
     }
-    const result = validateSnapshot(
-      wireSnapshot(nodes, ['root']),
-      DEFAULT_LIMITS,
-    );
+    const result = validateSnapshot(wireSnapshot(nodes, ['root']), DEFAULT_LIMITS);
     expect(result.ok).toBe(true);
   });
 
@@ -206,7 +218,11 @@ describe('hostile snapshots', () => {
           rootIds: ['root'],
           nodes: [wireNode({ id: 'root', role: 'region', name: 'B'.repeat(4 * MB) })],
           coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-          hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+          hitGrid: {
+            status: 'unsupported',
+            capability: 'pointer-hit-grid',
+            reason: 'framework-unobservable',
+          },
         },
       },
       DEFAULT_LIMITS,
@@ -231,10 +247,7 @@ describe('hostile log flood', () => {
   });
 
   it('rejects an oversized record without retaining it', () => {
-    const result = validateLogRecord(
-      { ...record(1), message: 'A'.repeat(4 * MB) },
-      DEFAULT_LIMITS,
-    );
+    const result = validateLogRecord({ ...record(1), message: 'A'.repeat(4 * MB) }, DEFAULT_LIMITS);
     expect(result.ok ? 'ok' : result.code).toBe('bytes');
   });
 

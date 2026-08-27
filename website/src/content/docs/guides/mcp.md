@@ -14,8 +14,8 @@ Add the executable to your agent host:
 ```jsonc
 {
   "mcpServers": {
-    "termwright": {"command": "termwright-mcp"}
-  }
+    "termwright": { "command": "termwright-mcp" },
+  },
 }
 ```
 
@@ -30,7 +30,7 @@ termwright-mcp --http --port 7333
 Start with `terminal.launch`, then request `terminal.snapshot`:
 
 ```jsonc
-{"command": ["node", "/workspace/app.js"], "columns": 100, "rows": 30}
+{ "command": ["node", "/workspace/app.js"], "columns": 100, "rows": 30 }
 ```
 
 The snapshot contains the terminal screen and, when an integration is active,

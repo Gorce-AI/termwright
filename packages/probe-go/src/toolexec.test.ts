@@ -1,9 +1,5 @@
-import {describe, expect, it} from 'vitest';
-import {
-  digestGoToolExecSource,
-  GoToolExecError,
-  quoteGoCommandArgument,
-} from './toolexec.js';
+import { describe, expect, it } from 'vitest';
+import { digestGoToolExecSource, GoToolExecError, quoteGoCommandArgument } from './toolexec.js';
 
 describe('Go tool-executor unit contracts', () => {
   it('quotes Windows tool paths with Go toolexec grammar rather than JSON escaping', () => {
@@ -12,8 +8,9 @@ describe('Go tool-executor unit contracts', () => {
   });
 
   it('fails closed when a tool path cannot be represented by Go toolexec grammar', () => {
-    expect(() => quoteGoCommandArgument(`path with 'single' and "double" quotes`))
-      .toThrow(expect.objectContaining({code: 'go-environment'} satisfies Partial<GoToolExecError>));
+    expect(() => quoteGoCommandArgument(`path with 'single' and "double" quotes`)).toThrow(
+      expect.objectContaining({ code: 'go-environment' } satisfies Partial<GoToolExecError>),
+    );
   });
 
   it('gives owned source bytes a deterministic content identity', () => {

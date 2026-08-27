@@ -2,7 +2,10 @@
 
 import { inspect } from 'node:util';
 import { ResourceBroker, type ResourceVector } from '@termwright/resource-broker';
-import { startResourceBrokerServer, type ResourceBrokerServer } from '@termwright/resource-broker/transport';
+import {
+  startResourceBrokerServer,
+  type ResourceBrokerServer,
+} from '@termwright/resource-broker/transport';
 import { startRunJournalServer, type RunJournalServer } from '@termwright/run-journal-transport';
 import { type NativeRunAttempt, type RunManifestWriter } from '@termwright/run-history';
 import {
@@ -20,9 +23,7 @@ import {
   type TerminalRunState,
 } from '@termwright/protocol';
 import type { TermwrightHostTaskIdentity } from '@termwright/test/runner';
-import {
-  assertCertifiedVitestRuntime,
-} from '@termwright/test/vitest-engine';
+import { assertCertifiedVitestRuntime } from '@termwright/test/vitest-engine';
 import type { UserConsoleLog } from 'vitest';
 import type { TestCase, TestRunResult } from 'vitest/node';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
@@ -44,12 +45,19 @@ import {
 } from './test-host-persistence.js';
 import { loadRepositorySkipDeclarations } from './skip-policy.js';
 
-export { HostRunBudget, TermwrightHostStartupCleanupError, TermwrightHostTimeoutError } from './test-host-persistence.js';
+export {
+  HostRunBudget,
+  TermwrightHostStartupCleanupError,
+  TermwrightHostTimeoutError,
+} from './test-host-persistence.js';
 export type { TermwrightHostDeadlineRuntime } from './test-host-persistence.js';
 export type { TermwrightVitestEngine } from './test-host-engine.js';
 
 export { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
-export type { TermwrightResourceProfile, TermwrightResourceProfileName } from './resource-profiles.js';
+export type {
+  TermwrightResourceProfile,
+  TermwrightResourceProfileName,
+} from './resource-profiles.js';
 
 export interface NativeTestCase {
   readonly runnerTaskId: RunnerTaskId;
@@ -207,11 +215,14 @@ export class TermwrightTestHost {
   readonly #timeouts: TermwrightHostTimeouts;
   readonly #skipDeclarations: readonly NativeTestSkipDeclaration[];
   readonly #projects = new Map<string, ProjectId>();
-  readonly #tasks = new Map<string, {
-    readonly signature: string;
-    readonly runnerTaskId: RunnerTaskId;
-    readonly specId: SpecId;
-  }>();
+  readonly #tasks = new Map<
+    string,
+    {
+      readonly signature: string;
+      readonly runnerTaskId: RunnerTaskId;
+      readonly specId: SpecId;
+    }
+  >();
   #active: ActiveRun | undefined;
   readonly #detachConsole: (() => void) | undefined;
   #closed = false;
@@ -250,8 +261,8 @@ export class TermwrightTestHost {
   static async open(options: TermwrightTestHostOptions): Promise<TermwrightTestHost> {
     assertFirstWorkflowAttempt(process.env);
     await preflightTestHost(options);
-    const skipDeclarations = options.skipDeclarations ??
-      await loadRepositorySkipDeclarations(options.cwd);
+    const skipDeclarations =
+      options.skipDeclarations ?? (await loadRepositorySkipDeclarations(options.cwd));
     const timeouts = resolveHostTimeouts(options.timeouts);
     const creation = createCertifiedVitestEngine(options);
     let created;
@@ -278,7 +289,10 @@ export class TermwrightTestHost {
   }
 
   /** Test seam; production callers use {@link open}. */
-  static fromEngine(engine: TermwrightVitestEngine, options: TermwrightTestHostOptions): TermwrightTestHost {
+  static fromEngine(
+    engine: TermwrightVitestEngine,
+    options: TermwrightTestHostOptions,
+  ): TermwrightTestHost {
     assertCertifiedVitestRuntime(engine.version);
     return new TermwrightTestHost(engine, options);
   }
@@ -333,12 +347,14 @@ export class TermwrightTestHost {
     let running: RunHandle;
     const launch = (): RunHandle => {
       const handle = this.requestRun(request);
-      void handle.completed.then((completion) => onCompletion?.(completion)).finally(() => {
-        if (!closed && queued) {
-          queued = false;
-          running = launch();
-        }
-      });
+      void handle.completed
+        .then((completion) => onCompletion?.(completion))
+        .finally(() => {
+          if (!closed && queued) {
+            queued = false;
+            running = launch();
+          }
+        });
       return handle;
     };
     const detach = this.#engine.onSourceChange(() => {
@@ -389,7 +405,11 @@ export class TermwrightTestHost {
     let failure: unknown;
     const testFailures: NativeTestFailure[] = [];
     let skips: readonly NativeTestSkip[] = Object.freeze([]);
-    let skipPolicy: NativeTestSkipPolicyResult = Object.freeze({ status: 'matched', declarations: 0, issues: Object.freeze([]) });
+    let skipPolicy: NativeTestSkipPolicyResult = Object.freeze({
+      status: 'matched',
+      declarations: 0,
+      issues: Object.freeze([]),
+    });
     let brokerServer: ResourceBrokerServer | undefined;
     let journalServer: RunJournalServer | undefined;
     const expectedTasks = new Set<RunnerTaskId>();
@@ -400,40 +420,44 @@ export class TermwrightTestHost {
     let history: RunHistoryPersistence | undefined;
     try {
       history = await active.budget.execution('run history startup', () => active.history);
-      const broker = new ResourceBroker({ runId: active.runId, capacities: this.#resourceProfile.capacities });
-      brokerServer = await active.budget.startResource(
-        'resource broker startup',
-        (signal) => startResourceBrokerServer({ broker, runId: active.runId, signal }),
+      const broker = new ResourceBroker({
+        runId: active.runId,
+        capacities: this.#resourceProfile.capacities,
+      });
+      brokerServer = await active.budget.startResource('resource broker startup', (signal) =>
+        startResourceBrokerServer({ broker, runId: active.runId, signal }),
       );
-      journalServer = await active.budget.startResource(
-        'run journal startup',
-        (signal) => startRunJournalServer({
+      journalServer = await active.budget.startResource('run journal startup', (signal) =>
+        startRunJournalServer({
           runId: active.runId,
           signal,
           append: (event) => {
-          observeAttemptEvent(event, expectedTasks, attempts, active.budget.elapsedMs());
-          const appended = active.persistence.append(event);
-          if (!appended.ok) {
-            throw new Error(`run journal rejected worker event: ${appended.code}: ${appended.detail}`);
-          }
-          if (event.type === 'attempt.finished' && event.identity.attemptId !== undefined) {
-            const snapshot = broker.snapshot();
-            const attemptId = event.identity.attemptId;
-            const activeLeases = snapshot.active.filter((lease) => lease.attemptId === attemptId);
-            const queued = snapshot.queue.filter((request) => request.attemptId === attemptId);
-            if (activeLeases.length > 0 || queued.length > 0) {
-              resourceFailure ??= new Error(
-                `attempt ${attemptId} finished with ${activeLeases.length} active resource leases and ${queued.length} queued requests` +
-                (activeLeases.length === 0 ? '' : `: ${JSON.stringify(activeLeases)}`),
+            observeAttemptEvent(event, expectedTasks, attempts, active.budget.elapsedMs());
+            const appended = active.persistence.append(event);
+            if (!appended.ok) {
+              throw new Error(
+                `run journal rejected worker event: ${appended.code}: ${appended.detail}`,
               );
-              // The transport ACK is written in the current poll phase. A
-              // managed setImmediate task requests cancellation afterwards,
-              // so the worker never deadlocks waiting for its final journal
-              // ACK and the host never leaves a fire-and-forget rejection.
-              resourceCancellation ??= new Promise<void>((resolve) => setImmediate(resolve))
-                .then(() => this.#engine.cancel());
             }
-          }
+            if (event.type === 'attempt.finished' && event.identity.attemptId !== undefined) {
+              const snapshot = broker.snapshot();
+              const attemptId = event.identity.attemptId;
+              const activeLeases = snapshot.active.filter((lease) => lease.attemptId === attemptId);
+              const queued = snapshot.queue.filter((request) => request.attemptId === attemptId);
+              if (activeLeases.length > 0 || queued.length > 0) {
+                resourceFailure ??= new Error(
+                  `attempt ${attemptId} finished with ${activeLeases.length} active resource leases and ${queued.length} queued requests` +
+                    (activeLeases.length === 0 ? '' : `: ${JSON.stringify(activeLeases)}`),
+                );
+                // The transport ACK is written in the current poll phase. A
+                // managed setImmediate task requests cancellation afterwards,
+                // so the worker never deadlocks waiting for its final journal
+                // ACK and the host never leaves a fire-and-forget rejection.
+                resourceCancellation ??= new Promise<void>((resolve) => setImmediate(resolve)).then(
+                  () => this.#engine.cancel(),
+                );
+              }
+            }
           },
         }),
       );
@@ -447,7 +471,8 @@ export class TermwrightTestHost {
         // later total-run deadline is only a backstop if worker cancellation
         // fails; using the execution instant here makes two processes race to
         // classify the same timeout. The epoch form is comparable across forks.
-        admissionDeadline: performance.timeOrigin + performance.now() + active.budget.finalizationRemainingMs(),
+        admissionDeadline:
+          performance.timeOrigin + performance.now() + active.budget.finalizationRemainingMs(),
         resourceProfile: this.#resourceProfile.perTerminal,
       } as const;
       const journalContext = {
@@ -467,7 +492,9 @@ export class TermwrightTestHost {
         broker: brokerContext,
         journal: journalContext,
       });
-      const collection = await active.budget.execution('Vitest collection', () => this.#engine.collect(this.#filters));
+      const collection = await active.budget.execution('Vitest collection', () =>
+        this.#engine.collect(this.#filters),
+      );
       const collectionErrors = collectVitestCollectionErrors(collection.result);
       if (collectionErrors.length > 0) {
         throw new AggregateError(collectionErrors, 'Vitest collection failed');
@@ -495,7 +522,10 @@ export class TermwrightTestHost {
         terminal = 'skipped';
       } else {
         this.#transition(active, 'scheduled');
-        const tasks: Record<string, TermwrightHostTaskIdentity> = Object.create(null) as Record<string, TermwrightHostTaskIdentity>;
+        const tasks: Record<string, TermwrightHostTaskIdentity> = Object.create(null) as Record<
+          string,
+          TermwrightHostTaskIdentity
+        >;
         const modules = new Set<string>();
         for (const test of selected) {
           expectedTasks.add(test.runnerTaskId);
@@ -523,8 +553,12 @@ export class TermwrightTestHost {
           terminal = 'skipped';
         } else {
           this.#transition(active, 'running');
-          const result = await active.budget.execution('Vitest execution', () => this.#engine.run(modules));
-          const selectedByNativeId = new Map(selected.map((test) => [test.nativeTaskId, test.runnerTaskId]));
+          const result = await active.budget.execution('Vitest execution', () =>
+            this.#engine.run(modules),
+          );
+          const selectedByNativeId = new Map(
+            selected.map((test) => [test.nativeTaskId, test.runnerTaskId]),
+          );
           const selectedCases = new Map(selected.map((test) => [test.nativeTaskId, test]));
           for (const module of result.testModules) {
             for (const testCase of module.children.allTests()) {
@@ -540,7 +574,9 @@ export class TermwrightTestHost {
                   nativeTaskId: identity.nativeTaskId,
                   file: identity.file,
                   fullName: identity.fullName,
-                  errors: Object.freeze(nativeResult.errors.map((error) => describeTestError(error))),
+                  errors: Object.freeze(
+                    nativeResult.errors.map((error) => describeTestError(error)),
+                  ),
                 });
                 testFailures.push(observed);
                 this.#recordTestFailure(active, identity, observed.errors);
@@ -554,9 +590,16 @@ export class TermwrightTestHost {
           // the final state remains infrastructure-failed and the lease stays
           // held until its worker is reclaimed.
           if (resourceCancellation !== undefined) {
-            try { await active.budget.finalization('resource leak cancellation', () => resourceCancellation!); }
-            catch (error) {
-              throw new AggregateError([resourceFailure, error], 'resource leak cancellation failed');
+            try {
+              await active.budget.finalization(
+                'resource leak cancellation',
+                () => resourceCancellation!,
+              );
+            } catch (error) {
+              throw new AggregateError(
+                [resourceFailure, error],
+                'resource leak cancellation failed',
+              );
             }
           }
           if (resourceFailure !== undefined) throw resourceFailure;
@@ -570,7 +613,9 @@ export class TermwrightTestHost {
           // only this assignment puts it in the journal and the CLI output.
           if (terminal === 'infrastructure-failed' && result.unhandledErrors.length > 0) {
             failure = new AggregateError(
-              result.unhandledErrors.map((error) => (error instanceof Error ? error : new Error(describeFailure(error)))),
+              result.unhandledErrors.map((error) =>
+                error instanceof Error ? error : new Error(describeFailure(error)),
+              ),
               `vitest reported ${result.unhandledErrors.length} unhandled error(s) outside any test`,
             );
           }
@@ -578,15 +623,19 @@ export class TermwrightTestHost {
       }
     } catch (error) {
       failure = error;
-      terminal = isNoSpace(error) || error instanceof TermwrightHostStartupCleanupError
-        ? 'incomplete'
-        : active.cancellationRequested
-          ? 'cancelled'
-          : 'infrastructure-failed';
+      terminal =
+        isNoSpace(error) || error instanceof TermwrightHostStartupCleanupError
+          ? 'incomplete'
+          : active.cancellationRequested
+            ? 'cancelled'
+            : 'infrastructure-failed';
       if (canTransitionRunState(active.state, 'finalizing')) this.#transition(active, 'finalizing');
       if (error instanceof TermwrightHostTimeoutError) {
-        try { await active.budget.finalization('Vitest timeout cancellation', () => this.#engine.cancel()); }
-        catch (cancelError) {
+        try {
+          await active.budget.finalization('Vitest timeout cancellation', () =>
+            this.#engine.cancel(),
+          );
+        } catch (cancelError) {
           failure = new AggregateError([error, cancelError], 'host timeout cancellation failed');
           terminal = 'incomplete';
         }
@@ -603,13 +652,19 @@ export class TermwrightTestHost {
         const leak = new Error(
           `run ${active.runId} reached finalization with ${leaked.active.length} active resource leases and ${leaked.queue.length} queued requests`,
         );
-        failure = failure === undefined ? leak : new AggregateError([failure, leak], 'run left resource leases');
+        failure =
+          failure === undefined
+            ? leak
+            : new AggregateError([failure, leak], 'run left resource leases');
         terminal = 'infrastructure-failed';
       }
       try {
         await active.budget.finalization('resource broker close', () => brokerServer.close());
       } catch (error) {
-        failure = failure === undefined ? error : new AggregateError([failure, error], 'run broker cleanup failed');
+        failure =
+          failure === undefined
+            ? error
+            : new AggregateError([failure, error], 'run broker cleanup failed');
         terminal = 'incomplete';
       }
     }
@@ -618,21 +673,27 @@ export class TermwrightTestHost {
       try {
         await active.budget.finalization('run journal close', () => journalServer.close());
       } catch (error) {
-        failure = failure === undefined ? error : new AggregateError([failure, error], 'run journal transport cleanup failed');
+        failure =
+          failure === undefined
+            ? error
+            : new AggregateError([failure, error], 'run journal transport cleanup failed');
         terminal = 'incomplete';
       }
     }
 
     if (!active.cancellationRequested && resourceFailure === undefined && expectedTasks.size > 0) {
       const unfinished = [...attempts.entries()].filter(([, attempt]) => !attempt.finished);
-      const observedTasks = new Set([...attempts.values()].filter((attempt) => attempt.finished).map((attempt) => attempt.task));
+      const observedTasks = new Set(
+        [...attempts.values()].filter((attempt) => attempt.finished).map((attempt) => attempt.task),
+      );
       // A runner/setup failure can happen before an authored Attempt exists
       // (notably scheduler admission). Vitest's failed task plus its recorded
       // test.failed event is complete evidence for that path; inventing an
       // attempt.started event would falsely claim admission had succeeded.
       const failedTasks = new Set(testFailures.map((test) => test.runnerTaskId));
-      const missingTasks = [...expectedTasks].filter((task) =>
-        !observedTasks.has(task) && !skippedTasks.has(task) && !failedTasks.has(task));
+      const missingTasks = [...expectedTasks].filter(
+        (task) => !observedTasks.has(task) && !skippedTasks.has(task) && !failedTasks.has(task),
+      );
       if (unfinished.length > 0 || missingTasks.length > 0) {
         // Name the tasks. A RunnerTaskId identifies the attempt to the journal
         // but tells a reader nothing about which test stopped short, and this
@@ -646,19 +707,34 @@ export class TermwrightTestHost {
         // only the terminal event is missing". Those have different causes and
         // the barrier is where a reader finds out which one happened.
         const lastSeen = (attemptId: string): string => {
-          const events = active.persistence.recorded.filter((event) => event.identity.attemptId === attemptId);
+          const events = active.persistence.recorded.filter(
+            (event) => event.identity.attemptId === attemptId,
+          );
           const last = events.at(-1);
           return last === undefined ? 'no events' : `${events.length} events, last ${last.type}`;
         };
         const lifecycleFailure = new Error(
           `authoritative attempt journal incomplete: ${unfinished.length} attempts unfinished` +
-          `${unfinished.length === 0 ? '' : ` (${unfinished.slice(0, 8).map(([attemptId, attempt]) => `${named(attempt.task)} [${lastSeen(attemptId)}]`).join('; ')})`}` +
-          `, ${missingTasks.length} executed tasks without a finished attempt` +
-          `${missingTasks.length === 0 ? '' : ` (${missingTasks.slice(0, 8).map(named).join('; ')})`}`,
+            `${
+              unfinished.length === 0
+                ? ''
+                : ` (${unfinished
+                    .slice(0, 8)
+                    .map(
+                      ([attemptId, attempt]) => `${named(attempt.task)} [${lastSeen(attemptId)}]`,
+                    )
+                    .join('; ')})`
+            }` +
+            `, ${missingTasks.length} executed tasks without a finished attempt` +
+            `${missingTasks.length === 0 ? '' : ` (${missingTasks.slice(0, 8).map(named).join('; ')})`}`,
         );
-        failure = failure === undefined
-          ? lifecycleFailure
-          : new AggregateError([failure, lifecycleFailure], 'run attempt finalization barrier failed');
+        failure =
+          failure === undefined
+            ? lifecycleFailure
+            : new AggregateError(
+                [failure, lifecycleFailure],
+                'run attempt finalization barrier failed',
+              );
         terminal = 'infrastructure-failed';
       }
     }
@@ -668,16 +744,20 @@ export class TermwrightTestHost {
         active.controlFailures,
         'structured test output could not be attributed authoritatively',
       );
-      failure = failure === undefined
-        ? outputFailure
-        : new AggregateError([failure, outputFailure], 'run control-plane evidence failed');
+      failure =
+        failure === undefined
+          ? outputFailure
+          : new AggregateError([failure, outputFailure], 'run control-plane evidence failed');
       terminal = 'infrastructure-failed';
     }
 
     skips = Object.freeze(
       [...skippedTasks].map((runnerTaskId): NativeTestSkip => {
-        const test = active.catalog?.tests.find((candidate) => candidate.runnerTaskId === runnerTaskId);
-        if (test === undefined) throw new Error(`skipped task ${runnerTaskId} disappeared from the native catalog`);
+        const test = active.catalog?.tests.find(
+          (candidate) => candidate.runnerTaskId === runnerTaskId,
+        );
+        if (test === undefined)
+          throw new Error(`skipped task ${runnerTaskId} disappeared from the native catalog`);
         return Object.freeze({
           runnerTaskId,
           nativeTaskId: test.nativeTaskId,
@@ -687,28 +767,31 @@ export class TermwrightTestHost {
       }),
     );
     skipPolicy = assessSkipPolicy(
-      request.execute === false ? [] : active.selected ?? [],
+      request.execute === false ? [] : (active.selected ?? []),
       skips,
       this.#skipDeclarations,
-      request.runnerTaskIds === undefined && request.execute !== false &&
-        this.#filters.length === 0 && this.#engine.catalogueScope === 'full'
+      request.runnerTaskIds === undefined &&
+        request.execute !== false &&
+        this.#filters.length === 0 &&
+        this.#engine.catalogueScope === 'full'
         ? 'full'
         : 'targeted',
     );
     try {
       this.#recordSkipEvidence(active, skips, skipPolicy);
     } catch (error) {
-      failure = failure === undefined ? error : new AggregateError([failure, error], 'run skip evidence failed');
+      failure =
+        failure === undefined
+          ? error
+          : new AggregateError([failure, error], 'run skip evidence failed');
       terminal = 'incomplete';
     }
 
     if (
       failure !== undefined &&
-      (
-        terminal === 'infrastructure-failed' ||
+      (terminal === 'infrastructure-failed' ||
         terminal === 'crashed' ||
-        failure instanceof TermwrightHostStartupCleanupError
-      )
+        failure instanceof TermwrightHostStartupCleanupError)
     ) {
       this.#recordInfrastructureFailure(active, failure);
     }
@@ -718,9 +801,14 @@ export class TermwrightTestHost {
       // successful terminal state. A failed sink therefore cannot leave a
       // durable journal that says "passed" while the returned run is
       // incomplete.
-      await active.budget.finalization('pre-terminal journal flush', () => active.persistence.flush());
+      await active.budget.finalization('pre-terminal journal flush', () =>
+        active.persistence.flush(),
+      );
     } catch (error) {
-      failure = failure === undefined ? error : new AggregateError([failure, error], 'run and journal finalization failed');
+      failure =
+        failure === undefined
+          ? error
+          : new AggregateError([failure, error], 'run and journal finalization failed');
       terminal = 'incomplete';
     }
 
@@ -731,18 +819,22 @@ export class TermwrightTestHost {
     try {
       await active.budget.finalization('terminal journal flush', () => active.persistence.flush());
     } catch (error) {
-      failure = failure === undefined
-        ? error
-        : new AggregateError(
-            [failure, error],
-            `${describeFailure(failure)}; terminal run state persistence also failed`,
-            { cause: failure },
-          );
+      failure =
+        failure === undefined
+          ? error
+          : new AggregateError(
+              [failure, error],
+              `${describeFailure(failure)}; terminal run state persistence also failed`,
+              { cause: failure },
+            );
       terminal = 'incomplete';
       try {
         this.#recordPersistenceFailure(active, 'external-journal-projection', error);
       } catch (recordError) {
-        failure = new AggregateError([failure, recordError], 'external projection and canonical failure recording failed');
+        failure = new AggregateError(
+          [failure, recordError],
+          'external projection and canonical failure recording failed',
+        );
       }
       // A projection is not a competing source of truth. Retry once so it can
       // receive both the retained terminal event and the explicit failure.
@@ -754,13 +846,15 @@ export class TermwrightTestHost {
         // The manifest embeds the canonical journal, including terminal and
         // projection-failure events. The rename is the only certification
         // commit; a staging directory is always read as incomplete.
-        await active.budget.finalization(
-          'run history prepare',
-          () => history.prepare(this.#manifestInput(active, attempts, terminal)),
+        await active.budget.finalization('run history prepare', () =>
+          history.prepare(this.#manifestInput(active, attempts, terminal)),
         );
         await active.budget.finalization('run history commit', () => history.commitPrepared());
       } catch (error) {
-        failure = failure === undefined ? error : new AggregateError([failure, error], 'run history commit failed');
+        failure =
+          failure === undefined
+            ? error
+            : new AggregateError([failure, error], 'run history commit failed');
         terminal = 'incomplete';
         try {
           this.#recordPersistenceFailure(active, 'canonical-run-history', error);
@@ -830,7 +924,9 @@ export class TermwrightTestHost {
         project,
         file: testCase.module.moduleId,
         fullName: testCase.fullName,
-        ...(testCase.location === undefined ? {} : { location: Object.freeze({ ...testCase.location }) }),
+        ...(testCase.location === undefined
+          ? {}
+          : { location: Object.freeze({ ...testCase.location }) }),
         metadata,
         ...(resourceReservation === undefined ? {} : { resourceReservation }),
       });
@@ -841,7 +937,10 @@ export class TermwrightTestHost {
     return Object.freeze({ runId, tests: Object.freeze(catalog) });
   }
 
-  #select(catalog: NativeTestCatalog, ids: readonly RunnerTaskId[] | undefined): readonly NativeTestCase[] {
+  #select(
+    catalog: NativeTestCatalog,
+    ids: readonly RunnerTaskId[] | undefined,
+  ): readonly NativeTestCase[] {
     if (ids === undefined) return catalog.tests;
     const byId = new Map(catalog.tests.map((test) => [test.runnerTaskId, test]));
     const seen = new Set<RunnerTaskId>();
@@ -849,7 +948,8 @@ export class TermwrightTestHost {
       if (seen.has(id)) throw new TypeError(`duplicate selected RunnerTaskId ${id}`);
       seen.add(id);
       const test = byId.get(id);
-      if (test === undefined) throw new TypeError(`RunnerTaskId ${id} is not part of run ${catalog.runId}`);
+      if (test === undefined)
+        throw new TypeError(`RunnerTaskId ${id} is not part of run ${catalog.runId}`);
       return test;
     });
   }
@@ -871,7 +971,8 @@ export class TermwrightTestHost {
       payload: { state },
     });
     const appended = active.persistence.append(event);
-    if (!appended.ok) throw new Error(`run journal rejected state event: ${appended.code}: ${appended.detail}`);
+    if (!appended.ok)
+      throw new Error(`run journal rejected state event: ${appended.code}: ${appended.detail}`);
   }
 
   #recordSkipEvidence(
@@ -889,19 +990,28 @@ export class TermwrightTestHost {
       });
     }
     for (const skip of skips) {
-      const test = active.catalog?.tests.find((candidate) => candidate.runnerTaskId === skip.runnerTaskId);
-      if (test === undefined) throw new Error(`skipped task ${skip.runnerTaskId} disappeared from the native catalog`);
-      this.#appendAuthoritative(active, 'test.skipped', {
-        nativeTaskId: skip.nativeTaskId,
-        file: skip.file,
-        fullName: skip.fullName,
-      }, {
-        projectId: test.projectId,
-        specId: test.specId,
-        runnerTaskId: test.runnerTaskId,
-      });
+      const test = active.catalog?.tests.find(
+        (candidate) => candidate.runnerTaskId === skip.runnerTaskId,
+      );
+      if (test === undefined)
+        throw new Error(`skipped task ${skip.runnerTaskId} disappeared from the native catalog`);
+      this.#appendAuthoritative(
+        active,
+        'test.skipped',
+        {
+          nativeTaskId: skip.nativeTaskId,
+          file: skip.file,
+          fullName: skip.fullName,
+        },
+        {
+          projectId: test.projectId,
+          specId: test.specId,
+          runnerTaskId: test.runnerTaskId,
+        },
+      );
     }
-    for (const issue of policy.issues) this.#appendAuthoritative(active, 'run.skip-policy-issue', { detail: issue });
+    for (const issue of policy.issues)
+      this.#appendAuthoritative(active, 'run.skip-policy-issue', { detail: issue });
     this.#appendAuthoritative(active, 'run.skip-policy', {
       status: policy.status,
       declarations: policy.declarations,
@@ -923,7 +1033,8 @@ export class TermwrightTestHost {
       payload,
     });
     const appended = active.persistence.append(event);
-    if (!appended.ok) throw new Error(`run journal rejected ${type}: ${appended.code}: ${appended.detail}`);
+    if (!appended.ok)
+      throw new Error(`run journal rejected ${type}: ${appended.code}: ${appended.detail}`);
   }
 
   #recordTestFailure(active: ActiveRun, test: NativeTestCase, errors: readonly string[]): void {
@@ -945,7 +1056,10 @@ export class TermwrightTestHost {
       },
     });
     const appended = active.persistence.append(event);
-    if (!appended.ok) throw new Error(`run journal rejected test failure event: ${appended.code}: ${appended.detail}`);
+    if (!appended.ok)
+      throw new Error(
+        `run journal rejected test failure event: ${appended.code}: ${appended.detail}`,
+      );
   }
 
   #recordConfiguration(active: ActiveRun): void {
@@ -969,7 +1083,10 @@ export class TermwrightTestHost {
       },
     });
     const appended = active.persistence.append(event);
-    if (!appended.ok) throw new Error(`run journal rejected configuration event: ${appended.code}: ${appended.detail}`);
+    if (!appended.ok)
+      throw new Error(
+        `run journal rejected configuration event: ${appended.code}: ${appended.detail}`,
+      );
   }
 
   #recordPersistenceFailure(active: ActiveRun, stage: string, error: unknown): void {
@@ -980,7 +1097,10 @@ export class TermwrightTestHost {
       payload: { stage, detail: describeFailure(error) },
     });
     const appended = active.persistence.append(event);
-    if (!appended.ok) throw new Error(`run journal rejected persistence failure: ${appended.code}: ${appended.detail}`);
+    if (!appended.ok)
+      throw new Error(
+        `run journal rejected persistence failure: ${appended.code}: ${appended.detail}`,
+      );
   }
 
   #recordInfrastructureFailure(active: ActiveRun, error: unknown): void {
@@ -994,18 +1114,25 @@ export class TermwrightTestHost {
       },
     });
     const appended = active.persistence.append(event);
-    if (!appended.ok) throw new Error(`run journal rejected infrastructure failure: ${appended.code}: ${appended.detail}`);
+    if (!appended.ok)
+      throw new Error(
+        `run journal rejected infrastructure failure: ${appended.code}: ${appended.detail}`,
+      );
   }
 
   #recordUserConsoleLog(log: UserConsoleLog): void {
     const active = this.#active;
     if (active === undefined) return;
-    const test = log.taskId === undefined
-      ? undefined
-      : active.catalog?.tests.find((candidate) => candidate.nativeTaskId === log.taskId);
-    const forTask = log.taskId === undefined
-      ? []
-      : [...active.attempts.entries()].filter(([, attempt]) => attempt.nativeTaskId === log.taskId);
+    const test =
+      log.taskId === undefined
+        ? undefined
+        : active.catalog?.tests.find((candidate) => candidate.nativeTaskId === log.taskId);
+    const forTask =
+      log.taskId === undefined
+        ? []
+        : [...active.attempts.entries()].filter(
+            ([, attempt]) => attempt.nativeTaskId === log.taskId,
+          );
     const running = forTask.filter(([, attempt]) => attempt.finished === undefined);
     // Vitest delivers console output on its own schedule, so a line written
     // just before a test returns can arrive after that attempt has finished.
@@ -1015,14 +1142,16 @@ export class TermwrightTestHost {
     // flagged unattributed. Only genuine ambiguity — no attempt for the task
     // at all, or several running at once — is a control-plane failure.
     if (test !== undefined && running.length > 1) {
-      active.controlFailures.push(new Error(
-        `console ${log.type} for native task ${log.taskId} matched ${running.length} concurrent attempts`,
-      ));
+      active.controlFailures.push(
+        new Error(
+          `console ${log.type} for native task ${log.taskId} matched ${running.length} concurrent attempts`,
+        ),
+      );
     }
     if (test !== undefined && forTask.length === 0) {
-      active.controlFailures.push(new Error(
-        `console ${log.type} for native task ${log.taskId} matched no recorded attempt`,
-      ));
+      active.controlFailures.push(
+        new Error(`console ${log.type} for native task ${log.taskId} matched no recorded attempt`),
+      );
     }
     const attempt = running.length === 1 ? running[0] : undefined;
     for (const [index, content] of splitDiagnosticContent(log.content)) {
@@ -1032,15 +1161,19 @@ export class TermwrightTestHost {
         identity: {
           invocationId: this.invocationId,
           runId: active.runId,
-          ...(test === undefined ? {} : {
-            projectId: test.projectId,
-            specId: test.specId,
-            runnerTaskId: test.runnerTaskId,
-          }),
-          ...(attempt === undefined ? {} : {
-            executionId: attempt[1].executionId,
-            attemptId: attempt[0],
-          }),
+          ...(test === undefined
+            ? {}
+            : {
+                projectId: test.projectId,
+                specId: test.specId,
+                runnerTaskId: test.runnerTaskId,
+              }),
+          ...(attempt === undefined
+            ? {}
+            : {
+                executionId: attempt[1].executionId,
+                attemptId: attempt[0],
+              }),
         },
         payload: {
           stream: log.type,
@@ -1054,15 +1187,21 @@ export class TermwrightTestHost {
       });
       const appended = active.persistence.append(event);
       if (!appended.ok) {
-        active.controlFailures.push(new Error(
-          `run journal rejected structured test output: ${appended.code}: ${appended.detail}`,
-        ));
+        active.controlFailures.push(
+          new Error(
+            `run journal rejected structured test output: ${appended.code}: ${appended.detail}`,
+          ),
+        );
         continue;
       }
     }
   }
 
-  #beginHistory(runId: RunId, startedAt: number, budget: HostRunBudget): Promise<RunHistoryPersistence> {
+  #beginHistory(
+    runId: RunId,
+    startedAt: number,
+    budget: HostRunBudget,
+  ): Promise<RunHistoryPersistence> {
     return RunHistoryPersistence.begin({
       invocationId: this.invocationId,
       runId,
@@ -1082,32 +1221,37 @@ export class TermwrightTestHost {
     attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
     status: TerminalRunState,
   ): Parameters<RunHistoryPersistence['prepare']>[0] {
-    const specs = (active.selected ?? []).map((test) => Object.freeze({
-      runnerTaskId: test.runnerTaskId,
-      specId: test.specId,
-      projectId: test.projectId,
-      nativeTaskId: test.nativeTaskId,
-      file: test.file,
-      fullName: test.fullName,
-    }));
+    const specs = (active.selected ?? []).map((test) =>
+      Object.freeze({
+        runnerTaskId: test.runnerTaskId,
+        specId: test.specId,
+        projectId: test.projectId,
+        nativeTaskId: test.nativeTaskId,
+        file: test.file,
+        fullName: test.fullName,
+      }),
+    );
     const completedAttempts: NativeRunAttempt[] = [];
     for (const [attemptId, attempt] of attempts) {
-      completedAttempts.push(Object.freeze({
-        attemptId,
-        executionId: attempt.executionId,
-        runnerTaskId: attempt.task,
-        projectId: attempt.projectId,
-        specId: attempt.specId,
-        nativeTaskId: attempt.nativeTaskId,
-        repeat: attempt.repeat,
-        retry: attempt.retry,
-        status: attempt.finished?.state ?? 'incomplete',
-        startedAfterRunMs: attempt.startedAfterRunMs,
-        finishedAfterRunMs: attempt.finished?.observedAfterRunMs ?? null,
-        durationMs: attempt.finished === undefined
-          ? null
-          : Math.max(0, attempt.finished.monotonicTime - attempt.startedAt),
-      }));
+      completedAttempts.push(
+        Object.freeze({
+          attemptId,
+          executionId: attempt.executionId,
+          runnerTaskId: attempt.task,
+          projectId: attempt.projectId,
+          specId: attempt.specId,
+          nativeTaskId: attempt.nativeTaskId,
+          repeat: attempt.repeat,
+          retry: attempt.retry,
+          status: attempt.finished?.state ?? 'incomplete',
+          startedAfterRunMs: attempt.startedAfterRunMs,
+          finishedAfterRunMs: attempt.finished?.observedAfterRunMs ?? null,
+          durationMs:
+            attempt.finished === undefined
+              ? null
+              : Math.max(0, attempt.finished.monotonicTime - attempt.startedAt),
+        }),
+      );
     }
     return {
       status,
@@ -1126,7 +1270,10 @@ export function assessSkipPolicy(
   selection: 'full' | 'targeted',
 ): NativeTestSkipPolicyResult {
   const issues: string[] = [];
-  const matches = (test: Pick<NativeTestCase, 'file' | 'fullName'>, declaration: NativeTestSkipDeclaration): boolean => {
+  const matches = (
+    test: Pick<NativeTestCase, 'file' | 'fullName'>,
+    declaration: NativeTestSkipDeclaration,
+  ): boolean => {
     const file = test.file.replaceAll('\\', '/');
     const declaredFile = declaration.file.replaceAll('\\', '/');
     const fileMatches = file === declaredFile || file.endsWith(`/${declaredFile}`);
@@ -1150,18 +1297,28 @@ export function assessSkipPolicy(
   for (const declaration of declarations) {
     const selectedMatches = selected.filter((test) => matches(test, declaration));
     if (selectedMatches.length > 1) {
-      issues.push(`skip declaration matches ${selectedMatches.length} selected cases instead of one exact case: ${declaration.id}`);
+      issues.push(
+        `skip declaration matches ${selectedMatches.length} selected cases instead of one exact case: ${declaration.id}`,
+      );
       continue;
     }
     if (declaration.required && selection === 'full' && selectedMatches.length === 0) {
-      issues.push(`stale required skip declaration has no exact case in the full catalogue: ${declaration.id}`);
+      issues.push(
+        `stale required skip declaration has no exact case in the full catalogue: ${declaration.id}`,
+      );
       continue;
     }
     if (declaration.required && selectedMatches.length === 1) {
-      const missing = selectedMatches.filter((test) => !skipped.some((skip) =>
-        skip.runnerTaskId === test.runnerTaskId && matches(skip, declaration)));
+      const missing = selectedMatches.filter(
+        (test) =>
+          !skipped.some(
+            (skip) => skip.runnerTaskId === test.runnerTaskId && matches(skip, declaration),
+          ),
+      );
       if (missing.length > 0) {
-        issues.push(`required skip was not observed for ${missing.length} selected case(s): ${declaration.id}`);
+        issues.push(
+          `required skip was not observed for ${missing.length} selected case(s): ${declaration.id}`,
+        );
       }
     }
   }
@@ -1173,14 +1330,24 @@ export function assessSkipPolicy(
 }
 
 /** Refuse to turn a failed GitHub certification run into a later green attempt. */
-export function assertFirstWorkflowAttempt(env: Readonly<Record<string, string | undefined>>): void {
+export function assertFirstWorkflowAttempt(
+  env: Readonly<Record<string, string | undefined>>,
+): void {
   const required = env['TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT'];
-  if (required === undefined || required === '' || required === '0' || required.toLowerCase() === 'false') return;
+  if (
+    required === undefined ||
+    required === '' ||
+    required === '0' ||
+    required.toLowerCase() === 'false'
+  )
+    return;
   if (required !== '1' && required.toLowerCase() !== 'true') {
     throw new Error('TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT must be 0, 1, false, or true');
   }
   if (env['GITHUB_RUN_ATTEMPT'] !== '1') {
-    throw new Error('certification requires the first GitHub workflow attempt; start a new run instead of rerunning failed tests');
+    throw new Error(
+      'certification requires the first GitHub workflow attempt; start a new run instead of rerunning failed tests',
+    );
   }
 }
 
@@ -1205,21 +1372,24 @@ export function describeFailure(error: unknown): string {
  * directory from certifying only the modules that happened to import.
  */
 function collectVitestCollectionErrors(result: TestRunResult): Error[] {
-  const failures = result.unhandledErrors.map((error) => error instanceof Error
-    ? error
-    : new Error(describeFailure(error)));
+  const failures = result.unhandledErrors.map((error) =>
+    error instanceof Error ? error : new Error(describeFailure(error)),
+  );
   for (const module of result.testModules) {
     const moduleErrors = module.errors();
     for (const error of moduleErrors) {
-      failures.push(new Error(
-        `Vitest collection module ${module.moduleId} failed: ${describeFailure(error)}`,
-        { cause: error },
-      ));
+      failures.push(
+        new Error(`Vitest collection module ${module.moduleId} failed: ${describeFailure(error)}`, {
+          cause: error,
+        }),
+      );
     }
     if (module.state() === 'failed' && moduleErrors.length === 0) {
-      failures.push(new Error(
-        `Vitest collection module ${module.moduleId} failed without structured error evidence`,
-      ));
+      failures.push(
+        new Error(
+          `Vitest collection module ${module.moduleId} failed without structured error evidence`,
+        ),
+      );
     }
   }
   return failures;
@@ -1236,7 +1406,9 @@ function withCause(error: Error, described: string): string {
   const cause = (error as { readonly cause?: unknown }).cause;
   if (cause === undefined || cause === null) return described;
   const detail = describeFailure(cause);
-  return detail.length === 0 || described.includes(detail) ? described : `${described} <- ${detail}`;
+  return detail.length === 0 || described.includes(detail)
+    ? described
+    : `${described} <- ${detail}`;
 }
 
 function infrastructureFailureCategory(error: unknown): string {
@@ -1245,14 +1417,19 @@ function infrastructureFailureCategory(error: unknown): string {
   if (detail.includes('collection')) return 'collection';
   if (detail.includes('resource lease') || detail.includes('resource broker')) return 'resource';
   if (detail.includes('journal')) return 'journal';
-  if (detail.includes('worker') || detail.includes('channel closed') || detail.includes('ipc')) return 'worker';
+  if (detail.includes('worker') || detail.includes('channel closed') || detail.includes('ipc'))
+    return 'worker';
   return 'engine';
 }
 
 function containsHostTimeout(error: unknown): boolean {
   if (error instanceof TermwrightHostTimeoutError) return true;
   if (error instanceof AggregateError) return [...error.errors].some(containsHostTimeout);
-  return typeof error === 'object' && error !== null && containsHostTimeout((error as { cause?: unknown }).cause);
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    containsHostTimeout((error as { cause?: unknown }).cause)
+  );
 }
 
 function describeTestError(error: unknown): string {
@@ -1297,17 +1474,26 @@ function observeAttemptEvent(
   if (event.type !== 'attempt.started' && event.type !== 'attempt.finished') return;
   const attemptId = event.identity.attemptId;
   const { runnerTaskId: task, executionId, projectId, specId } = event.identity;
-  if (attemptId === undefined || task === undefined || executionId === undefined ||
-      projectId === undefined || specId === undefined) {
+  if (
+    attemptId === undefined ||
+    task === undefined ||
+    executionId === undefined ||
+    projectId === undefined ||
+    specId === undefined
+  ) {
     throw new Error(`${event.type} is missing its authoritative attempt identity`);
   }
-  if (!expectedTasks.has(task)) throw new Error(`${event.type} belongs to unassigned RunnerTaskId ${task}`);
+  if (!expectedTasks.has(task))
+    throw new Error(`${event.type} belongs to unassigned RunnerTaskId ${task}`);
   const current = attempts.get(attemptId);
   if (event.type === 'attempt.started') {
     if (current !== undefined) throw new Error(`attempt ${attemptId} started more than once`);
     const payload = attemptPayload(event.payload, false);
     attempts.set(attemptId, {
-      task, executionId, projectId, specId,
+      task,
+      executionId,
+      projectId,
+      specId,
       nativeTaskId: payload.nativeTaskId,
       repeat: payload.repeat,
       retry: payload.retry,
@@ -1317,13 +1503,23 @@ function observeAttemptEvent(
     return;
   }
   if (current === undefined) throw new Error(`attempt ${attemptId} finished before it started`);
-  if (current.task !== task) throw new Error(`attempt ${attemptId} changed RunnerTaskId during execution`);
-  if (current.finished !== undefined) throw new Error(`attempt ${attemptId} finished more than once`);
-  if (current.executionId !== executionId || current.projectId !== projectId || current.specId !== specId) {
+  if (current.task !== task)
+    throw new Error(`attempt ${attemptId} changed RunnerTaskId during execution`);
+  if (current.finished !== undefined)
+    throw new Error(`attempt ${attemptId} finished more than once`);
+  if (
+    current.executionId !== executionId ||
+    current.projectId !== projectId ||
+    current.specId !== specId
+  ) {
     throw new Error(`attempt ${attemptId} changed hierarchical identity during execution`);
   }
   const payload = attemptPayload(event.payload, true);
-  if (payload.nativeTaskId !== current.nativeTaskId || payload.repeat !== current.repeat || payload.retry !== current.retry) {
+  if (
+    payload.nativeTaskId !== current.nativeTaskId ||
+    payload.repeat !== current.repeat ||
+    payload.retry !== current.retry
+  ) {
     throw new Error(`attempt ${attemptId} changed native identity or ordinal during execution`);
   }
   current.finished = {
@@ -1333,13 +1529,29 @@ function observeAttemptEvent(
   };
 }
 
-function attemptPayload(payload: unknown, terminal: false): { readonly nativeTaskId: string; readonly repeat: number; readonly retry: number };
-function attemptPayload(payload: unknown, terminal: true): { readonly nativeTaskId: string; readonly repeat: number; readonly retry: number; readonly state: NativeRunAttempt['status'] };
+function attemptPayload(
+  payload: unknown,
+  terminal: false,
+): { readonly nativeTaskId: string; readonly repeat: number; readonly retry: number };
+function attemptPayload(
+  payload: unknown,
+  terminal: true,
+): {
+  readonly nativeTaskId: string;
+  readonly repeat: number;
+  readonly retry: number;
+  readonly state: NativeRunAttempt['status'];
+};
 function attemptPayload(payload: unknown, terminal: boolean) {
-  if (typeof payload !== 'object' || payload === null) throw new Error('attempt event payload is not an object');
+  if (typeof payload !== 'object' || payload === null)
+    throw new Error('attempt event payload is not an object');
   const record = payload as Record<string, unknown>;
-  if (typeof record['nativeTaskId'] !== 'string' || record['nativeTaskId'] === '' ||
-      !nonNegativeInteger(record['repeat']) || !nonNegativeInteger(record['retry'])) {
+  if (
+    typeof record['nativeTaskId'] !== 'string' ||
+    record['nativeTaskId'] === '' ||
+    !nonNegativeInteger(record['repeat']) ||
+    !nonNegativeInteger(record['retry'])
+  ) {
     throw new Error('attempt event payload has invalid native identity or ordinal');
   }
   const state = record['state'];
@@ -1347,7 +1559,12 @@ function attemptPayload(payload: unknown, terminal: boolean) {
     throw new Error('attempt.finished payload has invalid state');
   }
   return terminal
-    ? { nativeTaskId: record['nativeTaskId'], repeat: record['repeat'], retry: record['retry'], state }
+    ? {
+        nativeTaskId: record['nativeTaskId'],
+        repeat: record['repeat'],
+        retry: record['retry'],
+        state,
+      }
     : { nativeTaskId: record['nativeTaskId'], repeat: record['repeat'], retry: record['retry'] };
 }
 
@@ -1360,9 +1577,11 @@ function resourceReservationFromMetadata(
   metadata: unknown,
   exclusiveNativeHostPressure: number,
 ): ResourceVector | undefined {
-  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) return undefined;
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))
+    return undefined;
   const termwright = (metadata as Record<string, unknown>)['termwright'];
-  if (typeof termwright !== 'object' || termwright === null || Array.isArray(termwright)) return undefined;
+  if (typeof termwright !== 'object' || termwright === null || Array.isArray(termwright))
+    return undefined;
   const resources = (termwright as Record<string, unknown>)['resources'];
   if (resources === undefined) return undefined;
   if (typeof resources !== 'object' || resources === null || Array.isArray(resources)) {
@@ -1370,7 +1589,12 @@ function resourceReservationFromMetadata(
   }
   const record = resources as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (key !== 'terminals' && key !== 'traceWriters' && key !== 'nativeHost' && key !== 'hostPressure') {
+    if (
+      key !== 'terminals' &&
+      key !== 'traceWriters' &&
+      key !== 'nativeHost' &&
+      key !== 'hostPressure'
+    ) {
       throw new TypeError(`collected termwright.resources contains unknown key ${key}`);
     }
   }
@@ -1378,9 +1602,10 @@ function resourceReservationFromMetadata(
   // A terminal may retain a trace even on an otherwise passing run. Reserving
   // the writer with the terminal is the safe default; tests configured with
   // trace:'off' can opt out explicitly with traceWriters:0.
-  const traceWriters = record['traceWriters'] === undefined
-    ? terminals
-    : boundedResourceAmount(record['traceWriters'], 'traceWriters');
+  const traceWriters =
+    record['traceWriters'] === undefined
+      ? terminals
+      : boundedResourceAmount(record['traceWriters'], 'traceWriters');
   const nativeHost = record['nativeHost'];
   if (nativeHost !== undefined && nativeHost !== 'shared' && nativeHost !== 'exclusive') {
     throw new TypeError('collected termwright.resources.nativeHost must be shared or exclusive');
@@ -1393,20 +1618,25 @@ function resourceReservationFromMetadata(
     throw new TypeError('collected termwright.resources.hostPressure must be exclusive');
   }
   if (nativeHost !== undefined && hostPressure !== undefined) {
-    throw new TypeError('collected termwright.resources cannot combine nativeHost and hostPressure');
+    throw new TypeError(
+      'collected termwright.resources cannot combine nativeHost and hostPressure',
+    );
   }
-  const nativeHostPressure = nativeHost === 'exclusive' || hostPressure === 'exclusive'
-    ? exclusiveNativeHostPressure
-    : terminals;
+  const nativeHostPressure =
+    nativeHost === 'exclusive' || hostPressure === 'exclusive'
+      ? exclusiveNativeHostPressure
+      : terminals;
   if (terminals === 0 && traceWriters === 0 && nativeHostPressure === 0) {
     throw new TypeError('collected termwright.resources must reserve at least one resource');
   }
   return Object.freeze({
-    ...(terminals === 0 ? {} : {
-      ptySession: terminals,
-      externalProcess: terminals,
-      semanticEndpoint: terminals,
-    }),
+    ...(terminals === 0
+      ? {}
+      : {
+          ptySession: terminals,
+          externalProcess: terminals,
+          semanticEndpoint: terminals,
+        }),
     ...(nativeHostPressure === 0 ? {} : { nativeHostPressure }),
     ...(traceWriters === 0 ? {} : { traceWriter: traceWriters }),
   });
@@ -1415,7 +1645,9 @@ function resourceReservationFromMetadata(
 function boundedResourceAmount(value: unknown, label: string): number {
   if (value === undefined) return 0;
   if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > 1_024) {
-    throw new RangeError(`collected termwright.resources.${label} must be an integer between 0 and 1024`);
+    throw new RangeError(
+      `collected termwright.resources.${label} must be an integer between 0 and 1024`,
+    );
   }
   return value as number;
 }
@@ -1447,7 +1679,9 @@ function splitDiagnosticContent(content: string): readonly (readonly [number, st
   return chunks;
 }
 
-function resolveHostTimeouts(input: Partial<TermwrightHostTimeouts> | undefined): TermwrightHostTimeouts {
+function resolveHostTimeouts(
+  input: Partial<TermwrightHostTimeouts> | undefined,
+): TermwrightHostTimeouts {
   const resolved = Object.freeze({ ...DEFAULT_TERMWRIGHT_HOST_TIMEOUTS, ...input });
   positiveFinite(resolved.startupMs, 'host startup timeout');
   positiveFinite(resolved.runMs, 'host run timeout');
@@ -1459,5 +1693,6 @@ function resolveHostTimeouts(input: Partial<TermwrightHostTimeouts> | undefined)
 }
 
 function positiveFinite(value: number, label: string): void {
-  if (!Number.isFinite(value) || value <= 0) throw new TypeError(`${label} must be a positive finite number`);
+  if (!Number.isFinite(value) || value <= 0)
+    throw new TypeError(`${label} must be a positive finite number`);
 }

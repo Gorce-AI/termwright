@@ -35,8 +35,8 @@ export class AttemptBudgetExceededError extends Error {
   }) {
     super(
       `attempt budget exhausted before ${input.phase}; elapsed=${Math.round(input.elapsedMs)}ms ` +
-      `total=${input.totalMs}ms reserves=` +
-      `diagnostics:${input.reserves.diagnosticsMs},trace:${input.reserves.traceFlushMs},teardown:${input.reserves.teardownMs}`,
+        `total=${input.totalMs}ms reserves=` +
+        `diagnostics:${input.reserves.diagnosticsMs},trace:${input.reserves.traceFlushMs},teardown:${input.reserves.teardownMs}`,
     );
     this.name = 'AttemptBudgetExceededError';
     this.phase = input.phase;
@@ -74,9 +74,15 @@ export class TestBudget {
     this.#started = !deferred;
   }
 
-  get phase(): AttemptPhase { return this.#phase; }
-  get totalMs(): number { return this.#totalMs; }
-  get reserves(): AttemptBudgetReserves { return this.#reserves; }
+  get phase(): AttemptPhase {
+    return this.#phase;
+  }
+  get totalMs(): number {
+    return this.#totalMs;
+  }
+  get reserves(): AttemptBudgetReserves {
+    return this.#reserves;
+  }
 
   /** Starts a budget created dormant for host-owned resource admission. */
   start(): void {
@@ -154,11 +160,15 @@ export class TestBudget {
       case 'before-each':
       case 'fixture':
       case 'operation':
-      case 'assertion': return this.#endsAt - diagnosticsMs - traceFlushMs - teardownMs;
-      case 'diagnostics': return this.#endsAt - traceFlushMs - teardownMs;
-      case 'trace-flush': return this.#endsAt - teardownMs;
+      case 'assertion':
+        return this.#endsAt - diagnosticsMs - traceFlushMs - teardownMs;
+      case 'diagnostics':
+        return this.#endsAt - traceFlushMs - teardownMs;
+      case 'trace-flush':
+        return this.#endsAt - teardownMs;
       case 'teardown':
-      case 'cleanup': return this.#endsAt;
+      case 'cleanup':
+        return this.#endsAt;
     }
   }
 
@@ -172,10 +182,12 @@ export class TestBudget {
   }
 
   #assertStarted(): void {
-    if (!this.#started) throw new Error('attempt budget has not started; resource admission is still pending');
+    if (!this.#started)
+      throw new Error('attempt budget has not started; resource admission is still pending');
   }
 }
 
 function finiteNonNegative(value: number, label: string): void {
-  if (!Number.isFinite(value) || value < 0) throw new TypeError(`${label} must be a finite non-negative number`);
+  if (!Number.isFinite(value) || value < 0)
+    throw new TypeError(`${label} must be a finite non-negative number`);
 }

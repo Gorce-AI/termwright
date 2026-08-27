@@ -4,7 +4,9 @@
   "private": true,
   "description": "A Ratatui list tested through an instrumented Cargo build",
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "cargo run --manifest-path app/Cargo.toml",

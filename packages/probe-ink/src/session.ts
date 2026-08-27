@@ -135,8 +135,12 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
   };
 
   return {
-    get revision() { return revision; },
-    get frames() { return frames; },
+    get revision() {
+      return revision;
+    },
+    get frames() {
+      return frames;
+    },
     notifyRender(notifyOptions = {}) {
       if (stopped) return Promise.resolve(null);
       try {
@@ -152,7 +156,9 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
           limits: options.channel.session.limits as ProtocolLimits,
           ...(excluded === undefined ? {} : { excluded }),
           ...(capture.staticRoots.length === 0 ? {} : { retainedRoots: capture.staticRoots }),
-          ...(capture.staticChildren.size === 0 ? {} : { retainedChildren: capture.staticChildren }),
+          ...(capture.staticChildren.size === 0
+            ? {}
+            : { retainedChildren: capture.staticChildren }),
           geometry: capture.geometry,
         });
         // Layout effects can register annotations after React mutates the host
@@ -162,20 +168,25 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
         // onRender call freezes it. Renderer-originated calls remain strict.
         if (hasDisplayedNodeWithoutGeometry(observation.frame)) {
           if (notifyOptions.allowUnsettled === true) return Promise.resolve(null);
-          throw new Error('certified Ink renderer capture is missing geometry for a displayed host node');
+          throw new Error(
+            'certified Ink renderer capture is missing geometry for a displayed host node',
+          );
         }
         frames += 1;
         latestFrame = frames;
         const frozen = { number: frames, capture, observation };
-        const boundary = notifyOptions.awaitPublication === true
-          ? new Promise<number>((resolve, reject) => {
-              publicationWaiters.push({ targetFrame: frozen.number, resolve, reject });
-            })
-          : null;
-        const publication = queue.then(() => publish(frozen)).catch((error) => {
-          fail(error);
-          return null;
-        });
+        const boundary =
+          notifyOptions.awaitPublication === true
+            ? new Promise<number>((resolve, reject) => {
+                publicationWaiters.push({ targetFrame: frozen.number, resolve, reject });
+              })
+            : null;
+        const publication = queue
+          .then(() => publish(frozen))
+          .catch((error) => {
+            fail(error);
+            return null;
+          });
         queue = publication.then(() => undefined);
         return boundary ?? publication;
       } catch (error) {
@@ -183,14 +194,16 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
         return Promise.resolve(null);
       }
     },
-    async flush() { await queue.catch(() => undefined); },
+    async flush() {
+      await queue.catch(() => undefined);
+    },
     stop,
   };
 }
 
 function hasDisplayedNodeWithoutGeometry(frame: ProbeFrame): boolean {
-  return frame.objects.some((object) =>
-    object.state?.displayed !== false && object.geometry?.intendedRect === undefined,
+  return frame.objects.some(
+    (object) => object.state?.displayed !== false && object.geometry?.intendedRect === undefined,
   );
 }
 
@@ -218,21 +231,26 @@ function qualifyFrame(
       const region = observation.geometryRegions.get(object.identity.value);
       const geometry = object.geometry;
       if (
-        geometry?.intendedRect === undefined
-        || geometry.visibleRect === undefined
-        || region === undefined
-      ) return object;
+        geometry?.intendedRect === undefined ||
+        geometry.visibleRect === undefined ||
+        region === undefined
+      )
+        return object;
       const origin = region === 'live' ? liveOrigin : staticOrigin;
       const intendedRect = shift(geometry.intendedRect, origin);
-      const visibleRect = context.interactive || region === 'static' || context.debug
-        ? viewportIntersection(shift(geometry.visibleRect, origin), columns, rows)
-        : { row: Math.min(Math.max(origin, 0), rows), column: 0, width: 0, height: 0 };
+      const visibleRect =
+        context.interactive || region === 'static' || context.debug
+          ? viewportIntersection(shift(geometry.visibleRect, origin), columns, rows)
+          : { row: Math.min(Math.max(origin, 0), rows), column: 0, width: 0, height: 0 };
       return { ...object, geometry: { intendedRect, visibleRect } };
     }),
   };
 }
 
-function shift(rect: import('@termwright/protocol').ProbeRect, rows: number): import('@termwright/protocol').ProbeRect {
+function shift(
+  rect: import('@termwright/protocol').ProbeRect,
+  rows: number,
+): import('@termwright/protocol').ProbeRect {
   return { ...rect, row: rect.row + rows };
 }
 
@@ -264,7 +282,8 @@ export function createInkMarkerWriter(
   if (!options.certifiedHarness && platform === 'win32' && stream.isTTY === true) {
     const fd = (stream as NodeJS.WriteStream & { readonly fd?: unknown }).fd;
     if (typeof fd !== 'number' || !Number.isInteger(fd) || fd < 0) {
-      return () => Promise.reject(new Error('Ink stdout has no certifiable Windows console handle'));
+      return () =>
+        Promise.reject(new Error('Ink stdout has no certifiable Windows console handle'));
     }
     const writeNative = options.writeWindowsMarker ?? writeWindowsConsoleMarker;
     return (marker) => {
@@ -276,18 +295,19 @@ export function createInkMarkerWriter(
       }
     };
   }
-  return (marker) => new Promise((resolve, reject) => {
-    if (stream.writableEnded || stream.destroyed) {
-      reject(new Error('Ink stdout closed before the semantic render marker could be written'));
-      return;
-    }
-    try {
-      stream.write(marker, (error?: Error | null) => {
-        if (error instanceof Error) reject(error);
-        else resolve();
-      });
-    } catch (error) {
-      reject(error instanceof Error ? error : new Error(String(error)));
-    }
-  });
+  return (marker) =>
+    new Promise((resolve, reject) => {
+      if (stream.writableEnded || stream.destroyed) {
+        reject(new Error('Ink stdout closed before the semantic render marker could be written'));
+        return;
+      }
+      try {
+        stream.write(marker, (error?: Error | null) => {
+          if (error instanceof Error) reject(error);
+          else resolve();
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
 }

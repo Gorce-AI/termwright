@@ -6,17 +6,28 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deriveHookInstrumentationProfile } from './certify-framework-candidate.mjs';
 import { canonicalJson, downloadVerifiedNpmTarball } from './discover-framework-candidates.mjs';
-import { materializeCandidateSource, preparePatchBundles, removeMaterializedCandidateSource } from './prepare-framework-candidate.mjs';
+import {
+  materializeCandidateSource,
+  preparePatchBundles,
+  removeMaterializedCandidateSource,
+} from './prepare-framework-candidate.mjs';
 import { finishWithCleanups } from './cleanup-resources.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-export const requiredPlatforms = (candidate) => (candidate.frameworkId === 'opentui' ? ['linux', 'macos'] : candidate.frameworkId === 'tview' ? ['linux', 'windows'] : ['linux']);
+export const requiredPlatforms = (candidate) =>
+  candidate.frameworkId === 'opentui'
+    ? ['linux', 'macos']
+    : candidate.frameworkId === 'tview'
+      ? ['linux', 'windows']
+      : ['linux'];
 
 async function treeDigest(directory, omittedFile) {
   const files = [];
   const visit = async (current) => {
-    for (const entry of (await readdir(current, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of (await readdir(current, { withFileTypes: true })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
       const path = join(current, entry.name);
       if (entry.isDirectory()) await visit(path);
       else if (entry.isFile() && path !== omittedFile) {
@@ -27,7 +38,8 @@ async function treeDigest(directory, omittedFile) {
             .update(await readFile(path))
             .digest('hex'),
         });
-      } else if (!entry.isFile()) throw new Error(`platform result contains a non-regular entry: ${path}`);
+      } else if (!entry.isFile())
+        throw new Error(`platform result contains a non-regular entry: ${path}`);
     }
   };
   await visit(directory);
@@ -59,11 +71,15 @@ async function validatePlatformArtifactShape(result, slot) {
       .sort()
       .join('\0') !== expected.join('\0')
   ) {
-    throw new Error(`${result.verdict.candidateId}: platform certifier emitted an unexpected artifact shape`);
+    throw new Error(
+      `${result.verdict.candidateId}: platform certifier emitted an unexpected artifact shape`,
+    );
   }
   for (const entry of entries) {
     if (entry.name === `verdict-${slot}.json` ? !entry.isFile() : !entry.isDirectory()) {
-      throw new Error(`${result.verdict.candidateId}: platform certifier artifact has an unexpected type`);
+      throw new Error(
+        `${result.verdict.candidateId}: platform certifier artifact has an unexpected type`,
+      );
     }
   }
 }
@@ -83,13 +99,21 @@ export async function aggregateCandidate({ candidate, slot, inputs, output, sour
   let executableResolution;
   if (green) {
     const resolutions = results.map(({ verdict }) => verdict.executableResolution);
-    if (['patch', 'capability'].includes(candidate.mode) && resolutions.some((value) => value === null || typeof value !== 'object')) {
-      throw new Error(`${candidate.id}: green ${candidate.mode} verdict omitted executableResolution`);
+    if (
+      ['patch', 'capability'].includes(candidate.mode) &&
+      resolutions.some((value) => value === null || typeof value !== 'object')
+    ) {
+      throw new Error(
+        `${candidate.id}: green ${candidate.mode} verdict omitted executableResolution`,
+      );
     }
     const present = resolutions.filter((value) => value !== undefined);
     if (present.length > 0) {
       const canonical = canonicalJson(present[0]);
-      if (present.length !== resolutions.length || present.some((value) => canonicalJson(value) !== canonical)) {
+      if (
+        present.length !== resolutions.length ||
+        present.some((value) => canonicalJson(value) !== canonical)
+      ) {
         throw new Error(`${candidate.id}: platform executable resolutions disagree`);
       }
       executableResolution = present[0];
@@ -184,7 +208,12 @@ export async function writeTrustedHookUpdate({ candidate, output, sourceRevision
 
 export async function writeTrustedPatchUpdates(
   { candidates, output, sourceRevision },
-  { materialize = materializeCandidateSource, prepare = preparePatchBundles, freshOutput = freshUpdateDirectory, cleanup = removeMaterializedCandidateSource } = {},
+  {
+    materialize = materializeCandidateSource,
+    prepare = preparePatchBundles,
+    freshOutput = freshUpdateDirectory,
+    cleanup = removeMaterializedCandidateSource,
+  } = {},
 ) {
   if (candidates.length === 0) return;
   const requests = [];
@@ -252,18 +281,25 @@ async function main(argv) {
     if (aggregate.state === 'green') trustedUpdates.push(candidate);
   }
   await writeTrustedPatchUpdates({
-    candidates: trustedUpdates.filter((candidate) => candidate.mode === 'patch' && candidate.patch.status === 'needs-patch'),
+    candidates: trustedUpdates.filter(
+      (candidate) => candidate.mode === 'patch' && candidate.patch.status === 'needs-patch',
+    ),
     output,
     sourceRevision,
   });
   for (const candidate of trustedUpdates) {
     if (candidate.frameworkId === 'textual') continue;
-    if (candidate.mode === 'hook' && candidate.hookStrategy === 'runtime') await writeTrustedRuntimeUpdate({ candidate, output, sourceRevision });
-    else if (candidate.mode === 'hook' && candidate.hookStrategy === 'exact-source') await writeTrustedHookUpdate({ candidate, output, sourceRevision });
+    if (candidate.mode === 'hook' && candidate.hookStrategy === 'runtime')
+      await writeTrustedRuntimeUpdate({ candidate, output, sourceRevision });
+    else if (candidate.mode === 'hook' && candidate.hookStrategy === 'exact-source')
+      await writeTrustedHookUpdate({ candidate, output, sourceRevision });
   }
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

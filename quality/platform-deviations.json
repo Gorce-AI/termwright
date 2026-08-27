@@ -30,15 +30,16 @@
       "removalCondition": "Never; retain as a platform-specific positive certification test.",
       "owner": "termwright-core",
       "revalidate": "each POSIX backend certification change",
-      "tests": [
+      "tests": [["packages/driver/src/process-lifecycle.pty.test.ts", "POSIX process lifecycle"]],
+      "skipPolicyTests": [
         [
           "packages/driver/src/process-lifecycle.pty.test.ts",
-          "POSIX process lifecycle"
+          "reaps an owned process group when its root exits naturally first"
+        ],
+        [
+          "packages/driver/src/process-lifecycle.pty.test.ts",
+          "escalates and removes a child plus grandchild that ignore graceful shutdown"
         ]
-      ],
-      "skipPolicyTests": [
-        ["packages/driver/src/process-lifecycle.pty.test.ts", "reaps an owned process group when its root exits naturally first"],
-        ["packages/driver/src/process-lifecycle.pty.test.ts", "escalates and removes a child plus grandchild that ignore graceful shutdown"]
       ]
     },
     {
@@ -52,16 +53,20 @@
       "removalCondition": "Never; retain as a platform-specific positive certification test.",
       "owner": "termwright-core",
       "revalidate": "each native PTY or ConPTY certification change",
-      "tests": [
+      "tests": [["packages/driver/src/process-lifecycle.pty.test.ts", "Windows process lifecycle"]],
+      "skipPolicyTests": [
         [
           "packages/driver/src/process-lifecycle.pty.test.ts",
-          "Windows process lifecycle"
+          "does not publish natural exit while a console descendant remains alive"
+        ],
+        [
+          "packages/driver/src/process-lifecycle.pty.test.ts",
+          "uses the ConPTY hard-kill mechanism for the complete console tree"
+        ],
+        [
+          "packages/driver/src/process-lifecycle.pty.test.ts",
+          "rejects TERM instead of silently converting it to a hard kill"
         ]
-      ],
-      "skipPolicyTests": [
-        ["packages/driver/src/process-lifecycle.pty.test.ts", "does not publish natural exit while a console descendant remains alive"],
-        ["packages/driver/src/process-lifecycle.pty.test.ts", "uses the ConPTY hard-kill mechanism for the complete console tree"],
-        ["packages/driver/src/process-lifecycle.pty.test.ts", "rejects TERM instead of silently converting it to a hard kill"]
       ]
     },
     {
@@ -93,24 +98,46 @@
       "removalCondition": "Never; retain as platform-specific positive certification tests.",
       "owner": "termwright-core",
       "revalidate": "each POSIX native PTY implementation or packaging change",
-      "tests": [
-        [
-          "packages/pty/src/index.test.ts",
-          "the Termwright-owned POSIX PTY"
-        ]
-      ],
+      "tests": [["packages/pty/src/index.test.ts", "the Termwright-owned POSIX PTY"]],
       "skipPolicyTests": [
         ["packages/pty/src/index.test.ts", "loads the local addon before the platform prebuild"],
-        ["packages/pty/src/index.test.ts", "resolves a bare executable from PATH without invoking a shell"],
-        ["packages/pty/src/index.test.ts", "fails before forking when a bare executable is absent from PATH"],
-        ["packages/pty/src/index.test.ts", "delivers a megabyte tail and its sentinel before authoritative EOF"],
+        [
+          "packages/pty/src/index.test.ts",
+          "resolves a bare executable from PATH without invoking a shell"
+        ],
+        [
+          "packages/pty/src/index.test.ts",
+          "fails before forking when a bare executable is absent from PATH"
+        ],
+        [
+          "packages/pty/src/index.test.ts",
+          "delivers a megabyte tail and its sentinel before authoritative EOF"
+        ],
         ["packages/pty/src/index.test.ts", "writes exact bytes through the owned master"],
-        ["packages/pty/src/index.test.ts", "does not lose a wake while many small writes race the writer"],
-        ["packages/pty/src/index.test.ts", "keeps a backpressured write healthy when later input wakes its poll"],
-        ["packages/pty/src/index.test.ts", "changes the kernel PTY size without a scheduling delay"],
-        ["packages/pty/src/index.test.ts", "reports a delivered signal and drains the terminal to EOF"],
-        ["packages/pty/src/index.test.ts", "cancels a silent live session through owned wake descriptors"],
-        ["packages/pty/src/index.test.ts", "kills descendants at the unreaped root boundary so they cannot hold the PTY open"]
+        [
+          "packages/pty/src/index.test.ts",
+          "does not lose a wake while many small writes race the writer"
+        ],
+        [
+          "packages/pty/src/index.test.ts",
+          "keeps a backpressured write healthy when later input wakes its poll"
+        ],
+        [
+          "packages/pty/src/index.test.ts",
+          "changes the kernel PTY size without a scheduling delay"
+        ],
+        [
+          "packages/pty/src/index.test.ts",
+          "reports a delivered signal and drains the terminal to EOF"
+        ],
+        [
+          "packages/pty/src/index.test.ts",
+          "cancels a silent live session through owned wake descriptors"
+        ],
+        [
+          "packages/pty/src/index.test.ts",
+          "kills descendants at the unreaped root boundary so they cannot hold the PTY open"
+        ]
       ]
     }
   ]

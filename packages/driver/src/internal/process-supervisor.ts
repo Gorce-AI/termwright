@@ -98,12 +98,15 @@ export class ProcessSupervisor {
 
   ownedTreeExitFailure(): ProcessLifecycleError {
     const failures = this.#exitTreeFailures ?? [];
-    const evidence = failures.length > 0
-      ? failures
-      : [new ProcessLifecycleError(
-          'cleanup-failed',
-          `process tree ${this.#pty.pid} was not confirmed gone`,
-        )];
+    const evidence =
+      failures.length > 0
+        ? failures
+        : [
+            new ProcessLifecycleError(
+              'cleanup-failed',
+              `process tree ${this.#pty.pid} was not confirmed gone`,
+            ),
+          ];
     return new ProcessLifecycleError(
       'cleanup-failed',
       `failed to confirm cleanup of process tree ${this.#pty.pid}: ${evidence.map(describeFailure).join('; ')}`,
@@ -130,10 +133,12 @@ export class ProcessSupervisor {
     if (treeState === undefined) {
       const treeClaim = this.#pty.lifecycle?.tree;
       if (treeClaim === 'posix-process-group' || treeClaim === 'conpty-console') {
-        failures.push(new ProcessLifecycleError(
-          'cleanup-failed',
-          `${treeClaim} backend for process ${this.#pty.pid} exposes no tree-state confirmation`,
-        ));
+        failures.push(
+          new ProcessLifecycleError(
+            'cleanup-failed',
+            `${treeClaim} backend for process ${this.#pty.pid} exposes no tree-state confirmation`,
+          ),
+        );
         this.#exitTreeNeedsConfirmation = true;
         this.#exitTreeConfirmation = Promise.resolve(false);
       } else {
@@ -150,10 +155,12 @@ export class ProcessSupervisor {
       if (state !== 'alive') {
         this.#exitTreeConfirmedGone = state === 'gone';
         if (state === 'unsupported') {
-          failures.push(new ProcessLifecycleError(
-            'cleanup-failed',
-            `backend for process ${this.#pty.pid} could not confirm its declared process tree`,
-          ));
+          failures.push(
+            new ProcessLifecycleError(
+              'cleanup-failed',
+              `backend for process ${this.#pty.pid} could not confirm its declared process tree`,
+            ),
+          );
           this.#exitTreeNeedsConfirmation = true;
         }
         this.#exitTreeConfirmation = Promise.resolve(state === 'gone');
@@ -167,7 +174,9 @@ export class ProcessSupervisor {
           this.#trySignal('KILL', failures);
         }
       } catch (error) {
-        failures.push(isErrno(error, 'EPERM') ? new ProcessSignalPermissionError('KILL', error) : error);
+        failures.push(
+          isErrno(error, 'EPERM') ? new ProcessSignalPermissionError('KILL', error) : error,
+        );
       }
       // Preserve the exact ownership snapshot and begin one owned confirmation
       // now. Natural exit waits without an invented timeout; close() can cancel
@@ -187,10 +196,16 @@ export class ProcessSupervisor {
     // A non-finite deadline or a negative grace interval is a caller mistake,
     // and rejecting one must not release a backend the caller still owns.
     if (!Number.isFinite(options.deadline)) {
-      throw new ProcessLifecycleError('cleanup-failed', 'process shutdown deadline must be a finite monotonic instant');
+      throw new ProcessLifecycleError(
+        'cleanup-failed',
+        'process shutdown deadline must be a finite monotonic instant',
+      );
     }
     if (!Number.isFinite(options.gracefulMs) || options.gracefulMs < 0) {
-      throw new ProcessLifecycleError('cleanup-failed', 'process graceful interval must be non-negative');
+      throw new ProcessLifecycleError(
+        'cleanup-failed',
+        'process graceful interval must be non-negative',
+      );
     }
     // An expired deadline is not a caller mistake — it means an earlier phase
     // consumed the budget — and it used to throw from here, above the block
@@ -293,10 +308,12 @@ export class ProcessSupervisor {
         // native backend owns a Job Object and exposes its termination as this
         // deliberately separate hard-kill path.
         if (this.#pty.hardKillTree === undefined) {
-          failures.push(new ProcessLifecycleError(
-            'cleanup-failed',
-            `ConPTY backend for process ${this.#pty.pid} cannot prove complete tree termination`,
-          ));
+          failures.push(
+            new ProcessLifecycleError(
+              'cleanup-failed',
+              `ConPTY backend for process ${this.#pty.pid} cannot prove complete tree termination`,
+            ),
+          );
           this.#trySignal('KILL', failures);
         } else {
           try {
@@ -310,10 +327,12 @@ export class ProcessSupervisor {
         }
       } else if (lifecycle?.tree === 'delegated') {
         if (this.#pty.terminate === undefined) {
-          failures.push(new ProcessLifecycleError(
-            'cleanup-failed',
-            `delegated PTY backend for process ${this.#pty.pid} exposes no graceful terminate operation`,
-          ));
+          failures.push(
+            new ProcessLifecycleError(
+              'cleanup-failed',
+              `delegated PTY backend for process ${this.#pty.pid} exposes no graceful terminate operation`,
+            ),
+          );
           this.#trySignal('KILL', failures);
         } else {
           try {
@@ -341,10 +360,12 @@ export class ProcessSupervisor {
 
       if (canObserveExit && observed === null) observed = await waitForDeadlineExit();
       if (canObserveExit && observed === null) {
-        failures.push(new ProcessLifecycleError(
-          'cleanup-failed',
-          `process ${this.#pty.pid} did not report a real exit before the shutdown deadline`,
-        ));
+        failures.push(
+          new ProcessLifecycleError(
+            'cleanup-failed',
+            `process ${this.#pty.pid} did not report a real exit before the shutdown deadline`,
+          ),
+        );
       }
 
       const exitTreeFailures = this.#exitTreeFailures ?? [];
@@ -352,10 +373,13 @@ export class ProcessSupervisor {
         if (deadlineReached) this.#cancelExitTreeConfirmation?.();
         const gone = await this.waitForOwnedTreeExit();
         this.#exitTreeConfirmedGone = gone;
-        if (!gone) exitTreeFailures.push(new ProcessLifecycleError(
-          'cleanup-failed',
-          `process group ${this.#pty.pid} remained alive after root exit and hard kill before the shutdown deadline`,
-        ));
+        if (!gone)
+          exitTreeFailures.push(
+            new ProcessLifecycleError(
+              'cleanup-failed',
+              `process group ${this.#pty.pid} remained alive after root exit and hard kill before the shutdown deadline`,
+            ),
+          );
       }
       failures.push(...exitTreeFailures);
       if (observed !== null && this.#exitTreeConfirmedGone) {
@@ -398,7 +422,9 @@ export class ProcessSupervisor {
     try {
       this.#pty.signal(signal);
     } catch (error) {
-      failures.push(isErrno(error, 'EPERM') ? new ProcessSignalPermissionError(signal, error) : error);
+      failures.push(
+        isErrno(error, 'EPERM') ? new ProcessSignalPermissionError(signal, error) : error,
+      );
     }
   }
 

@@ -25,11 +25,7 @@ import { Writable } from 'node:stream';
 import { createCliRenderer, BoxRenderable, TextRenderable } from '@opentui/core';
 
 const arm = (process.argv[2] ?? 'native') as
-  | 'native'
-  | 'feed'
-  | 'feed-quiet'
-  | 'postprocess'
-  | 'postprocess-real';
+  'native' | 'feed' | 'feed-quiet' | 'postprocess' | 'postprocess-real';
 const outFile = process.argv[3] ?? '/tmp/bench.json';
 const windowMs = Number(process.argv[4] ?? 2000);
 

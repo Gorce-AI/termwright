@@ -1,11 +1,11 @@
-import {readdir, readFile, writeFile} from 'node:fs/promises';
-import {dirname, join, posix, relative} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, posix, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../website/src/content/docs/api/', import.meta.url));
 
 async function markdownFiles(directory) {
-  const entries = await readdir(directory, {withFileTypes: true});
+  const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(
     entries.map((entry) => {
       const path = join(directory, entry.name);
@@ -17,13 +17,13 @@ async function markdownFiles(directory) {
 
 function routeFor(markdownPath) {
   const withoutExtension = markdownPath.replace(/\.md$/u, '');
-  return (withoutExtension === 'index'
-    ? ''
-    : withoutExtension.endsWith('/index')
-      ? withoutExtension.slice(0, -'/index'.length)
-      : withoutExtension
-  )
-    .toLowerCase();
+  return (
+    withoutExtension === 'index'
+      ? ''
+      : withoutExtension.endsWith('/index')
+        ? withoutExtension.slice(0, -'/index'.length)
+        : withoutExtension
+  ).toLowerCase();
 }
 
 for (const path of await markdownFiles(root)) {
@@ -37,12 +37,17 @@ for (const path of await markdownFiles(root)) {
   }
   const title = JSON.stringify(heading);
   const sourceRoute = routeFor(sourcePath);
-  const withRoutes = source.replace(/\]\(([^)#]+\.md)(#[^)]+)?\)/gu, (_match, target, hash = '') => {
-    const targetPath = posix.normalize(posix.join(dirname(sourcePath), target));
-    const targetRoute = routeFor(targetPath);
-    const destination = (sourceRoute === '' ? targetRoute : relative(sourceRoute, targetRoute)).replaceAll('\\', '/');
-    return `](${destination === '' ? './' : `${destination}/`}${hash})`;
-  });
+  const withRoutes = source.replace(
+    /\]\(([^)#]+\.md)(#[^)]+)?\)/gu,
+    (_match, target, hash = '') => {
+      const targetPath = posix.normalize(posix.join(dirname(sourcePath), target));
+      const targetRoute = routeFor(targetPath);
+      const destination = (
+        sourceRoute === '' ? targetRoute : relative(sourceRoute, targetRoute)
+      ).replaceAll('\\', '/');
+      return `](${destination === '' ? './' : `${destination}/`}${hash})`;
+    },
+  );
   // TypeDoc may resolve a re-export through another workspace package's
   // generated dist/*.d.ts. Those files are build artifacts, not repository
   // source, so a GitHub URL would be a guaranteed 404. Keep the useful display
@@ -53,6 +58,9 @@ for (const path of await markdownFiles(root)) {
   );
   await writeFile(
     path,
-    withValidSourceLinks.replace('---\neditUrl: false\n---\n', `---\ntitle: ${title}\neditUrl: false\n---\n`),
+    withValidSourceLinks.replace(
+      '---\neditUrl: false\n---\n',
+      `---\ntitle: ${title}\neditUrl: false\n---\n`,
+    ),
   );
 }

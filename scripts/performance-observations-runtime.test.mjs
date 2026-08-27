@@ -19,19 +19,23 @@ describe('performance observation runtime boundary', () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-runtime-boundary-'));
     roots.push(directory);
     const environment = join(directory, 'environment.json');
-    await writeFile(environment, JSON.stringify({
-      kind: 'termwright-performance-environment',
-      schemaVersion: 1,
-      class: `${platform}-${arch}-node${nodeMajor}-go1.25-bun1.2.15`,
-      runner: { image: 'forged-runner', platform, arch },
-      toolchains: {
-        node: { qualified: nodeMajor, resolved: process.versions.node },
-        go: { qualified: '1.25', resolved: '1.25.0' },
-        bun: { qualified: '1.2.15', resolved: '1.2.15' },
-      },
-    }));
+    await writeFile(
+      environment,
+      JSON.stringify({
+        kind: 'termwright-performance-environment',
+        schemaVersion: 1,
+        class: `${platform}-${arch}-node${nodeMajor}-go1.25-bun1.2.15`,
+        runner: { image: 'forged-runner', platform, arch },
+        toolchains: {
+          node: { qualified: nodeMajor, resolved: process.versions.node },
+          go: { qualified: '1.25', resolved: '1.25.0' },
+          bun: { qualified: '1.2.15', resolved: '1.2.15' },
+        },
+      }),
+    );
 
-    await expect(loadPerformanceObservations({ environment }, 'a'.repeat(40)))
-      .rejects.toThrow(`requires platform=${platform}, observed ${process.platform}`);
+    await expect(loadPerformanceObservations({ environment }, 'a'.repeat(40))).rejects.toThrow(
+      `requires platform=${platform}, observed ${process.platform}`,
+    );
   });
 });

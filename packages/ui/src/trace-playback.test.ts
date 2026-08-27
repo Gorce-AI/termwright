@@ -34,7 +34,10 @@ describe('readCommandLog', () => {
 
   it('reports a complete log as complete', async () => {
     const result = await readCommandLog(
-      readerThatFails([{ kind: 'action', t: 10, castOffset: 10, api: 'locator.click', ok: true }], 99),
+      readerThatFails(
+        [{ kind: 'action', t: 10, castOffset: 10, api: 'locator.click', ok: true }],
+        99,
+      ),
     );
     expect(result.incomplete).toBe(false);
     expect(result.error).toBeUndefined();

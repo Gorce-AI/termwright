@@ -40,5 +40,11 @@ export type {
   RecordedMessage,
 } from './support/probe.js';
 
-export { CONFORMANCE_FIXTURES, createSessionPool, environment, fixturePath, ptyAvailable } from './support/pty.js';
+export {
+  CONFORMANCE_FIXTURES,
+  createSessionPool,
+  environment,
+  fixturePath,
+  ptyAvailable,
+} from './support/pty.js';
 export type { FixtureLaunchOptions, SessionPool } from './support/pty.js';

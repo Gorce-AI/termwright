@@ -89,8 +89,8 @@ function modifierParameter(mods: Modifiers): number {
 function unsupported(key: string, detail: string): never {
   throw new TypeError(
     `cannot encode key ${JSON.stringify(key)}: ${detail}; use a single character, or one of Enter, ` +
-    'Escape, Tab, Backspace, Delete, Insert, Space, Arrow{Up,Down,Left,Right}, Home, End, PageUp, ' +
-    'PageDown, F1–F12, optionally prefixed with Control+/Shift+/Alt+',
+      'Escape, Tab, Backspace, Delete, Insert, Space, Arrow{Up,Down,Left,Right}, Home, End, PageUp, ' +
+      'PageDown, F1–F12, optionally prefixed with Control+/Shift+/Alt+',
   );
 }
 

@@ -1,10 +1,6 @@
 import { PassThrough, Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import {
-  certifyLocalMarkerFeed,
-  createMarkerSink,
-  MARKER_SINK_FEED_WRITE_SYMBOL,
-} from './sink.js';
+import { certifyLocalMarkerFeed, createMarkerSink, MARKER_SINK_FEED_WRITE_SYMBOL } from './sink.js';
 
 describe('OpenTUI local marker feed certification', () => {
   it('retains the native feed while restoring local stdout lifecycle semantics', () => {
@@ -65,7 +61,9 @@ describe('OpenTUI local marker feed certification', () => {
 
     sink.releaseAfterUse();
     sink.releaseAfterUse();
-    await new Promise<void>((resolve) => sink.writableFinished ? resolve() : sink.once('finish', resolve));
+    await new Promise<void>((resolve) =>
+      sink.writableFinished ? resolve() : sink.once('finish', resolve),
+    );
     expect(target.listenerCount('error')).toBe(baseline);
   });
 

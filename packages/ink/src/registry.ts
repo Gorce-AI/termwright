@@ -51,14 +51,15 @@ export function freezeInkAnnotation(meta: InkSemanticAnnotation): StoredInkAnnot
 }
 
 /** @internal Registration is lifecycle-owned by `useSemantic`. */
-export function registerInkAnnotation(
-  node: DOMElement,
-  slot: InkAnnotationSlot,
-): () => void {
+export function registerInkAnnotation(node: DOMElement, slot: InkAnnotationSlot): () => void {
   const { entries, listeners } = channel();
   entries.set(node, slot);
   for (const listener of [...listeners]) {
-    try { listener(); } catch { /* annotation observers are best-effort */ }
+    try {
+      listener();
+    } catch {
+      /* annotation observers are best-effort */
+    }
   }
   return () => {
     if (entries.get(node) === slot) entries.delete(node);

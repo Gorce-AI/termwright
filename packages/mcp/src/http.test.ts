@@ -49,7 +49,9 @@ describe('the Streamable HTTP transport', () => {
     try {
       await expect(serveHttp({ port: address.port })).rejects.toMatchObject({ code: 'EADDRINUSE' });
     } finally {
-      await new Promise<void>((resolve, reject) => occupied.close((error) => error === undefined ? resolve() : reject(error)));
+      await new Promise<void>((resolve, reject) =>
+        occupied.close((error) => (error === undefined ? resolve() : reject(error))),
+      );
     }
 
     const rebound = await serveHttp({ port: address.port });
@@ -372,11 +374,14 @@ describe('idle sessions', () => {
     await launchLongLived(client, pidFile);
 
     // The child writes its pid as it starts; give it that beat.
-    const pid = await vi.waitFor(async () => {
-      const value = Number(await readFile(pidFile, 'utf8'));
-      expect(Number.isInteger(value)).toBe(true);
-      return value;
-    }, { timeout: 5_000 });
+    const pid = await vi.waitFor(
+      async () => {
+        const value = Number(await readFile(pidFile, 'utf8'));
+        expect(Number.isInteger(value)).toBe(true);
+        return value;
+      },
+      { timeout: 5_000 },
+    );
     expect(alive(pid)).toBe(true);
     expect(handle.registry.size).toBe(1);
 

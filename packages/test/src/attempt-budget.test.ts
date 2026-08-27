@@ -3,7 +3,12 @@ import { AttemptBudgetExceededError, TestBudget } from './attempt-budget.js';
 
 function clock(start = 0): { now(): number; advance(ms: number): void } {
   let value = start;
-  return { now: () => value, advance: (ms) => { value += ms; } };
+  return {
+    now: () => value,
+    advance: (ms) => {
+      value += ms;
+    },
+  };
 }
 
 const reserves = { diagnosticsMs: 10, traceFlushMs: 10, teardownMs: 10 } as const;
@@ -26,11 +31,15 @@ describe('TestBudget', () => {
 
   it('keeps a bounded authoritative finalization allowance after user timeout', () => {
     let now = 0;
-    const budget = new TestBudget(5_000, {
-      diagnosticsMs: 250,
-      traceFlushMs: 500,
-      teardownMs: 1_000,
-    }, () => now);
+    const budget = new TestBudget(
+      5_000,
+      {
+        diagnosticsMs: 250,
+        traceFlushMs: 500,
+        teardownMs: 1_000,
+      },
+      () => now,
+    );
     now = 5_003;
 
     expect(budget.finalizationTimeout(5_000)).toBe(1_000);
@@ -64,10 +73,18 @@ describe('TestBudget', () => {
     const budget = new TestBudget(100, reserves, time.now);
     time.advance(71);
     let failure: unknown;
-    try { budget.operationTimeout(20, 'assertion'); } catch (error) { failure = error; }
+    try {
+      budget.operationTimeout(20, 'assertion');
+    } catch (error) {
+      failure = error;
+    }
     expect(failure).toBeInstanceOf(AttemptBudgetExceededError);
     expect(failure).toMatchObject({
-      code: 'TW_ATTEMPT_BUDGET_EXCEEDED', phase: 'assertion', elapsedMs: 71, totalMs: 100, reserves,
+      code: 'TW_ATTEMPT_BUDGET_EXCEEDED',
+      phase: 'assertion',
+      elapsedMs: 71,
+      totalMs: 100,
+      reserves,
     });
     expect((failure as Error).message).toContain('diagnostics:10,trace:10,teardown:10');
   });

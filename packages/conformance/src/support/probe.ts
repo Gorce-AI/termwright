@@ -218,7 +218,10 @@ export class AdapterProbe {
     // artifact somebody has to go and find. A path, never `TERMWRIGHT_DEBUG=1`:
     // that means "log to stderr", which under a pty lands in the middle of the
     // frame this suite makes assertions about.
-    const debugFile = join(tmpdir(), `termwright-adapter-debug-${randomBytes(8).toString('hex')}.log`);
+    const debugFile = join(
+      tmpdir(),
+      `termwright-adapter-debug-${randomBytes(8).toString('hex')}.log`,
+    );
     env['TERMWRIGHT_DEBUG_FILE'] = debugFile;
 
     const size = { columns: options.columns ?? 80, rows: options.rows ?? 24 };
@@ -234,13 +237,7 @@ export class AdapterProbe {
       term: 'xterm-256color',
     });
 
-    const probe = new AdapterProbe(
-      { sessionId, token },
-      server,
-      directory,
-      pty,
-      size,
-    );
+    const probe = new AdapterProbe({ sessionId, token }, server, directory, pty, size);
     probe.#debugFile = debugFile;
 
     pty.onData((data) => probe.#onData(data));
@@ -353,7 +350,10 @@ export class AdapterProbe {
     }
     const traffic =
       kinds.size === 0 ? 'no messages' : [...kinds].map(([kind, n]) => `${kind}×${n}`).join(', ');
-    const screen = this.screenText().trimEnd().split('\n').filter((line) => line.trim() !== '');
+    const screen = this.screenText()
+      .trimEnd()
+      .split('\n')
+      .filter((line) => line.trim() !== '');
     const exit = this.#exit === null ? 'still running' : `exited ${JSON.stringify(this.#exit)}`;
     return (
       `${connections} connection(s) to the endpoint, ${traffic}; the child is ${exit}; ` +
@@ -414,8 +414,10 @@ export class AdapterProbe {
     this.#pty.dispose();
     this.#notifyChange();
     this.#terminal.dispose();
-    if (this.#server !== null) await new Promise<void>((resolve) => this.#server?.close(() => resolve()));
-    if (this.#directory !== null) await rm(this.#directory, { recursive: true, force: true }).catch(() => {});
+    if (this.#server !== null)
+      await new Promise<void>((resolve) => this.#server?.close(() => resolve()));
+    if (this.#directory !== null)
+      await rm(this.#directory, { recursive: true, force: true }).catch(() => {});
     if (this.#debugFile !== null) await rm(this.#debugFile, { force: true }).catch(() => {});
   }
 
@@ -450,7 +452,10 @@ export class AdapterProbe {
       const payload = match[1] ?? '';
       const verified = verifyMarkerPayload(payload, this.token, this.sessionId);
       if (verified === null) {
-        this.#faults.push({ code: 'marker', detail: `marker did not verify: ${JSON.stringify(payload)}` });
+        this.#faults.push({
+          code: 'marker',
+          detail: `marker did not verify: ${JSON.stringify(payload)}`,
+        });
       } else {
         this.#markers.push({ revision: verified.revision, offset: match.index, atMs: this.#now() });
       }
@@ -464,7 +469,10 @@ export class AdapterProbe {
     this.#notifyChange();
     if (this.#socket !== null) {
       // One adapter per session; a second connection is a conformance failure.
-      this.#faults.push({ code: 'second-connection', detail: 'the adapter opened a second channel' });
+      this.#faults.push({
+        code: 'second-connection',
+        detail: 'the adapter opened a second channel',
+      });
       socket.destroy();
       return;
     }
@@ -475,7 +483,10 @@ export class AdapterProbe {
       try {
         frames = decoder.push(chunk);
       } catch (error) {
-        this.#faults.push({ code: 'framing', detail: error instanceof Error ? error.message : String(error) });
+        this.#faults.push({
+          code: 'framing',
+          detail: error instanceof Error ? error.message : String(error),
+        });
         this.#notifyChange();
         socket.destroy();
         return;

@@ -31,14 +31,18 @@ import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
 describe('workflow attempt certification', () => {
   it('accepts only the first GitHub attempt when certification requires it', () => {
     expect(() => assertFirstWorkflowAttempt({})).not.toThrow();
-    expect(() => assertFirstWorkflowAttempt({
-      TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1',
-      GITHUB_RUN_ATTEMPT: '1',
-    })).not.toThrow();
-    expect(() => assertFirstWorkflowAttempt({
-      TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1',
-      GITHUB_RUN_ATTEMPT: '2',
-    })).toThrow(/start a new run instead of rerunning/u);
+    expect(() =>
+      assertFirstWorkflowAttempt({
+        TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1',
+        GITHUB_RUN_ATTEMPT: '1',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertFirstWorkflowAttempt({
+        TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1',
+        GITHUB_RUN_ATTEMPT: '2',
+      }),
+    ).toThrow(/start a new run instead of rerunning/u);
   });
 });
 
@@ -115,12 +119,15 @@ class FakeEngine implements TermwrightVitestEngine {
           attemptId,
         } as const;
         if (!this.omitAttemptLifecycle) {
-          await client.append(producer.emit({
-            eventClass: 'authoritative',
-            type: 'attempt.started',
-            identity: eventIdentity,
-            payload: { nativeTaskId, repeat: 0, retry: 0 },
-          }), performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs);
+          await client.append(
+            producer.emit({
+              eventClass: 'authoritative',
+              type: 'attempt.started',
+              identity: eventIdentity,
+              payload: { nativeTaskId, repeat: 0, retry: 0 },
+            }),
+            performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
+          );
         }
         if (this.consoleContent !== undefined) {
           this.consoleListener?.({
@@ -138,14 +145,20 @@ class FakeEngine implements TermwrightVitestEngine {
             deadline: performance.timeOrigin + performance.now() + 5_000,
           });
         }
-        const state = this.tests.find((test) => test.id === nativeTaskId)?.result()?.state === 'failed' ? 'failed' : 'passed';
+        const state =
+          this.tests.find((test) => test.id === nativeTaskId)?.result()?.state === 'failed'
+            ? 'failed'
+            : 'passed';
         if (!this.omitAttemptLifecycle && !this.omitFinished) {
-          await client.append(producer.emit({
-            eventClass: 'authoritative',
-            type: 'attempt.finished',
-            identity: eventIdentity,
-            payload: { nativeTaskId, repeat: 0, retry: 0, state },
-          }), performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs);
+          await client.append(
+            producer.emit({
+              eventClass: 'authoritative',
+              type: 'attempt.finished',
+              identity: eventIdentity,
+              payload: { nativeTaskId, repeat: 0, retry: 0, state },
+            }),
+            performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
+          );
         }
       }
     } finally {
@@ -161,12 +174,16 @@ class FakeEngine implements TermwrightVitestEngine {
 
   onSourceChange(listener: (file: string) => void): () => void {
     this.sourceListener = listener;
-    return () => { this.sourceListener = undefined; };
+    return () => {
+      this.sourceListener = undefined;
+    };
   }
 
   onUserConsoleLog(listener: (log: UserConsoleLog) => void): () => void {
     this.consoleListener = listener;
-    return () => { this.consoleListener = undefined; };
+    return () => {
+      this.consoleListener = undefined;
+    };
   }
 
   async close(): Promise<void> {
@@ -185,10 +202,16 @@ describe('TermwrightTestHost', () => {
     const completion = await host.requestRun().completed;
 
     expect(completion.state).toBe('infrastructure-failed');
-    expect(completion.events.find((event) => event.type === 'run.infrastructure-failed')?.payload)
-      .toMatchObject({ category: 'timeout' });
-    expect((completion.events.find((event) => event.type === 'run.infrastructure-failed')?.payload as { detail: string }).detail)
-      .toContain('Vitest execution');
+    expect(
+      completion.events.find((event) => event.type === 'run.infrastructure-failed')?.payload,
+    ).toMatchObject({ category: 'timeout' });
+    expect(
+      (
+        completion.events.find((event) => event.type === 'run.infrastructure-failed')?.payload as {
+          detail: string;
+        }
+      ).detail,
+    ).toContain('Vitest execution');
     expect(engine.cancellations).toBe(1);
     await host.close();
   });
@@ -206,27 +229,40 @@ describe('TermwrightTestHost', () => {
     const started = completion.events.find((event) => event.type === 'attempt.started');
     const output = completion.events.filter((event) => event.type === 'test.output');
     expect(output.length).toBeGreaterThan(1);
-    expect(output.map((event) => String((event.payload as { content: string }).content)).join(''))
-      .toBe(engine.consoleContent);
+    expect(
+      output.map((event) => String((event.payload as { content: string }).content)).join(''),
+    ).toBe(engine.consoleContent);
     expect(output.map((event) => event.identity.attemptId)).toEqual(
       output.map(() => started?.identity.attemptId),
     );
-    expect(output.every((event) => event.identity.runnerTaskId === started?.identity.runnerTaskId)).toBe(true);
-    expect(output.every((event) => (event.payload as { taskAttributed: boolean }).taskAttributed)).toBe(true);
-    expect(output.every((event) => Buffer.byteLength(JSON.stringify(event)) < 256 * 1024)).toBe(true);
+    expect(
+      output.every((event) => event.identity.runnerTaskId === started?.identity.runnerTaskId),
+    ).toBe(true);
+    expect(
+      output.every((event) => (event.payload as { taskAttributed: boolean }).taskAttributed),
+    ).toBe(true);
+    expect(output.every((event) => Buffer.byteLength(JSON.stringify(event)) < 256 * 1024)).toBe(
+      true,
+    );
     await host.close();
   });
 
   it('uses native task ids and keeps duplicate titles distinct across runs', async () => {
     const engine = new FakeEngine();
-    engine.tests = [testCase('native-a', 'duplicate title'), testCase('native-b', 'duplicate title')];
+    engine.tests = [
+      testCase('native-a', 'duplicate title'),
+      testCase('native-b', 'duplicate title'),
+    ];
     engine.runResult = result(engine.tests);
     const host = TermwrightTestHost.fromEngine(engine, hostOptions());
     const firstHandle = host.requestRun();
     expect(firstHandle.runId).toMatch(/^run:/u);
     const first = await firstHandle.completed;
     expect(first.state).toBe('passed');
-    expect(first.catalog?.tests.map((test) => test.fullName)).toEqual(['duplicate title', 'duplicate title']);
+    expect(first.catalog?.tests.map((test) => test.fullName)).toEqual([
+      'duplicate title',
+      'duplicate title',
+    ]);
     expect(new Set(first.catalog?.tests.map((test) => test.runnerTaskId)).size).toBe(2);
 
     const selected = first.catalog?.tests[1]?.runnerTaskId as RunnerTaskId;
@@ -237,16 +273,24 @@ describe('TermwrightTestHost', () => {
     expect(execution?.tasks['native-b']?.runnerTaskId).toBe(selected);
     expect(second.runId).not.toBe(first.runId);
     expect(second.invocationId).toBe(first.invocationId);
-    expect(second.events
-      .filter((event) => event.type === 'run.configuration' || event.type === 'run.state')
-      .map((event) => event.payload)).toEqual([
+    expect(
+      second.events
+        .filter((event) => event.type === 'run.configuration' || event.type === 'run.state')
+        .map((event) => event.payload),
+    ).toEqual([
       {
         engine: { name: 'vitest', version: CERTIFIED_VITEST_VERSION },
         runtime: { node: process.version, platform: process.platform, arch: process.arch },
         resourceProfile: {
           name: 'local',
           scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },
-          capacities: { ptySession: 4, externalProcess: 4, semanticEndpoint: 4, nativeHostPressure: 4, traceWriter: 4 },
+          capacities: {
+            ptySession: 4,
+            externalProcess: 4,
+            semanticEndpoint: 4,
+            nativeHostPressure: 4,
+            traceWriter: 4,
+          },
           perTerminal: { semanticEndpoint: 1, nativeHostPressure: 1 },
         },
         timeouts: { totalRunMs: 600_000, finalizationReserveMs: 30_000 },
@@ -258,8 +302,9 @@ describe('TermwrightTestHost', () => {
       { state: 'finalizing' },
       { state: 'passed' },
     ]);
-    expect(second.events.filter((event) => event.type.startsWith('attempt.')).map((event) => event.type))
-      .toEqual(['attempt.started', 'attempt.finished']);
+    expect(
+      second.events.filter((event) => event.type.startsWith('attempt.')).map((event) => event.type),
+    ).toEqual(['attempt.started', 'attempt.finished']);
     await host.close();
   });
 
@@ -322,12 +367,20 @@ describe('TermwrightTestHost', () => {
 
   it('composes exclusive host pressure with the declared terminal vector', async () => {
     const engine = new FakeEngine();
-    const pressure = testCase('terminal-host-pressure', 'terminal host pressure', 'passed', 0, true, [], {
-      termwright: {
-        provider: { id: '@termwright/test', version: 1 },
-        resources: { terminals: 1, traceWriters: 0, hostPressure: 'exclusive' },
+    const pressure = testCase(
+      'terminal-host-pressure',
+      'terminal host pressure',
+      'passed',
+      0,
+      true,
+      [],
+      {
+        termwright: {
+          provider: { id: '@termwright/test', version: 1 },
+          resources: { terminals: 1, traceWriters: 0, hostPressure: 'exclusive' },
+        },
       },
-    });
+    );
     engine.tests = [pressure];
     engine.runResult = result([pressure]);
     const host = TermwrightTestHost.fromEngine(engine, hostOptions());
@@ -348,7 +401,9 @@ describe('TermwrightTestHost', () => {
     const completion = await host.requestRun({ execute: false }).completed;
     expect(completion.state).toBe('skipped');
     expect(engine.contexts.at(-1)?.tasks).toEqual({});
-    expect(completion.events.filter((event) => event.type === 'run.state').map((event) => event.payload)).toEqual([
+    expect(
+      completion.events.filter((event) => event.type === 'run.state').map((event) => event.payload),
+    ).toEqual([
       { state: 'requested' },
       { state: 'collecting' },
       { state: 'scheduled' },
@@ -378,8 +433,9 @@ describe('TermwrightTestHost', () => {
 
     expect(completion.state).toBe('infrastructure-failed');
     expect(completion.failures).toEqual([]);
-    expect(completion.events.find((event) => event.type === 'run.infrastructure-failed')?.payload)
-      .toMatchObject({ detail: expect.stringContaining('1 missing (native-current)') });
+    expect(
+      completion.events.find((event) => event.type === 'run.infrastructure-failed')?.payload,
+    ).toMatchObject({ detail: expect.stringContaining('1 missing (native-current)') });
     await host.close();
   });
 
@@ -401,29 +457,44 @@ describe('TermwrightTestHost', () => {
     engine.runResult = result([passed, skipped]);
     const host = TermwrightTestHost.fromEngine(engine, {
       ...hostOptions(),
-      skipDeclarations: [{
-        id: 'declared-platform-case',
-        file: skipped.module.moduleId,
-        fullName: skipped.fullName,
-        required: true,
-      }],
+      skipDeclarations: [
+        {
+          id: 'declared-platform-case',
+          file: skipped.module.moduleId,
+          fullName: skipped.fullName,
+          required: true,
+        },
+      ],
     });
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('passed-with-skips');
-    expect(completion.skips).toMatchObject([{
-      nativeTaskId: 'native-optional',
-      fullName: 'platform-only',
-    }]);
+    expect(completion.skips).toMatchObject([
+      {
+        nativeTaskId: 'native-optional',
+        fullName: 'platform-only',
+      },
+    ]);
     expect(completion.skipPolicy).toEqual({ status: 'matched', declarations: 1, issues: [] });
     expect(completion.events.at(-1)).toMatchObject({
       type: 'run.state',
       payload: { state: 'passed-with-skips' },
     });
-    expect(completion.events).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'run.skip-declaration', payload: expect.objectContaining({ id: 'declared-platform-case' }) }),
-      expect.objectContaining({ type: 'test.skipped', identity: expect.objectContaining({ runnerTaskId: completion.skips[0]?.runnerTaskId }) }),
-      expect.objectContaining({ type: 'run.skip-policy', payload: { status: 'matched', declarations: 1, observed: 1, issues: 0 } }),
-    ]));
+    expect(completion.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'run.skip-declaration',
+          payload: expect.objectContaining({ id: 'declared-platform-case' }),
+        }),
+        expect.objectContaining({
+          type: 'test.skipped',
+          identity: expect.objectContaining({ runnerTaskId: completion.skips[0]?.runnerTaskId }),
+        }),
+        expect.objectContaining({
+          type: 'run.skip-policy',
+          payload: { status: 'matched', declarations: 1, observed: 1, issues: 0 },
+        }),
+      ]),
+    );
     await host.close();
   });
 
@@ -454,10 +525,12 @@ describe('TermwrightTestHost', () => {
     fullEngine.tests = [testCase('native-passed', 'works')];
     fullEngine.runResult = result(fullEngine.tests);
     const fullHost = TermwrightTestHost.fromEngine(fullEngine, {
-      ...hostOptions(), skipDeclarations: [declaration],
+      ...hostOptions(),
+      skipDeclarations: [declaration],
     });
     expect((await fullHost.requestRun().completed).skipPolicy).toMatchObject({
-      status: 'mismatch', issues: [expect.stringContaining('stale required')],
+      status: 'mismatch',
+      issues: [expect.stringContaining('stale required')],
     });
     await fullHost.close();
 
@@ -465,10 +538,14 @@ describe('TermwrightTestHost', () => {
     targetedEngine.tests = [testCase('native-passed', 'works')];
     targetedEngine.runResult = result(targetedEngine.tests);
     const targetedHost = TermwrightTestHost.fromEngine(targetedEngine, {
-      ...hostOptions(), filters: ['packages/example.test.ts'], skipDeclarations: [declaration],
+      ...hostOptions(),
+      filters: ['packages/example.test.ts'],
+      skipDeclarations: [declaration],
     });
     expect((await targetedHost.requestRun().completed).skipPolicy).toEqual({
-      status: 'matched', declarations: 1, issues: [],
+      status: 'matched',
+      declarations: 1,
+      issues: [],
     });
     await targetedHost.close();
   });
@@ -476,25 +553,34 @@ describe('TermwrightTestHost', () => {
   it('treats an explicitly configured Vitest catalogue as targeted without weakening exact skip matching', async () => {
     const engine = new FakeEngine();
     engine.catalogueScope = 'targeted';
-    const skipped = testCase('native-docs-screenshot', 'captures documentation screenshots', 'skipped');
+    const skipped = testCase(
+      'native-docs-screenshot',
+      'captures documentation screenshots',
+      'skipped',
+    );
     engine.tests = [skipped];
     engine.runResult = result([skipped]);
     const host = TermwrightTestHost.fromEngine(engine, {
       ...hostOptions(),
-      skipDeclarations: [{
-        id: 'ui-doc-screenshot-capture-mode',
-        file: skipped.module.moduleId,
-        fullName: skipped.fullName,
-        required: false,
-      }, {
-        id: 'uncollected-required-conpty-case',
-        file: '/repo/packages/conformance/src/suites/driver-generic.test.ts',
-        fullName: 'fails closed when an embedding hides terminal input modes',
-        required: true,
-      }],
+      skipDeclarations: [
+        {
+          id: 'ui-doc-screenshot-capture-mode',
+          file: skipped.module.moduleId,
+          fullName: skipped.fullName,
+          required: false,
+        },
+        {
+          id: 'uncollected-required-conpty-case',
+          file: '/repo/packages/conformance/src/suites/driver-generic.test.ts',
+          fullName: 'fails closed when an embedding hides terminal input modes',
+          required: true,
+        },
+      ],
     });
     expect((await host.requestRun().completed).skipPolicy).toEqual({
-      status: 'matched', declarations: 2, issues: [],
+      status: 'matched',
+      declarations: 2,
+      issues: [],
     });
     await host.close();
   });
@@ -520,12 +606,21 @@ describe('TermwrightTestHost', () => {
       fullName: test.fullName,
       metadata: {},
     }));
-    expect(assessSkipPolicy(nativeSelected, skips, [{
-      id: 'windows-process-lifecycle',
-      file: selected[0]!.module.moduleId,
-      fullName: 'Windows process lifecycle',
-      required: true,
-    }], 'full')).toMatchObject({
+    expect(
+      assessSkipPolicy(
+        nativeSelected,
+        skips,
+        [
+          {
+            id: 'windows-process-lifecycle',
+            file: selected[0]!.module.moduleId,
+            fullName: 'Windows process lifecycle',
+            required: true,
+          },
+        ],
+        'full',
+      ),
+    ).toMatchObject({
       status: 'mismatch',
       issues: expect.arrayContaining([
         expect.stringContaining('undeclared skip'),
@@ -537,25 +632,51 @@ describe('TermwrightTestHost', () => {
   it('uses an exact normalized top-level suite without hiding duplicate leaves inside that scope', () => {
     const file = '/repo/language-adapters.test.ts';
     const cases = [
-      testCase('textual-leaf', 'adapter conformance: termwright (Textual) (skipped: python unavailable) > contract > shared leaf'),
-      testCase('tview-leaf', 'adapter conformance: termwright (tview) (skipped: go unavailable) > contract > shared leaf'),
+      testCase(
+        'textual-leaf',
+        'adapter conformance: termwright (Textual) (skipped: python unavailable) > contract > shared leaf',
+      ),
+      testCase(
+        'tview-leaf',
+        'adapter conformance: termwright (tview) (skipped: go unavailable) > contract > shared leaf',
+      ),
     ];
     const selected = cases.map((test, index) => ({
       runnerTaskId: `runner-task:00000000-0000-4000-8000-00000000000${index + 1}` as RunnerTaskId,
       nativeTaskId: test.id,
       projectId: 'project:00000000-0000-4000-8000-000000000001' as never,
       specId: `spec:00000000-0000-4000-8000-00000000000${index + 1}` as never,
-      project: 'test', file, fullName: test.fullName, metadata: {},
+      project: 'test',
+      file,
+      fullName: test.fullName,
+      metadata: {},
     }));
     const skipped = selected.map((test) => ({
-      runnerTaskId: test.runnerTaskId, nativeTaskId: test.nativeTaskId, file, fullName: test.fullName,
+      runnerTaskId: test.runnerTaskId,
+      nativeTaskId: test.nativeTaskId,
+      file,
+      fullName: test.fullName,
     }));
     const declarations = [
-      { id: 'textual-leaf', file, suite: 'adapter conformance: termwright (Textual)', fullName: 'shared leaf', required: false },
-      { id: 'tview-leaf', file, suite: 'adapter conformance: termwright (tview)', fullName: 'shared leaf', required: false },
+      {
+        id: 'textual-leaf',
+        file,
+        suite: 'adapter conformance: termwright (Textual)',
+        fullName: 'shared leaf',
+        required: false,
+      },
+      {
+        id: 'tview-leaf',
+        file,
+        suite: 'adapter conformance: termwright (tview)',
+        fullName: 'shared leaf',
+        required: false,
+      },
     ] as const;
     expect(assessSkipPolicy(selected, skipped, declarations, 'full')).toEqual({
-      status: 'matched', declarations: 2, issues: [],
+      status: 'matched',
+      declarations: 2,
+      issues: [],
     });
 
     const duplicate = {
@@ -565,14 +686,26 @@ describe('TermwrightTestHost', () => {
       specId: 'spec:00000000-0000-4000-8000-000000000003' as never,
       fullName: 'adapter conformance: termwright (Textual) > future group > shared leaf',
     };
-    expect(assessSkipPolicy(
-      [...selected, duplicate],
-      [...skipped, { runnerTaskId: duplicate.runnerTaskId, nativeTaskId: duplicate.nativeTaskId, file, fullName: duplicate.fullName }],
-      declarations,
-      'full',
-    )).toMatchObject({
+    expect(
+      assessSkipPolicy(
+        [...selected, duplicate],
+        [
+          ...skipped,
+          {
+            runnerTaskId: duplicate.runnerTaskId,
+            nativeTaskId: duplicate.nativeTaskId,
+            file,
+            fullName: duplicate.fullName,
+          },
+        ],
+        declarations,
+        'full',
+      ),
+    ).toMatchObject({
       status: 'mismatch',
-      issues: expect.arrayContaining([expect.stringContaining('matches 2 selected cases instead of one exact case: textual-leaf')]),
+      issues: expect.arrayContaining([
+        expect.stringContaining('matches 2 selected cases instead of one exact case: textual-leaf'),
+      ]),
     });
   });
 
@@ -589,7 +722,9 @@ describe('TermwrightTestHost', () => {
       issues: [expect.stringContaining('stale required')],
     });
     expect(assessSkipPolicy([], [], [declaration], 'targeted')).toEqual({
-      status: 'matched', declarations: 1, issues: [],
+      status: 'matched',
+      declarations: 1,
+      issues: [],
     });
   });
 
@@ -629,11 +764,19 @@ describe('TermwrightTestHost', () => {
     expect(record.manifest.durationMs).toBeGreaterThanOrEqual(0);
     expect(record.manifest.attempts[0]?.attemptId).toMatch(/^attempt:/u);
     expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeGreaterThanOrEqual(0);
-    expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeLessThanOrEqual(record.manifest.durationMs);
-    expect(record.manifest.attempts[0]?.finishedAfterRunMs)
-      .toBeGreaterThanOrEqual(record.manifest.attempts[0]?.startedAfterRunMs ?? Number.POSITIVE_INFINITY);
-    expect(record.manifest.attempts[0]?.finishedAfterRunMs).toBeLessThanOrEqual(record.manifest.durationMs);
-    expect(record.manifest.events.at(-1)).toMatchObject({ type: 'run.state', payload: { state: 'passed' } });
+    expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeLessThanOrEqual(
+      record.manifest.durationMs,
+    );
+    expect(record.manifest.attempts[0]?.finishedAfterRunMs).toBeGreaterThanOrEqual(
+      record.manifest.attempts[0]?.startedAfterRunMs ?? Number.POSITIVE_INFINITY,
+    );
+    expect(record.manifest.attempts[0]?.finishedAfterRunMs).toBeLessThanOrEqual(
+      record.manifest.durationMs,
+    );
+    expect(record.manifest.events.at(-1)).toMatchObject({
+      type: 'run.state',
+      payload: { state: 'passed' },
+    });
     await host.close();
   });
 
@@ -644,10 +787,15 @@ describe('TermwrightTestHost', () => {
     const failed = await collectionHost.requestRun().completed;
     expect(failed.state).toBe('infrastructure-failed');
     expect(failed.error).toBeInstanceOf(AggregateError);
-    expect(failed.events).toContainEqual(expect.objectContaining({
-      type: 'run.infrastructure-failed',
-      payload: expect.objectContaining({ category: 'collection', detail: expect.stringContaining('Vitest collection failed') }),
-    }));
+    expect(failed.events).toContainEqual(
+      expect.objectContaining({
+        type: 'run.infrastructure-failed',
+        payload: expect.objectContaining({
+          category: 'collection',
+          detail: expect.stringContaining('Vitest collection failed'),
+        }),
+      }),
+    );
     await collectionHost.close();
 
     const sinkEngine = new FakeEngine();
@@ -665,9 +813,12 @@ describe('TermwrightTestHost', () => {
     expect(String(incomplete.error)).toContain('ENOSPC');
     const sinkRecord = await readRunManifest(sinkOptions.runsDir, incomplete.runId);
     expect(sinkRecord.state).toBe('complete');
-    if (sinkRecord.state !== 'complete') throw new Error('expected canonical history despite projection failure');
+    if (sinkRecord.state !== 'complete')
+      throw new Error('expected canonical history despite projection failure');
     expect(sinkRecord.manifest.status).toBe('incomplete');
-    expect(sinkRecord.manifest.events.some((event) => event.type === 'run.persistence-failed')).toBe(true);
+    expect(
+      sinkRecord.manifest.events.some((event) => event.type === 'run.persistence-failed'),
+    ).toBe(true);
     await sinkHost.close();
   });
 
@@ -683,7 +834,9 @@ describe('TermwrightTestHost', () => {
       ]),
     ];
     let started = false;
-    engine.runStarted = () => { started = true; };
+    engine.runStarted = () => {
+      started = true;
+    };
     const host = TermwrightTestHost.fromEngine(engine, { ...hostOptions(), filters: ['mixed'] });
 
     const completion = await host.requestRun().completed;
@@ -731,9 +884,12 @@ describe('TermwrightTestHost', () => {
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('incomplete');
     expect(completion.events.at(-1)).toMatchObject({
-      type: 'run.persistence-failed', payload: { stage: 'canonical-run-history' },
+      type: 'run.persistence-failed',
+      payload: { stage: 'canonical-run-history' },
     });
-    expect(await readRunManifest(options.runsDir, completion.runId)).toMatchObject({ state: 'incomplete' });
+    expect(await readRunManifest(options.runsDir, completion.runId)).toMatchObject({
+      state: 'incomplete',
+    });
     await host.close();
   });
 
@@ -799,24 +955,25 @@ describe('TermwrightTestHost', () => {
     // journal records a category without a cause.
     expect(describeFailure(completion.error)).toContain('listener leaked past its test');
     expect(describeFailure(completion.error)).toContain('a rejection that was never an Error');
-    expect(completion.events.filter((event) => event.type === 'run.infrastructure-failed')).toEqual([
-      expect.objectContaining({
-        payload: expect.objectContaining({ detail: expect.stringContaining('listener leaked past its test') }),
-      }),
-    ]);
+    expect(completion.events.filter((event) => event.type === 'run.infrastructure-failed')).toEqual(
+      [
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            detail: expect.stringContaining('listener leaked past its test'),
+          }),
+        }),
+      ],
+    );
     await host.close();
   });
 
   it('cancels and classifies an attempt that finishes while retaining a resource lease', async () => {
     const engine = new FakeEngine();
-    engine.tests = [testCase(
-      'native-leak',
-      'leaks a terminal resource',
-      'failed',
-      0,
-      true,
-      [new Error('fixture teardown could not verify process exit')],
-    )];
+    engine.tests = [
+      testCase('native-leak', 'leaks a terminal resource', 'failed', 0, true, [
+        new Error('fixture teardown could not verify process exit'),
+      ]),
+    ];
     engine.runResult = result(engine.tests);
     engine.leakLease = true;
     const host = TermwrightTestHost.fromEngine(engine, hostOptions());
@@ -860,7 +1017,9 @@ describe('TermwrightTestHost', () => {
     engine.tests = [testCase('native-a', 'case')];
     engine.runResult = result(engine.tests);
     let release!: () => void;
-    engine.blockRun = new Promise<void>((resolve) => { release = resolve; });
+    engine.blockRun = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const host = TermwrightTestHost.fromEngine(engine, hostOptions());
     const watching = host.watch();
     await until(() => engine.contexts.length >= 2);
@@ -878,7 +1037,9 @@ describe('TermwrightTestHost', () => {
 describe('HostRunBudget', () => {
   it('rejects deadlines that the runtime would silently collapse to one millisecond', () => {
     const clock = new ManualDeadlineRuntime();
-    expect(() => new HostRunBudget(2_147_483_648, 100, clock)).toThrow(/must not exceed 2147483647/u);
+    expect(() => new HostRunBudget(2_147_483_648, 100, clock)).toThrow(
+      /must not exceed 2147483647/u,
+    );
   });
 
   it('uses one execution deadline and preserves the finalization reserve', async () => {
@@ -886,7 +1047,10 @@ describe('HostRunBudget', () => {
     const budget = new HostRunBudget(250, 100, clock);
     expect(budget.executionRemainingMs()).toBe(150);
     expect(budget.finalizationRemainingMs()).toBe(250);
-    const execution = budget.execution('Vitest execution', () => new Promise<never>(() => undefined));
+    const execution = budget.execution(
+      'Vitest execution',
+      () => new Promise<never>(() => undefined),
+    );
 
     clock.advance(150);
     expect(budget.executionRemainingMs()).toBe(0);
@@ -896,7 +1060,10 @@ describe('HostRunBudget', () => {
       phase: 'Vitest execution',
     });
 
-    const finalization = budget.finalization('bounded cleanup', () => new Promise<never>(() => undefined));
+    const finalization = budget.finalization(
+      'bounded cleanup',
+      () => new Promise<never>(() => undefined),
+    );
     clock.advance(99);
     expect(clock.now()).toBe(249);
     clock.advance(1);
@@ -910,12 +1077,20 @@ describe('HostRunBudget', () => {
     const clock = new ManualDeadlineRuntime();
     const budget = new HostRunBudget(250, 100, clock);
     let aborted = false;
-    const startup = budget.startResource('resource broker startup', (signal) => new Promise<{ close(): Promise<void> }>((_, reject) => {
-      signal.addEventListener('abort', () => {
-        aborted = true;
-        reject(signal.reason);
-      }, { once: true });
-    }));
+    const startup = budget.startResource(
+      'resource broker startup',
+      (signal) =>
+        new Promise<{ close(): Promise<void> }>((_, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              aborted = true;
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
 
     clock.advance(150);
     await expect(startup).rejects.toMatchObject({
@@ -931,10 +1106,12 @@ describe('HostRunBudget', () => {
     const ownedFailure = new TermwrightHostTimeoutError('transport-owned timeout', 25);
     let signal: AbortSignal | undefined;
 
-    await expect(budget.startResource('resource broker startup', (receivedSignal) => {
-      signal = receivedSignal;
-      return Promise.reject(ownedFailure);
-    })).rejects.toBe(ownedFailure);
+    await expect(
+      budget.startResource('resource broker startup', (receivedSignal) => {
+        signal = receivedSignal;
+        return Promise.reject(ownedFailure);
+      }),
+    ).rejects.toBe(ownedFailure);
     expect(signal?.aborted).toBe(false);
   });
 
@@ -943,12 +1120,20 @@ describe('HostRunBudget', () => {
     const budget = new HostRunBudget(250, 100, clock);
     let resolveStartup!: (resource: { close(): Promise<void> }) => void;
     let closes = 0;
-    const startup = budget.startResource('run journal startup', () => new Promise<{ close(): Promise<void> }>((resolve) => {
-      resolveStartup = resolve;
-    }));
+    const startup = budget.startResource(
+      'run journal startup',
+      () =>
+        new Promise<{ close(): Promise<void> }>((resolve) => {
+          resolveStartup = resolve;
+        }),
+    );
 
     clock.advance(150);
-    resolveStartup({ async close() { closes += 1; } });
+    resolveStartup({
+      async close() {
+        closes += 1;
+      },
+    });
     await expect(startup).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT' });
     expect(closes).toBe(1);
   });
@@ -957,9 +1142,13 @@ describe('HostRunBudget', () => {
     const clock = new ManualDeadlineRuntime();
     const budget = new HostRunBudget(250, 100, clock);
     let resolveStartup!: (resource: { close(): Promise<void> }) => void;
-    const startup = budget.startResource('run journal startup', () => new Promise<{ close(): Promise<void> }>((resolve) => {
-      resolveStartup = resolve;
-    }));
+    const startup = budget.startResource(
+      'run journal startup',
+      () =>
+        new Promise<{ close(): Promise<void> }>((resolve) => {
+          resolveStartup = resolve;
+        }),
+    );
 
     clock.advance(150);
     resolveStartup({ close: () => new Promise(() => undefined) });
@@ -972,12 +1161,20 @@ describe('HostRunBudget', () => {
     const clock = new ManualDeadlineRuntime();
     const budget = new HostRunBudget(250, 100, clock);
     let resolveStartup!: (resource: { close(): Promise<void> }) => void;
-    const startup = budget.startResource('resource broker startup', () => new Promise<{ close(): Promise<void> }>((resolve) => {
-      resolveStartup = resolve;
-    }));
+    const startup = budget.startResource(
+      'resource broker startup',
+      () =>
+        new Promise<{ close(): Promise<void> }>((resolve) => {
+          resolveStartup = resolve;
+        }),
+    );
 
     clock.advance(150);
-    resolveStartup({ async close() { throw new DOMException('close aborted', 'AbortError'); } });
+    resolveStartup({
+      async close() {
+        throw new DOMException('close aborted', 'AbortError');
+      },
+    });
     await expect(startup).rejects.toBeInstanceOf(TermwrightHostStartupCleanupError);
   });
 
@@ -986,13 +1183,21 @@ describe('HostRunBudget', () => {
     const budget = new HostRunBudget(250, 100, clock);
     let resolveStartup!: (resource: { close(): Promise<void> }) => void;
     let closes = 0;
-    const startup = budget.startResource('resource broker startup', () => new Promise<{ close(): Promise<void> }>((resolve) => {
-      resolveStartup = resolve;
-    }));
+    const startup = budget.startResource(
+      'resource broker startup',
+      () =>
+        new Promise<{ close(): Promise<void> }>((resolve) => {
+          resolveStartup = resolve;
+        }),
+    );
 
     clock.advance(250);
     await expect(startup).rejects.toBeInstanceOf(TermwrightHostStartupCleanupError);
-    resolveStartup({ async close() { closes += 1; } });
+    resolveStartup({
+      async close() {
+        closes += 1;
+      },
+    });
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(closes).toBe(1);
   });
@@ -1008,7 +1213,9 @@ class ManualDeadlineRuntime implements TermwrightHostDeadlineRuntime {
   readonly schedule = (delayMs: number, elapsed: () => void): (() => void) => {
     const id = this.#nextId++;
     this.#scheduled.set(id, { at: this.#now + delayMs, elapsed });
-    return () => { this.#scheduled.delete(id); };
+    return () => {
+      this.#scheduled.delete(id);
+    };
   };
 
   advance(ms: number): void {
@@ -1046,9 +1253,11 @@ function testCase(
     location: { line: 1, column: 1 },
     project: { name: 'default' },
     module: { moduleId: '/workspace/example.test.ts' },
-    meta: () => metadata ?? (withProviderMetadata
-      ? { termwright: { provider: { id: '@termwright/test', version: 1 } } }
-      : {}),
+    meta: () =>
+      metadata ??
+      (withProviderMetadata
+        ? { termwright: { provider: { id: '@termwright/test', version: 1 } } }
+        : {}),
     result: () => ({ state, retryCount, errors }),
   };
   return test as unknown as TestCase;
@@ -1061,9 +1270,12 @@ function result(
 ): TestRunResult {
   return {
     unhandledErrors: [...unhandledErrors],
-    testModules: testModules === undefined ? (tests.length === 0
-      ? []
-      : [testModule('/workspace/example.test.ts', tests, 'queued')]) : [...testModules],
+    testModules:
+      testModules === undefined
+        ? tests.length === 0
+          ? []
+          : [testModule('/workspace/example.test.ts', tests, 'queued')]
+        : [...testModules],
   };
 }
 
@@ -1075,7 +1287,11 @@ function testModule(
 ): TestModule {
   return {
     moduleId,
-    children: { allTests: function* () { yield* tests; } },
+    children: {
+      allTests: function* () {
+        yield* tests;
+      },
+    },
     errors: () => [...errors],
     state: () => state,
   } as unknown as TestModule;

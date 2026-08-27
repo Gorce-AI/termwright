@@ -63,10 +63,10 @@ describe('parseSemanticSnapshot', () => {
   });
 
   it('round-trips a name that needed quoting', () => {
-    const text = serializeSemanticSnapshot(
-      {
-        ...permissionDialog(),
-        nodes: [{
+    const text = serializeSemanticSnapshot({
+      ...permissionDialog(),
+      nodes: [
+        {
           id: 'n1',
           role: 'heading',
           name: 'Issue #12',
@@ -75,10 +75,10 @@ describe('parseSemanticSnapshot', () => {
             intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
             visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
           },
-        }],
-        rootIds: ['n1'],
-      },
-    );
+        },
+      ],
+      rootIds: ['n1'],
+    });
     const [pattern] = parseSemanticSnapshot(text);
     expect(pattern?.name?.test('Issue #12')).toBe(true);
   });
@@ -88,15 +88,21 @@ describe('parseSemanticSnapshot', () => {
   });
 
   it('rejects an unknown state flag', () => {
-    expect(() => parseSemanticSnapshot('- button "X" [glowing]')).toThrow(/unknown state flag "glowing"/u);
+    expect(() => parseSemanticSnapshot('- button "X" [glowing]')).toThrow(
+      /unknown state flag "glowing"/u,
+    );
   });
 
   it('rejects a head it cannot read', () => {
-    expect(() => parseSemanticSnapshot('- button Approve')).toThrow(/expected 'role "name" \[flags\]'/u);
+    expect(() => parseSemanticSnapshot('- button Approve')).toThrow(
+      /expected 'role "name" \[flags\]'/u,
+    );
   });
 
   it('rejects a negated flag with a value', () => {
-    expect(() => parseNodeHead('heading [!level=2]')).toThrow(/cannot be both negated and compared/u);
+    expect(() => parseNodeHead('heading [!level=2]')).toThrow(
+      /cannot be both negated and compared/u,
+    );
   });
 
   it('rejects a broken regex', () => {

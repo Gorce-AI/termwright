@@ -1,10 +1,6 @@
 /** Ordinary OpenTUI ownership plus an optional annotation on a custom Renderable. */
 
-import {
-  createCliRenderer,
-  BoxRenderable,
-  TextRenderable,
-} from '@opentui/core';
+import { createCliRenderer, BoxRenderable, TextRenderable } from '@opentui/core';
 import { describeRenderable } from '@termwright/opentui';
 
 class DeploymentRenderable extends BoxRenderable {}

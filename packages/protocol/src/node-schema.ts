@@ -9,44 +9,34 @@
  * construction off the per-message path.
  */
 
-import { Buffer } from "node:buffer";
-import { z } from "zod";
-import type { ProtocolLimits } from "./limits.js";
-import type { SemanticExtendedValue } from "./tree.js";
-import {
-  PHYSICAL_INPUT_RECIPE_ACTIONS,
-  SEMANTIC_ACTIONS,
-  SEMANTIC_ROLES,
-} from "./roles.js";
-import { PROVENANCE_SOURCES } from "./probe/ir.js";
+import { Buffer } from 'node:buffer';
+import { z } from 'zod';
+import type { ProtocolLimits } from './limits.js';
+import type { SemanticExtendedValue } from './tree.js';
+import { PHYSICAL_INPUT_RECIPE_ACTIONS, SEMANTIC_ACTIONS, SEMANTIC_ROLES } from './roles.js';
+import { PROVENANCE_SOURCES } from './probe/ir.js';
 
 export function safeInt(): z.ZodType<number> {
-  return z.number().refine(Number.isSafeInteger, "expected a safe integer");
+  return z.number().refine(Number.isSafeInteger, 'expected a safe integer');
 }
 
 export function nonNegativeInt(): z.ZodType<number> {
   return z
     .number()
-    .refine(
-      (n) => Number.isSafeInteger(n) && n >= 0,
-      "expected a non-negative safe integer",
-    );
+    .refine((n) => Number.isSafeInteger(n) && n >= 0, 'expected a non-negative safe integer');
 }
 
 export function positiveInt(): z.ZodType<number> {
   return z
     .number()
-    .refine(
-      (n) => Number.isSafeInteger(n) && n > 0,
-      "expected a positive safe integer",
-    );
+    .refine((n) => Number.isSafeInteger(n) && n > 0, 'expected a positive safe integer');
 }
 
 export function boundedString(maxStringBytes: number): z.ZodType<string> {
   return z
     .string()
     .refine(
-      (s) => Buffer.byteLength(s, "utf8") <= maxStringBytes,
+      (s) => Buffer.byteLength(s, 'utf8') <= maxStringBytes,
       `expected at most ${maxStringBytes} UTF-8 bytes`,
     );
 }
@@ -77,92 +67,70 @@ function build(limits: ProtocolLimits): TreeSchemas {
   });
 
   const evidence = z.strictObject({
-    source: z.enum([
-      "framework",
-      "application",
-      "terminal",
-      "recognizer",
-      "driver",
-    ]),
+    source: z.enum(['framework', 'application', 'terminal', 'recognizer', 'driver']),
     method: z.enum([
-      "native",
-      "instrumented",
-      "declared",
-      "correlated",
-      "measured",
-      "derived",
-      "heuristic",
+      'native',
+      'instrumented',
+      'declared',
+      'correlated',
+      'measured',
+      'derived',
+      'heuristic',
     ]),
-    strength: z.enum(["authoritative", "diagnostic"]),
+    strength: z.enum(['authoritative', 'diagnostic']),
     providerId: z.string().min(1).max(256),
   });
   const authoritativeEvidence = evidence.extend({
-    strength: z.literal("authoritative"),
+    strength: z.literal('authoritative'),
   });
 
   const observation = <T extends z.ZodType>(value: T): z.ZodType =>
-    z.discriminatedUnion("status", [
+    z.discriminatedUnion('status', [
       z.strictObject({
-        status: z.literal("known"),
+        status: z.literal('known'),
         value,
         evidence,
       }),
       z.strictObject({
-        status: z.literal("absent"),
-        reason: z.enum(["detached", "not-displayed", "not-laid-out"]),
+        status: z.literal('absent'),
+        reason: z.enum(['detached', 'not-displayed', 'not-laid-out']),
         evidence: authoritativeEvidence,
       }),
       z.strictObject({
-        status: z.literal("unknown"),
-        reason: z.enum([
-          "awaiting-revision-pair",
-          "provider-refresh",
-          "stale-revision",
-        ]),
+        status: z.literal('unknown'),
+        reason: z.enum(['awaiting-revision-pair', 'provider-refresh', 'stale-revision']),
       }),
       z.strictObject({
-        status: z.literal("unsupported"),
+        status: z.literal('unsupported'),
         capability: text,
-        reason: z.enum([
-          "capability",
-          "framework-unobservable",
-          "not-negotiated",
-        ]),
+        reason: z.enum(['capability', 'framework-unobservable', 'not-negotiated']),
       }),
     ]);
-  const semanticValue = z.discriminatedUnion("status", [
+  const semanticValue = z.discriminatedUnion('status', [
     z.strictObject({
-      status: z.literal("known"),
+      status: z.literal('known'),
       value: text,
-      sensitivity: z.enum(["public", "sensitive"]),
+      sensitivity: z.enum(['public', 'sensitive']),
       evidence,
     }),
     z.strictObject({
-      status: z.literal("absent"),
-      reason: z.enum(["detached", "not-displayed", "not-laid-out", "no-value"]),
+      status: z.literal('absent'),
+      reason: z.enum(['detached', 'not-displayed', 'not-laid-out', 'no-value']),
       evidence: authoritativeEvidence,
     }),
     z.strictObject({
-      status: z.literal("unknown"),
-      reason: z.enum([
-        "awaiting-revision-pair",
-        "provider-refresh",
-        "stale-revision",
-      ]),
+      status: z.literal('unknown'),
+      reason: z.enum(['awaiting-revision-pair', 'provider-refresh', 'stale-revision']),
     }),
     z.strictObject({
-      status: z.literal("unsupported"),
-      capability: z.literal("semantic-value"),
-      reason: z.enum([
-        "capability",
-        "framework-unobservable",
-        "not-negotiated",
-      ]),
+      status: z.literal('unsupported'),
+      capability: z.literal('semantic-value'),
+      reason: z.enum(['capability', 'framework-unobservable', 'not-negotiated']),
     }),
     z.strictObject({
-      status: z.literal("withheld"),
-      reason: z.enum(["sensitive", "artifact-policy", "provider-policy"]),
-      sensitivity: z.enum(["public", "sensitive"]),
+      status: z.literal('withheld'),
+      reason: z.enum(['sensitive', 'artifact-policy', 'provider-policy']),
+      sensitivity: z.enum(['public', 'sensitive']),
     }),
   ]);
 
@@ -170,7 +138,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     disabled: z.boolean().optional(),
     focused: z.boolean().optional(),
     selected: z.boolean().optional(),
-    checked: z.union([z.boolean(), z.literal("mixed")]).optional(),
+    checked: z.union([z.boolean(), z.literal('mixed')]).optional(),
     expanded: z.boolean().optional(),
     modal: z.boolean().optional(),
     busy: z.boolean().optional(),
@@ -180,9 +148,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     multiline: z.boolean().optional(),
     required: z.boolean().optional(),
     multiselectable: z.boolean().optional(),
-    orientation: z
-      .union([z.literal("horizontal"), z.literal("vertical")])
-      .optional(),
+    orientation: z.union([z.literal('horizontal'), z.literal('vertical')]).optional(),
     level: positiveInt().optional(),
     positionInSet: positiveInt().optional(),
     setSize: nonNegativeInt().optional(),
@@ -203,7 +169,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
         .finite()
         .refine(
           (value) => Math.abs(value) <= Number.MAX_SAFE_INTEGER,
-          "expected a finite JSON number in the safe range",
+          'expected a finite JSON number in the safe range',
         ),
       text,
       z.array(extendedValue).max(limits.maxRelationTargets),
@@ -230,32 +196,30 @@ function build(limits: ProtocolLimits): TreeSchemas {
         .array(
           z.union([
             z.strictObject({
-              kind: z.literal("press"),
-              key: text.refine((s) => s.length > 0, "key must not be empty"),
+              kind: z.literal('press'),
+              key: text.refine((s) => s.length > 0, 'key must not be empty'),
             }),
-            z.strictObject({ kind: z.literal("insert-action-value") }),
+            z.strictObject({ kind: z.literal('insert-action-value') }),
           ]),
         )
         .min(1)
         .max(limits.maxRelationTargets),
     })
     .superRefine((recipe, context) => {
-      const inserts = recipe.steps.filter(
-        ({ kind }) => kind === "insert-action-value",
-      ).length;
+      const inserts = recipe.steps.filter(({ kind }) => kind === 'insert-action-value').length;
       if (
-        (recipe.action === "setValue" && inserts !== 1) ||
-        (recipe.action !== "setValue" && inserts !== 0)
+        (recipe.action === 'setValue' && inserts !== 1) ||
+        (recipe.action !== 'setValue' && inserts !== 0)
       ) {
         context.addIssue({
-          code: "custom",
-          message: "setValue requires exactly one insert-action-value step",
+          code: 'custom',
+          message: 'setValue requires exactly one insert-action-value step',
         });
       }
-      if (recipe.action === "focus" && recipe.requiresFocus) {
+      if (recipe.action === 'focus' && recipe.requiresFocus) {
         context.addIssue({
-          code: "custom",
-          message: "focus recipe cannot require focus",
+          code: 'custom',
+          message: 'focus recipe cannot require focus',
         });
       }
     });
@@ -263,12 +227,10 @@ function build(limits: ProtocolLimits): TreeSchemas {
     .array(inputRecipe)
     .max(PHYSICAL_INPUT_RECIPE_ACTIONS.length)
     .superRefine((recipes, context) => {
-      if (
-        new Set(recipes.map(({ action }) => action)).size !== recipes.length
-      ) {
+      if (new Set(recipes.map(({ action }) => action)).size !== recipes.length) {
         context.addIssue({
-          code: "custom",
-          message: "input recipe actions must be unique",
+          code: 'custom',
+          message: 'input recipe actions must be unique',
         });
       }
     });
@@ -279,7 +241,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
       from: nonNegativeInt(),
       to: positiveInt(),
     })
-    .refine((span) => span.to > span.from, "region span must be non-empty");
+    .refine((span) => span.to > span.from, 'region span must be non-empty');
   const regionSpans = z
     .array(regionSpan)
     .max(limits.maxNodes)
@@ -293,9 +255,9 @@ function build(limits: ProtocolLimits): TreeSchemas {
             (current.row === previous.row && current.from < previous.to))
         ) {
           ctx.addIssue({
-            code: "custom",
+            code: 'custom',
             path: [index],
-            message: "region spans must be non-overlapping row-major runs",
+            message: 'region spans must be non-overlapping row-major runs',
           });
           return;
         }
@@ -304,7 +266,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     });
 
   const nodeFields = {
-    id: text.refine((s) => s.length > 0, "node id must not be empty"),
+    id: text.refine((s) => s.length > 0, 'node id must not be empty'),
     parentId: text.optional(),
     role: z.enum(SEMANTIC_ROLES),
     name: text,
@@ -312,10 +274,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     value: semanticValue.optional(),
     state: state.optional(),
     extended: extended.optional(),
-    actions: z
-      .array(z.enum(SEMANTIC_ACTIONS))
-      .max(SEMANTIC_ACTIONS.length)
-      .optional(),
+    actions: z.array(z.enum(SEMANTIC_ACTIONS)).max(SEMANTIC_ACTIONS.length).optional(),
     inputRecipes: inputRecipes.optional(),
     labelledBy: relations.optional(),
     describedBy: relations.optional(),
@@ -335,24 +294,28 @@ function build(limits: ProtocolLimits): TreeSchemas {
     .strictObject({
       ...nodeFields,
       geometry,
-      scroll: observation(z.strictObject({
-        axis: z.enum(["vertical", "horizontal"]),
-        offset: nonNegativeInt(),
-        viewport: nonNegativeInt(),
-        extent: nonNegativeInt(),
-      })).optional(),
-      paintedRegion: observation(z.strictObject({
-        regionBounds: rect,
-        spans: regionSpans,
-      })).optional(),
+      scroll: observation(
+        z.strictObject({
+          axis: z.enum(['vertical', 'horizontal']),
+          offset: nonNegativeInt(),
+          viewport: nonNegativeInt(),
+          extent: nonNegativeInt(),
+        }),
+      ).optional(),
+      paintedRegion: observation(
+        z.strictObject({
+          regionBounds: rect,
+          spans: regionSpans,
+        }),
+      ).optional(),
     })
     .superRefine((node, context) => {
       const intents = new Set(node.actions ?? []);
       for (const [index, recipe] of (node.inputRecipes ?? []).entries()) {
         if (!intents.has(recipe.action)) {
           context.addIssue({
-            code: "custom",
-            path: ["inputRecipes", index, "action"],
+            code: 'custom',
+            path: ['inputRecipes', index, 'action'],
             message: `input recipe '${recipe.action}' requires the matching semantic action intent`,
           });
         }
@@ -363,9 +326,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     row: nonNegativeInt(),
     column: nonNegativeInt(),
     visible: z.boolean(),
-    shape: z
-      .union([z.literal("block"), z.literal("underline"), z.literal("bar")])
-      .optional(),
+    shape: z.union([z.literal('block'), z.literal('underline'), z.literal('bar')]).optional(),
   });
 
   const hitRun = z.strictObject({
@@ -391,13 +352,12 @@ function build(limits: ProtocolLimits): TreeSchemas {
             previous !== undefined &&
             (current.rect.row < previous.rect.row ||
               (current.rect.row === previous.rect.row &&
-                current.rect.column <
-                  previous.rect.column + previous.rect.width))
+                current.rect.column < previous.rect.column + previous.rect.width))
           ) {
             ctx.addIssue({
-              code: "custom",
-              path: [index, "rect"],
-              message: "hit regions must be non-overlapping row-major runs",
+              code: 'custom',
+              path: [index, 'rect'],
+              message: 'hit regions must be non-overlapping row-major runs',
             });
             return;
           }
@@ -406,75 +366,68 @@ function build(limits: ProtocolLimits): TreeSchemas {
       }),
   });
   const providerPointerRegion = z.strictObject({
-    recipientId: text.refine(
-      (value) => value.length > 0,
-      "recipient id must not be empty",
-    ),
+    recipientId: text.refine((value) => value.length > 0, 'recipient id must not be empty'),
     regionBounds: rect,
     spans: regionSpans,
   });
   const providerActionRecipes = z.strictObject({
-    recipientId: text.refine(
-      (value) => value.length > 0,
-      "recipient id must not be empty",
-    ),
+    recipientId: text.refine((value) => value.length > 0, 'recipient id must not be empty'),
     recipes: inputRecipes,
   });
-  const providerScrollState = z.strictObject({
-    recipientId: text.refine(
-      (value) => value.length > 0,
-      "recipient id must not be empty",
-    ),
-    axis: z.enum(["vertical", "horizontal"]),
-    offset: nonNegativeInt(),
-    viewport: nonNegativeInt(),
-    extent: nonNegativeInt(),
-  }).superRefine((state, context) => {
-    if (state.offset > state.extent || state.viewport > state.extent || state.offset + state.viewport > state.extent) {
-      context.addIssue({
-        code: "custom",
-        message: "scroll state must fit inside its extent",
-      });
-    }
-  });
-  const providerEvidence = z.discriminatedUnion("status", [
+  const providerScrollState = z
+    .strictObject({
+      recipientId: text.refine((value) => value.length > 0, 'recipient id must not be empty'),
+      axis: z.enum(['vertical', 'horizontal']),
+      offset: nonNegativeInt(),
+      viewport: nonNegativeInt(),
+      extent: nonNegativeInt(),
+    })
+    .superRefine((state, context) => {
+      if (
+        state.offset > state.extent ||
+        state.viewport > state.extent ||
+        state.offset + state.viewport > state.extent
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'scroll state must fit inside its extent',
+        });
+      }
+    });
+  const providerEvidence = z.discriminatedUnion('status', [
     z.strictObject({
-      providerId: text.refine(
-        (value) => value.length > 0,
-        "provider id must not be empty",
-      ),
-      sessionId: text.refine(
-        (value) => value.length > 0,
-        "provider session id must not be empty",
-      ),
+      providerId: text.refine((value) => value.length > 0, 'provider id must not be empty'),
+      sessionId: text.refine((value) => value.length > 0, 'provider session id must not be empty'),
       revision: positiveInt(),
-      status: z.literal("available"),
+      status: z.literal('available'),
       evidence: z.strictObject({
-        source: z.literal("application"),
-        method: z.enum(["native", "instrumented", "declared"]),
-        strength: z.literal("authoritative"),
+        source: z.literal('application'),
+        method: z.enum(['native', 'instrumented', 'declared']),
+        strength: z.literal('authoritative'),
         providerId: text.refine(
           (value) => value.length > 0,
-          "evidence provider id must not be empty",
+          'evidence provider id must not be empty',
         ),
       }),
       pointerRegions: z.array(providerPointerRegion).max(limits.maxNodes),
       paintedRegions: z.array(providerPointerRegion).max(limits.maxNodes).optional(),
-      inputModes: z.strictObject({
-        mouseTracking: z.enum(['none', 'x10', 'vt200', 'drag', 'any']),
-        mouseEncoding: z.enum(['default', 'sgr', 'urxvt', 'utf8']),
-        focusReporting: z.enum(['on', 'off']),
-      }).optional(),
+      inputModes: z
+        .strictObject({
+          mouseTracking: z.enum(['none', 'x10', 'vt200', 'drag', 'any']),
+          mouseEncoding: z.enum(['default', 'sgr', 'urxvt', 'utf8']),
+          focusReporting: z.enum(['on', 'off']),
+        })
+        .optional(),
       focusState: z
-        .discriminatedUnion("status", [
+        .discriminatedUnion('status', [
           z.strictObject({
-            status: z.literal("focused"),
+            status: z.literal('focused'),
             recipientId: text.refine(
               (value) => value.length > 0,
-              "focused recipient id must not be empty",
+              'focused recipient id must not be empty',
             ),
           }),
-          z.strictObject({ status: z.literal("none") }),
+          z.strictObject({ status: z.literal('none') }),
         ])
         .optional(),
       actionRecipes: z
@@ -485,9 +438,9 @@ function build(limits: ProtocolLimits): TreeSchemas {
           for (const [index, entry] of entries.entries()) {
             if (seen.has(entry.recipientId)) {
               context.addIssue({
-                code: "custom",
-                path: [index, "recipientId"],
-                message: "provider action recipe recipients must be unique",
+                code: 'custom',
+                path: [index, 'recipientId'],
+                message: 'provider action recipe recipients must be unique',
               });
             }
             seen.add(entry.recipientId);
@@ -502,9 +455,9 @@ function build(limits: ProtocolLimits): TreeSchemas {
           for (const [index, entry] of entries.entries()) {
             if (seen.has(entry.recipientId)) {
               context.addIssue({
-                code: "custom",
-                path: [index, "recipientId"],
-                message: "provider scroll recipients must be unique",
+                code: 'custom',
+                path: [index, 'recipientId'],
+                message: 'provider scroll recipients must be unique',
               });
             }
             seen.add(entry.recipientId);
@@ -514,50 +467,33 @@ function build(limits: ProtocolLimits): TreeSchemas {
       hitGrid: hitGrid.optional(),
     }),
     z.strictObject({
-      providerId: text.refine(
-        (value) => value.length > 0,
-        "provider id must not be empty",
-      ),
-      sessionId: text.refine(
-        (value) => value.length > 0,
-        "provider session id must not be empty",
-      ),
+      providerId: text.refine((value) => value.length > 0, 'provider id must not be empty'),
+      sessionId: text.refine((value) => value.length > 0, 'provider session id must not be empty'),
       revision: positiveInt(),
-      status: z.literal("lost"),
-      reason: text.refine(
-        (value) => value.length > 0,
-        "provider loss reason must not be empty",
-      ),
+      status: z.literal('lost'),
+      reason: text.refine((value) => value.length > 0, 'provider loss reason must not be empty'),
     }),
     z.strictObject({
-      providerId: text.refine(
-        (value) => value.length > 0,
-        "provider id must not be empty",
-      ),
-      sessionId: text.refine(
-        (value) => value.length > 0,
-        "provider session id must not be empty",
-      ),
+      providerId: text.refine((value) => value.length > 0, 'provider id must not be empty'),
+      sessionId: text.refine((value) => value.length > 0, 'provider session id must not be empty'),
       revision: positiveInt(),
-      status: z.literal("violation"),
+      status: z.literal('violation'),
       reason: text.refine(
         (value) => value.length > 0,
-        "provider violation reason must not be empty",
+        'provider violation reason must not be empty',
       ),
     }),
   ]);
   const snapshotV2 = z.strictObject({
     v: z.literal(2),
-    sessionId: text.refine((s) => s.length > 0, "sessionId must not be empty"),
+    sessionId: text.refine((s) => s.length > 0, 'sessionId must not be empty'),
     revision: positiveInt(),
     columns: positiveInt(),
     rows: positiveInt(),
     cursor: cursor.optional(),
     rootIds: z.array(text).max(limits.maxNodes),
     nodes: z.array(nodeV2).max(limits.maxNodes),
-    coordinateSpace: observation(
-      z.enum(["viewport-cells", "framework-local-cells"]),
-    ),
+    coordinateSpace: observation(z.enum(['viewport-cells', 'framework-local-cells'])),
     hitGrid: observation(hitGrid),
     providerEvidence: z.array(providerEvidence).max(64).optional(),
   });

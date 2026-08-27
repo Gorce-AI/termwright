@@ -3,7 +3,7 @@
 The rules that turn observed facts into meaning.
 
 A probe reports what a framework exposed — classes, coordinates, flags. This
-package decides what those facts *are*: a role, a name, a state. Keeping the two
+package decides what those facts _are_: a role, a name, a state. Keeping the two
 apart is what lets six frameworks disagree about what is knowable without that
 disagreement leaking into the semantic tree.
 
@@ -22,7 +22,7 @@ Depends on `@termwright/protocol` and nothing else.
 ## Usage
 
 ```ts
-import {recognize} from '@termwright/recognizers';
+import { recognize } from '@termwright/recognizers';
 
 const snapshot = recognize(probeFrame, {
   sessionId,
@@ -48,7 +48,7 @@ the framework called it.
 `button`, `listitem`, `menuitem`, `tab`, `checkbox`, `radio`, `cell`, `row`,
 `heading`, plus `text` for its own string. A container keeps an empty name
 unless annotated: naming it from its content is what makes
-`getByRole('region', {name: 'Approve'})` match the dialog *containing* the
+`getByRole('region', {name: 'Approve'})` match the dialog _containing_ the
 button.
 
 **Physical facts stay the framework's.** An author may name a thing; an author

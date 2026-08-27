@@ -25,9 +25,21 @@ import type { TermwrightResourceProfile } from './resource-profiles.js';
 const executeFile = promisify(execFile);
 const MAX_RUNTIME_TIMER_MS = 2_147_483_647;
 const CI_PROVENANCE_KEYS = [
-  'CI', 'GITHUB_ACTIONS', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_WORKFLOW', 'GITHUB_JOB',
-  'GITLAB_CI', 'CI_PIPELINE_ID', 'CI_JOB_ID', 'BUILDKITE', 'BUILDKITE_BUILD_ID',
-  'TF_BUILD', 'BUILD_BUILDID', 'JENKINS_URL', 'BUILD_ID',
+  'CI',
+  'GITHUB_ACTIONS',
+  'GITHUB_RUN_ID',
+  'GITHUB_RUN_ATTEMPT',
+  'GITHUB_WORKFLOW',
+  'GITHUB_JOB',
+  'GITLAB_CI',
+  'CI_PIPELINE_ID',
+  'CI_JOB_ID',
+  'BUILDKITE',
+  'BUILDKITE_BUILD_ID',
+  'TF_BUILD',
+  'BUILD_BUILDID',
+  'JENKINS_URL',
+  'BUILD_ID',
 ] as const;
 
 export interface TermwrightHostDeadlineRuntime {
@@ -46,7 +58,10 @@ export const SYSTEM_HOST_DEADLINE_RUNTIME: TermwrightHostDeadlineRuntime = Objec
 
 export class TermwrightHostTimeoutError extends Error {
   readonly code = 'TW_HOST_TIMEOUT';
-  constructor(readonly phase: string, readonly totalMs: number) {
+  constructor(
+    readonly phase: string,
+    readonly totalMs: number,
+  ) {
     super(`Termwright native host exceeded its ${totalMs} ms total deadline during ${phase}`);
     this.name = 'TermwrightHostTimeoutError';
   }
@@ -74,8 +89,10 @@ export class HostRunBudget {
   ) {
     positiveFinite(totalMs, 'run timeout');
     positiveFinite(finalizationReserveMs, 'host finalization reserve');
-    if (totalMs > MAX_RUNTIME_TIMER_MS) throw new TypeError(`run timeout must not exceed ${MAX_RUNTIME_TIMER_MS} ms`);
-    if (finalizationReserveMs >= totalMs) throw new TypeError('host finalization reserve must be smaller than the total run timeout');
+    if (totalMs > MAX_RUNTIME_TIMER_MS)
+      throw new TypeError(`run timeout must not exceed ${MAX_RUNTIME_TIMER_MS} ms`);
+    if (finalizationReserveMs >= totalMs)
+      throw new TypeError('host finalization reserve must be smaller than the total run timeout');
     this.#startedAt = runtime.now();
     this.#deadlineAt = this.#startedAt + totalMs;
     this.#executionDeadlineAt = this.#deadlineAt - finalizationReserveMs;
@@ -101,36 +118,61 @@ export class HostRunBudget {
   }
 
   execution<T>(phase: string, operation: () => Promise<T>): Promise<T> {
-    return startWithinHostDeadline(operation, this.#executionDeadlineAt, phase, this.totalMs, this.runtime);
+    return startWithinHostDeadline(
+      operation,
+      this.#executionDeadlineAt,
+      phase,
+      this.totalMs,
+      this.runtime,
+    );
   }
 
   finalization<T>(phase: string, operation: () => Promise<T>): Promise<T> {
     return startWithinHostDeadline(operation, this.#deadlineAt, phase, this.totalMs, this.runtime);
   }
 
-  async startResource<T extends { close(): Promise<void> }>(phase: string, start: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  async startResource<T extends { close(): Promise<void> }>(
+    phase: string,
+    start: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
     const controller = new AbortController();
     let startup: Promise<T> | undefined;
     try {
-      return await startWithinHostDeadline(() => {
-        startup = start(controller.signal);
-        return startup;
-      }, this.#executionDeadlineAt, phase, this.totalMs, this.runtime, () => controller.abort());
+      return await startWithinHostDeadline(
+        () => {
+          startup = start(controller.signal);
+          return startup;
+        },
+        this.#executionDeadlineAt,
+        phase,
+        this.totalMs,
+        this.runtime,
+        () => controller.abort(),
+      );
     } catch (error) {
-      if (!(error instanceof TermwrightHostTimeoutError) || !controller.signal.aborted || startup === undefined) throw error;
+      if (
+        !(error instanceof TermwrightHostTimeoutError) ||
+        !controller.signal.aborted ||
+        startup === undefined
+      )
+        throw error;
       const pendingStartup = startup;
       const cleanup = (async () => {
         let resource: T;
-        try { resource = await pendingStartup; }
-        catch (startupError) {
+        try {
+          resource = await pendingStartup;
+        } catch (startupError) {
           if (controller.signal.aborted && isAbortError(startupError)) return;
           throw startupError;
         }
         await resource.close();
       })();
       void cleanup.catch(() => undefined);
-      try { await this.finalization(`${phase} abort`, () => cleanup); }
-      catch (cleanupError) { throw new TermwrightHostStartupCleanupError(error, cleanupError); }
+      try {
+        await this.finalization(`${phase} abort`, () => cleanup);
+      } catch (cleanupError) {
+        throw new TermwrightHostStartupCleanupError(error, cleanupError);
+      }
       throw error;
     }
   }
@@ -160,14 +202,22 @@ export class RunEventPersistence {
     this.#observer = options.observer;
   }
 
-  get recorded(): readonly RunEvent[] { return this.#recorded; }
-  get persisted(): readonly RunEvent[] { return this.#persisted; }
+  get recorded(): readonly RunEvent[] {
+    return this.#recorded;
+  }
+  get persisted(): readonly RunEvent[] {
+    return this.#persisted;
+  }
 
   append(event: RunEvent): ReturnType<RunEventJournal['append']> {
     const result = this.#journal.append(event);
     if (!result.ok) return result;
     this.#recorded.push(event);
-    try { this.#observer?.(event); } catch { /* Projections cannot change the certified result. */ }
+    try {
+      this.#observer?.(event);
+    } catch {
+      /* Projections cannot change the certified result. */
+    }
     return result;
   }
 
@@ -186,9 +236,13 @@ export type PersistedAttempt = NativeRunAttempt;
 export class RunHistoryPersistence {
   readonly #transaction: RunManifestTransaction;
 
-  private constructor(transaction: RunManifestTransaction) { this.#transaction = transaction; }
+  private constructor(transaction: RunManifestTransaction) {
+    this.#transaction = transaction;
+  }
 
-  get start(): RunStartProvenance { return this.#transaction.start; }
+  get start(): RunStartProvenance {
+    return this.#transaction.start;
+  }
 
   static async begin(options: {
     readonly invocationId: InvocationId;
@@ -211,14 +265,21 @@ export class RunHistoryPersistence {
         version: options.engineVersion,
         certification: `termwright-vitest-${CERTIFIED_VITEST_VERSION}`,
       }),
-      runtime: Object.freeze({ node: process.version, platform: process.platform, arch: process.arch }),
+      runtime: Object.freeze({
+        node: process.version,
+        platform: process.platform,
+        arch: process.arch,
+      }),
       resources: Object.freeze({
         profile: options.resourceProfile.name,
         scheduler: Object.freeze({ ...options.resourceProfile.scheduler }),
         capacities: Object.freeze({ ...options.resourceProfile.capacities }),
         perTerminal: Object.freeze({ ...options.resourceProfile.perTerminal }),
       }),
-      timeouts: Object.freeze({ totalRunMs: options.totalRunMs, finalizationReserveMs: options.finalizationReserveMs }),
+      timeouts: Object.freeze({
+        totalRunMs: options.totalRunMs,
+        finalizationReserveMs: options.finalizationReserveMs,
+      }),
       ci: Object.freeze(captureCiProvenance(process.env)),
       git: await captureGitProvenance(options.cwd),
     });
@@ -239,7 +300,9 @@ export class RunHistoryPersistence {
     return this.#transaction.prepare(createRunManifest(this.start, input));
   }
 
-  async commitPrepared(): Promise<void> { await this.#transaction.commitPrepared(); }
+  async commitPrepared(): Promise<void> {
+    await this.#transaction.commitPrepared();
+  }
 }
 
 export function createRunManifest(
@@ -265,7 +328,9 @@ export function createRunManifest(
   });
 }
 
-export function captureCiProvenance(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
+export function captureCiProvenance(
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
   const result: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const key of CI_PROVENANCE_KEYS) {
     const value = env[key];
@@ -284,18 +349,37 @@ async function captureGitProvenance(cwd: string): Promise<RunStartProvenance['gi
   if (details === null || branch === null) return null;
   const separator = details.indexOf('\0');
   if (separator <= 0 || separator === details.length - 1) return null;
-  return Object.freeze({ commit, message: details.slice(0, separator), author: details.slice(separator + 1), branch });
+  return Object.freeze({
+    commit,
+    message: details.slice(0, separator),
+    author: details.slice(separator + 1),
+    branch,
+  });
 }
 
 async function gitValue(cwd: string, arguments_: readonly string[]): Promise<string | null> {
   try {
-    const { stdout } = await executeFile('git', [...arguments_], { cwd, timeout: 2_000, windowsHide: true, maxBuffer: 64 * 1_024 });
+    const { stdout } = await executeFile('git', [...arguments_], {
+      cwd,
+      timeout: 2_000,
+      windowsHide: true,
+      maxBuffer: 64 * 1_024,
+    });
     const value = stdout.trim();
     return value === '' ? null : value;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
-export async function withinHostDeadline<T>(operation: Promise<T>, deadlineAt: number, phase: string, totalMs: number, runtime: TermwrightHostDeadlineRuntime, onElapsed?: () => void): Promise<T> {
+export async function withinHostDeadline<T>(
+  operation: Promise<T>,
+  deadlineAt: number,
+  phase: string,
+  totalMs: number,
+  runtime: TermwrightHostDeadlineRuntime,
+  onElapsed?: () => void,
+): Promise<T> {
   const remaining = deadlineAt - runtime.now();
   if (remaining <= 0) {
     void operation.catch(() => undefined);
@@ -303,21 +387,37 @@ export async function withinHostDeadline<T>(operation: Promise<T>, deadlineAt: n
   }
   let cancelTimer: (() => void) | undefined;
   try {
-    return await Promise.race([operation, new Promise<never>((_, reject) => {
-      cancelTimer = runtime.schedule(remaining, () => {
-        reject(new TermwrightHostTimeoutError(phase, totalMs));
-        onElapsed?.();
-      });
-    })]);
-  } finally { cancelTimer?.(); }
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        cancelTimer = runtime.schedule(remaining, () => {
+          reject(new TermwrightHostTimeoutError(phase, totalMs));
+          onElapsed?.();
+        });
+      }),
+    ]);
+  } finally {
+    cancelTimer?.();
+  }
 }
 
-function startWithinHostDeadline<T>(operation: () => Promise<T>, deadlineAt: number, phase: string, totalMs: number, runtime: TermwrightHostDeadlineRuntime, onElapsed?: () => void): Promise<T> {
-  if (runtime.now() >= deadlineAt) return Promise.reject(new TermwrightHostTimeoutError(phase, totalMs));
+function startWithinHostDeadline<T>(
+  operation: () => Promise<T>,
+  deadlineAt: number,
+  phase: string,
+  totalMs: number,
+  runtime: TermwrightHostDeadlineRuntime,
+  onElapsed?: () => void,
+): Promise<T> {
+  if (runtime.now() >= deadlineAt)
+    return Promise.reject(new TermwrightHostTimeoutError(phase, totalMs));
   return withinHostDeadline(operation(), deadlineAt, phase, totalMs, runtime, onElapsed);
 }
 
-function isAbortError(error: unknown): boolean { return error instanceof Error && error.name === 'AbortError'; }
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
 function positiveFinite(value: number, label: string): void {
-  if (!Number.isFinite(value) || value <= 0) throw new TypeError(`${label} must be a positive finite number`);
+  if (!Number.isFinite(value) || value <= 0)
+    throw new TypeError(`${label} must be a positive finite number`);
 }

@@ -1,5 +1,5 @@
 ---
-"@termwright/driver": patch
+'@termwright/driver': patch
 ---
 
 Expose locator retry waits through a structured `action-observation-wait`

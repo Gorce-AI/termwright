@@ -91,7 +91,8 @@ const ERROR_KINDS: readonly ErrorKind[] = [...DRIVER_ERROR_KINDS, ...MCP_ERROR_K
 
 /** Shared targeting guidance for every agent-facing surface. */
 export const TARGETING_GUIDANCE = {
-  precedence: 'Targeting precedence is `ref`, `selector`, `testId`, `role` (+`name`), `label`, `text`, `screenText`.',
+  precedence:
+    'Targeting precedence is `ref`, `selector`, `testId`, `role` (+`name`), `label`, `text`, `screenText`.',
   semanticUnavailable:
     '`semanticTree: unavailable` means the program ships no integration — target physical output with `screenText`, never semantic `text` or `role`.',
 } as const;
@@ -106,7 +107,7 @@ const CONVENTIONS = [
   'Locators are strict: more than one match fails with kind "ambiguous-locator" unless nth is given.',
   TARGETING_GUIDANCE.semanticUnavailable,
   'Errors are returned as tool results with isError set; _meta["io.termwright/error"].kind is the value to ' +
-    'branch on, and that payload\'s suggestion says what to try next. Error results intentionally omit structuredContent because it is success-schema validated.',
+    "branch on, and that payload's suggestion says what to try next. Error results intentionally omit structuredContent because it is success-schema validated.",
 ] as const;
 
 function toJsonSchema(shape: Record<string, z.ZodType>): JsonSchema {

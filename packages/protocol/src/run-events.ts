@@ -61,7 +61,9 @@ export interface RunIdByKind {
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const ID_PATTERNS: Readonly<Record<RunIdKind, RegExp>> = Object.freeze(
-  Object.fromEntries(RUN_ID_KINDS.map((kind) => [kind, new RegExp(`^${kind}:${UUID}$`, 'u')])) as Record<RunIdKind, RegExp>,
+  Object.fromEntries(
+    RUN_ID_KINDS.map((kind) => [kind, new RegExp(`^${kind}:${UUID}$`, 'u')]),
+  ) as Record<RunIdKind, RegExp>,
 );
 
 /** Validate and brand an id received from an untrusted or persisted source. */
@@ -106,7 +108,14 @@ export class RunIdFactory {
 }
 
 function browserRandomUuid(): string {
-  const crypto = (globalThis as { readonly crypto?: { randomUUID?: () => string; getRandomValues?<T extends ArrayBufferView>(value: T): T } }).crypto;
+  const crypto = (
+    globalThis as {
+      readonly crypto?: {
+        randomUUID?: () => string;
+        getRandomValues?<T extends ArrayBufferView>(value: T): T;
+      };
+    }
+  ).crypto;
   if (crypto?.randomUUID !== undefined) return crypto.randomUUID();
   if (crypto?.getRandomValues === undefined) {
     throw new Error('secure randomness is unavailable; pass an explicit randomUUID function');
@@ -120,7 +129,8 @@ function browserRandomUuid(): string {
 
 function browserMonotonicNow(): number {
   const performance = (globalThis as { readonly performance?: { now(): number } }).performance;
-  if (performance === undefined) throw new Error('a monotonic clock is unavailable; pass monotonicNow');
+  if (performance === undefined)
+    throw new Error('a monotonic clock is unavailable; pass monotonicNow');
   return performance.now();
 }
 
@@ -208,10 +218,7 @@ export type RunEventValidationResult =
 
 type RunEventFailure = Extract<RunEventValidationResult, { readonly ok: false }>;
 
-export interface CreateRunEventInput<
-  Type extends string,
-  Payload extends RunEventJson,
-> {
+export interface CreateRunEventInput<Type extends string, Payload extends RunEventJson> {
   readonly eventId?: RunEventId;
   readonly producerId: RunEventProducerId;
   readonly epoch: number;
@@ -254,7 +261,8 @@ export class RunEventProducer {
     readonly monotonicNow?: () => number;
     readonly wallNow?: () => number;
   }) {
-    if (!nonNegativeInteger(options.epoch)) throw new TypeError('producer epoch must be a non-negative safe integer');
+    if (!nonNegativeInteger(options.epoch))
+      throw new TypeError('producer epoch must be a non-negative safe integer');
     parseRunId('producer', options.producerId);
     this.#producerId = options.producerId;
     this.#epoch = options.epoch;
@@ -267,22 +275,27 @@ export class RunEventProducer {
     input: ProduceRunEventInput<Type, Payload>,
     limits: RunEventLimits = DEFAULT_RUN_EVENT_LIMITS,
   ): RunEvent<Type, Payload> {
-    if (!Number.isSafeInteger(this.#seq)) throw new Error('producer sequence exhausted the safe integer range');
+    if (!Number.isSafeInteger(this.#seq))
+      throw new Error('producer sequence exhausted the safe integer range');
     const now = this.#monotonicNow();
-    if (!time(now) || now < this.#lastTime) throw new Error('producer monotonic clock moved backwards');
-    const event = createRunEvent({
-      eventId: this.#ids.create('event'),
-      producerId: this.#producerId,
-      epoch: this.#epoch,
-      seq: this.#seq,
-      eventClass: input.eventClass,
-      type: input.type,
-      monotonicTime: now,
-      ...(this.#wallNow === undefined ? {} : { wallTime: this.#wallNow() }),
-      identity: input.identity,
-      ...(input.causedBy === undefined ? {} : { causedBy: input.causedBy }),
-      payload: input.payload,
-    }, limits);
+    if (!time(now) || now < this.#lastTime)
+      throw new Error('producer monotonic clock moved backwards');
+    const event = createRunEvent(
+      {
+        eventId: this.#ids.create('event'),
+        producerId: this.#producerId,
+        epoch: this.#epoch,
+        seq: this.#seq,
+        eventClass: input.eventClass,
+        type: input.type,
+        monotonicTime: now,
+        ...(this.#wallNow === undefined ? {} : { wallTime: this.#wallNow() }),
+        identity: input.identity,
+        ...(input.causedBy === undefined ? {} : { causedBy: input.causedBy }),
+        payload: input.payload,
+      },
+      limits,
+    );
     this.#seq += 1;
     this.#lastTime = now;
     return event;
@@ -323,30 +336,59 @@ export function validateRunEvent(
   const projected = projectJson(value, limits);
   if (!projected.ok) return projected;
   const event = projected.value;
-  if (!isRecord(event) || event['v'] !== RUN_EVENT_VERSION) return fail('invalid-envelope', `v must be exactly ${RUN_EVENT_VERSION}`);
-  const allowed = new Set(['v', 'eventId', 'producerId', 'epoch', 'seq', 'eventClass', 'type', 'monotonicTime', 'wallTime', 'identity', 'causedBy', 'payload']);
-  if (Object.keys(event).some((key) => !allowed.has(key))) return fail('invalid-envelope', 'event contains an unknown field');
+  if (!isRecord(event) || event['v'] !== RUN_EVENT_VERSION)
+    return fail('invalid-envelope', `v must be exactly ${RUN_EVENT_VERSION}`);
+  const allowed = new Set([
+    'v',
+    'eventId',
+    'producerId',
+    'epoch',
+    'seq',
+    'eventClass',
+    'type',
+    'monotonicTime',
+    'wallTime',
+    'identity',
+    'causedBy',
+    'payload',
+  ]);
+  if (Object.keys(event).some((key) => !allowed.has(key)))
+    return fail('invalid-envelope', 'event contains an unknown field');
   if (!id('event', event['eventId'])) return fail('invalid-id', 'eventId is invalid');
   if (!id('producer', event['producerId'])) return fail('invalid-id', 'producerId is invalid');
-  if (!nonNegativeInteger(event['epoch'])) return fail('invalid-envelope', 'epoch must be a non-negative safe integer');
-  if (!nonNegativeInteger(event['seq'])) return fail('invalid-envelope', 'seq must be a non-negative safe integer');
-  if (!RUN_EVENT_CLASSES.includes(event['eventClass'] as RunEventClass)) return fail('invalid-envelope', 'eventClass is invalid');
-  if (typeof event['type'] !== 'string' || !/^[a-z][a-z0-9]*(?:[./:-][a-z0-9]+)*$/u.test(event['type']) || utf8(event['type']) > 128) {
+  if (!nonNegativeInteger(event['epoch']))
+    return fail('invalid-envelope', 'epoch must be a non-negative safe integer');
+  if (!nonNegativeInteger(event['seq']))
+    return fail('invalid-envelope', 'seq must be a non-negative safe integer');
+  if (!RUN_EVENT_CLASSES.includes(event['eventClass'] as RunEventClass))
+    return fail('invalid-envelope', 'eventClass is invalid');
+  if (
+    typeof event['type'] !== 'string' ||
+    !/^[a-z][a-z0-9]*(?:[./:-][a-z0-9]+)*$/u.test(event['type']) ||
+    utf8(event['type']) > 128
+  ) {
     return fail('invalid-envelope', 'type must be a bounded lowercase namespaced token');
   }
-  if (!time(event['monotonicTime'])) return fail('invalid-envelope', 'monotonicTime must be a finite non-negative number');
-  if (event['wallTime'] !== undefined && !time(event['wallTime'])) return fail('invalid-envelope', 'wallTime must be a finite non-negative number');
+  if (!time(event['monotonicTime']))
+    return fail('invalid-envelope', 'monotonicTime must be a finite non-negative number');
+  if (event['wallTime'] !== undefined && !time(event['wallTime']))
+    return fail('invalid-envelope', 'wallTime must be a finite non-negative number');
   const identityFailure = validateIdentity(event['identity']);
   if (identityFailure !== null) return identityFailure;
   if (event['causedBy'] !== undefined) {
-    if (!Array.isArray(event['causedBy']) || event['causedBy'].length > limits.maxCauses) return fail('invalid-envelope', 'causedBy exceeds its bound');
+    if (!Array.isArray(event['causedBy']) || event['causedBy'].length > limits.maxCauses)
+      return fail('invalid-envelope', 'causedBy exceeds its bound');
     const causes = event['causedBy'];
-    if (causes.some((cause) => !id('event', cause))) return fail('invalid-id', 'causedBy contains an invalid event id');
-    if (new Set(causes).size !== causes.length) return fail('invalid-envelope', 'causedBy contains duplicates');
-    if (causes.includes(event['eventId'])) return fail('causal-cycle', 'an event cannot cause itself');
+    if (causes.some((cause) => !id('event', cause)))
+      return fail('invalid-id', 'causedBy contains an invalid event id');
+    if (new Set(causes).size !== causes.length)
+      return fail('invalid-envelope', 'causedBy contains duplicates');
+    if (causes.includes(event['eventId']))
+      return fail('causal-cycle', 'an event cannot cause itself');
   }
   const bytes = utf8(JSON.stringify(event));
-  if (bytes > limits.maxEventBytes) return fail('event-oversized', `event is ${bytes} bytes, ceiling is ${limits.maxEventBytes}`);
+  if (bytes > limits.maxEventBytes)
+    return fail('event-oversized', `event is ${bytes} bytes, ceiling is ${limits.maxEventBytes}`);
   return { ok: true, value: event as unknown as RunEvent };
 }
 
@@ -369,15 +411,20 @@ export class RunEventStreamValidator {
     const parsed = validateRunEvent(value, this.#limits);
     if (!parsed.ok) return parsed;
     const event = parsed.value;
-    if (this.#eventIds.has(event.eventId)) return fail('event-collision', `event id ${event.eventId} was already observed`);
+    if (this.#eventIds.has(event.eventId))
+      return fail('event-collision', `event id ${event.eventId} was already observed`);
     const sequenceKey = `${event.producerId}/${event.epoch}/${event.seq}`;
-    if (this.#sequenceKeys.has(sequenceKey)) return fail('event-collision', 'producer epoch/sequence was already observed');
+    if (this.#sequenceKeys.has(sequenceKey))
+      return fail('event-collision', 'producer epoch/sequence was already observed');
     const newestEpoch = this.#producerEpoch.get(event.producerId);
-    if (newestEpoch !== undefined && event.epoch < newestEpoch) return fail('epoch-regression', 'producer epoch moved backwards');
+    if (newestEpoch !== undefined && event.epoch < newestEpoch)
+      return fail('epoch-regression', 'producer epoch moved backwards');
     const incarnation = `${event.producerId}/${event.epoch}`;
     const previous = this.#last.get(incarnation);
-    if (previous !== undefined && event.seq <= previous.seq) return fail('sequence-regression', 'producer sequence did not increase');
-    if (previous !== undefined && event.monotonicTime < previous.monotonicTime) return fail('monotonic-time-regression', 'producer monotonic time moved backwards');
+    if (previous !== undefined && event.seq <= previous.seq)
+      return fail('sequence-regression', 'producer sequence did not increase');
+    if (previous !== undefined && event.monotonicTime < previous.monotonicTime)
+      return fail('monotonic-time-regression', 'producer monotonic time moved backwards');
 
     const causes = event.causedBy ?? [];
     this.#causes.set(event.eventId, causes);
@@ -413,31 +460,46 @@ export class RunEventStreamValidator {
 function validateIdentity(value: RunEventJson | undefined): RunEventFailure | null {
   if (!isRecord(value)) return fail('invalid-identity', 'identity must be an object');
   const fields = Object.freeze([
-    ['invocationId', 'invocation'], ['runId', 'run'], ['projectId', 'project'], ['shardId', 'shard'],
-    ['specId', 'spec'], ['runnerTaskId', 'runner-task'], ['executionId', 'execution'], ['attemptId', 'attempt'],
-    ['sessionId', 'session'], ['stepId', 'step'], ['actionId', 'action'],
+    ['invocationId', 'invocation'],
+    ['runId', 'run'],
+    ['projectId', 'project'],
+    ['shardId', 'shard'],
+    ['specId', 'spec'],
+    ['runnerTaskId', 'runner-task'],
+    ['executionId', 'execution'],
+    ['attemptId', 'attempt'],
+    ['sessionId', 'session'],
+    ['stepId', 'step'],
+    ['actionId', 'action'],
   ] as const);
-  if (Object.keys(value).some((key) => !fields.some(([field]) => field === key))) return fail('invalid-identity', 'identity contains an unknown field');
+  if (Object.keys(value).some((key) => !fields.some(([field]) => field === key)))
+    return fail('invalid-identity', 'identity contains an unknown field');
   for (const [field, kind] of fields) {
-    if ((field === 'invocationId' || value[field] !== undefined) && !id(kind, value[field])) return fail('invalid-id', `${field} is invalid`);
+    if ((field === 'invocationId' || value[field] !== undefined) && !id(kind, value[field]))
+      return fail('invalid-id', `${field} is invalid`);
   }
   const needs = (child: string, parent: string): RunEventFailure | null =>
-    value[child] !== undefined && value[parent] === undefined ? fail('invalid-identity', `${child} requires ${parent}`) : null;
-  return needs('runId', 'invocationId')
-    ?? needs('projectId', 'runId')
-    ?? needs('shardId', 'runId')
-    ?? needs('specId', 'projectId')
-    ?? needs('runnerTaskId', 'specId')
-    ?? needs('executionId', 'runnerTaskId')
-    ?? needs('attemptId', 'executionId')
-    ?? needs('sessionId', 'attemptId')
-    ?? needs('stepId', 'attemptId')
-    ?? needs('actionId', 'sessionId');
+    value[child] !== undefined && value[parent] === undefined
+      ? fail('invalid-identity', `${child} requires ${parent}`)
+      : null;
+  return (
+    needs('runId', 'invocationId') ??
+    needs('projectId', 'runId') ??
+    needs('shardId', 'runId') ??
+    needs('specId', 'projectId') ??
+    needs('runnerTaskId', 'specId') ??
+    needs('executionId', 'runnerTaskId') ??
+    needs('attemptId', 'executionId') ??
+    needs('sessionId', 'attemptId') ??
+    needs('stepId', 'attemptId') ??
+    needs('actionId', 'sessionId')
+  );
 }
 
 function validateLimits(limits: RunEventLimits): RunEventFailure | null {
   for (const [name, value] of Object.entries(limits)) {
-    if (!Number.isSafeInteger(value) || value <= 0) return fail('invalid-envelope', `${name} must be a positive safe integer`);
+    if (!Number.isSafeInteger(value) || value <= 0)
+      return fail('invalid-envelope', `${name} must be a positive safe integer`);
   }
   return null;
 }
@@ -460,28 +522,38 @@ function reject(code: RunEventViolationCode, detail: string): ProjectionFailure 
   return new ProjectionFailure(fail(code, detail));
 }
 
-function projectJson(value: unknown, limits: RunEventLimits): { readonly ok: true; readonly value: RunEventJson } | RunEventFailure {
+function projectJson(
+  value: unknown,
+  limits: RunEventLimits,
+): { readonly ok: true; readonly value: RunEventJson } | RunEventFailure {
   let entries = 0;
   const seen = new Set<object>();
   const visit = (current: unknown, depth: number): RunEventJson | ProjectionFailure => {
     if (current === null || typeof current === 'boolean' || typeof current === 'string') {
-      if (typeof current === 'string' && utf8(current) > limits.maxStringBytes) return reject('invalid-payload', 'a string exceeds maxStringBytes');
+      if (typeof current === 'string' && utf8(current) > limits.maxStringBytes)
+        return reject('invalid-payload', 'a string exceeds maxStringBytes');
       return current;
     }
-    if (typeof current === 'number') return Number.isFinite(current) ? current : reject('invalid-payload', 'numbers must be finite');
+    if (typeof current === 'number')
+      return Number.isFinite(current)
+        ? current
+        : reject('invalid-payload', 'numbers must be finite');
     if (typeof current !== 'object') return reject('invalid-payload', 'payload is not JSON data');
-    if (depth > limits.maxPayloadDepth) return reject('invalid-payload', 'payload exceeds maxPayloadDepth');
+    if (depth > limits.maxPayloadDepth)
+      return reject('invalid-payload', 'payload exceeds maxPayloadDepth');
     if (seen.has(current)) return reject('invalid-payload', 'payload aliases or cycles an object');
     seen.add(current);
     try {
       const symbols = Object.getOwnPropertySymbols(current);
       if (symbols.length > 0) return reject('invalid-payload', 'payload contains symbol keys');
       if (Array.isArray(current)) {
-        if (Object.keys(current).length !== current.length) return reject('invalid-payload', 'payload contains a sparse array or extra array keys');
+        if (Object.keys(current).length !== current.length)
+          return reject('invalid-payload', 'payload contains a sparse array or extra array keys');
         const result: RunEventJson[] = [];
         for (const item of current) {
           entries += 1;
-          if (entries > limits.maxPayloadEntries) return reject('invalid-payload', 'payload exceeds maxPayloadEntries');
+          if (entries > limits.maxPayloadEntries)
+            return reject('invalid-payload', 'payload exceeds maxPayloadEntries');
           const child = visit(item, depth + 1);
           if (child instanceof ProjectionFailure) return child;
           result.push(child);
@@ -489,15 +561,23 @@ function projectJson(value: unknown, limits: RunEventLimits): { readonly ok: tru
         return Object.freeze(result);
       }
       const prototype = Object.getPrototypeOf(current);
-      if (prototype !== Object.prototype && prototype !== null) return reject('invalid-payload', 'payload object has a non-plain prototype');
-      const result: Record<string, RunEventJson> = Object.create(null) as Record<string, RunEventJson>;
+      if (prototype !== Object.prototype && prototype !== null)
+        return reject('invalid-payload', 'payload object has a non-plain prototype');
+      const result: Record<string, RunEventJson> = Object.create(null) as Record<
+        string,
+        RunEventJson
+      >;
       for (const key of Object.keys(current)) {
-        if (key === '__proto__' || key === 'constructor' || key === 'prototype') return reject('invalid-payload', 'payload contains a reserved key');
-        if (utf8(key) > limits.maxStringBytes) return reject('invalid-payload', 'a payload key exceeds maxStringBytes');
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype')
+          return reject('invalid-payload', 'payload contains a reserved key');
+        if (utf8(key) > limits.maxStringBytes)
+          return reject('invalid-payload', 'a payload key exceeds maxStringBytes');
         const descriptor = Object.getOwnPropertyDescriptor(current, key);
-        if (descriptor === undefined || !('value' in descriptor)) return reject('invalid-payload', 'payload contains an accessor');
+        if (descriptor === undefined || !('value' in descriptor))
+          return reject('invalid-payload', 'payload contains an accessor');
         entries += 1;
-        if (entries > limits.maxPayloadEntries) return reject('invalid-payload', 'payload exceeds maxPayloadEntries');
+        if (entries > limits.maxPayloadEntries)
+          return reject('invalid-payload', 'payload exceeds maxPayloadEntries');
         const child = visit(descriptor.value, depth + 1);
         if (child instanceof ProjectionFailure) return child;
         result[key] = child;
@@ -508,10 +588,14 @@ function projectJson(value: unknown, limits: RunEventLimits): { readonly ok: tru
     }
   };
   const projected = visit(value, 0);
-  return projected instanceof ProjectionFailure ? projected.failure : { ok: true, value: projected };
+  return projected instanceof ProjectionFailure
+    ? projected.failure
+    : { ok: true, value: projected };
 }
 
-function isRecord(value: RunEventJson | undefined): value is { readonly [key: string]: RunEventJson } {
+function isRecord(
+  value: RunEventJson | undefined,
+): value is { readonly [key: string]: RunEventJson } {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

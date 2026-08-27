@@ -41,19 +41,40 @@ const environment = environmentDescriptor.class;
 const runsDir = resolve(root, '.termwright', 'runs');
 
 const soakArgs = [
-  'packages/termwright-cli/dist/bin.js', 'test', '--runs', String(args.cycles),
-  '--resource-profile', 'ci', '--json', '--', '--config', 'quality/soak/vitest.config.ts',
-  '--run', 'quality/soak/terminal-cycle.test.ts',
+  'packages/termwright-cli/dist/bin.js',
+  'test',
+  '--runs',
+  String(args.cycles),
+  '--resource-profile',
+  'ci',
+  '--json',
+  '--',
+  '--config',
+  'quality/soak/vitest.config.ts',
+  '--run',
+  'quality/soak/terminal-cycle.test.ts',
 ];
 const timingRunIds = await observeTiming(soakArgs, args.cycles);
 const resourceSoak = await observeResources(soakArgs, undefined, args.cycles);
 const stressCheckpoint = await createQualityCheckpoint(16);
 let stress;
 try {
-  stress = await observeResources([
-    'packages/termwright-cli/dist/bin.js', 'test', '--resource-profile', 'stress', '--json', '--',
-    '--config', 'quality/stress/vitest.config.ts', '--run', 'quality/stress/terminal-concurrency.test.ts',
-  ], stressCheckpoint, 1);
+  stress = await observeResources(
+    [
+      'packages/termwright-cli/dist/bin.js',
+      'test',
+      '--resource-profile',
+      'stress',
+      '--json',
+      '--',
+      '--config',
+      'quality/stress/vitest.config.ts',
+      '--run',
+      'quality/stress/terminal-concurrency.test.ts',
+    ],
+    stressCheckpoint,
+    1,
+  );
 } finally {
   await rm(stressCheckpoint.directory, { recursive: true, force: true });
 }
@@ -86,16 +107,19 @@ const observations = {
   resourceSnapshot: {
     kind: 'termwright-quality-resource-snapshot',
     schemaVersion: 1,
-    memoryMeasurement: process.platform === 'darwin'
-      ? 'darwin-summary-footprint'
-      : 'linux-proportional-set-size',
+    memoryMeasurement:
+      process.platform === 'darwin' ? 'darwin-summary-footprint' : 'linux-proportional-set-size',
     stress: {
       expectedSessions: stressCheckpoint.expectedSessions,
       processCount: stress.checkpointProcessCount,
     },
   },
   metrics: {
-    firstRunPreAttemptMs: observation(timing.firstRunPreAttemptMs, 'milliseconds', 'quality/soak first run: host-monotonic run start to first attempt'),
+    firstRunPreAttemptMs: observation(
+      timing.firstRunPreAttemptMs,
+      'milliseconds',
+      'quality/soak first run: host-monotonic run start to first attempt',
+    ),
     postStartupRunOrchestrationMs: observation(
       timing.postStartupRunOrchestrationMs,
       'milliseconds',
@@ -106,9 +130,21 @@ const observations = {
       'bytes',
       'maximum sampled aggregate physical footprint across the separately instrumented lifecycle soak and certified 16-session stress tree',
     ),
-    peakOpenFileDescriptors: observation(Math.max(resourceSoak.peakOpenFileDescriptors, stress.peakOpenFileDescriptors), 'count', 'maximum open descriptors across the separately instrumented lifecycle soak and certified stress tree'),
-    leakedFileDescriptors: observation(resourceSoak.leakedFileDescriptors + stress.leakedFileDescriptors, 'count', 'descriptors owned by observed lifecycle or stress descendants still alive after certified host exit'),
-    leakedProcesses: observation(resourceSoak.leakedProcesses + stress.leakedProcesses, 'count', 'observed lifecycle or stress descendants still alive after certified host exit'),
+    peakOpenFileDescriptors: observation(
+      Math.max(resourceSoak.peakOpenFileDescriptors, stress.peakOpenFileDescriptors),
+      'count',
+      'maximum open descriptors across the separately instrumented lifecycle soak and certified stress tree',
+    ),
+    leakedFileDescriptors: observation(
+      resourceSoak.leakedFileDescriptors + stress.leakedFileDescriptors,
+      'count',
+      'descriptors owned by observed lifecycle or stress descendants still alive after certified host exit',
+    ),
+    leakedProcesses: observation(
+      resourceSoak.leakedProcesses + stress.leakedProcesses,
+      'count',
+      'observed lifecycle or stress descendants still alive after certified host exit',
+    ),
   },
 };
 await writeFile(resolve(args.output), `${JSON.stringify(observations, null, 2)}\n`, 'utf8');
@@ -142,14 +178,20 @@ async function observeResources(nodeArgs, checkpoint, expectedRuns) {
   let stderr = '';
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => { stdout += chunk; });
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
   const closePromise = new Promise((resolveExit, reject) => {
     child.once('error', reject);
     child.once('close', resolveExit);
   });
   const checkpointAbort = new AbortController();
-  const closedBeforeReady = new Error('quality command exited before publishing its ready checkpoint');
+  const closedBeforeReady = new Error(
+    'quality command exited before publishing its ready checkpoint',
+  );
   child.once('close', () => checkpointAbort.abort(closedBeforeReady));
   let peakMemoryFootprintBytes = 0;
   let peakOpenFileDescriptors = 0;
@@ -189,7 +231,8 @@ async function observeResources(nodeArgs, checkpoint, expectedRuns) {
       const pids = descendants(child.pid, table);
       rememberProcesses(observed, pids, table);
       const footprint = await memoryFootprint(pids, table, required, signal);
-      if (footprint !== undefined) peakMemoryFootprintBytes = Math.max(peakMemoryFootprintBytes, footprint);
+      if (footprint !== undefined)
+        peakMemoryFootprintBytes = Math.max(peakMemoryFootprintBytes, footprint);
       return { pids, table, footprint };
     })();
     memorySampling = operation;
@@ -209,7 +252,8 @@ async function observeResources(nodeArgs, checkpoint, expectedRuns) {
       const pids = descendants(child.pid, table);
       rememberProcesses(observed, pids, table);
       const descriptors = await descriptorCount(pids, table, required, signal);
-      if (descriptors !== undefined) peakOpenFileDescriptors = Math.max(peakOpenFileDescriptors, descriptors);
+      if (descriptors !== undefined)
+        peakOpenFileDescriptors = Math.max(peakOpenFileDescriptors, descriptors);
       return { pids, table, descriptors };
     })();
     descriptorSampling = operation;
@@ -220,71 +264,108 @@ async function observeResources(nodeArgs, checkpoint, expectedRuns) {
     }
   };
   await Promise.all([
-    discoverProcesses().catch((error) => { discoverySamplingError ??= error; }),
-    sampleMemory().catch((error) => { memorySamplingError ??= error; }),
-    sampleDescriptors().catch((error) => { descriptorSamplingError ??= error; }),
+    discoverProcesses().catch((error) => {
+      discoverySamplingError ??= error;
+    }),
+    sampleMemory().catch((error) => {
+      memorySamplingError ??= error;
+    }),
+    sampleDescriptors().catch((error) => {
+      descriptorSamplingError ??= error;
+    }),
   ]);
   const discoveryInterval = setInterval(() => {
     if (discoverySamplingError !== undefined) return;
-    void discoverProcesses().catch((error) => { discoverySamplingError ??= error; });
+    void discoverProcesses().catch((error) => {
+      discoverySamplingError ??= error;
+    });
   }, 25);
   const memoryInterval = setInterval(() => {
     if (memorySamplingError !== undefined) return;
-    void sampleMemory().catch((error) => { memorySamplingError ??= error; });
+    void sampleMemory().catch((error) => {
+      memorySamplingError ??= error;
+    });
   }, 100);
   const descriptorInterval = setInterval(() => {
     if (descriptorSamplingError !== undefined) return;
-    void sampleDescriptors().catch((error) => { descriptorSamplingError ??= error; });
+    void sampleDescriptors().catch((error) => {
+      descriptorSamplingError ??= error;
+    });
   }, 100);
-  const checkpointTask = checkpoint === undefined ? undefined : (async () => {
-    try {
-      const ready = await waitForQualityReady(checkpoint, { signal: checkpointAbort.signal });
-      const snapshotSignal = AbortSignal.timeout(CHECKPOINT_SNAPSHOT_DEADLINE_MS);
-      clearInterval(discoveryInterval);
-      clearInterval(memoryInterval);
-      clearInterval(descriptorInterval);
-      await Promise.all([discoverySampling, memorySampling, descriptorSampling]);
-      if (discoverySamplingError !== undefined || memorySamplingError !== undefined || descriptorSamplingError !== undefined) {
-        throw new AggregateError(
-          [discoverySamplingError, memorySamplingError, descriptorSamplingError]
-            .filter((error) => error !== undefined),
-          'pre-checkpoint process resource sampling failed',
-        );
-      }
-      const discovery = await discoverProcesses(true, snapshotSignal);
-      const memory = await sampleMemory(true, snapshotSignal);
-      const descriptors = await sampleDescriptors(true, snapshotSignal);
-      const processCount = memory?.pids.length ?? 0;
-      if (processCount < checkpoint.expectedSessions + 2) {
-        throw new Error(
-          `ready checkpoint claimed ${checkpoint.expectedSessions} sessions but the owned tree contained only ${processCount} processes`,
-        );
-      }
-      if (descriptors === undefined || descriptors.descriptors === undefined ||
-          descriptors.pids.length < checkpoint.expectedSessions + 2) {
-        throw new Error('descriptor snapshot did not cover the complete ready process tree');
-      }
-      const confirmation = await discoverProcesses(true, snapshotSignal);
-      if (discovery === undefined || memory === undefined || confirmation === undefined ||
-          !sameProcessSet(discovery, memory) || !sameProcessSet(memory, descriptors) ||
-          !sameProcessSet(descriptors, confirmation)) {
-        throw new Error('ready checkpoint process set changed across discovery, footprint and descriptor snapshots');
-      }
-      if (ready.processPids.some((pid) => !confirmation.pids.includes(pid))) {
-        throw new Error('ready checkpoint application process set is not owned by the stable process tree');
-      }
-      rememberProcesses(observed, confirmation.pids, confirmation.table);
-      checkpointProcessCount = processCount;
-      await publishQualityTerminal(checkpoint, { status: 'ok', processCount });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      try { await publishQualityTerminal(checkpoint, { status: 'failure', message }); }
-      catch (publishError) {
-        throw new AggregateError([error, publishError], 'quality snapshot and failure publication both failed', { cause: error });
-      }
-      throw error;
-    }
-  })();
+  const checkpointTask =
+    checkpoint === undefined
+      ? undefined
+      : (async () => {
+          try {
+            const ready = await waitForQualityReady(checkpoint, { signal: checkpointAbort.signal });
+            const snapshotSignal = AbortSignal.timeout(CHECKPOINT_SNAPSHOT_DEADLINE_MS);
+            clearInterval(discoveryInterval);
+            clearInterval(memoryInterval);
+            clearInterval(descriptorInterval);
+            await Promise.all([discoverySampling, memorySampling, descriptorSampling]);
+            if (
+              discoverySamplingError !== undefined ||
+              memorySamplingError !== undefined ||
+              descriptorSamplingError !== undefined
+            ) {
+              throw new AggregateError(
+                [discoverySamplingError, memorySamplingError, descriptorSamplingError].filter(
+                  (error) => error !== undefined,
+                ),
+                'pre-checkpoint process resource sampling failed',
+              );
+            }
+            const discovery = await discoverProcesses(true, snapshotSignal);
+            const memory = await sampleMemory(true, snapshotSignal);
+            const descriptors = await sampleDescriptors(true, snapshotSignal);
+            const processCount = memory?.pids.length ?? 0;
+            if (processCount < checkpoint.expectedSessions + 2) {
+              throw new Error(
+                `ready checkpoint claimed ${checkpoint.expectedSessions} sessions but the owned tree contained only ${processCount} processes`,
+              );
+            }
+            if (
+              descriptors === undefined ||
+              descriptors.descriptors === undefined ||
+              descriptors.pids.length < checkpoint.expectedSessions + 2
+            ) {
+              throw new Error('descriptor snapshot did not cover the complete ready process tree');
+            }
+            const confirmation = await discoverProcesses(true, snapshotSignal);
+            if (
+              discovery === undefined ||
+              memory === undefined ||
+              confirmation === undefined ||
+              !sameProcessSet(discovery, memory) ||
+              !sameProcessSet(memory, descriptors) ||
+              !sameProcessSet(descriptors, confirmation)
+            ) {
+              throw new Error(
+                'ready checkpoint process set changed across discovery, footprint and descriptor snapshots',
+              );
+            }
+            if (ready.processPids.some((pid) => !confirmation.pids.includes(pid))) {
+              throw new Error(
+                'ready checkpoint application process set is not owned by the stable process tree',
+              );
+            }
+            rememberProcesses(observed, confirmation.pids, confirmation.table);
+            checkpointProcessCount = processCount;
+            await publishQualityTerminal(checkpoint, { status: 'ok', processCount });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            try {
+              await publishQualityTerminal(checkpoint, { status: 'failure', message });
+            } catch (publishError) {
+              throw new AggregateError(
+                [error, publishError],
+                'quality snapshot and failure publication both failed',
+                { cause: error },
+              );
+            }
+            throw error;
+          }
+        })();
   // Attach rejection handling immediately; the authoritative await remains
   // below after the failure record has released fixture-owned sessions.
   void checkpointTask?.catch(() => undefined);
@@ -316,17 +397,23 @@ async function observeResources(nodeArgs, checkpoint, expectedRuns) {
     );
   }
   if (code !== 0) throw new Error(`quality command exited ${String(code)}\n${stdout}\n${stderr}`);
-  if (discoverySamplingError !== undefined || memorySamplingError !== undefined || descriptorSamplingError !== undefined) {
+  if (
+    discoverySamplingError !== undefined ||
+    memorySamplingError !== undefined ||
+    descriptorSamplingError !== undefined
+  ) {
     throw new AggregateError(
-      [discoverySamplingError, memorySamplingError, descriptorSamplingError]
-        .filter((error) => error !== undefined),
+      [discoverySamplingError, memorySamplingError, descriptorSamplingError].filter(
+        (error) => error !== undefined,
+      ),
       'process resource sampling failed',
     );
   }
   const table = await processTable();
-  const survivors = [...observed].filter(([pid, identity]) => sameProcessGeneration(identity, table.get(pid)))
+  const survivors = [...observed]
+    .filter(([pid, identity]) => sameProcessGeneration(identity, table.get(pid)))
     .map(([pid]) => pid);
-  const leakedFileDescriptors = await descriptorCount(survivors, table, false) ?? 0;
+  const leakedFileDescriptors = (await descriptorCount(survivors, table, false)) ?? 0;
   return {
     runIds: hostReportRunIds(stdout, expectedRuns),
     peakMemoryFootprintBytes,
@@ -340,17 +427,29 @@ async function observeResources(nodeArgs, checkpoint, expectedRuns) {
 function hostReportRunIds(stdout, expectedRuns) {
   const finalLine = stdout.trim().split(/\r?\n/u).at(-1);
   let report;
-  try { report = JSON.parse(finalLine ?? ''); }
-  catch (error) { throw new Error('quality command did not end with its JSON host report', { cause: error }); }
-  if (report?.state !== 'passed' || report.requestedRuns !== expectedRuns
-    || report.completedRuns !== expectedRuns || report.skipPolicy !== 'matched'
-    || !Array.isArray(report.runs) || report.runs.length !== expectedRuns) {
-    throw new Error('quality command host report is incomplete or not passed on its first attempts');
+  try {
+    report = JSON.parse(finalLine ?? '');
+  } catch (error) {
+    throw new Error('quality command did not end with its JSON host report', { cause: error });
+  }
+  if (
+    report?.state !== 'passed' ||
+    report.requestedRuns !== expectedRuns ||
+    report.completedRuns !== expectedRuns ||
+    report.skipPolicy !== 'matched' ||
+    !Array.isArray(report.runs) ||
+    report.runs.length !== expectedRuns
+  ) {
+    throw new Error(
+      'quality command host report is incomplete or not passed on its first attempts',
+    );
   }
   const runIds = report.runs.map((run) => run?.runId);
-  if (runIds.some((runId) => typeof runId !== 'string' || !/^run:[0-9a-f-]+$/u.test(runId))
-    || new Set(runIds).size !== expectedRuns
-    || report.runs.some((run) => run?.state !== 'passed')) {
+  if (
+    runIds.some((runId) => typeof runId !== 'string' || !/^run:[0-9a-f-]+$/u.test(runId)) ||
+    new Set(runIds).size !== expectedRuns ||
+    report.runs.some((run) => run?.state !== 'passed')
+  ) {
     throw new Error('quality command host report contains invalid run evidence');
   }
   return runIds;
@@ -375,8 +474,10 @@ async function memoryFootprint(pids, table, required, signal) {
         signal: operationSignal,
       }));
     } catch (error) {
-      if (!required && await processSetChanged(pids, table, operationSignal)) return undefined;
-      throw new Error('cannot observe physical footprint for the live process tree', { cause: error });
+      if (!required && (await processSetChanged(pids, table, operationSignal))) return undefined;
+      throw new Error('cannot observe physical footprint for the live process tree', {
+        cause: error,
+      });
     }
     try {
       const footprint = parseDarwinFootprint(stdout, pids);
@@ -386,32 +487,36 @@ async function memoryFootprint(pids, table, required, signal) {
       }
       return footprint;
     } catch (error) {
-      if (!required && await processSetChanged(pids, table, operationSignal)) return undefined;
+      if (!required && (await processSetChanged(pids, table, operationSignal))) return undefined;
       throw error;
     }
   }
   if (process.platform === 'linux') {
     try {
-      const values = await Promise.all(pids.map(async (pid) => {
-        const rollup = await readFile(`/proc/${pid}/smaps_rollup`, {
-          encoding: 'utf8',
-          signal: operationSignal,
-        });
-        const match = /^Pss:\s+(\d+) kB\s*$/mu.exec(rollup);
-        const kibibytes = Number(match?.[1]);
-        if (!Number.isSafeInteger(kibibytes) || kibibytes < 0) {
-          throw new Error(`smaps_rollup for pid ${pid} has no valid Pss`);
-        }
-        return kibibytes * 1024;
-      }));
+      const values = await Promise.all(
+        pids.map(async (pid) => {
+          const rollup = await readFile(`/proc/${pid}/smaps_rollup`, {
+            encoding: 'utf8',
+            signal: operationSignal,
+          });
+          const match = /^Pss:\s+(\d+) kB\s*$/mu.exec(rollup);
+          const kibibytes = Number(match?.[1]);
+          if (!Number.isSafeInteger(kibibytes) || kibibytes < 0) {
+            throw new Error(`smaps_rollup for pid ${pid} has no valid Pss`);
+          }
+          return kibibytes * 1024;
+        }),
+      );
       if (await processSetChanged(pids, table, operationSignal)) {
         if (!required) return undefined;
         throw new Error('process identity changed while proportional memory was measured');
       }
       return values.reduce((sum, value) => sum + value, 0);
     } catch (error) {
-      if (!required && await processSetChanged(pids, table, operationSignal)) return undefined;
-      throw new Error('cannot observe proportional memory footprint for the live process tree', { cause: error });
+      if (!required && (await processSetChanged(pids, table, operationSignal))) return undefined;
+      throw new Error('cannot observe proportional memory footprint for the live process tree', {
+        cause: error,
+      });
     }
   }
   throw new Error(`memory footprint observation is unsupported on ${process.platform}`);
@@ -444,16 +549,19 @@ async function descriptorCount(pids, table, required, signal) {
   const operationSignal = signal ?? AbortSignal.timeout(RESOURCE_SAMPLE_DEADLINE_MS);
   if (process.platform === 'linux') {
     try {
-      const counts = await Promise.all(pids.map(async (pid) => (
-        await awaitWithSignal(readdir(`/proc/${pid}/fd`), operationSignal)
-      ).length));
+      const counts = await Promise.all(
+        pids.map(
+          async (pid) =>
+            (await awaitWithSignal(readdir(`/proc/${pid}/fd`), operationSignal)).length,
+        ),
+      );
       if (await processSetChanged(pids, table, operationSignal)) {
         if (!required) return undefined;
         throw new Error('process identity changed while descriptors were measured');
       }
       return counts.reduce((sum, count) => sum + count, 0);
     } catch (error) {
-      if (!required && await processSetChanged(pids, table, operationSignal)) return undefined;
+      if (!required && (await processSetChanged(pids, table, operationSignal))) return undefined;
       throw new Error('cannot observe descriptors for the live process tree', { cause: error });
     }
   }
@@ -469,7 +577,7 @@ async function descriptorCount(pids, table, required, signal) {
       }
       return descriptors;
     } catch (error) {
-      if (!required && await processSetChanged(pids, table, operationSignal)) return undefined;
+      if (!required && (await processSetChanged(pids, table, operationSignal))) return undefined;
       throw new Error('cannot observe descriptors for the live process tree', { cause: error });
     }
   }
@@ -484,7 +592,8 @@ async function processSetChanged(pids, table, signal) {
 async function awaitWithSignal(promise, signal) {
   if (signal.aborted) throw signal.reason ?? new Error('resource observation aborted');
   return await new Promise((resolveValue, reject) => {
-    const onAbort = () => finish(reject, signal.reason ?? new Error('resource observation aborted'));
+    const onAbort = () =>
+      finish(reject, signal.reason ?? new Error('resource observation aborted'));
     const finish = (action, value) => {
       signal.removeEventListener('abort', onAbort);
       action(value);
@@ -499,42 +608,58 @@ async function awaitWithSignal(promise, signal) {
 }
 
 async function manifests(runIds) {
-  return Promise.all(runIds.map(async (runId) => {
-    const record = await readRunManifest(runsDir, runId);
-    if (record.state !== 'complete' || record.runId !== runId || record.manifest.runId !== runId) {
-      throw new Error(`quality run ${runId} has no complete committed current manifest: ${record.state}`);
-    }
-    const directory = resolve(runsDir, runDirectoryName(runId));
-    const [raw, committed] = await Promise.all([
-      readFile(resolve(directory, 'manifest.json')),
-      readFile(resolve(directory, 'COMMITTED'), 'utf8'),
-    ]);
-    const manifestSha256 = sha256(raw);
-    if (committed.trim() !== `termwright-run-history-v${RUN_HISTORY_COMMIT_VERSION} sha256:${manifestSha256}`) {
-      throw new Error(`quality run ${runId} changed after its committed manifest was validated`);
-    }
-    return {
-      manifest: record.manifest,
-      evidence: {
-        runId,
-        manifestSha256,
-      },
-    };
-  }));
+  return Promise.all(
+    runIds.map(async (runId) => {
+      const record = await readRunManifest(runsDir, runId);
+      if (
+        record.state !== 'complete' ||
+        record.runId !== runId ||
+        record.manifest.runId !== runId
+      ) {
+        throw new Error(
+          `quality run ${runId} has no complete committed current manifest: ${record.state}`,
+        );
+      }
+      const directory = resolve(runsDir, runDirectoryName(runId));
+      const [raw, committed] = await Promise.all([
+        readFile(resolve(directory, 'manifest.json')),
+        readFile(resolve(directory, 'COMMITTED'), 'utf8'),
+      ]);
+      const manifestSha256 = sha256(raw);
+      if (
+        committed.trim() !==
+        `termwright-run-history-v${RUN_HISTORY_COMMIT_VERSION} sha256:${manifestSha256}`
+      ) {
+        throw new Error(`quality run ${runId} changed after its committed manifest was validated`);
+      }
+      return {
+        manifest: record.manifest,
+        evidence: {
+          runId,
+          manifestSha256,
+        },
+      };
+    }),
+  );
 }
 
 async function qualityProvenance(roles) {
   const collector = await readFile(fileURLToPath(import.meta.url));
-  const { stdout } = await execute('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: root });
+  const { stdout } = await execute('git', ['rev-parse', '--verify', 'HEAD^{commit}'], {
+    cwd: root,
+  });
   const gitCommit = stdout.trim();
-  if (!/^[0-9a-f]{40}$/u.test(gitCommit)) throw new Error('quality collector could not resolve one Git commit');
+  if (!/^[0-9a-f]{40}$/u.test(gitCommit))
+    throw new Error('quality collector could not resolve one Git commit');
   return {
     kind: 'termwright-quality-provenance',
     schemaVersion: 1,
     collectorSha256: sha256(collector),
     gitCommit,
     ci: githubCiProvenance(process.env, gitCommit),
-    roles: Object.fromEntries(Object.entries(roles).map(([role, records]) => [role, roleEvidence(role, records)])),
+    roles: Object.fromEntries(
+      Object.entries(roles).map(([role, records]) => [role, roleEvidence(role, records)]),
+    ),
   };
 }
 
@@ -554,16 +679,26 @@ function githubCiProvenance(env, gitCommit) {
   const runId = env.GITHUB_RUN_ID;
   const runAttempt = env.GITHUB_RUN_ATTEMPT;
   const sha = env.GITHUB_SHA;
-  if (!/^[1-9][0-9]*$/u.test(runId ?? '') || !/^[1-9][0-9]*$/u.test(runAttempt ?? '')
-    || !/^[0-9a-f]{40}$/u.test(sha ?? '') || sha !== gitCommit) {
-    throw new Error('GitHub Actions quality provenance is missing or differs from the measured Git commit');
+  if (
+    !/^[1-9][0-9]*$/u.test(runId ?? '') ||
+    !/^[1-9][0-9]*$/u.test(runAttempt ?? '') ||
+    !/^[0-9a-f]{40}$/u.test(sha ?? '') ||
+    sha !== gitCommit
+  ) {
+    throw new Error(
+      'GitHub Actions quality provenance is missing or differs from the measured Git commit',
+    );
   }
   return { runId, runAttempt, sha };
 }
 
-function sha256(value) { return createHash('sha256').update(value).digest('hex'); }
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
 
-function observation(value, unit, source) { return { value, unit, source }; }
+function observation(value, unit, source) {
+  return { value, unit, source };
+}
 
 function parseArgs(argv) {
   const options = { cycles: 10, output: 'performance-quality.json', environmentFile: undefined };
@@ -576,8 +711,10 @@ function parseArgs(argv) {
     else throw new Error(`unknown option ${String(name)}`);
     index += 1;
   }
-  if (!Number.isSafeInteger(options.cycles) || options.cycles < 2 || options.cycles > 100) throw new Error('--cycles must be 2..100');
+  if (!Number.isSafeInteger(options.cycles) || options.cycles < 2 || options.cycles > 100)
+    throw new Error('--cycles must be 2..100');
   if (!options.output) throw new Error('--output requires a path');
-  if (!options.environmentFile) throw new Error('--environment-file requires a measured runner descriptor');
+  if (!options.environmentFile)
+    throw new Error('--environment-file requires a measured runner descriptor');
   return options;
 }

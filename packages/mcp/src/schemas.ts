@@ -63,7 +63,9 @@ export const targetShape = {
   selector: z
     .string()
     .optional()
-    .describe('Termwright semantic selector: "dialog button#approve:focused" (role, #testId, .class, :state)'),
+    .describe(
+      'Termwright semantic selector: "dialog button#approve:focused" (role, #testId, .class, :state)',
+    ),
   role: z.enum(SEMANTIC_ROLES).optional().describe('semantic role; requires a semantic tree'),
   name: z
     .string()
@@ -71,14 +73,8 @@ export const targetShape = {
     .describe('accessible name; "/pattern/flags" is read as a regular expression'),
   testId: z.string().optional().describe('author-supplied test id'),
   label: z.string().optional().describe('label text (labelledBy, else name)'),
-  text: z
-    .string()
-    .optional()
-    .describe('semantic node text; requires a semantic tree'),
-  screenText: z
-    .string()
-    .optional()
-    .describe('text rendered in the physical terminal grid'),
+  text: z.string().optional().describe('semantic node text; requires a semantic tree'),
+  screenText: z.string().optional().describe('text rendered in the physical terminal grid'),
   exact: z.boolean().optional().describe('exact rather than substring text matching'),
   state: stateFilter.optional(),
   nth: z
@@ -94,7 +90,9 @@ export const targetShape = {
  * something else (`terminal.type` types it, `terminal.wait_for` awaits it).
  * Those tools target by ref, selector, testId, role or label.
  */
-export const targetShapeWithoutText = (({ text: _text, screenText: _screenText, ...rest }) => rest)(targetShape);
+export const targetShapeWithoutText = (({ text: _text, screenText: _screenText, ...rest }) => rest)(
+  targetShape,
+);
 
 /** Same fields, as a nested object (drag destinations). */
 export const targetObject = z.object(targetShape);
@@ -124,7 +122,15 @@ export const semanticTreeState = z.enum(['available', 'unavailable']);
 /** Authoritative/diagnostic evidence identity shared with protocol v2. */
 export const evidenceProvenanceSchema = z.object({
   source: z.enum(['framework', 'application', 'terminal', 'recognizer', 'driver']),
-  method: z.enum(['native', 'instrumented', 'declared', 'correlated', 'measured', 'derived', 'heuristic']),
+  method: z.enum([
+    'native',
+    'instrumented',
+    'declared',
+    'correlated',
+    'measured',
+    'derived',
+    'heuristic',
+  ]),
   strength: z.enum(['authoritative', 'diagnostic']),
   providerId: z.string().min(1),
 });

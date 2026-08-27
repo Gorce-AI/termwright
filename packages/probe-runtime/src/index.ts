@@ -168,9 +168,8 @@ export class ProbeChannel {
           coalescedEvents: 0,
         }
       : null;
-    this.#performanceSink = performanceSink === undefined
-      ? null
-      : () => performanceSink(this.performanceMetrics());
+    this.#performanceSink =
+      performanceSink === undefined ? null : () => performanceSink(this.performanceMetrics());
 
     socket.on('data', (chunk: Buffer) => {
       if (!this.#open) return;
@@ -237,10 +236,7 @@ export class ProbeChannel {
       averageBytesPerFrame: average(metrics.semanticBytes, frames),
       averageSemanticNodesPerFrame: average(metrics.semanticNodes, frames),
       averageUnknownFrameworkNodesPerFrame: average(metrics.unknownFrameworkNodes, frames),
-      averageSerializationMicrosecondsPerFrame: average(
-        metrics.serializationMicroseconds,
-        frames,
-      ),
+      averageSerializationMicrosecondsPerFrame: average(metrics.serializationMicroseconds, frames),
       probeEventsPerFrame: average(metrics.probeEvents, metrics.framesWithProbeEvents),
       coalescedEvents: metrics.coalescedEvents,
       renderCorrelationRate: null,
@@ -269,12 +265,14 @@ export class ProbeChannel {
       columns: snapshot.columns,
       rows: snapshot.rows,
       resolveRecipient: (recipient) => {
-        const matches = 'semanticId' in recipient
-          ? snapshot.nodes.filter((node) => node.id === recipient.semanticId)
-          : 'testId' in recipient
-            ? snapshot.nodes.filter((node) => node.testId === recipient.testId)
-            : snapshot.nodes.filter((node) =>
-                node.role === recipient.role && node.name === recipient.name);
+        const matches =
+          'semanticId' in recipient
+            ? snapshot.nodes.filter((node) => node.id === recipient.semanticId)
+            : 'testId' in recipient
+              ? snapshot.nodes.filter((node) => node.testId === recipient.testId)
+              : snapshot.nodes.filter(
+                  (node) => node.role === recipient.role && node.name === recipient.name,
+                );
         if (matches.length !== 1) {
           throw new Error(
             `application evidence recipient resolved to ${matches.length} semantic nodes`,
@@ -283,9 +281,8 @@ export class ProbeChannel {
         return matches[0]!.id;
       },
     });
-    const qualifiedSnapshot: SemanticSnapshot = providerEvidence.length === 0
-      ? snapshot
-      : Object.freeze({ ...snapshot, providerEvidence });
+    const qualifiedSnapshot: SemanticSnapshot =
+      providerEvidence.length === 0 ? snapshot : Object.freeze({ ...snapshot, providerEvidence });
     const sent = this.#send(
       { type: 'snapshot', snapshot: qualifiedSnapshot },
       this.#performance !== null,
@@ -305,9 +302,9 @@ export class ProbeChannel {
       ).length;
       this.#performance.serializationMicroseconds += sent.serializationMicroseconds;
       if (
-        publication.probeEvents !== undefined
-        && Number.isSafeInteger(publication.probeEvents)
-        && publication.probeEvents >= 0
+        publication.probeEvents !== undefined &&
+        Number.isSafeInteger(publication.probeEvents) &&
+        publication.probeEvents >= 0
       ) {
         this.#performance.probeEvents += publication.probeEvents;
         this.#performance.framesWithProbeEvents += 1;
@@ -343,7 +340,10 @@ export class ProbeChannel {
   }
 
   /** Report a typed fatal producer-contract violation and close the channel. */
-  fail(code: 'duplicate-semantic-key' | 'adapter-guarantee-violation' | 'internal', message: string): void {
+  fail(
+    code: 'duplicate-semantic-key' | 'adapter-guarantee-violation' | 'internal',
+    message: string,
+  ): void {
     if (!this.#open) return;
     this.#send({ type: 'error', code, message: message.slice(0, 1_024) });
     this.close();
@@ -378,9 +378,7 @@ export class ProbeChannel {
     try {
       const started = measureSerialization ? performance.now() : 0;
       frame = encodeFrame(message, this.session.limits.maxFrameBytes);
-      serializationMicroseconds = measureSerialization
-        ? (performance.now() - started) * 1_000
-        : 0;
+      serializationMicroseconds = measureSerialization ? (performance.now() - started) * 1_000 : 0;
     } catch {
       // This is locally produced data and encodeFrame writes nothing before it
       // rejects. Drop only this publication: a later, smaller framework frame
@@ -474,20 +472,23 @@ export async function connectProbe(options: ConnectOptions): Promise<ProbeChanne
       settled = true;
       detach();
       const metricsPath = options.performanceMetricsFile ?? performanceFile(process.env);
-      resolve(new ProbeChannel(
-        socket,
-        session,
-        options.token,
-        decoder,
-        pending,
-        evidenceProviders,
-        options.performanceMetrics ?? (metricsPath !== undefined || debugMetricsEnabled(process.env)),
-        filePerformanceSink(metricsPath, {
-          adapter: options.adapterName,
-          framework: options.probe.framework,
-          sessionId: session.sessionId,
-        }),
-      ));
+      resolve(
+        new ProbeChannel(
+          socket,
+          session,
+          options.token,
+          decoder,
+          pending,
+          evidenceProviders,
+          options.performanceMetrics ??
+            (metricsPath !== undefined || debugMetricsEnabled(process.env)),
+          filePerformanceSink(metricsPath, {
+            adapter: options.adapterName,
+            framework: options.probe.framework,
+            sessionId: session.sessionId,
+          }),
+        ),
+      );
     };
 
     try {

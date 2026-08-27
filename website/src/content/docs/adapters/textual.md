@@ -22,7 +22,7 @@ python -m termwright_probe -- python app.py
 const app = await terminal.launch({
   command: ['python', '-m', 'termwright_probe', '--', 'python', appPath],
 });
-await app.getByRole('button', {name: 'Approve'}).click();
+await app.getByRole('button', { name: 'Approve' }).click();
 await expect(app.getByRole('status')).toHaveText('Approved');
 ```
 

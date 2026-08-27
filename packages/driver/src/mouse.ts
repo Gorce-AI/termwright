@@ -60,7 +60,8 @@ const X10_MAX_COORDINATE = 223;
 
 function buttonCode(event: MouseEvent): number {
   const modifiers = new Set(normalizeMouseModifiers(event.modifiers));
-  const modifierBits = (modifiers.has('shift') ? 4 : 0) +
+  const modifierBits =
+    (modifiers.has('shift') ? 4 : 0) +
     (modifiers.has('alt') ? 8 : 0) +
     (modifiers.has('control') ? 16 : 0);
   switch (event.kind) {
@@ -148,19 +149,15 @@ export function encodeMouse(event: MouseEvent, modes: TerminalModes): Uint8Array
       }
       const code2 = event.kind === 'release' ? 3 : code;
       // Legacy encoding is byte-based, not text-based: one byte per field.
-      return Uint8Array.from([
-        0x1b,
-        0x5b,
-        0x4d,
-        32 + code2,
-        32 + column,
-        32 + row,
-      ]);
+      return Uint8Array.from([0x1b, 0x5b, 0x4d, 32 + code2, 32 + column, 32 + row]);
     }
     default:
       throw new CapabilityUnavailableError(
         `unknown mouse encoding ${JSON.stringify(modes.mouseEncoding)}`,
-        { semanticTree: false, suggestion: 'file a bug: the driver observed a mouse encoding it does not implement' },
+        {
+          semanticTree: false,
+          suggestion: 'file a bug: the driver observed a mouse encoding it does not implement',
+        },
       );
   }
 }

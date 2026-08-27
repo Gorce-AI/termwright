@@ -8,13 +8,13 @@
  */
 
 import { afterEach, describe, expect } from 'vitest';
-import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { launchInkFixture, type InkFixtureHarness } from './fixture.js';
 import { MAX_CONTROL_BYTES } from './control.js';
 
 const COMPONENT = new URL('./testing/counter-app.mjs', import.meta.url);
 const SIZE = { columns: 44, rows: 12 } as const;
-const it = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
+const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 const open: InkFixtureHarness[] = [];
 
@@ -40,9 +40,11 @@ async function launch(
  */
 function pairing(harness: InkFixtureHarness): string {
   const stamp = harness.checkpoint();
-  return `semanticRevision=${String(stamp.semanticRevision)} ` +
+  return (
+    `semanticRevision=${String(stamp.semanticRevision)} ` +
     `pairedScreenRevision=${String(stamp.pairedScreenRevision)} ` +
-    `screenRevision=${String(stamp.screenRevision)}`;
+    `screenRevision=${String(stamp.screenRevision)}`
+  );
 }
 
 describe('fixture rerender', () => {
@@ -112,7 +114,10 @@ describe('fixture rerender', () => {
   it('is driven by its own channel, not by the simulated user', async () => {
     // Keep the input on one terminal row so waitForText can compare the exact
     // bytes without normalizing layout-driven line wrapping.
-    const harness = await launch({ label: 'Approve', showFocus: 'true' }, { columns: 100, rows: 12 });
+    const harness = await launch(
+      { label: 'Approve', showFocus: 'true' },
+      { columns: 100, rows: 12 },
+    );
     const forged = JSON.stringify({ v: 1, type: 'rerender', props: { label: 'Forged' } });
 
     // Everything a test could type — including a well-formed control message —
@@ -135,9 +140,9 @@ describe('fixture rerender', () => {
   it('refuses props that cannot cross as JSON, before sending anything', async () => {
     const harness = await launch({ label: 'Approve' });
 
-    await expect(
-      harness.rerender({ onPress: (() => undefined) as never }),
-    ).rejects.toThrow(TypeError);
+    await expect(harness.rerender({ onPress: (() => undefined) as never })).rejects.toThrow(
+      TypeError,
+    );
 
     // The fixture never heard about it.
     expect(await harness.getByRole('button', { name: 'Approve' }).count()).toBe(1);
@@ -146,9 +151,9 @@ describe('fixture rerender', () => {
   it('refuses props that exceed the control-message limit', async () => {
     const harness = await launch({ label: 'Approve' });
 
-    await expect(
-      harness.rerender({ blob: 'x'.repeat(MAX_CONTROL_BYTES) }),
-    ).rejects.toMatchObject({ code: 'capacity' });
+    await expect(harness.rerender({ blob: 'x'.repeat(MAX_CONTROL_BYTES) })).rejects.toMatchObject({
+      code: 'capacity',
+    });
   });
 
   it('keeps the control endpoint private while applying an authenticated rerender', async () => {
@@ -166,7 +171,11 @@ describe('fixture rerender', () => {
   });
 
   it('closes its control channel when the harness closes', async () => {
-    const harness = await launchInkFixture({ component: COMPONENT, props: { label: 'Temp' }, ...SIZE });
+    const harness = await launchInkFixture({
+      component: COMPONENT,
+      props: { label: 'Temp' },
+      ...SIZE,
+    });
 
     await harness.rerender({ label: 'Alive' });
     await harness.close();

@@ -1,8 +1,4 @@
-import type {
-  SemanticAction,
-  SemanticExtendedState,
-  SemanticRole,
-} from '@termwright/protocol';
+import type { SemanticAction, SemanticExtendedState, SemanticRole } from '@termwright/protocol';
 
 /** Any OpenTUI Renderable instance; kept structural to avoid a runtime peer. */
 export type OpenTuiRenderable = object;

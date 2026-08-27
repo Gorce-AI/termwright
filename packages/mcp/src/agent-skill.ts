@@ -30,7 +30,9 @@ const SKILL_DESCRIPTION =
 function renderParameters(schema: JsonSchema): string {
   const properties = schema['properties'];
   if (typeof properties !== 'object' || properties === null) return '  (no parameters)';
-  const required = new Set(Array.isArray(schema['required']) ? (schema['required'] as string[]) : []);
+  const required = new Set(
+    Array.isArray(schema['required']) ? (schema['required'] as string[]) : [],
+  );
   return Object.entries(properties as Record<string, Record<string, unknown>>)
     .map(([name, definition]) => {
       const type =
@@ -115,7 +117,7 @@ function renderSkillMarkdown(): string {
     '```',
     '',
     'The header `revision` is the **screen** revision — that is the `cursor` for',
-    '`terminal.capture_since`. A ref\'s number is the **semantic** revision where it was minted.',
+    "`terminal.capture_since`. A ref's number is the **semantic** revision where it was minted.",
     'Stable semantic identities can be resolved again after the screen moves on. Frame-local',
     'identities and grid refs cannot; take a fresh snapshot when they become stale.',
     '',
@@ -188,7 +190,7 @@ function renderSkillMarkdown(): string {
     '',
     '**The screen tail is unredacted.** It is whatever the terminal displayed at the end — a stack',
     'trace, a config dump, an echoed password, whatever was there. Treat it like a screenshot of the',
-    'user\'s machine: use it to diagnose, but do not paste it into issues, commit messages, chat',
+    "user's machine: use it to diagnose, but do not paste it into issues, commit messages, chat",
     'transcripts or anywhere else it outlives the investigation. The one thing never recorded is the',
     'content of a paste — those carry secrets routinely, so only their size is kept.',
     '',
@@ -209,11 +211,7 @@ function renderSkillMarkdown(): string {
     '## Command line',
     '',
     '```',
-    buildUsage()
-      .split('\n')
-      .slice(2)
-      .join('\n')
-      .trim(),
+    buildUsage().split('\n').slice(2).join('\n').trim(),
     '```',
     '',
   ].join('\n');

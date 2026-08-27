@@ -42,7 +42,9 @@ const MAX_TEXT = 60;
 /** Formats one argument for the log: short, escaped and never a secret. */
 function formatValue(value: unknown): string {
   if (typeof value === 'string') {
-    const escaped = JSON.stringify(value.length > MAX_TEXT ? `${value.slice(0, MAX_TEXT)}…` : value);
+    const escaped = JSON.stringify(
+      value.length > MAX_TEXT ? `${value.slice(0, MAX_TEXT)}…` : value,
+    );
     return escaped;
   }
   if (value instanceof RegExp) return String(value);
@@ -130,7 +132,11 @@ function describeResult(value: unknown): string | null {
  * code that reaches into another instance's internals must {@link unwrap} the
  * value it was handed.
  */
-export function instrument<T extends object>(target: T, log: DebugLog, kind: 'harness' | 'locator'): T {
+export function instrument<T extends object>(
+  target: T,
+  log: DebugLog,
+  kind: 'harness' | 'locator',
+): T {
   const cache = new Map<string | symbol, unknown>();
   return new Proxy(target, {
     get(raw, property, receiver): unknown {
@@ -166,11 +172,17 @@ export function instrument<T extends object>(target: T, log: DebugLog, kind: 'ha
         log.line(category, `${call} started`);
         return result.then(
           (value_: unknown) => {
-            log.line(category, `${call} succeeded in ${Math.round(performance.now() - startedAt)} ms`);
+            log.line(
+              category,
+              `${call} succeeded in ${Math.round(performance.now() - startedAt)} ms`,
+            );
             return value_;
           },
           (error: unknown) => {
-            log.line(category, `${call} failed after ${Math.round(performance.now() - startedAt)} ms: ${errorLabel(error)}`);
+            log.line(
+              category,
+              `${call} failed after ${Math.round(performance.now() - startedAt)} ms: ${errorLabel(error)}`,
+            );
             throw error;
           },
         );

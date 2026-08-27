@@ -18,7 +18,11 @@ describe('tree shaping', () => {
   ]);
 
   it('groups children by parent, in snapshot order', () => {
-    expect(childrenOf(tree).get('d1')?.map((child) => child.id)).toEqual(['b1', 'b2']);
+    expect(
+      childrenOf(tree)
+        .get('d1')
+        ?.map((child) => child.id),
+    ).toEqual(['b1', 'b2']);
   });
 
   it('uses rootIds for the roots', () => {
@@ -37,7 +41,13 @@ describe('tree shaping', () => {
 
   it('renders set flags the way the YAML snapshots write them', () => {
     expect(
-      statesOf(node({ id: 'n1', role: 'checkbox', state: { checked: 'mixed', disabled: false, focused: true } })),
+      statesOf(
+        node({
+          id: 'n1',
+          role: 'checkbox',
+          state: { checked: 'mixed', disabled: false, focused: true },
+        }),
+      ),
     ).toEqual(['checked=mixed', 'focused']);
     expect(statesOf(node({ id: 'n1', role: 'button' }))).toEqual([]);
   });
@@ -45,13 +55,51 @@ describe('tree shaping', () => {
 
 describe('nodeAt', () => {
   const visible = (rect: { row: number; column: number; width: number; height: number }) => ({
-    displayed: { status: 'known' as const, value: true, evidence: { source: 'framework' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'ui-test' } },
-    intendedRect: { status: 'known' as const, value: { ...rect }, evidence: { source: 'framework' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'ui-test' } },
-    visibleRect: { status: 'known' as const, value: { ...rect }, evidence: { source: 'framework' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'ui-test' } },
+    displayed: {
+      status: 'known' as const,
+      value: true,
+      evidence: {
+        source: 'framework' as const,
+        method: 'native' as const,
+        strength: 'authoritative' as const,
+        providerId: 'ui-test',
+      },
+    },
+    intendedRect: {
+      status: 'known' as const,
+      value: { ...rect },
+      evidence: {
+        source: 'framework' as const,
+        method: 'native' as const,
+        strength: 'authoritative' as const,
+        providerId: 'ui-test',
+      },
+    },
+    visibleRect: {
+      status: 'known' as const,
+      value: { ...rect },
+      evidence: {
+        source: 'framework' as const,
+        method: 'native' as const,
+        strength: 'authoritative' as const,
+        providerId: 'ui-test',
+      },
+    },
   });
   const nodes = [
-    node({ id: 'd1', role: 'dialog', name: 'Permission', geometry: visible({ row: 0, column: 0, width: 40, height: 5 }) }),
-    node({ id: 'b1', role: 'button', name: 'Approve', parentId: 'd1', geometry: visible({ row: 2, column: 2, width: 11, height: 1 }) }),
+    node({
+      id: 'd1',
+      role: 'dialog',
+      name: 'Permission',
+      geometry: visible({ row: 0, column: 0, width: 40, height: 5 }),
+    }),
+    node({
+      id: 'b1',
+      role: 'button',
+      name: 'Approve',
+      parentId: 'd1',
+      geometry: visible({ row: 2, column: 2, width: 11, height: 1 }),
+    }),
     node({ id: 'x1', role: 'text', name: 'no bounds' }),
   ];
 

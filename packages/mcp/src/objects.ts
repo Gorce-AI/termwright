@@ -7,7 +7,9 @@
  * while the driver's option types are declared under
  * `exactOptionalPropertyTypes`. This is the one conversion between the two.
  */
-export function definedOnly<T extends object>(value: T): { [K in keyof T]?: Exclude<T[K], undefined> } {
+export function definedOnly<T extends object>(
+  value: T,
+): { [K in keyof T]?: Exclude<T[K], undefined> } {
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
     if (item !== undefined) out[key] = item;

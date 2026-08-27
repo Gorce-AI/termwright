@@ -13,15 +13,15 @@ npm install --save-dev @termwright/probe-ink
 ```
 
 ```ts
-import {fileURLToPath} from 'node:url';
-import {withProbe} from '@termwright/probe-ink';
-import {test, expect} from 'termwright/test';
+import { fileURLToPath } from 'node:url';
+import { withProbe } from '@termwright/probe-ink';
+import { test, expect } from 'termwright/test';
 
 const appPath = fileURLToPath(new URL('../app.mjs', import.meta.url));
 
-test('approves the request', async ({terminal}) => {
+test('approves the request', async ({ terminal }) => {
   const instrumented = withProbe('node', [process.execPath, appPath]);
-  const app = await terminal.launch({command: instrumented.command});
+  const app = await terminal.launch({ command: instrumented.command });
   await app.press('Tab');
   await app.press('Enter');
   await expect(app).toHaveText('Approved');
@@ -34,7 +34,7 @@ preload is dormant outside a Termwright session.
 ## Verify semantic observation
 
 ```ts
-await expect(app.getByRole('button', {name: 'Approve'})).toBeAttached();
+await expect(app.getByRole('button', { name: 'Approve' })).toBeAttached();
 ```
 
 The certified renderer instrumentation publishes intended and clipped geometry
@@ -54,14 +54,18 @@ Install `@termwright/ink` only when the host tree cannot express application
 meaning:
 
 ```tsx
-import {Box, Text, type DOMElement} from 'ink';
-import {useRef} from 'react';
-import {useSemantic} from '@termwright/ink';
+import { Box, Text, type DOMElement } from 'ink';
+import { useRef } from 'react';
+import { useSemantic } from '@termwright/ink';
 
 export function Approve() {
   const ref = useRef<DOMElement>(null);
-  useSemantic(ref, {role: 'button', name: 'Approve', testId: 'approve'});
-  return <Box ref={ref}><Text>Approve</Text></Box>;
+  useSemantic(ref, { role: 'button', name: 'Approve', testId: 'approve' });
+  return (
+    <Box ref={ref}>
+      <Text>Approve</Text>
+    </Box>
+  );
 }
 ```
 
@@ -75,15 +79,17 @@ application contract, including `dialog`, `textbox`, `button`, `list`,
 `listitem`, `status`, and `alert`:
 
 ```tsx
-import {Semantic} from '@termwright/ink';
+import { Semantic } from '@termwright/ink';
 
 <Semantic role="dialog" name="Permission">
   <Box flexDirection="column">
     <Semantic role="button" name="Approve">
-      <Box><Text>Approve</Text></Box>
+      <Box>
+        <Text>Approve</Text>
+      </Box>
     </Semantic>
   </Box>
-</Semantic>
+</Semantic>;
 ```
 
 Ink's `Box` and `Text` types do not prove application intent. The integration

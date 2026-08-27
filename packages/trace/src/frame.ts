@@ -83,17 +83,12 @@ export async function frameAt(trace: TraceReader, timeMs: number): Promise<Trace
     rows: state.rows,
     timeMs: state.timeMs,
     semanticRevision: state.nearestSemanticRevision,
-    ...(trace.meta.terminalProfile === undefined
-      ? {}
-      : { profile: trace.meta.terminalProfile }),
+    ...(trace.meta.terminalProfile === undefined ? {} : { profile: trace.meta.terminalProfile }),
   });
 }
 
 /** Replays an ANSI stream into a cell grid. */
-export async function frameFromAnsi(
-  ansi: string,
-  options: FrameOptions = {},
-): Promise<TraceFrame> {
+export async function frameFromAnsi(ansi: string, options: FrameOptions = {}): Promise<TraceFrame> {
   const columns = options.columns ?? 100;
   const rows = options.rows ?? 30;
   const terminal = createTerminal(columns, rows, options.profile);

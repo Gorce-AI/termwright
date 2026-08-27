@@ -20,10 +20,7 @@ export class SessionInputEvidenceBarrier {
   }
 
   noteSemanticCommit(revision: number): void {
-    if (
-      this.#invalidAfterRevision !== null &&
-      revision > this.#invalidAfterRevision
-    ) {
+    if (this.#invalidAfterRevision !== null && revision > this.#invalidAfterRevision) {
       this.#invalidAfterRevision = null;
     }
   }

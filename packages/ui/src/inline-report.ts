@@ -90,7 +90,14 @@ export async function buildInlinePayload(
       record: null,
     };
 
-    const fixed = size({ v: 1, state, commands, traceState, logs: { ...logs, records: [] }, frames: { ...frames, frames: [] } });
+    const fixed = size({
+      v: 1,
+      state,
+      commands,
+      traceState,
+      logs: { ...logs, records: [] },
+      frames: { ...frames, frames: [] },
+    });
     const trimmedFrames = trimFrames(frames.frames, Math.max(budget - fixed, 0));
     const remaining = Math.max(budget - fixed - size(trimmedFrames.kept), 0);
     const trimmedLogs = trimLogs(logs.records, remaining);
@@ -154,11 +161,23 @@ export async function renderInlineHtml(payload: InlinePayload, appDir?: string):
   try {
     shell = await readFile(join(directory, 'index.html'), 'utf8');
   } catch {
-    throw new Error(`${directory} holds no built app; run \`pnpm --filter @termwright/ui build\` first`);
+    throw new Error(
+      `${directory} holds no built app; run \`pnpm --filter @termwright/ui build\` first`,
+    );
   }
 
-  const script = await inlineAsset(directory, shell, /<script[^>]*src="([^"]+)"[^>]*><\/script>/, 'script');
-  const styled = await inlineAsset(directory, script, /<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*\/?>/, 'style');
+  const script = await inlineAsset(
+    directory,
+    shell,
+    /<script[^>]*src="([^"]+)"[^>]*><\/script>/,
+    'script',
+  );
+  const styled = await inlineAsset(
+    directory,
+    script,
+    /<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*\/?>/,
+    'style',
+  );
   const selfContained = await inlineReferencedSvgAssets(directory, styled);
 
   const data = `<script>globalThis.${INLINE_PAYLOAD_KEY}=${jsonForScript(payload)};</script>`;
@@ -231,7 +250,10 @@ function size(value: unknown): number {
  * a working replay is one at the end: dropping a frame from the middle would
  * put every later frame on a screen that never existed.
  */
-function trimFrames<T>(frames: readonly T[], budget: number): { kept: readonly T[]; dropped: number } {
+function trimFrames<T>(
+  frames: readonly T[],
+  budget: number,
+): { kept: readonly T[]; dropped: number } {
   if (size(frames) <= budget) return { kept: frames, dropped: 0 };
   let used = 2; // the brackets
   const kept: T[] = [];
@@ -251,7 +273,10 @@ function trimFrames<T>(frames: readonly T[], budget: number): { kept: readonly T
  * find out how something ended, and the lines just before that are the ones
  * worth carrying.
  */
-function trimLogs<T>(records: readonly T[], budget: number): { kept: readonly T[]; dropped: number } {
+function trimLogs<T>(
+  records: readonly T[],
+  budget: number,
+): { kept: readonly T[]; dropped: number } {
   if (size(records) <= budget) return { kept: records, dropped: 0 };
   let used = 2;
   const kept: T[] = [];

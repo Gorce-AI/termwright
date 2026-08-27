@@ -27,7 +27,10 @@ interface MountErrorBoundaryState {
  * unambiguous: the screen is empty and `renderError()` explains why, instead of
  * a diagnostic string that a text locator could accidentally match.
  */
-export class MountErrorBoundary extends Component<MountErrorBoundaryProps, MountErrorBoundaryState> {
+export class MountErrorBoundary extends Component<
+  MountErrorBoundaryProps,
+  MountErrorBoundaryState
+> {
   override state: MountErrorBoundaryState = { failed: false };
 
   static getDerivedStateFromError(): MountErrorBoundaryState {

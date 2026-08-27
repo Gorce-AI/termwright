@@ -24,7 +24,14 @@ export type { ObservedRenderer, ObservedRuntimeCertification } from './attach.js
 export type { RuntimeCertification } from './certification.js';
 export { detectRuntime, isInstrumented } from './runtime.js';
 export type { EnvSource, ProbeRuntime } from './runtime.js';
-export { buildShimSource, shouldShim, originalUrl, toModuleUrl, ORIGINAL_MARKER, OPENTUI_ENTRY_PATTERN } from './shim.js';
+export {
+  buildShimSource,
+  shouldShim,
+  originalUrl,
+  toModuleUrl,
+  ORIGINAL_MARKER,
+  OPENTUI_ENTRY_PATTERN,
+} from './shim.js';
 export { observeTree } from './observe.js';
 export { createMarkerSink } from './sink.js';
 export type { MarkerSink } from './sink.js';
@@ -35,4 +42,8 @@ export { connectProbe, ProbeChannel } from '@termwright/probe-runtime';
 export type { ChannelSession, ConnectOptions } from '@termwright/probe-runtime';
 export type { ObservableRenderer, Publisher, ProbeSession, SessionOptions } from './session.js';
 export type { ObservableNode, ObserveOptions, Observation } from './observe.js';
-export type { CommittedFrameGeometry, FrameGeometryProvider, InstrumentedRect } from './geometry.js';
+export type {
+  CommittedFrameGeometry,
+  FrameGeometryProvider,
+  InstrumentedRect,
+} from './geometry.js';

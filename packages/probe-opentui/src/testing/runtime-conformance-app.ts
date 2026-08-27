@@ -56,57 +56,106 @@ const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   targetFps: 60,
   useMouse: true,
-  ...(splitFooter
-    ? { screenMode: 'split-footer' as const, footerHeight: 12 }
-    : {}),
+  ...(splitFooter ? { screenMode: 'split-footer' as const, footerHeight: 12 } : {}),
 });
 
 const clippedOuter = new BoxRenderable(renderer, {
-  id: 'differential-outer', width: 12, height: 5, overflow: 'hidden',
-  position: 'absolute', left: 1, top: 1,
+  id: 'differential-outer',
+  width: 12,
+  height: 5,
+  overflow: 'hidden',
+  position: 'absolute',
+  left: 1,
+  top: 1,
 });
 const clippedInner = new BoxRenderable(renderer, {
-  id: 'differential-inner', width: 9, height: 3, overflow: 'hidden',
-  position: 'absolute', left: 5, top: 1,
+  id: 'differential-inner',
+  width: 9,
+  height: 3,
+  overflow: 'hidden',
+  position: 'absolute',
+  left: 5,
+  top: 1,
 });
-clippedInner.add(new TextRenderable(renderer, {
-  id: 'differential-clipped', content: 'differential clipped', width: 20, height: 1,
-}));
+clippedInner.add(
+  new TextRenderable(renderer, {
+    id: 'differential-clipped',
+    content: 'differential clipped',
+    width: 20,
+    height: 1,
+  }),
+);
 clippedOuter.add(clippedInner);
 
 const buffered = new BoxRenderable(renderer, {
-  id: 'differential-buffered', buffered: true, overflow: 'hidden',
-  position: 'absolute', left: 15, top: 1, width: 12, height: 4,
+  id: 'differential-buffered',
+  buffered: true,
+  overflow: 'hidden',
+  position: 'absolute',
+  left: 15,
+  top: 1,
+  width: 12,
+  height: 4,
 });
-buffered.add(new TextRenderable(renderer, {
-  id: 'buffered-child', content: 'buffered child wider', width: 20, height: 1,
-}));
+buffered.add(
+  new TextRenderable(renderer, {
+    id: 'buffered-child',
+    content: 'buffered child wider',
+    width: 20,
+    height: 1,
+  }),
+);
 
 const scroll = new ScrollBoxRenderable(renderer, {
-  id: 'differential-scroll', position: 'absolute', left: 1, top: 7,
-  width: 18, height: 3, scrollY: true, stickyScroll: false,
+  id: 'differential-scroll',
+  position: 'absolute',
+  left: 1,
+  top: 7,
+  width: 18,
+  height: 3,
+  scrollY: true,
+  stickyScroll: false,
 });
 for (let index = 0; index < 12; index += 1) {
-  scroll.add(new TextRenderable(renderer, {
-    id: `differential-row-${index}`,
-    content: `differential row ${index}`,
-    height: 1,
-  }));
+  scroll.add(
+    new TextRenderable(renderer, {
+      id: `differential-row-${index}`,
+      content: `differential row ${index}`,
+      height: 1,
+    }),
+  );
 }
 
 const lower = new TextRenderable(renderer, {
-  id: 'differential-lower', content: 'lower overlap', width: 8, height: 1,
-  position: 'absolute', left: 21, top: 7, zIndex: 1,
+  id: 'differential-lower',
+  content: 'lower overlap',
+  width: 8,
+  height: 1,
+  position: 'absolute',
+  left: 21,
+  top: 7,
+  zIndex: 1,
 });
 const upper = new TextRenderable(renderer, {
-  id: 'differential-upper', content: 'upper overlap', width: 8, height: 1,
-  position: 'absolute', left: 21, top: 7, zIndex: 2,
+  id: 'differential-upper',
+  content: 'upper overlap',
+  width: 8,
+  height: 1,
+  position: 'absolute',
+  left: 21,
+  top: 7,
+  zIndex: 2,
 });
 const noHit = new NoHitGridRenderable(renderer);
 const customScissor = new LocalBufferScissorRenderable(renderer);
 const dynamic = new TextRenderable(renderer, {
-  id: 'differential-dynamic', content: 'dynamic mounted', width: 16, height: 1,
-  position: 'absolute', left: 21, top: 10,
+  id: 'differential-dynamic',
+  content: 'dynamic mounted',
+  width: 16,
+  height: 1,
+  position: 'absolute',
+  left: 21,
+  top: 10,
 });
 let oracleToken = 0;
 const originOracle = splitFooter
@@ -152,11 +201,14 @@ renderer.on(CliRenderEvents.FRAME, () => {
   if (stopping) return;
   committed += 1;
   if (splitFooter && process.env['TW_RUNTIME_ORACLE_FD'] === '3' && originOracle !== undefined) {
-    writeSync(3, `${JSON.stringify({
-      frameId: renderer.frameId,
-      renderOffset: (renderer as unknown as { readonly renderOffset: number }).renderOffset,
-      token: `split origin oracle ${oracleToken}`,
-    })}\n`);
+    writeSync(
+      3,
+      `${JSON.stringify({
+        frameId: renderer.frameId,
+        renderOffset: (renderer as unknown as { readonly renderOffset: number }).renderOffset,
+        token: `split origin oracle ${oracleToken}`,
+      })}\n`,
+    );
     oracleToken += 1;
     originOracle.content = `split origin oracle ${oracleToken}`;
   }

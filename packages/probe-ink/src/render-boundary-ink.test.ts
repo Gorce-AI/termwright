@@ -16,18 +16,25 @@ describe('Ink host render boundary integration', () => {
     const ref: { current: DOMElement | null } = { current: null };
     const generations: unknown[] = [];
     const HostBox = Box as ComponentType<Record<string, unknown>>;
-    const node = (generation: number) => createElement(HostBox, {
-      ref,
-      display: 'none',
-      [COMMIT_GENERATION_ATTRIBUTE]: generation,
-    });
+    const node = (generation: number) =>
+      createElement(HostBox, {
+        ref,
+        display: 'none',
+        [COMMIT_GENERATION_ATTRIBUTE]: generation,
+      });
     const instance = render(node(0), {
       stdout,
       patchConsole: false,
       onRender() {
-        generations.push((ref.current as (DOMElement & {
-          style?: Record<string, unknown>;
-        }) | null)?.style?.[COMMIT_GENERATION_ATTRIBUTE]);
+        generations.push(
+          (
+            ref.current as
+              | (DOMElement & {
+                  style?: Record<string, unknown>;
+                })
+              | null
+          )?.style?.[COMMIT_GENERATION_ATTRIBUTE],
+        );
       },
     });
 

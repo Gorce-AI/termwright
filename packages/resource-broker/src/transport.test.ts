@@ -66,11 +66,16 @@ function frameReader(socket: ReturnType<typeof connect>): () => Promise<unknown>
   });
   return () => {
     const value = values.shift();
-    return value === undefined ? new Promise((resolve) => waiters.push(resolve)) : Promise.resolve(value);
+    return value === undefined
+      ? new Promise((resolve) => waiters.push(resolve))
+      : Promise.resolve(value);
   };
 }
 
-async function rawAuthenticated(server: ResourceBrokerServer, workerId: string): Promise<{
+async function rawAuthenticated(
+  server: ResourceBrokerServer,
+  workerId: string,
+): Promise<{
   readonly socket: ReturnType<typeof connect>;
   readonly nextFrame: () => Promise<unknown>;
 }> {
@@ -78,9 +83,17 @@ async function rawAuthenticated(server: ResourceBrokerServer, workerId: string):
   socket.on('error', () => undefined);
   const nextFrame = frameReader(socket);
   await once(socket, 'connect');
-  socket.write(framed({
-    v: 1, type: 'hello', requestId: 'hello', token: server.token, runId: RUN, workerId, workerEpoch: 1,
-  }));
+  socket.write(
+    framed({
+      v: 1,
+      type: 'hello',
+      requestId: 'hello',
+      token: server.token,
+      runId: RUN,
+      workerId,
+      workerEpoch: 1,
+    }),
+  );
   expect(await nextFrame()).toMatchObject({ ok: true, requestId: 'hello' });
   return { socket, nextFrame };
 }
@@ -90,7 +103,12 @@ async function harness(
   serverOptions: Partial<Parameters<typeof startResourceBrokerServer>[0]> = {},
 ): Promise<{ broker: ResourceBroker; server: ResourceBrokerServer }> {
   const broker = new ResourceBroker({ runId: RUN, capacities });
-  const server = await startResourceBrokerServer({ broker, runId: RUN, token: TOKEN, ...serverOptions });
+  const server = await startResourceBrokerServer({
+    broker,
+    runId: RUN,
+    token: TOKEN,
+    ...serverOptions,
+  });
   servers.push(server);
   return { broker, server };
 }
@@ -119,7 +137,13 @@ describe('resource broker transport', () => {
     const controller = new AbortController();
     const broker = new ResourceBroker({ runId: RUN, capacities: CAPACITIES });
     const endpoint = testEndpoint('broker-abort');
-    const startup = startResourceBrokerServer({ broker, runId: RUN, token: TOKEN, endpoint, signal: controller.signal });
+    const startup = startResourceBrokerServer({
+      broker,
+      runId: RUN,
+      token: TOKEN,
+      endpoint,
+      signal: controller.signal,
+    });
     controller.abort();
     await expect(startup).rejects.toMatchObject({ name: 'AbortError' });
     await expectConnectionRefused(endpoint);
@@ -156,24 +180,32 @@ describe('resource broker transport', () => {
 
   it('rejects a bad token and a stale run before registering a worker', async () => {
     const { server } = await harness();
-    await expect(worker(server, 'bad-token', 1, { token: 'z'.repeat(48) }))
-      .rejects.toMatchObject({ code: 'authentication-failed' });
-    await expect(worker(server, 'stale-run', 1, { runId: OTHER_RUN }))
-      .rejects.toMatchObject({ code: 'stale-run' });
+    await expect(worker(server, 'bad-token', 1, { token: 'z'.repeat(48) })).rejects.toMatchObject({
+      code: 'authentication-failed',
+    });
+    await expect(worker(server, 'stale-run', 1, { runId: OTHER_RUN })).rejects.toMatchObject({
+      code: 'stale-run',
+    });
     expect(server.snapshot().active).toHaveLength(0);
   });
 
   it('rejects duplicate epochs and a newer reconnect atomically reclaims the old worker', async () => {
     const { server } = await harness();
     const original = await worker(server, 'worker', 7);
-    await original.acquire({ attemptId: attempt(2), resources: { ptySession: 1 }, deadline: deadline() });
+    await original.acquire({
+      attemptId: attempt(2),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
+    });
     await expect(worker(server, 'worker', 7)).rejects.toMatchObject({ code: 'stale-worker' });
     expect(server.snapshot().used.ptySession).toBe(1);
 
     const replacement = await worker(server, 'worker', 8);
     expect(server.snapshot().used.ptySession).toBe(0);
     const replacementLease = await replacement.acquire({
-      attemptId: attempt(3), resources: { ptySession: 1 }, deadline: deadline(),
+      attemptId: attempt(3),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
     });
     await replacementLease.release();
   });
@@ -182,8 +214,16 @@ describe('resource broker transport', () => {
     const { server } = await harness();
     const owner = await worker(server, 'owner');
     const waiter = await worker(server, 'waiter');
-    await owner.acquire({ attemptId: attempt(4), resources: { ptySession: 1 }, deadline: deadline() });
-    const waiting = waiter.acquire({ attemptId: attempt(5), resources: { ptySession: 1 }, deadline: deadline() });
+    await owner.acquire({
+      attemptId: attempt(4),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
+    });
+    const waiting = waiter.acquire({
+      attemptId: attempt(5),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
+    });
     expect((await waiter.snapshot()).queue).toHaveLength(1);
     await owner.close();
     const granted = await waiting;
@@ -197,10 +237,14 @@ describe('resource broker transport', () => {
     const first = await worker(server, 'first');
     const second = await worker(server, 'second');
     const firstLease = await first.acquire({
-      attemptId: attempt(6), resources: { ptySession: 2 }, deadline: deadline(),
+      attemptId: attempt(6),
+      resources: { ptySession: 2 },
+      deadline: deadline(),
     });
     const secondLeasePromise = second.acquire({
-      attemptId: attempt(7), resources: { ptySession: 2 }, deadline: deadline(),
+      attemptId: attempt(7),
+      resources: { ptySession: 2 },
+      deadline: deadline(),
     });
     expect((await second.snapshot()).queue.map((entry) => entry.attemptId)).toEqual([attempt(7)]);
     await firstLease.release();
@@ -212,16 +256,27 @@ describe('resource broker transport', () => {
     const owner = await worker(server, 'owner');
     const cancelled = await worker(server, 'cancelled');
     const next = await worker(server, 'next');
-    const held = await owner.acquire({ attemptId: attempt(8), resources: { ptySession: 1 }, deadline: deadline() });
+    const held = await owner.acquire({
+      attemptId: attempt(8),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
+    });
     const controller = new AbortController();
     const acquisition = cancelled.acquire({
-      attemptId: attempt(9), resources: { ptySession: 1 }, deadline: deadline(), signal: controller.signal,
+      attemptId: attempt(9),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
+      signal: controller.signal,
     });
     controller.abort();
     await expect(acquisition).rejects.toMatchObject({ code: 'aborted' });
     await cancelled.snapshot(); // ordered after cancel on the same framed connection
     expect(server.snapshot().queue).toHaveLength(0);
-    const nextLease = next.acquire({ attemptId: attempt(10), resources: { ptySession: 1 }, deadline: deadline() });
+    const nextLease = next.acquire({
+      attemptId: attempt(10),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
+    });
     await held.release();
     await (await nextLease).release();
   });
@@ -231,14 +286,24 @@ describe('resource broker transport', () => {
     const owner = await worker(server, 'deadline-owner');
     const expires = await worker(server, 'deadline-waiter');
     const next = await worker(server, 'deadline-next');
-    const held = await owner.acquire({ attemptId: attempt(11), resources: { ptySession: 1 }, deadline: deadline() });
+    const held = await owner.acquire({
+      attemptId: attempt(11),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
+    });
     const acquisition = expires.acquire({
-      attemptId: attempt(12), resources: { ptySession: 1 }, deadline: deadline(30),
+      attemptId: attempt(12),
+      resources: { ptySession: 1 },
+      deadline: deadline(30),
     });
     await expect(acquisition).rejects.toMatchObject({ code: 'deadline-exceeded' });
     await expires.snapshot();
     expect(server.snapshot().queue).toHaveLength(0);
-    const nextLease = next.acquire({ attemptId: attempt(13), resources: { ptySession: 1 }, deadline: deadline() });
+    const nextLease = next.acquire({
+      attemptId: attempt(13),
+      resources: { ptySession: 1 },
+      deadline: deadline(),
+    });
     await held.release();
     await (await nextLease).release();
   });
@@ -246,25 +311,45 @@ describe('resource broker transport', () => {
   it('releases a grant racing with cancellation and fail-closes a stale lease token', async () => {
     const { server } = await harness();
     const racing = await rawAuthenticated(server, 'racing-worker');
-    racing.socket.write(Buffer.concat([
-      framed({ v: 1, type: 'acquire', requestId: 'acquire-race', attemptId: attempt(14),
-        resources: { ptySession: 1 }, deadline: deadline() }),
-      framed({ v: 1, type: 'cancel', requestId: 'cancel-race', targetRequestId: 'acquire-race' }),
-    ]));
+    racing.socket.write(
+      Buffer.concat([
+        framed({
+          v: 1,
+          type: 'acquire',
+          requestId: 'acquire-race',
+          attemptId: attempt(14),
+          resources: { ptySession: 1 },
+          deadline: deadline(),
+        }),
+        framed({ v: 1, type: 'cancel', requestId: 'cancel-race', targetRequestId: 'acquire-race' }),
+      ]),
+    );
     expect(await racing.nextFrame()).toMatchObject({ ok: true, requestId: 'cancel-race' });
     expect(server.snapshot().used.ptySession).toBe(0);
     racing.socket.destroy();
 
     const stale = await rawAuthenticated(server, 'stale-token-worker');
-    stale.socket.write(framed({
-      v: 1, type: 'acquire', requestId: 'acquire-stale', attemptId: attempt(15),
-      resources: { ptySession: 1 }, deadline: deadline(),
-    }));
-    const response = await stale.nextFrame() as { readonly result: { readonly leaseId: string } };
-    stale.socket.write(framed({
-      v: 1, type: 'release', requestId: 'forged-release', attemptId: attempt(15),
-      leaseId: response.result.leaseId, leaseToken: 'forged-lease-token',
-    }));
+    stale.socket.write(
+      framed({
+        v: 1,
+        type: 'acquire',
+        requestId: 'acquire-stale',
+        attemptId: attempt(15),
+        resources: { ptySession: 1 },
+        deadline: deadline(),
+      }),
+    );
+    const response = (await stale.nextFrame()) as { readonly result: { readonly leaseId: string } };
+    stale.socket.write(
+      framed({
+        v: 1,
+        type: 'release',
+        requestId: 'forged-release',
+        attemptId: attempt(15),
+        leaseId: response.result.leaseId,
+        leaseToken: 'forged-lease-token',
+      }),
+    );
     await once(stale.socket, 'close');
     expect(server.snapshot().used.ptySession).toBe(0);
   });

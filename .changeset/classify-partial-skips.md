@@ -1,8 +1,8 @@
 ---
-"@termwright/protocol": minor
-"@termwright/run-history": minor
-"@termwright/ui": minor
-"termwright": minor
+'@termwright/protocol': minor
+'@termwright/run-history': minor
+'@termwright/ui': minor
+'termwright': minor
 ---
 
 Preserve mixed pass/skip runs as the distinct amber `passed-with-skips`

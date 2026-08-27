@@ -4,7 +4,9 @@
   "private": true,
   "description": "A Textual notebook, driven end to end from TypeScript",
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "scripts": {
     "start": "python3 app/notes_app.py",
     "typecheck": "tsc --noEmit",

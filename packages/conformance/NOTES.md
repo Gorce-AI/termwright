@@ -17,7 +17,7 @@ Round 1 (driver f78174f):
    `limit-exceeded`, structural violations stay `malformed`. Pinned by the
    `REJECTED` table in `adversarial.test.ts`, which covers both sides of the
    split on purpose.
-2. **`revision-commit` was discarded** — now advisory *and* recorded, so the
+2. **`revision-commit` was discarded** — now advisory _and_ recorded, so the
    `tree-without-marker` case asserts directly that the driver saw the
    announcement for revision 4 and still refused to publish it without a marker.
 3. **Channel diagnostics were unreachable** — `harness.diagnostics()` and the
@@ -27,7 +27,7 @@ Round 5 (mcp a296dca):
 
 10. **A lost MCP transport leaked a terminal and a session slot.** Streamable
     HTTP never signals that a client vanished, and there was no idle deadline,
-    so a crashed agent cost a real PTY *and* a session slot until the server
+    so a crashed agent cost a real PTY _and_ a session slot until the server
     exited — repeated crashes exhausted `maxSessions` and locked out new
     agents. `SessionRegistry` now expires idle sessions with a full teardown.
     The suite drives it through an injected clock, because a test that slept
@@ -68,7 +68,8 @@ Round 2 (driver 0e1b0fe, contract note 2d09049):
 6. **`ready-strategy` conflated a fact with a guess** — replaced by
    `ready-shell-integration` and `ready-settled-screen`. With that, no assertion
    in this package matches diagnostic prose; every one is on a code.
-Round 6 (driver f17b251, e404026, cf1229d):
+
+### Round 6 (driver f17b251, e404026, cf1229d)
 
 11. **`focusReporting` reported the host's state as if it were the child's** —
     historical inbox-ConPTY finding, raised here after the Windows run and
@@ -79,10 +80,10 @@ Round 6 (driver f17b251, e404026, cf1229d):
     (run 31939398845, `session.pty.test.ts:743`): on Windows the field read
     `true` for a child that never asked — the fixture sends only `?1000h` and
     `?1006h`. The host turns focus reporting on by itself, so the reading says nothing about the child in
-    either direction, and the damage runs the *other* way from the reported one:
+    either direction, and the damage runs the _other_ way from the reported one:
     the driver was delivering `CSI I`/`CSI O` to programs that never wanted them.
-    Fixed in f17b251 with the shape the analogy did get right — `'on' | 'off' |
-    'unknown'`, a report *sent* rather than refused while the mode is
+    Fixed in f17b251 with the shape the analogy did get right: the tri-state values
+    `on`, `off`, and `unknown`, with a report _sent_ rather than refused while the mode is
     unverifiable, and `mouse-mode-unverifiable` generalised to
     `mode-unverifiable` with a `mode` field. The lesson for this package: an
     analogy is a hypothesis, and "same shape as the mouse" was reported as
@@ -98,7 +99,7 @@ Round 6 (driver f17b251, e404026, cf1229d):
     Closed by `e404026`, which arms the expiry clock at the drain barrier;
     `--repaint=40000`, 8 MB of repaint across the burst, is the regression test.
     **B**: the bytes are still in the pipe, which the drain barrier cannot see
-    precisely because the queue is *empty* — nothing arrived, the drain resolves
+    precisely because the queue is _empty_ — nothing arrived, the drain resolves
     at once, the clock arms, and the marker lands seconds later. Reproduced here
     with `TERMWRIGHT_CONFORMANCE_STDOUT_BPS=5000` (burst ended on revision 1,
     `revision-expired×64`) and independently by the driver (commit-to-sighting
@@ -106,7 +107,7 @@ Round 6 (driver f17b251, e404026, cf1229d):
     have been quiet for `pairingTimeoutMs`: the clock only starts once the
     evidence cannot still be in transit. Both knobs now settle on 200. The
     limit is deliberate and worth knowing — quiet extends the window only while
-    output is *flowing*, so a silent session whose marker turns up two seconds
+    output is _flowing_, so a silent session whose marker turns up two seconds
     later still expires on time, and eviction still caps a stream that never
     stops.
 
@@ -218,7 +219,7 @@ has to delete an assertion that explains itself.
   step in front of them.
 - **The semantic fixture hit-tests its own layout.** Clicks are resolved against
   bounds the fixture measured with `measureElement`, so a passing hit-test proves
-  the driver aimed at the cell the *application* believes the widget occupies.
+  the driver aimed at the cell the _application_ believes the widget occupies.
   Asserting "something changed" would pass on an off-by-one.
 - **The suites run under `envMode: 'replace'`.** The session pool passes no
   `env` at all, so every suite exercises the secret-safe default a user gets.
@@ -244,7 +245,7 @@ has to delete an assertion that explains itself.
   driven. That is what the peer-crash test asserts.
 - **The env allowlist is per platform, and "what the parent had" is the wrong
   question.** The first attempt asserted `HOME` only where this process has one
-  — which failed on Windows, because a bash runner *does* have `HOME` and the
+  — which failed on Windows, because a bash runner _does_ have `HOME` and the
   driver's Windows list correctly does not forward it (`USERPROFILE` and the
   profile variables are what a program uses there, and `SystemRoot` is what
   keeps a Node child from aborting outright). The fixture now names the home
@@ -261,7 +262,7 @@ has to delete an assertion that explains itself.
   mode read `'unknown'` while the child tracked and decoded SGR reports. The
   pinned passthrough runtime forwards DECSET and Windows now follows the same
   observable branch as POSIX. Any assertion
-  that a click is *refused* is a claim about the child ("it enabled nothing"),
+  that a click is _refused_ is a claim about the child ("it enabled nothing"),
   and only a platform that shows the mode can make it. The suites take the
   branch from `terminal.screen().modes.mouseTracking`, so a platform that
   starts reporting the mode tightens these assertions by itself and one that
@@ -271,7 +272,7 @@ has to delete an assertion that explains itself.
   because that entry describes the platform rather than any one action.
 - **A timeout is not a diagnosis; make the wait produce one.** The two
   200-revision floods were given 45 s, then failed on Windows anyway. Waiting on
-  *progress* rather than a clock turned "Matcher did not succeed in time" into
+  _progress_ rather than a clock turned "Matcher did not succeed in time" into
   "stopped at 39-44 of 200; revision-dropped×130, revision-expired×64", and that
   measurement is what let the driver find the cause — its own emulator write
   queue, which a marker has to cross while the snapshot travels the socket for
@@ -288,7 +289,7 @@ has to delete an assertion that explains itself.
   the machine, so neither is asserted — pinning emulator throughput turns a
   loaded runner into a red driver. `--repaint=<bytes>` reproduces the driver-
   side backlog the fix is about (8 MB of repaint over 200 revisions still lands
-  on 200); `--stdout-bps` reproduces the *other* delay, a transport that
+  on 200); `--stdout-bps` reproduces the _other_ delay, a transport that
   delivers late. Keep them distinct — they were fixed by different changes, and
   finding 12 carries the measurements for both. The eviction half needs no such care: `maxQueuedFrames`
   overflowing is unconditional and correct however the bytes are delayed, which
@@ -310,7 +311,7 @@ has to delete an assertion that explains itself.
   worst way to learn it: the machine, not the platform, decided the branch.
   Helpers now wait for a settled answer (`'on'` or `'unknown'`) and return the
   three states, and `pnpm typecheck` catches the next such rename, which is how
-  this one was actually found. The follow-up bite: the *pre*-condition of those
+  this one was actually found. The follow-up bite: the _pre_-condition of those
   tests — "focus is refused before the child asks" — is a claim about the child
   too, and the old inbox ConPTY had `1004` on for a child that never sent it, so
   that assertion also had to move behind the observed mode. Wherever a refusal
@@ -326,7 +327,7 @@ has to delete an assertion that explains itself.
   opening revision having landed by the time `PEER READY` was drawn; at 400 ms
   it also caught the flood's eviction list being read once after an idle
   screen. `arm()` now waits for the revision itself, and the two waits that
-  cover a driver *timer* — a revision expiring — budget for delivery as well as
+  cover a driver _timer_ — a revision expiring — budget for delivery as well as
   for the window.
 - **A PTY coalesces writes.** Two `press()` calls routinely arrive as one chunk.
   Both interactive fixtures tokenise the chunk (escape sequences whole, then one
@@ -339,7 +340,7 @@ has to delete an assertion that explains itself.
   The two are different views of the same session and are easy to confuse. The
   grid is what a user sees and is what waits match against. The raw text is
   everything ever written, so anything printed once matches it forever —
-  which is why proving an app is *still* rendering uses growth in its length,
+  which is why proving an app is _still_ rendering uses growth in its length,
   never a text match.
 - **If an assertion counts occurrences, the wait before it must not be
   satisfiable by the first one.** The double-click test counted `MOUSE press`
@@ -350,10 +351,11 @@ has to delete an assertion that explains itself.
   event, so the test waits for something that exists exactly once.
 
   This is a different failure from the scroll-off trap below, and the pair is
-  worth holding side by side: that one is *asserting on something that can
-  disappear*, this one is *waiting for something that arrives twice*. Both look
+  worth holding side by side: that one is _asserting on something that can
+  disappear_, this one is _waiting for something that arrives twice_. Both look
   like flakiness and neither is — the test was wrong, and the machine's timing
   only decided when it would say so.
+
 - **Run vitest as a script, not as a shim or through `npx`.** Two ways this
   broke. `npx vitest` downloads the latest release when the local binary is not
   on its lookup path, so a workspace change elsewhere turned `pnpm conformance`
@@ -390,7 +392,7 @@ has to delete an assertion that explains itself.
 - **`waitForQuiet` can return before the command it should wait for starts.**
   Between `press('Enter')` and the shell's `OSC 133 C`, the last mark still says
   "prompt waiting", so a `waitForQuiet` issued immediately after a keystroke
-  resolves against the *previous* prompt. The prompt fixture prints
+  resolves against the _previous_ prompt. The prompt fixture prints
   `RUNNING <command>` at command start so the suite can wait for the command to
   be observably running first; a user hits the same race and needs the same
   answer.
@@ -405,11 +407,11 @@ has to delete an assertion that explains itself.
 - A non-Termwright embedding that hides DECSET still needs its own conformance
   coverage and explicit mode-evidence provider. The repository's pinned
   passthrough ConPTY is covered by the native Windows lanes instead.
-- Log *bridges*: `@termwright/logs` ships pino, consola and OTel adapters;
+- Log _bridges_: `@termwright/logs` ships pino, consola and OTel adapters;
   conformance exercises the wire contract (`seq`, budgets, ceilings, records
   staying off-screen) but not the bridges themselves, which have their own
   tests.
-- MCP session *recovery*: `mcp-sessions.test.ts` covers isolation, close
+- MCP session _recovery_: `mcp-sessions.test.ts` covers isolation, close
   ownership, the ceiling and cursor independence, but not resuming a session
   from a new transport (the SDK supports it; nothing in this project relies on
   it yet).

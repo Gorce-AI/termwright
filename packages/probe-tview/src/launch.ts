@@ -1,10 +1,10 @@
 /** Capability-driven, add-only compiler injection for tview. */
 
-import {execFile} from 'node:child_process';
-import {readFile} from 'node:fs/promises';
-import {join} from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {promisify} from 'node:util';
+import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import {
   digestGoToolExecSource,
   prepareGoToolExec,
@@ -42,27 +42,21 @@ export interface PreparedBuild {
  * module-cache, workspace, replacement, and vendored dependency layouts.
  * No upstream path is copied, patched, or hashed.
  */
-export async function prepareInstrumentedBuild(
-  options: PrepareOptions,
-): Promise<PreparedBuild> {
+export async function prepareInstrumentedBuild(options: PrepareOptions): Promise<PreparedBuild> {
   const env = options.env ?? process.env;
   const frameworkVersion = await moduleVersion(options.moduleDir, FRAMEWORK, env);
-  if (
-    options.frameworkVersion !== undefined &&
-    options.frameworkVersion !== frameworkVersion
-  ) {
+  if (options.frameworkVersion !== undefined && options.frameworkVersion !== frameworkVersion) {
     throw new Error(
       `@termwright/probe-tview expected ${FRAMEWORK} ${options.frameworkVersion}, ` +
         `but the application resolves ${frameworkVersion || 'no version'}`,
     );
   }
 
-  const goos = (await run('go', ['env', 'GOOS'], {cwd: options.moduleDir, env})).stdout.trim();
+  const goos = (await run('go', ['env', 'GOOS'], { cwd: options.moduleDir, env })).stdout.trim();
   const units = await compilationUnits(goos);
   const prepared = await prepareGoToolExec({
     moduleDir: options.moduleDir,
-    outputDir:
-      options.outputDir ?? join(options.moduleDir, '.termwright', 'go-toolexec'),
+    outputDir: options.outputDir ?? join(options.moduleDir, '.termwright', 'go-toolexec'),
     units,
     env,
   });
@@ -91,11 +85,7 @@ async function compilationUnits(goos: string): Promise<readonly GoToolExecUnit[]
     {
       packagePath: FRAMEWORK,
       targetFile: 'zz_termwright_probe.go',
-      sourceFile: join(
-        root,
-        'assets',
-        'tview_probe.go.txt',
-      ),
+      sourceFile: join(root, 'assets', 'tview_probe.go.txt'),
       imports: [
         'errors',
         'reflect',
@@ -115,29 +105,27 @@ async function compilationUnits(goos: string): Promise<readonly GoToolExecUnit[]
     {
       packagePath: TCELL_FRAMEWORK,
       targetFile: 'zz_termwright_marker.go',
-      sourceFile: join(
-        root,
-        'assets',
-        'tcell_marker_windows.go.txt',
-      ),
+      sourceFile: join(root, 'assets', 'tcell_marker_windows.go.txt'),
       stripWindowsConstraint: true,
       imports: ['errors', 'io', 'syscall', 'unicode/utf16', 'unsafe'],
     },
-  ].filter(({targetFile}) => compilerUnitTargetsForPlatform(goos).includes(targetFile));
+  ].filter(({ targetFile }) => compilerUnitTargetsForPlatform(goos).includes(targetFile));
   return Promise.all(
-    declarations.map(async ({packagePath, targetFile, sourceFile, stripWindowsConstraint, imports}) => {
-      const asset = await readFile(sourceFile, 'utf8');
-      const source = stripWindowsConstraint
-        ? asset.replace(/^\/\/go:build windows\n\n/u, '')
-        : asset;
-      return {
-        packagePath,
-        targetFile,
-        source,
-        sourceDigest: digestGoToolExecSource(source),
-        ...(imports === undefined ? {} : {imports}),
-      };
-    }),
+    declarations.map(
+      async ({ packagePath, targetFile, sourceFile, stripWindowsConstraint, imports }) => {
+        const asset = await readFile(sourceFile, 'utf8');
+        const source = stripWindowsConstraint
+          ? asset.replace(/^\/\/go:build windows\n\n/u, '')
+          : asset;
+        return {
+          packagePath,
+          targetFile,
+          source,
+          sourceDigest: digestGoToolExecSource(source),
+          ...(imports === undefined ? {} : { imports }),
+        };
+      },
+    ),
   );
 }
 

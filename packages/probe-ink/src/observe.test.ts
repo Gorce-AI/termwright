@@ -121,14 +121,17 @@ describe('observeInkTree', () => {
       configurable: true,
       value: {
         entries: new WeakMap<object, object>([
-          [button, {
-            current: {
-              name: 'Run',
-              actions: ['shell'],
-              extended: cyclic,
-              labelledBy: hostileRelations,
+          [
+            button,
+            {
+              current: {
+                name: 'Run',
+                actions: ['shell'],
+                extended: cyclic,
+                labelledBy: hostileRelations,
+              },
             },
-          }],
+          ],
         ]),
         listeners: new Set<() => void>(),
       },

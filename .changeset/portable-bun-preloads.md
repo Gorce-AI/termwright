@@ -1,6 +1,6 @@
 ---
-"@termwright/probe-ink": patch
-"@termwright/probe-opentui": patch
+'@termwright/probe-ink': patch
+'@termwright/probe-opentui': patch
 ---
 
 Pass native absolute paths to Bun's preload resolver while retaining file URLs

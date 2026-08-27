@@ -112,7 +112,10 @@ export class TerminalStore {
 
   constructor(options: TerminalStoreOptions) {
     this.sessionKey = options.sessionKey;
-    this.#directory = join(options.storageDir ?? join(tmpdir(), 'termwright-mcp'), options.sessionKey);
+    this.#directory = join(
+      options.storageDir ?? join(tmpdir(), 'termwright-mcp'),
+      options.sessionKey,
+    );
     this.#maxTerminals = options.maxTerminals ?? MCP_LIMITS.maxTerminals;
     this.#now = options.now ?? Date.now;
   }
@@ -145,7 +148,9 @@ export class TerminalStore {
       ...(request.cwd === undefined ? {} : { cwd: request.cwd }),
       ...(request.columns === undefined ? {} : { columns: request.columns }),
       ...(request.rows === undefined ? {} : { rows: request.rows }),
-      ...(request.scrollbackLines === undefined ? {} : { scrollbackLines: request.scrollbackLines }),
+      ...(request.scrollbackLines === undefined
+        ? {}
+        : { scrollbackLines: request.scrollbackLines }),
       ...(request.semanticNegotiationMs === undefined
         ? {}
         : { semanticNegotiationMs: request.semanticNegotiationMs }),
@@ -153,10 +158,16 @@ export class TerminalStore {
       ...(request.logs === undefined
         ? {}
         : {
-            logs: request.logs.flatMap((source) => (source.path === undefined ? [] : [{
-              path: source.path,
-              ...(source.label === undefined ? {} : { label: source.label }),
-            }])),
+            logs: request.logs.flatMap((source) =>
+              source.path === undefined
+                ? []
+                : [
+                    {
+                      path: source.path,
+                      ...(source.label === undefined ? {} : { label: source.label }),
+                    },
+                  ],
+            ),
           }),
     };
 
@@ -176,12 +187,15 @@ export class TerminalStore {
     // Subscribe from the source journal rather than racing a live listener
     // against a separate snapshot. A bounded-prefix loss advances the cursor,
     // so capture_since reports an explicit omission instead of looking whole.
-    harness.events.subscribe({
-      fromSequence: 1,
-      onGap: (gap) => entry.logs.omit(Math.max(1, gap.lostEvents)),
-    }, (recorded) => {
-      if (recorded.type === 'app-log') entry.logs.append(recorded.payload);
-    });
+    harness.events.subscribe(
+      {
+        fromSequence: 1,
+        onGap: (gap) => entry.logs.omit(Math.max(1, gap.lostEvents)),
+      },
+      (recorded) => {
+        if (recorded.type === 'app-log') entry.logs.append(recorded.payload);
+      },
+    );
     // The exit promise is observed here so `terminal.close` can report a status
     // without racing, and so an exited child never leaves an unhandled rejection.
     void harness.exit.then(
@@ -277,16 +291,19 @@ export class TerminalStore {
   async closeAll(): Promise<void> {
     const entries = [...this.#terminals.values()];
     const failures: unknown[] = [];
-    await Promise.all(entries.map(async (entry) => {
-      try {
-        await entry.harness.close();
-        entry.closed = true;
-        this.#terminals.delete(entry.id);
-      } catch (error) {
-        failures.push(error);
-      }
-    }));
-    if (failures.length > 0) throw new AggregateError(failures, 'one or more MCP terminals failed to close');
+    await Promise.all(
+      entries.map(async (entry) => {
+        try {
+          await entry.harness.close();
+          entry.closed = true;
+          this.#terminals.delete(entry.id);
+        } catch (error) {
+          failures.push(error);
+        }
+      }),
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'one or more MCP terminals failed to close');
   }
 }
 
@@ -316,7 +333,9 @@ export function createSessionStores(options: {
 /** Closes both stores of a session. */
 export async function closeSessionStores(stores: SessionStores): Promise<void> {
   const results = await Promise.allSettled([stores.terminals.closeAll(), stores.traces.closeAll()]);
-  const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
   if (failures.length > 0) throw new AggregateError(failures, 'MCP session stores failed to close');
 }
 
@@ -417,7 +436,9 @@ export class SessionRegistry<T> {
    * Runs {@link sweepIdle} on a timer until the returned function is called.
    * The timer is unref'd, so it never keeps a process alive on its own.
    */
-  startIdleSweeper(intervalMs = Math.min(Math.max(this.#idleTtlMs / 4, 1_000), 60_000)): () => void {
+  startIdleSweeper(
+    intervalMs = Math.min(Math.max(this.#idleTtlMs / 4, 1_000), 60_000),
+  ): () => void {
     if (this.#idleTtlMs <= 0) return () => undefined;
     if (!this.#sweeperStopped) return () => this.stopIdleSweeper();
     this.#sweeperStopped = false;
@@ -427,10 +448,12 @@ export class SessionRegistry<T> {
         this.#sweeper = undefined;
         const task = this.sweepIdle();
         this.#sweepTask = task;
-        void task.catch((error) => this.#onBackgroundError?.(error)).finally(() => {
-          if (this.#sweepTask === task) this.#sweepTask = undefined;
-          schedule();
-        });
+        void task
+          .catch((error) => this.#onBackgroundError?.(error))
+          .finally(() => {
+            if (this.#sweepTask === task) this.#sweepTask = undefined;
+            schedule();
+          });
       }, intervalMs);
       this.#sweeper.unref?.();
     };
@@ -490,8 +513,11 @@ export class SessionRegistry<T> {
         closeSessionStores(session.stores),
         Promise.resolve().then(() => this.#disposeAttachment?.(session.attachment)),
       ]);
-      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-      if (failures.length > 0) throw new AggregateError(failures, `MCP session ${key} failed to close`);
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError(failures, `MCP session ${key} failed to close`);
       this.#sessions.delete(key);
     })();
     return session.closing;
@@ -503,7 +529,10 @@ export class SessionRegistry<T> {
     await this.#sweepTask?.catch(() => undefined);
     const keys = [...this.#sessions.keys()];
     const results = await Promise.allSettled(keys.map(async (key) => this.delete(key)));
-    const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-    if (failures.length > 0) throw new AggregateError(failures, 'one or more MCP sessions failed to close');
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'one or more MCP sessions failed to close');
   }
 }

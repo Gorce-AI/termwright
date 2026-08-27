@@ -43,14 +43,20 @@ function median(values: readonly number[]): number {
   return ((ordered[middle - 1] as number) + (ordered[middle] as number)) / 2;
 }
 
-async function sample(arm: MarkerArm, output: string, windowMs: number): Promise<MarkerRouteSample> {
+async function sample(
+  arm: MarkerArm,
+  output: string,
+  windowMs: number,
+): Promise<MarkerRouteSample> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn('bun', [BENCHMARK, arm, output, String(windowMs)], {
       stdio: ['ignore', 'ignore', 'pipe'],
     });
     let stderr = '';
     child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
     child.once('error', reject);
     child.once('close', (code) => {
       if (code === 0) resolve();
@@ -93,8 +99,8 @@ export async function runOpenTuiMarkerBenchmark(
     const quiet = samples.get('feed-quiet') as MarkerRouteSample[];
     const feed = samples.get('feed') as MarkerRouteSample[];
     if (
-      ![...native, ...quiet, ...feed].every((entry) => entry.useThread)
-      || !feed.every((entry) => entry.markerAfterFrame === true)
+      ![...native, ...quiet, ...feed].every((entry) => entry.useThread) ||
+      !feed.every((entry) => entry.markerAfterFrame === true)
     ) {
       throw new Error('the retained renderer benchmark did not prove threaded marker ordering');
     }
@@ -103,7 +109,11 @@ export async function runOpenTuiMarkerBenchmark(
     const feedFps = median(feed.map((entry) => entry.fps));
     const correlation = median(feed.map((entry) => entry.markerWrites / Math.max(1, entry.frames)));
 
-    const unavailable = (unit: 'count' | 'events/frame' | 'bytes/frame' | 'nodes/frame' | 'microseconds/frame' | 'ratio', reason: string) => ({
+    const unavailable = (
+      unit:
+        'count' | 'events/frame' | 'bytes/frame' | 'nodes/frame' | 'microseconds/frame' | 'ratio',
+      reason: string,
+    ) => ({
       status: 'unavailable' as const,
       unit,
       value: null,
@@ -113,30 +123,64 @@ export async function runOpenTuiMarkerBenchmark(
       id: 'opentui-threaded-marker-route',
       framework: 'opentui',
       renderingMode: 'retained',
-      description: 'real resolved OpenTUI threaded renderer with a changing frame and three stdout/marker routes',
+      description:
+        'real resolved OpenTUI threaded renderer with a changing frame and three stdout/marker routes',
       workload: {
         frames: feed.reduce((total, entry) => total + entry.frames, 0),
         warmupFrames: 0,
         targetNodesPerFrame: 2,
       },
       metrics: {
-        probeEventsPerFrame: unavailable('events/frame', 'The marker-route benchmark isolates renderer routing, not Probe IR observation.'),
-        bytesPerFrame: unavailable('bytes/frame', 'bytesSeenInJs contains terminal render bytes and markers, not semantic-channel bytes.'),
-        fullSnapshots: unavailable('count', 'The marker-route benchmark deliberately has no semantic driver.'),
-        droppedEvents: unavailable('count', 'No semantic producer queue is active in this route-isolation benchmark.'),
-        coalescedEvents: unavailable('count', 'OpenTUI does not expose skipped native renders as a counter here.'),
-        semanticNodesPerFrame: unavailable('nodes/frame', 'No semantic snapshot is built in this route-isolation benchmark.'),
-        unknownFrameworkNodesPerFrame: unavailable('nodes/frame', 'No semantic snapshot is built in this route-isolation benchmark.'),
+        probeEventsPerFrame: unavailable(
+          'events/frame',
+          'The marker-route benchmark isolates renderer routing, not Probe IR observation.',
+        ),
+        bytesPerFrame: unavailable(
+          'bytes/frame',
+          'bytesSeenInJs contains terminal render bytes and markers, not semantic-channel bytes.',
+        ),
+        fullSnapshots: unavailable(
+          'count',
+          'The marker-route benchmark deliberately has no semantic driver.',
+        ),
+        droppedEvents: unavailable(
+          'count',
+          'No semantic producer queue is active in this route-isolation benchmark.',
+        ),
+        coalescedEvents: unavailable(
+          'count',
+          'OpenTUI does not expose skipped native renders as a counter here.',
+        ),
+        semanticNodesPerFrame: unavailable(
+          'nodes/frame',
+          'No semantic snapshot is built in this route-isolation benchmark.',
+        ),
+        unknownFrameworkNodesPerFrame: unavailable(
+          'nodes/frame',
+          'No semantic snapshot is built in this route-isolation benchmark.',
+        ),
         renderCorrelationRate: {
           status: 'measured',
           unit: 'ratio',
           value: correlation,
           note: 'Marker writes divided by rendered frames; every sampled first marker was structurally after frame bytes.',
         },
-        probeSerializationTime: unavailable('microseconds/frame', 'No semantic snapshot is serialized in this route-isolation benchmark.'),
-        parentNormalizationTime: unavailable('microseconds/frame', 'No semantic parent is connected.'),
-        parentProtocolValidationTime: unavailable('microseconds/frame', 'No semantic parent is connected.'),
-        probeHotPathTime: unavailable('microseconds/frame', 'The benchmark reports renderer throughput rather than isolating a per-frame CPU duration.'),
+        probeSerializationTime: unavailable(
+          'microseconds/frame',
+          'No semantic snapshot is serialized in this route-isolation benchmark.',
+        ),
+        parentNormalizationTime: unavailable(
+          'microseconds/frame',
+          'No semantic parent is connected.',
+        ),
+        parentProtocolValidationTime: unavailable(
+          'microseconds/frame',
+          'No semantic parent is connected.',
+        ),
+        probeHotPathTime: unavailable(
+          'microseconds/frame',
+          'The benchmark reports renderer throughput rather than isolating a per-frame CPU duration.',
+        ),
         applicationOverheadRatio: {
           status: 'measured',
           unit: 'ratio',
@@ -147,13 +191,17 @@ export async function runOpenTuiMarkerBenchmark(
     };
 
     const coreEntry = requireFromBenchmark.resolve('@opentui/core');
-    const corePackage = JSON.parse(await readFile(join(dirname(coreEntry), 'package.json'), 'utf8')) as {
+    const corePackage = JSON.parse(
+      await readFile(join(dirname(coreEntry), 'package.json'), 'utf8'),
+    ) as {
       name?: unknown;
       version?: unknown;
     };
-    if (corePackage.name !== '@opentui/core'
-      || typeof corePackage.version !== 'string'
-      || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(corePackage.version)) {
+    if (
+      corePackage.name !== '@opentui/core' ||
+      typeof corePackage.version !== 'string' ||
+      !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(corePackage.version)
+    ) {
       throw new Error('cannot resolve exact @opentui/core package provenance');
     }
 

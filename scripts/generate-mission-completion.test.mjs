@@ -14,10 +14,14 @@ describe('mission completion report', () => {
       remainingImplementation: 0,
       incorrectAfterDeeperEvidence: 0,
     });
-    expect(report.sections.filter((section) => section.status === 'partially-fixed').map((section) => ({
-      section: section.section,
-      kind: section.remainingKind,
-    }))).toEqual([]);
+    expect(
+      report.sections
+        .filter((section) => section.status === 'partially-fixed')
+        .map((section) => ({
+          section: section.section,
+          kind: section.remainingKind,
+        })),
+    ).toEqual([]);
     expect(report.releaseReadiness).toMatchObject({
       status: 'blocked',
       technicalMissionPartialSections: [],
@@ -35,8 +39,14 @@ describe('mission completion report', () => {
       mergedAs: report.baselineHead,
     });
     expect(report.vitestReliabilityEvidence.jobs).toEqual([
-      expect.objectContaining({ name: 'Windows Node 22 / Vitest pool matrix', conclusion: 'success' }),
-      expect.objectContaining({ name: 'Windows Node 24 / Vitest pool matrix', conclusion: 'success' }),
+      expect.objectContaining({
+        name: 'Windows Node 22 / Vitest pool matrix',
+        conclusion: 'success',
+      }),
+      expect.objectContaining({
+        name: 'Windows Node 24 / Vitest pool matrix',
+        conclusion: 'success',
+      }),
     ]);
     expect(report.postMergeRegressionEvidence).toMatchObject({
       runId: '32919169129',

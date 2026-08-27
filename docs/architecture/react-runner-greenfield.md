@@ -62,11 +62,11 @@ attempt identity and replay selection. These identities have different
 lifetimes:
 
 ```ts
-type CaseKey = string;       // stable discovery/rerun identity
-type RunId = string;         // one suite invocation
-type ExecutionId = string;   // one case attempt within a run
-type RuntimeId = string;     // producer/Vitest correlation only
-type SessionId = string;     // one terminal process
+type CaseKey = string; // stable discovery/rerun identity
+type RunId = string; // one suite invocation
+type ExecutionId = string; // one case attempt within a run
+type RuntimeId = string; // producer/Vitest correlation only
+type SessionId = string; // one terminal process
 
 interface SourceLocation {
   file: string;
@@ -160,9 +160,9 @@ interface WorkspaceState {
   selectedExecutionId: ExecutionId | null;
   selectedSessionId: SessionId | null;
   evidence:
-    | {kind: 'live'; executionId: ExecutionId}
-    | {kind: 'replay'; runId: RunId; executionId: ExecutionId; traceRef: string}
-    | {kind: 'empty'};
+    | { kind: 'live'; executionId: ExecutionId }
+    | { kind: 'replay'; runId: RunId; executionId: ExecutionId; traceRef: string }
+    | { kind: 'empty' };
   playheadMs: number;
   previewMs: number | null;
   expandedSpecs: ReadonlySet<string>;
@@ -366,18 +366,18 @@ Runs is immutable history:
 The current browser suite contains valuable behavior tests and legacy layout
 tests. Port them by intent:
 
-| Current coverage | Greenfield treatment |
-|---|---|
-| initialization error, navigation during load, inline report | preserve end to end |
-| discovery/not-run reconciliation, user-owned Specs folds, mid-run backlog | preserve against normalized store and React view |
-| Stop races/failure, current-attempt session switch | preserve; add explicit `executionId` assertions |
-| live-to-replay and two-tab contextual replay | preserve as P0 acceptance tests |
-| command hover/restore/pin, timeline edges and markers | preserve using accessible names and execution ids |
-| large/small terminal scaling | preserve as TerminalStage contract tests |
-| exact `.view`, `.layout`, `.tree`, `.commands`, `#terminal .xterm-screen` geometry | delete or rewrite as user-visible no-overflow/reachability assertions |
-| repeated test ids selected with `nth()` | replace with role/name plus `data-case-key` or `data-execution-id` |
-| old three-pane existence | replace with Runner regions and compact `Steps/Screen/Inspect` navigation |
-| Lit render-unit tests | move pure behavior to selector/reducer tests and interactions to React Testing Library |
+| Current coverage                                                                   | Greenfield treatment                                                                   |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| initialization error, navigation during load, inline report                        | preserve end to end                                                                    |
+| discovery/not-run reconciliation, user-owned Specs folds, mid-run backlog          | preserve against normalized store and React view                                       |
+| Stop races/failure, current-attempt session switch                                 | preserve; add explicit `executionId` assertions                                        |
+| live-to-replay and two-tab contextual replay                                       | preserve as P0 acceptance tests                                                        |
+| command hover/restore/pin, timeline edges and markers                              | preserve using accessible names and execution ids                                      |
+| large/small terminal scaling                                                       | preserve as TerminalStage contract tests                                               |
+| exact `.view`, `.layout`, `.tree`, `.commands`, `#terminal .xterm-screen` geometry | delete or rewrite as user-visible no-overflow/reachability assertions                  |
+| repeated test ids selected with `nth()`                                            | replace with role/name plus `data-case-key` or `data-execution-id`                     |
+| old three-pane existence                                                           | replace with Runner regions and compact `Steps/Screen/Inspect` navigation              |
+| Lit render-unit tests                                                              | move pure behavior to selector/reducer tests and interactions to React Testing Library |
 
 Keep a small number of opaque test ids for surfaces with no reliable accessible
 handle, such as the xterm host and timeline track. Test ids are observation

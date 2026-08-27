@@ -34,7 +34,9 @@ const forgedMarkerProbe = process.env['TERMWRIGHT_FIXTURE_FORGED_MARKER'] === '1
 const terminalMouseEnabled = process.env['TERMWRIGHT_FIXTURE_MOUSE_MODE'] !== '0';
 const firstTreeDelay = Number(process.env['TERMWRIGHT_FIXTURE_FIRST_TREE_DELAY'] ?? '0');
 const pendingFocusFrame = process.env['TERMWRIGHT_FIXTURE_PENDING_FOCUS_FRAME'] === '1';
-const unpairedRefreshDelay = Number(process.env['TERMWRIGHT_FIXTURE_UNPAIRED_REFRESH_DELAY'] ?? '100');
+const unpairedRefreshDelay = Number(
+  process.env['TERMWRIGHT_FIXTURE_UNPAIRED_REFRESH_DELAY'] ?? '100',
+);
 const coverApproveCenter = process.env['TERMWRIGHT_FIXTURE_COVER_APPROVE_CENTER'] === '1';
 const conditionStates = process.env['TERMWRIGHT_FIXTURE_CONDITIONS'] === '1';
 const duplicateSemanticKey = process.env['TERMWRIGHT_FIXTURE_DUPLICATE_KEY'] === '1';
@@ -73,11 +75,13 @@ const focusOrder = ['approve', 'reject', 'name'];
 function focusRecipe(target) {
   if (focused === target) return [];
   const key = target === 'approve' ? 'P' : target === 'reject' ? 'J' : 'N';
-  return [{
-    action: 'focus',
-    requiresFocus: false,
-    steps: [{ kind: 'press', key }],
-  }];
+  return [
+    {
+      action: 'focus',
+      requiresFocus: false,
+      steps: [{ kind: 'press', key }],
+    },
+  ];
 }
 
 function render() {
@@ -136,10 +140,18 @@ function tree() {
           ...(conditionStates ? { checked: true, selected: true, expanded: false } : {}),
         },
         actions: ['focus', 'activate'],
-        ...(!providerActionRecipes ? { inputRecipes: [
-            ...focusRecipe('approve'),
-            { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
-          ] } : {}),
+        ...(!providerActionRecipes
+          ? {
+              inputRecipes: [
+                ...focusRecipe('approve'),
+                {
+                  action: 'activate',
+                  requiresFocus: true,
+                  steps: [{ kind: 'press', key: 'Enter' }],
+                },
+              ],
+            }
+          : {}),
       },
       {
         id: 'n4',
@@ -151,19 +163,28 @@ function tree() {
           status: 'known',
           value: typed,
           sensitivity: 'public',
-          evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'fixture' },
+          evidence: {
+            source: 'application',
+            method: 'native',
+            strength: 'authoritative',
+            providerId: 'fixture',
+          },
         },
         bounds: { row: 2, column: 6, width: 20, height: 1 },
         state: !providerFocusState ? { focused: focused === 'name' } : undefined,
         actions: ['focus', 'setValue'],
-        ...(!providerActionRecipes ? { inputRecipes: [
-            ...focusRecipe('name'),
-            {
-              action: 'setValue',
-              requiresFocus: true,
-              steps: [{ kind: 'press', key: 'K' }, { kind: 'insert-action-value' }],
-            },
-          ] } : {}),
+        ...(!providerActionRecipes
+          ? {
+              inputRecipes: [
+                ...focusRecipe('name'),
+                {
+                  action: 'setValue',
+                  requiresFocus: true,
+                  steps: [{ kind: 'press', key: 'K' }, { kind: 'insert-action-value' }],
+                },
+              ],
+            }
+          : {}),
       },
       ...(probeMode === undefined
         ? []
@@ -187,20 +208,30 @@ function tree() {
         bounds: { row: 1, column: 14, width: 8, height: 1 },
         state: !providerFocusState ? { focused: focused === 'reject' } : undefined,
         actions: ['focus', 'activate'],
-        ...(!providerActionRecipes ? { inputRecipes: [
-            ...focusRecipe('reject'),
-            { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
-          ] } : {}),
+        ...(!providerActionRecipes
+          ? {
+              inputRecipes: [
+                ...focusRecipe('reject'),
+                {
+                  action: 'activate',
+                  requiresFocus: true,
+                  steps: [{ kind: 'press', key: 'Enter' }],
+                },
+              ],
+            }
+          : {}),
       },
       ...(loaderVisible
-        ? [{
-            id: 'loader',
-            parentId: 'n1',
-            role: 'progressbar',
-            name: 'Saving',
-            bounds: { row: 4, column: 0, width: 10, height: 1 },
-            state: {},
-          }]
+        ? [
+            {
+              id: 'loader',
+              parentId: 'n1',
+              role: 'progressbar',
+              name: 'Saving',
+              bounds: { row: 4, column: 0, width: 10, height: 1 },
+              state: {},
+            },
+          ]
         : []),
     ],
   };
@@ -214,17 +245,37 @@ function stripBounds(snapshot) {
 }
 
 function qualifiedSnapshot(snapshot) {
-  const evidenceFor = (kind) => ({
-    adapter: { source: 'application', method: 'declared', strength: 'authoritative', providerId: 'fixture-adapter' },
-    'viewport-clip': { source: 'driver', method: 'derived', strength: 'authoritative', providerId: 'fixture-clip' },
-    'hit-grid': { source: 'application', method: 'native', strength: 'authoritative', providerId: 'fixture-hit-grid' },
-  })[kind];
+  const evidenceFor = (kind) =>
+    ({
+      adapter: {
+        source: 'application',
+        method: 'declared',
+        strength: 'authoritative',
+        providerId: 'fixture-adapter',
+      },
+      'viewport-clip': {
+        source: 'driver',
+        method: 'derived',
+        strength: 'authoritative',
+        providerId: 'fixture-clip',
+      },
+      'hit-grid': {
+        source: 'application',
+        method: 'native',
+        strength: 'authoritative',
+        providerId: 'fixture-hit-grid',
+      },
+    })[kind];
   const known = (value, kind) => ({ status: 'known', value, evidence: evidenceFor(kind) });
   const unsupportedGeometry = {
-    status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable',
+    status: 'unsupported',
+    capability: 'intended-geometry',
+    reason: 'framework-unobservable',
   };
   const unsupportedClip = {
-    status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable',
+    status: 'unsupported',
+    capability: 'clipped-geometry',
+    reason: 'framework-unobservable',
   };
   const unsupportedHitGrid = {
     status: 'unsupported',
@@ -235,34 +286,71 @@ function qualifiedSnapshot(snapshot) {
     ...node,
     geometry: {
       displayed: known(true, 'adapter'),
-      intendedRect: bounds === undefined
-        ? committedUnknown ? { status: 'unknown', reason: 'awaiting-revision-pair' } : unsupportedGeometry
-        : known(bounds, 'adapter'),
-      visibleRect: bounds === undefined
-        ? committedUnknown ? { status: 'unknown', reason: 'awaiting-revision-pair' } : unsupportedClip
-        : known(bounds, 'viewport-clip'),
+      intendedRect:
+        bounds === undefined
+          ? committedUnknown
+            ? { status: 'unknown', reason: 'awaiting-revision-pair' }
+            : unsupportedGeometry
+          : known(bounds, 'adapter'),
+      visibleRect:
+        bounds === undefined
+          ? committedUnknown
+            ? { status: 'unknown', reason: 'awaiting-revision-pair' }
+            : unsupportedClip
+          : known(bounds, 'viewport-clip'),
     },
   }));
-  const hitGrid = withoutBounds || withoutAbsoluteBounds || probeMode !== undefined
-    ? unsupportedHitGrid
-    : known({
-        regions: snapshot.nodes
-          .filter((node) => node.id !== 'n1' && node.bounds !== undefined)
-          .flatMap((node) => {
-            if (coverApproveCenter && node.id === 'n2') {
-              return [
-                { rect: { row: node.bounds.row, column: node.bounds.column, width: 4, height: 1 }, recipientId: node.id },
-                { rect: { row: node.bounds.row, column: node.bounds.column + 5, width: node.bounds.width - 5, height: 1 }, recipientId: node.id },
-                { rect: { row: node.bounds.row, column: node.bounds.column + 4, width: 1, height: 1 }, recipientId: 'n3' },
-              ];
-            }
-            return Array.from({ length: node.bounds.height }, (_, offset) => ({
-              rect: { ...node.bounds, row: node.bounds.row + offset, height: 1 },
-              recipientId: node.id,
-            }));
-          })
-          .sort((left, right) => left.rect.row - right.rect.row || left.rect.column - right.rect.column),
-      }, 'hit-grid');
+  const hitGrid =
+    withoutBounds || withoutAbsoluteBounds || probeMode !== undefined
+      ? unsupportedHitGrid
+      : known(
+          {
+            regions: snapshot.nodes
+              .filter((node) => node.id !== 'n1' && node.bounds !== undefined)
+              .flatMap((node) => {
+                if (coverApproveCenter && node.id === 'n2') {
+                  return [
+                    {
+                      rect: {
+                        row: node.bounds.row,
+                        column: node.bounds.column,
+                        width: 4,
+                        height: 1,
+                      },
+                      recipientId: node.id,
+                    },
+                    {
+                      rect: {
+                        row: node.bounds.row,
+                        column: node.bounds.column + 5,
+                        width: node.bounds.width - 5,
+                        height: 1,
+                      },
+                      recipientId: node.id,
+                    },
+                    {
+                      rect: {
+                        row: node.bounds.row,
+                        column: node.bounds.column + 4,
+                        width: 1,
+                        height: 1,
+                      },
+                      recipientId: 'n3',
+                    },
+                  ];
+                }
+                return Array.from({ length: node.bounds.height }, (_, offset) => ({
+                  rect: { ...node.bounds, row: node.bounds.row + offset, height: 1 },
+                  recipientId: node.id,
+                }));
+              })
+              .sort(
+                (left, right) =>
+                  left.rect.row - right.rect.row || left.rect.column - right.rect.column,
+              ),
+          },
+          'hit-grid',
+        );
   return {
     ...snapshot,
     v: 2,
@@ -273,83 +361,139 @@ function qualifiedSnapshot(snapshot) {
     hitGrid,
     ...(staleProviderEvidence || providerActionRecipes || providerFocusState || providerInputModes
       ? {
-          providerEvidence: [...(providerInputModes ? [{
-            providerId: 'fixture-production-input',
-            sessionId,
-            revision,
-            status: 'available',
-            evidence: {
-              source: 'application', method: 'native', strength: 'authoritative',
-              providerId: 'fixture-production-input',
-            },
-            pointerRegions: [],
-            inputModes: {
-              // Must match what this fixture actually writes below, or the
-              // driver's VT cross-check rejects the evidence as a conflict on
-              // platforms where the modes are observable.
-              mouseTracking: !terminalMouseEnabled ? 'none' : hoverTracking ? 'any' : 'vt200',
-              mouseEncoding: terminalMouseEnabled ? 'sgr' : 'default',
-              focusReporting: 'off',
-            },
-          }] : []), ...(staleProviderEvidence ? [{
-            providerId: 'fixture-production-router',
-            sessionId,
-            // Revision 1 is valid so negotiation can freeze normally; the
-            // next application render deliberately replays revision 1.
-            revision: revision === 1 ? 1 : revision - 1,
-            status: 'available',
-            evidence: {
-              source: 'application',
-              method: 'native',
-              strength: 'authoritative',
-              providerId: 'fixture-production-router',
-            },
-            pointerRegions: [{
-              recipientId: 'n2',
-              regionBounds: {row: 1, column: 2, width: 9, height: 1},
-              spans: [{row: 1, from: 2, to: 11}],
-            }],
-            // Match the framework's complete production ownership map on the
-            // valid first frame. Only the next frame's revision is corrupt.
-            hitGrid: hitGrid.status === 'known' ? hitGrid.value : {regions: []},
-          }] : []), ...(providerActionRecipes ? [{
-            providerId: 'fixture-production-keys',
-            sessionId,
-            revision,
-            status: 'available',
-            evidence: {
-              source: 'application', method: 'native', strength: 'authoritative',
-              providerId: 'fixture-production-keys',
-            },
-            pointerRegions: [],
-            actionRecipes: [
-              { recipientId: 'n2', recipes: [
-                ...focusRecipe('approve'),
-                { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
-              ] },
-              { recipientId: 'n3', recipes: [
-                ...focusRecipe('reject'),
-                { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
-              ] },
-              { recipientId: 'n4', recipes: [
-                ...focusRecipe('name'),
-                { action: 'setValue', requiresFocus: true, steps: [
-                  { kind: 'press', key: 'K' }, { kind: 'insert-action-value' },
-                ] },
-              ] },
-            ],
-          }] : []), ...(providerFocusState ? [{
-            providerId: 'fixture-production-focus',
-            sessionId,
-            revision,
-            status: 'available',
-            evidence: {
-              source: 'application', method: 'native', strength: 'authoritative',
-              providerId: 'fixture-production-focus',
-            },
-            pointerRegions: [],
-            focusState: { status: 'focused', recipientId: focused === 'approve' ? 'n2' : focused === 'reject' ? 'n3' : 'n4' },
-          }] : [])],
+          providerEvidence: [
+            ...(providerInputModes
+              ? [
+                  {
+                    providerId: 'fixture-production-input',
+                    sessionId,
+                    revision,
+                    status: 'available',
+                    evidence: {
+                      source: 'application',
+                      method: 'native',
+                      strength: 'authoritative',
+                      providerId: 'fixture-production-input',
+                    },
+                    pointerRegions: [],
+                    inputModes: {
+                      // Must match what this fixture actually writes below, or the
+                      // driver's VT cross-check rejects the evidence as a conflict on
+                      // platforms where the modes are observable.
+                      mouseTracking: !terminalMouseEnabled
+                        ? 'none'
+                        : hoverTracking
+                          ? 'any'
+                          : 'vt200',
+                      mouseEncoding: terminalMouseEnabled ? 'sgr' : 'default',
+                      focusReporting: 'off',
+                    },
+                  },
+                ]
+              : []),
+            ...(staleProviderEvidence
+              ? [
+                  {
+                    providerId: 'fixture-production-router',
+                    sessionId,
+                    // Revision 1 is valid so negotiation can freeze normally; the
+                    // next application render deliberately replays revision 1.
+                    revision: revision === 1 ? 1 : revision - 1,
+                    status: 'available',
+                    evidence: {
+                      source: 'application',
+                      method: 'native',
+                      strength: 'authoritative',
+                      providerId: 'fixture-production-router',
+                    },
+                    pointerRegions: [
+                      {
+                        recipientId: 'n2',
+                        regionBounds: { row: 1, column: 2, width: 9, height: 1 },
+                        spans: [{ row: 1, from: 2, to: 11 }],
+                      },
+                    ],
+                    // Match the framework's complete production ownership map on the
+                    // valid first frame. Only the next frame's revision is corrupt.
+                    hitGrid: hitGrid.status === 'known' ? hitGrid.value : { regions: [] },
+                  },
+                ]
+              : []),
+            ...(providerActionRecipes
+              ? [
+                  {
+                    providerId: 'fixture-production-keys',
+                    sessionId,
+                    revision,
+                    status: 'available',
+                    evidence: {
+                      source: 'application',
+                      method: 'native',
+                      strength: 'authoritative',
+                      providerId: 'fixture-production-keys',
+                    },
+                    pointerRegions: [],
+                    actionRecipes: [
+                      {
+                        recipientId: 'n2',
+                        recipes: [
+                          ...focusRecipe('approve'),
+                          {
+                            action: 'activate',
+                            requiresFocus: true,
+                            steps: [{ kind: 'press', key: 'Enter' }],
+                          },
+                        ],
+                      },
+                      {
+                        recipientId: 'n3',
+                        recipes: [
+                          ...focusRecipe('reject'),
+                          {
+                            action: 'activate',
+                            requiresFocus: true,
+                            steps: [{ kind: 'press', key: 'Enter' }],
+                          },
+                        ],
+                      },
+                      {
+                        recipientId: 'n4',
+                        recipes: [
+                          ...focusRecipe('name'),
+                          {
+                            action: 'setValue',
+                            requiresFocus: true,
+                            steps: [{ kind: 'press', key: 'K' }, { kind: 'insert-action-value' }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ]
+              : []),
+            ...(providerFocusState
+              ? [
+                  {
+                    providerId: 'fixture-production-focus',
+                    sessionId,
+                    revision,
+                    status: 'available',
+                    evidence: {
+                      source: 'application',
+                      method: 'native',
+                      strength: 'authoritative',
+                      providerId: 'fixture-production-focus',
+                    },
+                    pointerRegions: [],
+                    focusState: {
+                      status: 'focused',
+                      recipientId:
+                        focused === 'approve' ? 'n2' : focused === 'reject' ? 'n3' : 'n4',
+                    },
+                  },
+                ]
+              : []),
+          ],
         }
       : {}),
   };
@@ -391,7 +535,9 @@ function publish() {
     // prevents frame N+1 from entering between frame N and marker N.
     await writeAndFlush(frame);
     publicationSocket.write(encodeFrame({ type: 'snapshot', snapshot }, 1024 * 1024));
-    publicationSocket.write(encodeFrame({ type: 'revision-commit', revision: publishedRevision }, 1024 * 1024));
+    publicationSocket.write(
+      encodeFrame({ type: 'revision-commit', revision: publishedRevision }, 1024 * 1024),
+    );
     const marker = encodeMarker(
       forgedMarkerProbe ? `${token}-forged` : token,
       publicationSessionId,
@@ -399,13 +545,15 @@ function publish() {
     );
     // A plain-text receipt for the marker, printed only when a test asks for
     // it. It follows the marker and therefore belongs to a later observation.
-    await writeAndFlush(`${marker}${
-      forgedMarkerProbe
-        ? `FORGED ${publishedRevision}\r\n`
-        : markProbe
-          ? `MARKED ${publishedRevision}\r\n`
-          : ''
-    }`);
+    await writeAndFlush(
+      `${marker}${
+        forgedMarkerProbe
+          ? `FORGED ${publishedRevision}\r\n`
+          : markProbe
+            ? `MARKED ${publishedRevision}\r\n`
+            : ''
+      }`,
+    );
   });
 }
 
@@ -566,7 +714,8 @@ process.stdin.on('data', (chunk) => {
     return;
   }
   if (/^\t+$/u.test(text)) {
-    for (const _tab of text) focused = focusOrder[(focusOrder.indexOf(focused) + 1) % focusOrder.length];
+    for (const _tab of text)
+      focused = focusOrder[(focusOrder.indexOf(focused) + 1) % focusOrder.length];
     lastEvent = `FOCUS ${focused}`;
     publish();
     return;
@@ -600,71 +749,97 @@ if (endpoint === undefined || token === undefined) {
   socket = connect(endpoint, () => {
     const sendHello = () =>
       socket.write(
-      encodeFrame(
-        {
-          type: 'hello',
-          protocol: 'termwright/2',
-          token,
-          adapter: { name: 'fixture', version: '0.1.0' },
-          capabilities: [
-            'tree',
-            ...((!withoutBounds || brokenGeometryGuarantee) && !withoutAbsoluteBounds ? ['intended-geometry'] : []),
-            ...(!withoutBounds && !withoutAbsoluteBounds ? ['clipped-geometry'] : []),
-            'states',
-            ...(!providerFocusState ? ['focus-state'] : []),
-            'actions',
-            ...(!providerActionRecipes ? ['action-recipes'] : []),
-            'render-revisions',
-            'logs',
-            ...(!withoutBounds && !withoutAbsoluteBounds && probeMode === undefined
-              ? ['pointer-hit-grid']
-              : []),
-          ],
-          ...(staleProviderEvidence || providerActionRecipes || providerFocusState || providerInputModes
-            ? {
-                providers: [...(providerInputModes ? [{
-                  id: 'fixture-production-input',
-                  version: '1.0.0',
-                  method: 'native',
-                  capabilities: ['terminal-input-modes'],
-                }] : []), ...(staleProviderEvidence ? [{
-                  id: 'fixture-production-router',
-                  version: '1.0.0',
-                  method: 'native',
-                  capabilities: ['pointer-regions', 'hit-test'],
-                }] : []), ...(providerActionRecipes ? [{
-                  id: 'fixture-production-keys',
-                  version: '1.0.0',
-                  method: 'native',
-                  capabilities: ['action-recipes'],
-                }] : []), ...(providerFocusState ? [{
-                  id: 'fixture-production-focus',
-                  version: '1.0.0',
-                  method: 'native',
-                  capabilities: ['focus-state'],
-                }] : [])],
-              }
-            : {}),
-          ...(probeMode === undefined && !pendingFocusFrame
-            ? {}
-            : {
-                probe: {
-                  framework: 'fixture-fw',
-                  frameworkVersion: '1.0.0',
-                  probeVersion: '0.1.0',
-                  identityKind: probeMode ?? 'stable',
-                  // 'stable-identity' would contradict a frame-local kind, and
-                  // the protocol refuses that pair on the wire.
-                  capabilities: [
-                    ...(probeMode === 'stable' || pendingFocusFrame ? ['stable-identity'] : []),
-                    ...(pendingFocusFrame ? ['frame-begin'] : []),
+        encodeFrame(
+          {
+            type: 'hello',
+            protocol: 'termwright/2',
+            token,
+            adapter: { name: 'fixture', version: '0.1.0' },
+            capabilities: [
+              'tree',
+              ...((!withoutBounds || brokenGeometryGuarantee) && !withoutAbsoluteBounds
+                ? ['intended-geometry']
+                : []),
+              ...(!withoutBounds && !withoutAbsoluteBounds ? ['clipped-geometry'] : []),
+              'states',
+              ...(!providerFocusState ? ['focus-state'] : []),
+              'actions',
+              ...(!providerActionRecipes ? ['action-recipes'] : []),
+              'render-revisions',
+              'logs',
+              ...(!withoutBounds && !withoutAbsoluteBounds && probeMode === undefined
+                ? ['pointer-hit-grid']
+                : []),
+            ],
+            ...(staleProviderEvidence ||
+            providerActionRecipes ||
+            providerFocusState ||
+            providerInputModes
+              ? {
+                  providers: [
+                    ...(providerInputModes
+                      ? [
+                          {
+                            id: 'fixture-production-input',
+                            version: '1.0.0',
+                            method: 'native',
+                            capabilities: ['terminal-input-modes'],
+                          },
+                        ]
+                      : []),
+                    ...(staleProviderEvidence
+                      ? [
+                          {
+                            id: 'fixture-production-router',
+                            version: '1.0.0',
+                            method: 'native',
+                            capabilities: ['pointer-regions', 'hit-test'],
+                          },
+                        ]
+                      : []),
+                    ...(providerActionRecipes
+                      ? [
+                          {
+                            id: 'fixture-production-keys',
+                            version: '1.0.0',
+                            method: 'native',
+                            capabilities: ['action-recipes'],
+                          },
+                        ]
+                      : []),
+                    ...(providerFocusState
+                      ? [
+                          {
+                            id: 'fixture-production-focus',
+                            version: '1.0.0',
+                            method: 'native',
+                            capabilities: ['focus-state'],
+                          },
+                        ]
+                      : []),
                   ],
-                },
-              }),
-        },
-        1024 * 1024,
-      ),
-    );
+                }
+              : {}),
+            ...(probeMode === undefined && !pendingFocusFrame
+              ? {}
+              : {
+                  probe: {
+                    framework: 'fixture-fw',
+                    frameworkVersion: '1.0.0',
+                    probeVersion: '0.1.0',
+                    identityKind: probeMode ?? 'stable',
+                    // 'stable-identity' would contradict a frame-local kind, and
+                    // the protocol refuses that pair on the wire.
+                    capabilities: [
+                      ...(probeMode === 'stable' || pendingFocusFrame ? ['stable-identity'] : []),
+                      ...(pendingFocusFrame ? ['frame-begin'] : []),
+                    ],
+                  },
+                }),
+          },
+          1024 * 1024,
+        ),
+      );
     if (helloDelay > 0) setTimeout(sendHello, helloDelay);
     else sendHello();
   });
@@ -674,11 +849,17 @@ if (endpoint === undefined || token === undefined) {
       if (message.type === 'hello-ack') {
         sessionId = message.sessionId;
         if (duplicateSemanticKey) {
-          socket.write(encodeFrame({
-            type: 'error',
-            code: 'duplicate-semantic-key',
-            message: 'duplicate SemanticKey: save',
-          }, 1024 * 1024), () => socket.end());
+          socket.write(
+            encodeFrame(
+              {
+                type: 'error',
+                code: 'duplicate-semantic-key',
+                message: 'duplicate SemanticKey: save',
+              },
+              1024 * 1024,
+            ),
+            () => socket.end(),
+          );
           return;
         }
         // Absent 'logs' means the channel was not granted: stay quiet.

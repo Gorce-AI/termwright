@@ -26,15 +26,42 @@ describe('diffSemanticSnapshots', () => {
   });
 
   it('records paint provenance changes independently of layout movement', () => {
-    const evidence = { source: 'application' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'app.paint' };
-    const before = snapshot(1, [node({
-      id: 'n1', role: 'button', name: 'Submit',
-      paintedRegion: { status: 'known', value: { regionBounds: { row: 1, column: 1, width: 2, height: 1 }, spans: [{ row: 1, from: 1, to: 3 }] }, evidence },
-    })]);
-    const after = snapshot(2, [node({
-      id: 'n1', role: 'button', name: 'Submit',
-      paintedRegion: { status: 'known', value: { regionBounds: { row: 1, column: 1, width: 1, height: 1 }, spans: [{ row: 1, from: 1, to: 2 }] }, evidence },
-    })]);
+    const evidence = {
+      source: 'application' as const,
+      method: 'native' as const,
+      strength: 'authoritative' as const,
+      providerId: 'app.paint',
+    };
+    const before = snapshot(1, [
+      node({
+        id: 'n1',
+        role: 'button',
+        name: 'Submit',
+        paintedRegion: {
+          status: 'known',
+          value: {
+            regionBounds: { row: 1, column: 1, width: 2, height: 1 },
+            spans: [{ row: 1, from: 1, to: 3 }],
+          },
+          evidence,
+        },
+      }),
+    ]);
+    const after = snapshot(2, [
+      node({
+        id: 'n1',
+        role: 'button',
+        name: 'Submit',
+        paintedRegion: {
+          status: 'known',
+          value: {
+            regionBounds: { row: 1, column: 1, width: 1, height: 1 },
+            spans: [{ row: 1, from: 1, to: 2 }],
+          },
+          evidence,
+        },
+      }),
+    ]);
     expect(diffSemanticSnapshots(before, after).changed[0]?.changes).toEqual([
       expect.objectContaining({ kind: 'painted-region', field: 'paintedRegion' }),
     ]);
@@ -54,10 +81,7 @@ describe('diffSemanticSnapshots', () => {
     const before = snapshot(1, [node({ id: 'n1', role: 'text', name: 'Loading' })]);
     const after = snapshot(2, [node({ id: 'n2', role: 'dialog', name: 'Permission' })]);
     const diff = diffSemanticSnapshots(before, after);
-    expect(diff.sentences).toEqual([
-      `dialog "Permission" appeared`,
-      `text "Loading" disappeared`,
-    ]);
+    expect(diff.sentences).toEqual([`dialog "Permission" appeared`, `text "Loading" disappeared`]);
     expect(diff.added.map((n) => n.id)).toEqual(['n2']);
     expect(diff.removed.map((n) => n.id)).toEqual(['n1']);
   });
@@ -65,11 +89,41 @@ describe('diffSemanticSnapshots', () => {
   it('describes renames and value changes', () => {
     const before = snapshot(1, [
       node({ id: 'n1', role: 'button', name: 'Submit' }),
-      node({ id: 'n2', role: 'textbox', name: 'Name', value: { status: 'known', value: '', sensitivity: 'public', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } } }),
+      node({
+        id: 'n2',
+        role: 'textbox',
+        name: 'Name',
+        value: {
+          status: 'known',
+          value: '',
+          sensitivity: 'public',
+          evidence: {
+            source: 'driver',
+            method: 'native',
+            strength: 'authoritative',
+            providerId: 'test',
+          },
+        },
+      }),
     ]);
     const after = snapshot(2, [
       node({ id: 'n1', role: 'button', name: 'Send' }),
-      node({ id: 'n2', role: 'textbox', name: 'Name', value: { status: 'known', value: 'ada', sensitivity: 'public', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } } }),
+      node({
+        id: 'n2',
+        role: 'textbox',
+        name: 'Name',
+        value: {
+          status: 'known',
+          value: 'ada',
+          sensitivity: 'public',
+          evidence: {
+            source: 'driver',
+            method: 'native',
+            strength: 'authoritative',
+            providerId: 'test',
+          },
+        },
+      }),
     ]);
     expect(diffSemanticSnapshots(before, after).sentences).toEqual([
       `button "Submit" renamed to "Send"`,
@@ -121,8 +175,9 @@ describe('diffSemanticSnapshots', () => {
     const diff = diffSemanticSnapshots(before, movedAndDisabled);
     expect(diff.sentences).toEqual([`button "Submit" state changed to disabled`]);
     expect(diff.changed[0]?.changes.map((change) => change.kind)).toEqual(['state', 'bounds']);
-    expect(diffSemanticSnapshots(before, movedAndDisabled, { includeBounds: true }).sentences)
-      .toHaveLength(2);
+    expect(
+      diffSemanticSnapshots(before, movedAndDisabled, { includeBounds: true }).sentences,
+    ).toHaveLength(2);
   });
 
   it('describes non-boolean state changes with both values', () => {
@@ -156,7 +211,34 @@ describe('diffSemanticSnapshots', () => {
   });
 });
 const visibleGeometry = (rect: { row: number; column: number; width: number; height: number }) => ({
-  displayed: { status: 'known', value: true, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test' } } as const,
-  intendedRect: { status: 'known', value: { ...rect }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test' } } as const,
-  visibleRect: { status: 'known', value: { ...rect }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test' } } as const,
+  displayed: {
+    status: 'known',
+    value: true,
+    evidence: {
+      source: 'framework',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'test',
+    },
+  } as const,
+  intendedRect: {
+    status: 'known',
+    value: { ...rect },
+    evidence: {
+      source: 'framework',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'test',
+    },
+  } as const,
+  visibleRect: {
+    status: 'known',
+    value: { ...rect },
+    evidence: {
+      source: 'framework',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'test',
+    },
+  } as const,
 });

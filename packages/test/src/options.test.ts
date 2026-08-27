@@ -68,8 +68,17 @@ describe('mergeOptions', () => {
   });
 
   it('merges timeout classes key by key, keeping the ones nobody mentioned', () => {
-    const merged = mergeOptions(config, { timeouts: { action: 1_000 } }, { timeouts: { text: 2_000 } });
-    expect(merged.timeouts).toMatchObject({ action: 1_000, text: 2_000, idle: 2_000, exit: 10_000 });
+    const merged = mergeOptions(
+      config,
+      { timeouts: { action: 1_000 } },
+      { timeouts: { text: 2_000 } },
+    );
+    expect(merged.timeouts).toMatchObject({
+      action: 1_000,
+      text: 2_000,
+      idle: 2_000,
+      exit: 10_000,
+    });
   });
 
   it('never lets the expect class reach the driver', () => {
@@ -91,7 +100,9 @@ describe('mergeOptions', () => {
   it('ignores an explicit undefined instead of erasing the layer below', () => {
     // Types forbid this, JavaScript does not: options built dynamically end up
     // with explicit undefineds, and spreading one would erase the layer below.
-    const suite = { timeouts: { action: undefined } } as unknown as Parameters<typeof mergeOptions>[1];
+    const suite = { timeouts: { action: undefined } } as unknown as Parameters<
+      typeof mergeOptions
+    >[1];
     expect(mergeOptions(config, suite, {}).timeouts.action).toBe(5_000);
   });
 });

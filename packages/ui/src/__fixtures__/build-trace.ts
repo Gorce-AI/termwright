@@ -74,17 +74,32 @@ const visibleGeometry = (rect: Rect): NodeGeometryObservations => ({
   displayed: {
     status: 'known',
     value: true,
-    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+    evidence: {
+      source: 'framework',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'ui-fixture',
+    },
   },
   intendedRect: {
     status: 'known',
     value: { ...rect },
-    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+    evidence: {
+      source: 'framework',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'ui-fixture',
+    },
   },
   visibleRect: {
     status: 'known',
     value: { ...rect },
-    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+    evidence: {
+      source: 'framework',
+      method: 'native',
+      strength: 'authoritative',
+      providerId: 'ui-fixture',
+    },
   },
 });
 
@@ -107,8 +122,20 @@ export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
     rows: 24,
     rootIds: ['d1'],
     nodes: [
-      { id: 'd1', role: 'dialog', name: 'Permission', state: { modal: true }, geometry: unknownGeometry() },
-      { id: 'b1', role: 'button', name: 'Approve', parentId: 'd1', geometry: visibleGeometry({ row: 3, column: 4, width: 9, height: 1 }) },
+      {
+        id: 'd1',
+        role: 'dialog',
+        name: 'Permission',
+        state: { modal: true },
+        geometry: unknownGeometry(),
+      },
+      {
+        id: 'b1',
+        role: 'button',
+        name: 'Approve',
+        parentId: 'd1',
+        geometry: visibleGeometry({ row: 3, column: 4, width: 9, height: 1 }),
+      },
     ],
     ...snapshotFacts,
   },
@@ -130,7 +157,9 @@ export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
  *
  * @returns the archive directory.
  */
-export async function buildFixtureTrace(options: { readonly columns?: number; readonly rows?: number } = {}): Promise<string> {
+export async function buildFixtureTrace(
+  options: { readonly columns?: number; readonly rows?: number } = {},
+): Promise<string> {
   const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-')), 'session.twtrace');
   const session = new Recorded();
   const columns = options.columns ?? 80;
@@ -217,7 +246,9 @@ export async function buildCrashedFixtureTrace(): Promise<string> {
       { timeMs: 1_100, kind: 'key', bytes: 1, preview: '\\r' },
       { timeMs: 1_150, kind: 'paste', bytes: 64 },
     ],
-    diagnosticsTail: [{ code: 'protocol-violation', detail: 'frame too large', revision: 1, timeMs: 1_300 }],
+    diagnosticsTail: [
+      { code: 'protocol-violation', detail: 'frame too large', revision: 1, timeMs: 1_300 },
+    ],
     timeMs: 1_400,
   });
   session.emit('exit', { code: null, signal: 'SIGSEGV', timeMs: 1_400 });

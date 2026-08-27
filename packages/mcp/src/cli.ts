@@ -138,7 +138,9 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
     json = args.json;
     switch (args.command) {
       case 'version':
-        io.out(json ? JSON.stringify({ name: SERVER_NAME, version: SERVER_VERSION }) : SERVER_VERSION);
+        io.out(
+          json ? JSON.stringify({ name: SERVER_NAME, version: SERVER_VERSION }) : SERVER_VERSION,
+        );
         return EXIT_CODES.ok;
       case 'help':
       case 'usage':

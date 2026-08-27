@@ -40,7 +40,10 @@ export interface ObservableRenderer {
 /** Where a finished snapshot goes. */
 export interface Publisher {
   /** Send the tree for a revision. Returns the marker to write, if any. */
-  publish(snapshot: SemanticSnapshot, metrics?: { readonly probeEvents: number }): string | undefined;
+  publish(
+    snapshot: SemanticSnapshot,
+    metrics?: { readonly probeEvents: number },
+  ): string | undefined;
 }
 
 /** Settings for {@link startSession}. */
@@ -95,7 +98,13 @@ export function probeInfo(frameworkVersion?: string): ProbeInfo {
     // capability structural or passing off document order as paint order.
     // The optional @termwright/opentui SDK publishes developer intent through
     // a Symbol.for + WeakMap channel consumed by every observation.
-    capabilities: ['stable-identity', 'intended-rect', 'visible-rect', 'paint-order', 'annotations'],
+    capabilities: [
+      'stable-identity',
+      'intended-rect',
+      'visible-rect',
+      'paint-order',
+      'annotations',
+    ],
     instrumentation: {
       highestTier: 'T3',
       semanticClass: 'A',
@@ -117,9 +126,7 @@ export function startSession(options: SessionOptions): ProbeSession {
   const sessionIdOf = (): string =>
     typeof options.sessionId === 'function' ? options.sessionId() : options.sessionId;
   const limitsOf = (): ProtocolLimits =>
-    typeof options.limits === 'function'
-      ? options.limits()
-      : options.limits ?? DEFAULT_LIMITS;
+    typeof options.limits === 'function' ? options.limits() : (options.limits ?? DEFAULT_LIMITS);
   let revision = 0;
   let frames = 0;
   let stopped = false;
@@ -128,7 +135,11 @@ export function startSession(options: SessionOptions): ProbeSession {
 
   const halt = (): void => {
     if (listenerAttached) {
-      try { renderer.off('frame', frameListener); } catch { /* do not turn teardown into an app failure */ }
+      try {
+        renderer.off('frame', frameListener);
+      } catch {
+        /* do not turn teardown into an app failure */
+      }
       listenerAttached = false;
     }
     releaseSinkFailure();
@@ -161,7 +172,9 @@ export function startSession(options: SessionOptions): ProbeSession {
       const limits = limitsOf();
       const observation = observeTree(renderer.root, { frame: frames, limits });
       if (!observation.paintOrderKnown) {
-        throw new Error('certified OpenTUI adapter lost authoritative render order for a committed frame');
+        throw new Error(
+          'certified OpenTUI adapter lost authoritative render order for a committed frame',
+        );
       }
       const qualifiedFrame = qualifyFrame(observation.frame, geometry);
       revision += 1;
@@ -199,7 +212,8 @@ export function startSession(options: SessionOptions): ProbeSession {
     }
   };
 
-  const frameListener = (event?: { readonly frameId?: number }): void => captureCommitted(event?.frameId);
+  const frameListener = (event?: { readonly frameId?: number }): void =>
+    captureCommitted(event?.frameId);
   renderer.on('frame', frameListener);
   listenerAttached = true;
   if (sink !== undefined) {
@@ -232,7 +246,9 @@ export function qualifyFrame(
       const visibleRect = geometry.visible.get(object.identity.value);
       const displayed = object.state?.displayed;
       if (displayed !== false && (intendedRect === undefined || visibleRect === undefined)) {
-        throw new Error(`OpenTUI frame ${geometry.frameId} omitted geometry for displayed object ${object.identity.value}`);
+        throw new Error(
+          `OpenTUI frame ${geometry.frameId} omitted geometry for displayed object ${object.identity.value}`,
+        );
       }
       const unobservable = object.unobservable?.filter(
         (field) => field !== 'intendedRect' && field !== 'visibleRect',
@@ -266,20 +282,36 @@ function qualifySnapshot(
       strength: 'authoritative' as const,
     });
     if (object === undefined || typeof displayed !== 'boolean') {
-      throw new Error(`certified OpenTUI runtime observation omitted display evidence for ${node.id}`);
+      throw new Error(
+        `certified OpenTUI runtime observation omitted display evidence for ${node.id}`,
+      );
     }
     return {
       ...node,
       geometry: {
         displayed: { status: 'known' as const, value: displayed, evidence: geometryEvidence() },
-        intendedRect: intended !== undefined
-          ? { status: 'known' as const, value: intended, evidence: geometryEvidence() }
-          : { status: 'absent' as const, reason: 'not-laid-out' as const, evidence: geometryEvidence() },
-        visibleRect: displayed === false
-          ? { status: 'absent' as const, reason: 'not-displayed' as const, evidence: geometryEvidence() }
-          : visible !== undefined
-            ? { status: 'known' as const, value: visible, evidence: geometryEvidence() }
-            : { status: 'absent' as const, reason: 'not-laid-out' as const, evidence: geometryEvidence() },
+        intendedRect:
+          intended !== undefined
+            ? { status: 'known' as const, value: intended, evidence: geometryEvidence() }
+            : {
+                status: 'absent' as const,
+                reason: 'not-laid-out' as const,
+                evidence: geometryEvidence(),
+              },
+        visibleRect:
+          displayed === false
+            ? {
+                status: 'absent' as const,
+                reason: 'not-displayed' as const,
+                evidence: geometryEvidence(),
+              }
+            : visible !== undefined
+              ? { status: 'known' as const, value: visible, evidence: geometryEvidence() }
+              : {
+                  status: 'absent' as const,
+                  reason: 'not-laid-out' as const,
+                  evidence: geometryEvidence(),
+                },
       },
     };
   });
@@ -287,22 +319,33 @@ function qualifySnapshot(
   if (typeof renderer.hitTest !== 'function') {
     throw new Error('certified OpenTUI renderer does not expose native hitTest');
   }
-  const regions: { rect: { row: number; column: number; width: number; height: number }; recipientId: string }[] = [];
+  const regions: {
+    rect: { row: number; column: number; width: number; height: number };
+    recipientId: string;
+  }[] = [];
   for (let row = 0; row < base.rows; row += 1) {
     let owner: string | null = null;
     let start = 0;
     for (let column = 0; column <= base.columns; column += 1) {
       const surfaceColumn = column - committed.surfaceOrigin.column;
       const surfaceRow = row - committed.surfaceOrigin.row;
-      const onSurface = surfaceColumn >= 0 && surfaceColumn < committed.surfaceColumns
-        && surfaceRow >= 0 && surfaceRow < committed.surfaceRows;
-      const hit = column < base.columns && onSurface ? renderer.hitTest(surfaceColumn, surfaceRow) : 0;
+      const onSurface =
+        surfaceColumn >= 0 &&
+        surfaceColumn < committed.surfaceColumns &&
+        surfaceRow >= 0 &&
+        surfaceRow < committed.surfaceRows;
+      const hit =
+        column < base.columns && onSurface ? renderer.hitTest(surfaceColumn, surfaceRow) : 0;
       const next = hit === 0 ? null : `n${hit}`;
       if (next !== null && !ids.has(next)) {
         throw new Error(`native OpenTUI hit grid returned unknown renderable ${hit}`);
       }
       if (next === owner) continue;
-      if (owner !== null) regions.push({ rect: { row, column: start, width: column - start, height: 1 }, recipientId: owner });
+      if (owner !== null)
+        regions.push({
+          rect: { row, column: start, width: column - start, height: 1 },
+          recipientId: owner,
+        });
       owner = next;
       start = column;
     }
@@ -316,7 +359,11 @@ function qualifySnapshot(
     ...base,
     v: 2,
     nodes,
-    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence('framework', 'instrumented', 'authoritative', 'opentui') },
+    coordinateSpace: {
+      status: 'known',
+      value: 'viewport-cells',
+      evidence: evidence('framework', 'instrumented', 'authoritative', 'opentui'),
+    },
     hitGrid,
   };
 }

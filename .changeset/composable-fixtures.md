@@ -1,7 +1,7 @@
 ---
-"@termwright/gherkin": minor
-"@termwright/test": minor
-"termwright": minor
+'@termwright/gherkin': minor
+'@termwright/test': minor
+'termwright': minor
 ---
 
 BREAKING: replace the pre-release `test.scoped()` fixture-composition API with

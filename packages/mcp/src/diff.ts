@@ -28,7 +28,10 @@ export interface SubtreeChange {
 }
 
 /** Rows present in `after` but different (or absent) in `before`. */
-export function diffRows(before: readonly string[], after: readonly string[]): readonly RowChange[] {
+export function diffRows(
+  before: readonly string[],
+  after: readonly string[],
+): readonly RowChange[] {
   const changes: RowChange[] = [];
   for (let row = 0; row < after.length; row += 1) {
     const next = after[row] ?? '';

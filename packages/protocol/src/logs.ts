@@ -197,7 +197,10 @@ export function validateLogRecord(value: unknown, limits: ProtocolLimits): LogVa
       if (type === 'number' && !Number.isFinite(attrValue)) {
         return fail('schema', `attribute "${key}" must be a finite number`);
       }
-      if (type === 'string' && Buffer.byteLength(attrValue as string, 'utf8') > limits.maxStringBytes) {
+      if (
+        type === 'string' &&
+        Buffer.byteLength(attrValue as string, 'utf8') > limits.maxStringBytes
+      ) {
         return fail('string-bytes', `attribute "${key}" exceeds the string ceiling`);
       }
     }

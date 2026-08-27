@@ -11,7 +11,11 @@ import {
   type InkSessionOptions,
 } from './session.js';
 import type { InkDomElement } from './observe.js';
-import { trackTerminal, type InkTerminalTracker, type TerminalPosition } from './terminal-tracker.js';
+import {
+  trackTerminal,
+  type InkTerminalTracker,
+  type TerminalPosition,
+} from './terminal-tracker.js';
 import { INK_VERSION } from './instrumentation.js';
 import { PACKAGE_VERSION } from './version.js';
 
@@ -24,10 +28,28 @@ function root(): InkDomElement {
   return { nodeName: 'ink-root', style: {}, childNodes: [label] };
 }
 
-function capture(tree: InkDomElement, overrides: Partial<InkFrameCapture['context']> = {}): InkFrameCapture {
-  const geometry = new Map<InkDomElement, { intended: { row: number; column: number; width: number; height: number }; visible: { row: number; column: number; width: number; height: number }; region: 'live' }>();
-  geometry.set(tree, { intended: { row: 0, column: 0, width: 20, height: 2 }, visible: { row: 0, column: 0, width: 20, height: 2 }, region: 'live' });
-  geometry.set(tree.childNodes[0] as InkDomElement, { intended: { row: 0, column: 0, width: 5, height: 1 }, visible: { row: 0, column: 0, width: 5, height: 1 }, region: 'live' });
+function capture(
+  tree: InkDomElement,
+  overrides: Partial<InkFrameCapture['context']> = {},
+): InkFrameCapture {
+  const geometry = new Map<
+    InkDomElement,
+    {
+      intended: { row: number; column: number; width: number; height: number };
+      visible: { row: number; column: number; width: number; height: number };
+      region: 'live';
+    }
+  >();
+  geometry.set(tree, {
+    intended: { row: 0, column: 0, width: 20, height: 2 },
+    visible: { row: 0, column: 0, width: 20, height: 2 },
+    region: 'live',
+  });
+  geometry.set(tree.childNodes[0] as InkDomElement, {
+    intended: { row: 0, column: 0, width: 5, height: 1 },
+    visible: { row: 0, column: 0, width: 5, height: 1 },
+    region: 'live',
+  });
   return {
     root: tree,
     staticRoots: [],
@@ -48,18 +70,26 @@ function capture(tree: InkDomElement, overrides: Partial<InkFrameCapture['contex
   };
 }
 
-function fakeTracker(initial: TerminalPosition = { row: 2, column: 0, buffer: 'normal' }): InkTerminalTracker & { set(value: TerminalPosition): void } {
+function fakeTracker(
+  initial: TerminalPosition = { row: 2, column: 0, buffer: 'normal' },
+): InkTerminalTracker & { set(value: TerminalPosition): void } {
   let position = initial;
   return {
     drain: async () => undefined,
     position: () => position,
     resize: () => undefined,
     stop: () => undefined,
-    set(value) { position = value; },
+    set(value) {
+      position = value;
+    },
   };
 }
 
-function channel(snapshots: SemanticSnapshot[], writes: string[], coalesced = { count: 0 }): ProbeChannel {
+function channel(
+  snapshots: SemanticSnapshot[],
+  writes: string[],
+  coalesced = { count: 0 },
+): ProbeChannel {
   const fake = {
     isOpen: true,
     session: { sessionId: 's1', limits: DEFAULT_LIMITS, markerEnabled: true },
@@ -67,8 +97,12 @@ function channel(snapshots: SemanticSnapshot[], writes: string[], coalesced = { 
       snapshots.push(snapshot);
       return `MARK:${snapshot.revision}`;
     },
-    recordCoalescedEvent() { coalesced.count += 1; },
-    close() { fake.isOpen = false; },
+    recordCoalescedEvent() {
+      coalesced.count += 1;
+    },
+    close() {
+      fake.isOpen = false;
+    },
   };
   void writes;
   return fake as unknown as ProbeChannel;
@@ -83,9 +117,7 @@ function stream(writes: string[]): NodeJS.WriteStream {
 
 const flushedRender = async (): Promise<void> => undefined;
 
-function createTestInkSession(
-  options: Omit<InkSessionOptions, 'writeMarker'>,
-): InkProbeSession {
+function createTestInkSession(options: Omit<InkSessionOptions, 'writeMarker'>): InkProbeSession {
   return createInkSession({
     ...options,
     writeMarker: createInkMarkerWriter(options.stdout, { certifiedHarness: true }),
@@ -106,15 +138,18 @@ function delayedStream(writes: string[]): DelayedWriteStream {
   const waiters: Array<{ count: number; resolve: () => void }> = [];
   Object.defineProperties(target, { columns: { value: 20 }, rows: { value: 8 } });
   target.write = ((chunk: unknown, encoding?: unknown, callback?: unknown): boolean => {
-    const cb: (() => void) | undefined = typeof encoding === 'function'
-      ? encoding as () => void
-      : typeof callback === 'function'
-        ? callback as () => void
-        : undefined;
+    const cb: (() => void) | undefined =
+      typeof encoding === 'function'
+        ? (encoding as () => void)
+        : typeof callback === 'function'
+          ? (callback as () => void)
+          : undefined;
     pending.push(() => {
-      writes.push(Buffer.isBuffer(chunk) || chunk instanceof Uint8Array
-        ? Buffer.from(chunk).toString()
-        : String(chunk));
+      writes.push(
+        Buffer.isBuffer(chunk) || chunk instanceof Uint8Array
+          ? Buffer.from(chunk).toString()
+          : String(chunk),
+      );
       cb?.();
     });
     for (let index = waiters.length - 1; index >= 0; index -= 1) {
@@ -132,9 +167,10 @@ function delayedStream(writes: string[]): DelayedWriteStream {
     return true;
   };
   target.pendingWrites = () => pending.length;
-  target.waitForPendingWrites = (count) => pending.length >= count
-    ? Promise.resolve()
-    : new Promise((resolve) => waiters.push({ count, resolve }));
+  target.waitForPendingWrites = (count) =>
+    pending.length >= count
+      ? Promise.resolve()
+      : new Promise((resolve) => waiters.push({ count, resolve }));
   return target;
 }
 
@@ -165,10 +201,12 @@ describe('Ink probe session', () => {
     const output = stream([]);
     Object.defineProperty(output, 'isTTY', { value: true });
 
-    await expect(createInkMarkerWriter(output, {
-      certifiedHarness: false,
-      platform: 'win32',
-    })('MARK')).rejects.toThrow('no certifiable Windows console handle');
+    await expect(
+      createInkMarkerWriter(output, {
+        certifiedHarness: false,
+        platform: 'win32',
+      })('MARK'),
+    ).rejects.toThrow('no certifiable Windows console handle');
   });
 
   it('uses the native writer for a production Windows console', async () => {
@@ -221,7 +259,9 @@ describe('Ink probe session', () => {
       writeMarker: createInkMarkerWriter(output, {
         certifiedHarness: false,
         platform: 'win32',
-        writeWindowsMarker: () => { throw new Error('native marker failed'); },
+        writeWindowsMarker: () => {
+          throw new Error('native marker failed');
+        },
       }),
       tracker: fakeTracker(),
       onGuaranteeViolation: violation,
@@ -230,7 +270,9 @@ describe('Ink probe session', () => {
     session.notifyRender();
     await session.flush();
 
-    expect(violation).toHaveBeenCalledWith(expect.objectContaining({ message: 'native marker failed' }));
+    expect(violation).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'native marker failed' }),
+    );
     expect(fakeChannel.isOpen).toBe(false);
   });
 
@@ -347,10 +389,18 @@ describe('Ink probe session', () => {
 
   it('maps Static above the live origin without disabling later geometry', async () => {
     const tree = root();
-    const staticNode = { nodeName: 'ink-text' as const, style: {}, childNodes: [{ nodeName: '#text' as const, nodeValue: 'Done' }] };
+    const staticNode = {
+      nodeName: 'ink-text' as const,
+      style: {},
+      childNodes: [{ nodeName: '#text' as const, nodeValue: 'Done' }],
+    };
     const captures = capture(tree);
     const geometry = new Map(captures.geometry);
-    geometry.set(staticNode, { intended: { row: 0, column: 0, width: 4, height: 1 }, visible: { row: 0, column: 0, width: 4, height: 1 }, region: 'static' });
+    geometry.set(staticNode, {
+      intended: { row: 0, column: 0, width: 4, height: 1 },
+      visible: { row: 0, column: 0, width: 4, height: 1 },
+      region: 'static',
+    });
     (tree.childNodes as InkDomElement[]).push(staticNode);
     const withStatic: InkFrameCapture = { ...captures, geometry, staticRows: 1 };
     const snapshots: SemanticSnapshot[] = [];
@@ -378,7 +428,12 @@ describe('Ink probe session', () => {
       const session = createTestInkSession({
         channel: channel([], []),
         resolveRoot: () => tree,
-        resolveCapture: () => mode === 'missing' ? undefined : mode === 'screen-reader' ? { ...base, screenReader: true } : base,
+        resolveCapture: () =>
+          mode === 'missing'
+            ? undefined
+            : mode === 'screen-reader'
+              ? { ...base, screenReader: true }
+              : base,
         waitForRenderFlush: flushedRender,
         stdout: stream([]),
         tracker: fakeTracker(),

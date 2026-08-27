@@ -4,7 +4,9 @@
   "private": true,
   "description": "A tview menu and form, driven end to end from TypeScript",
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "go run ./app",

@@ -290,7 +290,12 @@ export class RevisionPairing {
     }
   }
 
-  #retain<T extends { watchdog: DeferredWatchdog }>(store: Map<number, T>, revision: number, half: string, entry: T): void {
+  #retain<T extends { watchdog: DeferredWatchdog }>(
+    store: Map<number, T>,
+    revision: number,
+    half: string,
+    entry: T,
+  ): void {
     // Repeated delivery replaces the evidence for this half. Its old watchdog
     // must not later report the replacement as stale.
     store.get(revision)?.watchdog.cancel();

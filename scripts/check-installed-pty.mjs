@@ -633,9 +633,7 @@ if (checkProbeSyntax) {
   exit(syntax.status ?? 1);
 }
 if (installDirectory === undefined) {
-  console.error(
-    'usage: check-installed-pty.mjs <install-dir> [--verdict <path>]',
-  );
+  console.error('usage: check-installed-pty.mjs <install-dir> [--verdict <path>]');
   exit(1);
 }
 if (verdictFlag >= 0 && verdictPath === undefined) {
@@ -678,19 +676,10 @@ if (verdictPath !== undefined) {
     console.error('--verdict is only supported for a Windows ConPTY bundle');
     exit(1);
   }
-  const installedRequire = createRequire(
-    join(installDirectory, 'termwright-pty-certifier.cjs'),
-  );
-  const addonPath = installedRequire.resolve(
-    `@termwright/pty-win32-${arch}/termwright_pty.node`,
-  );
-  const manifestPath = join(
-    dirname(addonPath),
-    'vendor',
-    'conpty-manifest.json',
-  );
-  const sha256 = (path) =>
-    createHash('sha256').update(readFileSync(path)).digest('hex');
+  const installedRequire = createRequire(join(installDirectory, 'termwright-pty-certifier.cjs'));
+  const addonPath = installedRequire.resolve(`@termwright/pty-win32-${arch}/termwright_pty.node`);
+  const manifestPath = join(dirname(addonPath), 'vendor', 'conpty-manifest.json');
+  const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
   const runtime = installedRequire(addonPath).conPtyRuntimeInfo();
   writeFileSync(
     verdictPath,
@@ -734,6 +723,4 @@ if (verdictPath !== undefined) {
     )}\n`,
   );
 }
-console.log(
-  `the installed @termwright/pty runs a real pseudoterminal on ${platform}-${arch}`,
-);
+console.log(`the installed @termwright/pty runs a real pseudoterminal on ${platform}-${arch}`);

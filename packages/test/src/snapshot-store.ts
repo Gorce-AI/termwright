@@ -32,7 +32,11 @@ const HEADER = [
 ].join('\n');
 
 /** Path of the snapshot file backing a test file. */
-export function snapshotFilePath(testFile: string, kind: SnapshotKind, snapshotDir: string): string {
+export function snapshotFilePath(
+  testFile: string,
+  kind: SnapshotKind,
+  snapshotDir: string,
+): string {
   const dir = isAbsolute(snapshotDir) ? snapshotDir : join(dirname(testFile), snapshotDir);
   return resolve(join(dir, `${basename(testFile)}.tw-${kind}.yaml`));
 }
@@ -49,7 +53,12 @@ export function resolveUpdateMode(
 ): UpdateSnapshotsMode {
   const explicit = env['TERMWRIGHT_UPDATE_SNAPSHOTS'];
   if (explicit !== undefined && explicit.length > 0) {
-    if (explicit === 'all' || explicit === 'changed' || explicit === 'missing' || explicit === 'none') {
+    if (
+      explicit === 'all' ||
+      explicit === 'changed' ||
+      explicit === 'missing' ||
+      explicit === 'none'
+    ) {
       return explicit;
     }
     throw new TypeError(

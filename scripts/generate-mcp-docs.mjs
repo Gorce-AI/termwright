@@ -18,7 +18,10 @@ function renderDocument(document, generated, path) {
   if (start === -1 || end === -1 || end < start) {
     throw new Error(`${path}: missing or invalid MCP tool surface markers`);
   }
-  if (document.indexOf(START, start + START.length) !== -1 || document.indexOf(END, end + END.length) !== -1) {
+  if (
+    document.indexOf(START, start + START.length) !== -1 ||
+    document.indexOf(END, end + END.length) !== -1
+  ) {
     throw new Error(`${path}: MCP tool surface markers must occur exactly once`);
   }
   return `${document.slice(0, start + START.length)}\n${generated.trimEnd()}\n${document.slice(end)}`;
@@ -36,10 +39,14 @@ async function main() {
     else drifted.push(path);
   }
   if (drifted.length > 0) {
-    throw new Error(`MCP documentation drifted; run node scripts/generate-mcp-docs.mjs --write\n${drifted.join('\n')}`);
+    throw new Error(
+      `MCP documentation drifted; run node scripts/generate-mcp-docs.mjs --write\n${drifted.join('\n')}`,
+    );
   }
   process.stdout.write(
-    process.argv.includes('--write') ? `wrote ${targets.length} MCP documentation surfaces\n` : 'MCP documentation: zero drift\n',
+    process.argv.includes('--write')
+      ? `wrote ${targets.length} MCP documentation surfaces\n`
+      : 'MCP documentation: zero drift\n',
   );
 }
 

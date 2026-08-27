@@ -1,5 +1,5 @@
 ---
-"termwright": minor
+'termwright': minor
 ---
 
 Replace the testing core with a frozen Effective Session Contract, strict

@@ -84,7 +84,14 @@ describe('agent-context', () => {
   });
 
   it('publishes the exit-code taxonomy from CONTRACTS.md', () => {
-    expect(context.exitCodes).toEqual({ ok: 0, assertion: 1, usage: 2, noSession: 3, ipc: 4, internal: 5 });
+    expect(context.exitCodes).toEqual({
+      ok: 0,
+      assertion: 1,
+      usage: 2,
+      noSession: 3,
+      ipc: 4,
+      internal: 5,
+    });
   });
 
   it('serialises to JSON', () => {
@@ -105,7 +112,11 @@ describe('exit codes', () => {
 });
 
 describe('the CLI', () => {
-  function collect(): { io: { out: (t: string) => void; err: (t: string) => void }; out: string[]; err: string[] } {
+  function collect(): {
+    io: { out: (t: string) => void; err: (t: string) => void };
+    out: string[];
+    err: string[];
+  } {
     const out: string[] = [];
     const err: string[] = [];
     return { io: { out: (t) => out.push(t), err: (t) => err.push(t) }, out, err };
@@ -176,7 +187,11 @@ describe('the agent-skill package', () => {
   const files = buildAgentSkill();
 
   it('emits SKILL.md, a reference and the machine-readable context', () => {
-    expect(files.map((file) => file.path)).toEqual(['SKILL.md', 'reference.md', 'agent-context.json']);
+    expect(files.map((file) => file.path)).toEqual([
+      'SKILL.md',
+      'reference.md',
+      'agent-context.json',
+    ]);
   });
 
   it('gives SKILL.md the frontmatter a host matches on', () => {
@@ -210,7 +225,9 @@ describe('the agent-skill package', () => {
   });
 
   it('ships the same agent-context the CLI prints', () => {
-    expect(JSON.parse(files[2]?.contents ?? '{}')).toEqual(JSON.parse(JSON.stringify(buildAgentContext())));
+    expect(JSON.parse(files[2]?.contents ?? '{}')).toEqual(
+      JSON.parse(JSON.stringify(buildAgentContext())),
+    );
   });
 
   it('writes the package to a directory on request', async () => {

@@ -27,12 +27,12 @@ npm install --save-dev termwright
 ## Write a test
 
 ```ts
-import {fileURLToPath} from 'node:url';
-import {expect, test} from 'termwright/test';
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'termwright/test';
 
 const appFile = fileURLToPath(new URL('../app.js', import.meta.url));
 
-test('submits a permission request', async ({terminal}) => {
+test('submits a permission request', async ({ terminal }) => {
   const app = await terminal.launch({
     command: [process.execPath, appFile],
   });

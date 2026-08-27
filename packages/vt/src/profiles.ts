@@ -86,11 +86,12 @@ export const ITERM2_AMBIGUOUS_WIDE_PROFILE: TerminalProfile = Object.freeze({
 });
 
 /** Every built-in profile, by id. */
-export const TERMINAL_PROFILES: Readonly<Record<TerminalProfileId, TerminalProfile>> = Object.freeze({
-  default: DEFAULT_PROFILE,
-  kitty: KITTY_PROFILE,
-  'iterm2-ambiguous-wide': ITERM2_AMBIGUOUS_WIDE_PROFILE,
-});
+export const TERMINAL_PROFILES: Readonly<Record<TerminalProfileId, TerminalProfile>> =
+  Object.freeze({
+    default: DEFAULT_PROFILE,
+    kitty: KITTY_PROFILE,
+    'iterm2-ambiguous-wide': ITERM2_AMBIGUOUS_WIDE_PROFILE,
+  });
 
 /** Anything a caller may pass where a profile is expected. */
 export type TerminalProfileLike = TerminalProfileId | TerminalProfile | undefined;
@@ -107,7 +108,9 @@ export type TerminalProfileLike = TerminalProfileId | TerminalProfile | undefine
 export function resolveProfileId(id: string): TerminalProfile | undefined {
   // Own properties only: the caller's string comes from a file, and a plain
   // lookup would answer '__proto__' with Object.prototype.
-  return Object.hasOwn(TERMINAL_PROFILES, id) ? TERMINAL_PROFILES[id as TerminalProfileId] : undefined;
+  return Object.hasOwn(TERMINAL_PROFILES, id)
+    ? TERMINAL_PROFILES[id as TerminalProfileId]
+    : undefined;
 }
 
 /**

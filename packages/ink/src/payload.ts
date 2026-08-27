@@ -13,7 +13,8 @@
 import { CapacityError } from '@termwright/driver';
 
 /** A value that survives the crossing to a fixture process. */
-export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
+export type JsonValue =
+  string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 /** Props for a fixture component: a JSON object, never a function. */
 export type JsonProps = { readonly [key: string]: JsonValue };
@@ -93,7 +94,8 @@ function assertJsonValue(value: unknown, path: string, depth: number, seen: Set<
     case 'boolean':
       return;
     case 'number':
-      if (!Number.isFinite(value)) throw reject(path, `is ${String(value)}, which JSON cannot represent`);
+      if (!Number.isFinite(value))
+        throw reject(path, `is ${String(value)}, which JSON cannot represent`);
       return;
     case 'undefined':
       throw reject(path, 'is undefined; omit the key or use null');

@@ -60,7 +60,9 @@ export interface CommandDoc {
 export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
   test: {
     headline: 'run the certified Termwright host on the Vitest engine.',
-    synopsis: ['test [--runs N] [--resource-profile <name>] [--tags <expression>] [-- <vitest args>]'],
+    synopsis: [
+      'test [--runs N] [--resource-profile <name>] [--tags <expression>] [-- <vitest args>]',
+    ],
     summary: [
       'run the certified Termwright host on the exact Vitest engine.',
       'Termwright owns run identity, attempt scope, events and terminal resources;',
@@ -144,8 +146,18 @@ export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
     synopsis: ['doctor [--json]'],
     summary: ['run an environment smoke test and print actionable diagnostics.'],
   },
-  help: { headline: 'print the full help.', synopsis: ['--help, -h'], summary: ['print the full help.'], global: true },
-  version: { headline: 'print the version.', synopsis: ['--version, -v'], summary: ['print the version.'], global: true },
+  help: {
+    headline: 'print the full help.',
+    synopsis: ['--help, -h'],
+    summary: ['print the full help.'],
+    global: true,
+  },
+  version: {
+    headline: 'print the version.',
+    synopsis: ['--version, -v'],
+    summary: ['print the version.'],
+    global: true,
+  },
 };
 
 /** The commands a user invokes, in the order they are documented. */
@@ -343,7 +355,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         watch = false;
         break;
       case '--no-open':
-        if (surface === 'browser') throw usageError('--browser and --no-open cannot be used together');
+        if (surface === 'browser')
+          throw usageError('--browser and --no-open cannot be used together');
         surface = 'none';
         break;
       case '--browser':
@@ -388,13 +401,25 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (resolved === 'codegen') record = true;
 
   if (record && trace !== undefined) {
-    throw usageError('--trace and --record are different modes; pass one', 'see `termwright --help`');
+    throw usageError(
+      '--trace and --record are different modes; pass one',
+      'see `termwright --help`',
+    );
   }
   if (tags !== undefined && resolved !== 'ui' && resolved !== 'test' && resolved !== 'watch') {
-    throw usageError('--tags is only available with `termwright test`, `termwright watch`, or `termwright ui`');
+    throw usageError(
+      '--tags is only available with `termwright test`, `termwright watch`, or `termwright ui`',
+    );
   }
-  if (resourceProfile !== 'local' && resolved !== 'test' && resolved !== 'watch' && resolved !== 'ui') {
-    throw usageError('--resource-profile is only available with `termwright test`, `termwright watch`, or `termwright ui`');
+  if (
+    resourceProfile !== 'local' &&
+    resolved !== 'test' &&
+    resolved !== 'watch' &&
+    resolved !== 'ui'
+  ) {
+    throw usageError(
+      '--resource-profile is only available with `termwright test`, `termwright watch`, or `termwright ui`',
+    );
   }
   if (runs !== 1 && resolved !== 'test') {
     throw usageError('--runs is only available with `termwright test`');

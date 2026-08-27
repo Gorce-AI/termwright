@@ -111,7 +111,11 @@ export function ariaElementFor(node: SemanticNode): AriaElement {
   }
 
   // A textbox's content is its value; a progressbar's is its text.
-  if (node.value?.status === 'known' && node.value.sensitivity === 'public' && effectiveRole === 'progressbar') {
+  if (
+    node.value?.status === 'known' &&
+    node.value.sensitivity === 'public' &&
+    effectiveRole === 'progressbar'
+  ) {
     const numeric = Number.parseFloat(node.value.value);
     if (Number.isFinite(numeric)) attrs['aria-valuenow'] = String(numeric);
     else attrs['aria-valuetext'] = node.value.value;
@@ -134,8 +138,14 @@ export function ariaElementFor(node: SemanticNode): AriaElement {
  * `textbox` — render their value instead.
  */
 export function ariaTextFor(node: SemanticNode): string {
-  if (node.role === 'text') return node.value?.status === 'known' && node.value.sensitivity === 'public' ? node.value.value : node.name;
-  if (node.role === 'textbox') return node.value?.status === 'known' && node.value.sensitivity === 'public' ? node.value.value : '';
+  if (node.role === 'text')
+    return node.value?.status === 'known' && node.value.sensitivity === 'public'
+      ? node.value.value
+      : node.name;
+  if (node.role === 'textbox')
+    return node.value?.status === 'known' && node.value.sensitivity === 'public'
+      ? node.value.value
+      : '';
   return '';
 }
 

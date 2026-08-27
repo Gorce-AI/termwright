@@ -151,7 +151,8 @@ export function topLevel(
   rootId: string | undefined,
   includeRoot = true,
 ): readonly SemanticNode[] {
-  if (rootId === undefined) return snapshot.nodes.filter((node) => snapshot.rootIds.includes(node.id));
+  if (rootId === undefined)
+    return snapshot.nodes.filter((node) => snapshot.rootIds.includes(node.id));
   if (!includeRoot) return children.get(rootId) ?? [];
   return snapshot.nodes.filter((node) => node.id === rootId);
 }
@@ -181,6 +182,9 @@ function stateKeys(selection: StateSelection): readonly (keyof SemanticState)[] 
  */
 function quoteWhenNeeded(head: string): string {
   const risky =
-    /^[-?:,[\]{}#&*!|>'"%@`]/u.test(head) || /\s#/u.test(head) || /:(\s|$)/u.test(head) || /\s$/u.test(head);
+    /^[-?:,[\]{}#&*!|>'"%@`]/u.test(head) ||
+    /\s#/u.test(head) ||
+    /:(\s|$)/u.test(head) ||
+    /\s$/u.test(head);
   return risky ? `'${head.replace(/'/gu, "''")}'` : head;
 }

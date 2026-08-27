@@ -39,10 +39,7 @@ describe('grouping specs by directory', () => {
 
   it('attaches what the history knows about a file', () => {
     const facts = new Map([
-      [
-        'x/login.test.ts',
-        { file: 'x/login.test.ts', modifiedMs: 10, averageMs: 500, latest: [] },
-      ],
+      ['x/login.test.ts', { file: 'x/login.test.ts', modifiedMs: 10, averageMs: 500, latest: [] }],
     ]);
     const tree = buildSpecTree([test('a', 'x/login.test.ts')], facts);
     const file = (tree[0] as SpecDirectory).children[0] as SpecFile;

@@ -28,13 +28,36 @@ describe('diagnostic report', () => {
       connected: true,
       canRun: true,
       sessions: { [sentinel]: session },
-      executions: [{
-        caseKey: 'safe-case', runId: 'safe-run', executionId: 'safe-execution', provider: '@termwright/test', kind: 'test' as const,
-        title: sentinel, ancestors: [], tags: [], source: { file: sentinel }, status: 'failed' as const, attempt: 1, priorFailures: [], flaky: false,
-        error: sentinel, lostLogRecords: 0, sessionIds: [sentinel], nodes: [],
-      }],
+      executions: [
+        {
+          caseKey: 'safe-case',
+          runId: 'safe-run',
+          executionId: 'safe-execution',
+          provider: '@termwright/test',
+          kind: 'test' as const,
+          title: sentinel,
+          ancestors: [],
+          tags: [],
+          source: { file: sentinel },
+          status: 'failed' as const,
+          attempt: 1,
+          priorFailures: [],
+          flaky: false,
+          error: sentinel,
+          lostLogRecords: 0,
+          sessionIds: [sentinel],
+          nodes: [],
+        },
+      ],
     };
-    const serialized = JSON.stringify(buildDiagnosticReport(state, { live: true, history: true, openTrace: true }, DEFAULT_PREFERENCES, true));
+    const serialized = JSON.stringify(
+      buildDiagnosticReport(
+        state,
+        { live: true, history: true, openTrace: true },
+        DEFAULT_PREFERENCES,
+        true,
+      ),
+    );
     expect(serialized).not.toContain(sentinel);
     expect(serialized).toContain('"version":"0.1.0"');
     expect(serialized).toContain('ink@5');

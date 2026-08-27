@@ -35,7 +35,7 @@ workaround in this directory.
   what a modal does when it closes, taking the rest of the app's clicks with
   it. The refcount is not ceremony; the bug is real and it is silent.
 - **Every mouse report returns early, not just the press.** A handler that
-  recognises presses and lets everything else fall through types the *release*
+  recognises presses and lets everything else fall through types the _release_
   report into the focused text field. This one shipped in the first draft and
   was caught by the filter test.
 - **The dialog is a separate component so a component test can mount it.**
@@ -63,7 +63,7 @@ workaround in this directory.
 - **A click needs the frame to hold still.** Matchers read the tree, but a
   click aims at cell coordinates. Textual fades a modal in, so its buttons
   exist at coordinates that are still moving — `waitForQuiet()` before the
-  click. This is the one wait in these suites that is *not* about the tree, and
+  click. This is the one wait in these suites that is _not_ about the tree, and
   the reason it survives the rest of them being deleted.
 - **Two chords in one `press()` are one write, not two keystrokes.** The driver
   encodes the chords and sends them as a single write, so any program that
@@ -101,7 +101,7 @@ outside and had nothing in common.
 
 - **A real product bug, found here first.** Sessions began reporting
   `protocol-violation (malformed): limits: unrecognized key(s):
-  maxLogRecordBytes, maxLogQueue`. A new limit key had been added to
+maxLogRecordBytes, maxLogQueue`. A new limit key had been added to
   `ProtocolLimits`, and `limits` was validated with a strict schema that the
   Python and Go clients faithfully mirror — so every client built before the
   change rejected the driver's `hello-ack` and the semantic channel died

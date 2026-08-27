@@ -14,6 +14,8 @@ pnpm check:local
 `pnpm install` prepares the workspace; `check:fast` is the review loop and
 `check:local` is the complete local check. Cross-platform, native Windows and
 language-client certification remains the responsibility of the CI workflow.
+Run `pnpm format` for the repository-wide Prettier pass and `pnpm lint:fix` for
+safe ESLint fixes; both are verified by `pnpm check:fast`.
 Node 22 or 24 and pnpm 9 are required. Most integration suites need a real pseudo-terminal and
 skip themselves where none can be opened; `TERMWRIGHT_SKIP_PTY=1` skips them
 explicitly. A run where everything skipped is not a passing run.
@@ -22,13 +24,13 @@ explicitly. A run where everything skipped is not a passing run.
 
 Some interfaces are normative, and each has exactly one owner file:
 
-| Contract | Normative location |
-|---|---|
-| Semantic wire protocol | `packages/protocol/src/*.ts` |
-| Driver public API | `packages/driver/src/api.ts` |
-| Trace archive format | `CONTRACTS.md` §Trace |
-| UI ↔ runner event protocol | `CONTRACTS.md` §UI events |
-| MCP tool surface | `CONTRACTS.md` §MCP |
+| Contract                      | Normative location             |
+| ----------------------------- | ------------------------------ |
+| Semantic wire protocol        | `packages/protocol/src/*.ts`   |
+| Driver public API             | `packages/driver/src/api.ts`   |
+| Trace archive format          | `CONTRACTS.md` §Trace          |
+| UI ↔ runner event protocol    | `CONTRACTS.md` §UI events      |
+| MCP tool surface              | `CONTRACTS.md` §MCP            |
 | Semantic YAML snapshot format | `CONTRACTS.md` §YAML snapshots |
 
 Changing one means: **update the normative file first**, note the change in
@@ -141,7 +143,7 @@ read:
 
 The method, in order:
 
-1. list what the READMEs and docs *promise a user can do*;
+1. list what the READMEs and docs _promise a user can do_;
 2. for each promise, run the command a user would run;
 3. classify: **reachable**, **library-only on purpose** (with a link to where
    that is documented), or **gap** (with a suggested command or flag);

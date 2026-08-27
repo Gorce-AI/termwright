@@ -116,7 +116,10 @@ function matchNode(
   state: { budget: number },
 ): NodeResult {
   if (pattern.role !== '*' && pattern.role !== node.role) {
-    return { ok: false, reason: `role is ${JSON.stringify(node.role)}, expected ${JSON.stringify(pattern.role)}` };
+    return {
+      ok: false,
+      reason: `role is ${JSON.stringify(node.role)}, expected ${JSON.stringify(pattern.role)}`,
+    };
   }
   if (pattern.name !== undefined) {
     const name = normalizeName(node.name);
@@ -146,7 +149,10 @@ function matchNode(
   const mismatch = nested.mismatch;
   return {
     ok: false,
-    reason: mismatch === undefined ? 'children do not match' : `children do not match: ${mismatch.reason}`,
+    reason:
+      mismatch === undefined
+        ? 'children do not match'
+        : `children do not match: ${mismatch.reason}`,
     ...(mismatch === undefined ? {} : { nested: mismatch }),
   };
 }
@@ -159,7 +165,9 @@ function matchFlag(flag: FlagAssertion, state: SemanticState | undefined): strin
       : `flag [!${flag.key}] failed: the node is ${flag.key}`;
   }
   if (flag.value === undefined) {
-    return actual === true ? undefined : `flag [${flag.key}] is not set (actual: ${format(actual)})`;
+    return actual === true
+      ? undefined
+      : `flag [${flag.key}] is not set (actual: ${format(actual)})`;
   }
   return String(actual) === flag.value
     ? undefined
@@ -185,7 +193,9 @@ function diagnose(
     let best: NodeFailure | undefined;
     let matched = false;
     for (const node of nodes) {
-      const result = matchNode(pattern, node, children, trail, { budget: Math.max(state.budget, 1_000) });
+      const result = matchNode(pattern, node, children, trail, {
+        budget: Math.max(state.budget, 1_000),
+      });
       if (result.ok) {
         matched = true;
         break;

@@ -5,8 +5,14 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: [
-      { find: /^@termwright\/driver\/experimental$/u, replacement: fileURLToPath(new URL('../driver/src/experimental.ts', import.meta.url)) },
-      { find: /^@termwright\/driver$/u, replacement: fileURLToPath(new URL('../driver/src/index.ts', import.meta.url)) },
+      {
+        find: /^@termwright\/driver\/experimental$/u,
+        replacement: fileURLToPath(new URL('../driver/src/experimental.ts', import.meta.url)),
+      },
+      {
+        find: /^@termwright\/driver$/u,
+        replacement: fileURLToPath(new URL('../driver/src/index.ts', import.meta.url)),
+      },
     ],
   },
   test: {

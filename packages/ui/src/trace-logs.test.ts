@@ -84,7 +84,10 @@ describe('readTraceLogs', () => {
 
   it('reports what the writer evicted as missing, not as all there is', async () => {
     const logs = await readTraceLogs(
-      readerWith([record()], { dropped: 42, sources: [{ label: 'app.log', path: '/var/log/app.log' }] }),
+      readerWith([record()], {
+        dropped: 42,
+        sources: [{ label: 'app.log', path: '/var/log/app.log' }],
+      }),
     );
     expect(logs.dropped).toBe(42);
     expect(logs.truncated).toBe(true);
@@ -93,7 +96,9 @@ describe('readTraceLogs', () => {
 
   it('carries the writer’s per-level counts, ignoring levels it does not know', async () => {
     const logs = await readTraceLogs(
-      readerWith([record()], { levels: { error: 2, warn: 1, trace: 0, critical: 9, info: 'lots' } }),
+      readerWith([record()], {
+        levels: { error: 2, warn: 1, trace: 0, critical: 9, info: 'lots' },
+      }),
     );
     expect(logs.levels).toEqual({ error: 2, warn: 1 });
   });
@@ -107,7 +112,9 @@ describe('readTraceLogs', () => {
   it('returns a window of the size asked for, and says what is outside it', async () => {
     const many = Array.from({ length: 50 }, (_, index) => record({ castOffset: index * 10 }));
     const latest = await readTraceLogs(readerWith(many), { limit: 10 });
-    expect(latest.records.map((entry) => entry.t)).toEqual([400, 410, 420, 430, 440, 450, 460, 470, 480, 490]);
+    expect(latest.records.map((entry) => entry.t)).toEqual([
+      400, 410, 420, 430, 440, 450, 460, 470, 480, 490,
+    ]);
     expect(latest.hasMoreBefore).toBe(true);
     expect(latest.hasMoreAfter).toBe(false);
     expect(latest.total).toBe(50);
@@ -158,7 +165,9 @@ describe('readTraceLogs', () => {
   });
 
   it('keeps what it read when the stream dies mid-file', async () => {
-    const logs = await readTraceLogs(readerWith([record(), record({ message: 'second' })], { throwAfter: 1 }));
+    const logs = await readTraceLogs(
+      readerWith([record(), record({ message: 'second' })], { throwAfter: 1 }),
+    );
     expect(logs.records.map((entry) => entry.message)).toEqual(['listening']);
     expect(logs.truncated).toBe(true);
     expect(logs.available).toBe(true);

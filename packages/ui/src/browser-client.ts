@@ -62,17 +62,23 @@ export class RunnerClient implements DataSource {
   #reconnect = false;
   #reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   #activeRunId: string | undefined;
-  readonly #inspections = new Map<string, {
-    readonly resolve: (results: readonly UiActionability[]) => void;
-    readonly reject: (error: Error) => void;
-    readonly timer: ReturnType<typeof setTimeout>;
-  }>();
-  readonly #controls = new Map<string, {
-    readonly control: 'input';
-    readonly resolve: () => void;
-    readonly reject: (error: Error) => void;
-    readonly timer: ReturnType<typeof setTimeout>;
-  }>();
+  readonly #inspections = new Map<
+    string,
+    {
+      readonly resolve: (results: readonly UiActionability[]) => void;
+      readonly reject: (error: Error) => void;
+      readonly timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  readonly #controls = new Map<
+    string,
+    {
+      readonly control: 'input';
+      readonly resolve: () => void;
+      readonly reject: (error: Error) => void;
+      readonly timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   readonly #inputQueues = new Map<string, Promise<void>>();
 
   constructor(token: string = new URLSearchParams(location.search).get('token') ?? '') {
@@ -80,7 +86,10 @@ export class RunnerClient implements DataSource {
   }
 
   /** Opens the socket and reconnects when the server restarts. */
-  connect(onMessage: (message: ServerMessage) => void, onStatus: (connected: boolean) => void): void {
+  connect(
+    onMessage: (message: ServerMessage) => void,
+    onStatus: (connected: boolean) => void,
+  ): void {
     this.#onMessage = onMessage;
     this.#onStatus = onStatus;
     this.#reconnect = true;
@@ -134,15 +143,26 @@ export class RunnerClient implements DataSource {
           clearTimeout(pending.timer);
           this.#controls.delete(message.requestId);
           if (message.control !== pending.control) {
-            pending.reject(new RunnerControlError('protocol', `Runner control response mismatch: expected ${pending.control}, received ${message.control}`));
+            pending.reject(
+              new RunnerControlError(
+                'protocol',
+                `Runner control response mismatch: expected ${pending.control}, received ${message.control}`,
+              ),
+            );
           } else if (message.ok) {
             pending.resolve();
           } else {
-            pending.reject(new RunnerControlError('rejected', message.error ?? `${message.control} failed`));
+            pending.reject(
+              new RunnerControlError('rejected', message.error ?? `${message.control} failed`),
+            );
           }
           return;
         }
-        if (message.type === 'run-end' || message.type === 'run-cancelled' || message.type === 'run-infrastructure-failed') {
+        if (
+          message.type === 'run-end' ||
+          message.type === 'run-cancelled' ||
+          message.type === 'run-infrastructure-failed'
+        ) {
           this.#activeRunId = undefined;
         }
         this.#onMessage(message);
@@ -155,11 +175,17 @@ export class RunnerClient implements DataSource {
       if (this.#socket !== socket) return;
       this.#socket = undefined;
       this.#onStatus(false);
-      this.#rejectPending(new RunnerControlError('disconnected', 'the Runner disconnected before acknowledging the request'));
-      if (this.#reconnect) this.#reconnectTimer = setTimeout(() => {
-        this.#reconnectTimer = undefined;
-        if (this.#reconnect && this.#socket === undefined) this.#open();
-      }, 1_000);
+      this.#rejectPending(
+        new RunnerControlError(
+          'disconnected',
+          'the Runner disconnected before acknowledging the request',
+        ),
+      );
+      if (this.#reconnect)
+        this.#reconnectTimer = setTimeout(() => {
+          this.#reconnectTimer = undefined;
+          if (this.#reconnect && this.#socket === undefined) this.#open();
+        }, 1_000);
     });
   }
 
@@ -176,14 +202,16 @@ export class RunnerClient implements DataSource {
    */
   sendInput(sessionId: string, data: string): Promise<void> {
     const previous = this.#inputQueues.get(sessionId) ?? Promise.resolve();
-    const delivery = previous.catch((error: unknown) => {
-      // A negative ACK is a definitive boundary for one rejected operation;
-      // later queued bytes are still ordered and safe to attempt. A timeout,
-      // disconnect or protocol mismatch leaves the write outcome unknown, so
-      // the queue fails closed instead of possibly duplicating input.
-      if (error instanceof RunnerControlError && error.kind === 'rejected') return;
-      throw error;
-    }).then(() => this.#sendInput(sessionId, data));
+    const delivery = previous
+      .catch((error: unknown) => {
+        // A negative ACK is a definitive boundary for one rejected operation;
+        // later queued bytes are still ordered and safe to attempt. A timeout,
+        // disconnect or protocol mismatch leaves the write outcome unknown, so
+        // the queue fails closed instead of possibly duplicating input.
+        if (error instanceof RunnerControlError && error.kind === 'rejected') return;
+        throw error;
+      })
+      .then(() => this.#sendInput(sessionId, data));
     this.#inputQueues.set(sessionId, delivery);
     void delivery.then(
       () => {
@@ -210,13 +238,15 @@ export class RunnerClient implements DataSource {
       }, 5_000);
       this.#controls.set(requestId, { control: 'input', resolve, reject, timer });
       try {
-        socket.send(encodeMessage({
-          v: 1,
-          type: 'input',
-          sessionId,
-          dataB64: toBase64(new TextEncoder().encode(data)),
-          requestId,
-        }));
+        socket.send(
+          encodeMessage({
+            v: 1,
+            type: 'input',
+            sessionId,
+            dataB64: toBase64(new TextEncoder().encode(data)),
+            requestId,
+          }),
+        );
       } catch (error) {
         clearTimeout(timer);
         this.#controls.delete(requestId);
@@ -269,8 +299,7 @@ export class RunnerClient implements DataSource {
     const params = Object.entries({
       ...query,
       ...(this.#archivePath === undefined ? {} : { archive: this.#archivePath }),
-    })
-      .filter(([, value]) => value !== undefined)
+    }).filter(([, value]) => value !== undefined);
     const search = new URLSearchParams(params.map(([key, value]) => [key, String(value)]));
     return this.#get<TraceLogs>(`/api/trace/logs${search.size === 0 ? '' : `?${search}`}`);
   }
@@ -349,8 +378,14 @@ export class RunnerClient implements DataSource {
   }
 
   /** Starts recording a program in this panel. */
-  async startRecording(command: readonly string[], outFile?: string): Promise<{ sessionId: string }> {
-    return this.#post('/api/record/start', { command, ...(outFile === undefined ? {} : { outFile }) });
+  async startRecording(
+    command: readonly string[],
+    outFile?: string,
+  ): Promise<{ sessionId: string }> {
+    return this.#post('/api/record/start', {
+      command,
+      ...(outFile === undefined ? {} : { outFile }),
+    });
   }
 
   /** Stops recording and returns the test that was written. */
@@ -363,11 +398,17 @@ export class RunnerClient implements DataSource {
     return this.#post('/api/record/discard', {});
   }
 
-  async recordAction(kind: 'click' | 'assert-visible', nodeId: string): Promise<{ selector: GeneratedSelector; source: string }> {
+  async recordAction(
+    kind: 'click' | 'assert-visible',
+    nodeId: string,
+  ): Promise<{ selector: GeneratedSelector; source: string }> {
     return this.#post('/api/record/action', { kind, nodeId });
   }
 
-  async recordAssert(kind: 'snapshot' | 'text' | 'wait-text', text?: string): Promise<{ source: string }> {
+  async recordAssert(
+    kind: 'snapshot' | 'text' | 'wait-text',
+    text?: string,
+  ): Promise<{ source: string }> {
     return this.#post('/api/record/assert', { kind, ...(text === undefined ? {} : { text }) });
   }
 
@@ -389,9 +430,12 @@ export class RunnerClient implements DataSource {
     const response = await fetch(url);
     const parsed: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const detail = typeof parsed === 'object' && parsed !== null && typeof (parsed as { error?: unknown }).error === 'string'
-        ? (parsed as { error: string }).error
-        : String(response.status);
+      const detail =
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        typeof (parsed as { error?: unknown }).error === 'string'
+          ? (parsed as { error: string }).error
+          : String(response.status);
       throw new Error(`${path}: ${detail}`);
     }
     return parsed as T;

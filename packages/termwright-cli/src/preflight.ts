@@ -28,7 +28,9 @@ export class TermwrightPreflightError extends Error {
   readonly code = 'TW_HOST_PREFLIGHT';
 
   constructor(readonly issues: readonly string[]) {
-    super(`Termwright native host preflight failed:\n${issues.map((issue) => `- ${issue}`).join('\n')}`);
+    super(
+      `Termwright native host preflight failed:\n${issues.map((issue) => `- ${issue}`).join('\n')}`,
+    );
     this.name = 'TermwrightPreflightError';
   }
 }
@@ -60,16 +62,17 @@ export interface TermwrightPreflightDeps {
 
 const DEFAULT_DEPS: TermwrightPreflightDeps = {
   statfs: (path) => nodeStatfs(path, { bigint: true }),
-  execFile: (executable, arguments_, options) => new Promise((resolve, reject) => {
-    nodeExecFile(executable, [...arguments_], options, (error, stdout, stderr) => {
-      if (error !== null) {
-        Object.assign(error, { stdout, stderr });
-        reject(error);
-        return;
-      }
-      resolve({ stdout, stderr });
-    });
-  }),
+  execFile: (executable, arguments_, options) =>
+    new Promise((resolve, reject) => {
+      nodeExecFile(executable, [...arguments_], options, (error, stdout, stderr) => {
+        if (error !== null) {
+          Object.assign(error, { stdout, stderr });
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr });
+      });
+    }),
 };
 
 /**
@@ -93,7 +96,9 @@ export async function preflightTestHost(
     checkDisk(input.runsDir, minimum, deps),
     Promise.all(requirements.map((requirement) => checkToolchain(requirement, input.cwd, deps))),
   ]);
-  const issues = [diskIssue, ...toolchainIssues].filter((issue): issue is string => issue !== undefined);
+  const issues = [diskIssue, ...toolchainIssues].filter(
+    (issue): issue is string => issue !== undefined,
+  );
   if (issues.length > 0) throw new TermwrightPreflightError(Object.freeze(issues));
 }
 
@@ -107,8 +112,10 @@ async function checkDisk(
     const { path, space } = await statNearestExistingFileSystem(runsDir, deps);
     const available = space.bavail * space.bsize;
     if (available >= minimum) return undefined;
-    return `insufficient free disk space for ${runsDir}: ${formatBytes(available)} available on ${path}, ` +
-      `${formatBytes(minimum)} required`;
+    return (
+      `insufficient free disk space for ${runsDir}: ${formatBytes(available)} available on ${path}, ` +
+      `${formatBytes(minimum)} required`
+    );
   } catch (error) {
     return `could not inspect free disk space for ${runsDir}: ${errorDetail(error)}`;
   }
@@ -136,7 +143,8 @@ async function checkToolchain(
   deps: TermwrightPreflightDeps,
 ): Promise<string | undefined> {
   if (requirement.name.trim() === '') return 'required toolchain has an empty name';
-  if (requirement.commands.length === 0) return `required toolchain "${requirement.name}" declares no probe commands`;
+  if (requirement.commands.length === 0)
+    return `required toolchain "${requirement.name}" declares no probe commands`;
   const failures: string[] = [];
   for (const [executable, ...arguments_] of requirement.commands) {
     if (executable === '') {
@@ -160,13 +168,18 @@ async function checkToolchain(
 }
 
 function hasCode(error: unknown, code: string): boolean {
-  return typeof error === 'object' && error !== null && (error as NodeJS.ErrnoException).code === code;
+  return (
+    typeof error === 'object' && error !== null && (error as NodeJS.ErrnoException).code === code
+  );
 }
 
 function errorDetail(error: unknown): string {
   if (typeof error !== 'object' || error === null) return String(error);
   const record = error as NodeJS.ErrnoException & { stderr?: unknown; killed?: unknown };
-  const stderr = typeof record.stderr === 'string' ? record.stderr.trim().split(/\r?\n/u).slice(-2).join(' ') : '';
+  const stderr =
+    typeof record.stderr === 'string'
+      ? record.stderr.trim().split(/\r?\n/u).slice(-2).join(' ')
+      : '';
   if (stderr !== '') return stderr;
   if (record.killed === true) return 'probe timed out';
   return record.code === undefined ? record.message : `${record.code}: ${record.message}`;

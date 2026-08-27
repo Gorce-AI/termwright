@@ -70,7 +70,9 @@ export function createLinkResolver(terminal: Terminal): LinkResolver {
     try {
       const data = service.getLinkData(urlId);
       if (data?.uri !== undefined && data.uri.length > 0) {
-        link = Object.freeze(data.id === undefined ? { uri: data.uri } : { uri: data.uri, id: data.id });
+        link = Object.freeze(
+          data.id === undefined ? { uri: data.uri } : { uri: data.uri, id: data.id },
+        );
       }
     } catch {
       link = null;

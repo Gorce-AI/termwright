@@ -32,8 +32,12 @@ export interface QualityCheckpointReady {
   readonly processPids: readonly number[];
 }
 
-export declare function createQualityCheckpoint(expectedSessions: number): Promise<QualityCheckpoint>;
-export declare function qualityCheckpointEnvironment(checkpoint: QualityCheckpoint): Readonly<Record<string, string>>;
+export declare function createQualityCheckpoint(
+  expectedSessions: number,
+): Promise<QualityCheckpoint>;
+export declare function qualityCheckpointEnvironment(
+  checkpoint: QualityCheckpoint,
+): Readonly<Record<string, string>>;
 export declare function qualityCheckpointIsConfigured(
   env?: Readonly<Record<string, string | undefined>>,
 ): boolean;
@@ -50,7 +54,9 @@ export declare function waitForQualityReady(
 ): Promise<QualityCheckpointReady>;
 export declare function publishQualityTerminal(
   checkpoint: QualityCheckpoint,
-  outcome: Readonly<{ status: 'ok'; processCount: number }> | Readonly<{ status: 'failure'; message: string }>,
+  outcome:
+    | Readonly<{ status: 'ok'; processCount: number }>
+    | Readonly<{ status: 'failure'; message: string }>,
 ): Promise<void>;
 export declare function waitForQualityTerminal(
   checkpoint: QualityCheckpoint,

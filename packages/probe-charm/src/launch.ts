@@ -32,11 +32,7 @@ import {
   type CopyKeyInput,
   type GoToolExecUnit,
 } from '@termwright/probe-go';
-import {
-  detectCharmFlavour,
-  type CharmFlavour,
-  type CharmMajor,
-} from './detect.js';
+import { detectCharmFlavour, type CharmFlavour, type CharmMajor } from './detect.js';
 
 const run = promisify(execFile);
 
@@ -115,9 +111,7 @@ interface PreparedCopy {
  * version, and writes an external workspace for the remaining redirects. It
  * does not build or launch the application or write inside `moduleDir`.
  */
-export async function prepareInstrumentedBuild(
-  options: PrepareOptions,
-): Promise<PreparedBuild> {
+export async function prepareInstrumentedBuild(options: PrepareOptions): Promise<PreparedBuild> {
   const env = options.env ?? process.env;
   assertNoVendorMode(env);
 
@@ -147,28 +141,27 @@ export async function prepareInstrumentedBuild(
     options.workspaceFile === undefined
       ? await defaultWorkspaceFile({ moduleDir: options.moduleDir, inherited, replaces }, env)
       : resolve(options.workspaceFile);
-  const workspaceFile = await writeWorkspace(
-    requestedWorkspace,
-    {
-      moduleDir: options.moduleDir,
-      inherited,
-      suppliedUses: (await modulePath(options.moduleDir, env)) === CLIENT_MODULE
+  const workspaceFile = await writeWorkspace(requestedWorkspace, {
+    moduleDir: options.moduleDir,
+    inherited,
+    suppliedUses:
+      (await modulePath(options.moduleDir, env)) === CLIENT_MODULE
         ? []
         : [{ dir: clientDir, module: CLIENT_MODULE }],
-      replaces,
-    },
-  );
+    replaces,
+  });
   const buildEnv = { ...env, GOWORK: workspaceFile };
-  const bubblesToolExec = bubblesVersion === undefined
-    ? null
-    : await prepareBubblesToolExec({
-        moduleDir: options.moduleDir,
-        module: bubblesModule,
-        version: bubblesVersion,
-        patchSetDir: requireBubblesUnitProfile(flavour.major, bubblesModule),
-        outputDir: join(dirname(workspaceFile), 'bubbles-toolexec'),
-        env: buildEnv,
-      });
+  const bubblesToolExec =
+    bubblesVersion === undefined
+      ? null
+      : await prepareBubblesToolExec({
+          moduleDir: options.moduleDir,
+          module: bubblesModule,
+          version: bubblesVersion,
+          patchSetDir: requireBubblesUnitProfile(flavour.major, bubblesModule),
+          outputDir: join(dirname(workspaceFile), 'bubbles-toolexec'),
+          env: buildEnv,
+        });
 
   return {
     flavour,
@@ -206,15 +199,17 @@ async function prepareBubblesToolExec(options: {
       `the Bubbles manifest for ${options.module} ${options.version} must contain only add-only units`,
     );
   }
-  const units: GoToolExecUnit[] = await Promise.all(manifest.added.map(async (added) => {
-    const packageDir = dirname(added.path).replaceAll('\\', '/');
-    return {
-      packagePath: packageDir === '.' ? options.module : `${options.module}/${packageDir}`,
-      targetFile: 'zz_termwright_probe.go',
-      source: await readFile(join(options.patchSetDir, added.source), 'utf8'),
-      sourceDigest: added.sha256,
-    };
-  }));
+  const units: GoToolExecUnit[] = await Promise.all(
+    manifest.added.map(async (added) => {
+      const packageDir = dirname(added.path).replaceAll('\\', '/');
+      return {
+        packagePath: packageDir === '.' ? options.module : `${options.module}/${packageDir}`,
+        targetFile: 'zz_termwright_probe.go',
+        source: await readFile(join(options.patchSetDir, added.source), 'utf8'),
+        sourceDigest: added.sha256,
+      };
+    }),
+  );
   const prepared = await prepareGoToolExec({
     moduleDir: options.moduleDir,
     outputDir: options.outputDir,

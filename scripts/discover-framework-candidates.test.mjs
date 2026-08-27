@@ -150,7 +150,11 @@ describe('framework candidate discovery', () => {
         ],
       },
     });
-    expect(result.candidates.map((entry) => entry.id)).toEqual(['older-backlog@2.0.1', 'newer-stream@2.1.0', 'older-backlog@2.0.2']);
+    expect(result.candidates.map((entry) => entry.id)).toEqual([
+      'older-backlog@2.0.1',
+      'newer-stream@2.1.0',
+      'older-backlog@2.0.2',
+    ]);
     expect(result.totalPending).toBe(4);
     expect(result.backlog).toBe(1);
 
@@ -188,7 +192,9 @@ describe('framework candidate discovery', () => {
         ],
       },
     });
-    expect(permuted.candidates.map((entry) => entry.id)).toEqual(result.candidates.map((entry) => entry.id));
+    expect(permuted.candidates.map((entry) => entry.id)).toEqual(
+      result.candidates.map((entry) => entry.id),
+    );
   });
 
   it('applies an exact stream filter and an independent bounded dispatch cap', async () => {
@@ -347,9 +353,16 @@ describe('framework candidate discovery', () => {
   });
 
   it('keeps the scheduled default large enough to visit every configured stream', async () => {
-    const repositoryConfig = JSON.parse(await readFile(new URL('../compatibility/upstream-patches.json', import.meta.url), 'utf8'));
-    const workflow = await readFile(new URL('../.github/workflows/upstream-candidates.yml', import.meta.url), 'utf8');
-    expect(repositoryConfig.maxCandidatesPerRun).toBeGreaterThanOrEqual(repositoryConfig.streams.length);
+    const repositoryConfig = JSON.parse(
+      await readFile(new URL('../compatibility/upstream-patches.json', import.meta.url), 'utf8'),
+    );
+    const workflow = await readFile(
+      new URL('../.github/workflows/upstream-candidates.yml', import.meta.url),
+      'utf8',
+    );
+    expect(repositoryConfig.maxCandidatesPerRun).toBeGreaterThanOrEqual(
+      repositoryConfig.streams.length,
+    );
     expect(workflow).toContain(`default: ${repositoryConfig.maxCandidatesPerRun}`);
     expect(workflow).toContain(`inputs.maximum || '${repositoryConfig.maxCandidatesPerRun}'`);
     expect(workflow).toContain("STREAM: ${{ inputs.stream || '' }}");
@@ -431,7 +444,10 @@ describe('framework candidate discovery', () => {
     expect(changedSource.candidates[0].candidateDigest).not.toBe(candidate.candidateDigest);
 
     await mkdir(join(directory, 'patches/example/2.0.1'), { recursive: true });
-    await writeFile(join(directory, 'patches/example/2.0.1/manifest.json'), '{"framework":"example"}\n');
+    await writeFile(
+      join(directory, 'patches/example/2.0.1/manifest.json'),
+      '{"framework":"example"}\n',
+    );
     const preparedPatch = await selectCandidates({
       rootDir: directory,
       config,
@@ -542,7 +558,16 @@ describe('framework candidate discovery', () => {
       },
     };
     const lightweightSource = Object.fromEntries(
-      Object.entries(npmSource).filter(([key]) => !['tarballSha256', 'dependencyRoots', 'dependencyClosure', 'closureDigest', 'closureComplete'].includes(key)),
+      Object.entries(npmSource).filter(
+        ([key]) =>
+          ![
+            'tarballSha256',
+            'dependencyRoots',
+            'dependencyClosure',
+            'closureDigest',
+            'closureComplete',
+          ].includes(key),
+      ),
     );
     const changedClosure = {
       dependencyRoots: [
@@ -645,7 +670,10 @@ describe('framework candidate discovery', () => {
   it('marks an exact prepared patch and content-addresses its manifest', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
     await mkdir(join(directory, 'patches/example/2.0.1'), { recursive: true });
-    await writeFile(join(directory, 'patches/example/2.0.1/manifest.json'), '{"framework":"example"}\n');
+    await writeFile(
+      join(directory, 'patches/example/2.0.1/manifest.json'),
+      '{"framework":"example"}\n',
+    );
     const result = await selectCandidates({
       rootDir: directory,
       config,
@@ -702,11 +730,15 @@ describe('framework candidate discovery', () => {
         Zip: '/cache/framework.zip',
       }),
     });
-    expect(() => recoverGoDownloadFailure('example.invalid/framework@v2.0.9', failure)).toThrow(failure);
+    expect(() => recoverGoDownloadFailure('example.invalid/framework@v2.0.9', failure)).toThrow(
+      failure,
+    );
   });
 
   it('forces local toolchain selection over inherited or caller-provided auto mode', () => {
-    expect(trustedGoEnvironment({ GOTOOLCHAIN: 'auto', GOWORK: 'off' }, { GOTOOLCHAIN: 'auto' })).toMatchObject({ GOTOOLCHAIN: 'local', GOWORK: 'off' });
+    expect(
+      trustedGoEnvironment({ GOTOOLCHAIN: 'auto', GOWORK: 'off' }, { GOTOOLCHAIN: 'auto' }),
+    ).toMatchObject({ GOTOOLCHAIN: 'local', GOWORK: 'off' });
   });
 
   it('discovers hook integrations without inventing a patch requirement', async () => {
@@ -776,8 +808,14 @@ describe('framework candidate discovery', () => {
   });
 
   it('keeps the repository hook strategies explicit and framework-specific', async () => {
-    const config = JSON.parse(await readFile(new URL('../compatibility/upstream-patches.json', import.meta.url), 'utf8'));
-    const strategies = Object.fromEntries(config.streams.filter((stream) => stream.mode === 'hook').map((stream) => [stream.frameworkId, stream.hookStrategy]));
+    const config = JSON.parse(
+      await readFile(new URL('../compatibility/upstream-patches.json', import.meta.url), 'utf8'),
+    );
+    const strategies = Object.fromEntries(
+      config.streams
+        .filter((stream) => stream.mode === 'hook')
+        .map((stream) => [stream.frameworkId, stream.hookStrategy]),
+    );
     expect(strategies).toEqual({
       ink: 'exact-source',
       opentui: 'runtime',
@@ -879,11 +917,31 @@ describe('framework candidate discovery', () => {
         json: async () => packuments[name],
       };
     };
-    const first = await resolveNpmDependencyClosure({ dependencies: { a: '^1.0.0' } }, { fetchImpl });
-    const second = await resolveNpmDependencyClosure({ dependencies: { a: '^1.0.0' } }, { fetchImpl });
-    expect(first.dependencyClosure.map(({ name, version }) => `${name}@${version}`)).toEqual(['a@1.9.0', 'native@1.2.0', 'nested@3.1.9', 'peer@4.8.0']);
-    expect(first.dependencyClosure.find((entry) => entry.name === 'native')?.platform).toEqual({ os: ['darwin'], cpu: ['arm64'], libc: ['glibc'] });
-    expect(first.dependencyClosure.every((entry) => entry.integrity.startsWith('sha512-') && /^[0-9a-f]{64}$/u.test(entry.tarballSha256))).toBe(true);
+    const first = await resolveNpmDependencyClosure(
+      { dependencies: { a: '^1.0.0' } },
+      { fetchImpl },
+    );
+    const second = await resolveNpmDependencyClosure(
+      { dependencies: { a: '^1.0.0' } },
+      { fetchImpl },
+    );
+    expect(first.dependencyClosure.map(({ name, version }) => `${name}@${version}`)).toEqual([
+      'a@1.9.0',
+      'native@1.2.0',
+      'nested@3.1.9',
+      'peer@4.8.0',
+    ]);
+    expect(first.dependencyClosure.find((entry) => entry.name === 'native')?.platform).toEqual({
+      os: ['darwin'],
+      cpu: ['arm64'],
+      libc: ['glibc'],
+    });
+    expect(
+      first.dependencyClosure.every(
+        (entry) =>
+          entry.integrity.startsWith('sha512-') && /^[0-9a-f]{64}$/u.test(entry.tarballSha256),
+      ),
+    ).toBe(true);
     expect(first.closureDigest).toBe(second.closureDigest);
   });
 
@@ -893,7 +951,10 @@ describe('framework candidate discovery', () => {
       tarball: 'https://tarballs.invalid/same.tgz',
       integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
     };
-    const makeFetch = (versions) => async (url) => (url.startsWith('https://tarballs.invalid/') ? { ok: true, arrayBuffer: async () => bytes } : { ok: true, json: async () => ({ versions }) });
+    const makeFetch = (versions) => async (url) =>
+      url.startsWith('https://tarballs.invalid/')
+        ? { ok: true, arrayBuffer: async () => bytes }
+        : { ok: true, json: async () => ({ versions }) };
     const forward = await resolveNpmDependencyClosure(
       { dependencies: { pkg: '^1.0.0' } },
       {

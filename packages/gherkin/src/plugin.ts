@@ -1,6 +1,12 @@
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { AstBuilder, compile, GherkinClassicTokenMatcher, Parser } from '@cucumber/gherkin';
-import { IdGenerator, type GherkinDocument, type Pickle, type Scenario, type Step } from '@cucumber/messages';
+import {
+  IdGenerator,
+  type GherkinDocument,
+  type Pickle,
+  type Scenario,
+  type Step,
+} from '@cucumber/messages';
 import { parse as parseTagExpression } from '@cucumber/tag-expressions';
 import { SourceMapGenerator, type RawSourceMap } from 'source-map-js';
 import { convertPathToPattern, glob } from 'tinyglobby';
@@ -17,9 +23,21 @@ const DEFAULT_STEP_DEFINITIONS = [
 
 /** Fixture names supplied by the Gherkin bridge or the native Termwright/Vitest context. */
 export type GherkinReservedFixtureName =
-  | 'termwrightOptions' | 'termwright' | 'terminal' | 'step'
-  | 'expect' | 'world' | 'scenario' | 'defer' | 'use'
-  | 'task' | 'signal' | 'skip' | 'annotate' | 'onTestFailed' | 'onTestFinished';
+  | 'termwrightOptions'
+  | 'termwright'
+  | 'terminal'
+  | 'step'
+  | 'expect'
+  | 'world'
+  | 'scenario'
+  | 'defer'
+  | 'use'
+  | 'task'
+  | 'signal'
+  | 'skip'
+  | 'annotate'
+  | 'onTestFailed'
+  | 'onTestFinished';
 
 /** Options for a Gherkin transform using an optional project fixture surface. */
 export interface GherkinPluginOptions<Fixtures extends object = Record<string, unknown>> {
@@ -39,7 +57,10 @@ export interface GherkinPluginOptions<Fixtures extends object = Record<string, u
   /** Module specifiers emitted into transformed feature files. */
   readonly generatedImports?: GeneratedGherkinImports;
   /** Custom `test.extend()` fixture names forwarded into every Gherkin context. */
-  readonly fixtureNames?: readonly Exclude<Extract<keyof Fixtures, string>, GherkinReservedFixtureName>[];
+  readonly fixtureNames?: readonly Exclude<
+    Extract<keyof Fixtures, string>,
+    GherkinReservedFixtureName
+  >[];
   /** Cucumber tag expression selecting Scenario and Outline cases. */
   readonly tags?: string;
 }
@@ -79,9 +100,11 @@ export function featureIncludesForVitest(includes: readonly string[]): readonly 
       // Resolved Vitest includes normally name files. An extensionless value is
       // treated as a directory so programmatic configs can still express a
       // source root without accidentally selecting sibling trees.
-      projected.add(extname(basename) === ''
-        ? `${include.replace(/\/$/u, '')}/**/*.feature`
-        : `${directory}*.feature`);
+      projected.add(
+        extname(basename) === ''
+          ? `${include.replace(/\/$/u, '')}/**/*.feature`
+          : `${directory}*.feature`,
+      );
       continue;
     }
 
@@ -116,17 +139,71 @@ export interface TransformFeatureInput {
 }
 
 const RESERVED_CONTEXT_NAMES = new Set([
-  'termwrightOptions', 'termwright', 'terminal', 'step',
-  'expect', 'world', 'scenario', 'defer', 'use',
-  'task', 'signal', 'skip', 'annotate', 'onTestFailed', 'onTestFinished',
+  'termwrightOptions',
+  'termwright',
+  'terminal',
+  'step',
+  'expect',
+  'world',
+  'scenario',
+  'defer',
+  'use',
+  'task',
+  'signal',
+  'skip',
+  'annotate',
+  'onTestFailed',
+  'onTestFinished',
   // Module code is strict. These spellings match IdentifierName syntax but
   // cannot be emitted as destructured binding identifiers.
-  'arguments', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',
-  'default', 'delete', 'do', 'else', 'enum', 'eval', 'export', 'extends',
-  'false', 'finally', 'for', 'function', 'if', 'implements', 'import', 'in',
-  'instanceof', 'interface', 'let', 'new', 'null', 'package', 'private',
-  'protected', 'public', 'return', 'static', 'super', 'switch', 'this',
-  'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield',
+  'arguments',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'enum',
+  'eval',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'function',
+  'if',
+  'implements',
+  'import',
+  'in',
+  'instanceof',
+  'interface',
+  'let',
+  'new',
+  'null',
+  'package',
+  'private',
+  'protected',
+  'public',
+  'return',
+  'static',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
 ]);
 
 function fixtureNames(input: readonly string[] | undefined): readonly string[] {
@@ -134,12 +211,15 @@ function fixtureNames(input: readonly string[] | undefined): readonly string[] {
   const seen = new Set<string>();
   for (const name of input ?? []) {
     if (!/^[$A-Z_a-z][$\w]*$/u.test(name)) {
-      throw new TypeError(`Gherkin fixture name must be a JavaScript identifier: ${JSON.stringify(name)}`);
+      throw new TypeError(
+        `Gherkin fixture name must be a JavaScript identifier: ${JSON.stringify(name)}`,
+      );
     }
     if (RESERVED_CONTEXT_NAMES.has(name) || name.startsWith('__')) {
       throw new TypeError(`Gherkin fixture name is reserved: ${JSON.stringify(name)}`);
     }
-    if (seen.has(name)) throw new TypeError(`Duplicate Gherkin fixture name: ${JSON.stringify(name)}`);
+    if (seen.has(name))
+      throw new TypeError(`Duplicate Gherkin fixture name: ${JSON.stringify(name)}`);
     seen.add(name);
     result.push(name);
   }
@@ -181,14 +261,18 @@ function expandTemplate(
   const hasFilepath = template.includes('[filepath]');
   const hasFilepart = template.includes('[filepart]');
   if (hasFilepath && hasFilepart) {
-    throw new Error(`Gherkin pairing template cannot combine [filepath] and [filepart]: ${template}`);
+    throw new Error(
+      `Gherkin pairing template cannot combine [filepath] and [filepart]: ${template}`,
+    );
   }
   if (hasFilepath) {
-    return [{
-      pattern: template.replaceAll('[filepath]', convertPathToPattern(filepath)),
-      tier: 0,
-      scope: 'filepath',
-    }];
+    return [
+      {
+        pattern: template.replaceAll('[filepath]', convertPathToPattern(filepath)),
+        tier: 0,
+        scope: 'filepath',
+      },
+    ];
   }
   if (hasFilepart) {
     return parts.map((part, distance) => ({
@@ -230,8 +314,9 @@ export async function resolvePairing(input: PairingInput): Promise<readonly Pair
     }
   }
 
-  return [...selected.values()].sort((left, right) =>
-    left.tier - right.tier || left.path.localeCompare(right.path));
+  return [...selected.values()].sort(
+    (left, right) => left.tier - right.tier || left.path.localeCompare(right.path),
+  );
 }
 
 function globParent(pattern: string): string {
@@ -272,11 +357,14 @@ function pairingWatchRoots(input: PairingInput): readonly string[] {
       roots.add(globParent(pattern));
     }
   }
-  return [...roots].sort().filter((candidate, _index, all) => !all.some((other) => {
-    if (other === candidate) return false;
-    const path = relative(other, candidate);
-    return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
-  }));
+  return [...roots].sort().filter(
+    (candidate, _index, all) =>
+      !all.some((other) => {
+        if (other === candidate) return false;
+        const path = relative(other, candidate);
+        return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+      }),
+  );
 }
 
 function pairingSignature(glue: readonly PairedGlue[]): string {
@@ -363,11 +451,13 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
   const document = parser.parse(input.source);
   const feature = document.feature;
   if (feature === undefined) throw new Error(`No Feature found in ${input.uri}`);
-  const tagExpression = input.tags === undefined || input.tags.trim() === ''
-    ? undefined
-    : parseTagExpression(input.tags);
-  const pickles = compile(document, input.uri, newId).filter((pickle) =>
-    tagExpression?.evaluate(pickle.tags.map((tag) => tag.name)) ?? true);
+  const tagExpression =
+    input.tags === undefined || input.tags.trim() === ''
+      ? undefined
+      : parseTagExpression(input.tags);
+  const pickles = compile(document, input.uri, newId).filter(
+    (pickle) => tagExpression?.evaluate(pickle.tags.map((tag) => tag.name)) ?? true,
+  );
   const index = indexDocument(document);
   const sourceName = posix(input.uri);
   const map = new SourceMapGenerator({ file: sourceName });
@@ -389,17 +479,23 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
   const customFixtures = fixtureNames(input.fixtureNames);
   emit(TRANSFORM_MARKER);
   emit(`import { describe, expect, test } from ${JSON.stringify(generatedImports.test)};`);
-  emit(`import { createGherkinContext as __createContext, createGherkinRuntime as __createRuntime, runGherkinScenario as __runScenario, runGherkinStep as __runStep } from ${JSON.stringify(generatedImports.runtime)};`);
+  emit(
+    `import { createGherkinContext as __createContext, createGherkinRuntime as __createRuntime, runGherkinScenario as __runScenario, runGherkinStep as __runStep } from ${JSON.stringify(generatedImports.runtime)};`,
+  );
   input.glue.forEach((glue, index) => {
     emit(`import * as __glue${index} from ${JSON.stringify(importedPath(input.uri, glue.path))};`);
   });
-  const modules = input.glue.map((glue, index) =>
-    `{ path: ${JSON.stringify(posix(glue.path))}, tier: ${glue.tier}, definitions: __glue${index}.default }`);
+  const modules = input.glue.map(
+    (glue, index) =>
+      `{ path: ${JSON.stringify(posix(glue.path))}, tier: ${glue.tier}, definitions: __glue${index}.default }`,
+  );
   emit(`const __runtime = __createRuntime([${modules.join(', ')}]);`);
-  const validationSteps = pickles.flatMap((pickle) => pickle.steps.map((step) => ({
-    text: step.text,
-    title: step.text,
-  })));
+  const validationSteps = pickles.flatMap((pickle) =>
+    pickle.steps.map((step) => ({
+      text: step.text,
+      title: step.text,
+    })),
+  );
   emit(`for (const __step of ${JSON.stringify(validationSteps)}) __runtime.validate(__step);`);
   emit(`describe(${JSON.stringify(feature.name)}, () => {`);
 
@@ -410,7 +506,8 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
     const scenario = pickle.astNodeIds.map((id) => index.scenarios.get(id)).find(Boolean);
     const rule = pickle.astNodeIds.map((id) => index.scenarioRules.get(id)).find(Boolean);
     const scenarioLine = scenario?.location.line ?? pickle.location?.line ?? feature.location.line;
-    const scenarioColumn = scenario?.location.column ?? pickle.location?.column ?? feature.location.column;
+    const scenarioColumn =
+      scenario?.location.column ?? pickle.location?.column ?? feature.location.column;
     const outline = (scenario?.examples.length ?? 0) > 0;
     const scenarioKey = scenario?.id ?? `${pickle.name}\0${scenarioLine}`;
     const outlineRow = (outlineRows.get(scenarioKey) ?? 0) + 1;
@@ -425,9 +522,7 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
       meta: {
         termwright: {
           source: { file: sourceName, line: scenarioLine, column: scenarioColumn },
-          kind: outline
-            ? 'gherkin-outline-example'
-            : 'gherkin-scenario',
+          kind: outline ? 'gherkin-outline-example' : 'gherkin-scenario',
           ancestors: [
             { kind: 'feature', title: feature.name },
             ...(rule === undefined ? [] : [{ kind: 'rule', title: rule }]),
@@ -436,8 +531,17 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
         },
       },
     };
-    const fixtureBindings = ['termwrightOptions', 'termwright', 'terminal', 'step', ...customFixtures];
-    emit(`test(${JSON.stringify(testName)}, ${JSON.stringify(declarationMeta)}, async ({ ${fixtureBindings.join(', ')} }) => {`, scenarioLine);
+    const fixtureBindings = [
+      'termwrightOptions',
+      'termwright',
+      'terminal',
+      'step',
+      ...customFixtures,
+    ];
+    emit(
+      `test(${JSON.stringify(testName)}, ${JSON.stringify(declarationMeta)}, async ({ ${fixtureBindings.join(', ')} }) => {`,
+      scenarioLine,
+    );
     const metadata = {
       feature: feature.name,
       name: pickle.name,
@@ -445,7 +549,9 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
       line: scenarioLine,
       tags: pickle.tags.map((tag) => tag.name),
     };
-    emit(`const __context = __createContext({ termwrightOptions, termwright, terminal, step, ${customFixtures.map((name) => `${name}, `).join('')}expect, world: {}, scenario: ${JSON.stringify(metadata)} });`);
+    emit(
+      `const __context = __createContext({ termwrightOptions, termwright, terminal, step, ${customFixtures.map((name) => `${name}, `).join('')}expect, world: {}, scenario: ${JSON.stringify(metadata)} });`,
+    );
     emit('await __runScenario(__runtime, __context, async () => {');
     for (const pickleStep of pickle.steps) {
       const astStep = pickleStep.astNodeIds.map((id) => index.steps.get(id)).find(Boolean);
@@ -461,9 +567,10 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
         source: { file: sourceName, line: stepLine, column: stepColumn },
         ...(background ? { background: true } : {}),
       };
-      const runtimeStep = argument === undefined
-        ? { text: pickleStep.text, title, gherkin }
-        : { text: pickleStep.text, title, argument, gherkin };
+      const runtimeStep =
+        argument === undefined
+          ? { text: pickleStep.text, title, gherkin }
+          : { text: pickleStep.text, title, argument, gherkin };
       emit(`await __runStep(__runtime, __context, ${JSON.stringify(runtimeStep)});`, stepLine);
     }
     emit('});');
@@ -490,7 +597,9 @@ export function gherkinPlugin<Fixtures extends object = Record<string, unknown>>
     return {
       featureFile: file,
       featureRoot,
-      ...(options.stepDefinitions === undefined ? {} : { stepDefinitions: options.stepDefinitions }),
+      ...(options.stepDefinitions === undefined
+        ? {}
+        : { stepDefinitions: options.stepDefinitions }),
     };
   };
   return {
@@ -521,7 +630,9 @@ export function gherkinPlugin<Fixtures extends object = Record<string, unknown>>
         source,
         uri: file,
         glue,
-        ...(options.generatedImports === undefined ? {} : { generatedImports: options.generatedImports }),
+        ...(options.generatedImports === undefined
+          ? {}
+          : { generatedImports: options.generatedImports }),
         ...(options.fixtureNames === undefined ? {} : { fixtureNames: options.fixtureNames }),
         // The command line composes with the project's filter rather than
         // replacing it, and it arrives by environment because the transform
@@ -540,7 +651,8 @@ export function gherkinPlugin<Fixtures extends object = Record<string, unknown>>
         const next = await resolvePairing(pairingInput(feature));
         featureGlue.set(feature, next);
         const pairingChanged = pairingSignature(previous) !== pairingSignature(next);
-        const pairedFileChanged = previous.some(({ path }) => path === changedFile) ||
+        const pairedFileChanged =
+          previous.some(({ path }) => path === changedFile) ||
           next.some(({ path }) => path === changedFile);
         if (!pairingChanged && !pairedFileChanged) continue;
         const module = context.server.moduleGraph.getModuleById(feature);

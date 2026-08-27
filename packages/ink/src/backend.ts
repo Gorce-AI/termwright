@@ -10,8 +10,18 @@
  */
 
 import type { ExitStatus } from '@termwright/driver';
-import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions } from '@termwright/driver/experimental';
-import { createHarnessStdin, createHarnessStdout, type HarnessStdin, type HarnessStdout } from './streams.js';
+import type {
+  PtyBackend,
+  PtyProcess,
+  PtySignal,
+  PtySpawnOptions,
+} from '@termwright/driver/experimental';
+import {
+  createHarnessStdin,
+  createHarnessStdout,
+  type HarnessStdin,
+  type HarnessStdout,
+} from './streams.js';
 
 /** The wires and the environment handed to an in-process application. */
 export interface InProcessIo {

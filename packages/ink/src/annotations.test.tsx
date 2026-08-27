@@ -26,10 +26,17 @@ describe('@termwright/ink annotations', () => {
     const ref = createRef<DOMElement>();
     const App = ({ name }: { readonly name: string }) => {
       useSemantic(ref, { role: 'button', name, testId: 'save', extended: { area: 'editor' } });
-      return <Box ref={ref}><Text>Save</Text></Box>;
+      return (
+        <Box ref={ref}>
+          <Text>Save</Text>
+        </Box>
+      );
     };
     const stdout = outputStream();
-    const instance = render(<App name="Save draft" />, { stdout: stdout.stream, patchConsole: false });
+    const instance = render(<App name="Save draft" />, {
+      stdout: stdout.stream,
+      patchConsole: false,
+    });
     await instance.waitUntilRenderFlush();
 
     const channel = (globalThis as Record<PropertyKey, unknown>)[SYMBOL] as {
@@ -50,10 +57,18 @@ describe('@termwright/ink annotations', () => {
   it('<Semantic> adds no host node and changes no terminal bytes', async () => {
     const plainOut = outputStream();
     const annotatedOut = outputStream();
-    const child = <Box><Text>Deploy</Text></Box>;
+    const child = (
+      <Box>
+        <Text>Deploy</Text>
+      </Box>
+    );
     const plain = render(child, { stdout: plainOut.stream, patchConsole: false });
     const annotated = render(
-      <Semantic role="button" name="Deploy"><Box><Text>Deploy</Text></Box></Semantic>,
+      <Semantic role="button" name="Deploy">
+        <Box>
+          <Text>Deploy</Text>
+        </Box>
+      </Semantic>,
       { stdout: annotatedOut.stream, patchConsole: false },
     );
     await Promise.all([plain.waitUntilRenderFlush(), annotated.waitUntilRenderFlush()]);
@@ -74,7 +89,11 @@ describe('@termwright/ink annotations', () => {
     } as unknown as InkSemanticAnnotation;
     const App = () => {
       useSemantic(ref, forged);
-      return <Box ref={ref}><Text>real text</Text></Box>;
+      return (
+        <Box ref={ref}>
+          <Text>real text</Text>
+        </Box>
+      );
     };
     const stdout = outputStream();
     const instance = render(<App />, { stdout: stdout.stream, patchConsole: false });

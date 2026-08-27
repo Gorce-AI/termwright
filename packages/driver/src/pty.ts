@@ -1,5 +1,5 @@
 /** Backend-neutral PTY contracts implemented by the Termwright-owned native package. */
-import type { ExitStatus } from "./api.js";
+import type { ExitStatus } from './api.js';
 
 /** Options accepted by {@link PtyBackend.spawn}. */
 export interface PtySpawnOptions {
@@ -20,8 +20,8 @@ export interface PtyProcess {
   readonly pid: number;
   /** Truthful lifecycle properties when the backend can prove them. */
   readonly lifecycle?: {
-    readonly tree: "posix-process-group" | "conpty-console" | "delegated";
-    readonly outputDrain: "eof" | "bounded-fallback";
+    readonly tree: 'posix-process-group' | 'conpty-console' | 'delegated';
+    readonly outputDrain: 'eof' | 'bounded-fallback';
   };
   /**
    * Queues raw bytes in the backend's ordered input stream. Never appends a
@@ -58,13 +58,13 @@ export interface PtyProcess {
   /** Queue-drained notification; it does not claim child consumption. */
   onWriteDrain?(cb: () => void): PtyUnsubscribe;
   /** Liveness of the owned tree, when the backend has an OS primitive for it. */
-  treeState?(): "alive" | "gone" | "unsupported";
+  treeState?(): 'alive' | 'gone' | 'unsupported';
   /** Idempotent finalizer; hangs up a live PTY before releasing listeners. */
   dispose(): void;
 }
 
 /** Signals the driver is allowed to deliver. */
-export type PtySignal = "INT" | "TERM" | "KILL" | "HUP";
+export type PtySignal = 'INT' | 'TERM' | 'KILL' | 'HUP';
 
 /** Factory for pseudo-terminals. */
 export interface PtyBackend {

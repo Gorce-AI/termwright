@@ -76,7 +76,11 @@ export function framesUpTo(
   frames: readonly PlaybackFrame[],
   state: PlaybackState,
   timeMs: number,
-): { readonly frames: readonly PlaybackFrame[]; readonly cursor: number; readonly rewind: boolean } {
+): {
+  readonly frames: readonly PlaybackFrame[];
+  readonly cursor: number;
+  readonly rewind: boolean;
+} {
   const previous = state.cursor === 0 ? -Infinity : (frames[state.cursor - 1]?.t ?? -Infinity);
   if (timeMs < previous) {
     let cursor = 0;

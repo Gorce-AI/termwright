@@ -4,7 +4,9 @@
   "private": true,
   "description": "Ink todo list with a modal confirmation, tested end to end and per component",
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "scripts": {
     "build": "tsup src/cli.tsx --format esm --target node22 --out-dir dist",
     "start": "node dist/cli.js",

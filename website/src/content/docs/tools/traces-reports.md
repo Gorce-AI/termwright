@@ -21,12 +21,12 @@ configureTermwright({
 });
 ```
 
-| Policy | Use when |
-| --- | --- |
-| `retain-on-failure` | Normal local and CI runs. This is the default. |
-| `on-first-retry` | Large suites where only the first retry needs a trace. |
-| `on` | Successful runs must also remain replayable. |
-| `off` | Recording is not permitted or needed. |
+| Policy              | Use when                                               |
+| ------------------- | ------------------------------------------------------ |
+| `retain-on-failure` | Normal local and CI runs. This is the default.         |
+| `on-first-retry`    | Large suites where only the first retry needs a trace. |
+| `on`                | Successful runs must also remain replayable.           |
+| `off`               | Recording is not permitted or needed.                  |
 
 Driver actions and matcher assertions are recorded automatically. Named
 `step()` blocks organize those events. Do not call a second recording API after

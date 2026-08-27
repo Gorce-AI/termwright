@@ -48,8 +48,15 @@ describe('direct cell reads', () => {
     const vt = await paint('edge\r\n');
     const screen = captureScreen(vt);
     const probes: readonly (readonly [number, number])[] = [
-      [-1, 0], [0, -1], [999, 0], [0, 999], [vt.rows, 0], [0, vt.columns],
-      [1.5, 0], [0, 1.5], [Number.NaN, 0],
+      [-1, 0],
+      [0, -1],
+      [999, 0],
+      [0, 999],
+      [vt.rows, 0],
+      [0, vt.columns],
+      [1.5, 0],
+      [0, 1.5],
+      [Number.NaN, 0],
     ];
     for (const [row, column] of probes) {
       expect(captureCell(vt, row, column)).toEqual(screen.cell(row, column));
@@ -60,7 +67,9 @@ describe('direct cell reads', () => {
   it('follows the viewport after scrolling', async () => {
     // The viewport offset is the part a direct read could easily get wrong:
     // reading absolute buffer lines would silently return scrollback.
-    const vt = await paint(`${Array.from({ length: 30 }, (_, index) => `line ${index}`).join('\r\n')}\r\n`);
+    const vt = await paint(
+      `${Array.from({ length: 30 }, (_, index) => `line ${index}`).join('\r\n')}\r\n`,
+    );
     const screen = captureScreen(vt);
     for (let row = 0; row < vt.rows; row += 1) {
       expect(captureCell(vt, row, 0)).toEqual(screen.cell(row, 0));
@@ -111,20 +120,32 @@ describe('text-only capture', () => {
   for (const [name, content] of CORPUS) {
     it(`matches the joined row text for ${name}`, async () => {
       const vt = await paint(content);
-      expect(captureText(vt)).toBe(captureRows(vt).map((row) => row.text).join('\n'));
+      expect(captureText(vt)).toBe(
+        captureRows(vt)
+          .map((row) => row.text)
+          .join('\n'),
+      );
       vt.dispose();
     });
   }
 
   it('matches after scrolling past the viewport', async () => {
-    const vt = await paint(`${Array.from({ length: 40 }, (_, index) => `row ${index}`).join('\r\n')}\r\n`);
-    expect(captureText(vt)).toBe(captureRows(vt).map((row) => row.text).join('\n'));
+    const vt = await paint(
+      `${Array.from({ length: 40 }, (_, index) => `row ${index}`).join('\r\n')}\r\n`,
+    );
+    expect(captureText(vt)).toBe(
+      captureRows(vt)
+        .map((row) => row.text)
+        .join('\n'),
+    );
     vt.dispose();
   });
 
   it('keeps trailing blank rows, which a substring search can depend on', async () => {
     const vt = await paint('only one line\r\n');
-    const expected = captureRows(vt).map((row) => row.text).join('\n');
+    const expected = captureRows(vt)
+      .map((row) => row.text)
+      .join('\n');
     expect(captureText(vt)).toBe(expected);
     expect(captureText(vt).split('\n')).toHaveLength(vt.rows);
     vt.dispose();
@@ -147,12 +168,17 @@ describe('text-only capture stays a fast path', () => {
 
     const iterations = 200;
     for (let index = 0; index < 50; index += 1) {
-      captureRows(vt).map((row) => row.text).join('\n');
+      captureRows(vt)
+        .map((row) => row.text)
+        .join('\n');
       captureText(vt);
     }
 
     const rowsStart = performance.now();
-    for (let index = 0; index < iterations; index += 1) captureRows(vt).map((row) => row.text).join('\n');
+    for (let index = 0; index < iterations; index += 1)
+      captureRows(vt)
+        .map((row) => row.text)
+        .join('\n');
     const rowsMs = performance.now() - rowsStart;
 
     const textStart = performance.now();

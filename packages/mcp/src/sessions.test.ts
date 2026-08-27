@@ -23,7 +23,9 @@ describe('managed MCP session lifecycle', () => {
 
   it('retains failed ownership and reports every close failure', async () => {
     const registry = new SessionRegistry<{ id: string }>({
-      disposeAttachment: () => { throw new Error('transport close failed'); },
+      disposeAttachment: () => {
+        throw new Error('transport close failed');
+      },
     });
     registry.create('s1', () => ({ id: 'attachment' }));
 
@@ -39,7 +41,9 @@ describe('managed MCP session lifecycle', () => {
       const registry = new SessionRegistry<{ id: string }>({
         idleTtlMs: 10,
         now: () => clock,
-        disposeAttachment: () => { throw new Error('cleanup failed'); },
+        disposeAttachment: () => {
+          throw new Error('cleanup failed');
+        },
         onBackgroundError: (error) => failures.push(error),
       });
       registry.create('s1', () => ({ id: 'attachment' }));

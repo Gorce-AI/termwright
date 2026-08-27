@@ -18,7 +18,8 @@ describe('desktop host boundary', () => {
       'http://0.0.0.0:5000/?token=x',
       'http://127.0.0.1:5000/',
       'http://127.0.0.1:5000/?token=x&token=y',
-    ]) expect(() => validateRunnerUrl(url), url).toThrow();
+    ])
+      expect(() => validateRunnerUrl(url), url).toThrow();
   });
 
   it('keeps Node and privileged renderer features disabled', () => {

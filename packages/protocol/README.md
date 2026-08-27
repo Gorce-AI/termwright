@@ -25,22 +25,22 @@ Each semantic revision is published as a complete snapshot.
 
 ## Package surface
 
-| Module | Provides |
-| --- | --- |
-| `env` | Endpoint/token names, `PROTOCOL_VERSION`, `PROTOCOL_ID` |
-| `roles` | Closed semantic role and action vocabularies |
-| `limits` | Default, absolute, and negotiated protocol limits |
-| `tree` | `SemanticSnapshot`, `SemanticNode`, observations, rectangles, portable state, extended state |
-| `node-keys` | Closed semantic-node key set shared by validators |
-| `probe` | Probe IR, metadata, identity, capability, and provenance vocabularies |
-| `logs` | Structured application-log records and validation |
-| `messages` | Wire message types and both directional parsers |
-| `framing` | Length-prefixed JSON framing and hostile-data projection |
-| `marker` | Authenticated render-marker encoding and verification |
-| `validate` | Full snapshot validation |
-| `accesskit` | Pure conversion to AccessKit-compatible data |
-| `errors` | Typed protocol violations |
-| `run-state` | Closed run lifecycle, terminal verdicts, and transition validation |
+| Module      | Provides                                                                                     |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| `env`       | Endpoint/token names, `PROTOCOL_VERSION`, `PROTOCOL_ID`                                      |
+| `roles`     | Closed semantic role and action vocabularies                                                 |
+| `limits`    | Default, absolute, and negotiated protocol limits                                            |
+| `tree`      | `SemanticSnapshot`, `SemanticNode`, observations, rectangles, portable state, extended state |
+| `node-keys` | Closed semantic-node key set shared by validators                                            |
+| `probe`     | Probe IR, metadata, identity, capability, and provenance vocabularies                        |
+| `logs`      | Structured application-log records and validation                                            |
+| `messages`  | Wire message types and both directional parsers                                              |
+| `framing`   | Length-prefixed JSON framing and hostile-data projection                                     |
+| `marker`    | Authenticated render-marker encoding and verification                                        |
+| `validate`  | Full snapshot validation                                                                     |
+| `accesskit` | Pure conversion to AccessKit-compatible data                                                 |
+| `errors`    | Typed protocol violations                                                                    |
+| `run-state` | Closed run lifecycle, terminal verdicts, and transition validation                           |
 
 `passed-with-skips` is a terminal run verdict distinct from both plain
 `passed` and fully `skipped`. It preserves partial-skip evidence for hosts and
@@ -50,11 +50,7 @@ not by the protocol state alone.
 ## Decode adapter traffic
 
 ```ts
-import {
-  DEFAULT_LIMITS,
-  createFrameDecoder,
-  parseAdapterMessage,
-} from '@termwright/protocol';
+import { DEFAULT_LIMITS, createFrameDecoder, parseAdapterMessage } from '@termwright/protocol';
 
 const decoder = createFrameDecoder(DEFAULT_LIMITS.maxFrameBytes);
 
@@ -137,12 +133,12 @@ interface NodeGeometryObservations {
 Physical facts use `Observation<T>` so missing evidence cannot become a false
 boolean or guessed rectangle:
 
-| Status | Meaning |
-| --- | --- |
-| `known` | The value is present with structurally validated provenance |
-| `absent` | Authoritative provenance proves the fact does not exist in this state |
-| `unknown` | A revision pair, provider refresh or stale revision is temporarily unsettled |
-| `unsupported` | The frozen session contract does not provide the capability |
+| Status        | Meaning                                                                      |
+| ------------- | ---------------------------------------------------------------------------- |
+| `known`       | The value is present with structurally validated provenance                  |
+| `absent`      | Authoritative provenance proves the fact does not exist in this state        |
+| `unknown`     | A revision pair, provider refresh or stale revision is temporarily unsettled |
+| `unsupported` | The frozen session contract does not provide the capability                  |
 
 `intendedRect` and `visibleRect` are different facts. A producer must not copy
 the intended rectangle into the visible field when clipping is unavailable.

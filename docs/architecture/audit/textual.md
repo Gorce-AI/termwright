@@ -33,7 +33,7 @@ between frames and can be inspected at rest.
 
 **Identity.** There is no framework-assigned stable node id.
 
-- `DOMNode.id` (`dom.py:810`) is the *author's* id, optional, and settable once
+- `DOMNode.id` (`dom.py:810`) is the _author's_ id, optional, and settable once
   (`dom.py:815`). Most widgets in most applications have none.
 - The only always-available identity is the Python object itself. Object
   identity is stable for the lifetime of the widget, which spans frames, so a
@@ -58,7 +58,7 @@ any registration, which is the behaviour the campaign asks for
   hand-written adapter already does exactly this
   (`clients/python/src/termwright/textual_adapter.py`, `role_for`), and the
   mechanism carries over unchanged to a probe.
-- The map must be keyed on class *name*, not on imported class objects, if the
+- The map must be keyed on class _name_, not on imported class objects, if the
   probe is to avoid importing `textual.widgets` eagerly — importing the widget
   package to compare classes would pull in the whole widget library at probe
   load time.
@@ -84,22 +84,22 @@ All of these come from one record. `Screen.find_widget` (`screen.py:740`)
 delegates to `Compositor.find_widget` (`_compositor.py:970`) and returns a
 `MapGeometry` (`map_geometry.py`), a `NamedTuple` carrying:
 
-| field | meaning |
-|---|---|
-| `region` | screen-absolute rectangle |
-| `order` | paint order, as a tuple of per-ancestor triples |
-| `clip` | the clipping rectangle imposed by containers |
-| `virtual_size` | scrollable extent, when the widget is a container |
-| `container_size` | area minus scrollbars |
-| `virtual_region` | position within the container |
-| `dock_gutter` | space reserved by docked widgets |
+| field            | meaning                                           |
+| ---------------- | ------------------------------------------------- |
+| `region`         | screen-absolute rectangle                         |
+| `order`          | paint order, as a tuple of per-ancestor triples   |
+| `clip`           | the clipping rectangle imposed by containers      |
+| `virtual_size`   | scrollable extent, when the widget is a container |
+| `container_size` | area minus scrollbars                             |
+| `virtual_region` | position within the container                     |
+| `dock_gutter`    | space reserved by docked widgets                  |
 
 and one derived property that matters more than any of the above:
 
 - `MapGeometry.visible_region` (`map_geometry.py`) — `clip ∩ region`, "the
   Widget region after clipping".
 
-**Finding.** `region` is *not* what the user can see. A widget scrolled halfway
+**Finding.** `region` is _not_ what the user can see. A widget scrolled halfway
 out of a container has a `region` that extends past the container, and only
 `visible_region` reflects what is on screen. The current hand-written adapter
 publishes `region` and is therefore wrong for clipped widgets — it reports
@@ -145,7 +145,7 @@ Candidates, in the order the frame reaches them:
    after a display is done. Used in tests." — an empty method that exists to
    be overridden.
 3. `Screen._on_idle` (`screen.py:1172`) — decides whether a repaint or relayout
-   is needed and resumes the update timer; runs *before* layout is settled, so
+   is needed and resumes the update timer; runs _before_ layout is settled, so
    geometry read here may be stale.
 
 **Phase 0 identified `post_display_hook` as the observation point**, for two
@@ -185,15 +185,15 @@ first line runs.
 Everything below was **measured on this machine** (CPython 3.12.11, macOS),
 not recalled.
 
-| Invocation | `sitecustomize` ran? |
-|---|---|
-| `python script.py` | yes |
-| `python -m package` | yes |
-| `python -c "..."` | yes |
-| console-script entry point (`venv/bin/tool`) | yes |
-| `uv run --no-project python main.py` | yes |
-| `python -S script.py` | **no** — `-S` disables `site` entirely |
-| `python -E script.py` | **no** — `-E` makes the interpreter ignore `PYTHONPATH` |
+| Invocation                                   | `sitecustomize` ran?                                    |
+| -------------------------------------------- | ------------------------------------------------------- |
+| `python script.py`                           | yes                                                     |
+| `python -m package`                          | yes                                                     |
+| `python -c "..."`                            | yes                                                     |
+| console-script entry point (`venv/bin/tool`) | yes                                                     |
+| `uv run --no-project python main.py`         | yes                                                     |
+| `python -S script.py`                        | **no** — `-S` disables `site` entirely                  |
+| `python -E script.py`                        | **no** — `-E` makes the interpreter ignore `PYTHONPATH` |
 
 `poetry` was not installed here, so its behaviour is **unverified**. It runs
 the interpreter from the project venv as a subprocess and passes the
@@ -207,7 +207,7 @@ Three further measurements matter more than the table:
 script's directory has not been prepended yet. Measured by printing
 `sys.path[0]` from inside `sitecustomize` while running a script from a
 directory that also contained a `sitecustomize.py`: ours ran, the neighbour's
-did not. Only an explicit `PYTHONPATH` entry ordered *before* ours displaces
+did not. Only an explicit `PYTHONPATH` entry ordered _before_ ours displaces
 us.
 
 **b. We shadow anything already installed.** `PYTHONPATH` precedes
@@ -244,16 +244,16 @@ reuse the parent's authenticated semantic session.
 
 Ordered by how much of the design would move if it broke.
 
-| Surface | Stability | Note |
-|---|---|---|
-| `DOMNode.children`, `query` | public, documented | safe |
-| `Widget.region`, `virtual_region`, `content_region` | public, documented | safe |
-| `App.focused`, `Widget.has_focus` | public | safe |
-| per-widget `value`/`text`/`index` | public per class | the *set* of classes changes between releases |
-| `App.post_display_hook` | public but documented as "used in tests" | the attachment point; an undocumented removal would be silent |
-| `Screen.find_widget` → `MapGeometry` | public method, `MapGeometry` is a public NamedTuple | field order could change; access by name |
-| `Compositor.visible_widgets` | **private** (`_compositor.py`) | the cheap bulk read is off the supported path |
-| `DOMNode._nodes` | **private** | `children` is the public equivalent; prefer it |
+| Surface                                             | Stability                                           | Note                                                          |
+| --------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------- |
+| `DOMNode.children`, `query`                         | public, documented                                  | safe                                                          |
+| `Widget.region`, `virtual_region`, `content_region` | public, documented                                  | safe                                                          |
+| `App.focused`, `Widget.has_focus`                   | public                                              | safe                                                          |
+| per-widget `value`/`text`/`index`                   | public per class                                    | the _set_ of classes changes between releases                 |
+| `App.post_display_hook`                             | public but documented as "used in tests"            | the attachment point; an undocumented removal would be silent |
+| `Screen.find_widget` → `MapGeometry`                | public method, `MapGeometry` is a public NamedTuple | field order could change; access by name                      |
+| `Compositor.visible_widgets`                        | **private** (`_compositor.py`)                      | the cheap bulk read is off the supported path                 |
+| `DOMNode._nodes`                                    | **private**                                         | `children` is the public equivalent; prefer it                |
 
 The Python extra declares Textual 8.2.8 as an advisory minimum. Strong
 instrumentation is not allowlisted by version: public tree APIs are validated

@@ -38,7 +38,11 @@ export function percentFor(timeMs: number, durationMs: number): string {
  * @param track - the track's bounding box; the *same* element the positions are
  * measured against, which is what keeps the two directions consistent.
  */
-export function timeAt(clientX: number, track: { left: number; width: number }, durationMs: number): number {
+export function timeAt(
+  clientX: number,
+  track: { left: number; width: number },
+  durationMs: number,
+): number {
   if (track.width <= 0 || durationMs <= 0) return 0;
   const fraction = Math.min(Math.max((clientX - track.left) / track.width, 0), 1);
   return fraction * durationMs;

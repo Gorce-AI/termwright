@@ -71,7 +71,10 @@ function compiledHook<Fixtures extends object>(
   };
 }
 
-function applies<Fixtures extends object>(hook: CompiledHook<Fixtures>, context: GherkinContext<Fixtures>): boolean {
+function applies<Fixtures extends object>(
+  hook: CompiledHook<Fixtures>,
+  context: GherkinContext<Fixtures>,
+): boolean {
   return hook.tags?.evaluate([...context.scenario.tags]) ?? true;
 }
 
@@ -81,9 +84,14 @@ function validateDefinitions<Fixtures extends object>(glue: ImportedGlue<Fixture
   }
 }
 
-function parameterRegistry<Fixtures extends object>(glue: readonly ImportedGlue<Fixtures>[]): ParameterTypeRegistry {
+function parameterRegistry<Fixtures extends object>(
+  glue: readonly ImportedGlue<Fixtures>[],
+): ParameterTypeRegistry {
   const registry = new ParameterTypeRegistry();
-  const selected = new Map<string, { tier: number; path: string; definition: ParameterTypeDefinition }>();
+  const selected = new Map<
+    string,
+    { tier: number; path: string; definition: ParameterTypeDefinition }
+  >();
 
   for (const module of glue) {
     for (const definition of module.definitions) {
@@ -93,7 +101,7 @@ function parameterRegistry<Fixtures extends object>(glue: readonly ImportedGlue<
       if (existing?.tier === module.tier) {
         throw new Error(
           `Duplicate Gherkin parameter type {${name}} in tier ${module.tier}: ` +
-          `${existing.path} and ${module.path}`,
+            `${existing.path} and ${module.path}`,
         );
       }
       if (existing !== undefined) continue;
@@ -103,14 +111,9 @@ function parameterRegistry<Fixtures extends object>(glue: readonly ImportedGlue<
 
   for (const { definition } of selected.values()) {
     const { name, regexp, transformer, useForSnippets, preferForRegexpMatch } = definition.options;
-    registry.defineParameterType(new ParameterType(
-      name,
-      regexp,
-      null,
-      transformer,
-      useForSnippets,
-      preferForRegexpMatch,
-    ));
+    registry.defineParameterType(
+      new ParameterType(name, regexp, null, transformer, useForSnippets, preferForRegexpMatch),
+    );
   }
   return registry;
 }
@@ -119,16 +122,22 @@ function compiledSteps<Fixtures extends object>(
   glue: readonly ImportedGlue<Fixtures>[],
   registry: ParameterTypeRegistry,
 ): readonly LocatedStepDefinition<Fixtures>[] {
-  return glue.flatMap((module) => module.definitions.flatMap((definition) => {
-    if (definition.type !== 'step') return [];
-    const expression = typeof definition.expression === 'string'
-      ? new CucumberExpression(definition.expression, registry)
-      : new RegularExpression(definition.expression, registry);
-    return [{ definition, path: module.path, tier: module.tier, expression }];
-  }));
+  return glue.flatMap((module) =>
+    module.definitions.flatMap((definition) => {
+      if (definition.type !== 'step') return [];
+      const expression =
+        typeof definition.expression === 'string'
+          ? new CucumberExpression(definition.expression, registry)
+          : new RegularExpression(definition.expression, registry);
+      return [{ definition, path: module.path, tier: module.tier, expression }];
+    }),
+  );
 }
 
-function ambiguity<Fixtures extends object>(step: RuntimeStep, matches: readonly StepMatch<Fixtures>[]): Error {
+function ambiguity<Fixtures extends object>(
+  step: RuntimeStep,
+  matches: readonly StepMatch<Fixtures>[],
+): Error {
   const candidates = matches
     .map(({ located }) => `${located.path}: ${String(located.definition.expression)}`)
     .join('\n  - ');
@@ -157,14 +166,27 @@ function matchingDefinitions<Fixtures extends object>(
 export function createGherkinRuntime<Fixtures extends object = object>(
   imported: readonly ImportedGlue<Fixtures>[],
 ): GherkinRuntime<Fixtures> {
-  const glue = [...imported].sort((left, right) =>
-    left.tier - right.tier || left.path.localeCompare(right.path));
+  const glue = [...imported].sort(
+    (left, right) => left.tier - right.tier || left.path.localeCompare(right.path),
+  );
   for (const module of glue) validateDefinitions(module);
   const definitions = compiledSteps(glue, parameterRegistry(glue));
-  const beforeHooks = glue.flatMap((module) => module.definitions.flatMap((definition) =>
-    definition.type === 'hook' && definition.phase === 'before' ? [compiledHook(definition)] : []));
-  const afterHooks = glue.toReversed().flatMap((module) => module.definitions.toReversed().flatMap((definition) =>
-    definition.type === 'hook' && definition.phase === 'after' ? [compiledHook(definition)] : []));
+  const beforeHooks = glue.flatMap((module) =>
+    module.definitions.flatMap((definition) =>
+      definition.type === 'hook' && definition.phase === 'before' ? [compiledHook(definition)] : [],
+    ),
+  );
+  const afterHooks = glue
+    .toReversed()
+    .flatMap((module) =>
+      module.definitions
+        .toReversed()
+        .flatMap((definition) =>
+          definition.type === 'hook' && definition.phase === 'after'
+            ? [compiledHook(definition)]
+            : [],
+        ),
+    );
 
   return Object.freeze({
     async before(context: GherkinContext<Fixtures>): Promise<void> {
@@ -178,9 +200,7 @@ export function createGherkinRuntime<Fixtures extends object = object>(
       const captures = await Promise.all(
         match.arguments.map((argument) => argument.getValue(context.world)),
       );
-      const values = step.argument === undefined
-        ? captures
-        : [...captures, step.argument];
+      const values = step.argument === undefined ? captures : [...captures, step.argument];
       await match.located.definition.body(context, ...values);
     },
     async after(context: GherkinContext<Fixtures>): Promise<void> {
@@ -193,12 +213,14 @@ type ManagedGherkinContext<Fixtures extends object = object> = GherkinContext<Fi
   dispose(): Promise<void>;
 };
 
-function resourceCleanup(resource: GherkinResource): (() => unknown | Promise<unknown>) {
+function resourceCleanup(resource: GherkinResource): () => unknown | Promise<unknown> {
   if (resource[Symbol.asyncDispose] !== undefined) return () => resource[Symbol.asyncDispose]!();
   if (resource[Symbol.dispose] !== undefined) return () => resource[Symbol.dispose]!();
   if (resource.close !== undefined) return () => resource.close!();
   if (resource.dispose !== undefined) return () => resource.dispose!();
-  throw new TypeError('Gherkin context.use() needs a close(), dispose(), Symbol.dispose, or Symbol.asyncDispose resource');
+  throw new TypeError(
+    'Gherkin context.use() needs a close(), dispose(), Symbol.dispose, or Symbol.asyncDispose resource',
+  );
 }
 
 /** Adds scenario-scoped resource management without process-global hooks. */
@@ -208,7 +230,8 @@ export function createGherkinContext<Fixtures extends object = object>(
   const cleanups: (() => unknown | Promise<unknown>)[] = [];
   return Object.assign(base, {
     defer(cleanup: () => unknown | Promise<unknown>): void {
-      if (typeof cleanup !== 'function') throw new TypeError('Gherkin context.defer() needs a function');
+      if (typeof cleanup !== 'function')
+        throw new TypeError('Gherkin context.defer() needs a function');
       cleanups.push(cleanup);
     },
     use<T extends GherkinResource>(resource: T): T {
@@ -225,7 +248,8 @@ export function createGherkinContext<Fixtures extends object = object>(
         }
       }
       if (errors.length === 1) throw errors[0];
-      if (errors.length > 1) throw new AggregateError(errors, 'Multiple Gherkin scenario cleanups failed');
+      if (errors.length > 1)
+        throw new AggregateError(errors, 'Multiple Gherkin scenario cleanups failed');
     },
   }) as ManagedGherkinContext<Fixtures>;
 }
@@ -246,16 +270,18 @@ export async function runGherkinScenario<Fixtures extends object = object>(
   try {
     await runtime.after(context);
   } catch (error) {
-    failure = failure === undefined
-      ? error
-      : new AggregateError([failure, error], 'Gherkin scenario and After hook failed');
+    failure =
+      failure === undefined
+        ? error
+        : new AggregateError([failure, error], 'Gherkin scenario and After hook failed');
   }
   try {
     await context.dispose();
   } catch (error) {
-    failure = failure === undefined
-      ? error
-      : new AggregateError([failure, error], 'Gherkin scenario lifecycle failed during cleanup');
+    failure =
+      failure === undefined
+        ? error
+        : new AggregateError([failure, error], 'Gherkin scenario lifecycle failed during cleanup');
   }
   if (failure !== undefined) throw failure;
 }

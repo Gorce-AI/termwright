@@ -31,7 +31,9 @@ for (const { entry, specifier, inlined } of CASES) {
   try {
     source = await reachableBundleSource(entry);
   } catch {
-    console.error(`${entry} or one of its chunks is missing; build the workspace before checking its externals`);
+    console.error(
+      `${entry} or one of its chunks is missing; build the workspace before checking its externals`,
+    );
     failed = true;
     continue;
   }

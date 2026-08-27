@@ -11,8 +11,13 @@ const token = process.env['TERMWRIGHT_TEST_BROKER_TOKEN'];
 const runId = process.env['TERMWRIGHT_TEST_RUN_ID'];
 const journalEndpoint = process.env['TERMWRIGHT_TEST_JOURNAL_ENDPOINT'];
 const journalToken = process.env['TERMWRIGHT_TEST_JOURNAL_TOKEN'];
-if (endpoint === undefined || token === undefined || runId === undefined ||
-    journalEndpoint === undefined || journalToken === undefined) {
+if (
+  endpoint === undefined ||
+  token === undefined ||
+  runId === undefined ||
+  journalEndpoint === undefined ||
+  journalToken === undefined
+) {
   throw new Error('denied runner fixture requires its authoritative broker context');
 }
 
@@ -35,13 +40,18 @@ export default defineConfig({
           },
         },
         broker: {
-          endpoint, token, workerEpoch: 0, workerIdPrefix: 'denied-fixture',
+          endpoint,
+          token,
+          workerEpoch: 0,
+          workerIdPrefix: 'denied-fixture',
           handshakeTimeoutMs: 5_000,
           admissionDeadline: performance.timeOrigin + performance.now() + 30_000,
           resourceProfile: {},
         },
         journal: {
-          endpoint: journalEndpoint, token: journalToken, handshakeTimeoutMs: 5_000,
+          endpoint: journalEndpoint,
+          token: journalToken,
+          handshakeTimeoutMs: 5_000,
           acknowledgementTimeoutMs: 5_000,
           binding: 'host-assigned-worker',
         },

@@ -245,7 +245,9 @@ export class SemanticChannel {
       } else {
         directory = await (dependencies.makeDirectory ?? mkdtemp)(join(tmpdir(), 'termwright-'));
         endpoint = join(directory, 'semantic.sock');
-        resources.defer('semantic socket directory', () => rm(directory!, { recursive: true, force: true }));
+        resources.defer('semantic socket directory', () =>
+          rm(directory!, { recursive: true, force: true }),
+        );
       }
       resources.defer('semantic listener', () => closeServer(server));
       await (dependencies.listen ?? listenServer)(server, endpoint);
@@ -277,7 +279,10 @@ export class SemanticChannel {
   }
 
   get negotiationState(): SemanticNegotiationState {
-    return Object.freeze({ admissionOpen: this.#admissionOpen, pendingHandshakes: this.#handshakeTimers.size });
+    return Object.freeze({
+      admissionOpen: this.#admissionOpen,
+      pendingHandshakes: this.#handshakeTimers.size,
+    });
   }
 
   /** Closes the endpoint and removes the socket directory. Idempotent. */
@@ -353,7 +358,12 @@ export class SemanticChannel {
         // The protocol decoder is permanently poisoned after any violation, so
         // the connection goes with it rather than resynchronising on an offset
         // an attacker chose.
-        this.#fail(socket, wireCodeFor(error), `framing: ${errorDetail(error)}`, violationCode(error));
+        this.#fail(
+          socket,
+          wireCodeFor(error),
+          `framing: ${errorDetail(error)}`,
+          violationCode(error),
+        );
         return;
       }
       for (const frame of frames) {
@@ -382,7 +392,10 @@ export class SemanticChannel {
       if (this.#attached === socket) {
         this.#attached = null;
         if (!this.#closed) {
-          this.#options.hooks.onDiagnostic('adapter-disconnected', 'the semantic adapter disconnected');
+          this.#options.hooks.onDiagnostic(
+            'adapter-disconnected',
+            'the semantic adapter disconnected',
+          );
           this.#options.hooks.onDisconnect();
         }
       }
@@ -451,21 +464,27 @@ export class SemanticChannel {
           : Object.freeze({
               ...hello.probe,
               capabilities: Object.freeze([...hello.probe.capabilities]),
-              ...(hello.probe.instrumentation === undefined ? {} : {
-                instrumentation: Object.freeze({
-                  ...hello.probe.instrumentation,
-                  degradedCapabilities: Object.freeze([
-                    ...hello.probe.instrumentation.degradedCapabilities,
-                  ]),
-                }),
-              }),
+              ...(hello.probe.instrumentation === undefined
+                ? {}
+                : {
+                    instrumentation: Object.freeze({
+                      ...hello.probe.instrumentation,
+                      degradedCapabilities: Object.freeze([
+                        ...hello.probe.instrumentation.degradedCapabilities,
+                      ]),
+                    }),
+                  }),
             }),
-      providers: Object.freeze((hello.providers ?? []).map((provider) => Object.freeze({
-        id: provider.id,
-        version: provider.version,
-        method: provider.method,
-        capabilities: Object.freeze([...provider.capabilities]),
-      }))),
+      providers: Object.freeze(
+        (hello.providers ?? []).map((provider) =>
+          Object.freeze({
+            id: provider.id,
+            version: provider.version,
+            method: provider.method,
+            capabilities: Object.freeze([...provider.capabilities]),
+          }),
+        ),
+      ),
     });
     this.#options.hooks.onAttach(this.#attachment);
     this.#publishNegotiationState();
@@ -506,12 +525,23 @@ export class SemanticChannel {
           return false;
         }
         if (message.snapshot.v !== 2) {
-          this.#fail(socket, 'bad-version', `snapshot v${message.snapshot.v} does not match negotiated ${PROTOCOL_ID}`);
+          this.#fail(
+            socket,
+            'bad-version',
+            `snapshot v${message.snapshot.v} does not match negotiated ${PROTOCOL_ID}`,
+          );
           return false;
         }
         if (!this.#acceptsTreeFields(socket, message.snapshot.nodes, 'snapshot')) return false;
-        if (message.snapshot.hitGrid.status === 'known' && this.#attachment?.capabilities.includes('pointer-hit-grid') !== true) {
-          this.#fail(socket, 'malformed', "snapshot contains a known hit grid without the 'pointer-hit-grid' capability");
+        if (
+          message.snapshot.hitGrid.status === 'known' &&
+          this.#attachment?.capabilities.includes('pointer-hit-grid') !== true
+        ) {
+          this.#fail(
+            socket,
+            'malformed',
+            "snapshot contains a known hit grid without the 'pointer-hit-grid' capability",
+          );
           return false;
         }
         this.#acceptTree(message.snapshot);
@@ -596,7 +626,10 @@ export class SemanticChannel {
     try {
       socket.write(encodeFrame(message, this.#options.limits.maxFrameBytes));
     } catch (error) {
-      this.#options.hooks.onDiagnostic('endpoint-error', `failed to send frame: ${errorDetail(error)}`);
+      this.#options.hooks.onDiagnostic(
+        'endpoint-error',
+        `failed to send frame: ${errorDetail(error)}`,
+      );
     }
   }
 
@@ -629,7 +662,8 @@ export class SemanticChannel {
     this.#options.hooks.onProtocolViolation(
       new ProtocolViolationError(`the semantic channel was closed: ${detail}`, {
         semanticTree: this.#attachment !== null,
-        suggestion: `wire error ${code}${violation === undefined ? '' : ` (${violation})`}; ` +
+        suggestion:
+          `wire error ${code}${violation === undefined ? '' : ` (${violation})`}; ` +
           'the adapter must be fixed — the session keeps its last accepted tree and stops updating it',
       }),
       wireCode,

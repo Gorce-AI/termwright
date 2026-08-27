@@ -1,16 +1,7 @@
 /** The public Charm launcher, including the parts a hand-assembled test misses. */
 
 import { execFile } from 'node:child_process';
-import {
-  cp,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  realpath,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,10 +19,14 @@ const FIXTURE = join(here, 'testing', 'fixture-v2');
 const roots: string[] = [];
 
 async function goAvailable(): Promise<boolean> {
-  return goTestCapability(async () => {
-    await run('go', ['version']);
-    return true;
-  }, false, 'Go certification toolchain');
+  return goTestCapability(
+    async () => {
+      await run('go', ['version']);
+      return true;
+    },
+    false,
+    'Go certification toolchain',
+  );
 }
 
 const hasGo = await goAvailable();
@@ -114,13 +109,11 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     expect(workspace).not.toContain('replace charm.land/bubbles/v2');
     const client = await realpath(join(here, '..', '..', '..', 'clients', 'go'));
     expect(workspace).toContain(`use ${workspacePath(client)}`);
-    expect(workspace).toContain(
-      `replace ${CLIENT_MODULE} v0.0.0 => ${workspacePath(client)}`,
-    );
+    expect(workspace).toContain(`replace ${CLIENT_MODULE} v0.0.0 => ${workspacePath(client)}`);
     // The launcher must consume the current manifest, not resurrect an
     // older handshake/capability patch through a parallel launcher patch set.
     await expect(readFile(join(first.copyDir, 'TERMWRIGHT.md'), 'utf8')).resolves.toContain(
-      "patch set v21 applied",
+      'patch set v21 applied',
     );
 
     await run('go', ['build', ...first.goArgs, '-o', join(dir, 'app-bin'), '.'], {
@@ -143,10 +136,7 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     const app = join(dir, 'app');
     await writeModule(
       app,
-      [
-        'github.com/charmbracelet/bubbletea v1.3.10',
-        'github.com/charmbracelet/bubbles v1.0.0',
-      ],
+      ['github.com/charmbracelet/bubbletea v1.3.10', 'github.com/charmbracelet/bubbles v1.0.0'],
       `package main
 
 import tea "github.com/charmbracelet/bubbletea"
@@ -232,11 +222,19 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
       'github.com/charmbracelet/bubbles v1.0.0',
     ]);
     await mkdir(bubbles, { recursive: true });
-    await writeFile(join(bubbles, 'go.mod'), 'module github.com/charmbracelet/bubbles\n\ngo 1.24.0\n', 'utf8');
+    await writeFile(
+      join(bubbles, 'go.mod'),
+      'module github.com/charmbracelet/bubbles\n\ngo 1.24.0\n',
+      'utf8',
+    );
     for (const name of ['spinner', 'progress', 'filepicker', 'list', 'table']) {
       const packageDir = join(bubbles, name);
       await mkdir(packageDir, { recursive: true });
-      await writeFile(join(packageDir, `${name}.go`), `package ${name}\n\ntype Model struct{}\n`, 'utf8');
+      await writeFile(
+        join(packageDir, `${name}.go`),
+        `package ${name}\n\ntype Model struct{}\n`,
+        'utf8',
+      );
     }
     const goMod = await readFile(join(app, 'go.mod'), 'utf8');
     await writeFile(

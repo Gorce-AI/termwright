@@ -17,7 +17,13 @@
 
 import { writeFile } from 'node:fs/promises';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
-import { DEFAULT_ARTIFACT_VALUE_POLICY, type ArtifactValuePolicy, type EffectiveSessionContract, type PointerHitGrid, type SemanticSnapshot } from '@termwright/protocol';
+import {
+  DEFAULT_ARTIFACT_VALUE_POLICY,
+  type ArtifactValuePolicy,
+  type EffectiveSessionContract,
+  type PointerHitGrid,
+  type SemanticSnapshot,
+} from '@termwright/protocol';
 import { generateTestSource, type CodegenOptions, type RecordedEvent } from './codegen.js';
 import { coalesceInput, InputDecoder } from './input-decode.js';
 import { generateSelector, type GeneratedSelector } from './selector.js';
@@ -241,7 +247,12 @@ class Recorder implements RecorderSession {
     const policy = this.#options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
     if (policy === 'none') return;
     if (policy === 'redacted') {
-      this.#push({ kind: 'withheld-input', inputKind: kind, bytes: Buffer.byteLength(text, 'utf8'), t });
+      this.#push({
+        kind: 'withheld-input',
+        inputKind: kind,
+        bytes: Buffer.byteLength(text, 'utf8'),
+        t,
+      });
       return;
     }
     if (kind === 'type') this.#pushTyped(text, t);
@@ -282,7 +293,8 @@ function ownsPointerCell(
 ): boolean {
   if (contract.sessionId !== snapshot.sessionId) return false;
   const capability = contract.capabilities['pointer-hit-testing'];
-  if (capability.status !== 'supported' || capability.evidence.strength !== 'authoritative') return false;
+  if (capability.status !== 'supported' || capability.evidence.strength !== 'authoritative')
+    return false;
   if (!snapshot.nodes.some((node) => node.id === nodeId)) return false;
 
   if (
@@ -293,19 +305,20 @@ function ownsPointerCell(
     return gridOwns(snapshot.hitGrid.value, nodeId);
   }
 
-  return (snapshot.providerEvidence ?? []).some((provider) =>
-    provider.status === 'available' &&
-    provider.sessionId === snapshot.sessionId &&
-    provider.revision === snapshot.revision &&
-    provider.providerId === capability.evidence.providerId &&
-    provider.evidence.strength === 'authoritative' &&
-    provider.hitGrid !== undefined &&
-    gridOwns(provider.hitGrid, nodeId),
+  return (snapshot.providerEvidence ?? []).some(
+    (provider) =>
+      provider.status === 'available' &&
+      provider.sessionId === snapshot.sessionId &&
+      provider.revision === snapshot.revision &&
+      provider.providerId === capability.evidence.providerId &&
+      provider.evidence.strength === 'authoritative' &&
+      provider.hitGrid !== undefined &&
+      gridOwns(provider.hitGrid, nodeId),
   );
 }
 
 function gridOwns(grid: PointerHitGrid, nodeId: string): boolean {
-  return grid.regions.some(({ recipientId, rect }) =>
-    recipientId === nodeId && rect.width > 0 && rect.height > 0,
+  return grid.regions.some(
+    ({ recipientId, rect }) => recipientId === nodeId && rect.width > 0 && rect.height > 0,
   );
 }

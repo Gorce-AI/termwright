@@ -29,8 +29,12 @@ describe('certified Ink instrumentation', () => {
   it('fails closed when either audited artifact changes', async () => {
     const rendererPath = join(inkBuild, 'renderer.js');
     const corePath = join(inkBuild, 'ink.js');
-    expect(instrumentInkRenderer(rendererPath, `${await readFile(rendererPath, 'utf8')}\n// changed`)).toBeUndefined();
-    expect(instrumentInkCore(corePath, `${await readFile(corePath, 'utf8')}\n// changed`)).toBeUndefined();
+    expect(
+      instrumentInkRenderer(rendererPath, `${await readFile(rendererPath, 'utf8')}\n// changed`),
+    ).toBeUndefined();
+    expect(
+      instrumentInkCore(corePath, `${await readFile(corePath, 'utf8')}\n// changed`),
+    ).toBeUndefined();
   });
 
   it('requires one matching renderer and core profile before enabling capture', () => {
@@ -59,9 +63,11 @@ describe('certified Ink instrumentation', () => {
         rendererChecksum: profile!.rendererSha256,
         coreChecksum: profile!.coreSha256,
       });
-      expect(instrumentationSentinel()).toEqual(expect.objectContaining({
-        frameworkVersion: INK_VERSION,
-      }));
+      expect(instrumentationSentinel()).toEqual(
+        expect.objectContaining({
+          frameworkVersion: INK_VERSION,
+        }),
+      );
     } finally {
       if (prior === undefined) delete globals[INK_INSTRUMENTATION_SENTINEL];
       else globals[INK_INSTRUMENTATION_SENTINEL] = prior;
@@ -94,7 +100,9 @@ describe('certified Ink instrumentation', () => {
       }),
     });
     try {
-      expect(instrumentInkRenderer(rendererPath, renderer)).toContain('frameworkVersion: "7.1.1-candidate"');
+      expect(instrumentInkRenderer(rendererPath, renderer)).toContain(
+        'frameworkVersion: "7.1.1-candidate"',
+      );
       process.env['GITHUB_SHA'] = 'stale-sha';
       // The built-in exact profile still accepts the real artifact, but the
       // untrusted candidate version can never appear in its output.

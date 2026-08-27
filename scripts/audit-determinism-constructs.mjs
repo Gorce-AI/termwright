@@ -14,8 +14,11 @@ const patterns = Object.freeze([
   ['arbitrary-browser-wait', /\bwaitForTimeout\s*\(/gu],
   ['test-skip', /\b(?:it|test|describe)\.(?:skip|skipIf)\b/gu],
   ['fixed-listen-port', /\.listen\s*\(\s*[1-9][0-9]{2,5}\b/gu],
-  ['process-global-mutation', /\bprocess\.(?:chdir\s*\(|env(?:\[[^\]]+\]|\.[A-Za-z_$][\w$]*)\s*=)/gu],
-  ['fire-and-forget', /\bvoid\s+(?:this\.)?[A-Za-z_$][\w$#.]*\s*\(/gu],
+  [
+    'process-global-mutation',
+    /\bprocess\.(?:chdir\s*\(|env(?:\[[^\]]+\]|\.[A-Za-z_$][\w$]*)\s*=)/gu,
+  ],
+  ['fire-and-forget', /\bvoid\s+[A-Za-z_$][\w$]*(?:\s*\.\s*#?[A-Za-z_$][\w$]*)*\s*\(/gu],
 ]);
 
 const findings = [];
@@ -27,14 +30,21 @@ for (const absolute of sources.sort()) {
     for (const match of source.matchAll(pattern)) {
       const index = match.index ?? 0;
       const line = 1 + source.slice(0, index).split('\n').length - 1;
-      const excerpt = source.slice(source.lastIndexOf('\n', index) + 1, source.indexOf('\n', index) < 0 ? source.length : source.indexOf('\n', index)).trim();
-      findings.push(Object.freeze({
-        path,
-        line,
-        kind,
-        classification: classify(path, kind),
-        excerpt,
-      }));
+      const excerpt = source
+        .slice(
+          source.lastIndexOf('\n', index) + 1,
+          source.indexOf('\n', index) < 0 ? source.length : source.indexOf('\n', index),
+        )
+        .trim();
+      findings.push(
+        Object.freeze({
+          path,
+          line,
+          kind,
+          classification: classify(path, kind),
+          excerpt,
+        }),
+      );
     }
   }
 }
@@ -43,27 +53,46 @@ for (const absolute of sources.sort()) {
 // makes an edit anywhere above a construct rewrite the inventory. That churn
 // buries the entries a reviewer actually needs to see. Lines are still
 // reported live, in the messages below, where they help someone navigate.
-findings.sort((left, right) =>
-  left.path.localeCompare(right.path) ||
-  left.kind.localeCompare(right.kind) ||
-  left.excerpt.localeCompare(right.excerpt) ||
-  left.line - right.line);
+findings.sort(
+  (left, right) =>
+    left.path.localeCompare(right.path) ||
+    left.kind.localeCompare(right.kind) ||
+    left.excerpt.localeCompare(right.excerpt) ||
+    left.line - right.line,
+);
 
-const forbidden = findings.filter(({ kind }) => kind === 'arbitrary-browser-wait' || kind === 'fixed-listen-port');
+const forbidden = findings.filter(
+  ({ kind }) => kind === 'arbitrary-browser-wait' || kind === 'fixed-listen-port',
+);
 if (forbidden.length > 0) {
-  throw new Error(`forbidden deterministic constructs:\n${forbidden.map(({ path, line, kind }) => `  ${path}:${line} ${kind}`).join('\n')}`);
+  throw new Error(
+    `forbidden deterministic constructs:\n${forbidden.map(({ path, line, kind }) => `  ${path}:${line} ${kind}`).join('\n')}`,
+  );
 }
 
 const report = {
   schemaVersion: 1,
   policy: {
     generatedBy: 'node scripts/audit-determinism-constructs.mjs --write',
-    invariant: 'every timing, polling, skip, process-global mutation and unawaited task is classified; drift requires review',
+    invariant:
+      'every timing, polling, skip, process-global mutation and unawaited task is classified; drift requires review',
     forbidden: ['arbitrary-browser-wait', 'fixed-listen-port'],
     platformSkips: 'additionally governed by quality/platform-deviations.json',
   },
-  summary: Object.fromEntries([...new Set(findings.map(({ classification }) => classification))].sort().map((classification) => [classification, findings.filter((finding) => finding.classification === classification).length])),
-  findings: findings.map(({ path, kind, classification, excerpt }) => ({ path, kind, classification, excerpt })),
+  summary: Object.fromEntries(
+    [...new Set(findings.map(({ classification }) => classification))]
+      .sort()
+      .map((classification) => [
+        classification,
+        findings.filter((finding) => finding.classification === classification).length,
+      ]),
+  ),
+  findings: findings.map(({ path, kind, classification, excerpt }) => ({
+    path,
+    kind,
+    classification,
+    excerpt,
+  })),
 };
 const encoded = `${JSON.stringify(report, null, 2)}\n`;
 if (process.argv.includes('--write')) {
@@ -74,7 +103,7 @@ if (process.argv.includes('--write')) {
   if (current !== encoded) {
     throw new Error(
       'determinism construct inventory drifted; inspect the diff, remove accidental waits, then run node scripts/audit-determinism-constructs.mjs --write\n' +
-      describeDrift(current, encoded),
+        describeDrift(current, encoded),
     );
   }
   console.log(`determinism constructs: ${findings.length} classified, zero forbidden, zero drift`);
@@ -88,7 +117,8 @@ function describeDrift(current, next) {
   const key = ({ path, kind, excerpt }) => `${path}\u0000${kind}\u0000${excerpt}`;
   const count = (encoded) => {
     const counts = new Map();
-    for (const finding of JSON.parse(encoded).findings) counts.set(key(finding), (counts.get(key(finding)) ?? 0) + 1);
+    for (const finding of JSON.parse(encoded).findings)
+      counts.set(key(finding), (counts.get(key(finding)) ?? 0) + 1);
     return counts;
   };
   let recorded;
@@ -103,7 +133,10 @@ function describeDrift(current, next) {
     const delta = total - (recorded.get(entry) ?? 0);
     if (delta <= 0) continue;
     const [path, kind, excerpt] = entry.split('\u0000');
-    const at = findings.filter((finding) => key(finding) === entry).map((finding) => finding.line).join(', ');
+    const at = findings
+      .filter((finding) => key(finding) === entry)
+      .map((finding) => finding.line)
+      .join(', ');
     lines.push(`  + ${path}:${at} ${kind} ${excerpt}`);
   }
   for (const [entry, total] of recorded) {
@@ -119,10 +152,17 @@ function classify(path, kind) {
   const test = /(?:\.test|\.spec|\.e2e)\.[cm]?[jt]sx?$/u.test(path);
   if (kind === 'wall-clock') return 'display-or-persisted-wall-time-not-correctness-order';
   if (kind === 'test-skip') return 'explicit-test-selection-reviewed-with-platform-registry';
-  if (kind === 'process-global-mutation') return test ? 'test-process-isolation-review' : 'production-process-isolation-review';
-  if (kind === 'fire-and-forget') return test ? 'test-observer-or-intentional-background-task' : 'managed-or-diagnostic-background-task';
+  if (kind === 'process-global-mutation')
+    return test ? 'test-process-isolation-review' : 'production-process-isolation-review';
+  if (kind === 'fire-and-forget')
+    return test
+      ? 'test-observer-or-intentional-background-task'
+      : 'managed-or-diagnostic-background-task';
   if (fixture) return 'deterministic-adversarial-fixture-schedule';
-  if (test) return kind === 'polling' ? 'explicit-external-or-ui-source-polling' : 'deadline-or-scheduler-regression-test';
+  if (test)
+    return kind === 'polling'
+      ? 'explicit-external-or-ui-source-polling'
+      : 'deadline-or-scheduler-regression-test';
   if (path === 'packages/driver/src/logs.ts') return 'explicit-external-file-polling';
   if (kind === 'polling') return 'production-polling-review';
   return 'bounded-deadline-or-managed-background-task';

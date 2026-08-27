@@ -9,7 +9,9 @@ import { writeWindowsConsoleMarker } from '@termwright/pty';
 
 export const MARKER_SINK_SYMBOL = Symbol.for('termwright.opentui.marker-sink.v1');
 export const MARKER_SINK_TARGET_SYMBOL = Symbol.for('termwright.opentui.marker-sink-target.v1');
-export const MARKER_SINK_FEED_WRITE_SYMBOL = Symbol.for('termwright.opentui.marker-sink-feed-write.v1');
+export const MARKER_SINK_FEED_WRITE_SYMBOL = Symbol.for(
+  'termwright.opentui.marker-sink-feed-write.v1',
+);
 
 export interface MarkerSink extends Writable {
   writeMarker(marker: string): void;
@@ -22,9 +24,11 @@ export interface MarkerSink extends Writable {
 }
 
 export function isMarkerSink(value: unknown, token: string): value is MarkerSink {
-  return value !== null
-    && typeof value === 'object'
-    && (value as Partial<MarkerSink>)[MARKER_SINK_SYMBOL] === token;
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    (value as Partial<MarkerSink>)[MARKER_SINK_SYMBOL] === token
+  );
 }
 
 interface LocalFeedRenderer {
@@ -41,7 +45,10 @@ interface TargetFailureGuard {
 
 const targetFailureGuards = new WeakMap<object, TargetFailureGuard>();
 
-function observeTargetFailures(target: NodeJS.WriteStream, subscriber: (error: Error) => void): () => void {
+function observeTargetFailures(
+  target: NodeJS.WriteStream,
+  subscriber: (error: Error) => void,
+): () => void {
   let guard = targetFailureGuards.get(target);
   if (guard === undefined) {
     const subscribers = new Set<(error: Error) => void>();
@@ -106,7 +113,11 @@ export function createMarkerSink(target: NodeJS.WriteStream, token: string): Mar
     if (firstFailure !== undefined) return;
     firstFailure = error;
     for (const handler of [...failureHandlers]) {
-      try { handler(error); } catch { /* diagnostics cannot escape */ }
+      try {
+        handler(error);
+      } catch {
+        /* diagnostics cannot escape */
+      }
     }
   };
   const releaseTargetFailure = observeTargetFailures(target, notifyFailure);
@@ -157,7 +168,11 @@ export function createMarkerSink(target: NodeJS.WriteStream, token: string): Mar
   sink.onFailure = (handler): (() => void) => {
     failureHandlers.add(handler);
     if (firstFailure !== undefined) {
-      try { handler(firstFailure); } catch { /* diagnostics cannot escape */ }
+      try {
+        handler(firstFailure);
+      } catch {
+        /* diagnostics cannot escape */
+      }
     }
     return () => failureHandlers.delete(handler);
   };

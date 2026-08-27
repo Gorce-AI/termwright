@@ -135,7 +135,13 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
 export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void {
   const testId = overview.sessionId;
   const messages: ServerMessage[] = [
-    { v: 1, type: 'run-start', runId: `trace:${overview.sessionId}`, mode: 'post-mortem', startedAt: overview.startedAt },
+    {
+      v: 1,
+      type: 'run-start',
+      runId: `trace:${overview.sessionId}`,
+      mode: 'post-mortem',
+      startedAt: overview.startedAt,
+    },
     {
       v: 1,
       type: 'session',
@@ -173,7 +179,9 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
         title: step.title,
         phase: 'end',
         t: step.castEndOffset,
-        ...(step.status === 'failed' ? { status: 'failed' as const } : { status: 'passed' as const }),
+        ...(step.status === 'failed'
+          ? { status: 'failed' as const }
+          : { status: 'passed' as const }),
       });
     }
   }
@@ -221,7 +229,10 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
  * terminal.write(Buffer.from(state.castPrefixB64, 'base64').toString('utf8'));
  * ```
  */
-export async function traceStateAt(reader: TraceReader, timeMs: number): Promise<TraceStatePayload> {
+export async function traceStateAt(
+  reader: TraceReader,
+  timeMs: number,
+): Promise<TraceStatePayload> {
   const state = await reader.stateAt(timeMs);
   return {
     timeMs: state.timeMs,

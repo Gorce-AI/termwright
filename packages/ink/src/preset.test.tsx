@@ -97,15 +97,35 @@ test('publishes explicit interactive roles and accessible names without guessing
   const harness = await mountInk(
     <Semantic role="dialog" name="Permission">
       <Box flexDirection="column">
-        <Semantic role="textbox" name="Command"><Box><Text>deploy</Text></Box></Semantic>
-        <Semantic role="button" name="Approve"><Box><Text>Approve</Text></Box></Semantic>
-        <Semantic role="list" name="Targets">
+        <Semantic role="textbox" name="Command">
           <Box>
-            <Semantic role="listitem" name="Production"><Box><Text>Production</Text></Box></Semantic>
+            <Text>deploy</Text>
           </Box>
         </Semantic>
-        <Semantic role="status" name="Ready"><Box><Text>Ready</Text></Box></Semantic>
-        <Semantic role="alert" name="Review required"><Box><Text>Review required</Text></Box></Semantic>
+        <Semantic role="button" name="Approve">
+          <Box>
+            <Text>Approve</Text>
+          </Box>
+        </Semantic>
+        <Semantic role="list" name="Targets">
+          <Box>
+            <Semantic role="listitem" name="Production">
+              <Box>
+                <Text>Production</Text>
+              </Box>
+            </Semantic>
+          </Box>
+        </Semantic>
+        <Semantic role="status" name="Ready">
+          <Box>
+            <Text>Ready</Text>
+          </Box>
+        </Semantic>
+        <Semantic role="alert" name="Review required">
+          <Box>
+            <Text>Review required</Text>
+          </Box>
+        </Semantic>
       </Box>
     </Semantic>,
     SIZE,

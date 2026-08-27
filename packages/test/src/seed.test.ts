@@ -13,7 +13,8 @@ function workspace(): string {
 }
 
 afterEach(() => {
-  while (directories.length > 0) rmSync(directories.pop() as string, { recursive: true, force: true });
+  while (directories.length > 0)
+    rmSync(directories.pop() as string, { recursive: true, force: true });
 });
 
 describe('seedDirectory', () => {
@@ -86,8 +87,9 @@ describe('seedDirectory', () => {
     symlinkSync(outside, join(source, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
     const dir = workspace();
     expect(() => seedDirectory(dir, { template: source })).toThrow(/template symlink .* escapes/u);
-    expect(() => seedDirectory(dir, { template: source, files: { 'escape/owned.txt': 'no' } }))
-      .toThrow(/template symlink .* escapes/u);
+    expect(() =>
+      seedDirectory(dir, { template: source, files: { 'escape/owned.txt': 'no' } }),
+    ).toThrow(/template symlink .* escapes/u);
   });
 
   it('preserves an internal relative symlink but refuses overrides through it', () => {
@@ -99,7 +101,8 @@ describe('seedDirectory', () => {
     const dir = workspace();
     seedDirectory(dir, { template: source });
     expect(readFileSync(join(dir, 'package/shared/value.txt'), 'utf8')).toBe('safe');
-    expect(() => seedDirectory(dir, { files: { 'package/shared/override.txt': 'no' } }))
-      .toThrow(/traverses a symlink/u);
+    expect(() => seedDirectory(dir, { files: { 'package/shared/override.txt': 'no' } })).toThrow(
+      /traverses a symlink/u,
+    );
   });
 });

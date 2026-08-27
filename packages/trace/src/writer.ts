@@ -7,7 +7,14 @@ import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { mkdir, mkdtemp, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { DEFAULT_ARTIFACT_VALUE_POLICY, projectActionReceiptForArtifact, projectSemanticSnapshotForArtifact, type ArtifactValuePolicy, type EffectiveSessionContract, type SemanticSnapshot } from '@termwright/protocol';
+import {
+  DEFAULT_ARTIFACT_VALUE_POLICY,
+  projectActionReceiptForArtifact,
+  projectSemanticSnapshotForArtifact,
+  type ArtifactValuePolicy,
+  type EffectiveSessionContract,
+  type SemanticSnapshot,
+} from '@termwright/protocol';
 import type { SessionEventRecord, SessionEvents } from '@termwright/driver';
 import { formatCastEvent, formatCastHeader, type CastEventCode, type CastHeader } from './cast.js';
 import { TraceError } from './errors.js';
@@ -122,11 +129,14 @@ export interface TraceArchive {
 /** Records a live session into a `.twtrace` archive. */
 export interface TraceWriter {
   /** Opens a step; writes a cast marker labelled with `title`. */
-  addStep(title: string, metadata?: {
-    /** Stable test-scoped id supplied by an external lifecycle producer. */
-    readonly stepId?: string;
-    readonly gherkin?: GherkinStepMetadata;
-  }): StepHandle;
+  addStep(
+    title: string,
+    metadata?: {
+      /** Stable test-scoped id supplied by an external lifecycle producer. */
+      readonly stepId?: string;
+      readonly gherkin?: GherkinStepMetadata;
+    },
+  ): StepHandle;
   /** Closes the innermost open step (or `stepId` when given). */
   endStep(stepId?: string, status?: StepStatus, error?: string): void;
   /** Excludes subsequent output from the recording until {@link show}. */
@@ -191,10 +201,7 @@ const COALESCE_LIMIT_BYTES = 64 * 1024;
  * await writer.finalize({ idleTimeLimit: 2 });
  * ```
  */
-export function createTraceWriter(
-  session: TraceSource,
-  options: TraceWriterOptions,
-): TraceWriter {
+export function createTraceWriter(session: TraceSource, options: TraceWriterOptions): TraceWriter {
   // Timeline offsets must not jump when NTP or a user adjusts the wall clock.
   // `startedAt` below remains a real ISO wall time; only elapsed positions use
   // the monotonic clock, matching the driver's own event timestamps.
@@ -274,156 +281,183 @@ export function createTraceWriter(
 
   function consumeSessionEvent(recorded: SessionEventRecord): void {
     switch (recorded.type) {
-    case 'output': {
-      const { data, timeMs } = recorded.payload;
-      const wall = driverTime(timeMs);
-      // Decode unconditionally so the streaming decoder keeps its state even
-      // across hidden windows; discard the text when hidden.
-      const text = decoder.decode(data, { stream: true });
-      if (truncated || inHiddenWindow(wall)) return;
-      outputBytes += data.byteLength;
-      if (outputBytes > maxOutputBytes) {
-        truncated = true;
-        return;
-      }
-      pushOutput(wall, text);
-      break;
-    }
-    case 'input': {
-      const { data, timeMs, kind } = recorded.payload;
-      const wall = driverTime(timeMs);
-      traceEvents.push(artifactValuePolicy === 'raw'
-        ? { t: wall, kind: 'input', dataB64: Buffer.from(data).toString('base64'), inputKind: kind, recording: 'raw' }
-        : { t: wall, kind: 'input', inputKind: kind, recording: 'withheld', withheldReason: 'artifact-policy' });
-      if (options.recordInput === true && artifactValuePolicy === 'raw' && !inHiddenWindow(wall)) {
-        pushCast(wall, 'i', new TextDecoder('utf-8').decode(data));
-      }
-      break;
-    }
-    case 'resize': {
-      const event = recorded.payload;
-      const wall = driverTime(event.timeMs);
-      columns = event.columns;
-      rows = event.rows;
-      lastResize = { columns: event.columns, rows: event.rows };
-      traceEvents.push({
-        t: wall,
-        kind: 'resize',
-        columns: event.columns,
-        rows: event.rows,
-      });
-      pushCast(wall, 'r', `${event.columns}x${event.rows}`);
-      break;
-    }
-    case 'semantic-revision': {
-      const { revision, timeMs, snapshot } = recorded.payload;
-      if (snapshot.revision !== revision) {
-        throw new TraceError('protocol-violation', `semantic event revision ${revision} carried snapshot revision ${snapshot.revision}`);
-      }
-      semantics.push({ t: driverTime(timeMs), revision, snapshot: projectSemanticSnapshotForArtifact(snapshot, artifactValuePolicy) });
-      break;
-    }
-    case 'exit': {
-      const status = recorded.payload;
-      const wall = driverTime(status.timeMs);
-      exit = { code: status.code, signal: status.signal };
-      pushCast(wall, 'x', String(status.code ?? ''));
-      break;
-    }
-    case 'crash': {
-      const report = recorded.payload;
-    // `crash` arrives just before `exit`, and `exit` only after the emulator
-    // has drained — so the screen tail in the report is the screen the archive
-    // ends on, and both land at their own timestamps on the same clock.
-      const wall = driverTime(report.timeMs);
-      const lastSemanticRevision = report.lastSemanticTree?.revision ?? null;
-      crash = {
-        t: wall,
-        // Rewritten with the real value in writeArchive; the wall clock is the
-        // only timeline that exists before the hide/trim transforms run.
-        castOffset: wall,
-        exit: { code: report.exit.code, signal: report.exit.signal },
-        screenTail: [...report.screenTail],
-        lastSemanticRevision,
-        recentInputs: [...report.recentInputs],
-        diagnosticsTail: [...report.diagnosticsTail],
-      };
-      traceEvents.push({
-        t: wall,
-        kind: 'crash',
-        exit: crash.exit,
-        screenTailLines: crash.screenTail.length,
-        lastSemanticRevision,
-      });
-      break;
-    }
-    case 'action': {
-      const event = recorded.payload;
-    // Emitted after the action finished, so `t` is its completion — see
-    // ActionEvent's TSDoc for what that means for the timeline.
-      const stepId = openSteps[openSteps.length - 1];
-      traceEvents.push({
-        t: driverTime(event.timeMs),
-        kind: 'action',
-        api: event.api,
-        ...(event.selector === undefined ? {} : { selector: event.selector }),
-        ...(event.ref === undefined ? {} : { ref: event.ref }),
-        ok: event.ok,
-        ...(event.error === undefined ? {} : { error: event.error }),
-        ...(event.observation === undefined ? {} : { observation: event.observation }),
-        ...(event.receipt === undefined ? {} : { receipt: projectActionReceiptForArtifact(event.receipt, artifactValuePolicy) }),
-        ...(event.actionability === undefined ? {} : { actionability: event.actionability }),
-        ...(stepId === undefined ? {} : { stepId }),
-      });
-      break;
-    }
-    case 'app-log': {
-      const event = recorded.payload;
-      const wall = driverTime(event.timeMs);
-      const record = event.record;
-      const label = event.label ?? record?.logger;
-      const entry: TraceLogEntry = {
-        t: wall,
-        // Replaced with the real offset in writeArchive.
-        castOffset: wall,
-        source: event.source,
-        ...(label === undefined ? {} : { label }),
-        ...(event.path === undefined ? {} : { path: event.path }),
-        ...(record?.logger === undefined ? {} : { logger: record.logger }),
-        ...(record?.level === undefined ? {} : { level: record.level }),
-        message: record?.message ?? event.line ?? '',
-        ...(record?.attrs === undefined ? {} : { attrs: record.attrs }),
-        ...(record?.seq === undefined ? {} : { seq: record.seq }),
-        ...(record?.revision === undefined ? {} : { revision: record.revision }),
-        ...(record?.ts === undefined ? {} : { ts: record.ts }),
-      };
-      if (label !== undefined || event.path !== undefined) {
-        // Keyed on both: one label can front several files, and the same file
-        // can be relabelled between runs.
-        const key = `${label ?? ''}\u0000${event.path ?? ''}`;
-        if (!logSources.has(key)) {
-          logSources.set(key, {
-            ...(label === undefined ? {} : { label }),
-            ...(event.path === undefined ? {} : { path: event.path }),
-          });
+      case 'output': {
+        const { data, timeMs } = recorded.payload;
+        const wall = driverTime(timeMs);
+        // Decode unconditionally so the streaming decoder keeps its state even
+        // across hidden windows; discard the text when hidden.
+        const text = decoder.decode(data, { stream: true });
+        if (truncated || inHiddenWindow(wall)) return;
+        outputBytes += data.byteLength;
+        if (outputBytes > maxOutputBytes) {
+          truncated = true;
+          return;
         }
+        pushOutput(wall, text);
+        break;
       }
-      if (entry.level !== undefined) {
-        logLevels.set(entry.level, (logLevels.get(entry.level) ?? 0) + 1);
+      case 'input': {
+        const { data, timeMs, kind } = recorded.payload;
+        const wall = driverTime(timeMs);
+        traceEvents.push(
+          artifactValuePolicy === 'raw'
+            ? {
+                t: wall,
+                kind: 'input',
+                dataB64: Buffer.from(data).toString('base64'),
+                inputKind: kind,
+                recording: 'raw',
+              }
+            : {
+                t: wall,
+                kind: 'input',
+                inputKind: kind,
+                recording: 'withheld',
+                withheldReason: 'artifact-policy',
+              },
+        );
+        if (
+          options.recordInput === true &&
+          artifactValuePolicy === 'raw' &&
+          !inHiddenWindow(wall)
+        ) {
+          pushCast(wall, 'i', new TextDecoder('utf-8').decode(data));
+        }
+        break;
       }
-      logs.push(entry);
-      if (logs.length > maxLogEntries) {
-        logs.shift();
-        droppedLogs += 1;
+      case 'resize': {
+        const event = recorded.payload;
+        const wall = driverTime(event.timeMs);
+        columns = event.columns;
+        rows = event.rows;
+        lastResize = { columns: event.columns, rows: event.rows };
+        traceEvents.push({
+          t: wall,
+          kind: 'resize',
+          columns: event.columns,
+          rows: event.rows,
+        });
+        pushCast(wall, 'r', `${event.columns}x${event.rows}`);
+        break;
       }
-      break;
-    }
-    // These events are either represented by richer events above or are live
-    // projection concerns rather than trace archive records.
-    case 'action-start':
-    case 'diagnostic':
-    case 'screen-revision':
-      break;
+      case 'semantic-revision': {
+        const { revision, timeMs, snapshot } = recorded.payload;
+        if (snapshot.revision !== revision) {
+          throw new TraceError(
+            'protocol-violation',
+            `semantic event revision ${revision} carried snapshot revision ${snapshot.revision}`,
+          );
+        }
+        semantics.push({
+          t: driverTime(timeMs),
+          revision,
+          snapshot: projectSemanticSnapshotForArtifact(snapshot, artifactValuePolicy),
+        });
+        break;
+      }
+      case 'exit': {
+        const status = recorded.payload;
+        const wall = driverTime(status.timeMs);
+        exit = { code: status.code, signal: status.signal };
+        pushCast(wall, 'x', String(status.code ?? ''));
+        break;
+      }
+      case 'crash': {
+        const report = recorded.payload;
+        // `crash` arrives just before `exit`, and `exit` only after the emulator
+        // has drained — so the screen tail in the report is the screen the archive
+        // ends on, and both land at their own timestamps on the same clock.
+        const wall = driverTime(report.timeMs);
+        const lastSemanticRevision = report.lastSemanticTree?.revision ?? null;
+        crash = {
+          t: wall,
+          // Rewritten with the real value in writeArchive; the wall clock is the
+          // only timeline that exists before the hide/trim transforms run.
+          castOffset: wall,
+          exit: { code: report.exit.code, signal: report.exit.signal },
+          screenTail: [...report.screenTail],
+          lastSemanticRevision,
+          recentInputs: [...report.recentInputs],
+          diagnosticsTail: [...report.diagnosticsTail],
+        };
+        traceEvents.push({
+          t: wall,
+          kind: 'crash',
+          exit: crash.exit,
+          screenTailLines: crash.screenTail.length,
+          lastSemanticRevision,
+        });
+        break;
+      }
+      case 'action': {
+        const event = recorded.payload;
+        // Emitted after the action finished, so `t` is its completion — see
+        // ActionEvent's TSDoc for what that means for the timeline.
+        const stepId = openSteps[openSteps.length - 1];
+        traceEvents.push({
+          t: driverTime(event.timeMs),
+          kind: 'action',
+          api: event.api,
+          ...(event.selector === undefined ? {} : { selector: event.selector }),
+          ...(event.ref === undefined ? {} : { ref: event.ref }),
+          ok: event.ok,
+          ...(event.error === undefined ? {} : { error: event.error }),
+          ...(event.observation === undefined ? {} : { observation: event.observation }),
+          ...(event.receipt === undefined
+            ? {}
+            : { receipt: projectActionReceiptForArtifact(event.receipt, artifactValuePolicy) }),
+          ...(event.actionability === undefined ? {} : { actionability: event.actionability }),
+          ...(stepId === undefined ? {} : { stepId }),
+        });
+        break;
+      }
+      case 'app-log': {
+        const event = recorded.payload;
+        const wall = driverTime(event.timeMs);
+        const record = event.record;
+        const label = event.label ?? record?.logger;
+        const entry: TraceLogEntry = {
+          t: wall,
+          // Replaced with the real offset in writeArchive.
+          castOffset: wall,
+          source: event.source,
+          ...(label === undefined ? {} : { label }),
+          ...(event.path === undefined ? {} : { path: event.path }),
+          ...(record?.logger === undefined ? {} : { logger: record.logger }),
+          ...(record?.level === undefined ? {} : { level: record.level }),
+          message: record?.message ?? event.line ?? '',
+          ...(record?.attrs === undefined ? {} : { attrs: record.attrs }),
+          ...(record?.seq === undefined ? {} : { seq: record.seq }),
+          ...(record?.revision === undefined ? {} : { revision: record.revision }),
+          ...(record?.ts === undefined ? {} : { ts: record.ts }),
+        };
+        if (label !== undefined || event.path !== undefined) {
+          // Keyed on both: one label can front several files, and the same file
+          // can be relabelled between runs.
+          const key = `${label ?? ''}\u0000${event.path ?? ''}`;
+          if (!logSources.has(key)) {
+            logSources.set(key, {
+              ...(label === undefined ? {} : { label }),
+              ...(event.path === undefined ? {} : { path: event.path }),
+            });
+          }
+        }
+        if (entry.level !== undefined) {
+          logLevels.set(entry.level, (logLevels.get(entry.level) ?? 0) + 1);
+        }
+        logs.push(entry);
+        if (logs.length > maxLogEntries) {
+          logs.shift();
+          droppedLogs += 1;
+        }
+        break;
+      }
+      // These events are either represented by richer events above or are live
+      // projection concerns rather than trace archive records.
+      case 'action-start':
+      case 'diagnostic':
+      case 'screen-revision':
+        break;
     }
   }
 
@@ -459,10 +493,14 @@ export function createTraceWriter(
   }
 
   const writer: TraceWriter = {
-    addStep(title: string, metadata?: { readonly stepId?: string; readonly gherkin?: GherkinStepMetadata }): StepHandle {
+    addStep(
+      title: string,
+      metadata?: { readonly stepId?: string; readonly gherkin?: GherkinStepMetadata },
+    ): StepHandle {
       assertLive();
       const stepId = metadata?.stepId ?? `s${++stepCounter}`;
-      if (stepTitles.has(stepId)) throw new TraceError('protocol-violation', `duplicate trace step id ${stepId}`);
+      if (stepTitles.has(stepId))
+        throw new TraceError('protocol-violation', `duplicate trace step id ${stepId}`);
       const parentStepId = openSteps[openSteps.length - 1];
       stepTitles.set(stepId, title);
       openSteps.push(stepId);
@@ -579,13 +617,15 @@ export function createTraceWriter(
           },
         };
       }
-      finalizePromise = writeArchive(preparedArchive).then((archive) => {
-        finalizedArchive = archive;
-        return archive;
-      }).catch((error: unknown) => {
-        finalizePromise = undefined;
-        throw error;
-      });
+      finalizePromise = writeArchive(preparedArchive)
+        .then((archive) => {
+          finalizedArchive = archive;
+          return archive;
+        })
+        .catch((error: unknown) => {
+          finalizePromise = undefined;
+          throw error;
+        });
       return finalizePromise;
     },
 
@@ -619,12 +659,14 @@ export function createTraceWriter(
   }
 
   function resolveTerminalProfile(): string | undefined {
-    return options.terminalProfile ?? session.terminalProfile ?? session.contract?.()?.terminal.profile;
+    return (
+      options.terminalProfile ?? session.terminalProfile ?? session.contract?.()?.terminal.profile
+    );
   }
 
   function buildHeader(): CastHeader {
-    const initialColumns = options.columns ?? (lastResize?.columns ?? columns);
-    const initialRows = options.rows ?? (lastResize?.rows ?? rows);
+    const initialColumns = options.columns ?? lastResize?.columns ?? columns;
+    const initialRows = options.rows ?? lastResize?.rows ?? rows;
     return {
       version: 3,
       term: { cols: initialColumns, rows: initialRows },
@@ -748,7 +790,9 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
   };
   await writeDurable(join(staging, TRACE_INCOMPLETE_FILE), `${JSON.stringify({ v: 1, target })}\n`);
   for (const [name, body] of Object.entries(files)) await writeDurable(join(staging, name), body);
-  const checksums = Object.fromEntries(Object.entries(files).map(([name, body]) => [name, sha256(body)]));
+  const checksums = Object.fromEntries(
+    Object.entries(files).map(([name, body]) => [name, sha256(body)]),
+  );
   await unlink(join(staging, TRACE_INCOMPLETE_FILE));
   await writeDurable(join(staging, TRACE_FILES.commit), `${JSON.stringify({ v: 1, checksums })}\n`);
   await fsyncDirectory(staging);
@@ -796,7 +840,11 @@ async function writeDurable(path: string, body: string): Promise<void> {
   // read-only one; POSIX does not care. The file was just written, so this is
   // the same durability guarantee on both, not a platform concession.
   const handle = await open(path, 'r+');
-  try { await handle.sync(); } finally { await handle.close(); }
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
 }
 
 async function fsyncDirectory(path: string): Promise<void> {

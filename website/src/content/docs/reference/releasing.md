@@ -36,13 +36,13 @@ as one. This keeps installation and compatibility predictable.
 **The protocol version is a compatibility promise across languages.** These six
 always carry the same number:
 
-| Package | Registry |
-|---|---|
-| `@termwright/protocol` | npm |
-| `termwright` | PyPI |
-| `termwright-protocol` | crates.io |
-| `termwright-probe-ratatui` | crates.io |
-| `termwright-ratatui` | crates.io |
+| Package                                     | Registry   |
+| ------------------------------------------- | ---------- |
+| `@termwright/protocol`                      | npm        |
+| `termwright`                                | PyPI       |
+| `termwright-protocol`                       | crates.io  |
+| `termwright-probe-ratatui`                  | crates.io  |
+| `termwright-ratatui`                        | crates.io  |
 | `github.com/gorce-ai/termwright/clients/go` | Go modules |
 
 If your Python producer and your TypeScript driver report the same version, they
@@ -51,8 +51,8 @@ just at release time.
 
 ## Preview packages
 
-| Channel | What it is | How to install |
-|---|---|---|
+| Channel    | What it is                                                         | How to install                                     |
+| ---------- | ------------------------------------------------------------------ | -------------------------------------------------- |
 | PR preview | A build of an open pull request, on pkg-pr-new. Never touches npm. | `npm i https://pkg.pr.new/@termwright/driver@<pr>` |
 
 PR previews are opt-in per pull request. They provide installable artifacts for

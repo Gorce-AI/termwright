@@ -81,14 +81,12 @@ export class ConPtyControlPlaneNormalizer {
 
   push(chunk: Uint8Array): Buffer {
     if (this.#finished) {
-      throw new Error("ConPTY output arrived after authoritative EOF");
+      throw new Error('ConPTY output arrived after authoritative EOF');
     }
     if (chunk.byteLength === 0) return Buffer.alloc(0);
 
     const incoming = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-    const input = this.#pending.length === 0
-      ? incoming
-      : Buffer.concat([this.#pending, incoming]);
+    const input = this.#pending.length === 0 ? incoming : Buffer.concat([this.#pending, incoming]);
     this.#pending = Buffer.alloc(0);
 
     const output: Buffer[] = [];

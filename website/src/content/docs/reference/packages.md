@@ -11,13 +11,13 @@ npm install --save-dev termwright
 
 ## Public umbrella exports
 
-| Import | Use |
-| --- | --- |
-| `termwright` | Driver sessions, terminal model, locators, actions, and errors. |
-| `termwright/test` | Vitest fixture, `expect`, matchers, snapshots, config, retries, and seeding. |
-| `termwright/ink` | Ink component-test helpers. |
-| `termwright/gherkin` | Gherkin plugin and step-definition API. |
-| `termwright/cli` | Programmatic CLI entry. |
+| Import               | Use                                                                          |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `termwright`         | Driver sessions, terminal model, locators, actions, and errors.              |
+| `termwright/test`    | Vitest fixture, `expect`, matchers, snapshots, config, retries, and seeding. |
+| `termwright/ink`     | Ink component-test helpers.                                                  |
+| `termwright/gherkin` | Gherkin plugin and step-definition API.                                      |
+| `termwright/cli`     | Programmatic CLI entry.                                                      |
 
 Prefer these imports in application test suites. They keep setup consistent and
 avoid depending on transitive packages.
@@ -27,14 +27,14 @@ avoid depending on transitive packages.
 Framework probes and annotation SDKs are separate because they run inside or
 instrument the application:
 
-| Framework | Probe | Optional annotations |
-| --- | --- | --- |
-| Ink | `@termwright/probe-ink` | `@termwright/ink` |
-| OpenTUI | `@termwright/probe-opentui` | `@termwright/opentui` |
-| Textual | Python `termwright` probe | `termwright.textual` |
-| tview | `@termwright/probe-tview` | Go `annotate` package |
-| Ratatui | `termwright-probe-ratatui` | `termwright-ratatui` |
-| Bubble Tea | `@termwright/probe-charm` | Go `annotate` package |
+| Framework  | Probe                       | Optional annotations  |
+| ---------- | --------------------------- | --------------------- |
+| Ink        | `@termwright/probe-ink`     | `@termwright/ink`     |
+| OpenTUI    | `@termwright/probe-opentui` | `@termwright/opentui` |
+| Textual    | Python `termwright` probe   | `termwright.textual`  |
+| tview      | `@termwright/probe-tview`   | Go `annotate` package |
+| Ratatui    | `termwright-probe-ratatui`  | `termwright-ratatui`  |
+| Bubble Tea | `@termwright/probe-charm`   | Go `annotate` package |
 
 See [Framework integrations](../../adapters/) before adding one.
 
@@ -42,11 +42,11 @@ See [Framework integrations](../../adapters/) before adding one.
 
 The three Ink-related names serve different processes:
 
-| Package | Where it runs | Install when |
-| --- | --- | --- |
-| `termwright/ink` | test process | Writing Ink component tests. This is the recommended test import. |
-| `@termwright/probe-ink` | launched Ink application | Adding semantic observation to an end-to-end Ink test. |
-| `@termwright/ink` | Ink application | Adding optional roles, names, or domain annotations that Ink does not retain itself. |
+| Package                 | Where it runs            | Install when                                                                         |
+| ----------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| `termwright/ink`        | test process             | Writing Ink component tests. This is the recommended test import.                    |
+| `@termwright/probe-ink` | launched Ink application | Adding semantic observation to an end-to-end Ink test.                               |
+| `@termwright/ink`       | Ink application          | Adding optional roles, names, or domain annotations that Ink does not retain itself. |
 
 `termwright/ink` re-exports the focused `@termwright/ink` package. Most
 projects should not add both dependencies.

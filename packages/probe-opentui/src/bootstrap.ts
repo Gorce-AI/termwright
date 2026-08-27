@@ -147,9 +147,11 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
         if (channel === null) return;
         if (stopped) channel.close();
         else if (guaranteeFailed) {
-          channel.fail('adapter-guarantee-violation', guaranteeDetail ?? 'OpenTUI runtime guarantee failed');
-        }
-        else {
+          channel.fail(
+            'adapter-guarantee-violation',
+            guaranteeDetail ?? 'OpenTUI runtime guarantee failed',
+          );
+        } else {
           state.channel = channel;
           // A renderer may have painted its only requested frame while the
           // handshake was in flight. Ask for one fresh committed frame rather
@@ -157,7 +159,11 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
           try {
             (observedRenderer as ObservableRenderer & { requestRender(): void }).requestRender();
           } catch (error) {
-            abort(new Error(`OpenTUI requestRender failed: ${error instanceof Error ? error.message : String(error)}`));
+            abort(
+              new Error(
+                `OpenTUI requestRender failed: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+            );
           }
         }
       })
@@ -166,7 +172,9 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
 
   // The one chance to install a custom stdout. Without it OpenTUI writes frames
   // from a Zig thread and no byte reaches JS, so a marker has nothing to follow.
-  releaseSinkCheck = onOutputSinkCheck((value) => isMarkerSink(value, token) && ownedSinks.has(value));
+  releaseSinkCheck = onOutputSinkCheck(
+    (value) => isMarkerSink(value, token) && ownedSinks.has(value),
+  );
 
   releaseConfig = onRendererConfig((config) => {
     if (outputInstrumentationVersion(token) === undefined) {
@@ -195,9 +203,10 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
 
   releaseRenderer = onRendererCreated((renderer, certified, effectiveConfig) => {
     const configuredStdout = effectiveConfig['stdout'];
-    const configuredSink = isMarkerSink(configuredStdout, token) && ownedSinks.has(configuredStdout)
-      ? configuredStdout
-      : undefined;
+    const configuredSink =
+      isMarkerSink(configuredStdout, token) && ownedSinks.has(configuredStdout)
+        ? configuredStdout
+        : undefined;
     if (configuredSink !== undefined) pendingSinks.delete(configuredSink);
     if (configuredSink !== undefined) {
       const owner = renderer as {
@@ -222,16 +231,19 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
     observedRenderer = renderer as ObservableRenderer;
     certification = certified;
     if (outputInstrumentationVersion(token) !== certified.version) {
-      abort(new Error('OpenTUI local stdout feed instrumentation does not match the certified runtime'));
+      abort(
+        new Error('OpenTUI local stdout feed instrumentation does not match the certified runtime'),
+      );
       connectCertified();
       return;
     }
     if (configuredSink === undefined) {
-      const detail = effectiveConfig['bufferedOutput'] === 'memory'
-        ? 'OpenTUI memory-buffered output has no causal terminal commit channel'
-        : configuredStdout !== undefined
-          ? 'OpenTUI renderer has an application-owned stdout; same-writer render markers cannot be certified'
-          : 'OpenTUI renderer has no certified marker sink';
+      const detail =
+        effectiveConfig['bufferedOutput'] === 'memory'
+          ? 'OpenTUI memory-buffered output has no causal terminal commit channel'
+          : configuredStdout !== undefined
+            ? 'OpenTUI renderer has an application-owned stdout; same-writer render markers cannot be certified'
+            : 'OpenTUI renderer has no certified marker sink';
       abort(new Error(detail));
       connectCertified();
       return;
@@ -252,7 +264,11 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
       };
       lifecycleRenderer.on('destroy', destroyListener);
       releaseDestroy = () => {
-        try { lifecycleRenderer.off('destroy', destroyListener); } catch { /* teardown must not break the application */ }
+        try {
+          lifecycleRenderer.off('destroy', destroyListener);
+        } catch {
+          /* teardown must not break the application */
+        }
       };
       const session = startSession({
         renderer: observedRenderer,

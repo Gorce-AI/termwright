@@ -4,9 +4,9 @@ Ink annotations and component testing through one public package. Ordinary
 applications keep their normal Ink entry point:
 
 ```tsx
-import {render, Box, Text, type DOMElement} from 'ink';
-import {useRef} from 'react';
-import {useSemantic} from '@termwright/ink';
+import { render, Box, Text, type DOMElement } from 'ink';
+import { useRef } from 'react';
+import { useSemantic } from '@termwright/ink';
 
 function Approve() {
   const ref = useRef<DOMElement>(null);
@@ -15,10 +15,14 @@ function Approve() {
     name: 'Approve',
     description: 'Accept the pending change',
     testId: 'approve',
-    extended: {permission: 'write'},
+    extended: { permission: 'write' },
     actions: ['activate'],
   });
-  return <Box ref={ref}><Text>Approve</Text></Box>;
+  return (
+    <Box ref={ref}>
+      <Text>Approve</Text>
+    </Box>
+  );
 }
 
 render(<Approve />);
@@ -66,7 +70,7 @@ channel. Component tests use the same injected probe path as applications.
 Use `mountInk` for fast in-process component tests:
 
 ```tsx
-import {mountInk} from '@termwright/ink';
+import { mountInk } from '@termwright/ink';
 
 const harness = await mountInk(<Approve onApprove={spy} />);
 await harness.press('Tab');
@@ -79,12 +83,12 @@ await harness.close();
 Use `launchInkFixture` when the test needs a real child process, PTY,
 environment, signals, or process exit behavior.
 
-| | `mountInk` | `launchInkFixture` |
-|---|---|---|
-| process | current test process | child process in a real PTY |
-| props | any React props, including spies | bounded JSON |
-| rerender | React element | JSON props |
-| process/env/signal fidelity | modelled | real |
+|                             | `mountInk`                       | `launchInkFixture`          |
+| --------------------------- | -------------------------------- | --------------------------- |
+| process                     | current test process             | child process in a real PTY |
+| props                       | any React props, including spies | bounded JSON                |
+| rerender                    | React element                    | JSON props                  |
+| process/env/signal fidelity | modelled                         | real                        |
 
 Both modes return the standard `TerminalHarness`. Input is terminal input;
 neither mode invokes component callbacks directly. Both resolve after the

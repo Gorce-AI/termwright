@@ -9,10 +9,10 @@ import type {
   ProviderTerminalInputModes,
   Rect,
   SemanticSnapshot,
-} from "@termwright/protocol";
+} from '@termwright/protocol';
 
 export interface ProviderEvidenceProblem {
-  readonly kind: "lost" | "violation" | "conflict";
+  readonly kind: 'lost' | 'violation' | 'conflict';
   readonly message: string;
 }
 
@@ -51,15 +51,11 @@ function sameGrid(left: PointerHitGrid, right: PointerHitGrid): boolean {
   );
 }
 
-function regionsAgreeWithGrid(
-  region: ProviderPointerRegion,
-  grid: PointerHitGrid,
-): boolean {
+function regionsAgreeWithGrid(region: ProviderPointerRegion, grid: PointerHitGrid): boolean {
   return region.spans.every((span) => {
     let cursor = span.from;
     for (const hit of grid.regions) {
-      if (hit.rect.row !== span.row || hit.recipientId !== region.recipientId)
-        continue;
+      if (hit.rect.row !== span.row || hit.recipientId !== region.recipientId) continue;
       const start = Math.max(cursor, hit.rect.column);
       const end = Math.min(span.to, hit.rect.column + hit.rect.width);
       if (start === cursor && end > cursor) cursor = end;
@@ -69,30 +65,35 @@ function regionsAgreeWithGrid(
   });
 }
 
-function sameRecipe(
-  left: PhysicalInputRecipe,
-  right: PhysicalInputRecipe,
-): boolean {
+function sameRecipe(left: PhysicalInputRecipe, right: PhysicalInputRecipe): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function sameScrollState(left: ProviderScrollState, right: ProviderScrollState): boolean {
-  return left.axis === right.axis && left.offset === right.offset &&
-    left.viewport === right.viewport && left.extent === right.extent;
+  return (
+    left.axis === right.axis &&
+    left.offset === right.offset &&
+    left.viewport === right.viewport &&
+    left.extent === right.extent
+  );
 }
 
 function samePaintedRegion(left: ProviderPaintedRegion, right: ProviderPaintedRegion): boolean {
-  return sameRect(left.regionBounds, right.regionBounds) &&
-    JSON.stringify(left.spans) === JSON.stringify(right.spans);
+  return (
+    sameRect(left.regionBounds, right.regionBounds) &&
+    JSON.stringify(left.spans) === JSON.stringify(right.spans)
+  );
 }
 
 function sameInputModes(
   left: ProviderTerminalInputModes,
   right: ProviderTerminalInputModes,
 ): boolean {
-  return left.mouseTracking === right.mouseTracking &&
+  return (
+    left.mouseTracking === right.mouseTracking &&
     left.mouseEncoding === right.mouseEncoding &&
-    left.focusReporting === right.focusReporting;
+    left.focusReporting === right.focusReporting
+  );
 }
 
 /**
@@ -106,9 +107,7 @@ export function composeProviderEvidence(
   snapshot: SemanticSnapshot,
   registrations: readonly EvidenceProviderRegistration[],
 ): ProviderEvidenceResult {
-  const declared = new Map(
-    registrations.map((provider) => [provider.id, provider]),
-  );
+  const declared = new Map(registrations.map((provider) => [provider.id, provider]));
   const frames = new Map(
     (snapshot.providerEvidence ?? []).map((frame) => [frame.providerId, frame]),
   );
@@ -116,8 +115,8 @@ export function composeProviderEvidence(
     return {
       ok: false,
       problem: {
-        kind: "violation",
-        message: "provider evidence contains a duplicate id",
+        kind: 'violation',
+        message: 'provider evidence contains a duplicate id',
       },
     };
   }
@@ -126,7 +125,7 @@ export function composeProviderEvidence(
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `undeclared provider ${providerId} published evidence`,
         },
       };
@@ -155,18 +154,20 @@ export function composeProviderEvidence(
     string,
     { region: ProviderPaintedRegion; evidence: EvidenceProvenance; providerId: string }
   >();
-  let providerInputModes: {
-    value: ProviderTerminalInputModes;
-    evidence: EvidenceProvenance;
-    providerId: string;
-  } | undefined;
+  let providerInputModes:
+    | {
+        value: ProviderTerminalInputModes;
+        evidence: EvidenceProvenance;
+        providerId: string;
+      }
+    | undefined;
   for (const registration of registrations) {
     const frame = frames.get(registration.id);
     if (frame === undefined) {
       return {
         ok: false,
         problem: {
-          kind: "lost",
+          kind: 'lost',
           message: `provider ${registration.id} omitted revision ${snapshot.revision}`,
         },
       };
@@ -175,7 +176,7 @@ export function composeProviderEvidence(
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published evidence for session ${frame.sessionId}; expected ${snapshot.sessionId}`,
         },
       };
@@ -184,25 +185,25 @@ export function composeProviderEvidence(
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published stale revision ${frame.revision}; expected ${snapshot.revision}`,
         },
       };
     }
-    if (frame.status === "lost") {
+    if (frame.status === 'lost') {
       return {
         ok: false,
         problem: {
-          kind: "lost",
+          kind: 'lost',
           message: `provider ${registration.id} was lost: ${frame.reason}`,
         },
       };
     }
-    if (frame.status === "violation") {
+    if (frame.status === 'violation') {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} violated its contract: ${frame.reason}`,
         },
       };
@@ -211,152 +212,131 @@ export function composeProviderEvidence(
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} provenance method disagrees with its declaration`,
         },
       };
     }
     if (
       frame.evidence.providerId !== registration.id ||
-      frame.evidence.source !== "application" ||
-      frame.evidence.strength !== "authoritative"
+      frame.evidence.source !== 'application' ||
+      frame.evidence.strength !== 'authoritative'
     ) {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published non-authoritative or forged provenance`,
         },
       };
     }
-    if (
-      registration.capabilities.includes("hit-test") &&
-      frame.hitGrid === undefined
-    ) {
+    if (registration.capabilities.includes('hit-test') && frame.hitGrid === undefined) {
       return {
         ok: false,
         problem: {
-          kind: "lost",
+          kind: 'lost',
           message: `provider ${registration.id} omitted its negotiated hit-test evidence`,
         },
       };
     }
-    if (
-      !registration.capabilities.includes("hit-test") &&
-      frame.hitGrid !== undefined
-    ) {
+    if (!registration.capabilities.includes('hit-test') && frame.hitGrid !== undefined) {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published hit-test evidence it did not negotiate`,
         },
       };
     }
-    if (
-      !registration.capabilities.includes("pointer-regions") &&
-      frame.pointerRegions.length > 0
-    ) {
+    if (!registration.capabilities.includes('pointer-regions') && frame.pointerRegions.length > 0) {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published pointer-region evidence it did not negotiate`,
         },
       };
     }
-    if (
-      registration.capabilities.includes("action-recipes") &&
-      frame.actionRecipes === undefined
-    ) {
+    if (registration.capabilities.includes('action-recipes') && frame.actionRecipes === undefined) {
       return {
         ok: false,
         problem: {
-          kind: "lost",
+          kind: 'lost',
           message: `provider ${registration.id} omitted its negotiated action-recipes evidence`,
         },
       };
     }
-    if (
-      registration.capabilities.includes("focus-state") &&
-      frame.focusState === undefined
-    ) {
+    if (registration.capabilities.includes('focus-state') && frame.focusState === undefined) {
       return {
         ok: false,
         problem: {
-          kind: "lost",
+          kind: 'lost',
           message: `provider ${registration.id} omitted its negotiated focus-state evidence`,
         },
       };
     }
-    if (
-      registration.capabilities.includes("scroll-state") &&
-      frame.scrollStates === undefined
-    ) {
+    if (registration.capabilities.includes('scroll-state') && frame.scrollStates === undefined) {
       return {
         ok: false,
         problem: {
-          kind: "lost",
+          kind: 'lost',
           message: `provider ${registration.id} omitted its negotiated scroll-state evidence`,
         },
       };
     }
-    if (
-      !registration.capabilities.includes("scroll-state") &&
-      frame.scrollStates !== undefined
-    ) {
+    if (!registration.capabilities.includes('scroll-state') && frame.scrollStates !== undefined) {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published scroll-state evidence it did not negotiate`,
         },
       };
     }
     if (
-      registration.capabilities.includes("painted-regions") &&
+      registration.capabilities.includes('painted-regions') &&
       frame.paintedRegions === undefined
     ) {
       return {
         ok: false,
         problem: {
-          kind: "lost",
+          kind: 'lost',
           message: `provider ${registration.id} omitted its negotiated painted-regions evidence`,
         },
       };
     }
     if (
-      !registration.capabilities.includes("painted-regions") &&
+      !registration.capabilities.includes('painted-regions') &&
       frame.paintedRegions !== undefined
     ) {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published painted-region evidence it did not negotiate`,
         },
       };
     }
     if (
-      registration.capabilities.includes("terminal-input-modes") &&
+      registration.capabilities.includes('terminal-input-modes') &&
       frame.inputModes === undefined
     ) {
       return {
         ok: false,
         problem: {
-          kind: "lost",
+          kind: 'lost',
           message: `provider ${registration.id} omitted its negotiated terminal-input-modes evidence`,
         },
       };
     }
     if (
-      !registration.capabilities.includes("terminal-input-modes") &&
+      !registration.capabilities.includes('terminal-input-modes') &&
       frame.inputModes !== undefined
     ) {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published terminal-input-modes evidence it did not negotiate`,
         },
       };
@@ -369,7 +349,7 @@ export function composeProviderEvidence(
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `providers ${providerInputModes.providerId} and ${registration.id} disagree on terminal input modes`,
           },
         };
@@ -385,7 +365,7 @@ export function composeProviderEvidence(
         return {
           ok: false,
           problem: {
-            kind: "violation",
+            kind: 'violation',
             message: `provider ${registration.id} published painted region for unknown recipient ${region.recipientId}`,
           },
         };
@@ -395,7 +375,7 @@ export function composeProviderEvidence(
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `providers ${previous.providerId} and ${registration.id} disagree on painted region for ${region.recipientId}`,
           },
         };
@@ -411,7 +391,7 @@ export function composeProviderEvidence(
         return {
           ok: false,
           problem: {
-            kind: "violation",
+            kind: 'violation',
             message: `provider ${registration.id} published scroll state for unknown recipient ${state.recipientId}`,
           },
         };
@@ -421,7 +401,7 @@ export function composeProviderEvidence(
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `providers ${previous.providerId} and ${registration.id} disagree on scroll state for ${state.recipientId}`,
           },
         };
@@ -432,23 +412,18 @@ export function composeProviderEvidence(
         providerId: registration.id,
       });
     }
-    if (
-      !registration.capabilities.includes("focus-state") &&
-      frame.focusState !== undefined
-    ) {
+    if (!registration.capabilities.includes('focus-state') && frame.focusState !== undefined) {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published focus-state evidence it did not negotiate`,
         },
       };
     }
     if (frame.focusState !== undefined) {
       const focusedRecipientId =
-        frame.focusState.status === "focused"
-          ? frame.focusState.recipientId
-          : null;
+        frame.focusState.status === 'focused' ? frame.focusState.recipientId : null;
       if (
         focusedRecipientId !== null &&
         !snapshot.nodes.some((node) => node.id === focusedRecipientId)
@@ -456,19 +431,16 @@ export function composeProviderEvidence(
         return {
           ok: false,
           problem: {
-            kind: "violation",
+            kind: 'violation',
             message: `provider ${registration.id} focused unknown recipient ${focusedRecipientId}`,
           },
         };
       }
-      if (
-        focusedRecipient !== undefined &&
-        focusedRecipient.recipientId !== focusedRecipientId
-      ) {
+      if (focusedRecipient !== undefined && focusedRecipient.recipientId !== focusedRecipientId) {
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `providers ${focusedRecipient.providerId} and ${registration.id} disagree on focus state`,
           },
         };
@@ -479,39 +451,32 @@ export function composeProviderEvidence(
       };
     }
     if (
-      !registration.capabilities.includes("action-recipes") &&
+      !registration.capabilities.includes('action-recipes') &&
       frame.actionRecipes !== undefined
     ) {
       return {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: 'violation',
           message: `provider ${registration.id} published action recipes it did not negotiate`,
         },
       };
     }
     if (frame.hitGrid !== undefined) {
-      if (
-        frame.pointerRegions.some(
-          (region) => !regionsAgreeWithGrid(region, frame.hitGrid!),
-        )
-      ) {
+      if (frame.pointerRegions.some((region) => !regionsAgreeWithGrid(region, frame.hitGrid!))) {
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `provider ${registration.id} pointer regions disagree with its production hit test`,
           },
         };
       }
-      if (
-        providerGrid !== null &&
-        !sameGrid(providerGrid.grid, frame.hitGrid)
-      ) {
+      if (providerGrid !== null && !sameGrid(providerGrid.grid, frame.hitGrid)) {
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `providers ${providerGrid.providerId} and ${registration.id} disagree on pointer ownership`,
           },
         };
@@ -527,13 +492,12 @@ export function composeProviderEvidence(
       if (
         previous !== undefined &&
         (!sameRect(previous.region.regionBounds, region.regionBounds) ||
-          JSON.stringify(previous.region.spans) !==
-            JSON.stringify(region.spans))
+          JSON.stringify(previous.region.spans) !== JSON.stringify(region.spans))
       ) {
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `providers disagree on region for ${region.recipientId}`,
           },
         };
@@ -541,14 +505,12 @@ export function composeProviderEvidence(
       byTarget.set(region.recipientId, { region, evidence: frame.evidence });
     }
     for (const entry of frame.actionRecipes ?? []) {
-      const target = snapshot.nodes.find(
-        (node) => node.id === entry.recipientId,
-      );
+      const target = snapshot.nodes.find((node) => node.id === entry.recipientId);
       if (target === undefined) {
         return {
           ok: false,
           problem: {
-            kind: "violation",
+            kind: 'violation',
             message: `provider ${registration.id} published action recipes for unknown recipient ${entry.recipientId}`,
           },
         };
@@ -560,7 +522,7 @@ export function composeProviderEvidence(
           return {
             ok: false,
             problem: {
-              kind: "violation",
+              kind: 'violation',
               message: `provider ${registration.id} published ${recipe.action} without a matching semantic action intent on ${entry.recipientId}`,
             },
           };
@@ -570,7 +532,7 @@ export function composeProviderEvidence(
           return {
             ok: false,
             problem: {
-              kind: "conflict",
+              kind: 'conflict',
               message: `providers ${previous.providerId} and ${registration.id} disagree on ${recipe.action} recipe for ${entry.recipientId}`,
             },
           };
@@ -586,13 +548,13 @@ export function composeProviderEvidence(
 
   if (
     providerGrid !== null &&
-    snapshot.hitGrid.status === "known" &&
+    snapshot.hitGrid.status === 'known' &&
     !sameGrid(snapshot.hitGrid.value, providerGrid.grid)
   ) {
     return {
       ok: false,
       problem: {
-        kind: "conflict",
+        kind: 'conflict',
         message: `provider ${providerGrid.providerId} hit test disagrees with framework pointer ownership`,
       },
     };
@@ -603,7 +565,7 @@ export function composeProviderEvidence(
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `pointer region for ${recipientId} disagrees with provider ${providerGrid.providerId} production hit test`,
           },
         };
@@ -614,7 +576,7 @@ export function composeProviderEvidence(
     providerGrid === null
       ? snapshot.hitGrid
       : Object.freeze({
-          status: "known" as const,
+          status: 'known' as const,
           value: providerGrid.grid,
           evidence: providerGrid.evidence,
         });
@@ -626,7 +588,7 @@ export function composeProviderEvidence(
         return {
           ok: false,
           problem: {
-            kind: "conflict",
+            kind: 'conflict',
             message: `provider ${focusedRecipient.providerId} focus state disagrees with framework focus state for ${node.id}`,
           },
         };
@@ -643,13 +605,13 @@ export function composeProviderEvidence(
               ...node.state,
               focused: node.id === focusedRecipient.recipientId,
             }),
-            px: Object.freeze({ ...node.px, "state.focused": "application" as const }),
+            px: Object.freeze({ ...node.px, 'state.focused': 'application' as const }),
           };
     const providedScroll = scrollByTarget.get(node.id);
     const providedPaint = paintByTarget.get(node.id);
     if (
       providedScroll !== undefined &&
-      node.scroll?.status === "known" &&
+      node.scroll?.status === 'known' &&
       (node.scroll.value.axis !== providedScroll.state.axis ||
         node.scroll.value.offset !== providedScroll.state.offset ||
         node.scroll.value.viewport !== providedScroll.state.viewport ||
@@ -657,23 +619,24 @@ export function composeProviderEvidence(
     ) {
       return null;
     }
-    const scroll = providedScroll === undefined
-      ? {}
-      : {
-          scroll: Object.freeze({
-            status: "known" as const,
-            value: Object.freeze({
-              axis: providedScroll.state.axis,
-              offset: providedScroll.state.offset,
-              viewport: providedScroll.state.viewport,
-              extent: providedScroll.state.extent,
+    const scroll =
+      providedScroll === undefined
+        ? {}
+        : {
+            scroll: Object.freeze({
+              status: 'known' as const,
+              value: Object.freeze({
+                axis: providedScroll.state.axis,
+                offset: providedScroll.state.offset,
+                viewport: providedScroll.state.viewport,
+                extent: providedScroll.state.extent,
+              }),
+              evidence: providedScroll.evidence,
             }),
-            evidence: providedScroll.evidence,
-          }),
-        };
+          };
     if (
       providedPaint !== undefined &&
-      node.paintedRegion?.status === "known" &&
+      node.paintedRegion?.status === 'known' &&
       !samePaintedRegion(
         { recipientId: node.id, ...node.paintedRegion.value },
         providedPaint.region,
@@ -681,34 +644,37 @@ export function composeProviderEvidence(
     ) {
       return null;
     }
-    const paintedRegion = providedPaint === undefined
-      ? {}
-      : {
-          paintedRegion: Object.freeze({
-            status: "known" as const,
-            value: Object.freeze({
-              regionBounds: Object.freeze({ ...providedPaint.region.regionBounds }),
-              spans: Object.freeze(providedPaint.region.spans.map((span) => Object.freeze({ ...span }))),
+    const paintedRegion =
+      providedPaint === undefined
+        ? {}
+        : {
+            paintedRegion: Object.freeze({
+              status: 'known' as const,
+              value: Object.freeze({
+                regionBounds: Object.freeze({ ...providedPaint.region.regionBounds }),
+                spans: Object.freeze(
+                  providedPaint.region.spans.map((span) => Object.freeze({ ...span })),
+                ),
+              }),
+              evidence: providedPaint.evidence,
             }),
-            evidence: providedPaint.evidence,
-          }),
-        };
+          };
     if (provided === undefined) {
-      return Object.keys(focusState).length === 0 && Object.keys(scroll).length === 0 && Object.keys(paintedRegion).length === 0
+      return Object.keys(focusState).length === 0 &&
+        Object.keys(scroll).length === 0 &&
+        Object.keys(paintedRegion).length === 0
         ? node
         : Object.freeze({ ...node, ...focusState, ...scroll, ...paintedRegion });
     }
     const merged = new Map(
-      (node.inputRecipes ?? []).map(
-        (recipe) => [recipe.action, recipe] as const,
-      ),
+      (node.inputRecipes ?? []).map((recipe) => [recipe.action, recipe] as const),
     );
     for (const [action, entry] of provided) {
-      const existing = merged.get(action as PhysicalInputRecipe["action"]);
+      const existing = merged.get(action as PhysicalInputRecipe['action']);
       if (existing !== undefined && !sameRecipe(existing, entry.recipe)) {
         return null;
       }
-      merged.set(action as PhysicalInputRecipe["action"], entry.recipe);
+      merged.set(action as PhysicalInputRecipe['action'], entry.recipe);
     }
     return Object.freeze({
       ...node,
@@ -724,7 +690,7 @@ export function composeProviderEvidence(
     return {
       ok: false,
       problem: {
-        kind: "conflict",
+        kind: 'conflict',
         message: `application provider evidence disagrees with framework evidence for ${target.id}`,
       },
     };
@@ -736,8 +702,6 @@ export function composeProviderEvidence(
       nodes: Object.freeze(nodes as typeof snapshot.nodes),
       hitGrid,
     }),
-    ...(providerInputModes === undefined
-      ? {}
-      : { inputModes: Object.freeze(providerInputModes) }),
+    ...(providerInputModes === undefined ? {} : { inputModes: Object.freeze(providerInputModes) }),
   };
 }

@@ -13,7 +13,11 @@ export interface TerminalHighlight {
   readonly pinned: boolean;
 }
 
-export function highlightSemanticNode(node: SemanticNode, snapshot: SemanticSnapshot, pinned: boolean): TerminalHighlight {
+export function highlightSemanticNode(
+  node: SemanticNode,
+  snapshot: SemanticSnapshot,
+  pinned: boolean,
+): TerminalHighlight {
   const bounds = qualifiedHighlightRect(node);
   return {
     sourceId: `semantic:${snapshot.revision}:${node.id}`,
@@ -33,20 +37,47 @@ function qualifiedHighlightRect(node: SemanticNode): Rect | undefined {
   return undefined;
 }
 
-export function highlightExecutionTarget(node: ExecutionNode, snapshot: SemanticSnapshot | null, pinned: boolean): TerminalHighlight | null {
+export function highlightExecutionTarget(
+  node: ExecutionNode,
+  snapshot: SemanticSnapshot | null,
+  pinned: boolean,
+): TerminalHighlight | null {
   if (node.kind !== 'action' && node.kind !== 'assertion' && node.kind !== 'input') return null;
   if (node.targetIssue !== undefined) return unresolved(node, null, node.targetIssue, pinned);
   if (node.targetRef === undefined) {
-    return unresolved(node, null, 'This command did not retain a resolved semantic target.', pinned);
+    return unresolved(
+      node,
+      null,
+      'This command did not retain a resolved semantic target.',
+      pinned,
+    );
   }
   const parsed = parseRef(node.targetRef);
-  if (parsed === null) return unresolved(node, null, `Unsupported target reference: ${node.targetRef}`, pinned);
-  if (snapshot === null) return unresolved(node, parsed.revision, `Semantic revision ${parsed.revision} is unavailable.`, pinned);
+  if (parsed === null)
+    return unresolved(node, null, `Unsupported target reference: ${node.targetRef}`, pinned);
+  if (snapshot === null)
+    return unresolved(
+      node,
+      parsed.revision,
+      `Semantic revision ${parsed.revision} is unavailable.`,
+      pinned,
+    );
   if (snapshot.revision !== parsed.revision) {
-    return unresolved(node, parsed.revision, `Target revision ${parsed.revision} is not the displayed revision ${snapshot.revision}.`, pinned);
+    return unresolved(
+      node,
+      parsed.revision,
+      `Target revision ${parsed.revision} is not the displayed revision ${snapshot.revision}.`,
+      pinned,
+    );
   }
   const target = snapshot.nodes.find((candidate) => candidate.id === parsed.nodeId);
-  if (target === undefined) return unresolved(node, parsed.revision, `Target ${parsed.nodeId} is absent from revision ${parsed.revision}.`, pinned);
+  if (target === undefined)
+    return unresolved(
+      node,
+      parsed.revision,
+      `Target ${parsed.nodeId} is absent from revision ${parsed.revision}.`,
+      pinned,
+    );
   return {
     ...highlightSemanticNode(target, snapshot, pinned),
     sourceId: `command:${node.nodeId}`,
@@ -54,7 +85,12 @@ export function highlightExecutionTarget(node: ExecutionNode, snapshot: Semantic
   };
 }
 
-function unresolved(node: ExecutionNode, revision: number | null, reason: string, pinned: boolean): TerminalHighlight {
+function unresolved(
+  node: ExecutionNode,
+  revision: number | null,
+  reason: string,
+  pinned: boolean,
+): TerminalHighlight {
   return {
     sourceId: `command:${node.nodeId}`,
     targetRef: node.targetRef ?? null,

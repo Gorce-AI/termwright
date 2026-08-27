@@ -1,15 +1,15 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
 
-describe("Ink DEV decision", () => {
-  it("lets real Ink own the DEV injection and delegates to an existing hook exactly once", async () => {
-    const inkUrl = import.meta.resolve("ink");
-    const reactUrl = import.meta.resolve("react");
-    const reconcilerUrl = inkUrl.replace(/index\.js$/u, "reconciler.js");
-    const instrumentUrl = new URL("../dist/instrument.js", import.meta.url).href;
+describe('Ink DEV decision', () => {
+  it('lets real Ink own the DEV injection and delegates to an existing hook exactly once', async () => {
+    const inkUrl = import.meta.resolve('ink');
+    const reactUrl = import.meta.resolve('react');
+    const reconcilerUrl = inkUrl.replace(/index\.js$/u, 'reconciler.js');
+    const instrumentUrl = new URL('../dist/instrument.js', import.meta.url).href;
     const script = `
       import {PassThrough} from 'node:stream';
       import {createElement} from ${JSON.stringify(reactUrl)};
@@ -44,18 +44,18 @@ describe("Ink DEV decision", () => {
       await instance.waitUntilExit();
       process.stdout.write(JSON.stringify({existingInjects}));
     `;
-    const environment = { ...process.env, DEV: "true" };
+    const environment = { ...process.env, DEV: 'true' };
     const result = await execFileAsync(
       process.execPath,
-      ["--input-type=module", "--eval", script],
+      ['--input-type=module', '--eval', script],
       { env: environment },
     );
     expect(JSON.parse(result.stdout)).toEqual({ existingInjects: 1 });
   });
 
-  it("does not require DEV and Ink 7.1.1 renders identically with DEV disabled or enabled", async () => {
-    const inkUrl = import.meta.resolve("ink");
-    const reactUrl = import.meta.resolve("react");
+  it('does not require DEV and Ink 7.1.1 renders identically with DEV disabled or enabled', async () => {
+    const inkUrl = import.meta.resolve('ink');
+    const reactUrl = import.meta.resolve('react');
     const script = `
       import net from 'node:net';
       import {PassThrough} from 'node:stream';
@@ -91,11 +91,11 @@ describe("Ink DEV decision", () => {
       readonly processStderr: string;
     }> => {
       const environment = { ...process.env };
-      if (dev) environment["DEV"] = "true";
-      else delete environment["DEV"];
+      if (dev) environment['DEV'] = 'true';
+      else delete environment['DEV'];
       const result = await execFileAsync(
         process.execPath,
-        ["--input-type=module", "--eval", script],
+        ['--input-type=module', '--eval', script],
         {
           env: environment,
         },
@@ -109,9 +109,9 @@ describe("Ink DEV decision", () => {
     const withoutDev = await run(false);
     const withDev = await run(true);
     expect(withDev).toEqual(withoutDev);
-    expect(withDev.output.join("")).toContain("visual");
+    expect(withDev.output.join('')).toContain('visual');
     // Ink restores the cursor on process stderr at shutdown; this framework
     // behavior is identical in both modes and is unrelated to DevTools.
-    expect(withDev.processStderr).toBe("\u001B[?25h");
+    expect(withDev.processStderr).toBe('\u001B[?25h');
   });
 });

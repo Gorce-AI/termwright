@@ -5,7 +5,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TermwrightTestHost, TERMWRIGHT_RESOURCE_PROFILES } from '../../termwright-cli/dist/host.js';
+import {
+  TermwrightTestHost,
+  TERMWRIGHT_RESOURCE_PROFILES,
+} from '../../termwright-cli/dist/host.js';
 import { buildTviewFixture } from './build-tview-fixture.mjs';
 
 const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -40,9 +43,10 @@ try {
   host = await TermwrightTestHost.open({
     cwd: REPOSITORY_ROOT,
     runsDir: join(REPOSITORY_ROOT, '.termwright', 'conformance-runs'),
-    resourceProfile: process.platform === 'win32'
-      ? TERMWRIGHT_RESOURCE_PROFILES['windows-ci']
-      : TERMWRIGHT_RESOURCE_PROFILES.ci,
+    resourceProfile:
+      process.platform === 'win32'
+        ? TERMWRIGHT_RESOURCE_PROFILES['windows-ci']
+        : TERMWRIGHT_RESOURCE_PROFILES.ci,
     preflight: {
       requiredToolchains: [
         { name: 'Go', commands: [['go', 'version']] },
@@ -92,21 +96,31 @@ try {
   if (byFile.size === 0) {
     throw new Error(
       `native conformance catalog contained ${discovery.catalog.tests.length} tests but none matched the declared suites; ` +
-      `first module: ${discovery.catalog.tests[0]?.file ?? '<empty>'}`,
+        `first module: ${discovery.catalog.tests[0]?.file ?? '<empty>'}`,
     );
   }
 
   for (const [file, area, section] of SUITES) {
     const runnerTaskIds = byFile.get(file) ?? [];
     if (runnerTaskIds.length === 0) {
-      rows.push({ area, section, verdict: 'not run', tests: 0, passed: 0, seconds: '0.0', runId: null });
+      rows.push({
+        area,
+        section,
+        verdict: 'not run',
+        tests: 0,
+        passed: 0,
+        seconds: '0.0',
+        runId: null,
+      });
       continue;
     }
     const started = performance.now();
     const completion = await host.requestRun({ runnerTaskIds }).completed;
     const finishedTasks = new Set(
       completion.events
-        .filter((event) => event.type === 'attempt.finished' && event.identity.runnerTaskId !== undefined)
+        .filter(
+          (event) => event.type === 'attempt.finished' && event.identity.runnerTaskId !== undefined,
+        )
         .map((event) => event.identity.runnerTaskId),
     );
     const failed = completion.failures.length;
@@ -115,27 +129,43 @@ try {
     const skippedTests = runnerTaskIds
       .filter((runnerTaskId) => !finishedTasks.has(runnerTaskId))
       .map((runnerTaskId) => {
-        const test = discovery.catalog.tests.find((candidate) => candidate.runnerTaskId === runnerTaskId);
-        if (test === undefined) throw new Error(`conformance task ${runnerTaskId} disappeared from its catalog`);
+        const test = discovery.catalog.tests.find(
+          (candidate) => candidate.runnerTaskId === runnerTaskId,
+        );
+        if (test === undefined)
+          throw new Error(`conformance task ${runnerTaskId} disappeared from its catalog`);
         return `${file}::${test.fullName}`;
       });
-    const verdict = completion.state === 'infrastructure-failed' || completion.state === 'incomplete' || completion.state === 'crashed'
-      ? 'INFRASTRUCTURE'
-      : failed > 0 || completion.state === 'failed' || completion.state === 'flaky'
-        ? `FAIL (${Math.max(1, failed)})`
-        : passed === 0
-          ? 'skipped'
-          : skipped > 0
-            ? `pass, ${skipped} skip`
-            : 'pass';
+    const verdict =
+      completion.state === 'infrastructure-failed' ||
+      completion.state === 'incomplete' ||
+      completion.state === 'crashed'
+        ? 'INFRASTRUCTURE'
+        : failed > 0 || completion.state === 'failed' || completion.state === 'flaky'
+          ? `FAIL (${Math.max(1, failed)})`
+          : passed === 0
+            ? 'skipped'
+            : skipped > 0
+              ? `pass, ${skipped} skip`
+              : 'pass';
     if (verdict === 'INFRASTRUCTURE') infrastructureFailure = true;
-    rows.push({ area, section, verdict, tests: runnerTaskIds.length, passed, skipped, skippedTests,
-      seconds: ((performance.now() - started) / 1000).toFixed(1), runId: completion.runId });
+    rows.push({
+      area,
+      section,
+      verdict,
+      tests: runnerTaskIds.length,
+      passed,
+      skipped,
+      skippedTests,
+      seconds: ((performance.now() - started) / 1000).toFixed(1),
+      runId: completion.runId,
+    });
     for (const failure of completion.failures) {
       process.stdout.write(`FAIL ${basename(failure.file)} › ${failure.fullName}\n`);
       for (const error of failure.errors) process.stdout.write(`  ${error.split('\n')[0]}\n`);
     }
-    if (completion.error !== undefined) process.stdout.write(`INFRASTRUCTURE ${String(completion.error)}\n`);
+    if (completion.error !== undefined)
+      process.stdout.write(`INFRASTRUCTURE ${String(completion.error)}\n`);
   }
 } catch (error) {
   runFailure = error;
@@ -161,10 +191,14 @@ if (runFailure !== undefined || teardownFailures.length > 0) {
 const width = Math.max(...rows.map((row) => row.area.length), 4);
 process.stdout.write('\ntermwright conformance matrix (native host)\n');
 process.stdout.write(`${'-'.repeat(width + 82)}\n`);
-process.stdout.write(`${pad('area', width)}  ${pad('spec', 7)}  ${pad('result', 16)}  ${pad('tests', 7)}  ${pad('time', 7)}  RunId\n`);
+process.stdout.write(
+  `${pad('area', width)}  ${pad('spec', 7)}  ${pad('result', 16)}  ${pad('tests', 7)}  ${pad('time', 7)}  RunId\n`,
+);
 for (const row of rows) {
-  process.stdout.write(`${pad(row.area, width)}  ${pad(row.section, 7)}  ${pad(row.verdict, 16)}  ` +
-    `${pad(`${row.passed}/${row.tests}`, 7)}  ${pad(`${row.seconds}s`, 7)}  ${row.runId ?? '-'}\n`);
+  process.stdout.write(
+    `${pad(row.area, width)}  ${pad(row.section, 7)}  ${pad(row.verdict, 16)}  ` +
+      `${pad(`${row.passed}/${row.tests}`, 7)}  ${pad(`${row.seconds}s`, 7)}  ${row.runId ?? '-'}\n`,
+  );
 }
 process.stdout.write(`${'-'.repeat(width + 82)}\n`);
 printDeclaredDeviations();
@@ -175,26 +209,37 @@ const expectedSkips = REQUIRE_NO_SKIPPED_AREAS
   : REQUIRE_DECLARED_SKIPS
     ? [...declaredApplicabilitySkips(), ...declaredPlatformSkips(catalogTests)].sort()
     : null;
-const missingRequired = expectedSkips !== null && JSON.stringify(observedSkips) !== JSON.stringify(expectedSkips);
-const broken = infrastructureFailure || missingRequired || rows.some((row) => row.verdict === 'not run' || row.verdict.startsWith('FAIL'));
+const missingRequired =
+  expectedSkips !== null && JSON.stringify(observedSkips) !== JSON.stringify(expectedSkips);
+const broken =
+  infrastructureFailure ||
+  missingRequired ||
+  rows.some((row) => row.verdict === 'not run' || row.verdict.startsWith('FAIL'));
 if (missingRequired) {
-  process.stdout.write(`conformance skip mismatch:\n  expected ${JSON.stringify(expectedSkips)}\n  observed ${JSON.stringify(observedSkips)}\n`);
+  process.stdout.write(
+    `conformance skip mismatch:\n  expected ${JSON.stringify(expectedSkips)}\n  observed ${JSON.stringify(observedSkips)}\n`,
+  );
 }
 process.stdout.write(broken ? '\nconformance: FAILED\n\n' : 'conformance: passed\n\n');
 process.exit(broken ? 1 : 0);
 
-function pad(text, width) { return String(text).padEnd(width); }
+function pad(text, width) {
+  return String(text).padEnd(width);
+}
 
 function declaredPlatformSkips(catalog) {
-  const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, 'quality', 'platform-deviations.json'), 'utf8'));
+  const registry = JSON.parse(
+    readFileSync(join(REPOSITORY_ROOT, 'quality', 'platform-deviations.json'), 'utf8'),
+  );
   const suiteFiles = new Set(SUITES.map(([file]) => file));
   const platformDeclarations = registry.deviations
     .filter(({ predicate }) => predicate === (process.platform === 'win32' ? 'win32' : 'non-win32'))
     .flatMap(({ tests }) => tests)
     .filter(([file]) => suiteFiles.has(file));
   return platformDeclarations.map(([file, title]) => {
-    const matches = catalog.filter((test) =>
-      test.file === file && test.fullName.split(' > ').at(-1) === title);
+    const matches = catalog.filter(
+      (test) => test.file === file && test.fullName.split(' > ').at(-1) === title,
+    );
     if (matches.length !== 1) {
       throw new Error(`declared skip ${file}::${title} matched ${matches.length} catalog tests`);
     }
@@ -222,13 +267,17 @@ function printDeclaredDeviations() {
   process.stdout.write('declared deviations from adapters that actually ran\n');
   for (const file of files.sort()) {
     let summary;
-    try { summary = JSON.parse(readFileSync(join(directory, file), 'utf8')); }
-    catch { continue; }
+    try {
+      summary = JSON.parse(readFileSync(join(directory, file), 'utf8'));
+    } catch {
+      continue;
+    }
     const rules = Object.entries(summary.declared ?? {});
     if (rules.length === 0) process.stdout.write(`  ${summary.adapter}: none declared\n`);
     else {
       process.stdout.write(`  ${summary.adapter}\n`);
-      for (const [rule, titles] of rules) process.stdout.write(`    rule ${rule}: ${titles.join('; ')}\n`);
+      for (const [rule, titles] of rules)
+        process.stdout.write(`    rule ${rule}: ${titles.join('; ')}\n`);
     }
   }
   process.stdout.write('\n');

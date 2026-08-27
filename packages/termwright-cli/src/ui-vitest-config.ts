@@ -19,12 +19,14 @@ function gherkinEntry(file: 'index.js' | 'runtime.js'): string {
  */
 export function uiVitestViteOverrides(): Vite.UserConfig {
   return {
-    plugins: [gherkinPlugin({
-      includeFeatures: true,
-      ...(process.env['TERMWRIGHT_GHERKIN_TAGS'] === undefined
-        ? {}
-        : { tags: process.env['TERMWRIGHT_GHERKIN_TAGS'] }),
-    })],
+    plugins: [
+      gherkinPlugin({
+        includeFeatures: true,
+        ...(process.env['TERMWRIGHT_GHERKIN_TAGS'] === undefined
+          ? {}
+          : { tags: process.env['TERMWRIGHT_GHERKIN_TAGS'] }),
+      }),
+    ],
     resolve: {
       alias: [
         {

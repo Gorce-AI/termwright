@@ -5,7 +5,11 @@ export const PERFORMANCE_BASELINE_POLICY_VERSION = 3 as const;
 
 export type BaselineUnit = 'milliseconds' | 'bytes' | 'count' | 'microseconds/frame' | 'ratio';
 const BASELINE_UNITS: readonly BaselineUnit[] = [
-  'milliseconds', 'bytes', 'count', 'microseconds/frame', 'ratio',
+  'milliseconds',
+  'bytes',
+  'count',
+  'microseconds/frame',
+  'ratio',
 ];
 
 export interface PerformanceObservation {
@@ -116,16 +120,19 @@ export function comparePerformanceBaseline(
       throw new Error(`${name} unit changed from ${expected.unit} to ${observed.unit}`);
     }
     if (observed.source !== expected.source) {
-      throw new Error(`${name} measurement source changed from ${expected.source} to ${observed.source}`);
-    }
-    const allowedMaximum = expected.direction === 'exact'
-      ? expected.value + expected.absoluteTolerance
-      : Math.max(
-        expected.value + expected.absoluteTolerance,
-        expected.value * (1 + expected.relativeTolerance),
+      throw new Error(
+        `${name} measurement source changed from ${expected.source} to ${observed.source}`,
       );
+    }
+    const allowedMaximum =
+      expected.direction === 'exact'
+        ? expected.value + expected.absoluteTolerance
+        : Math.max(
+            expected.value + expected.absoluteTolerance,
+            expected.value * (1 + expected.relativeTolerance),
+          );
     const exceeded = observed.value > allowedMaximum;
-    const status = exceeded ? 'failure' as const : 'ok' as const;
+    const status = exceeded ? ('failure' as const) : ('ok' as const);
     return {
       metric: name,
       status,
@@ -160,17 +167,21 @@ export function capturePerformanceBaseline(
   validateProvenance(provenance, current.environment);
   requireSameMetricSet(policy.metrics, current.metrics, 'baseline policy', 'current observations');
 
-  const metrics = Object.fromEntries(Object.entries(policy.metrics).map(([name, expected]) => {
-    const observed = current.metrics[name];
-    if (observed === undefined) throw new Error(`current observations are missing ${name}`);
-    if (observed.unit !== expected.unit) {
-      throw new Error(`${name} unit changed from ${expected.unit} to ${observed.unit}`);
-    }
-    if (expected.direction === 'exact' && observed.value !== 0) {
-      throw new Error(`${name} violated its exact cleanup invariant during baseline capture: ${observed.value}`);
-    }
-    return [name, { ...observed, ...expected }];
-  }));
+  const metrics = Object.fromEntries(
+    Object.entries(policy.metrics).map(([name, expected]) => {
+      const observed = current.metrics[name];
+      if (observed === undefined) throw new Error(`current observations are missing ${name}`);
+      if (observed.unit !== expected.unit) {
+        throw new Error(`${name} unit changed from ${expected.unit} to ${observed.unit}`);
+      }
+      if (expected.direction === 'exact' && observed.value !== 0) {
+        throw new Error(
+          `${name} violated its exact cleanup invariant during baseline capture: ${observed.value}`,
+        );
+      }
+      return [name, { ...observed, ...expected }];
+    }),
+  );
 
   const baseline: PerformanceBaseline = {
     kind: PERFORMANCE_BASELINE_KIND,
@@ -186,8 +197,15 @@ export function capturePerformanceBaseline(
 
 export function validateBaseline(value: unknown): asserts value is PerformanceBaseline {
   if (!record(value)) throw new Error('baseline must be an object');
-  exactKeys(value, ['kind', 'schemaVersion', 'recordedAt', 'environment', 'provenance', 'metrics'], 'baseline');
-  if (value.kind !== PERFORMANCE_BASELINE_KIND || value.schemaVersion !== PERFORMANCE_BASELINE_VERSION) {
+  exactKeys(
+    value,
+    ['kind', 'schemaVersion', 'recordedAt', 'environment', 'provenance', 'metrics'],
+    'baseline',
+  );
+  if (
+    value.kind !== PERFORMANCE_BASELINE_KIND ||
+    value.schemaVersion !== PERFORMANCE_BASELINE_VERSION
+  ) {
     throw new Error('unsupported performance baseline kind or version');
   }
   date(value.recordedAt, 'baseline recordedAt');
@@ -200,7 +218,10 @@ export function validateBaseline(value: unknown): asserts value is PerformanceBa
 export function validateBaselinePolicy(value: unknown): asserts value is PerformanceBaselinePolicy {
   if (!record(value)) throw new Error('baseline policy must be an object');
   exactKeys(value, ['kind', 'schemaVersion', 'environment', 'metrics'], 'baseline policy');
-  if (value.kind !== PERFORMANCE_BASELINE_POLICY_KIND || value.schemaVersion !== PERFORMANCE_BASELINE_POLICY_VERSION) {
+  if (
+    value.kind !== PERFORMANCE_BASELINE_POLICY_KIND ||
+    value.schemaVersion !== PERFORMANCE_BASELINE_POLICY_VERSION
+  ) {
     throw new Error('unsupported performance baseline policy kind or version');
   }
   nonEmpty(value.environment, 'baseline policy environment');
@@ -223,11 +244,16 @@ function validateRequiredCleanupMetrics(value: unknown, values: boolean): void {
   for (const name of REQUIRED_CLEANUP_METRICS) {
     const metric = value[name];
     if (!record(metric)) throw new Error(`${name} is a required exact cleanup invariant`);
-    if (metric.unit !== 'count' || metric.direction !== 'exact'
-      || metric.relativeTolerance !== 0 || metric.absoluteTolerance !== 0) {
+    if (
+      metric.unit !== 'count' ||
+      metric.direction !== 'exact' ||
+      metric.relativeTolerance !== 0 ||
+      metric.absoluteTolerance !== 0
+    ) {
       throw new Error(`${name} must be an exact count invariant with zero tolerance`);
     }
-    if (values && metric.value !== 0) throw new Error(`${name} exact cleanup baseline must be zero`);
+    if (values && metric.value !== 0)
+      throw new Error(`${name} exact cleanup baseline must be zero`);
   }
 }
 
@@ -241,7 +267,10 @@ function validateRequiredCleanupObservations(value: unknown): void {
   }
 }
 
-function validateProvenance(value: unknown, environment: string): asserts value is PerformanceBaselineProvenance {
+function validateProvenance(
+  value: unknown,
+  environment: string,
+): asserts value is PerformanceBaselineProvenance {
   if (!record(value) || !record(value.environment) || !record(value.rawInputs)) {
     throw new Error('baseline provenance is missing');
   }
@@ -249,7 +278,8 @@ function validateProvenance(value: unknown, environment: string): asserts value 
   if (descriptor.kind !== 'termwright-performance-environment' || descriptor.schemaVersion !== 1) {
     throw new Error('baseline provenance environment descriptor is unsupported');
   }
-  if (descriptor.class !== environment) throw new Error('baseline provenance environment class differs from baseline');
+  if (descriptor.class !== environment)
+    throw new Error('baseline provenance environment class differs from baseline');
   if (!record(descriptor.runner) || !record(descriptor.toolchains)) {
     throw new Error('baseline provenance environment descriptor is incomplete');
   }
@@ -262,8 +292,8 @@ function validateProvenance(value: unknown, environment: string): asserts value 
     nonEmpty(toolchain.qualified, `baseline provenance ${name} qualification`);
     nonEmpty(toolchain.resolved, `baseline provenance ${name} resolution`);
   }
-  const runnerClass = /^(darwin|linux)-(arm64|x64)-node(\d+)-go(\d+\.\d+)-bun(\d+\.\d+\.\d+)$/u
-    .exec(environment);
+  const runnerClass =
+    /^(darwin|linux)-(arm64|x64)-node(\d+)-go(\d+\.\d+)-bun(\d+\.\d+\.\d+)$/u.exec(environment);
   if (runnerClass === null) throw new Error('baseline provenance runner class is invalid');
   const [, platform, arch, nodeMajor, goLine, bunVersion] = runnerClass;
   if (descriptor.runner.platform !== platform || descriptor.runner.arch !== arch) {
@@ -272,9 +302,14 @@ function validateProvenance(value: unknown, environment: string): asserts value 
   const node = descriptor.toolchains.node as Record<string, unknown>;
   const go = descriptor.toolchains.go as Record<string, unknown>;
   const bun = descriptor.toolchains.bun as Record<string, unknown>;
-  if (node.qualified !== nodeMajor || major(node.resolved) !== nodeMajor
-    || go.qualified !== goLine || majorMinor(go.resolved) !== goLine
-    || bun.qualified !== bunVersion || bun.resolved !== bunVersion) {
+  if (
+    node.qualified !== nodeMajor ||
+    major(node.resolved) !== nodeMajor ||
+    go.qualified !== goLine ||
+    majorMinor(go.resolved) !== goLine ||
+    bun.qualified !== bunVersion ||
+    bun.resolved !== bunVersion
+  ) {
     throw new Error('baseline provenance toolchains do not match their runner class');
   }
   for (const name of ['quality', 'semantic', 'charm', 'opentui'] as const) {
@@ -294,7 +329,8 @@ function majorMinor(value: unknown): string | undefined {
 }
 
 function validateMetrics(value: unknown, policy: boolean, values: boolean): void {
-  if (!record(value) || Object.keys(value).length === 0) throw new Error('metrics must be a non-empty object');
+  if (!record(value) || Object.keys(value).length === 0)
+    throw new Error('metrics must be a non-empty object');
   for (const [name, candidate] of Object.entries(value)) {
     nonEmpty(name, 'metric name');
     if (!record(candidate)) throw new Error(`${name} must be an object`);
@@ -303,7 +339,8 @@ function validateMetrics(value: unknown, policy: boolean, values: boolean): void
       nonEmpty(candidate.source, `${name}.source`);
     } else {
       if ('value' in candidate) throw new Error(`${name} policy must not contain a measured value`);
-      if ('source' in candidate) throw new Error(`${name} policy must not contain an observation source`);
+      if ('source' in candidate)
+        throw new Error(`${name} policy must not contain an observation source`);
     }
     if (!BASELINE_UNITS.includes(candidate.unit as BaselineUnit)) {
       throw new Error(`${name}.unit is unsupported`);
@@ -317,11 +354,16 @@ function validateMetrics(value: unknown, policy: boolean, values: boolean): void
     }
     finite(candidate.relativeTolerance, `${name}.relativeTolerance`);
     finite(candidate.absoluteTolerance, `${name}.absoluteTolerance`);
-    if ((candidate.relativeTolerance as number) < 0 || (candidate.absoluteTolerance as number) < 0) {
+    if (
+      (candidate.relativeTolerance as number) < 0 ||
+      (candidate.absoluteTolerance as number) < 0
+    ) {
       throw new Error(`${name} tolerances must be non-negative`);
     }
-    if (candidate.direction === 'exact'
-      && (candidate.relativeTolerance !== 0 || candidate.absoluteTolerance !== 0)) {
+    if (
+      candidate.direction === 'exact' &&
+      (candidate.relativeTolerance !== 0 || candidate.absoluteTolerance !== 0)
+    ) {
       throw new Error(`${name} exact cleanup policy must have zero tolerance`);
     }
   }
@@ -335,8 +377,10 @@ function requireSameMetricSet(
 ): void {
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
-  if (leftKeys.length !== rightKeys.length
-    || leftKeys.some((key, index) => key !== rightKeys[index])) {
+  if (
+    leftKeys.length !== rightKeys.length ||
+    leftKeys.some((key, index) => key !== rightKeys[index])
+  ) {
     throw new Error(`${leftName} and ${rightName} must contain the same metric set`);
   }
 }
@@ -352,11 +396,13 @@ function finite(value: unknown, name: string): asserts value is number {
 }
 
 function nonEmpty(value: unknown, name: string): asserts value is string {
-  if (typeof value !== 'string' || value.trim().length === 0) throw new Error(`${name} must be a string`);
+  if (typeof value !== 'string' || value.trim().length === 0)
+    throw new Error(`${name} must be a string`);
 }
 
 function date(value: unknown, name: string): void {
-  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw new Error(`${name} must be an ISO date`);
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)))
+    throw new Error(`${name} must be an ISO date`);
 }
 
 function escapeAnnotation(value: string): string {
@@ -368,7 +414,11 @@ function escapeAnnotation(value: string): string {
     .replaceAll(',', '%2C');
 }
 
-function exactKeys(value: Record<string, unknown>, expected: readonly string[], owner: string): void {
+function exactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  owner: string,
+): void {
   const actual = Object.keys(value).sort();
   const required = [...expected].sort();
   if (actual.length !== required.length || actual.some((key, index) => key !== required[index])) {

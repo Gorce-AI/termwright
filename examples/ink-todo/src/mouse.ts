@@ -91,15 +91,17 @@ class PointerRouter {
       const left = Math.max(0, box.x);
       const right = Math.min(columns, box.x + box.width);
       if (bottom <= top || right <= left) return [];
-      return [{
-        recipient: { testId },
-        regionBounds: { row: top, column: left, width: right - left, height: bottom - top },
-        spans: Array.from({ length: bottom - top }, (_, offset) => ({
-          row: top + offset,
-          from: left,
-          to: right,
-        })),
-      }];
+      return [
+        {
+          recipient: { testId },
+          regionBounds: { row: top, column: left, width: right - left, height: bottom - top },
+          spans: Array.from({ length: bottom - top }, (_, offset) => ({
+            row: top + offset,
+            from: left,
+            to: right,
+          })),
+        },
+      ];
     });
   }
 }

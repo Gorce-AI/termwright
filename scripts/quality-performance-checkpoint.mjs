@@ -9,7 +9,11 @@ export const CHECKPOINT_NONCE_ENV = 'TERMWRIGHT_QUALITY_CHECKPOINT_NONCE';
 export const CHECKPOINT_SCHEMA_VERSION = 1;
 
 const NONCE = /^[a-f0-9]{64}$/u;
-const FILES = Object.freeze({ request: 'request.json', ready: 'ready.json', terminal: 'terminal.json' });
+const FILES = Object.freeze({
+  request: 'request.json',
+  ready: 'ready.json',
+  terminal: 'terminal.json',
+});
 
 export async function createQualityCheckpoint(expectedSessions) {
   positiveInteger(expectedSessions, 'expectedSessions');
@@ -54,9 +58,14 @@ export async function readQualityCheckpointFromEnvironment(env = process.env) {
 export async function publishQualityReady(checkpoint, processPids) {
   validateCheckpoint(checkpoint);
   const processes = exactProcessPids(processPids, 'processPids');
-  const request = validateRequest(await readRecord(join(checkpoint.directory, FILES.request)), checkpoint.nonce);
+  const request = validateRequest(
+    await readRecord(join(checkpoint.directory, FILES.request)),
+    checkpoint.nonce,
+  );
   if (processes.length !== request.expectedSessions) {
-    throw new Error(`quality checkpoint expected ${request.expectedSessions} session processes, got ${processes.length}`);
+    throw new Error(
+      `quality checkpoint expected ${request.expectedSessions} session processes, got ${processes.length}`,
+    );
   }
   await atomicCreate(join(checkpoint.directory, FILES.ready), {
     kind: 'termwright-quality-snapshot-ready',
@@ -74,22 +83,23 @@ export async function waitForQualityReady(checkpoint, options = {}) {
 
 export async function publishQualityTerminal(checkpoint, outcome) {
   validateCheckpoint(checkpoint);
-  const terminal = outcome?.status === 'ok'
-    ? {
-        kind: 'termwright-quality-snapshot-terminal',
-        schemaVersion: CHECKPOINT_SCHEMA_VERSION,
-        nonce: checkpoint.nonce,
-        status: 'ok',
-        sessions: checkpoint.expectedSessions,
-        processCount: positiveInteger(outcome.processCount, 'processCount'),
-      }
-    : {
-        kind: 'termwright-quality-snapshot-terminal',
-        schemaVersion: CHECKPOINT_SCHEMA_VERSION,
-        nonce: checkpoint.nonce,
-        status: 'failure',
-        message: nonEmptyString(outcome?.message, 'message'),
-      };
+  const terminal =
+    outcome?.status === 'ok'
+      ? {
+          kind: 'termwright-quality-snapshot-terminal',
+          schemaVersion: CHECKPOINT_SCHEMA_VERSION,
+          nonce: checkpoint.nonce,
+          status: 'ok',
+          sessions: checkpoint.expectedSessions,
+          processCount: positiveInteger(outcome.processCount, 'processCount'),
+        }
+      : {
+          kind: 'termwright-quality-snapshot-terminal',
+          schemaVersion: CHECKPOINT_SCHEMA_VERSION,
+          nonce: checkpoint.nonce,
+          status: 'failure',
+          message: nonEmptyString(outcome?.message, 'message'),
+        };
   await atomicCreate(join(checkpoint.directory, FILES.terminal), terminal);
 }
 
@@ -118,16 +128,20 @@ async function waitForRecord(directory, filename, signal) {
       finish(() => reject(signal.reason ?? new Error('quality checkpoint wait aborted')));
     };
     const inspect = () => {
-      void tryReadRecord(path).then((record) => {
-        if (record !== undefined) finish(() => resolveRecord(record));
-      }, (error) => finish(() => reject(error)));
+      void tryReadRecord(path).then(
+        (record) => {
+          if (record !== undefined) finish(() => resolveRecord(record));
+        },
+        (error) => finish(() => reject(error)),
+      );
     };
     // Polling the exact pathname is level-triggered: publication remains
     // observable even when it happens between checks. fs.watch notifications
     // are edge-triggered and can be coalesced or lost on supported platforms.
     watchFile(path, { persistent: false, interval: 50 }, inspect);
     signal?.addEventListener('abort', onAbort, { once: true });
-    if (signal?.aborted) finish(() => reject(signal.reason ?? new Error('quality checkpoint wait aborted')));
+    if (signal?.aborted)
+      finish(() => reject(signal.reason ?? new Error('quality checkpoint wait aborted')));
     // The second read closes the read-before-watch lost-wakeup window.
     inspect();
   });
@@ -151,8 +165,9 @@ async function atomicCreate(path, value) {
 }
 
 async function tryReadRecord(path) {
-  try { return await readRecord(path); }
-  catch (error) {
+  try {
+    return await readRecord(path);
+  } catch (error) {
     if (error?.code === 'ENOENT') return undefined;
     throw error;
   }
@@ -160,8 +175,11 @@ async function tryReadRecord(path) {
 
 async function readRecord(path) {
   const text = await readFile(path, 'utf8');
-  try { return JSON.parse(text); }
-  catch (error) { throw new Error(`quality checkpoint record is not valid JSON: ${path}`, { cause: error }); }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`quality checkpoint record is not valid JSON: ${path}`, { cause: error });
+  }
 }
 
 function validateRequest(value, nonce) {
@@ -185,7 +203,11 @@ function validateReady(value, nonce, expectedSessions) {
 
 function validateTerminal(value, nonce, expectedSessions) {
   if (value?.status === 'ok') {
-    exactObject(value, ['kind', 'schemaVersion', 'nonce', 'status', 'sessions', 'processCount'], 'terminal ok');
+    exactObject(
+      value,
+      ['kind', 'schemaVersion', 'nonce', 'status', 'sessions', 'processCount'],
+      'terminal ok',
+    );
     exact(value.sessions, expectedSessions, 'terminal.sessions');
     positiveInteger(value.processCount, 'terminal.processCount');
   } else if (value?.status === 'failure') {
@@ -201,8 +223,10 @@ function validateTerminal(value, nonce, expectedSessions) {
 }
 
 function validateCheckpointIdentity(value) {
-  if (!isAbsolute(value?.directory ?? '')) throw new Error('quality checkpoint directory must be absolute');
-  if (!NONCE.test(value?.nonce ?? '')) throw new Error('quality checkpoint nonce must be 64 lowercase hex characters');
+  if (!isAbsolute(value?.directory ?? ''))
+    throw new Error('quality checkpoint directory must be absolute');
+  if (!NONCE.test(value?.nonce ?? ''))
+    throw new Error('quality checkpoint nonce must be 64 lowercase hex characters');
 }
 
 function validateCheckpoint(value) {
@@ -211,11 +235,13 @@ function validateCheckpoint(value) {
 }
 
 function exactNonce(value, expected, label) {
-  if (!NONCE.test(value) || value !== expected) throw new Error(`${label} does not match this checkpoint`);
+  if (!NONCE.test(value) || value !== expected)
+    throw new Error(`${label} does not match this checkpoint`);
 }
 
 function exactObject(value, keys, label) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new Error(`${label} must be an object`);
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
@@ -229,12 +255,14 @@ function exact(value, expected, label) {
 }
 
 function positiveInteger(value, label) {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${label} must be a positive safe integer`);
+  if (!Number.isSafeInteger(value) || value <= 0)
+    throw new Error(`${label} must be a positive safe integer`);
   return value;
 }
 
 function nonEmptyString(value, label) {
-  if (typeof value !== 'string' || value.trim() === '') throw new Error(`${label} must be a non-empty string`);
+  if (typeof value !== 'string' || value.trim() === '')
+    throw new Error(`${label} must be a non-empty string`);
   return value;
 }
 
@@ -242,6 +270,7 @@ function exactProcessPids(value, label) {
   if (!Array.isArray(value) || value.some((pid) => !Number.isSafeInteger(pid) || pid <= 0)) {
     throw new Error(`${label} must contain positive safe-integer process ids`);
   }
-  if (new Set(value).size !== value.length) throw new Error(`${label} must not contain duplicate process ids`);
+  if (new Set(value).size !== value.length)
+    throw new Error(`${label} must not contain duplicate process ids`);
   return [...value];
 }

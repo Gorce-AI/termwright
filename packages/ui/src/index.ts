@@ -153,24 +153,11 @@ export {
   type SelectorOptions,
 } from './selector.js';
 
-export {
-  generateTestSource,
-  type CodegenOptions,
-  type RecordedEvent,
-} from './codegen.js';
+export { generateTestSource, type CodegenOptions, type RecordedEvent } from './codegen.js';
 
-export {
-  InputDecoder,
-  coalesceInput,
-  decodeInput,
-  type DecodedInput,
-} from './input-decode.js';
+export { InputDecoder, coalesceInput, decodeInput, type DecodedInput } from './input-decode.js';
 
-export {
-  startRecorder,
-  type RecorderOptions,
-  type RecorderSession,
-} from './recorder.js';
+export { startRecorder, type RecorderOptions, type RecorderSession } from './recorder.js';
 
 export {
   INLINE_PAYLOAD_KEY,
@@ -202,11 +189,4 @@ export { ariaElementFor, ariaTextFor, type AriaElement } from './aria.js';
 
 export { navigateTree, type TreeKey, type TreeNavState, type TreeRow } from './tree-nav.js';
 
-export {
-  childrenOf,
-  formatMs,
-  nextMarker,
-  nodeAt,
-  rootsOf,
-  statesOf,
-} from './view-model.js';
+export { childrenOf, formatMs, nextMarker, nodeAt, rootsOf, statesOf } from './view-model.js';

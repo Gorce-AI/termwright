@@ -3,7 +3,12 @@
 import type { RunEvent, RunId, RunnerTaskId, TerminalRunState } from '@termwright/protocol';
 import { join } from 'node:path';
 import type { DiscoveredTest, UiRunHandle, UiServer, UiServerOptions } from '@termwright/ui';
-import { TERMWRIGHT_RESOURCE_PROFILES, TermwrightTestHost, type NativeTestCase, type RunHandle } from './test-host.js';
+import {
+  TERMWRIGHT_RESOURCE_PROFILES,
+  TermwrightTestHost,
+  type NativeTestCase,
+  type RunHandle,
+} from './test-host.js';
 import type { TermwrightResourceProfileName } from './resource-profiles.js';
 
 export interface NativeHostRun {
@@ -61,7 +66,7 @@ export async function startNativeHost(run: NativeHostRun): Promise<NativeHostHan
       return { runId: handle.runId, completed: handle.completed };
     },
     async stop(runId: RunId): Promise<void> {
-      if (!await host.stop(runId)) throw new Error(`run ${runId} is not active`);
+      if (!(await host.stop(runId))) throw new Error(`run ${runId} is not active`);
     },
     subscribe(listener): () => void {
       listeners.add(listener);
@@ -72,18 +77,21 @@ export async function startNativeHost(run: NativeHostRun): Promise<NativeHostHan
 }
 
 function projectTest(test: NativeTestCase): DiscoveredTest {
-  const metadata = typeof test.metadata === 'object' && test.metadata !== null
-    ? test.metadata as Record<string, unknown>
-    : {};
+  const metadata =
+    typeof test.metadata === 'object' && test.metadata !== null
+      ? (test.metadata as Record<string, unknown>)
+      : {};
   const provider = parseProvider(metadata['termwright']);
   return Object.freeze({
     id: test.runnerTaskId,
     title: test.fullName,
     file: test.file,
     ...(provider === undefined ? {} : { provider }),
-    ...(test.location === undefined ? {} : {
-      source: { file: test.file, line: test.location.line, column: test.location.column },
-    }),
+    ...(test.location === undefined
+      ? {}
+      : {
+          source: { file: test.file, line: test.location.line, column: test.location.column },
+        }),
   });
 }
 
@@ -132,7 +140,9 @@ export interface UiSurfaceHandle {
 export async function runUi(
   request: UiRequest,
   runtime: UiRuntime,
-  onReady: (result: Omit<UiResult, 'runnerExitCode'>) => void | UiSurfaceHandle | Promise<void | UiSurfaceHandle>,
+  onReady: (
+    result: Omit<UiResult, 'runnerExitCode'>,
+  ) => void | UiSurfaceHandle | Promise<void | UiSurfaceHandle>,
 ): Promise<UiResult> {
   let host: NativeHostHandle | undefined;
   const live = request.trace === undefined && request.record === undefined;
@@ -154,18 +164,26 @@ export async function runUi(
       ...(request.port === undefined ? {} : { port: request.port }),
       ...(request.host === undefined ? {} : { host: request.host }),
       ...(request.trace === undefined ? {} : { trace: request.trace }),
-      ...(request.record === undefined ? {} : {
-        record: {
-          command: request.record,
-          cwd: request.cwd,
-          ...(request.outFile === undefined ? {} : { outFile: request.outFile }),
-        },
-      }),
-      ...(!live ? {} : {
-        discovery: { cwd: request.cwd, watch: request.watch, load: async () => (await hostReady).discover() },
-        onRun: async (ids) => (await hostReady).run(ids ?? []),
-        onStop: async (runId) => (await hostReady).stop(runId),
-      }),
+      ...(request.record === undefined
+        ? {}
+        : {
+            record: {
+              command: request.record,
+              cwd: request.cwd,
+              ...(request.outFile === undefined ? {} : { outFile: request.outFile }),
+            },
+          }),
+      ...(!live
+        ? {}
+        : {
+            discovery: {
+              cwd: request.cwd,
+              watch: request.watch,
+              load: async () => (await hostReady).discover(),
+            },
+            onRun: async (ids) => (await hostReady).run(ids ?? []),
+            onStop: async (runId) => (await hostReady).stop(runId),
+          }),
     });
     if (live) {
       try {
@@ -187,7 +205,8 @@ export async function runUi(
       hostReadySettled = true;
       resolveHost(host);
     }
-    surface = (await onReady({ url: server.url, port: server.port, mode: server.mode })) ?? undefined;
+    surface =
+      (await onReady({ url: server.url, port: server.port, mode: server.mode })) ?? undefined;
     if (surface === undefined) await runtime.waitForInterrupt(new AbortController().signal);
     else {
       const interruptController = new AbortController();
@@ -210,8 +229,17 @@ export async function runUi(
     }
     const failures: unknown[] = [];
     // Stop discovery/network activity before closing the host it calls into.
-    for (const cleanup of [() => detachHostEvents?.(), () => surface?.close(), () => server?.close(), () => host?.shutdown()]) {
-      try { await cleanup(); } catch (error) { failures.push(error); }
+    for (const cleanup of [
+      () => detachHostEvents?.(),
+      () => surface?.close(),
+      () => server?.close(),
+      () => host?.shutdown(),
+    ]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failures.push(error);
+      }
     }
     if (failures.length > 0) throw new AggregateError(failures, 'Termwright UI cleanup failed');
   }
@@ -256,7 +284,9 @@ class NativeRunProjection {
         const values = [...latest.values()];
         const skippedTasks = new Set([
           ...this.#declarativeSkips,
-          ...values.filter((attempt) => attempt.status === 'skipped').map((attempt) => attempt.runnerTaskId),
+          ...values
+            .filter((attempt) => attempt.status === 'skipped')
+            .map((attempt) => attempt.runnerTaskId),
         ]);
         const observedTasks = new Set([...latest.keys(), ...skippedTasks]);
         this.#hub.publish({
@@ -268,9 +298,14 @@ class NativeRunProjection {
             passed: values.filter((attempt) => attempt.status === 'passed').length,
             failed: values.filter((attempt) => attempt.status === 'failed').length,
             skipped: skippedTasks.size,
-            flaky: values.filter((attempt) => attempt.status === 'passed' && attempt.retry > 0).length,
-            durationMs: Math.max(0, ...values.map((attempt) =>
-              attempt.status === undefined ? 0 : event.monotonicTime - attempt.monotonicTime)),
+            flaky: values.filter((attempt) => attempt.status === 'passed' && attempt.retry > 0)
+              .length,
+            durationMs: Math.max(
+              0,
+              ...values.map((attempt) =>
+                attempt.status === undefined ? 0 : event.monotonicTime - attempt.monotonicTime,
+              ),
+            ),
           },
         });
       }
@@ -287,7 +322,10 @@ class NativeRunProjection {
         v: 1,
         type: 'run-infrastructure-failed',
         runId: event.identity.runId,
-        error: typeof payload['detail'] === 'string' ? payload['detail'].slice(0, 256) : 'native host infrastructure failure',
+        error:
+          typeof payload['detail'] === 'string'
+            ? payload['detail'].slice(0, 256)
+            : 'native host infrastructure failure',
       });
       return;
     }
@@ -307,7 +345,9 @@ class NativeRunProjection {
         type: 'test-start',
         id: attemptId,
         runnerTaskId,
-        ...(event.identity.executionId === undefined ? {} : { executionId: event.identity.executionId }),
+        ...(event.identity.executionId === undefined
+          ? {}
+          : { executionId: event.identity.executionId }),
         attempt: retry + 1,
         title: test.title,
         file: test.file,
@@ -318,7 +358,8 @@ class NativeRunProjection {
     if (event.type !== 'attempt.finished') return;
     const attempt = this.#attempts.get(attemptId);
     const state = payload['state'];
-    if (attempt === undefined || (state !== 'passed' && state !== 'failed' && state !== 'skipped')) return;
+    if (attempt === undefined || (state !== 'passed' && state !== 'failed' && state !== 'skipped'))
+      return;
     attempt.status = state;
     this.#hub.publish({
       v: 1,
@@ -335,18 +376,26 @@ class NativeRunProjection {
 
 function asRecord(value: unknown): Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>>
+    ? (value as Readonly<Record<string, unknown>>)
     : {};
 }
 
 function nonNegative(value: unknown): number {
-  return Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : 0;
+  return Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : 0;
 }
 
 function isTerminalProjectionState(value: string): value is TerminalRunState {
-  return value === 'passed' || value === 'passed-with-skips' || value === 'failed' || value === 'flaky' ||
-    value === 'cancelled' || value === 'skipped' || value === 'infrastructure-failed' ||
-    value === 'crashed' || value === 'incomplete';
+  return (
+    value === 'passed' ||
+    value === 'passed-with-skips' ||
+    value === 'failed' ||
+    value === 'flaky' ||
+    value === 'cancelled' ||
+    value === 'skipped' ||
+    value === 'infrastructure-failed' ||
+    value === 'crashed' ||
+    value === 'incomplete'
+  );
 }
 
 export function waitForInterrupt(signal: AbortSignal): Promise<void> {

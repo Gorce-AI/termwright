@@ -98,19 +98,9 @@ export {
   type TraceState,
 } from './reader.js';
 
-export {
-  frameAt,
-  frameFromAnsi,
-  type FrameOptions,
-  type TraceFrame,
-} from './frame.js';
+export { frameAt, frameFromAnsi, type FrameOptions, type TraceFrame } from './frame.js';
 
-export {
-  openArchive,
-  packTrace,
-  unpackTrace,
-  type ArchiveFiles,
-} from './archive.js';
+export { openArchive, packTrace, unpackTrace, type ArchiveFiles } from './archive.js';
 
 export {
   describe as describeSemanticNode,

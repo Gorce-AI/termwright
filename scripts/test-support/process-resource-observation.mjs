@@ -13,14 +13,18 @@ export function parseProcessTable(stdout) {
 }
 
 export function parseDarwinFootprint(stdout, pids) {
-  const measuredPids = [...stdout.matchAll(/^.+ \[(\d+)\]:.*\bFootprint:\s+\d+ B/gmu)]
-    .map((match) => Number(match[1]));
-  const footprintMatch = pids.length === 1
-    ? /^.+ \[\d+\]:.*\bFootprint:\s+(\d+) B/gmu.exec(stdout)
-    : /^Summary Footprint:\s+(\d+) B\s*$/gmu.exec(stdout);
+  const measuredPids = [...stdout.matchAll(/^.+ \[(\d+)\]:.*\bFootprint:\s+\d+ B/gmu)].map(
+    (match) => Number(match[1]),
+  );
+  const footprintMatch =
+    pids.length === 1
+      ? /^.+ \[\d+\]:.*\bFootprint:\s+(\d+) B/gmu.exec(stdout)
+      : /^Summary Footprint:\s+(\d+) B\s*$/gmu.exec(stdout);
   const footprint = Number(footprintMatch?.[1]);
   if (!sameNumbers(measuredPids, pids) || !Number.isSafeInteger(footprint) || footprint < 0) {
-    throw new Error(`footprint did not return one complete aggregate for ${pids.length} requested live pids`);
+    throw new Error(
+      `footprint did not return one complete aggregate for ${pids.length} requested live pids`,
+    );
   }
   return footprint;
 }
@@ -36,19 +40,25 @@ export function parseDarwinOpenFileDescriptors(stdout, pids) {
 export function sameProcessSet(left, right) {
   if (left.pids.length !== right.pids.length) return false;
   const rightPids = new Set(right.pids);
-  return left.pids.every((pid) => rightPids.delete(pid)
-    && sameProcessIdentity(left.table.get(pid), right.table.get(pid)))
-    && rightPids.size === 0;
+  return (
+    left.pids.every(
+      (pid) =>
+        rightPids.delete(pid) && sameProcessIdentity(left.table.get(pid), right.table.get(pid)),
+    ) && rightPids.size === 0
+  );
 }
 
 export function sameProcessIdentity(left, right) {
-  return left !== undefined && right !== undefined
-    && left.ppid === right.ppid && sameProcessGeneration(left, right);
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.ppid === right.ppid &&
+    sameProcessGeneration(left, right)
+  );
 }
 
 export function sameProcessGeneration(left, right) {
-  return left !== undefined && right !== undefined
-    && left.startedAt === right.startedAt;
+  return left !== undefined && right !== undefined && left.startedAt === right.startedAt;
 }
 
 function sameNumbers(left, right) {

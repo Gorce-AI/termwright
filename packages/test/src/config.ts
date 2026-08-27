@@ -126,20 +126,27 @@ export function termwrightProjects(
   names: readonly string[] = Object.keys(config.profiles ?? {}),
 ): readonly TermwrightVitestProject[] {
   const known = config.profiles ?? {};
-  if (names.length === 0) throw new TypeError('termwrightProjects() needs at least one configured profile');
+  if (names.length === 0)
+    throw new TypeError('termwrightProjects() needs at least one configured profile');
   const seen = new Set<string>();
-  return Object.freeze(names.map((name) => {
-    if (seen.has(name)) throw new TypeError(`termwrightProjects() received duplicate profile ${JSON.stringify(name)}`);
-    seen.add(name);
-    if (known[name] === undefined) throw new TypeError(`termwrightProjects() cannot find profile ${JSON.stringify(name)}`);
-    return Object.freeze({
-      extends: true as const,
-      test: Object.freeze({
-        name,
-        env: Object.freeze({ TERMWRIGHT_PROFILE: name }),
-      }),
-    });
-  }));
+  return Object.freeze(
+    names.map((name) => {
+      if (seen.has(name))
+        throw new TypeError(
+          `termwrightProjects() received duplicate profile ${JSON.stringify(name)}`,
+        );
+      seen.add(name);
+      if (known[name] === undefined)
+        throw new TypeError(`termwrightProjects() cannot find profile ${JSON.stringify(name)}`);
+      return Object.freeze({
+        extends: true as const,
+        test: Object.freeze({
+          name,
+          env: Object.freeze({ TERMWRIGHT_PROFILE: name }),
+        }),
+      });
+    }),
+  );
 }
 
 /**
@@ -151,19 +158,44 @@ export function termwrightProjects(
 export const XTERM_PALETTE: ColorPalette = Object.freeze({
   name: 'xterm',
   colors: Object.freeze([
-    '#000000', '#cd0000', '#00cd00', '#cdcd00',
-    '#0000ee', '#cd00cd', '#00cdcd', '#e5e5e5',
-    '#7f7f7f', '#ff0000', '#00ff00', '#ffff00',
-    '#5c5cff', '#ff00ff', '#00ffff', '#ffffff',
+    '#000000',
+    '#cd0000',
+    '#00cd00',
+    '#cdcd00',
+    '#0000ee',
+    '#cd00cd',
+    '#00cdcd',
+    '#e5e5e5',
+    '#7f7f7f',
+    '#ff0000',
+    '#00ff00',
+    '#ffff00',
+    '#5c5cff',
+    '#ff00ff',
+    '#00ffff',
+    '#ffffff',
   ]),
   env: Object.freeze({ TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '3' }),
 });
 
 /** ANSI names for palette indices 0…15, used by cell snapshots. */
 export const ANSI_COLOR_NAMES: readonly string[] = Object.freeze([
-  'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
-  'bright-black', 'bright-red', 'bright-green', 'bright-yellow',
-  'bright-blue', 'bright-magenta', 'bright-cyan', 'bright-white',
+  'black',
+  'red',
+  'green',
+  'yellow',
+  'blue',
+  'magenta',
+  'cyan',
+  'white',
+  'bright-black',
+  'bright-red',
+  'bright-green',
+  'bright-yellow',
+  'bright-blue',
+  'bright-magenta',
+  'bright-cyan',
+  'bright-white',
 ]);
 
 const DEFAULT_TIMEOUTS: Required<TestTimeoutClasses> = Object.freeze({
@@ -213,7 +245,9 @@ export function termwrightRetry(options: TermwrightRetryOptions = {}): number {
 function retryCount(value: string | number, name: string): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_RETRIES) {
-    throw new TypeError(`${name} retries must be an integer from 0 to ${MAX_RETRIES}, received ${String(value)}`);
+    throw new TypeError(
+      `${name} retries must be an integer from 0 to ${MAX_RETRIES}, received ${String(value)}`,
+    );
   }
   return parsed;
 }
@@ -272,10 +306,14 @@ function validate(config: TermwrightConfig, path: string): void {
   const seen = new Set<SessionCapabilityId>();
   for (const capability of required) {
     if (!supported.has(capability)) {
-      throw new TypeError(`${path}.requiredCapabilities contains unknown capability ${JSON.stringify(capability)}`);
+      throw new TypeError(
+        `${path}.requiredCapabilities contains unknown capability ${JSON.stringify(capability)}`,
+      );
     }
     if (seen.has(capability)) {
-      throw new TypeError(`${path}.requiredCapabilities contains duplicate capability ${JSON.stringify(capability)}`);
+      throw new TypeError(
+        `${path}.requiredCapabilities contains duplicate capability ${JSON.stringify(capability)}`,
+      );
     }
     seen.add(capability);
   }
@@ -318,7 +356,8 @@ export function resolveTermwrightConfig(
     timeouts: Object.freeze({ ...DEFAULT_TIMEOUTS, ...stripUndefined(merged.timeouts ?? {}) }),
     trace: merged.trace ?? 'retain-on-failure',
     outputDir: merged.outputDir ?? 'termwright-report',
-    snapshotDir: merged.snapshotDir ?? (profile === undefined ? '__snapshots__' : `__snapshots__/${name}`),
+    snapshotDir:
+      merged.snapshotDir ?? (profile === undefined ? '__snapshots__' : `__snapshots__/${name}`),
     command: merged.command,
     requiredCapabilities: Object.freeze([...(merged.requiredCapabilities ?? [])]),
     env: Object.freeze({ ...(palette?.env ?? {}), ...(merged.env ?? {}) }),

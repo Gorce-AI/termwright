@@ -1,6 +1,11 @@
 /** Builders for hand-written semantic trees used across this package's tests. */
 
-import type { SemanticNode, SemanticRole, SemanticSnapshot, SemanticState } from '@termwright/protocol';
+import type {
+  SemanticNode,
+  SemanticRole,
+  SemanticSnapshot,
+  SemanticState,
+} from '@termwright/protocol';
 
 /** Builds a node; `parentId` and `state` are omitted rather than set to `undefined`. */
 export function node(
@@ -21,17 +26,21 @@ export function node(
     ...(extra.parentId === undefined ? {} : { parentId: extra.parentId }),
     ...(extra.state === undefined ? {} : { state: extra.state }),
     ...(extra.testId === undefined ? {} : { testId: extra.testId }),
-    ...(extra.value === undefined ? {} : { value: {
-      status: 'known' as const,
-      value: extra.value,
-      sensitivity: 'public' as const,
-      evidence: {
-        source: 'application' as const,
-        method: 'declared' as const,
-        strength: 'authoritative' as const,
-        providerId: 'test-fixture',
-      },
-    } }),
+    ...(extra.value === undefined
+      ? {}
+      : {
+          value: {
+            status: 'known' as const,
+            value: extra.value,
+            sensitivity: 'public' as const,
+            evidence: {
+              source: 'application' as const,
+              method: 'declared' as const,
+              strength: 'authoritative' as const,
+              providerId: 'test-fixture',
+            },
+          },
+        }),
   };
 }
 
@@ -46,7 +55,11 @@ export function snapshot(nodes: readonly SemanticNode[], revision = 1): Semantic
     rootIds: nodes.filter((entry) => entry.parentId === undefined).map((entry) => entry.id),
     nodes,
     coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }
 

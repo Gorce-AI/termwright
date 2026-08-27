@@ -44,7 +44,8 @@ export interface ScreenshotResult {
    */
   readonly timeMs: number;
   /** How that moment was chosen, for a line the user can check. */
-  readonly chosen: 'the moment given' | 'the step given' | 'the crash' | 'the last step' | 'the end';
+  readonly chosen:
+    'the moment given' | 'the step given' | 'the crash' | 'the last step' | 'the end';
   /**
    * Characters no embedded glyph covered.
    *

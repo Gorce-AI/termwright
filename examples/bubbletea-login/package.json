@@ -4,7 +4,9 @@
   "private": true,
   "description": "A Bubble Tea login form tested through an instrumented Go build",
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "go run ./app",

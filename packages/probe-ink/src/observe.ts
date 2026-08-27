@@ -45,9 +45,12 @@ export interface InkTextNode {
 export type InkDomNode = InkDomElement | InkTextNode;
 
 /** Public Ink measurement function, kept injectable for tests and isolation. */
-export type MeasureElement = (
-  node: InkDomElement,
-) => { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+export type MeasureElement = (node: InkDomElement) => {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
 
 export interface ObserveInkOptions {
   readonly frame: number;
@@ -113,7 +116,11 @@ export function observeInkTree(root: InkDomElement, options: ObserveInkOptions):
     // accessible name. The recognizer applies name-from-content over the tree.
     const children = options.retainedChildren?.get(node) ?? node.childNodes;
     const text = isTextHost(node) ? textOf(children, options.limits.maxStringBytes) : undefined;
-    const unobservable = unobservableFor(node, geometry?.intendedRect !== undefined, text !== undefined);
+    const unobservable = unobservableFor(
+      node,
+      geometry?.intendedRect !== undefined,
+      text !== undefined,
+    );
 
     objects.push({
       identity: { kind: 'stable', value: identity },

@@ -5,7 +5,10 @@ import { XTERM_PALETTE } from './config.js';
 
 describe('serializeScreen', () => {
   it('frames the grid and labels the viewport', () => {
-    const screen = fakeScreen(['Permission required', '  [Approve]  Reject'], { columns: 20, rows: 3 });
+    const screen = fakeScreen(['Permission required', '  [Approve]  Reject'], {
+      columns: 20,
+      rows: 3,
+    });
     expect(serializeScreen(screen)).toBe(
       [
         '┌─ 20×3 ─────────────┐',
@@ -19,9 +22,7 @@ describe('serializeScreen', () => {
 
   it('drops trailing empty rows but keeps the viewport size in the label', () => {
     const screen = fakeScreen(['only'], { columns: 8, rows: 4 });
-    expect(serializeScreen(screen)).toBe(
-      ['┌─ 8×4 ──┐', '│only    │', '└────────┘', ''].join('\n'),
-    );
+    expect(serializeScreen(screen)).toBe(['┌─ 8×4 ──┐', '│only    │', '└────────┘', ''].join('\n'));
   });
 
   it('keeps every row when asked', () => {
@@ -38,7 +39,9 @@ describe('serializeScreen', () => {
     const screen = fakeScreen(['ok fail'], {
       columns: 8,
       rows: 1,
-      runs: [{ row: 0, from: 3, to: 6, attributes: { bold: true }, fg: { kind: 'palette', index: 1 } }],
+      runs: [
+        { row: 0, from: 3, to: 6, attributes: { bold: true }, fg: { kind: 'palette', index: 1 } },
+      ],
     });
     const output = serializeScreen(screen, { attributes: true, palette: XTERM_PALETTE });
     expect(output).toContain('attributes:');

@@ -9,7 +9,15 @@
  * bytes, which `annotations.test.tsx` asserts against a plain baseline.
  */
 
-import { cloneElement, isValidElement, useCallback, useRef, type ReactElement, type ReactNode, type Ref } from 'react';
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useRef,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import type { DOMElement } from 'ink';
 import { useSemantic } from './use-semantic.js';
 import type { InkSemanticAnnotation } from './types.js';
@@ -31,7 +39,8 @@ export interface SemanticProps extends InkSemanticAnnotation {
 
 function assignRef(ref: Ref<DOMElement> | undefined, node: DOMElement | null): void {
   if (typeof ref === 'function') ref(node);
-  else if (ref !== null && ref !== undefined) (ref as { current: DOMElement | null }).current = node;
+  else if (ref !== null && ref !== undefined)
+    (ref as { current: DOMElement | null }).current = node;
 }
 
 /**

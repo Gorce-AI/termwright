@@ -70,8 +70,10 @@ function hasOpenTuiCandidateBinding(env: Readonly<Record<string, string | undefi
     }
     return true;
   }
-  return env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'] !== undefined
-    || env['TERMWRIGHT_CERTIFICATION_SOURCE_REVISION'] !== undefined;
+  return (
+    env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'] !== undefined ||
+    env['TERMWRIGHT_CERTIFICATION_SOURCE_REVISION'] !== undefined
+  );
 }
 
 function entryPath(entry: string): string | undefined {
@@ -90,20 +92,22 @@ function certificationOverride(
   const digest = env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'];
   const revision = env['TERMWRIGHT_CERTIFICATION_SOURCE_REVISION'];
   if (
-    raw === undefined
-    || env['GITHUB_ACTIONS'] !== 'true'
-    || !/^sha256:[a-f0-9]{64}$/u.test(digest ?? '')
-    || !/^[a-f0-9]{40}$/u.test(revision ?? '')
-    || revision !== env['GITHUB_SHA']
-  ) return undefined;
+    raw === undefined ||
+    env['GITHUB_ACTIONS'] !== 'true' ||
+    !/^sha256:[a-f0-9]{64}$/u.test(digest ?? '') ||
+    !/^[a-f0-9]{40}$/u.test(revision ?? '') ||
+    revision !== env['GITHUB_SHA']
+  )
+    return undefined;
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
     if (
-      value['framework'] !== 'opentui'
-      || typeof value['version'] !== 'string'
-      || value['candidateDigest'] !== digest
-      || value['sourceRevision'] !== revision
-    ) return undefined;
+      value['framework'] !== 'opentui' ||
+      typeof value['version'] !== 'string' ||
+      value['candidateDigest'] !== digest ||
+      value['sourceRevision'] !== revision
+    )
+      return undefined;
     return Object.freeze({
       version: value['version'],
       source: 'candidate',

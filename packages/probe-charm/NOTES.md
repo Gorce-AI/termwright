@@ -8,15 +8,14 @@ file records why the probe is shaped the way it is.
 
 Both Bubbles patch sets exist (v1.0.0 and v2.1.1) and are byte-identical in
 substance: the five fields the accessors read kept their names across the
-major. That is luck, not design — the fields that *were* renamed
+major. That is luck, not design — the fields that _were_ renamed
 (`filepicker.min`/`max` → `minIdx`/`maxIdx`) happen to be ones no accessor
 touches — so each major keeps its own set and its own checksums, and both are
 compiled in CI rather than assumed to match.
 
-
 **v2 is not v1 with a suffix.** It lives at `charm.land/bubbletea/v2`; asking
-the proxy for `github.com/charmbracelet/bubbletea/v2` fails with *module
-declares its path as: charm.land/bubbletea/v2*. A probe matching by module path
+the proxy for `github.com/charmbracelet/bubbletea/v2` fails with _module
+declares its path as: charm.land/bubbletea/v2_. A probe matching by module path
 that knows only the GitHub form misses every v2 project and reports nothing,
 which reads as an application without semantics rather than as a bug. Both
 constants are asserted to be non-derivable from each other.
@@ -63,13 +62,13 @@ capability failure rather than a version guess. The runtime also refuses a
 recognised private-state component when the caller omitted the returned
 `goArgs`, so it never silently falls back to public-getter-only facts.
 
-| Component | Without the patch set | With it |
-|---|---|---|
-| `spinner` | a glyph; "animating" and "stuck" are indistinguishable | frame index, so the tree shows it advancing |
-| `progress` | `Percent()` returns the animation's **target** | the fraction actually drawn |
-| `filepicker` | `HighlightedPath()` gives a path, no position | index and entry count |
-| `table` | cannot tell "row absent" from "row scrolled out of view" | the rendered window |
-| `list` | the status message looks like any other row | the message itself |
+| Component    | Without the patch set                                    | With it                                     |
+| ------------ | -------------------------------------------------------- | ------------------------------------------- |
+| `spinner`    | a glyph; "animating" and "stuck" are indistinguishable   | frame index, so the tree shows it advancing |
+| `progress`   | `Percent()` returns the animation's **target**           | the fraction actually drawn                 |
+| `filepicker` | `HighlightedPath()` gives a path, no position            | index and entry count                       |
+| `table`      | cannot tell "row absent" from "row scrolled out of view" | the rendered window                         |
+| `list`       | the status message looks like any other row              | the message itself                          |
 
 The progress case is the sharpest, and the end-to-end test pins it: the spring
 approaches its target asymptotically and settles just short, so `Percent()`

@@ -59,7 +59,10 @@ const ROLE_MAPS: Readonly<Record<string, (frameworkType: string) => SemanticRole
  * dropped: it falls through to the framework map, and the bad value stays
  * visible in the annotations rather than becoming an invented role.
  */
-function resolveRole(object: ProbeObject, framework: string): {
+function resolveRole(
+  object: ProbeObject,
+  framework: string,
+): {
   role: SemanticRole;
   source: ProvenanceSource;
 } {
@@ -141,14 +144,18 @@ function collectSubtreeText(
       const childText = collect(child);
       const childObject = objectById.get(child);
       if (
-        childObject?.annotations?.role !== undefined
-        || childObject?.accessibility?.role !== undefined
-      ) continue;
+        childObject?.annotations?.role !== undefined ||
+        childObject?.accessibility?.role !== undefined
+      )
+        continue;
       if (childText.length === 0) continue;
       // Separate host elements are separate content runs. Raw text fragments
       // inside one host were already joined by the probe, but sibling hosts
       // need a word boundary (`<Text>Save</Text><Text>now</Text>`).
-      result = clampUtf8(result.length === 0 ? childText : `${result} ${childText}`, maxStringBytes);
+      result = clampUtf8(
+        result.length === 0 ? childText : `${result} ${childText}`,
+        maxStringBytes,
+      );
       if (UTF8_ENCODER.encode(result).byteLength >= maxStringBytes) break;
     }
     visiting.delete(id);
@@ -223,9 +230,10 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
   // Ink boxes do not own their rendered label; it survives only in descendant
   // text hosts. Other framework probes already define the meaning of their own
   // `text` field and must not silently gain Ink's host-specific correlation.
-  const subtreeText: ReadonlyMap<string, string> = context.framework === 'ink'
-    ? collectSubtreeText(frame, context.maxStringBytes ?? DEFAULT_LIMITS.maxStringBytes)
-    : new Map();
+  const subtreeText: ReadonlyMap<string, string> =
+    context.framework === 'ink'
+      ? collectSubtreeText(frame, context.maxStringBytes ?? DEFAULT_LIMITS.maxStringBytes)
+      : new Map();
   const idByIdentity = new Map<string, string>();
   for (const object of frame.objects) {
     idByIdentity.set(object.identity.value, `n${object.identity.value}`);
@@ -242,7 +250,8 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
     const intended = object.geometry?.intendedRect;
     const visible = object.geometry?.visibleRect;
     const hiddenByGeometry = visible !== undefined && (visible.width === 0 || visible.height === 0);
-    const offscreen = hiddenByGeometry && intended !== undefined && intended.width > 0 && intended.height > 0;
+    const offscreen =
+      hiddenByGeometry && intended !== undefined && intended.width > 0 && intended.height > 0;
     const state = resolveState(object, hiddenByGeometry, offscreen);
     const parentId = object.parent === undefined ? undefined : idByIdentity.get(object.parent);
     if (parentId === undefined) rootIds.push(id);
@@ -284,27 +293,74 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
       ?.map((identity) => idByIdentity.get(identity))
       .filter((target): target is string => target !== undefined);
 
-    const displayed: Observation<boolean> = object.state?.displayed !== undefined
-      ? { status: 'known', value: object.state.displayed, evidence: evidence('framework', 'instrumented', 'authoritative', context.framework) }
-      : object.unobservable?.includes('displayed') === true
-        ? { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' }
-        : { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' };
-    const intendedRect: Observation<Rect> = displayed.status === 'known' && displayed.value === false && displayed.evidence.strength === 'authoritative'
-      ? { status: 'absent', reason: 'not-displayed', evidence: { ...displayed.evidence, strength: 'authoritative' } }
-      : object.geometry?.intendedRect !== undefined
-      ? { status: 'known', value: object.geometry.intendedRect, evidence: evidence('framework', 'instrumented', 'authoritative', context.framework) }
-      : object.unobservable?.includes('intendedRect') === true
-        ? { status: 'unsupported', capability: 'intended-rect', reason: 'framework-unobservable' }
-        : { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' };
-    const visibleRect: Observation<Rect> = displayed.status === 'known' && displayed.value === false && displayed.evidence.strength === 'authoritative'
-      ? { status: 'absent', reason: 'not-displayed', evidence: { ...displayed.evidence, strength: 'authoritative' } }
-      : displayed.status === 'known' && displayed.value === false
-        ? { status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' }
-      : object.geometry?.visibleRect !== undefined
-        ? { status: 'known', value: object.geometry.visibleRect, evidence: evidence('framework', 'instrumented', 'authoritative', context.framework) }
-        : object.unobservable?.includes('visibleRect') === true
-          ? { status: 'unsupported', capability: 'visible-rect', reason: 'framework-unobservable' }
-          : { status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' };
+    const displayed: Observation<boolean> =
+      object.state?.displayed !== undefined
+        ? {
+            status: 'known',
+            value: object.state.displayed,
+            evidence: evidence('framework', 'instrumented', 'authoritative', context.framework),
+          }
+        : object.unobservable?.includes('displayed') === true
+          ? { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' }
+          : { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' };
+    const intendedRect: Observation<Rect> =
+      displayed.status === 'known' &&
+      displayed.value === false &&
+      displayed.evidence.strength === 'authoritative'
+        ? {
+            status: 'absent',
+            reason: 'not-displayed',
+            evidence: { ...displayed.evidence, strength: 'authoritative' },
+          }
+        : object.geometry?.intendedRect !== undefined
+          ? {
+              status: 'known',
+              value: object.geometry.intendedRect,
+              evidence: evidence('framework', 'instrumented', 'authoritative', context.framework),
+            }
+          : object.unobservable?.includes('intendedRect') === true
+            ? {
+                status: 'unsupported',
+                capability: 'intended-rect',
+                reason: 'framework-unobservable',
+              }
+            : {
+                status: 'unsupported',
+                capability: 'intended-geometry',
+                reason: 'framework-unobservable',
+              };
+    const visibleRect: Observation<Rect> =
+      displayed.status === 'known' &&
+      displayed.value === false &&
+      displayed.evidence.strength === 'authoritative'
+        ? {
+            status: 'absent',
+            reason: 'not-displayed',
+            evidence: { ...displayed.evidence, strength: 'authoritative' },
+          }
+        : displayed.status === 'known' && displayed.value === false
+          ? {
+              status: 'unsupported',
+              capability: 'clipped-geometry',
+              reason: 'framework-unobservable',
+            }
+          : object.geometry?.visibleRect !== undefined
+            ? {
+                status: 'known',
+                value: object.geometry.visibleRect,
+                evidence: evidence('framework', 'instrumented', 'authoritative', context.framework),
+              }
+            : object.unobservable?.includes('visibleRect') === true
+              ? {
+                  status: 'unsupported',
+                  capability: 'visible-rect',
+                  reason: 'framework-unobservable',
+                }
+              : {
+                  status: 'unsupported',
+                  capability: 'clipped-geometry',
+                  reason: 'framework-unobservable',
+                };
 
     nodes.push({
       id,
@@ -319,26 +375,26 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
       frameworkType: object.frameworkType,
       geometry: { displayed, intendedRect, visibleRect },
       ...(state === undefined ? {} : { state }),
-      ...(object.annotations?.testId === undefined
-        ? {}
-        : { testId: object.annotations.testId }),
+      ...(object.annotations?.testId === undefined ? {} : { testId: object.annotations.testId }),
       ...(object.annotations?.extended === undefined
         ? {}
         : { extended: object.annotations.extended }),
-      ...(object.annotations?.actions === undefined
-        ? {}
-        : { actions: object.annotations.actions }),
+      ...(object.annotations?.actions === undefined ? {} : { actions: object.annotations.actions }),
       ...(object.annotations?.inputRecipes === undefined
         ? {}
         : { inputRecipes: object.annotations.inputRecipes }),
       ...(labelledBy === undefined || labelledBy.length === 0 ? {} : { labelledBy }),
       ...(describedBy === undefined || describedBy.length === 0 ? {} : { describedBy }),
-      ...(object.state?.value === undefined ? {} : { value: {
-        status: 'known' as const,
-        value: object.state.value,
-        sensitivity: object.state?.valueSensitivity ?? 'sensitive',
-        evidence: evidence('framework', 'instrumented', 'authoritative', context.framework),
-      } }),
+      ...(object.state?.value === undefined
+        ? {}
+        : {
+            value: {
+              status: 'known' as const,
+              value: object.state.value,
+              sensitivity: object.state?.valueSensitivity ?? 'sensitive',
+              evidence: evidence('framework', 'instrumented', 'authoritative', context.framework),
+            },
+          }),
       p: roleSource,
       ...(Object.keys(px).length === 0 ? {} : { px }),
     });
@@ -352,7 +408,15 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
     rows: context.rows,
     rootIds,
     nodes,
-    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence('framework', 'instrumented', 'authoritative', context.framework) },
-    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    coordinateSpace: {
+      status: 'known',
+      value: 'viewport-cells',
+      evidence: evidence('framework', 'instrumented', 'authoritative', context.framework),
+    },
+    hitGrid: {
+      status: 'unsupported',
+      capability: 'pointer-hit-grid',
+      reason: 'framework-unobservable',
+    },
   };
 }

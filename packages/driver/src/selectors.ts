@@ -164,8 +164,8 @@ const PSEUDO_STATES: Readonly<Record<string, keyof SemanticState>> = Object.free
 function syntaxError(selector: string, detail: string): never {
   throw new TypeError(
     `cannot parse selector ${JSON.stringify(selector)}: ${detail}; Termwright semantic selectors support ` +
-    "'role', '#testId', '.class', ':focused', ':disabled', ':selected', ':checked', ':expanded', " +
-    "':modal', ':busy', ':hidden', ':readonly' and descendant combinators",
+      "'role', '#testId', '.class', ':focused', ':disabled', ':selected', ':checked', ':expanded', " +
+      "':modal', ':busy', ':hidden', ':readonly' and descendant combinators",
   );
 }
 
@@ -213,7 +213,10 @@ export function describeMatcher(matcher: TextMatcher): string {
  * ```
  */
 export function parseSelector(selector: string): SemanticQuery {
-  const parts = selector.trim().split(/\s+/u).filter((part) => part.length > 0);
+  const parts = selector
+    .trim()
+    .split(/\s+/u)
+    .filter((part) => part.length > 0);
   if (parts.length === 0) syntaxError(selector, 'selector is empty');
   const steps = parts.map((part) => parseCompound(selector, part));
   return { kind: 'semantic', steps, description: selector.trim() };
@@ -235,7 +238,8 @@ function parseCompound(selector: string, compound: string): SemanticStep {
     const head = token[0];
     const body = token.slice(1);
     if (head === '#') {
-      if (testId !== undefined) syntaxError(selector, 'more than one #testId in a compound selector');
+      if (testId !== undefined)
+        syntaxError(selector, 'more than one #testId in a compound selector');
       testId = body;
     } else if (head === '.') {
       classes.push(body);

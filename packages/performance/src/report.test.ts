@@ -55,8 +55,9 @@ describe('semantic pipeline performance report', () => {
 
   it('rejects the previous report schema instead of retaining compatibility', () => {
     const report = runPerformanceBenchmark({ iterations: 1, warmupIterations: 1, nodeCount: 4 });
-    expect(() => validatePerformanceReport({ ...report, schemaVersion: 2 }))
-      .toThrow(/unsupported performance report kind or version/u);
+    expect(() => validatePerformanceReport({ ...report, schemaVersion: 2 })).toThrow(
+      /unsupported performance report kind or version/u,
+    );
   });
 
   it('keeps every checked-in representative report machine-readable and complete', async () => {
@@ -69,7 +70,9 @@ describe('semantic pipeline performance report', () => {
       const raw = await readFile(new URL(`../reports/${name}`, import.meta.url), 'utf8');
       const value: unknown = JSON.parse(raw);
       expect(() => validatePerformanceReport(value), name).not.toThrow();
-      expect((value as { scenarios: { renderingMode: string }[] }).scenarios[0]?.renderingMode).toBe(renderingMode);
+      expect(
+        (value as { scenarios: { renderingMode: string }[] }).scenarios[0]?.renderingMode,
+      ).toBe(renderingMode);
     }
   });
 
@@ -90,11 +93,13 @@ describe('semantic pipeline performance report', () => {
   });
 
   it('parses real Go debug counters without inferring unavailable values', () => {
-    const metrics = parseCharmDebug([
-      '  tw:io   [s1]   0.010s performance r1 bytes=401 nodes=3 unknown=1 serialization_us=12.500',
-      '  tw:io   [s1]   0.020s performance r2 bytes=187 nodes=3 unknown=1 serialization_us=8.250',
-      '  tw:sem  [s1]   0.030s close r2 snapshots=2 logs_dropped=0 performance_dropped=0',
-    ].join('\n'));
+    const metrics = parseCharmDebug(
+      [
+        '  tw:io   [s1]   0.010s performance r1 bytes=401 nodes=3 unknown=1 serialization_us=12.500',
+        '  tw:io   [s1]   0.020s performance r2 bytes=187 nodes=3 unknown=1 serialization_us=8.250',
+        '  tw:sem  [s1]   0.030s close r2 snapshots=2 logs_dropped=0 performance_dropped=0',
+      ].join('\n'),
+    );
     expect(metrics).toEqual({
       fullSnapshots: 2,
       droppedEvents: 0,
@@ -104,10 +109,14 @@ describe('semantic pipeline performance report', () => {
       serializationMicroseconds: [12.5, 8.25],
     });
 
-    expect(parseCharmDebug([
-      '  tw:io   [s1]   0.010s r1 snapshot nodes=3',
-      '  tw:io   [s1]   0.011s performance r1 bytes=401 nodes=3 unknown=1 serialization_us=12.500',
-    ].join('\n')).droppedEvents).toBe(0);
+    expect(
+      parseCharmDebug(
+        [
+          '  tw:io   [s1]   0.010s r1 snapshot nodes=3',
+          '  tw:io   [s1]   0.011s performance r1 bytes=401 nodes=3 unknown=1 serialization_us=12.500',
+        ].join('\n'),
+      ).droppedEvents,
+    ).toBe(0);
   });
 
   it('summarizes paired Charm durations without letting one small denominator dominate', () => {
@@ -120,7 +129,8 @@ describe('semantic pipeline performance report', () => {
   });
 
   it('rejects partial Charm measurement blocks before building the fixture', async () => {
-    await expect(runCharmPerformanceBenchmark({ iterations: 4 }))
-      .rejects.toThrow(/complete balanced measurement blocks/u);
+    await expect(runCharmPerformanceBenchmark({ iterations: 4 })).rejects.toThrow(
+      /complete balanced measurement blocks/u,
+    );
   });
 });

@@ -14,7 +14,11 @@ async function manifestDirectory(manifest: unknown): Promise<string> {
 }
 
 afterEach(async () => {
-  await Promise.all(scratchDirectories.splice(0).map((directory) => rm(directory, { force: true, recursive: true })));
+  await Promise.all(
+    scratchDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
 });
 
 const addedUnit = {
@@ -46,7 +50,9 @@ describe('patch intervention manifests', () => {
       added: [],
     });
 
-    await expect(readManifest(directory)).resolves.toMatchObject({ framework: 'example.com/framework' });
+    await expect(readManifest(directory)).resolves.toMatchObject({
+      framework: 'example.com/framework',
+    });
   });
 
   it('accepts an add-only T1 contract verified by compilation and conformance', async () => {
@@ -79,7 +85,8 @@ describe('patch intervention manifests', () => {
       },
       ...override,
     };
-    if ('tier' in override && override.tier === undefined) delete (manifest as { tier?: string }).tier;
+    if ('tier' in override && override.tier === undefined)
+      delete (manifest as { tier?: string }).tier;
     const directory = await manifestDirectory(manifest);
 
     await expect(readManifest(directory)).rejects.toThrow(expected);

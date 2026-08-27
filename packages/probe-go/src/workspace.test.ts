@@ -28,10 +28,14 @@ const run = promisify(execFile);
 const goIt = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 async function goAvailable(): Promise<string | null> {
-  return goTestCapability(async () => {
-    const { stdout } = await run('go', ['version']);
-    return stdout.trim();
-  }, null, 'Go certification toolchain');
+  return goTestCapability(
+    async () => {
+      const { stdout } = await run('go', ['version']);
+      return stdout.trim();
+    },
+    null,
+    'Go certification toolchain',
+  );
 }
 
 const toolchain = await goAvailable();
@@ -66,7 +70,11 @@ describe('rendering', () => {
     // for a module that only exists on disk.
     const rendered = renderWorkspace({
       moduleDir: '/proj/app',
-      inherited: { goVersion: '1.23', uses: [{ dir: '/proj/app' }, { dir: '/proj/lib' }], replaces: [] },
+      inherited: {
+        goVersion: '1.23',
+        uses: [{ dir: '/proj/app' }, { dir: '/proj/lib' }],
+        replaces: [],
+      },
       replaces: [{ from: 'github.com/rivo/tview', to: '/cache/tview' }],
     });
 
@@ -180,9 +188,7 @@ describe('use and replace cannot name the same directory', () => {
       moduleDir: '/proj/app',
       inherited: { uses: [], replaces: [] },
       suppliedUses: [{ dir: '/sdk/client', module: 'example.com/client' }],
-      replaces: [
-        { from: 'example.com/client', to: '/sdk/client', version: 'v0.1.0' },
-      ],
+      replaces: [{ from: 'example.com/client', to: '/sdk/client', version: 'v0.1.0' }],
     });
 
     expect(rendered).toContain('use /sdk/client');
@@ -238,146 +244,166 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     );
   });
 
-  goIt('builds a multi-module project through the generated workspace', async () => {
-    // The end-to-end form of the rendering test above: this is the build that
-    // failed with "unrecognized import path" when the generator invented a
-    // workspace instead of inheriting one.
-    const dir = await scratch();
-    await mkdir(join(dir, 'app'), { recursive: true });
-    await mkdir(join(dir, 'lib'), { recursive: true });
-    await writeFile(
-      join(dir, 'app', 'go.mod'),
-      'module example.com/app\n\ngo 1.22\n\nrequire example.com/lib v0.0.0\n',
-      'utf8',
-    );
-    await writeFile(
-      join(dir, 'app', 'main.go'),
-      'package main\n\nimport "example.com/lib"\n\nfunc main() { _ = lib.Hello() }\n',
-      'utf8',
-    );
-    await writeFile(join(dir, 'lib', 'go.mod'), 'module example.com/lib\n\ngo 1.22\n', 'utf8');
-    await writeFile(
-      join(dir, 'lib', 'lib.go'),
-      'package lib\n\nfunc Hello() string { return "hi" }\n',
-      'utf8',
-    );
-    await writeFile(join(dir, 'go.work'), 'go 1.22\n\nuse ./app\nuse ./lib\n', 'utf8');
+  goIt(
+    'builds a multi-module project through the generated workspace',
+    async () => {
+      // The end-to-end form of the rendering test above: this is the build that
+      // failed with "unrecognized import path" when the generator invented a
+      // workspace instead of inheriting one.
+      const dir = await scratch();
+      await mkdir(join(dir, 'app'), { recursive: true });
+      await mkdir(join(dir, 'lib'), { recursive: true });
+      await writeFile(
+        join(dir, 'app', 'go.mod'),
+        'module example.com/app\n\ngo 1.22\n\nrequire example.com/lib v0.0.0\n',
+        'utf8',
+      );
+      await writeFile(
+        join(dir, 'app', 'main.go'),
+        'package main\n\nimport "example.com/lib"\n\nfunc main() { _ = lib.Hello() }\n',
+        'utf8',
+      );
+      await writeFile(join(dir, 'lib', 'go.mod'), 'module example.com/lib\n\ngo 1.22\n', 'utf8');
+      await writeFile(
+        join(dir, 'lib', 'lib.go'),
+        'package lib\n\nfunc Hello() string { return "hi" }\n',
+        'utf8',
+      );
+      await writeFile(join(dir, 'go.work'), 'go 1.22\n\nuse ./app\nuse ./lib\n', 'utf8');
 
-    const inherited = await readWorkspace(join(dir, 'app'));
-    const file = await writeWorkspace(join(dir, 'generated.work'), {
-      moduleDir: join(dir, 'app'),
-      inherited,
-      // Nothing to redirect in this fixture; the point is the inherited uses.
-      replaces: [{ from: 'example.com/absent', to: join(dir, 'lib') }],
-    });
+      const inherited = await readWorkspace(join(dir, 'app'));
+      const file = await writeWorkspace(join(dir, 'generated.work'), {
+        moduleDir: join(dir, 'app'),
+        inherited,
+        // Nothing to redirect in this fixture; the point is the inherited uses.
+        replaces: [{ from: 'example.com/absent', to: join(dir, 'lib') }],
+      });
 
-    await expect(
-      run('go', ['build', './...'], {
+      await expect(
+        run('go', ['build', './...'], {
+          cwd: join(dir, 'app'),
+          env: { ...process.env, GOWORK: file },
+        }),
+      ).resolves.toBeDefined();
+    },
+    120_000,
+  );
+
+  goIt(
+    'leaves go.mod, go.sum and the project workspace untouched',
+    async () => {
+      const dir = await scratch();
+      await mkdir(join(dir, 'app'), { recursive: true });
+      const gomod = 'module example.com/app\n\ngo 1.22\n';
+      const gowork = 'go 1.22\n\nuse ./app\n';
+      await writeFile(join(dir, 'app', 'go.mod'), gomod, 'utf8');
+      await writeFile(join(dir, 'app', 'main.go'), 'package main\n\nfunc main() {}\n', 'utf8');
+      await writeFile(join(dir, 'go.work'), gowork, 'utf8');
+
+      const file = await writeWorkspace(join(dir, 'generated.work'), {
+        moduleDir: join(dir, 'app'),
+        inherited: await readWorkspace(join(dir, 'app')),
+        replaces: [{ from: 'example.com/absent', to: join(dir, 'app') }],
+      });
+      await run('go', ['build', './...'], {
         cwd: join(dir, 'app'),
         env: { ...process.env, GOWORK: file },
-      }),
-    ).resolves.toBeDefined();
-  }, 120_000);
+      });
 
-  goIt('leaves go.mod, go.sum and the project workspace untouched', async () => {
-    const dir = await scratch();
-    await mkdir(join(dir, 'app'), { recursive: true });
-    const gomod = 'module example.com/app\n\ngo 1.22\n';
-    const gowork = 'go 1.22\n\nuse ./app\n';
-    await writeFile(join(dir, 'app', 'go.mod'), gomod, 'utf8');
-    await writeFile(join(dir, 'app', 'main.go'), 'package main\n\nfunc main() {}\n', 'utf8');
-    await writeFile(join(dir, 'go.work'), gowork, 'utf8');
+      const { readFile } = await import('node:fs/promises');
+      expect(await readFile(join(dir, 'app', 'go.mod'), 'utf8')).toBe(gomod);
+      expect(await readFile(join(dir, 'go.work'), 'utf8')).toBe(gowork);
+      // A filesystem replace needs no checksum, so no go.work.sum is minted.
+      await expect(readFile(join(dir, 'generated.work.sum'), 'utf8')).rejects.toThrow();
+    },
+    120_000,
+  );
 
-    const file = await writeWorkspace(join(dir, 'generated.work'), {
-      moduleDir: join(dir, 'app'),
-      inherited: await readWorkspace(join(dir, 'app')),
-      replaces: [{ from: 'example.com/absent', to: join(dir, 'app') }],
-    });
-    await run('go', ['build', './...'], {
-      cwd: join(dir, 'app'),
-      env: { ...process.env, GOWORK: file },
-    });
+  goIt(
+    'proves through the canary that the copy is what compiles',
+    async () => {
+      const dir = await scratch();
+      await mkdir(join(dir, 'app'), { recursive: true });
+      await mkdir(join(dir, 'copy'), { recursive: true });
+      await writeFile(
+        join(dir, 'copy', 'go.mod'),
+        'module example.com/framework\n\ngo 1.22\n',
+        'utf8',
+      );
+      await writeFile(
+        join(dir, 'copy', 'framework.go'),
+        'package framework\n\nfunc Version() string { return "instrumented" }\n',
+        'utf8',
+      );
+      await writeFile(
+        join(dir, 'app', 'go.mod'),
+        'module example.com/app\n\ngo 1.22\n\nrequire example.com/framework v0.0.0\n',
+        'utf8',
+      );
+      await writeFile(
+        join(dir, 'app', 'main.go'),
+        'package main\n\nimport "example.com/framework"\n\nfunc main() { _ = framework.Version() }\n',
+        'utf8',
+      );
 
-    const { readFile } = await import('node:fs/promises');
-    expect(await readFile(join(dir, 'app', 'go.mod'), 'utf8')).toBe(gomod);
-    expect(await readFile(join(dir, 'go.work'), 'utf8')).toBe(gowork);
-    // A filesystem replace needs no checksum, so no go.work.sum is minted.
-    await expect(readFile(join(dir, 'generated.work.sum'), 'utf8')).rejects.toThrow();
-  }, 120_000);
+      const file = await writeWorkspace(join(dir, 'generated.work'), {
+        moduleDir: join(dir, 'app'),
+        inherited: { uses: [], replaces: [] },
+        replaces: [{ from: 'example.com/framework', to: join(dir, 'copy') }],
+      });
 
-  goIt('proves through the canary that the copy is what compiles', async () => {
-    const dir = await scratch();
-    await mkdir(join(dir, 'app'), { recursive: true });
-    await mkdir(join(dir, 'copy'), { recursive: true });
-    await writeFile(
-      join(dir, 'copy', 'go.mod'),
-      'module example.com/framework\n\ngo 1.22\n',
-      'utf8',
-    );
-    await writeFile(
-      join(dir, 'copy', 'framework.go'),
-      'package framework\n\nfunc Version() string { return "instrumented" }\n',
-      'utf8',
-    );
-    await writeFile(
-      join(dir, 'app', 'go.mod'),
-      'module example.com/app\n\ngo 1.22\n\nrequire example.com/framework v0.0.0\n',
-      'utf8',
-    );
-    await writeFile(
-      join(dir, 'app', 'main.go'),
-      'package main\n\nimport "example.com/framework"\n\nfunc main() { _ = framework.Version() }\n',
-      'utf8',
-    );
+      const result = await canaryCheck({
+        copyDir: join(dir, 'copy'),
+        moduleDir: join(dir, 'app'),
+        workspaceFile: file,
+        packageName: 'framework',
+      });
 
-    const file = await writeWorkspace(join(dir, 'generated.work'), {
-      moduleDir: join(dir, 'app'),
-      inherited: { uses: [], replaces: [] },
-      replaces: [{ from: 'example.com/framework', to: join(dir, 'copy') }],
-    });
+      expect(result.proved).toBe(true);
+      expect(result.detail).toContain('termwrightCanaryUndefinedOnPurpose');
 
-    const result = await canaryCheck({
-      copyDir: join(dir, 'copy'),
-      moduleDir: join(dir, 'app'),
-      workspaceFile: file,
-      packageName: 'framework',
-    });
+      // And the build is healthy again once the canary file is gone.
+      await expect(
+        run('go', ['build', './...'], {
+          cwd: join(dir, 'app'),
+          env: { ...process.env, GOWORK: file },
+        }),
+      ).resolves.toBeDefined();
+    },
+    120_000,
+  );
 
-    expect(result.proved).toBe(true);
-    expect(result.detail).toContain('termwrightCanaryUndefinedOnPurpose');
+  goIt(
+    'reports an unproved canary rather than throwing, when the redirect is not applied',
+    async () => {
+      const dir = await scratch();
+      await mkdir(join(dir, 'app'), { recursive: true });
+      await mkdir(join(dir, 'copy'), { recursive: true });
+      await writeFile(
+        join(dir, 'copy', 'go.mod'),
+        'module example.com/unused\n\ngo 1.22\n',
+        'utf8',
+      );
+      await writeFile(join(dir, 'app', 'go.mod'), 'module example.com/app\n\ngo 1.22\n', 'utf8');
+      await writeFile(join(dir, 'app', 'main.go'), 'package main\n\nfunc main() {}\n', 'utf8');
 
-    // And the build is healthy again once the canary file is gone.
-    await expect(
-      run('go', ['build', './...'], {
-        cwd: join(dir, 'app'),
-        env: { ...process.env, GOWORK: file },
-      }),
-    ).resolves.toBeDefined();
-  }, 120_000);
+      const file = await writeWorkspace(join(dir, 'generated.work'), {
+        moduleDir: join(dir, 'app'),
+        inherited: { uses: [], replaces: [] },
+        // Redirects a module the app never imports: the copy is never compiled.
+        replaces: [{ from: 'example.com/unused', to: join(dir, 'copy') }],
+      });
 
-  goIt('reports an unproved canary rather than throwing, when the redirect is not applied', async () => {
-    const dir = await scratch();
-    await mkdir(join(dir, 'app'), { recursive: true });
-    await mkdir(join(dir, 'copy'), { recursive: true });
-    await writeFile(join(dir, 'copy', 'go.mod'), 'module example.com/unused\n\ngo 1.22\n', 'utf8');
-    await writeFile(join(dir, 'app', 'go.mod'), 'module example.com/app\n\ngo 1.22\n', 'utf8');
-    await writeFile(join(dir, 'app', 'main.go'), 'package main\n\nfunc main() {}\n', 'utf8');
+      const result = await canaryCheck({
+        copyDir: join(dir, 'copy'),
+        moduleDir: join(dir, 'app'),
+        workspaceFile: file,
+        packageName: 'unused',
+      });
 
-    const file = await writeWorkspace(join(dir, 'generated.work'), {
-      moduleDir: join(dir, 'app'),
-      inherited: { uses: [], replaces: [] },
-      // Redirects a module the app never imports: the copy is never compiled.
-      replaces: [{ from: 'example.com/unused', to: join(dir, 'copy') }],
-    });
-
-    const result = await canaryCheck({
-      copyDir: join(dir, 'copy'),
-      moduleDir: join(dir, 'app'),
-      workspaceFile: file,
-      packageName: 'unused',
-    });
-
-    expect(result.proved).toBe(false);
-    expect(result.detail).toContain('the copy is not what was compiled');
-  }, 120_000);
+      expect(result.proved).toBe(false);
+      expect(result.detail).toContain('the copy is not what was compiled');
+    },
+    120_000,
+  );
 });

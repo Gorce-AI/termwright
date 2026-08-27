@@ -63,7 +63,10 @@ describe('generateSelector', () => {
   });
 
   it('marks a nameless, textless node as fragile', () => {
-    const tree = snapshot(1, [node({ id: 'n1', role: 'generic' }), node({ id: 'n2', role: 'generic' })]);
+    const tree = snapshot(1, [
+      node({ id: 'n1', role: 'generic' }),
+      node({ id: 'n2', role: 'generic' }),
+    ]);
     const selector = generateSelector(tree, 'n2');
     expect(selector?.unique).toBe(false);
     expect(selector?.code).toBe("getByRole('generic').nth(1)");

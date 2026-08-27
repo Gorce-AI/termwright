@@ -40,10 +40,7 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 
 function assertPositiveByteCeiling(maxFrameBytes: number): void {
   if (!Number.isSafeInteger(maxFrameBytes) || maxFrameBytes <= 0) {
-    throw new ProtocolViolation(
-      'frame-malformed',
-      'maxFrameBytes must be a positive safe integer',
-    );
+    throw new ProtocolViolation('frame-malformed', 'maxFrameBytes must be a positive safe integer');
   }
 }
 
@@ -128,9 +125,7 @@ class BufferedFrameDecoder implements FrameDecoder {
     const b = this.#buffer;
     const i = this.#start;
     // Non-null assertions are safe: the caller checked 4 bytes are available.
-    return (
-      (b[i]! * 0x1000000 + ((b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!)) >>> 0
-    );
+    return (b[i]! * 0x1000000 + ((b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!)) >>> 0;
   }
 
   #append(chunk: Uint8Array): void {
@@ -257,7 +252,13 @@ function projectScalar(value: unknown, path: string): string | number | boolean 
   }
 }
 
-function projectNode(value: unknown, depth: number, maxDepth: number, seen: Set<object>, path: string): unknown {
+function projectNode(
+  value: unknown,
+  depth: number,
+  maxDepth: number,
+  seen: Set<object>,
+  path: string,
+): unknown {
   if (value === null || typeof value !== 'object') {
     return projectScalar(value, path);
   }

@@ -37,7 +37,10 @@ export interface UiHubOptions {
   readonly maxSessions?: number;
 }
 
-function firstIndexOf(messages: readonly ServerMessage[], type: ServerMessage['type']): number | undefined {
+function firstIndexOf(
+  messages: readonly ServerMessage[],
+  type: ServerMessage['type'],
+): number | undefined {
   const index = messages.findIndex((message) => message.type === type);
   return index === -1 ? undefined : index;
 }
@@ -79,9 +82,18 @@ export class UiHub {
   constructor(options: UiHubOptions = {}) {
     // run-start + session + an explicit gap must always fit. A smaller limit
     // cannot truthfully retain identity and disclose projection loss.
-    this.#maxMessages = Math.max(3, nonNegativeSafeInteger(options.maxMessages ?? DEFAULT_MAX_MESSAGES, 'maxMessages'));
-    this.#maxOutputBytes = nonNegativeSafeInteger(options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES, 'maxOutputBytes');
-    this.#maxBacklogBytes = nonNegativeSafeInteger(options.maxBacklogBytes ?? DEFAULT_MAX_BACKLOG_BYTES, 'maxBacklogBytes');
+    this.#maxMessages = Math.max(
+      3,
+      nonNegativeSafeInteger(options.maxMessages ?? DEFAULT_MAX_MESSAGES, 'maxMessages'),
+    );
+    this.#maxOutputBytes = nonNegativeSafeInteger(
+      options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+      'maxOutputBytes',
+    );
+    this.#maxBacklogBytes = nonNegativeSafeInteger(
+      options.maxBacklogBytes ?? DEFAULT_MAX_BACKLOG_BYTES,
+      'maxBacklogBytes',
+    );
     this.#maxClientBufferedBytes = nonNegativeSafeInteger(
       options.maxClientBufferedBytes ?? DEFAULT_MAX_CLIENT_BUFFERED_BYTES,
       'maxClientBufferedBytes',
@@ -129,7 +141,11 @@ export class UiHub {
       this.#enforceBounds();
       outgoing.push(...this.#backlog.slice(1));
     } else {
-      if (message.type === 'run-end' || message.type === 'run-cancelled' || message.type === 'run-infrastructure-failed') {
+      if (
+        message.type === 'run-end' ||
+        message.type === 'run-cancelled' ||
+        message.type === 'run-infrastructure-failed'
+      ) {
         this.#runBusy = false;
       }
       this.#remember(message);
@@ -201,8 +217,7 @@ export class UiHub {
       // This is current state, not an append-only event. Coalescing means a
       // late client receives the newest handshake/lifecycle facts exactly once.
       const previous = this.#backlog.findIndex(
-        (candidate) =>
-          candidate.type === 'session' && candidate.sessionId === message.sessionId,
+        (candidate) => candidate.type === 'session' && candidate.sessionId === message.sessionId,
       );
       if (previous >= 0) {
         this.#backlogBytes -= encodedBytes(this.#backlog[previous]!);
@@ -261,7 +276,12 @@ export class UiHub {
     let bytes = 0;
     for (let index = this.#backlog.length - 1; index >= 0; index -= 1) {
       const message = this.#backlog[index];
-      if (message === undefined || !('sessionId' in message) || message.sessionId !== oldest.sessionId) continue;
+      if (
+        message === undefined ||
+        !('sessionId' in message) ||
+        message.sessionId !== oldest.sessionId
+      )
+        continue;
       if (message.type === 'output') this.#outputBytes -= message.dataB64.length;
       const encoded = encodedBytes(message);
       this.#backlogBytes -= encoded;
@@ -274,12 +294,19 @@ export class UiHub {
 
   /** Evicts the oldest complete session record, including its dependent wire events. */
   #trimSessions(): void {
-    while (this.#backlog.filter((message) => message.type === 'session').length > this.#maxSessions) {
+    while (
+      this.#backlog.filter((message) => message.type === 'session').length > this.#maxSessions
+    ) {
       const oldest = this.#backlog.find((message) => message.type === 'session');
       if (oldest?.type !== 'session') return;
       for (let index = this.#backlog.length - 1; index >= 0; index -= 1) {
         const message = this.#backlog[index];
-        if (message === undefined || !('sessionId' in message) || message.sessionId !== oldest.sessionId) continue;
+        if (
+          message === undefined ||
+          !('sessionId' in message) ||
+          message.sessionId !== oldest.sessionId
+        )
+          continue;
         if (message.type === 'output') this.#outputBytes -= message.dataB64.length;
         this.#backlogBytes -= encodedBytes(message);
         this.#backlog.splice(index, 1);
@@ -303,7 +330,10 @@ export class UiHub {
       firstIndexOf(this.#backlog, 'output') ??
       firstIndexOf(this.#backlog, 'app-log') ??
       this.#backlog.findIndex(
-        (message) => message.type !== 'run-start' && message.type !== 'session' && message.type !== 'diagnostic-gap',
+        (message) =>
+          message.type !== 'run-start' &&
+          message.type !== 'session' &&
+          message.type !== 'diagnostic-gap',
       );
     if (index < 0) return undefined;
     const [dropped] = this.#backlog.splice(index, 1);
@@ -327,14 +357,25 @@ export class UiHub {
         };
         this.#backlog[existing] = next;
         this.#backlogBytes += encodedBytes(next);
-        while (this.#backlog.length > this.#maxMessages || this.#backlogBytes > this.#maxBacklogBytes) {
+        while (
+          this.#backlog.length > this.#maxMessages ||
+          this.#backlogBytes > this.#maxBacklogBytes
+        ) {
           const dropped = this.#dropOldest();
           if (dropped !== undefined) {
-            next = { ...next, droppedMessages: next.droppedMessages + 1, droppedBytes: next.droppedBytes + encodedBytes(dropped) };
+            next = {
+              ...next,
+              droppedMessages: next.droppedMessages + 1,
+              droppedBytes: next.droppedBytes + encodedBytes(dropped),
+            };
           } else {
             const removed = this.#dropOldestSession();
             if (removed.messages === 0) break;
-            next = { ...next, droppedMessages: next.droppedMessages + removed.messages, droppedBytes: next.droppedBytes + removed.bytes };
+            next = {
+              ...next,
+              droppedMessages: next.droppedMessages + removed.messages,
+              droppedBytes: next.droppedBytes + removed.bytes,
+            };
           }
           const gapIndex = this.#backlog.findIndex(
             (message) => message.type === 'diagnostic-gap' && message.source === 'ui-hub',
@@ -356,8 +397,10 @@ export class UiHub {
       droppedMessages,
       droppedBytes,
     };
-    while (this.#backlog.length >= this.#maxMessages ||
-           this.#backlogBytes + encodedBytes(candidate) > this.#maxBacklogBytes) {
+    while (
+      this.#backlog.length >= this.#maxMessages ||
+      this.#backlogBytes + encodedBytes(candidate) > this.#maxBacklogBytes
+    ) {
       const dropped = this.#dropOldest();
       if (dropped !== undefined) {
         droppedMessages += 1;

@@ -102,7 +102,8 @@ export function createLogCollection(): LogCollection {
   };
   const collection: LogCollection = {
     all: () => entries,
-    filter: (query) => (query === undefined ? entries : entries.filter((entry) => matchesLog(entry, query))),
+    filter: (query) =>
+      query === undefined ? entries : entries.filter((entry) => matchesLog(entry, query)),
     text: (query) => {
       const selected = collection.filter(query);
       return selected.length === 0 ? '' : `${selected.map(formatLogEntry).join('\n')}\n`;
@@ -140,20 +141,21 @@ export function createLogCollection(): LogCollection {
       changed();
     },
     revision: () => revision,
-    waitForChange: (after, timeout) => new Promise<void>((resolve) => {
-      let done = false;
-      const finish = (): void => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        waiters.delete(finish);
-        resolve();
-      };
-      const timer = setTimeout(finish, Math.max(0, timeout));
-      timer.unref?.();
-      waiters.add(finish);
-      if (revision > after) finish();
-    }),
+    waitForChange: (after, timeout) =>
+      new Promise<void>((resolve) => {
+        let done = false;
+        const finish = (): void => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          waiters.delete(finish);
+          resolve();
+        };
+        const timer = setTimeout(finish, Math.max(0, timeout));
+        timer.unref?.();
+        waiters.add(finish);
+        if (revision > after) finish();
+      }),
   };
   return collection;
 }
@@ -180,24 +182,27 @@ export function collectLogs(
   harness: LogSource,
   into: LogCollection = createLogCollection(),
 ): { readonly collection: LogCollection; dispose(): void } {
-  const unsubscribe = harness.events.subscribe({
-    fromSequence: 1,
-    // The bounded source journal accounts for all event kinds, so this is a
-    // conservative lower bound rather than pretending the missing prefix had
-    // no logs. Any positive loss makes failOnLogLevel inconclusive and fails
-    // certification below.
-    onGap: (gap) => into.noteLostRecords(Math.max(1, gap.lostEvents)),
-  }, (recorded) => {
-    if (recorded.type === 'app-log') {
-      into.push({ ...recorded.payload, sessionId: harness.sessionId });
-    } else if (
-      recorded.type === 'diagnostic' &&
-      recorded.payload.code === 'log-dropped' &&
-      recorded.payload.count !== undefined
-    ) {
-      into.noteLostRecords(recorded.payload.count);
-    }
-  });
+  const unsubscribe = harness.events.subscribe(
+    {
+      fromSequence: 1,
+      // The bounded source journal accounts for all event kinds, so this is a
+      // conservative lower bound rather than pretending the missing prefix had
+      // no logs. Any positive loss makes failOnLogLevel inconclusive and fails
+      // certification below.
+      onGap: (gap) => into.noteLostRecords(Math.max(1, gap.lostEvents)),
+    },
+    (recorded) => {
+      if (recorded.type === 'app-log') {
+        into.push({ ...recorded.payload, sessionId: harness.sessionId });
+      } else if (
+        recorded.type === 'diagnostic' &&
+        recorded.payload.code === 'log-dropped' &&
+        recorded.payload.count !== undefined
+      ) {
+        into.noteLostRecords(recorded.payload.count);
+      }
+    },
+  );
   collections.set(harness, into);
   return {
     collection: into,
@@ -277,7 +282,9 @@ export function logsFailingThreshold(
   entries: readonly CapturedLog[],
   threshold: LogLevel,
 ): readonly CapturedLog[] {
-  return entries.filter((entry) => entry.record !== undefined && atLeast(entry.record.level, threshold));
+  return entries.filter(
+    (entry) => entry.record !== undefined && atLeast(entry.record.level, threshold),
+  );
 }
 
 /**
@@ -292,9 +299,11 @@ export function describeLogThresholdFailure(
   const offenders = logsFailingThreshold(entries, threshold);
   if (offenders.length > 0) return formatLogFailure(offenders, threshold, lostRecords);
   if (lostRecords > 0) {
-    return `The test passed, but ${lostRecords} application-log event${lostRecords === 1 ? '' : 's'} ` +
+    return (
+      `The test passed, but ${lostRecords} application-log event${lostRecords === 1 ? '' : 's'} ` +
       `were lost before failOnLogLevel(${JSON.stringify(threshold)}) could prove the run clean. ` +
-      'A certified pass requires a complete correctness log stream.';
+      'A certified pass requires a complete correctness log stream.'
+    );
   }
   return undefined;
 }
@@ -341,7 +350,7 @@ export function formatLogFailure(
       : []),
     '',
     'Assert on them with expect(terminal).toHaveLogged({ level: ... }), or turn the check off:',
-    "  for one test:   terminal.failOnLogLevel(false)",
+    '  for one test:   terminal.failOnLogLevel(false)',
     '  for the suite:  defineTermwrightConfig({ failOnLogLevel: false })',
   ].join('\n');
 }

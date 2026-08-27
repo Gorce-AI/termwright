@@ -29,7 +29,14 @@ describe('parseArgs', () => {
 
   it('reads the ui flags', () => {
     const args = parseArgs([
-      'ui', '--port', '4000', '--host', '127.0.0.1', '--tags', '@smoke and not @slow', '--no-watch',
+      'ui',
+      '--port',
+      '4000',
+      '--host',
+      '127.0.0.1',
+      '--tags',
+      '@smoke and not @slow',
+      '--no-watch',
     ]);
     expect(args).toMatchObject({
       command: 'ui',
@@ -43,7 +50,11 @@ describe('parseArgs', () => {
 
   it('reads the report command and where it writes', () => {
     const args = parseArgs(['report', '--trace', 'out/login.twtrace', '--out-file', 'r.html']);
-    expect(args).toMatchObject({ command: 'report', trace: 'out/login.twtrace', outFile: 'r.html' });
+    expect(args).toMatchObject({
+      command: 'report',
+      trace: 'out/login.twtrace',
+      outFile: 'r.html',
+    });
   });
 
   it('refuses a report with nothing to render', () => {
@@ -52,7 +63,15 @@ describe('parseArgs', () => {
   });
 
   it('reads the screenshot command and how the moment is named', () => {
-    const args = parseArgs(['screenshot', '--trace', 'out/a.twtrace', '--at', '1500', '--scale', '2']);
+    const args = parseArgs([
+      'screenshot',
+      '--trace',
+      'out/a.twtrace',
+      '--at',
+      '1500',
+      '--scale',
+      '2',
+    ]);
     expect(args).toMatchObject({ command: 'screenshot', atMs: 1_500, scale: 2 });
     expect(parseArgs(['screenshot', '--trace', 'out/a.twtrace', '--step', '3']).step).toBe(3);
   });
@@ -65,7 +84,9 @@ describe('parseArgs', () => {
   });
 
   it('refuses a flag that needs a number and did not get one', () => {
-    expect(() => parseArgs(['screenshot', '--trace', 'a', '--at', 'soon'])).toThrow(/needs a number/);
+    expect(() => parseArgs(['screenshot', '--trace', 'a', '--at', 'soon'])).toThrow(
+      /needs a number/,
+    );
   });
 
   it('selects desktop by default, or an explicit browser/no-open surface', () => {
@@ -83,7 +104,9 @@ describe('parseArgs', () => {
   });
 
   it('selects only a declared native-host resource profile', () => {
-    expect(parseArgs(['test', '--resource-profile', 'windows-ci']).resourceProfile).toBe('windows-ci');
+    expect(parseArgs(['test', '--resource-profile', 'windows-ci']).resourceProfile).toBe(
+      'windows-ci',
+    );
     expect(parseArgs(['watch', '--resource-profile', 'stress']).resourceProfile).toBe('stress');
     expect(() => parseArgs(['test', '--resource-profile', 'auto'])).toThrow(/must be one of/u);
     expect(() => parseArgs(['doctor', '--resource-profile', 'ci'])).toThrow(/only available/u);
@@ -121,8 +144,9 @@ describe('parseArgs', () => {
   it('does not apply Gherkin tag filtering to unrelated commands', () => {
     // Filtering belongs to the commands that run scenarios. Reading a trace or
     // writing a report has nothing to select.
-    expect(() => parseArgs(['report', '--trace', 'a.twtrace', '--tags', '@smoke']))
-      .toThrow(/only available with `termwright test`/u);
+    expect(() => parseArgs(['report', '--trace', 'a.twtrace', '--tags', '@smoke'])).toThrow(
+      /only available with `termwright test`/u,
+    );
   });
 
   it('accepts a tag filter on every command that runs scenarios', () => {

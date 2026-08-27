@@ -102,12 +102,10 @@ export function isSecretKey(key: string, redaction: ResolvedRedaction): boolean 
   if (!redaction.enabled) return false;
   redaction.keyPattern.lastIndex = 0;
   if (redaction.keyPattern.test(key)) return true;
-  return key
-    .split('.')
-    .some((segment) => {
-      redaction.keyPattern.lastIndex = 0;
-      return redaction.keyPattern.test(segment) || redaction.keyPattern.test(`_${segment}_`);
-    });
+  return key.split('.').some((segment) => {
+    redaction.keyPattern.lastIndex = 0;
+    return redaction.keyPattern.test(segment) || redaction.keyPattern.test(`_${segment}_`);
+  });
 }
 
 /**

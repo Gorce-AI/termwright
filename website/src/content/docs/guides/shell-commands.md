@@ -7,9 +7,9 @@ Use `terminal.shell` when a test drives several commands in one interactive
 shell and needs the result of each command separately.
 
 ```ts
-import {expect, test} from 'termwright/test';
+import { expect, test } from 'termwright/test';
 
-test('builds the workspace', async ({terminal}) => {
+test('builds the workspace', async ({ terminal }) => {
   const shell = await terminal.openShell({
     cwd: '/workspace/project',
   });
@@ -34,12 +34,12 @@ the initial boundary.
 
 ## Choose the command API
 
-| Need | Recommended approach |
-| --- | --- |
-| Test one CLI invocation | Launch the CLI directly and use `waitForExit()`. |
-| Run several commands in one shell | Use `terminal.openShell()` and `shell.run()`. |
-| Drive an interactive prompt or full-screen TUI | Use terminal input, locators, and assertions. |
-| Use a shell without OSC 133 integration | Drive it with `press()` and `type()`; command boundaries are unavailable. |
+| Need                                           | Recommended approach                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------- |
+| Test one CLI invocation                        | Launch the CLI directly and use `waitForExit()`.                          |
+| Run several commands in one shell              | Use `terminal.openShell()` and `shell.run()`.                             |
+| Drive an interactive prompt or full-screen TUI | Use terminal input, locators, and assertions.                             |
+| Use a shell without OSC 133 integration        | Drive it with `press()` and `type()`; command boundaries are unavailable. |
 
 ## Inspect shell state
 
@@ -49,7 +49,7 @@ const status = shell.shell.status();
 expect(status.ready).toBe(true);
 expect(status.cwd).toBe('/workspace/project');
 expect(status.title).toBe('project — zsh');
-expect(status.cursor).toMatchObject({row: 4, column: 2});
+expect(status.cursor).toMatchObject({ row: 4, column: 2 });
 expect(status.bellCount).toBe(0);
 ```
 

@@ -91,11 +91,11 @@ fails — its `.twtrace` archive is kept for the report.
 
 ## Fixtures
 
-| Fixture | What it gives you |
-|---|---|
-| `terminal` | `launch(options)` for as many sessions as the test needs, all closed on teardown; `sessions`; `tmpdir` |
-| `step` | `step(title, body)` — a marker in the recording, a step in the trace and a section in the report |
-| `termwright` | the resolved config, the test's private `tmpdir`, the traces kept for it |
+| Fixture      | What it gives you                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------ |
+| `terminal`   | `launch(options)` for as many sessions as the test needs, all closed on teardown; `sessions`; `tmpdir` |
+| `step`       | `step(title, body)` — a marker in the recording, a step in the trace and a section in the report       |
+| `termwright` | the resolved config, the test's private `tmpdir`, the traces kept for it                               |
 
 Each test gets a fresh temporary directory (the default `cwd`) and a minimal
 environment: only `PATH`, `HOME` and friends are inherited, so a stray variable
@@ -197,17 +197,17 @@ refused rather than written.
 All of them are asynchronous — `await expect(...)` — and the locator ones poll
 until the `expect` timeout class runs out.
 
-| Matcher | Subject |
-|---|---|
-| `toBeVisible()` | locator |
-| `toBeFocused()` | locator |
-| `toHaveState({ disabled: true })` | locator; asserts only the keys you list |
-| `toHaveExtendedState({ deploymentStatus: 'ready' })` | locator; recursively compares only the top-level domain keys you list |
-| `toHaveText('Save' \| /Sav/)` | locator (exact, whitespace-normalized) or terminal (substring of the grid) |
-| `toMatchSemanticSnapshot(expected?, { within })` | terminal or `SemanticSnapshot` |
-| `toMatchCellSnapshot(expected?)` | terminal or `ScreenSnapshot` |
+| Matcher                                              | Subject                                                                    |
+| ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| `toBeVisible()`                                      | locator                                                                    |
+| `toBeFocused()`                                      | locator                                                                    |
+| `toHaveState({ disabled: true })`                    | locator; asserts only the keys you list                                    |
+| `toHaveExtendedState({ deploymentStatus: 'ready' })` | locator; recursively compares only the top-level domain keys you list      |
+| `toHaveText('Save' \| /Sav/)`                        | locator (exact, whitespace-normalized) or terminal (substring of the grid) |
+| `toMatchSemanticSnapshot(expected?, { within })`     | terminal or `SemanticSnapshot`                                             |
+| `toMatchCellSnapshot(expected?)`                     | terminal or `ScreenSnapshot`                                               |
 
-Retrying is what makes them safe right after a *screen* wait. `waitForText()`
+Retrying is what makes them safe right after a _screen_ wait. `waitForText()`
 returns when the grid shows the text, but the semantic tree for that frame only
 becomes observable once its render-commit marker has been paired — including the
 first tree after the handshake, where `semanticTree()` is still `null` while
@@ -286,10 +286,10 @@ The format is normative in [`/CONTRACTS.md`](../../CONTRACTS.md) §YAML snapshot
 
 ### Two comparison modes, by source
 
-| Source | How it is compared |
-|---|---|
+| Source                                                  | How it is compared                                                                                                                                    |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **inline pattern** — the argument you write in the test | partial: omitted children are don't-care, unlisted siblings are allowed, flags assert only what they list. Listed children keep their relative order. |
-| **stored file** — written into `__snapshots__` | strict: the full serialized tree, exact flags. A node or state the app *grew* fails, which is the whole point of checking in a snapshot. |
+| **stored file** — written into `__snapshots__`          | strict: the full serialized tree, exact flags. A node or state the app _grew_ fails, which is the whole point of checking in a snapshot.              |
 
 So an inline pattern is an assertion about the part you care about, and a file
 snapshot is a fence around the whole tree. Reach for a pattern in a test about
@@ -353,18 +353,18 @@ block per assertion, keyed by test name.
 Vitest's `--update` has two states; the contract asks for three. The mode is
 resolved as:
 
-| Source | Mode |
-|---|---|
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=all` | rewrite every snapshot, even matching ones |
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=changed`, or `vitest -u` | write missing, overwrite mismatching |
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=missing`, or a plain run | write missing; a mismatch fails |
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=none`, `--update=none`, or **CI** | never write; a missing snapshot fails |
+| Source                                                         | Mode                                       |
+| -------------------------------------------------------------- | ------------------------------------------ |
+| `TERMWRIGHT_UPDATE_SNAPSHOTS=all`                              | rewrite every snapshot, even matching ones |
+| `TERMWRIGHT_UPDATE_SNAPSHOTS=changed`, or `vitest -u`          | write missing, overwrite mismatching       |
+| `TERMWRIGHT_UPDATE_SNAPSHOTS=missing`, or a plain run          | write missing; a mismatch fails            |
+| `TERMWRIGHT_UPDATE_SNAPSHOTS=none`, `--update=none`, or **CI** | never write; a missing snapshot fails      |
 
 ### Snapshots nobody claims any more
 
 Rename or delete a test and its stored snapshot stays behind. On the first test
 of each file the preset compares the file's keys against the tests that file
-*declares*, and:
+_declares_, and:
 
 - in `changed` / `all` it removes the orphans;
 - in any other mode it leaves them alone and the host records them in the run
@@ -373,7 +373,7 @@ of each file the preset compares the file's keys against the tests that file
 
 "Declares" is the important word: a test skipped by `describe.skipIf(!pty)` is
 still declared, so its snapshots survive on a machine that skips it. Pruning
-against the tests that merely *ran* would delete your E2E baselines the first
+against the tests that merely _ran_ would delete your E2E baselines the first
 time CI ran without a pseudo-terminal.
 
 `config.updateSnapshots` overrides all of it. Because a stored snapshot is
@@ -383,7 +383,7 @@ diff the way you would review the code that caused it.
 **On CI a missing snapshot fails.** Vitest turns updating off when `CI` is set,
 and this preset follows: a baseline that appears during the run would make CI
 green by writing the very thing it was supposed to check. Commit snapshots from
-a local run instead. A test whose *subject* is writing a snapshot should pin
+a local run instead. A test whose _subject_ is writing a snapshot should pin
 `updateSnapshots` in its own configuration rather than inherit the environment's.
 
 ## Application logs
@@ -525,7 +525,7 @@ export default defineTermwrightConfig({
   columns: 100,
   rows: 30,
   command: [process.execPath, appPath],
-  trace: 'retain-on-failure',            // 'on' | 'retain-on-failure' | 'off'
+  trace: 'retain-on-failure', // 'on' | 'retain-on-failure' | 'off'
   outputDir: 'termwright-report',
   timeouts: { expect: 5_000, action: 5_000 },
   profiles: {
@@ -577,11 +577,11 @@ three in `composition.test.ts`.
 
 ### Coming from Cypress
 
-| Cypress | Here |
-|---|---|
-| `cy.fixture('user.json')` and the shared `fixtures/` directory | `launch({ files })` / `launch({ template })`, declared per test into its own directory |
-| custom commands (`Cypress.Commands.add`) | a fixture composed with `test.extend`, as above |
-| `beforeEach` that logs in | the same, but as a fixture: it also tears down, and only the tests that ask for it pay for it |
+| Cypress                                                        | Here                                                                                          |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `cy.fixture('user.json')` and the shared `fixtures/` directory | `launch({ files })` / `launch({ template })`, declared per test into its own directory        |
+| custom commands (`Cypress.Commands.add`)                       | a fixture composed with `test.extend`, as above                                               |
+| `beforeEach` that logs in                                      | the same, but as a fixture: it also tears down, and only the tests that ask for it pay for it |
 
 ## Diagnostic retries and reports
 

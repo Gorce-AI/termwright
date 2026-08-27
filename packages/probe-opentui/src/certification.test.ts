@@ -16,11 +16,15 @@ afterEach(async () => {
 describe('OpenTUI runtime certification', () => {
   it('certifies the exact installed package version without inspecting chunks', () => {
     const entry = createRequire(import.meta.url).resolve('@opentui/core');
-    const installed = JSON.parse(readFileSync(join(dirname(entry), 'package.json'), 'utf8')) as { version: string };
+    const installed = JSON.parse(readFileSync(join(dirname(entry), 'package.json'), 'utf8')) as {
+      version: string;
+    };
     const certification = certifyOpenTuiEntry(entry);
 
     expect(certification?.version).toBe(installed.version);
-    expect(certification?.source).toBe(process.env['TERMWRIGHT_CERTIFICATION_HOOK_PROFILE'] === undefined ? 'builtin' : 'candidate');
+    expect(certification?.source).toBe(
+      process.env['TERMWRIGHT_CERTIFICATION_HOOK_PROFILE'] === undefined ? 'builtin' : 'candidate',
+    );
   });
 
   it('refuses an unsupported package version', async () => {
@@ -54,10 +58,12 @@ describe('OpenTUI runtime certification', () => {
       sourceRevision: revision,
     });
     expect(certifyOpenTuiEntry(entry, { ...env, GITHUB_SHA: 'e'.repeat(40) })).toBeUndefined();
-    expect(certifyOpenTuiEntry(entry, {
-      ...env,
-      TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: `sha256:${'f'.repeat(64)}`,
-    })).toBeUndefined();
+    expect(
+      certifyOpenTuiEntry(entry, {
+        ...env,
+        TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: `sha256:${'f'.repeat(64)}`,
+      }),
+    ).toBeUndefined();
   });
 
   it('gives an explicitly bound candidate precedence over a builtin version', async () => {
@@ -83,13 +89,17 @@ describe('OpenTUI runtime certification', () => {
       candidateDigest: digest,
       sourceRevision: revision,
     });
-    expect(certifyOpenTuiEntry(entry, {
-      ...env,
-      TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: 'c'.repeat(40),
-    })).toBeUndefined();
-    expect(certifyOpenTuiEntry(entry, {
-      TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: digest,
-    })).toBeUndefined();
+    expect(
+      certifyOpenTuiEntry(entry, {
+        ...env,
+        TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: 'c'.repeat(40),
+      }),
+    ).toBeUndefined();
+    expect(
+      certifyOpenTuiEntry(entry, {
+        TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: digest,
+      }),
+    ).toBeUndefined();
   });
 
   it('does not let another framework candidate disable a builtin OpenTUI profile', async () => {
@@ -97,18 +107,20 @@ describe('OpenTUI runtime certification', () => {
     const revision = 'b'.repeat(40);
     const digest = `sha256:${'a'.repeat(64)}`;
 
-    expect(certifyOpenTuiEntry(entry, {
-      GITHUB_ACTIONS: 'true',
-      GITHUB_SHA: revision,
-      TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: digest,
-      TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: revision,
-      TERMWRIGHT_CERTIFICATION_HOOK_PROFILE: JSON.stringify({
-        framework: 'ink',
-        version: '7.1.1',
-        candidateDigest: digest,
-        sourceRevision: revision,
+    expect(
+      certifyOpenTuiEntry(entry, {
+        GITHUB_ACTIONS: 'true',
+        GITHUB_SHA: revision,
+        TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: digest,
+        TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: revision,
+        TERMWRIGHT_CERTIFICATION_HOOK_PROFILE: JSON.stringify({
+          framework: 'ink',
+          version: '7.1.1',
+          candidateDigest: digest,
+          sourceRevision: revision,
+        }),
       }),
-    })).toEqual({ version: '0.5.3', source: 'builtin' });
+    ).toEqual({ version: '0.5.3', source: 'builtin' });
   });
 });
 
@@ -117,7 +129,10 @@ async function fakePackage(version: string): Promise<string> {
   temporary.push(root);
   const directory = join(root, '@opentui', 'core');
   await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, 'package.json'), JSON.stringify({ name: '@opentui/core', version }));
+  await writeFile(
+    join(directory, 'package.json'),
+    JSON.stringify({ name: '@opentui/core', version }),
+  );
   const entry = join(directory, 'index.bun.js');
   await writeFile(entry, 'export {};');
   return entry;

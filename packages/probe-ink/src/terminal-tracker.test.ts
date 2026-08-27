@@ -14,7 +14,9 @@ describe('Ink shadow terminal write queue', () => {
       writes.push('first');
       throw new Error('shadow parser failed');
     });
-    const ignored = vi.fn(async () => { writes.push('second'); });
+    const ignored = vi.fn(async () => {
+      writes.push('second');
+    });
     queue.enqueue(ignored);
 
     await expect(queue.drain()).rejects.toThrow('shadow parser failed');
@@ -57,11 +59,14 @@ describe('Ink terminal stream observation boundary', () => {
 
       // A descendant inheriting stdout is equally opaque to the parent's
       // stream wrapper even though its bytes reach the same terminal output.
-      const encodedModes = Buffer.from('\u001b[?1002h\u001b[?1006h\u001b[?1004hDEF').toString('base64');
-      const child = spawnSync(process.execPath, [
-        '-e',
-        `process.stdout.write(Buffer.from(${JSON.stringify(encodedModes)}, 'base64'))`,
-      ], { stdio: ['ignore', descriptor, 'ignore'] });
+      const encodedModes = Buffer.from('\u001b[?1002h\u001b[?1006h\u001b[?1004hDEF').toString(
+        'base64',
+      );
+      const child = spawnSync(
+        process.execPath,
+        ['-e', `process.stdout.write(Buffer.from(${JSON.stringify(encodedModes)}, 'base64'))`],
+        { stdio: ['ignore', descriptor, 'ignore'] },
+      );
       expect(child.status).toBe(0);
       await tracker.drain();
       expect(tracker.position().column).toBe(0);

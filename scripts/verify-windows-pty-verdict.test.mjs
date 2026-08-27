@@ -35,8 +35,7 @@ async function fixture() {
       policy: 'strict',
       failureCode: '',
       failureWin32: 0,
-      orderedMarkerSemantics:
-        'marker-authoritative-after-behavioral-certification',
+      orderedMarkerSemantics: 'marker-authoritative-after-behavioral-certification',
       selectedHostArchitecture: 'x64',
       assetsValidated: true,
       coreExports: true,
@@ -68,10 +67,7 @@ async function fixture() {
       fragmentedConsoleDelivery: true,
     },
   };
-  await writeFile(
-    join(root, 'certification-verdict.json'),
-    `${JSON.stringify(verdict)}\n`,
-  );
+  await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
   return { root, verdict };
 }
 
@@ -79,34 +75,22 @@ describe('Windows PTY causal verdict', () => {
   it('rejects the previous schema before the extended visual and semantic facts existed', async () => {
     const { root, verdict } = await fixture();
     verdict.schemaVersion = 3;
-    await writeFile(
-      join(root, 'certification-verdict.json'),
-      `${JSON.stringify(verdict)}\n`,
-    );
-    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
-      /does not bind/u,
-    );
+    await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
+    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
 
   it('binds all causal claims to the exact addon and vendored manifest', async () => {
     const { root, verdict } = await fixture();
     await expect(verifyWindowsPtyVerdict(root)).resolves.toEqual(verdict);
     await writeFile(join(root, 'termwright_pty.node'), 'different-addon');
-    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
-      /does not bind/u,
-    );
+    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
 
   it('rejects a verdict with reduced Bun coverage', async () => {
     const { root, verdict } = await fixture();
     verdict.causal.bun = false;
-    await writeFile(
-      join(root, 'certification-verdict.json'),
-      `${JSON.stringify(verdict)}\n`,
-    );
-    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
-      /does not bind/u,
-    );
+    await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
+    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
 
   it.each([
@@ -132,37 +116,22 @@ describe('Windows PTY causal verdict', () => {
   ])('rejects a verdict without the %s causal fact', async (fact) => {
     const { root, verdict } = await fixture();
     verdict.causal[fact] = false;
-    await writeFile(
-      join(root, 'certification-verdict.json'),
-      `${JSON.stringify(verdict)}\n`,
-    );
-    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
-      /does not bind/u,
-    );
+    await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
+    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
 
   it('rejects a verdict certified with a non-production marker OSC', async () => {
     const { root, verdict } = await fixture();
     verdict.causal.markerOsc = 8486;
-    await writeFile(
-      join(root, 'certification-verdict.json'),
-      `${JSON.stringify(verdict)}\n`,
-    );
-    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
-      /does not bind/u,
-    );
+    await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
+    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
 
   it('rejects a verdict that weakens the loaded runtime contract', async () => {
     const { root, verdict } = await fixture();
     verdict.runtime.mode = 'legacy-framed';
-    await writeFile(
-      join(root, 'certification-verdict.json'),
-      `${JSON.stringify(verdict)}\n`,
-    );
-    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(
-      /does not bind/u,
-    );
+    await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
+    await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
 
   it('verifies a separately named cross-host verdict against the same bytes', async () => {
@@ -175,8 +144,8 @@ describe('Windows PTY causal verdict', () => {
     await expect(
       verifyWindowsPtyVerdict(root, 'certification-verdict-arm64-host.json'),
     ).resolves.toEqual(verdict);
-    await expect(
-      verifyWindowsPtyVerdict(root, '../outside.json'),
-    ).rejects.toThrow(/invalid Windows PTY verdict filename/u);
+    await expect(verifyWindowsPtyVerdict(root, '../outside.json')).rejects.toThrow(
+      /invalid Windows PTY verdict filename/u,
+    );
   });
 });

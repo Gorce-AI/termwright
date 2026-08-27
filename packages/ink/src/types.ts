@@ -1,10 +1,6 @@
 import type { RefObject } from 'react';
 import type { DOMElement } from 'ink';
-import type {
-  SemanticAction,
-  SemanticExtendedState,
-  SemanticRole,
-} from '@termwright/protocol';
+import type { SemanticAction, SemanticExtendedState, SemanticRole } from '@termwright/protocol';
 
 /** Intent an application knows and the Ink host tree cannot derive. */
 export interface InkSemanticAnnotation {

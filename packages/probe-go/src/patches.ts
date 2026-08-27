@@ -138,12 +138,18 @@ function validateInterventionMetadata(manifest: PatchManifest): void {
     manifest.degradesTo !== undefined;
   if (tier === undefined) {
     if (hasDoctrineMetadata) {
-      throw new PatchError('manifest-invalid', 'schema-v2 intervention metadata must declare a tier');
+      throw new PatchError(
+        'manifest-invalid',
+        'schema-v2 intervention metadata must declare a tier',
+      );
     }
     return; // Current exact T3 manifests retain their exact byte contract.
   }
   if (!['T0', 'T1', 'T2', 'T3'].includes(tier)) {
-    throw new PatchError('manifest-invalid', `manifest declares unknown intervention tier ${String(tier)}`);
+    throw new PatchError(
+      'manifest-invalid',
+      `manifest declares unknown intervention tier ${String(tier)}`,
+    );
   }
   if (tier === 'T3') return; // T3 remains exact-version and content-addressed.
   if (manifest.schemaVersion !== 2) {
@@ -153,15 +159,23 @@ function validateInterventionMetadata(manifest: PatchManifest): void {
     throw new PatchError('manifest-invalid', `${tier} manifests must name a normalized capability`);
   }
   if (typeof manifest.versionRange !== 'string' || manifest.versionRange.trim().length === 0) {
-    throw new PatchError('manifest-invalid', `${tier} manifests must declare an advisory versionRange`);
+    throw new PatchError(
+      'manifest-invalid',
+      `${tier} manifests must declare an advisory versionRange`,
+    );
   }
   if (
     !Array.isArray(manifest.requiredSymbols) ||
     manifest.requiredSymbols.length === 0 ||
-    manifest.requiredSymbols.some((symbol) => typeof symbol !== 'string' || symbol.trim().length === 0) ||
+    manifest.requiredSymbols.some(
+      (symbol) => typeof symbol !== 'string' || symbol.trim().length === 0,
+    ) ||
     new Set(manifest.requiredSymbols).size !== manifest.requiredSymbols.length
   ) {
-    throw new PatchError('manifest-invalid', `${tier} manifests must declare unique requiredSymbols`);
+    throw new PatchError(
+      'manifest-invalid',
+      `${tier} manifests must declare unique requiredSymbols`,
+    );
   }
   if (
     typeof manifest.verification?.method !== 'string' ||
@@ -176,22 +190,34 @@ function validateInterventionMetadata(manifest: PatchManifest): void {
   }
   const method = manifest.verification.method.toLowerCase();
   if (!method.includes('conformance')) {
-    throw new PatchError('manifest-invalid', `${tier} verification must include behavioral conformance`);
+    throw new PatchError(
+      'manifest-invalid',
+      `${tier} verification must include behavioral conformance`,
+    );
   }
   if (tier !== 'T0' && !method.includes('compile')) {
-    throw new PatchError('manifest-invalid', `${tier} verification must include compiler verification`);
+    throw new PatchError(
+      'manifest-invalid',
+      `${tier} verification must include compiler verification`,
+    );
   }
   if (tier === 'T2' && !method.includes('idempot')) {
     throw new PatchError('manifest-invalid', 'T2 verification must include an idempotency check');
   }
   if (typeof manifest.degradesTo !== 'string' || manifest.degradesTo.trim().length === 0) {
-    throw new PatchError('manifest-invalid', `${tier} manifests must declare an explicit degradation`);
+    throw new PatchError(
+      'manifest-invalid',
+      `${tier} manifests must declare an explicit degradation`,
+    );
   }
   if (tier === 'T0' && (manifest.patched.length !== 0 || manifest.added.length !== 0)) {
     throw new PatchError('manifest-invalid', 'T0 cannot edit or add upstream compilation units');
   }
   if (tier === 'T1' && (manifest.patched.length !== 0 || manifest.added.length === 0)) {
-    throw new PatchError('manifest-invalid', 'T1 must be add-only and must not edit upstream bytes');
+    throw new PatchError(
+      'manifest-invalid',
+      'T1 must be add-only and must not edit upstream bytes',
+    );
   }
   if (tier === 'T2' && manifest.added.length === 0) {
     throw new PatchError('manifest-invalid', 'T2 must include an owned added compilation unit');
@@ -247,7 +273,17 @@ export async function applyPatchSet(copyDir: string, patchSetDir: string): Promi
       // Measured: the CRLF run yields exactly the sha the Windows lane reported.
       await run(
         'git',
-        ['-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '-p1', '--unidiff-zero', '--whitespace=nowarn', patch],
+        [
+          '-c',
+          'core.autocrlf=false',
+          '-c',
+          'core.eol=lf',
+          'apply',
+          '-p1',
+          '--unidiff-zero',
+          '--whitespace=nowarn',
+          patch,
+        ],
         { cwd: copyDir },
       );
     } catch (error) {
@@ -258,7 +294,10 @@ export async function applyPatchSet(copyDir: string, patchSetDir: string): Promi
           'applying the patch set needs `git` on PATH; the Go toolchain requires it too, so this is usually a container missing it',
         );
       }
-      throw new PatchError('apply-failed', `${file.patch} did not apply to ${file.path}: ${detail}`);
+      throw new PatchError(
+        'apply-failed',
+        `${file.patch} did not apply to ${file.path}: ${detail}`,
+      );
     }
 
     const actual = await digestFile(join(copyDir, file.path));
@@ -320,12 +359,16 @@ export async function ensureUpstreamModule(upstream: UpstreamModule): Promise<st
       `module termwright.local/fetch\n\ngo 1.22\n\nrequire ${upstream.module} ${upstream.version}\n`,
       'utf8',
     );
-    const { stdout } = await run('go', ['mod', 'download', '-json', `${upstream.module}@${upstream.version}`], {
-      cwd: scratch,
-      // -mod=vendor is incompatible with a download into the cache, and the
-      // user's flags are not this command's business.
-      env: { ...env, GOFLAGS: '' },
-    });
+    const { stdout } = await run(
+      'go',
+      ['mod', 'download', '-json', `${upstream.module}@${upstream.version}`],
+      {
+        cwd: scratch,
+        // -mod=vendor is incompatible with a download into the cache, and the
+        // user's flags are not this command's business.
+        env: { ...env, GOFLAGS: '' },
+      },
+    );
     const result = JSON.parse(stdout) as {
       readonly Dir?: string;
       readonly Error?: string;

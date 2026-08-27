@@ -29,11 +29,27 @@ describe('decodeInput', () => {
     expect(decodeInput(encode('\x1bOA'))).toEqual([{ kind: 'press', keys: 'ArrowUp' }]);
     expect(decodeInput(encode('\x1b[3~'))).toEqual([{ kind: 'press', keys: 'Delete' }]);
     expect(decodeInput(encode('\x1b[Z'))).toEqual([{ kind: 'press', keys: 'Shift+Tab' }]);
-    expect(decodeInput(encode('\x1b[1;5C'))).toEqual([{ kind: 'press', keys: 'Control+ArrowRight' }]);
+    expect(decodeInput(encode('\x1b[1;5C'))).toEqual([
+      { kind: 'press', keys: 'Control+ArrowRight' },
+    ]);
   });
 
   it('round-trips what the driver encodes', () => {
-    for (const key of ['Enter', 'Escape', 'Tab', 'Backspace', 'ArrowUp', 'ArrowLeft', 'Home', 'End', 'PageUp', 'Delete', 'F5', 'F12', 'Control+C']) {
+    for (const key of [
+      'Enter',
+      'Escape',
+      'Tab',
+      'Backspace',
+      'ArrowUp',
+      'ArrowLeft',
+      'Home',
+      'End',
+      'PageUp',
+      'Delete',
+      'F5',
+      'F12',
+      'Control+C',
+    ]) {
       expect(decodeInput(encodeKeys(key, MODES)), key).toEqual([{ kind: 'press', keys: key }]);
     }
   });

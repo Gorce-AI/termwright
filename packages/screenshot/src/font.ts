@@ -161,10 +161,10 @@ export class FontSet {
 
   /** True when a real face exists for this combination of bold and italic. */
   hasFace(face: FaceRequest): boolean {
-    const matches = (): boolean => this.#fonts.some(
-      (entry) =>
-        entry.bold === (face.bold ?? false) && entry.italic === (face.italic ?? false),
-    );
+    const matches = (): boolean =>
+      this.#fonts.some(
+        (entry) => entry.bold === (face.bold ?? false) && entry.italic === (face.italic ?? false),
+      );
     this.#loadUntil(matches);
     return matches();
   }
@@ -217,9 +217,14 @@ export class FontSet {
       });
     }
     if (result === null) {
-      result = this.#findGlyph(char, (entry) => !exactStyle(entry), wantsColour, (fallback) => {
-        monochromeFallback ??= fallback;
-      });
+      result = this.#findGlyph(
+        char,
+        (entry) => !exactStyle(entry),
+        wantsColour,
+        (fallback) => {
+          monochromeFallback ??= fallback;
+        },
+      );
     }
     result ??= monochromeFallback;
     if (result !== null) this.#used.add(result.file);
@@ -336,17 +341,14 @@ function safeImage(glyph: FontkitGlyph): { mediaType: string; base64: string } |
     if (image?.data === undefined || image.data.length === 0) return null;
     // fontkit reports sbix types as four-byte tags: 'png ', 'jpg ', 'tiff'.
     const tag = (image.type ?? 'png').trim().toLowerCase();
-    const mediaType =
-      tag === 'jpg' ? 'image/jpeg' : tag === 'tiff' ? 'image/tiff' : 'image/png';
+    const mediaType = tag === 'jpg' ? 'image/jpeg' : tag === 'tiff' ? 'image/tiff' : 'image/png';
     return { mediaType, base64: Buffer.from(image.data).toString('base64') };
   } catch {
     return null;
   }
 }
 
-function safeLayers(
-  glyph: FontkitGlyph,
-): readonly { path: string; color: string }[] | null {
+function safeLayers(glyph: FontkitGlyph): readonly { path: string; color: string }[] | null {
   try {
     const layers = glyph.layers;
     if (layers === undefined) return null;
@@ -431,9 +433,7 @@ function openFaces(file: string): readonly Font[] {
     return [];
   }
   const faces = isCollection(opened) ? [...opened.fonts] : [opened];
-  return faces.sort(
-    (a, b) => Number(isBold(a) || isItalic(a)) - Number(isBold(b) || isItalic(b)),
-  );
+  return faces.sort((a, b) => Number(isBold(a) || isItalic(a)) - Number(isBold(b) || isItalic(b)));
 }
 
 const systemFontSource: FontCandidateSource = {
@@ -495,9 +495,7 @@ function cachedFaces(file: string, source: FontCandidateSource): readonly Font[]
 
 /** The font's own opinion about its weight, not a guess from its name. */
 function isBold(font: Font): boolean {
-  const selection = (font as unknown as { 'OS/2'?: { fsSelection?: { bold?: boolean } } })[
-    'OS/2'
-  ];
+  const selection = (font as unknown as { 'OS/2'?: { fsSelection?: { bold?: boolean } } })['OS/2'];
   return selection?.fsSelection?.bold === true;
 }
 

@@ -55,9 +55,13 @@ export function trackTerminal(
   const restorers: (() => void)[] = [];
   const observe = (chunk: unknown, encoding?: unknown): void => {
     if (stopped) return;
-    const bytes = Buffer.isBuffer(chunk) || chunk instanceof Uint8Array
-      ? chunk
-      : Buffer.from(String(chunk), typeof encoding === 'string' ? encoding as BufferEncoding : 'utf8');
+    const bytes =
+      Buffer.isBuffer(chunk) || chunk instanceof Uint8Array
+        ? chunk
+        : Buffer.from(
+            String(chunk),
+            typeof encoding === 'string' ? (encoding as BufferEncoding) : 'utf8',
+          );
     // A real Unix PTY has ONLCR enabled for the child output stream by default.
     // Ink writes LF, while both the host terminal and Termwright's driver see
     // CRLF after the line discipline. Shadow those committed bytes, not the
@@ -67,7 +71,8 @@ export function trackTerminal(
   };
 
   for (const stream of new Set([stdout, stderr])) restorers.push(intercept(stream, observe));
-  const onResize = (): void => terminal.resize(positive(stdout.columns, terminal.cols), positive(stdout.rows, terminal.rows));
+  const onResize = (): void =>
+    terminal.resize(positive(stdout.columns, terminal.cols), positive(stdout.rows, terminal.rows));
   stdout.on('resize', onResize);
   restorers.push(() => stdout.off('resize', onResize));
 
@@ -127,5 +132,5 @@ function writeTerminal(terminal: Terminal, bytes: Uint8Array): Promise<void> {
 }
 
 function positive(value: number | undefined, fallback: number): number {
-  return Number.isSafeInteger(value) && (value as number) > 0 ? value as number : fallback;
+  return Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : fallback;
 }

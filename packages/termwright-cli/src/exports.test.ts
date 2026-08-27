@@ -44,14 +44,20 @@ describe('subpath entry points', () => {
   it('keeps transformed feature imports on umbrella subpaths', async () => {
     const { gherkinPlugin } = await import('./gherkin.js');
     const plugin = gherkinPlugin();
-    const resolveConfig = typeof plugin.configResolved === 'function'
-      ? plugin.configResolved
-      : plugin.configResolved?.handler;
+    const resolveConfig =
+      typeof plugin.configResolved === 'function'
+        ? plugin.configResolved
+        : plugin.configResolved?.handler;
     (resolveConfig as undefined | ((config: { root: string }) => void))?.({ root: '/tmp' });
-    const transform = typeof plugin.transform === 'function'
-      ? plugin.transform
-      : plugin.transform?.handler;
-    const result = await (transform as unknown as (this: { addWatchFile(): void }, source: string, id: string) => Promise<{ code: string }>).call(
+    const transform =
+      typeof plugin.transform === 'function' ? plugin.transform : plugin.transform?.handler;
+    const result = await (
+      transform as unknown as (
+        this: { addWatchFile(): void },
+        source: string,
+        id: string,
+      ) => Promise<{ code: string }>
+    ).call(
       { addWatchFile() {} },
       'Feature: umbrella\n\n  Scenario: strict install\n    Given a value\n',
       '/tmp/umbrella.feature',
@@ -75,21 +81,29 @@ describe('subpath entry points', () => {
       // @ts-expect-error the umbrella wrapper must preserve project fixture keys.
       gherkinPlugin<ProjectFixtures>({ fixtureNames: ['ap'] });
     }
-    const resolveConfig = typeof plugin.configResolved === 'function'
-      ? plugin.configResolved
-      : plugin.configResolved?.handler;
+    const resolveConfig =
+      typeof plugin.configResolved === 'function'
+        ? plugin.configResolved
+        : plugin.configResolved?.handler;
     (resolveConfig as undefined | ((config: { root: string }) => void))?.({ root: '/tmp' });
-    const transform = typeof plugin.transform === 'function'
-      ? plugin.transform
-      : plugin.transform?.handler;
-    const result = await (transform as unknown as (this: { addWatchFile(): void }, source: string, id: string) => Promise<{ code: string }>).call(
+    const transform =
+      typeof plugin.transform === 'function' ? plugin.transform : plugin.transform?.handler;
+    const result = await (
+      transform as unknown as (
+        this: { addWatchFile(): void },
+        source: string,
+        id: string,
+      ) => Promise<{ code: string }>
+    ).call(
       { addWatchFile() {} },
       'Feature: fixtures\n\n  Scenario: custom\n    Given an app\n',
       '/tmp/fixtures.feature',
     );
 
     expect(result.code).toContain('from "./fixtures.js"');
-    expect(result.code).toContain('async ({ termwrightOptions, termwright, terminal, step, app }) =>');
+    expect(result.code).toContain(
+      'async ({ termwrightOptions, termwright, terminal, step, app }) =>',
+    );
   });
 
   it('resolves generated subpaths from a strict consumer with only termwright installed', async () => {
@@ -98,7 +112,9 @@ describe('subpath entry points', () => {
       const modules = join(directory, 'node_modules');
       await mkdir(modules);
       await symlink(packageRoot, join(modules, 'termwright'), 'dir');
-      await writeFile(join(directory, 'check.mjs'), `
+      await writeFile(
+        join(directory, 'check.mjs'),
+        `
         if (!import.meta.resolve('termwright/test').endsWith('/dist/test.js')) {
           throw new Error('termwright/test did not resolve through the umbrella');
         }
@@ -119,10 +135,13 @@ describe('subpath entry points', () => {
         } catch (error) {
           if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
         }
-      `, 'utf8');
+      `,
+        'utf8',
+      );
 
-      await expect(execFileAsync(process.execPath, [join(directory, 'check.mjs')], { cwd: directory }))
-        .resolves.toMatchObject({ stderr: '' });
+      await expect(
+        execFileAsync(process.execPath, [join(directory, 'check.mjs')], { cwd: directory }),
+      ).resolves.toMatchObject({ stderr: '' });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -132,5 +151,4 @@ describe('subpath entry points', () => {
     const host = await import('./host.js');
     expect(host.TermwrightTestHost).toBeTypeOf('function');
   });
-
 });

@@ -14,12 +14,20 @@ export function bootstrapRunnerToken(
   const key = `${SESSION_KEY_PREFIX}${url.origin}`;
   const supplied = url.searchParams.get(TOKEN_PARAM);
   if (supplied !== null && supplied !== '') {
-    try { storage.setItem(key, supplied); } catch { /* The current page can still use the one-shot credential. */ }
+    try {
+      storage.setItem(key, supplied);
+    } catch {
+      /* The current page can still use the one-shot credential. */
+    }
   }
   if (url.searchParams.has(TOKEN_PARAM)) {
     url.searchParams.delete(TOKEN_PARAM);
     history.replaceState(history.state, '', url);
   }
   if (supplied !== null && supplied !== '') return supplied;
-  try { return storage.getItem(key) ?? ''; } catch { return ''; }
+  try {
+    return storage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
 }

@@ -28,14 +28,17 @@ const fixture = join(packageRoot, 'src', 'testing', 'zero-config-app.mjs');
 
 /** Require the immutable `.js` entry points prepared before test discovery. */
 async function requireBuiltInputs(): Promise<void> {
-  await requireImmutableBuildInputs([
-    join(packageRoot, 'dist', 'index.js'),
-    join(packageRoot, 'dist', 'bun-preload.js'),
-    join(packageRoot, 'dist', 'node-hook.js'),
-  ], {
-    label: '@termwright/probe-opentui injection tests',
-    buildCommand: 'pnpm --filter @termwright/probe-opentui build',
-  });
+  await requireImmutableBuildInputs(
+    [
+      join(packageRoot, 'dist', 'index.js'),
+      join(packageRoot, 'dist', 'bun-preload.js'),
+      join(packageRoot, 'dist', 'node-hook.js'),
+    ],
+    {
+      label: '@termwright/probe-opentui injection tests',
+      buildCommand: 'pnpm --filter @termwright/probe-opentui build',
+    },
+  );
 }
 
 interface Report {

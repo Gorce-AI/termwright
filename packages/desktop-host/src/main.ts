@@ -30,7 +30,8 @@ const appReady = app.whenReady();
 
 const controlAddress = process.env[DESKTOP_CONTROL_ENV];
 delete process.env[DESKTOP_CONTROL_ENV];
-if (controlAddress === undefined || controlAddress === '') throw new Error('desktop control address is missing');
+if (controlAddress === undefined || controlAddress === '')
+  throw new Error('desktop control address is missing');
 const control = connect(controlAddress);
 control.setEncoding('utf8');
 const replies = control;
@@ -124,9 +125,8 @@ function configureSession(partition: Session, runner: ValidatedRunnerUrl): void 
     (details, callback) => callback({ cancel: !isAllowedRequest(details.url, runner) }),
   );
   const csp = contentSecurityPolicy(runner);
-  partition.webRequest.onHeadersReceived(
-    { urls: [`${runner.origin}/*`] },
-    (details, callback) => callback({
+  partition.webRequest.onHeadersReceived({ urls: [`${runner.origin}/*`] }, (details, callback) =>
+    callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [csp],
@@ -143,7 +143,9 @@ async function start(bootstrap: DesktopBootstrap): Promise<void> {
   const partitionName = `termwright-${randomUUID()}`;
   hostSession = session.fromPartition(partitionName, { cache: false });
   configureSession(hostSession, runner);
-  const icon = nativeImage.createFromPath(fileURLToPath(new URL('./termwright-icon.svg', import.meta.url)));
+  const icon = nativeImage.createFromPath(
+    fileURLToPath(new URL('./termwright-icon.svg', import.meta.url)),
+  );
   if (process.platform === 'darwin' && !icon.isEmpty()) app.dock?.setIcon(icon);
 
   const created = new BrowserWindow({
@@ -169,7 +171,8 @@ async function start(bootstrap: DesktopBootstrap): Promise<void> {
   });
   created.webContents.on('will-attach-webview', (event) => event.preventDefault());
   created.webContents.on('render-process-gone', () => {
-    if (!quitting) reply({ protocol: DESKTOP_HOST_PROTOCOL, type: 'error', message: 'runner renderer stopped' });
+    if (!quitting)
+      reply({ protocol: DESKTOP_HOST_PROTOCOL, type: 'error', message: 'runner renderer stopped' });
     quit();
   });
   created.on('closed', () => {
@@ -187,7 +190,10 @@ async function start(bootstrap: DesktopBootstrap): Promise<void> {
 }
 
 function fail(error: unknown): void {
-  const message = error instanceof Error ? error.message.replace(/https?:\/\/\S+/g, '[runner URL]') : 'desktop host failed';
+  const message =
+    error instanceof Error
+      ? error.message.replace(/https?:\/\/\S+/g, '[runner URL]')
+      : 'desktop host failed';
   reply({ protocol: DESKTOP_HOST_PROTOCOL, type: 'error', message });
   quit();
 }

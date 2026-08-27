@@ -52,9 +52,8 @@ function launch(options: {
 }): Promise<Run> {
   const interpreter = options.runtime === 'bun' ? 'bun' : process.execPath;
   const base = [interpreter, options.appPath ?? app];
-  const command = options.mode === 'vanilla'
-    ? base
-    : builtWithProbe?.(options.runtime, base).command;
+  const command =
+    options.mode === 'vanilla' ? base : builtWithProbe?.(options.runtime, base).command;
   if (command === undefined) throw new Error('probe package was not built before launch');
   const [executable, ...argv] = command as [string, ...string[]];
 
@@ -79,19 +78,25 @@ function launch(options: {
     let stderr = '';
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => { stdout += chunk; });
-    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
     child.on('error', reject);
     child.on('close', (code) => resolve({ stdout, stderr, code }));
   });
 }
 
-async function launchInstrumented(options: Omit<Parameters<typeof launch>[0], 'mode'>): Promise<Run> {
+async function launchInstrumented(
+  options: Omit<Parameters<typeof launch>[0], 'mode'>,
+): Promise<Run> {
   const result = await launch({ ...options, mode: 'instrumented' });
   if (result.code !== 0) {
     throw new Error(
       `instrumented ${options.runtime} application exited with ${String(result.code)} before probe evidence: ` +
-      (result.stderr.trim() || '<empty stderr>'),
+        (result.stderr.trim() || '<empty stderr>'),
     );
   }
   return result;
@@ -130,15 +135,18 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     // spawning it. Build is a host prerequisite, never a concurrent test-side
     // mutation of another attempt's executable inputs.
     const entry = join(packageRoot, 'dist', 'index.js');
-    await requireImmutableBuildInputs([
-      entry,
-      join(packageRoot, 'dist', 'bun-preload.js'),
-      join(packageRoot, 'dist', 'node-hook.js'),
-    ], {
-      label: '@termwright/probe-ink zero-config tests',
-      buildCommand: 'pnpm --filter @termwright/probe-ink build',
-    });
-    const built = await import(entry) as {
+    await requireImmutableBuildInputs(
+      [
+        entry,
+        join(packageRoot, 'dist', 'bun-preload.js'),
+        join(packageRoot, 'dist', 'node-hook.js'),
+      ],
+      {
+        label: '@termwright/probe-ink zero-config tests',
+        buildCommand: 'pnpm --filter @termwright/probe-ink build',
+      },
+    );
+    const built = (await import(entry)) as {
       readonly withProbe: BuiltWithProbe;
     };
     builtWithProbe = built.withProbe;
@@ -161,9 +169,13 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
       expect(snapshot?.coordinateSpace).toMatchObject({ status: 'known', value: 'viewport-cells' });
       expect(snapshot?.hitGrid).toMatchObject({ status: 'unsupported' });
       expect(snapshot?.nodes.every((node) => node.geometry !== undefined)).toBe(true);
-      expect(snapshot?.nodes.every((node) =>
-        node.geometry.visibleRect.status === 'known'
-        || node.geometry.visibleRect.status === 'unsupported')).toBe(true);
+      expect(
+        snapshot?.nodes.every(
+          (node) =>
+            node.geometry.visibleRect.status === 'known' ||
+            node.geometry.visibleRect.status === 'unsupported',
+        ),
+      ).toBe(true);
     },
     60_000,
   );
@@ -216,12 +228,9 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
       expect(hello.probe?.frameworkVersion).toBe('7.1.1');
 
       const [snapshot] = await driver.waitForSnapshots(1);
-      expect(snapshot?.nodes.map((node) => node.role)).toEqual(expect.arrayContaining([
-        'application',
-        'generic',
-        'text',
-        'button',
-      ]));
+      expect(snapshot?.nodes.map((node) => node.role)).toEqual(
+        expect.arrayContaining(['application', 'generic', 'text', 'button']),
+      );
       expect(snapshot?.nodes.find((node) => node.role === 'button')).toMatchObject({
         name: 'Approve',
         frameworkType: 'ink-box',
@@ -238,9 +247,11 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
       open.push(driver);
       await launchInstrumented({ runtime, driver, steps: 3 });
       const snapshots = await driver.waitForSnapshots(2);
-      const values = snapshots.flatMap((snapshot) => snapshot.nodes
-        .filter((node) => node.role === 'text' && node.name.startsWith('Count '))
-        .map((node) => node.name));
+      const values = snapshots.flatMap((snapshot) =>
+        snapshot.nodes
+          .filter((node) => node.role === 'text' && node.name.startsWith('Count '))
+          .map((node) => node.name),
+      );
       expect(new Set(values).size).toBeGreaterThan(1);
     },
     60_000,
@@ -254,16 +265,12 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
       const result = await launchInstrumented({ runtime, driver });
       const snapshots = await driver.waitForSnapshots(1);
       const markers = [...result.stdout.matchAll(markerPattern())]
-        .map((match) => verifyMarkerPayload(
-          match[1] as string,
-          driver.token,
-          driver.sessionId,
-        ))
+        .map((match) => verifyMarkerPayload(match[1] as string, driver.token, driver.sessionId))
         .filter((marker) => marker !== null);
       expect(markers.length).toBeGreaterThan(0);
-      expect(markers.map((marker) => marker?.revision)).toEqual(expect.arrayContaining(
-        snapshots.map((snapshot) => snapshot.revision),
-      ));
+      expect(markers.map((marker) => marker?.revision)).toEqual(
+        expect.arrayContaining(snapshots.map((snapshot) => snapshot.revision)),
+      );
     },
     60_000,
   );

@@ -9,15 +9,23 @@ const entry = join(installRoot, 'node_modules', '@termwright', 'driver', 'dist',
 // script, which reads here as a broken PTY boundary in the packed driver.
 const { createNativePtyBackend, inheritedSpawnEnv } = await import(pathToFileURL(entry).href);
 const proc = createNativePtyBackend().spawn({
-  command: [process.execPath, '-e', "process.stdin.setRawMode?.(true);process.stdin.once('data',()=>{process.stdout.write('installed-driver-ok');process.exit(0)});process.stdin.resume()"],
+  command: [
+    process.execPath,
+    '-e',
+    "process.stdin.setRawMode?.(true);process.stdin.once('data',()=>{process.stdout.write('installed-driver-ok');process.exit(0)});process.stdin.resume()",
+  ],
   env: inheritedSpawnEnv(),
   columns: 40,
   rows: 4,
 });
 let output = '';
 let writeFailure;
-proc.onData((data) => { output += Buffer.from(data).toString('utf8'); });
-proc.onWriteError?.((error) => { writeFailure = error; });
+proc.onData((data) => {
+  output += Buffer.from(data).toString('utf8');
+});
+proc.onWriteError?.((error) => {
+  writeFailure = error;
+});
 const exited = new Promise((resolveExit) => proc.onExit(resolveExit));
 proc.write(Buffer.from('x'));
 let status;
@@ -31,7 +39,16 @@ try {
   proc.dispose();
 }
 if (writeFailure !== undefined) throw writeFailure;
-if (status.code !== 0 || sawEof !== true || tree !== 'gone' || !output.includes('installed-driver-ok')) {
-  throw new Error(`installed driver PTY boundary failed: ${JSON.stringify({ status, sawEof, tree, output })}`);
+if (
+  status.code !== 0 ||
+  sawEof !== true ||
+  tree !== 'gone' ||
+  !output.includes('installed-driver-ok')
+) {
+  throw new Error(
+    `installed driver PTY boundary failed: ${JSON.stringify({ status, sawEof, tree, output })}`,
+  );
 }
-console.log(`installed @termwright/driver PTY boundary verified on ${process.platform}-${process.arch}`);
+console.log(
+  `installed @termwright/driver PTY boundary verified on ${process.platform}-${process.arch}`,
+);

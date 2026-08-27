@@ -11,7 +11,7 @@ process event, or render marker.
 
 ```ts
 await app.waitForText('Ready');
-await expect(app.getByRole('button', {name: 'Save'})).toBeFocused();
+await expect(app.getByRole('button', { name: 'Save' })).toBeFocused();
 ```
 
 The assertion retries until it passes or reaches the expect timeout. This
@@ -20,15 +20,15 @@ same application frame.
 
 ## Explicit waits
 
-| Wait | Use when |
-| --- | --- |
-| `waitForText()` | The terminal grid must contain text. |
-| `locator.waitFor()` | A semantic node must become attached, hidden, or visible. |
-| `waitForShellPrompt()` | Shell integration must authoritatively report an OSC 133 prompt. |
+| Wait                      | Use when                                                                   |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `waitForText()`           | The terminal grid must contain text.                                       |
+| `locator.waitFor()`       | A semantic node must become attached, hidden, or visible.                  |
+| `waitForShellPrompt()`    | Shell integration must authoritatively report an OSC 133 prompt.           |
 | `waitForQuiet({quietMs})` | You explicitly accept a heuristic interval with no screen/semantic change. |
-| `waitForRender()` | You need a revision newer than a known screen revision. |
-| `waitForExit()` | Process termination is the expected result. |
-| `settled()` | Code must branch on whether semantic negotiation succeeded. |
+| `waitForRender()`         | You need a revision newer than a known screen revision.                    |
+| `waitForExit()`           | Process termination is the expected result.                                |
+| `settled()`               | Code must branch on whether semantic negotiation succeeded.                |
 
 Avoid `setTimeout()` and fixed sleeps. They wait too long on fast machines and
 remain too short on slow ones.
@@ -40,7 +40,7 @@ old screen as already quiet before the application handles the key.
 ```ts
 const before = app.checkpoint();
 await app.keyboard.press('Tab');
-await app.waitForRender({after: before.screenRevision});
+await app.waitForRender({ after: before.screenRevision });
 ```
 
 Prefer a web-first assertion on the intended result when one exists; it is more
@@ -63,7 +63,7 @@ Vitest schedules whole-case retries. Configure them with `test.retry`, the
 `--retry` CLI flag, or `termwrightRetry()`:
 
 ```ts
-retry: termwrightRetry({ci: 0, local: 0})
+retry: termwrightRetry({ ci: 0, local: 0 });
 ```
 
 This is separate from matcher event subscriptions. Reports retain the ordered

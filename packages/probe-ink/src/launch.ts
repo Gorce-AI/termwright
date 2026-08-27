@@ -20,12 +20,7 @@ export function withProbe(runtime: ProbeRuntime, argv: readonly string[]): Probe
   const [interpreter, ...rest] = argv as [string, ...string[]];
   const flag = runtime === 'bun' ? '--preload' : '--import';
   return {
-    command: [
-      interpreter,
-      flag,
-      runtimePreloadSpecifier(runtime, PROBE_ENTRIES[runtime]),
-      ...rest,
-    ],
+    command: [interpreter, flag, runtimePreloadSpecifier(runtime, PROBE_ENTRIES[runtime]), ...rest],
     runtime,
   };
 }

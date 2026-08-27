@@ -72,7 +72,9 @@ function withCrashContext(context: ToolContext, args: unknown, error: unknown): 
   const id = (args as { terminal?: unknown } | null)?.terminal;
   if (typeof id !== 'string') return error;
   const report = context.terminals.find(id)?.harness.crashReport();
-  return report === undefined || report === null ? error : new CrashContextError(error, describeCrash(report));
+  return report === undefined || report === null
+    ? error
+    : new CrashContextError(error, describeCrash(report));
 }
 
 /** `_meta` key carrying the structured error payload of a failed tool call. */
@@ -147,8 +149,11 @@ async function connect(stores: SessionStores, transport: Transport): Promise<Run
     await connectTransport(server, transport);
   } catch (error) {
     const cleanup = await Promise.allSettled([closeSessionStores(stores), server.close()]);
-    const failures = cleanup.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-    if (failures.length > 0) throw new AggregateError([error, ...failures], 'MCP transport startup and rollback failed');
+    const failures = cleanup.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError([error, ...failures], 'MCP transport startup and rollback failed');
     throw error;
   }
   return {
@@ -156,8 +161,11 @@ async function connect(stores: SessionStores, transport: Transport): Promise<Run
     stores,
     close: async (): Promise<void> => {
       const results = await Promise.allSettled([closeSessionStores(stores), server.close()]);
-      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-      if (failures.length > 0) throw new AggregateError(failures, 'MCP transport failed to close cleanly');
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError(failures, 'MCP transport failed to close cleanly');
     },
   };
 }
@@ -187,7 +195,10 @@ export async function serveInMemory(
 /** A listening Streamable HTTP server. */
 export interface HttpServerHandle {
   readonly http: Server;
-  readonly registry: SessionRegistry<{ transport: StreamableHTTPServerTransport; server: McpServer }>;
+  readonly registry: SessionRegistry<{
+    transport: StreamableHTTPServerTransport;
+    server: McpServer;
+  }>;
   readonly port: number;
   /** Per-launch bearer required by every HTTP request. Never put it in a URL. */
   readonly authToken: string;
@@ -284,7 +295,9 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
       log(`termwright: session ${key} expired after idling; terminals and traces released`);
     },
     onBackgroundError: (error) => {
-      log(`termwright: idle session cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+      log(
+        `termwright: idle session cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     },
   });
 
@@ -294,13 +307,16 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
         // Security admission is intentionally before URL routing, body reads,
         // session lookup/touch and initialize. A rejected peer cannot allocate
         // an MCP session, refresh one it guessed, or make us buffer its body.
-        if (!admitHttpRequest(request, response, {
-          token: authToken,
-          allowedOrigins,
-          authenticatedRateLimiter,
-          preflightRateLimiter,
-          now,
-        })) return;
+        if (
+          !admitHttpRequest(request, response, {
+            token: authToken,
+            allowedOrigins,
+            authenticatedRateLimiter,
+            preflightRateLimiter,
+            now,
+          })
+        )
+          return;
         const url = new URL(request.url ?? '/', 'http://localhost');
         if (url.pathname !== path) {
           sendJson(response, 404, { error: 'not found' });
@@ -342,7 +358,9 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
           const server = createTermwrightMcpServer(stores);
           transport.onclose = (): void => {
             void registry.delete(newKey).catch((error) => {
-              log(`termwright: session ${newKey} transport cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+              log(
+                `termwright: session ${newKey} transport cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+              );
             });
           };
           return { transport, server };
@@ -351,7 +369,8 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
         await session.attachment.transport.handleRequest(request, response, body);
       } catch (error) {
         const payload = toErrorPayload(error);
-        if (!response.headersSent) sendJson(response, 500, { error: payload.message, kind: payload.kind });
+        if (!response.headersSent)
+          sendJson(response, 500, { error: payload.message, kind: payload.kind });
         else response.end();
       }
     })();
@@ -391,11 +410,14 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
       const results = await Promise.allSettled([
         registry.closeAll(),
         new Promise<void>((resolve, reject) => {
-          http.close((error) => error === undefined ? resolve() : reject(error));
+          http.close((error) => (error === undefined ? resolve() : reject(error)));
         }),
       ]);
-      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
-      if (failures.length > 0) throw new AggregateError(failures, 'MCP HTTP server failed to close cleanly');
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError(failures, 'MCP HTTP server failed to close cleanly');
     },
   };
 }

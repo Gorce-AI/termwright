@@ -20,7 +20,9 @@ describe('the level ladder', () => {
 
 describe('parseAppLog', () => {
   it('reads a followed file line, and gives it no level', () => {
-    expect(parseAppLog({ source: 'file', label: 'server.log', line: 'ERROR boom', timeMs: 120 })).toEqual({
+    expect(
+      parseAppLog({ source: 'file', label: 'server.log', line: 'ERROR boom', timeMs: 120 }),
+    ).toEqual({
       t: 120,
       source: 'file',
       level: null,
@@ -57,7 +59,9 @@ describe('parseAppLog', () => {
   });
 
   it('accepts the flattened wire and archive form', () => {
-    expect(parseAppLog({ t: 5, source: 'adapter', level: 'error', message: 'nope' })?.level).toBe('error');
+    expect(parseAppLog({ t: 5, source: 'adapter', level: 'error', message: 'nope' })?.level).toBe(
+      'error',
+    );
   });
 
   it('rejects a row with no time or no message', () => {
@@ -69,7 +73,9 @@ describe('parseAppLog', () => {
   });
 
   it('drops an unknown level rather than inventing one', () => {
-    expect(parseAppLog({ t: 1, source: 'adapter', level: 'critical', message: 'x' })?.level).toBeNull();
+    expect(
+      parseAppLog({ t: 1, source: 'adapter', level: 'critical', message: 'x' })?.level,
+    ).toBeNull();
   });
 
   it('never infers severity from the text of a file line', () => {

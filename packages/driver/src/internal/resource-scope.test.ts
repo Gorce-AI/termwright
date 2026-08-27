@@ -6,26 +6,29 @@ describe('ResourceScope', () => {
     const events: string[] = [];
     const scope = new ResourceScope('test scope');
 
-    await scope.acquire('first', async () => {
-      events.push('acquire first');
-      return 'first';
-    }, async (value) => {
-      events.push(`dispose ${value}`);
-    });
-    await scope.acquire('second', () => {
-      events.push('acquire second');
-      return 'second';
-    }, (value) => {
-      events.push(`dispose ${value}`);
-    });
+    await scope.acquire(
+      'first',
+      async () => {
+        events.push('acquire first');
+        return 'first';
+      },
+      async (value) => {
+        events.push(`dispose ${value}`);
+      },
+    );
+    await scope.acquire(
+      'second',
+      () => {
+        events.push('acquire second');
+        return 'second';
+      },
+      (value) => {
+        events.push(`dispose ${value}`);
+      },
+    );
 
     await scope.close();
-    expect(events).toEqual([
-      'acquire first',
-      'acquire second',
-      'dispose second',
-      'dispose first',
-    ]);
+    expect(events).toEqual(['acquire first', 'acquire second', 'dispose second', 'dispose first']);
     expect(scope.state).toBe('closed');
   });
 
@@ -67,9 +70,13 @@ describe('ResourceScope', () => {
     const disposed: object[] = [];
     const scope = new ResourceScope('racing scope');
 
-    const pending = scope.acquire('late', () => acquired, (value) => {
-      disposed.push(value);
-    });
+    const pending = scope.acquire(
+      'late',
+      () => acquired,
+      (value) => {
+        disposed.push(value);
+      },
+    );
     const closing = scope.close();
     const value = {};
     publish(value);

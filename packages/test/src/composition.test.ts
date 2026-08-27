@@ -14,7 +14,13 @@ import { afterAll, describe } from 'vitest';
 import type { TerminalHarness } from '@termwright/driver';
 import { configureTermwright, expect, ptyAvailable, test } from './index.js';
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'driver', 'test-fixtures');
+const FIXTURES = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'driver',
+  'test-fixtures',
+);
 
 configureTermwright({
   columns: 60,
@@ -58,17 +64,19 @@ describe.skipIf(!pty)('options overridden for a suite', () => {
   // The equivalent of Playwright's test.use(), on Vitest's own mechanism.
   test.override({ termwrightOptions: { columns: 120, trace: 'on' } });
 
-  test('reach the session, and keep what they did not mention', { timeout: 30_000 }, async ({
-    terminal,
-  }) => {
-    const app = await terminal.launch();
-    await app.waitForText('Permission required');
-    // Overridden for this suite.
-    expect(app.screen().columns).toBe(120);
-    // From the project configuration, which overriding `columns` and `trace` must
-    // not have dropped: the command is why the program started at all.
-    expect(app.screen().rows).toBe(10);
-  });
+  test(
+    'reach the session, and keep what they did not mention',
+    { timeout: 30_000 },
+    async ({ terminal }) => {
+      const app = await terminal.launch();
+      await app.waitForText('Permission required');
+      // Overridden for this suite.
+      expect(app.screen().columns).toBe(120);
+      // From the project configuration, which overriding `columns` and `trace` must
+      // not have dropped: the command is why the program started at all.
+      expect(app.screen().rows).toBe(10);
+    },
+  );
 
   test('are overridden by the call that launches', { timeout: 30_000 }, async ({ terminal }) => {
     const app = await terminal.launch({ columns: 90 });
@@ -79,19 +87,27 @@ describe.skipIf(!pty)('options overridden for a suite', () => {
   describe('with a nested override', () => {
     test.override({ termwrightOptions: { columns: 140 } });
 
-    test('uses the nested value and keeps project defaults', { timeout: 30_000 }, async ({ terminal }) => {
-      const app = await terminal.launch();
-      await app.waitForText('Permission required');
-      expect(app.screen().columns).toBe(140);
-      expect(app.screen().rows).toBe(10);
-    });
+    test(
+      'uses the nested value and keeps project defaults',
+      { timeout: 30_000 },
+      async ({ terminal }) => {
+        const app = await terminal.launch();
+        await app.waitForText('Permission required');
+        expect(app.screen().columns).toBe(140);
+        expect(app.screen().rows).toBe(10);
+      },
+    );
   });
 
-  test('does not leak the nested override into its parent suite', { timeout: 30_000 }, async ({ terminal }) => {
-    const app = await terminal.launch();
-    await app.waitForText('Permission required');
-    expect(app.screen().columns).toBe(120);
-  });
+  test(
+    'does not leak the nested override into its parent suite',
+    { timeout: 30_000 },
+    async ({ terminal }) => {
+      const app = await terminal.launch();
+      await app.waitForText('Permission required');
+      expect(app.screen().columns).toBe(120);
+    },
+  );
 });
 
 describe.skipIf(!pty)('without a scope', () => {
@@ -103,19 +119,19 @@ describe.skipIf(!pty)('without a scope', () => {
 });
 
 describe.skipIf(!pty)('a fixture composed on top of the preset', () => {
-  appTest('receives a ready program and the preset fixtures beside it', { timeout: 30_000 }, async ({
-    app,
-    terminal,
-    step,
-  }) => {
-    order.push('body');
-    // The composed fixture's value is a real harness…
-    await expect(app.getByRole('button', { name: 'Approve' })).toBeFocused();
-    // …and the preset's own fixtures are still injectable next to it.
-    expect(terminal.sessions).toContain(app);
-    await step('use both', async () => {
-      await app.press('Tab');
-      await expect(app.getByRole('button', { name: 'Reject' })).toBeFocused();
-    });
-  });
+  appTest(
+    'receives a ready program and the preset fixtures beside it',
+    { timeout: 30_000 },
+    async ({ app, terminal, step }) => {
+      order.push('body');
+      // The composed fixture's value is a real harness…
+      await expect(app.getByRole('button', { name: 'Approve' })).toBeFocused();
+      // …and the preset's own fixtures are still injectable next to it.
+      expect(terminal.sessions).toContain(app);
+      await step('use both', async () => {
+        await app.press('Tab');
+        await expect(app.getByRole('button', { name: 'Reject' })).toBeFocused();
+      });
+    },
+  );
 });

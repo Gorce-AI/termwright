@@ -39,15 +39,15 @@ and exact pointer ownership where the framework can observe them.
 
 ## What you get from where
 
-| Import | Contents |
-|---|---|
-| `termwright` | `launchTerminal`, locators, actions, waits, the error taxonomy |
-| `termwright/test` | the Native Host authoring surface: `test`, `expect`, fixtures, matchers, snapshots |
-| `termwright/ink` | `mountInk`, `launchInkFixture` for Ink component tests |
-| `termwright/gherkin` | physical `.feature` support, step definitions and the explicit Vitest plugin |
-Everything a project needs is reachable from this one package. Termwright's
-runner, journal, traces and live UI are installed and owned by the Native Host;
-there is no reporter users must inject into `vitest.config.ts`.
+| Import                                                                          | Contents                                                                           |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `termwright`                                                                    | `launchTerminal`, locators, actions, waits, the error taxonomy                     |
+| `termwright/test`                                                               | the Native Host authoring surface: `test`, `expect`, fixtures, matchers, snapshots |
+| `termwright/ink`                                                                | `mountInk`, `launchInkFixture` for Ink component tests                             |
+| `termwright/gherkin`                                                            | physical `.feature` support, step definitions and the explicit Vitest plugin       |
+| Everything a project needs is reachable from this one package. Termwright's     |
+| runner, journal, traces and live UI are installed and owned by the Native Host; |
+| there is no reporter users must inject into `vitest.config.ts`.                 |
 
 `termwright` on its own has no test-runner dependency, so a script or a
 `node:test` file can use it:

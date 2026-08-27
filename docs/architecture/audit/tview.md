@@ -43,6 +43,7 @@ root.Draw(screen)
 if after != nil { after(screen) }
 screen.Show()
 ```
+
 (`application.go:727-744`)
 
 Two public entry points reach it. `Application.Draw()` (`application.go:684-689`)
@@ -56,10 +57,10 @@ update channel and takes only a read lock.
 
 ### The hooks
 
-| Hook | Signature | Where |
-|---|---|---|
+| Hook   | Signature                        | Where                    |
+| ------ | -------------------------------- | ------------------------ |
 | before | `func(screen tcell.Screen) bool` | `application.go:775-778` |
-| after | `func(screen tcell.Screen)` | `application.go:790-793` |
+| after  | `func(screen tcell.Screen)`      | `application.go:790-793` |
 
 Neither setter takes a lock, so both must be installed before `Run()`.
 `before` returning `true` suppresses the root draw **and** the after hook, while
@@ -111,12 +112,12 @@ are buffered at `queueSize = 100` (`application.go:13`).
 **Never from a hook** — `afterDraw` is called at `application.go:740`, inside
 `draw()`, which holds the write lock from `:704`:
 
-| Call from inside a hook | Result |
-|---|---|
-| `QueueUpdate` / `QueueUpdateDraw` / `Draw()` | blocks forever on the done channel (`:879`) — the loop is inside `draw()` and will never drain the queue |
-| `ForceDraw()` / `draw()` | re-entrant `a.Lock()` at `:704` on a non-reentrant mutex |
-| `SetFocus` (`:839`), `SetRoot` (`:809`), `Stop` (`:625`), `GetFocus` (`:860`), `Suspend` (`:644`) | same mutex, same deadlock |
-| `QueueEvent` (`:896-898`), `Sync()` (`:754`) | safe — non-blocking sends, subject to the 100-slot buffer |
+| Call from inside a hook                                                                           | Result                                                                                                   |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `QueueUpdate` / `QueueUpdateDraw` / `Draw()`                                                      | blocks forever on the done channel (`:879`) — the loop is inside `draw()` and will never drain the queue |
+| `ForceDraw()` / `draw()`                                                                          | re-entrant `a.Lock()` at `:704` on a non-reentrant mutex                                                 |
+| `SetFocus` (`:839`), `SetRoot` (`:809`), `Stop` (`:625`), `GetFocus` (`:860`), `Suspend` (`:644`) | same mutex, same deadlock                                                                                |
+| `QueueEvent` (`:896-898`), `Sync()` (`:754`)                                                      | safe — non-blocking sends, subject to the 100-slot buffer                                                |
 
 Consequence for the probe: **publishing must be a non-blocking send on our own
 channel, never a `QueueUpdate`.** `GetRect()` (`box.go:93-95`) is an unsynchronised
@@ -128,13 +129,13 @@ observe a pre-layout rect.
 
 ## 3. Containers
 
-| Container | Children field | Public accessor | Geometry notes |
-|---|---|---|---|
-| `Flex` | `items []*flexItem` (`flex.go:37`), fields `Item/FixedSize/Proportion/Focus` (`flex.go:20-26`) | `GetItemCount()` `flex.go:113`, `GetItem(i)` `flex.go:121` | no stored child rect; computed in `Draw` (`flex.go:145`) and pushed via `SetRect` |
-| `Grid` | `items []*gridItem` (`grid.go:35`) | **none** | `gridItem` carries `visible bool` and `x,y,w,h` — "the last position … undefined if visible is false" (`grid.go:17-18`). `Width/Height` on `gridItem` are **row/col spans**, not cells (`grid.go:201`); `x,y` are **relative to the grid's corner** |
-| `Pages` | `pages []*page` (`pages.go:24`) | `GetPageNames(visibleOnly)` `pages.go:57`, `GetPageCount` `:51`, `GetFrontPage` `:242`, `GetPage` `:253` | visibility is the **exported** field `page.Visible` (`pages.go:12`); `GetPageNames` iterates back-to-front (`:57-65`) and returns `nil` when empty |
-| `Frame` | single `primitive Primitive` (`frame.go:23`) | `GetPrimitive()` `frame.go:70` | texts in `text []*frameText` (`frame.go:26`) with **no accessor** |
-| `Form` | `items []FormItem` (`form.go:64`) **and** `buttons []*Button` (`form.go:67`) separately | `GetFormItemCount/GetFormItem` `form.go:443/450`, `GetButtonCount/GetButton` `:393/381`, `GetFocusedItemIndex` `:488` | `focusedElement int` (`form.go:82`) is a **single index across both lists**, items first (`:79-81`) |
+| Container | Children field                                                                                 | Public accessor                                                                                                       | Geometry notes                                                                                                                                                                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Flex`    | `items []*flexItem` (`flex.go:37`), fields `Item/FixedSize/Proportion/Focus` (`flex.go:20-26`) | `GetItemCount()` `flex.go:113`, `GetItem(i)` `flex.go:121`                                                            | no stored child rect; computed in `Draw` (`flex.go:145`) and pushed via `SetRect`                                                                                                                                                                   |
+| `Grid`    | `items []*gridItem` (`grid.go:35`)                                                             | **none**                                                                                                              | `gridItem` carries `visible bool` and `x,y,w,h` — "the last position … undefined if visible is false" (`grid.go:17-18`). `Width/Height` on `gridItem` are **row/col spans**, not cells (`grid.go:201`); `x,y` are **relative to the grid's corner** |
+| `Pages`   | `pages []*page` (`pages.go:24`)                                                                | `GetPageNames(visibleOnly)` `pages.go:57`, `GetPageCount` `:51`, `GetFrontPage` `:242`, `GetPage` `:253`              | visibility is the **exported** field `page.Visible` (`pages.go:12`); `GetPageNames` iterates back-to-front (`:57-65`) and returns `nil` when empty                                                                                                  |
+| `Frame`   | single `primitive Primitive` (`frame.go:23`)                                                   | `GetPrimitive()` `frame.go:70`                                                                                        | texts in `text []*frameText` (`frame.go:26`) with **no accessor**                                                                                                                                                                                   |
+| `Form`    | `items []FormItem` (`form.go:64`) **and** `buttons []*Button` (`form.go:67`) separately        | `GetFormItemCount/GetFormItem` `form.go:443/450`, `GetButtonCount/GetButton` `:393/381`, `GetFocusedItemIndex` `:488` | `focusedElement int` (`form.go:82`) is a **single index across both lists**, items first (`:79-81`)                                                                                                                                                 |
 
 `Grid` is the reason the current Go adapter ships `WithChildren`: with `items`
 unexported and no accessor (only `GetOffset()` at `grid.go:244`), an
@@ -146,28 +147,28 @@ it carries per-item visibility and last-drawn geometry.
 ## 4. Atomic primitives: the private state worth reading
 
 Every primitive below embeds `*Box` and has no rect of its own. `TextArea.width/height`
-(`textarea.go:199`) and `TextView.width/height` (`textview.go:140`) are *requested
-form sizes*, not positions; `TableCell.x/y/width` (`table.go:63`) is the cell's
+(`textarea.go:199`) and `TextView.width/height` (`textview.go:140`) are _requested
+form sizes_, not positions; `TableCell.x/y/width` (`table.go:63`) is the cell's
 last drawn position.
 
-| Primitive | Name / label | Value | Selection | Other state | Public getters |
-|---|---|---|---|---|---|
-| `Button` | `text` (`button.go:17`) — **not** `label` | — | — | `disabled` (`:14`) | `GetLabel()` `:57`, `IsDisabled()` `:110` |
-| `InputField` | delegated to `textArea` (`inputfield.go:82`, `:174`) | delegated (`:163`) | — | `fieldWidth` (`:86`); **no own label/text/placeholder field** | `GetText()` `:163`, `GetLabel()` `:174`; no `GetPlaceholder`, no `IsDisabled` |
-| `TextArea` | `label` (`textarea.go:206`), `placeholder` (`:203`) | piece chain: `initialText` (`:229`), `editText` (`:233`), `spans` (`:242`) — **not a string** | cursor/selection structs (`:285-298`) | `disabled` (`:196`), `rowOffset`/`columnOffset` (`:264`/`:267`) | `GetText()` `:440`, `GetLabel()` `:798`, `GetDisabled()` `:844`, `GetOffset()` `:906` |
-| `Checkbox` | `label` (`checkbox.go:21`) | — | — | `checked` (`:18`), `disabled` (`:15`) | `IsChecked()` `:85`, `GetLabel()` `:96` |
-| `DropDown` | `label` (`dropdown.go:54`) | `options []*dropDownOption` (`:27`) | `currentOption` (`:34`, negative = none) | `open` (`:43`), `disabled` (`:24`) | `GetCurrentOption()` `:147`, `GetOptionCount()` `:338`, `IsOpen()` `:652` |
-| `List` | — | `items []*listItem` (`list.go:45`) | `currentItem` (`:48`) | scroll is **`itemOffset`** (`:82`) + `horizontalOffset` (`:86`) | `GetCurrentItem()` `:144`, `GetOffset()` `:165`, `GetItemCount()` `:428`, `GetItemText(i)` `:441` |
-| `Table` | — | `content TableContent` interface (`table.go:476`) | `selectedRow/selectedColumn` (`:490`) | `rowOffset/columnOffset` (`:503`), `visibleRows` (`:509`) | `GetSelection()` `:638`, `GetOffset()` `:669`, `GetRowCount/GetColumnCount` `:780/785` |
-| `TreeView` | — | `root`/`nodes []*TreeNode` (`:303`/`:350`) | `currentNode` (`:306`, nil = none) | scroll is **`offsetY`** (`:327`) | `GetCurrentNode()` `:392`, `GetScrollOffset()` `:500`, `GetRowCount()` `:508` |
-| `Modal` | — | `text` (`modal.go:22`) | — | buttons live in `m.form.buttons` (`:19`) | **none at all** |
-| `TextView` | `label` (`textview.go:159`) | `text strings.Builder` (`:145`) | — | scroll is **`lineOffset`** (`:180`) + `columnOffset` (`:188`); own mutex (`:137`) | `GetText()` `:403`, `GetScrollOffset()` `:583` |
+| Primitive    | Name / label                                         | Value                                                                                         | Selection                                | Other state                                                                       | Public getters                                                                                    |
+| ------------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `Button`     | `text` (`button.go:17`) — **not** `label`            | —                                                                                             | —                                        | `disabled` (`:14`)                                                                | `GetLabel()` `:57`, `IsDisabled()` `:110`                                                         |
+| `InputField` | delegated to `textArea` (`inputfield.go:82`, `:174`) | delegated (`:163`)                                                                            | —                                        | `fieldWidth` (`:86`); **no own label/text/placeholder field**                     | `GetText()` `:163`, `GetLabel()` `:174`; no `GetPlaceholder`, no `IsDisabled`                     |
+| `TextArea`   | `label` (`textarea.go:206`), `placeholder` (`:203`)  | piece chain: `initialText` (`:229`), `editText` (`:233`), `spans` (`:242`) — **not a string** | cursor/selection structs (`:285-298`)    | `disabled` (`:196`), `rowOffset`/`columnOffset` (`:264`/`:267`)                   | `GetText()` `:440`, `GetLabel()` `:798`, `GetDisabled()` `:844`, `GetOffset()` `:906`             |
+| `Checkbox`   | `label` (`checkbox.go:21`)                           | —                                                                                             | —                                        | `checked` (`:18`), `disabled` (`:15`)                                             | `IsChecked()` `:85`, `GetLabel()` `:96`                                                           |
+| `DropDown`   | `label` (`dropdown.go:54`)                           | `options []*dropDownOption` (`:27`)                                                           | `currentOption` (`:34`, negative = none) | `open` (`:43`), `disabled` (`:24`)                                                | `GetCurrentOption()` `:147`, `GetOptionCount()` `:338`, `IsOpen()` `:652`                         |
+| `List`       | —                                                    | `items []*listItem` (`list.go:45`)                                                            | `currentItem` (`:48`)                    | scroll is **`itemOffset`** (`:82`) + `horizontalOffset` (`:86`)                   | `GetCurrentItem()` `:144`, `GetOffset()` `:165`, `GetItemCount()` `:428`, `GetItemText(i)` `:441` |
+| `Table`      | —                                                    | `content TableContent` interface (`table.go:476`)                                             | `selectedRow/selectedColumn` (`:490`)    | `rowOffset/columnOffset` (`:503`), `visibleRows` (`:509`)                         | `GetSelection()` `:638`, `GetOffset()` `:669`, `GetRowCount/GetColumnCount` `:780/785`            |
+| `TreeView`   | —                                                    | `root`/`nodes []*TreeNode` (`:303`/`:350`)                                                    | `currentNode` (`:306`, nil = none)       | scroll is **`offsetY`** (`:327`)                                                  | `GetCurrentNode()` `:392`, `GetScrollOffset()` `:500`, `GetRowCount()` `:508`                     |
+| `Modal`      | —                                                    | `text` (`modal.go:22`)                                                                        | —                                        | buttons live in `m.form.buttons` (`:19`)                                          | **none at all**                                                                                   |
+| `TextView`   | `label` (`textview.go:159`)                          | `text strings.Builder` (`:145`)                                                               | —                                        | scroll is **`lineOffset`** (`:180`) + `columnOffset` (`:188`); own mutex (`:137`) | `GetText()` `:403`, `GetScrollOffset()` `:583`                                                    |
 
 Two traps that will bite a probe author:
 
 - **Scroll field names are inconsistent across primitives.** `List.itemOffset`,
   `TextView.lineOffset`, `TextArea.rowOffset`, `Table.rowOffset`,
-  `TreeView.offsetY`, `Grid.rowOffset` (that last one scrolls the *container*).
+  `TreeView.offsetY`, `Grid.rowOffset` (that last one scrolls the _container_).
   There is no single field name to reach for.
 - **`disabled` exists on only five types** — `Button` (`button.go:14`),
   `Checkbox` (`:15`), `DropDown` (`dropdown.go:24`), `TextArea`
@@ -247,21 +248,21 @@ Invoked as `GOWORK=/path/to/generated.work go build ./...`.
 
 **What was verified.**
 
-1. *The replace takes effect.* `go list -m github.com/rivo/tview` prints the
+1. _The replace takes effect._ `go list -m github.com/rivo/tview` prints the
    bare version without the workspace and `v0.42.0 => /…/instrumented/tview`
    with it.
-2. *The instrumented copy is what actually compiles.* Introducing an undefined
+2. _The instrumented copy is what actually compiles._ Introducing an undefined
    symbol into the copy fails the build with
    `../instrumented/tview/probe_marker.go:2:23: undefined: …`, while the same
    build without `GOWORK` still succeeds against the pristine module cache.
    This is the canary the probe should keep permanently.
-3. *The user's files are not touched.* `go.mod` and `go.sum` are byte-identical
+3. _The user's files are not touched._ `go.mod` and `go.sum` are byte-identical
    before and after (md5 unchanged). A filesystem replace needs no `go.sum`
    entry, and **no `go.work.sum` was created** next to the generated file.
-4. *`GOWORK` overrides a workspace the project already has.* With the user's own
+4. _`GOWORK` overrides a workspace the project already has._ With the user's own
    `go.work` present and discoverable, `GOWORK=<ours>` still wins;
    `GOWORK=off` disables workspace mode entirely.
-5. *A `replace` in the user's `go.mod` loses to ours.* With the user replacing
+5. _A `replace` in the user's `go.mod` loses to ours._ With the user replacing
    tview with their own fork in `go.mod`, the workspace replace still selects
    our copy — workspace replaces override module replaces.
 

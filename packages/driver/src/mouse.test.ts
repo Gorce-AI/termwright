@@ -57,12 +57,18 @@ describe('a mouse mode known to be off or limited', () => {
   });
 
   it('still refuses a release the level does not report', () => {
-    const error = refusalFor({ kind: 'release', row: 0, column: 0 }, modes({ mouseTracking: 'x10' }));
+    const error = refusalFor(
+      { kind: 'release', row: 0, column: 0 },
+      modes({ mouseTracking: 'x10' }),
+    );
     expect(error.code).toBe('input-mode-disabled');
   });
 
   it('still refuses motion the level does not report', () => {
-    const error = refusalFor({ kind: 'move', row: 0, column: 0 }, modes({ mouseTracking: 'vt200' }));
+    const error = refusalFor(
+      { kind: 'move', row: 0, column: 0 },
+      modes({ mouseTracking: 'vt200' }),
+    );
     expect(error.code).toBe('input-mode-disabled');
     expect(error.diagnostics.suggestion).toContain('1002');
   });
@@ -70,28 +76,76 @@ describe('a mouse mode known to be off or limited', () => {
 
 describe('mouse modifiers', () => {
   it('encodes shift, alt and control in the terminal Cb bitfield', () => {
-    const encoded = new TextDecoder().decode(encodeMouse({
-      kind: 'press', row: 2, column: 4, button: 'right',
-      modifiers: ['control', 'shift', 'alt', 'shift'],
-    }, modes()));
+    const encoded = new TextDecoder().decode(
+      encodeMouse(
+        {
+          kind: 'press',
+          row: 2,
+          column: 4,
+          button: 'right',
+          modifiers: ['control', 'shift', 'alt', 'shift'],
+        },
+        modes(),
+      ),
+    );
     expect(encoded).toBe('\x1b[<30;5;3M');
   });
 
   it('preserves modifier bits for release, motion and wheel reports', () => {
-    expect(new TextDecoder().decode(encodeMouse({
-      kind: 'release', row: 0, column: 0, button: 'left', modifiers: ['control'],
-    }, modes()))).toBe('\x1b[<16;1;1m');
-    expect(new TextDecoder().decode(encodeMouse({
-      kind: 'move', row: 0, column: 0, modifiers: ['shift'],
-    }, modes({ mouseTracking: 'any' })))).toBe('\x1b[<39;1;1M');
-    expect(new TextDecoder().decode(encodeMouse({
-      kind: 'wheel', wheelDelta: 1, row: 0, column: 0, modifiers: ['alt'],
-    }, modes()))).toBe('\x1b[<73;1;1M');
+    expect(
+      new TextDecoder().decode(
+        encodeMouse(
+          {
+            kind: 'release',
+            row: 0,
+            column: 0,
+            button: 'left',
+            modifiers: ['control'],
+          },
+          modes(),
+        ),
+      ),
+    ).toBe('\x1b[<16;1;1m');
+    expect(
+      new TextDecoder().decode(
+        encodeMouse(
+          {
+            kind: 'move',
+            row: 0,
+            column: 0,
+            modifiers: ['shift'],
+          },
+          modes({ mouseTracking: 'any' }),
+        ),
+      ),
+    ).toBe('\x1b[<39;1;1M');
+    expect(
+      new TextDecoder().decode(
+        encodeMouse(
+          {
+            kind: 'wheel',
+            wheelDelta: 1,
+            row: 0,
+            column: 0,
+            modifiers: ['alt'],
+          },
+          modes(),
+        ),
+      ),
+    ).toBe('\x1b[<73;1;1M');
   });
 
   it('rejects unknown modifier names rather than dropping them', () => {
-    expect(() => encodeMouse({
-      kind: 'press', row: 0, column: 0, modifiers: ['super' as never],
-    }, modes())).toThrow(/unknown mouse modifier/u);
+    expect(() =>
+      encodeMouse(
+        {
+          kind: 'press',
+          row: 0,
+          column: 0,
+          modifiers: ['super' as never],
+        },
+        modes(),
+      ),
+    ).toThrow(/unknown mouse modifier/u);
   });
 });

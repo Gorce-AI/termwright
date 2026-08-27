@@ -29,6 +29,7 @@ its only test harness (`ink-testing-library`, 2.1M dl/mo) is abandoned and broke
 on current Ink. Messaging leads with Ink; architecture is cross-framework.
 
 Three headline differentiators (nobody has any of them):
+
 1. **Semantic YAML snapshots** (aria-snapshot style) — snapshots that break only
    when meaning changes, not when whitespace does.
 2. **Failure forensics**: HTML report with visual + semantic diff, plus an
@@ -38,21 +39,21 @@ Three headline differentiators (nobody has any of them):
 
 ## 2. Decisions log
 
-| Decision | Choice |
-|---|---|
-| Brand / npm scope | `termwright` / `@termwright` (npm+PyPI free; dead `fcoury/termwright` and taken crate name accepted — crate ships as `termwright-protocol`) |
-| GitHub org | `gorce-ai` |
-| 1.0 scope | Everything: protocol, driver, adapters, component testing, MCP, conformance, trace, Vitest preset, interactive runner UI with time travel |
-| Windows | First-class pinned passthrough ConPTY backend in 1.0, own conformance lane + Windows CI; child pointer/focus DECSET is observable after host-control normalization |
-| Runner | Vitest as the first-class preset; driver stays runner-agnostic (works from node:test/Jest/scripts) |
-| Core language | TypeScript core; protocol is language-neutral with thin clients for TS, Python, Go, Rust |
-| 1.0 adapters | Ink (full, first), OpenTUI, Textual, tview; Bubble Tea honest degradation (+ Lip Gloss Canvas adapter); Ratatui instrumented adapter in 1.x |
-| PTY | Termwright-owned `@termwright/pty`, with one loader and six optional native packages for Windows, Linux and macOS on x64/arm64; the native implementation owns producer EOF, process-tree teardown and write ordering |
-| VT | `@xterm/headless` 6.0 + `@xterm/addon-unicode11` (explicitly activated) + `@xterm/addon-serialize` |
-| Render marker encoding | Private **OSC 8487**, BEL-terminated and MAC-authenticated; a registered handler consumes it before grid mutation |
-| Semantic transport | Out-of-band local channel (unix socket / named pipe), CDP-style request-response + subscriptions; in-band marker is a frame **commit** (Neovim `flush` semantics), never a data carrier |
-| MCP SDK | v1.30.x behind our own facade (v1→v2 package-rename split in progress); Zod v4 from day one |
-| No musl/Alpine in 1.0 | documented (`node:22-slim`), no PTY candidate ships musl prebuilds |
+| Decision               | Choice                                                                                                                                                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Brand / npm scope      | `termwright` / `@termwright` (npm+PyPI free; dead `fcoury/termwright` and taken crate name accepted — crate ships as `termwright-protocol`)                                                                           |
+| GitHub org             | `gorce-ai`                                                                                                                                                                                                            |
+| 1.0 scope              | Everything: protocol, driver, adapters, component testing, MCP, conformance, trace, Vitest preset, interactive runner UI with time travel                                                                             |
+| Windows                | First-class pinned passthrough ConPTY backend in 1.0, own conformance lane + Windows CI; child pointer/focus DECSET is observable after host-control normalization                                                    |
+| Runner                 | Vitest as the first-class preset; driver stays runner-agnostic (works from node:test/Jest/scripts)                                                                                                                    |
+| Core language          | TypeScript core; protocol is language-neutral with thin clients for TS, Python, Go, Rust                                                                                                                              |
+| 1.0 adapters           | Ink (full, first), OpenTUI, Textual, tview; Bubble Tea honest degradation (+ Lip Gloss Canvas adapter); Ratatui instrumented adapter in 1.x                                                                           |
+| PTY                    | Termwright-owned `@termwright/pty`, with one loader and six optional native packages for Windows, Linux and macOS on x64/arm64; the native implementation owns producer EOF, process-tree teardown and write ordering |
+| VT                     | `@xterm/headless` 6.0 + `@xterm/addon-unicode11` (explicitly activated) + `@xterm/addon-serialize`                                                                                                                    |
+| Render marker encoding | Private **OSC 8487**, BEL-terminated and MAC-authenticated; a registered handler consumes it before grid mutation                                                                                                     |
+| Semantic transport     | Out-of-band local channel (unix socket / named pipe), CDP-style request-response + subscriptions; in-band marker is a frame **commit** (Neovim `flush` semantics), never a data carrier                               |
+| MCP SDK                | v1.30.x behind our own facade (v1→v2 package-rename split in progress); Zod v4 from day one                                                                                                                           |
+| No musl/Alpine in 1.0  | documented (`node:22-slim`), no PTY candidate ships musl prebuilds                                                                                                                                                    |
 
 ## 3. Package map
 
@@ -154,6 +155,7 @@ heuristically rehydrated.
 scrollbackLines, shell?, recording? })` → PTY via `PtyBackend` interface
 (`spawn/write/resize/onData/onExit/signal`), fed into `@xterm/headless`.
 Verified constraints honored in code:
+
 - every emulator `write` wrapped in a promise on its callback (async buffer);
 - Unicode 11 addon activated explicitly (`unicode.activeVersion = '11'`);
 - CJS-only import workaround for the headless package in our ESM build;
@@ -171,6 +173,7 @@ separately from close. Close is idempotent; destructive signals are explicit.
 ### 5.2 Locators
 
 Semantic locators are evaluated driver-side on one committed semantic frame:
+
 - Playwright family: `getByRole(role, {name, exact, state})`, `getByLabel`,
   `getByText(textOrRegex)`, `getByTestId`, descendant chaining, filters,
   intersections/unions and positional selection;
@@ -248,6 +251,7 @@ semantic candidates, and a suggestion.
 
 Two modes, one `TerminalHarness` interface (same locators/actions/matchers as
 `launchTerminal`):
+
 - `mountInk(<Comp/>, { columns, rows, wrapper })`: in-process; fake stdout feeds
   the same headless VT; the same Ink adapter publishes semantics; a click becomes
   a real mouse byte sequence into the component's stdin — never a semantic-channel
@@ -255,7 +259,7 @@ Two modes, one `TerminalHarness` interface (same locators/actions/matchers as
   behind revision waits. Asserting a prop spy after physical input is normal.
 - `launchInkFixture({ component, props })`: real-PTY subprocess for raw-mode
   stdin/modes/resize fidelity; props cross via bounded JSON, never eval.
-Test pyramid and mode-selection guidance: origin spec §10.3 verbatim.
+  Test pyramid and mode-selection guidance: origin spec §10.3 verbatim.
 
 ## 7. Adapters
 
@@ -321,16 +325,17 @@ differentiation opportunity (competition is weakest here).
 
 `termwright ui`: local server + browser app hooked into Vitest watch via
 reporter/API (our own small event protocol, no Vitest internals). Three panes:
+
 1. live terminal (xterm.js — same engine as headless, pixel-identical);
 2. semantic inspector (hover highlights bounds, click generates a selector —
    DevTools "pick element" for the terminal);
 3. test/step timeline with **time travel**: scrub → replay cast to offset +
    nearest semantic snapshot ≤ that revision.
-Modes: live (WebSocket from driver during watch) and post-mortem (open a
-`.twtrace` from CI). **Recorder/codegen in 1.0**: interact with the live
-terminal in the UI *or* run `termwright codegen -- <command>` in a terminal;
-both generate test code with semantic locators (the killer adoption feature —
-easier in a terminal than in a browser since we own the full input stream).
+   Modes: live (WebSocket from driver during watch) and post-mortem (open a
+   `.twtrace` from CI). **Recorder/codegen in 1.0**: interact with the live
+   terminal in the UI _or_ run `termwright codegen -- <command>` in a terminal;
+   both generate test code with semantic locators (the killer adoption feature —
+   easier in a terminal than in a browser since we own the full input stream).
 
 Screenshots: HTML serialization in core; **SVG screenshots with embedded Nerd
 Font glyph paths** (tui-test's trick — self-contained, never misrenders icons)
@@ -345,6 +350,7 @@ keyed by MCP session id in our layer, not in transport objects. Transports:
 stdio + Streamable HTTP.
 
 Tools: origin spec §17 list, plus:
+
 - `terminal.snapshot` returns the compact ref format
   (`button "Approve" ref=n8@42 bounds=(14,23,11,1) focused`) with visible text;
   full dumps can be written to disk with only refs returned (playwright-cli

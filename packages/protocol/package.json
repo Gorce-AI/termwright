@@ -9,7 +9,9 @@
     "directory": "packages/protocol"
   },
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -44,7 +46,9 @@
       "import": "./dist/test-provider.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/contract.ts src/capability-graph.ts src/action-model.ts src/run-events.ts src/run-journal.ts src/run-state.ts src/test-provider.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",

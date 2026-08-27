@@ -1,7 +1,7 @@
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const available = spawnSync('cargo', ['--version'], {stdio: 'ignore'});
+const available = spawnSync('cargo', ['--version'], { stdio: 'ignore' });
 if (available.status !== 0) {
   console.log('ratatui-list: no Rust toolchain, skipping the build');
   process.exit(0);

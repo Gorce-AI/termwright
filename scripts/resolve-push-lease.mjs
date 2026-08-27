@@ -27,15 +27,17 @@ export function parseRemoteLeaseResult(ref, exitCode, stdout) {
 export async function resolvePushLease(remote, ref, runGit = execFile) {
   if (remote.length === 0) throw new Error('a git remote is required');
   try {
-    const { stdout } = await runGit(
-      'git',
-      ['ls-remote', '--exit-code', '--refs', remote, ref],
-      { encoding: 'utf8' },
-    );
+    const { stdout } = await runGit('git', ['ls-remote', '--exit-code', '--refs', remote, ref], {
+      encoding: 'utf8',
+    });
     return parseRemoteLeaseResult(ref, 0, stdout);
   } catch (error) {
     if (typeof error === 'object' && error !== null && typeof error.code === 'number') {
-      return parseRemoteLeaseResult(ref, error.code, typeof error.stdout === 'string' ? error.stdout : '');
+      return parseRemoteLeaseResult(
+        ref,
+        error.code,
+        typeof error.stdout === 'string' ? error.stdout : '',
+      );
     }
     throw new Error('git ls-remote could not be executed', { cause: error });
   }

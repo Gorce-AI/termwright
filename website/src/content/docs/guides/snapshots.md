@@ -6,11 +6,11 @@ description: Choose between terminal cell snapshots and semantic tree snapshots,
 Termwright supports two snapshot types. Use the one that matches the behavior
 you want to protect.
 
-| Need | Snapshot |
-| --- | --- |
-| Exact characters, colors, attributes, and cell positions | Cell snapshot |
-| Roles, accessible names, hierarchy, and semantic state | Semantic snapshot |
-| Both rendering and meaning are important | Use both in the same test |
+| Need                                                     | Snapshot                  |
+| -------------------------------------------------------- | ------------------------- |
+| Exact characters, colors, attributes, and cell positions | Cell snapshot             |
+| Roles, accessible names, hierarchy, and semantic state   | Semantic snapshot         |
+| Both rendering and meaning are important                 | Use both in the same test |
 
 ## Match a cell snapshot
 
@@ -49,10 +49,9 @@ change should.
 Scope a semantic snapshot to one region:
 
 ```ts
-await expect(app).toMatchSemanticSnapshot(
-  '- button "Approve" [focused]',
-  {within: app.getByRole('dialog')},
-);
+await expect(app).toMatchSemanticSnapshot('- button "Approve" [focused]', {
+  within: app.getByRole('dialog'),
+});
 ```
 
 ## Update snapshots
@@ -65,12 +64,12 @@ termwright test -- --update
 
 For CI or a scripted workflow, set `TERMWRIGHT_UPDATE_SNAPSHOTS` to one of:
 
-| Value | Behavior |
-| --- | --- |
-| `all` | Rewrite every snapshot. |
+| Value     | Behavior                                        |
+| --------- | ----------------------------------------------- |
+| `all`     | Rewrite every snapshot.                         |
 | `changed` | Write missing snapshots and replace mismatches. |
-| `missing` | Write only snapshots that do not exist. |
-| `none` | Never write; missing snapshots fail. |
+| `missing` | Write only snapshots that do not exist.         |
+| `none`    | Never write; missing snapshots fail.            |
 
 ## Review a failure
 

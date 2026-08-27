@@ -33,12 +33,14 @@ describe('SessionEventEmitter journal', () => {
     events.subscribe({ fromSequence: 1, onGap }, (record) => seen.push(record.sequence))();
 
     expect(onGap).toHaveBeenCalledOnce();
-    expect(onGap).toHaveBeenCalledWith(expect.objectContaining({
-      requestedSequence: 1,
-      firstAvailableSequence: 2,
-      lastLostSequence: 1,
-      lostEvents: 1,
-    }));
+    expect(onGap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestedSequence: 1,
+        firstAvailableSequence: 2,
+        lastLostSequence: 1,
+        lostEvents: 1,
+      }),
+    );
     expect(seen).toHaveLength(8_192);
     expect(seen[0]).toBe(2);
     expect(seen.at(-1)).toBe(8_193);

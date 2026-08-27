@@ -11,7 +11,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
-import {it as resourceAwareIt} from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { TerminalHarness } from '@termwright/driver';
 import { launchInkFixture } from './fixture.js';
 import { mountInk } from './mount.js';
@@ -19,7 +19,7 @@ import CounterApp from './testing/counter-app.mjs';
 
 const CRASH_COMPONENT = new URL('./testing/crash-app.mjs', import.meta.url);
 const SIZE = { columns: 44, rows: 10 } as const;
-const fixtureIt = resourceAwareIt.resources({terminals: 1, traceWriters: 0});
+const fixtureIt = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 
 const open: TerminalHarness[] = [];
 

@@ -143,13 +143,13 @@ use the CI operating-system matrix for platform coverage.
 
 ## Choose a command
 
-| Task | Command |
-| --- | --- |
-| Repeatable local or CI run | `termwright test` |
-| Determinism certification in one host | `termwright test --runs 50` |
-| Watch source changes | `termwright watch` |
-| Visual selection and debugging | `termwright ui` |
-| Open a retained trace | `termwright ui --trace path/to/run.twtrace` |
+| Task                                  | Command                                     |
+| ------------------------------------- | ------------------------------------------- |
+| Repeatable local or CI run            | `termwright test`                           |
+| Determinism certification in one host | `termwright test --runs 50`                 |
+| Watch source changes                  | `termwright watch`                          |
+| Visual selection and debugging        | `termwright ui`                             |
+| Open a retained trace                 | `termwright ui --trace path/to/run.twtrace` |
 
 See [Runner UI](../tools/runner-ui/) for the visual workflow and
 [CLI and exit codes](../reference/cli/) for the complete command reference.

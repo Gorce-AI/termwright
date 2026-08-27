@@ -1,9 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openTrace, type TraceReader } from '@termwright/trace';
 import { readTraceLogs } from './trace-logs.js';
-import { buildCrashedFixtureTrace, buildFixtureTrace, FIXTURE_TREES } from './__fixtures__/build-trace.js';
+import {
+  buildCrashedFixtureTrace,
+  buildFixtureTrace,
+  FIXTURE_TREES,
+} from './__fixtures__/build-trace.js';
 import { UiHub } from './hub.js';
-import { publishTraceTimeline, readTraceOverview, traceStateAt, type TraceOverview } from './trace-source.js';
+import {
+  publishTraceTimeline,
+  readTraceOverview,
+  traceStateAt,
+  type TraceOverview,
+} from './trace-source.js';
 
 let reader: TraceReader;
 let overview: TraceOverview;
@@ -56,7 +65,12 @@ describe('publishTraceTimeline', () => {
     ]);
     const [runStart, session, testStart] = hub.backlog;
     expect(runStart?.type === 'run-start' && runStart.mode).toBe('post-mortem');
-    expect(session).toMatchObject({ type: 'session', sessionId: overview.sessionId, columns: 80, rows: 24 });
+    expect(session).toMatchObject({
+      type: 'session',
+      sessionId: overview.sessionId,
+      columns: 80,
+      rows: 24,
+    });
     expect(testStart?.type === 'test-start' && testStart.title).toBe('node agent.js');
     const testEnd = hub.backlog.find((message) => message.type === 'test-end');
     expect(testEnd?.type === 'test-end' && testEnd.status).toBe('passed');
@@ -106,7 +120,10 @@ describe('application logs in an archive', () => {
   it('reads back what the session logged, on the cast timeline', async () => {
     const logs = await readTraceLogs(reader);
     expect(logs.available).toBe(true);
-    expect(logs.records.map((entry) => entry.message)).toEqual(['listening on 3000', 'pool exhausted']);
+    expect(logs.records.map((entry) => entry.message)).toEqual([
+      'listening on 3000',
+      'pool exhausted',
+    ]);
 
     const [line, record] = logs.records;
     expect(line?.source).toBe('file');
@@ -183,7 +200,9 @@ describe('the terminal profile', () => {
       get(target, property) {
         if (property === 'meta') return { ...target.meta, ...extra };
         const value = Reflect.get(target, property, target) as unknown;
-        return typeof value === 'function' ? (value as (...args: never[]) => unknown).bind(target) : value;
+        return typeof value === 'function'
+          ? (value as (...args: never[]) => unknown).bind(target)
+          : value;
       },
     });
 
@@ -195,7 +214,9 @@ describe('the terminal profile', () => {
   });
 
   it('is null rather than guessed when the recording predates profiles', async () => {
-    expect((await readTraceOverview(withMeta({ terminalProfile: undefined }))).terminalProfile).toBeNull();
+    expect(
+      (await readTraceOverview(withMeta({ terminalProfile: undefined }))).terminalProfile,
+    ).toBeNull();
     expect((await readTraceOverview(withMeta({ terminalProfile: '' }))).terminalProfile).toBeNull();
   });
 });

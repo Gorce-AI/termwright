@@ -15,9 +15,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ADAPTER_CAPABILITIES, validateSnapshot, DEFAULT_LIMITS, PROTOCOL_ID } from '@termwright/protocol';
+import {
+  ADAPTER_CAPABILITIES,
+  validateSnapshot,
+  DEFAULT_LIMITS,
+  PROTOCOL_ID,
+} from '@termwright/protocol';
 import type { SemanticSnapshot } from '@termwright/protocol';
-import { AdapterProbe, MARKER_TEXT_PREFIX, type AdapterCommand, type ProbeObservation } from './support/probe.js';
+import {
+  AdapterProbe,
+  MARKER_TEXT_PREFIX,
+  type AdapterCommand,
+  type ProbeObservation,
+} from './support/probe.js';
 import { commandAvailable, ptyAvailable } from './support/pty.js';
 
 /** How to start, drive and stop the adapter under test. */
@@ -225,11 +235,18 @@ export function parseDeclaredDeviations(readme: string): Map<string, string[]> {
       add(declared, match[2] as string, (match[1] as string).trim());
     }
     const trimmed = line.trim();
-    if (trimmed.startsWith('|') && !/^\|[\s:|-]*\|?$/u.test(trimmed) && !/^\|\s*rule\s*\|/iu.test(trimmed)) {
+    if (
+      trimmed.startsWith('|') &&
+      !/^\|[\s:|-]*\|?$/u.test(trimmed) &&
+      !/^\|\s*rule\s*\|/iu.test(trimmed)
+    ) {
       // A table row. The rule number and its title share the first cell
       // (`2 — name sources`); a row that names no rule carries its text in the
       // second cell instead.
-      const cells = trimmed.split('|').slice(1, -1).map((cell) => cell.trim());
+      const cells = trimmed
+        .split('|')
+        .slice(1, -1)
+        .map((cell) => cell.trim());
       const numbered = /^(\d+)\s*[—-]\s*(.+)$/u.exec(cells[0] ?? '');
       if (numbered !== null) {
         add(declared, numbered[1] as string, (numbered[2] as string).trim());
@@ -298,7 +315,9 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
     options.requires === undefined ||
     commandAvailable(options.requires.probe, {
       ...(options.requires.cwd === undefined ? {} : { cwd: options.requires.cwd }),
-      ...(options.requires.timeoutMs === undefined ? {} : { timeoutMs: options.requires.timeoutMs }),
+      ...(options.requires.timeoutMs === undefined
+        ? {}
+        : { timeoutMs: options.requires.timeoutMs }),
       ...(options.requires.env === undefined ? {} : { env: options.requires.env }),
     });
   const probeOptions = {
@@ -315,7 +334,10 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
   describe.skipIf(!ptyAvailable() || !toolchain)(title, { timeout: timeout * 4 }, () => {
     describe('the dormant rule', () => {
       it('opens nothing and emits no marker without an endpoint', async () => {
-        const probe = await AdapterProbe.start(options.spawn(), { ...probeOptions, instrument: false });
+        const probe = await AdapterProbe.start(options.spawn(), {
+          ...probeOptions,
+          instrument: false,
+        });
         try {
           await probe.waitForText(options.ready, timeout);
           await probe.write(options.interaction.input);
@@ -409,11 +431,19 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
 
         expect(connections).toBe(1);
         expect(first?.message.type).toBe('hello');
-        const hello = first?.message as { protocol: string; adapter: { name: string; version: string }; capabilities: readonly string[] };
+        const hello = first?.message as {
+          protocol: string;
+          adapter: { name: string; version: string };
+          capabilities: readonly string[];
+        };
         expect(hello.protocol).toBe(PROTOCOL_ID);
         expect(hello.adapter.name.length).toBeGreaterThan(0);
         expect(hello.adapter.version.length).toBeGreaterThan(0);
-        expect(hello.capabilities.every((entry) => (ADAPTER_CAPABILITIES as readonly string[]).includes(entry))).toBe(true);
+        expect(
+          hello.capabilities.every((entry) =>
+            (ADAPTER_CAPABILITIES as readonly string[]).includes(entry),
+          ),
+        ).toBe(true);
         expect(hello.capabilities).toContain('tree');
         // A second hello, or a hello after other traffic, is a protocol fault.
         expect(messages.filter((entry) => entry.message.type === 'hello')).toHaveLength(1);
@@ -446,7 +476,10 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           const addressable = (latest?.nodes ?? []).filter(
             (node) => node.name.length > 0 || node.testId !== undefined,
           );
-          expect(addressable.length, 'the tree has no node that a locator could address').toBeGreaterThan(0);
+          expect(
+            addressable.length,
+            'the tree has no node that a locator could address',
+          ).toBeGreaterThan(0);
         },
       );
 
@@ -471,22 +504,29 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         expect([...revisions]).toEqual([...new Set(revisions)].sort((left, right) => left - right));
       });
 
-      it.skipIf(options.expectIntendedGeometry !== true)('publishes intended geometry in viewport cells', () => {
-        const snapshots = snapshotsOf(probe.observe());
-        const latest = snapshots[snapshots.length - 1];
-        expect(latest).toBeDefined();
-        const bounded = latest?.nodes.filter((node) => node.geometry.intendedRect.status === 'known') ?? [];
-        expect(bounded.length).toBeGreaterThan(0);
-        for (const node of bounded) {
-          const bounds = node.geometry.intendedRect.status === 'known' ? node.geometry.intendedRect.value : undefined;
-          expect(bounds).toBeDefined();
-          if (bounds === undefined) continue;
-          expect(bounds.row).toBeGreaterThanOrEqual(0);
-          expect(bounds.column).toBeGreaterThanOrEqual(0);
-          expect(bounds.row).toBeLessThan(latest?.rows ?? 0);
-          expect(bounds.column).toBeLessThan(latest?.columns ?? 0);
-        }
-      });
+      it.skipIf(options.expectIntendedGeometry !== true)(
+        'publishes intended geometry in viewport cells',
+        () => {
+          const snapshots = snapshotsOf(probe.observe());
+          const latest = snapshots[snapshots.length - 1];
+          expect(latest).toBeDefined();
+          const bounded =
+            latest?.nodes.filter((node) => node.geometry.intendedRect.status === 'known') ?? [];
+          expect(bounded.length).toBeGreaterThan(0);
+          for (const node of bounded) {
+            const bounds =
+              node.geometry.intendedRect.status === 'known'
+                ? node.geometry.intendedRect.value
+                : undefined;
+            expect(bounds).toBeDefined();
+            if (bounds === undefined) continue;
+            expect(bounds.row).toBeGreaterThanOrEqual(0);
+            expect(bounds.column).toBeGreaterThanOrEqual(0);
+            expect(bounds.row).toBeLessThan(latest?.rows ?? 0);
+            expect(bounds.column).toBeLessThan(latest?.columns ?? 0);
+          }
+        },
+      );
 
       it('orders every revision as snapshot, then commit, then marker', async () => {
         await probe.write(options.interaction.input);
@@ -508,10 +548,13 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
               observation.messages.some(
                 (entry) =>
                   entry.message.type === 'snapshot' &&
-                  (entry.message as { snapshot: SemanticSnapshot }).snapshot.revision === marker.revision,
+                  (entry.message as { snapshot: SemanticSnapshot }).snapshot.revision ===
+                    marker.revision,
               ) &&
               observation.messages.some(
-                (entry) => entry.message.type === 'revision-commit' && entry.message.revision === marker.revision,
+                (entry) =>
+                  entry.message.type === 'revision-commit' &&
+                  entry.message.revision === marker.revision,
               ),
           );
         await probe.waitFor(complete, timeout, 'every marker paired with a snapshot and a commit');
@@ -527,10 +570,13 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           const snapshot = observation.messages.find(
             (entry) =>
               entry.message.type === 'snapshot' &&
-              (entry.message as { snapshot: SemanticSnapshot }).snapshot.revision === marker.revision,
+              (entry.message as { snapshot: SemanticSnapshot }).snapshot.revision ===
+                marker.revision,
           );
           const commit = observation.messages.find(
-            (entry) => entry.message.type === 'revision-commit' && entry.message.revision === marker.revision,
+            (entry) =>
+              entry.message.type === 'revision-commit' &&
+              entry.message.revision === marker.revision,
           );
           expect(snapshot, `no snapshot for revision ${marker.revision}`).toBeDefined();
           expect(commit, `no commit for revision ${marker.revision}`).toBeDefined();
@@ -619,7 +665,12 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           return;
         }
         if (titles.length > 0) {
-          outcomes.push({ rule, what, status: 'documented', detail: `${titles.join('; ')} — ${failure}` });
+          outcomes.push({
+            rule,
+            what,
+            status: 'documented',
+            detail: `${titles.join('; ')} — ${failure}`,
+          });
           return;
         }
         outcomes.push({ rule, what, status: 'violation', detail: failure });
@@ -636,7 +687,9 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         convention('3', 'an annotated test id reaches the wire', () => {
           const latest = snapshotsOf(beforeInput).at(-1);
           const node = latest?.nodes.find((entry) => entry.testId === wanted);
-          return node === undefined ? `no node carries the test id ${JSON.stringify(wanted)}` : null;
+          return node === undefined
+            ? `no node carries the test id ${JSON.stringify(wanted)}`
+            : null;
         });
       });
 
@@ -674,7 +727,11 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           }
           // A boolean is a state, not contents: publishing `value: "true"`
           // makes a checkbox look like a textbox containing that word.
-          const booleans = nodes.filter((node) => node.value?.status === 'known' && (node.value.value === 'true' || node.value.value === 'false'));
+          const booleans = nodes.filter(
+            (node) =>
+              node.value?.status === 'known' &&
+              (node.value.value === 'true' || node.value.value === 'false'),
+          );
           return booleans.length === 0
             ? null
             : `published a boolean as a value on ${booleans.map((node) => node.role).join(', ')}`;
@@ -770,42 +827,45 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         ).toEqual([]);
       });
 
-      it.skipIf(options.logs === undefined)('carries a log record without printing it', async () => {
-        const logs = options.logs as NonNullable<AdapterConformanceOptions['logs']>;
-        const hello = probe.observe().messages[0]?.message as { capabilities: readonly string[] };
-        expect(
-          hello.capabilities.includes('logs'),
-          'the registration declares logs, but the adapter never announced the capability',
-        ).toBe(true);
+      it.skipIf(options.logs === undefined)(
+        'carries a log record without printing it',
+        async () => {
+          const logs = options.logs as NonNullable<AdapterConformanceOptions['logs']>;
+          const hello = probe.observe().messages[0]?.message as { capabilities: readonly string[] };
+          expect(
+            hello.capabilities.includes('logs'),
+            'the registration declares logs, but the adapter never announced the capability',
+          ).toBe(true);
 
-        const before = probe.observe().logs.length;
-        if (logs.input !== undefined) await probe.write(logs.input);
-        // An app that logs on its own may already have; one that logs on demand
-        // has just been asked to. Either way the wait is for a record.
-        await probe.waitFor(
-          (observation) => observation.logs.length > (logs.input === undefined ? 0 : before),
-          timeout,
-          'a log record over the negotiated channel',
-        );
+          const before = probe.observe().logs.length;
+          if (logs.input !== undefined) await probe.write(logs.input);
+          // An app that logs on its own may already have; one that logs on demand
+          // has just been asked to. Either way the wait is for a record.
+          await probe.waitFor(
+            (observation) => observation.logs.length > (logs.input === undefined ? 0 : before),
+            timeout,
+            'a log record over the negotiated channel',
+          );
 
-        const observation = probe.observe();
-        const record = observation.logs.find((entry) => entry.message.includes(logs.expect));
-        expect(record, `no log record matched ${JSON.stringify(logs.expect)}`).toBeDefined();
-        // `seq` is a non-negative counter, so the first record of a session is
-        // legitimately 0; what matters is the relation between records.
-        expect(record?.seq).toBeGreaterThanOrEqual(0);
+          const observation = probe.observe();
+          const record = observation.logs.find((entry) => entry.message.includes(logs.expect));
+          expect(record, `no log record matched ${JSON.stringify(logs.expect)}`).toBeDefined();
+          // `seq` is a non-negative counter, so the first record of a session is
+          // legitimately 0; what matters is the relation between records.
+          expect(record?.seq).toBeGreaterThanOrEqual(0);
 
-        // Strictly increasing within a session: a consumer counting errors must
-        // not be able to count one twice, and a gap must mean a real loss.
-        const seqs = observation.logs.map((entry) => entry.seq);
-        expect(seqs).toEqual([...seqs].sort((left, right) => left - right));
-        expect(new Set(seqs).size).toBe(seqs.length);
+          // Strictly increasing within a session: a consumer counting errors must
+          // not be able to count one twice, and a gap must mean a real loss.
+          const seqs = observation.logs.map((entry) => entry.seq);
+          expect(seqs).toEqual([...seqs].sort((left, right) => left - right));
+          expect(new Set(seqs).size).toBe(seqs.length);
 
-        // The whole point of the capability: the record reaches the driver and
-        // never the terminal. A TUI that printed it would corrupt its render.
-        expect(observation.screen).not.toContain(logs.expect);
-        expect(observation.text).not.toContain(logs.expect);
-      });
+          // The whole point of the capability: the record reaches the driver and
+          // never the terminal. A TUI that printed it would corrupt its render.
+          expect(observation.screen).not.toContain(logs.expect);
+          expect(observation.text).not.toContain(logs.expect);
+        },
+      );
 
       it('keeps the application alive when the channel is cut', async () => {
         const before = probe.observe();

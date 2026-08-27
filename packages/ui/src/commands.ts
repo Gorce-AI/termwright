@@ -123,7 +123,8 @@ export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[
         const consumed =
           kind === 'action' ? consumeTrailingInputs(rows, rawInputs, depth, stepId) : undefined;
         const actionPlan = kind === 'action' ? planFromReceipt(event['receipt']) : undefined;
-        const actionability = kind === 'action' ? actionabilityFromTrace(event['actionability']) : undefined;
+        const actionability =
+          kind === 'action' ? actionabilityFromTrace(event['actionability']) : undefined;
         rows.push({
           id: `r${index}`,
           kind: kind === 'assert' ? 'assert' : 'action',
@@ -172,7 +173,14 @@ function actionabilityFromTrace(value: unknown): UiActionability | undefined {
   const sequence = finiteInteger(checkpoint?.['sequence']);
   const actionable = explanation?.['actionable'];
   const rawRequirements = explanation?.['requirements'];
-  if (kind === undefined || contractId === undefined || sequence === undefined || typeof actionable !== 'boolean' || !Array.isArray(rawRequirements)) return undefined;
+  if (
+    kind === undefined ||
+    contractId === undefined ||
+    sequence === undefined ||
+    typeof actionable !== 'boolean' ||
+    !Array.isArray(rawRequirements)
+  )
+    return undefined;
   const requirements: UiActionPlan['requirements'][number][] = [];
   for (const raw of rawRequirements.slice(0, 128)) {
     const requirement = asObject(raw);
@@ -182,21 +190,52 @@ function actionabilityFromTrace(value: unknown): UiActionability | undefined {
     const target = text(condition?.['target']);
     const verdict = requirement?.['verdict'];
     const observation = observationValue?.['status'];
-    if (requirementKind === undefined || !CONDITION_KIND_SET.has(requirementKind) || (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') ||
-        (observation !== 'known' && observation !== 'absent' && observation !== 'unknown' && observation !== 'unsupported')) return undefined;
+    if (
+      requirementKind === undefined ||
+      !CONDITION_KIND_SET.has(requirementKind) ||
+      (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') ||
+      (observation !== 'known' &&
+        observation !== 'absent' &&
+        observation !== 'unknown' &&
+        observation !== 'unsupported')
+    )
+      return undefined;
     const evidence = evidenceFrom(observationValue?.['evidence']);
-    requirements.push({ kind: requirementKind, ...(target === undefined ? {} : { target }), verdict, observation, ...(evidence === undefined ? {} : { evidence }) });
+    requirements.push({
+      kind: requirementKind,
+      ...(target === undefined ? {} : { target }),
+      verdict,
+      observation,
+      ...(evidence === undefined ? {} : { evidence }),
+    });
   }
   const strategy = text(explanation?.['strategy']);
   const rawReason = asObject(explanation?.['reason']);
   const reasonCode = text(rawReason?.['code']);
   const reasonMessage = text(rawReason?.['message']);
   const rawTargetRef = text(rawReason?.['targetRef']);
-  const targetRef = rawTargetRef !== undefined && /^(?:semantic:[^@\s]+|screen:\d+,\d+,\d+,\d+)@\d+$/u.test(rawTargetRef)
-    ? rawTargetRef as import('@termwright/driver').LocatorRef
-    : undefined;
-  const reason = reasonCode === undefined || reasonMessage === undefined ? undefined : { code: reasonCode, message: reasonMessage, ...(targetRef === undefined ? {} : { targetRef }) };
-  return { actionable, kind, contractId, sequence, requirements, ...(strategy === undefined ? {} : { strategy }), ...(reason === undefined ? {} : { reason }) };
+  const targetRef =
+    rawTargetRef !== undefined &&
+    /^(?:semantic:[^@\s]+|screen:\d+,\d+,\d+,\d+)@\d+$/u.test(rawTargetRef)
+      ? (rawTargetRef as import('@termwright/driver').LocatorRef)
+      : undefined;
+  const reason =
+    reasonCode === undefined || reasonMessage === undefined
+      ? undefined
+      : {
+          code: reasonCode,
+          message: reasonMessage,
+          ...(targetRef === undefined ? {} : { targetRef }),
+        };
+  return {
+    actionable,
+    kind,
+    contractId,
+    sequence,
+    requirements,
+    ...(strategy === undefined ? {} : { strategy }),
+    ...(reason === undefined ? {} : { reason }),
+  };
 }
 
 function planFromReceipt(value: unknown): UiActionPlan | undefined {
@@ -213,21 +252,44 @@ function planFromReceipt(value: unknown): UiActionPlan | undefined {
   const contractId = text(plan?.['contractId']);
   const beforeSequence = finiteInteger(before?.['sequence']);
   const afterSequence = finiteInteger(after?.['sequence']);
-  if (actionId === undefined || kind === undefined || strategy === undefined || contractId === undefined ||
-      beforeSequence === undefined || afterSequence === undefined || !Array.isArray(executed) || !Array.isArray(rawRequirements)) return undefined;
-  const operations: { device: 'keyboard' | 'mouse'; kind: string; modifiers?: readonly ('shift' | 'alt' | 'control')[] }[] = [];
+  if (
+    actionId === undefined ||
+    kind === undefined ||
+    strategy === undefined ||
+    contractId === undefined ||
+    beforeSequence === undefined ||
+    afterSequence === undefined ||
+    !Array.isArray(executed) ||
+    !Array.isArray(rawRequirements)
+  )
+    return undefined;
+  const operations: {
+    device: 'keyboard' | 'mouse';
+    kind: string;
+    modifiers?: readonly ('shift' | 'alt' | 'control')[];
+  }[] = [];
   for (const raw of executed) {
     const operation = asObject(raw);
     const device = operation?.['device'];
     const operationKind = text(operation?.['kind']);
-    if ((device !== 'keyboard' && device !== 'mouse') || operationKind === undefined) return undefined;
+    if ((device !== 'keyboard' && device !== 'mouse') || operationKind === undefined)
+      return undefined;
     const rawModifiers = operation?.['modifiers'];
-    if (rawModifiers !== undefined && (device !== 'mouse' || !Array.isArray(rawModifiers) ||
-        rawModifiers.some((modifier) => modifier !== 'shift' && modifier !== 'alt' && modifier !== 'control'))) return undefined;
+    if (
+      rawModifiers !== undefined &&
+      (device !== 'mouse' ||
+        !Array.isArray(rawModifiers) ||
+        rawModifiers.some(
+          (modifier) => modifier !== 'shift' && modifier !== 'alt' && modifier !== 'control',
+        ))
+    )
+      return undefined;
     operations.push({
       device,
       kind: operationKind,
-      ...(rawModifiers === undefined ? {} : { modifiers: rawModifiers as ('shift' | 'alt' | 'control')[] }),
+      ...(rawModifiers === undefined
+        ? {}
+        : { modifiers: rawModifiers as ('shift' | 'alt' | 'control')[] }),
     });
   }
   const requirements: UiActionPlan['requirements'][number][] = [];
@@ -239,15 +301,38 @@ function planFromReceipt(value: unknown): UiActionPlan | undefined {
     const target = text(condition?.['target']);
     const verdict = requirement?.['verdict'];
     const observation = observationValue?.['status'];
-    if (requirementKind === undefined || !CONDITION_KIND_SET.has(requirementKind) ||
-        (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') ||
-        (observation !== 'known' && observation !== 'absent' && observation !== 'unknown' && observation !== 'unsupported')) return undefined;
+    if (
+      requirementKind === undefined ||
+      !CONDITION_KIND_SET.has(requirementKind) ||
+      (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') ||
+      (observation !== 'known' &&
+        observation !== 'absent' &&
+        observation !== 'unknown' &&
+        observation !== 'unsupported')
+    )
+      return undefined;
     const requirementEvidence = evidenceFrom(observationValue?.['evidence']);
-    requirements.push({ kind: requirementKind, ...(target === undefined ? {} : { target }), verdict, observation, ...(requirementEvidence === undefined ? {} : { evidence: requirementEvidence }) });
+    requirements.push({
+      kind: requirementKind,
+      ...(target === undefined ? {} : { target }),
+      verdict,
+      observation,
+      ...(requirementEvidence === undefined ? {} : { evidence: requirementEvidence }),
+    });
   }
   const physicalRegion = asObject(plan?.['physicalRegion']);
   const physicalEvidence = evidenceFrom(physicalRegion?.['evidence']);
-  return { actionId, kind, strategy, contractId, beforeSequence, afterSequence, operations, requirements, ...(physicalEvidence === undefined ? {} : { physicalEvidence }) };
+  return {
+    actionId,
+    kind,
+    strategy,
+    contractId,
+    beforeSequence,
+    afterSequence,
+    operations,
+    requirements,
+    ...(physicalEvidence === undefined ? {} : { physicalEvidence }),
+  };
 }
 
 function evidenceFrom(value: unknown): UiActionPlan['physicalEvidence'] | undefined {
@@ -257,9 +342,23 @@ function evidenceFrom(value: unknown): UiActionPlan['physicalEvidence'] | undefi
   const method = record['method'];
   const strength = record['strength'];
   const providerId = text(record['providerId']);
-  if ((source !== 'framework' && source !== 'application' && source !== 'terminal' && source !== 'recognizer' && source !== 'driver') ||
-      (method !== 'native' && method !== 'instrumented' && method !== 'declared' && method !== 'correlated' && method !== 'measured' && method !== 'derived' && method !== 'heuristic') ||
-      (strength !== 'authoritative' && strength !== 'diagnostic') || providerId === undefined) return undefined;
+  if (
+    (source !== 'framework' &&
+      source !== 'application' &&
+      source !== 'terminal' &&
+      source !== 'recognizer' &&
+      source !== 'driver') ||
+    (method !== 'native' &&
+      method !== 'instrumented' &&
+      method !== 'declared' &&
+      method !== 'correlated' &&
+      method !== 'measured' &&
+      method !== 'derived' &&
+      method !== 'heuristic') ||
+    (strength !== 'authoritative' && strength !== 'diagnostic') ||
+    providerId === undefined
+  )
+    return undefined;
   return { source, method, strength, providerId };
 }
 

@@ -37,7 +37,10 @@ export class SessionEventEmitter implements SessionEvents {
     this.#onListenerError = onListenerError;
   }
 
-  on<E extends keyof SessionEventMap>(event: E, cb: (payload: SessionEventMap[E]) => void): () => void {
+  on<E extends keyof SessionEventMap>(
+    event: E,
+    cb: (payload: SessionEventMap[E]) => void,
+  ): () => void {
     let set = this.#listeners.get(event);
     if (set === undefined) {
       set = new Set();
@@ -73,7 +76,8 @@ export class SessionEventEmitter implements SessionEvents {
           `session event journal no longer retains sequences ${gap.requestedSequence}..${gap.lastLostSequence}`,
           {
             semanticTree: false,
-            suggestion: 'attach the authoritative sink before the journal reaches its bounded capacity',
+            suggestion:
+              'attach the authoritative sink before the journal reaches its bounded capacity',
           },
         );
       }
@@ -94,7 +98,8 @@ export class SessionEventEmitter implements SessionEvents {
     if (options.onError !== undefined) this.#journalListenerErrors.set(listener, options.onError);
     try {
       for (const entry of this.#journal) {
-        if (entry.record.sequence < options.fromSequence || entry.record.sequence > highWater) continue;
+        if (entry.record.sequence < options.fromSequence || entry.record.sequence > highWater)
+          continue;
         cb(entry.record);
       }
       replaying = false;
@@ -150,7 +155,10 @@ export class SessionEventEmitter implements SessionEvents {
   }
 }
 
-function eventBytes<E extends keyof SessionEventMap>(event: E, payload: SessionEventMap[E]): number {
+function eventBytes<E extends keyof SessionEventMap>(
+  event: E,
+  payload: SessionEventMap[E],
+): number {
   if (event === 'output' || event === 'input') {
     return (payload as SessionEventMap['output'] | SessionEventMap['input']).data.byteLength + 64;
   }

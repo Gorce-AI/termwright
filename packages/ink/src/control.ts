@@ -20,7 +20,12 @@ import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CapacityError, ProtocolViolationError, SessionClosedError, TimeoutError } from '@termwright/driver';
+import {
+  CapacityError,
+  ProtocolViolationError,
+  SessionClosedError,
+  TimeoutError,
+} from '@termwright/driver';
 import { assertJsonProps, type JsonProps } from './payload.js';
 
 /** Environment variable carrying the control endpoint address. */
@@ -58,17 +63,19 @@ export interface RerenderCommand {
   readonly props: JsonProps;
 }
 
-type CommandReply = {
-  readonly v: 1;
-  readonly commandId: number;
-  readonly type: 'ok';
-  readonly semanticRevision: number;
-} | {
-  readonly v: 1;
-  readonly commandId: number;
-  readonly type: 'error';
-  readonly detail?: string;
-};
+type CommandReply =
+  | {
+      readonly v: 1;
+      readonly commandId: number;
+      readonly type: 'ok';
+      readonly semanticRevision: number;
+    }
+  | {
+      readonly v: 1;
+      readonly commandId: number;
+      readonly type: 'error';
+      readonly detail?: string;
+    };
 
 /** Internal fault-injection seam for endpoint startup lifecycle tests. */
 interface ControlChannelListenDependencies {
@@ -99,7 +106,8 @@ export class ControlChannel {
   } | null = null;
   #nextCommandId = 1;
   #commandTail: Promise<void> = Promise.resolve();
-  #waitingForFixture: { readonly resolve: () => void; readonly reject: (error: Error) => void }[] = [];
+  #waitingForFixture: { readonly resolve: () => void; readonly reject: (error: Error) => void }[] =
+    [];
   #everAttached = false;
   #fixtureGone = false;
   #closed = false;
@@ -117,7 +125,9 @@ export class ControlChannel {
   }
 
   /** Creates the endpoint and starts listening. */
-  static async listen(dependencies: ControlChannelListenDependencies = {}): Promise<ControlChannel> {
+  static async listen(
+    dependencies: ControlChannelListenDependencies = {},
+  ): Promise<ControlChannel> {
     const server = (dependencies.createServer ?? createServer)();
     const token = randomBytes(32).toString('base64url');
     let endpoint: string;
@@ -178,12 +188,18 @@ export class ControlChannel {
     }
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.#waitingForFixture = this.#waitingForFixture.filter((waiter) => waiter.resolve !== onAttach);
+        this.#waitingForFixture = this.#waitingForFixture.filter(
+          (waiter) => waiter.resolve !== onAttach,
+        );
         reject(
-          new TimeoutError(`the fixture did not attach to the control channel within ${timeoutMs} ms`, {
-            semanticTree: false,
-            suggestion: 'rerender needs a fixture started by this package; check the runner is the shipped one',
-          }),
+          new TimeoutError(
+            `the fixture did not attach to the control channel within ${timeoutMs} ms`,
+            {
+              semanticTree: false,
+              suggestion:
+                'rerender needs a fixture started by this package; check the runner is the shipped one',
+            },
+          ),
         );
       }, timeoutMs);
       timer.unref?.();
@@ -247,10 +263,13 @@ export class ControlChannel {
     // Commands stay serialized so React cannot coalesce two requested frames.
     // The id additionally prevents a late reply from a failed command from
     // acknowledging the following command.
-    const commandRun = this.#commandTail.then(
-      () => this.#sendRerender(command.commandId, line, timeoutMs),
+    const commandRun = this.#commandTail.then(() =>
+      this.#sendRerender(command.commandId, line, timeoutMs),
     );
-    this.#commandTail = commandRun.then(() => undefined, () => undefined);
+    this.#commandTail = commandRun.then(
+      () => undefined,
+      () => undefined,
+    );
     return commandRun;
   }
 
@@ -292,10 +311,13 @@ export class ControlChannel {
     });
 
     if (reply.type === 'error') {
-      throw new ProtocolViolationError(`the fixture refused the rerender: ${reply.detail ?? 'no detail given'}`, {
-        semanticTree: false,
-        suggestion: 'the runner rejects props it cannot apply; check the component accepts them',
-      });
+      throw new ProtocolViolationError(
+        `the fixture refused the rerender: ${reply.detail ?? 'no detail given'}`,
+        {
+          semanticTree: false,
+          suggestion: 'the runner rejects props it cannot apply; check the component accepts them',
+        },
+      );
     }
     return reply.semanticRevision;
   }
@@ -314,10 +336,12 @@ export class ControlChannel {
     this.#socket?.destroy();
     this.#socket = null;
     const failures: unknown[] = [];
-    await new Promise<void>((resolve) => this.#server.close((error) => {
-      if (error !== undefined) failures.push(error);
-      resolve();
-    }));
+    await new Promise<void>((resolve) =>
+      this.#server.close((error) => {
+        if (error !== undefined) failures.push(error);
+        resolve();
+      }),
+    );
     if (this.#directory !== null) {
       try {
         await rm(this.#directory, { recursive: true, force: true });
@@ -325,7 +349,8 @@ export class ControlChannel {
         failures.push(error);
       }
     }
-    if (failures.length > 0) throw new AggregateError(failures, 'failed to close the fixture control channel');
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'failed to close the fixture control channel');
   }
 
   #accept(socket: Socket): void {
@@ -418,18 +443,27 @@ export class ControlChannel {
       return;
     }
     if (record['type'] !== 'ok' && record['type'] !== 'error') {
-      this.#failAuthenticatedProtocol(socket, new ProtocolViolationError(
-        'the fixture sent an unknown control reply',
-        { semanticTree: false, suggestion: 'use the runner shipped with this version of @termwright/ink' },
-      ));
+      this.#failAuthenticatedProtocol(
+        socket,
+        new ProtocolViolationError('the fixture sent an unknown control reply', {
+          semanticTree: false,
+          suggestion: 'use the runner shipped with this version of @termwright/ink',
+        }),
+      );
       return;
     }
     const commandId = record['commandId'];
     if (!Number.isSafeInteger(commandId) || (commandId as number) <= 0) {
-      this.#failAuthenticatedProtocol(socket, new ProtocolViolationError(
-        'the fixture acknowledged a rerender without a valid command id',
-        { semanticTree: false, suggestion: 'use the runner shipped with this version of @termwright/ink' },
-      ));
+      this.#failAuthenticatedProtocol(
+        socket,
+        new ProtocolViolationError(
+          'the fixture acknowledged a rerender without a valid command id',
+          {
+            semanticTree: false,
+            suggestion: 'use the runner shipped with this version of @termwright/ink',
+          },
+        ),
+      );
       return;
     }
     const pending = this.#pending;
@@ -437,10 +471,16 @@ export class ControlChannel {
     if (record['type'] === 'ok') {
       const revision = record['semanticRevision'];
       if (!Number.isSafeInteger(revision) || (revision as number) <= 0) {
-        this.#failAuthenticatedProtocol(socket, new ProtocolViolationError(
-          'the fixture acknowledged a rerender without a valid semantic revision',
-          { semanticTree: false, suggestion: 'use the runner shipped with this version of @termwright/ink' },
-        ));
+        this.#failAuthenticatedProtocol(
+          socket,
+          new ProtocolViolationError(
+            'the fixture acknowledged a rerender without a valid semantic revision',
+            {
+              semanticTree: false,
+              suggestion: 'use the runner shipped with this version of @termwright/ink',
+            },
+          ),
+        );
         return;
       }
       pending.resolve({
@@ -502,8 +542,11 @@ async function listenServer(server: Server, endpoint: string): Promise<void> {
 }
 
 async function closeServer(server: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) => server.close((error) => {
-    if (error === undefined || (error as NodeJS.ErrnoException).code === 'ERR_SERVER_NOT_RUNNING') resolve();
-    else reject(error);
-  }));
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => {
+      if (error === undefined || (error as NodeJS.ErrnoException).code === 'ERR_SERVER_NOT_RUNNING')
+        resolve();
+      else reject(error);
+    }),
+  );
 }

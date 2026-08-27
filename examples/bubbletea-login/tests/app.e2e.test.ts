@@ -1,6 +1,6 @@
-import {existsSync} from 'node:fs';
-import {describe, expect, ptyAvailable, test} from 'termwright/test';
-import {binary} from '../termwright.config.js';
+import { existsSync } from 'node:fs';
+import { describe, expect, ptyAvailable, test } from 'termwright/test';
+import { binary } from '../termwright.config.js';
 
 const runnable = (await ptyAvailable()) && existsSync(binary);
 if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !runnable) {
@@ -8,12 +8,14 @@ if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !runnable) {
 }
 
 describe.skipIf(!runnable)('the Bubble Tea login form', () => {
-  test('tracks focus and values that are not recoverable from screen text', async ({terminal}) => {
+  test('tracks focus and values that are not recoverable from screen text', async ({
+    terminal,
+  }) => {
     const app = await terminal.launch();
     await app.waitForText('Sign in');
 
-    const name = app.getByRole('textbox', {name: 'Name'});
-    const password = app.getByRole('textbox', {name: 'Password'});
+    const name = app.getByRole('textbox', { name: 'Name' });
+    const password = app.getByRole('textbox', { name: 'Password' });
     await expect(name).toBeFocused();
 
     await app.type('Ada');
@@ -26,11 +28,13 @@ describe.skipIf(!runnable)('the Bubble Tea login form', () => {
     expect(JSON.stringify(app.semanticTree())).not.toContain('secret');
   });
 
-  test('clicks through Bubble Tea input using its production pointer router evidence', async ({terminal}) => {
+  test('clicks through Bubble Tea input using its production pointer router evidence', async ({
+    terminal,
+  }) => {
     const app = await terminal.launch();
     await app.waitForText('Sign in');
 
-    const receipt = await app.getByRole('button', {name: 'Submit'}).click();
+    const receipt = await app.getByRole('button', { name: 'Submit' }).click();
 
     await expect(app).toHaveText('status: submitted through terminal mouse');
     expect(receipt.plan.strategy).toBe('authoritative-pointer-region');
@@ -40,7 +44,7 @@ describe.skipIf(!runnable)('the Bubble Tea login form', () => {
     ]);
     expect(app.contract()?.capabilities['pointer-hit-testing']).toMatchObject({
       status: 'supported',
-      evidence: {providerId: 'bubbletea-login-production-router'},
+      evidence: { providerId: 'bubbletea-login-production-router' },
     });
   });
 });

@@ -27,7 +27,9 @@ describe('termwrightRetry', () => {
 
   it('rejects negative, fractional and unbounded retry counts', () => {
     for (const value of ['-1', '1.5', '101', 'nope']) {
-      expect(() => termwrightRetry({ env: { TERMWRIGHT_RETRIES: value } })).toThrow(/integer from 0 to 100/u);
+      expect(() => termwrightRetry({ env: { TERMWRIGHT_RETRIES: value } })).toThrow(
+        /integer from 0 to 100/u,
+      );
     }
   });
 });
@@ -39,13 +41,23 @@ describe('defineTermwrightConfig', () => {
   });
 
   it('rejects impossible values, in profiles too', () => {
-    expect(() => defineTermwrightConfig({ columns: 0 })).toThrow(/columns must be a positive number/u);
+    expect(() => defineTermwrightConfig({ columns: 0 })).toThrow(
+      /columns must be a positive number/u,
+    );
     expect(() => defineTermwrightConfig({ timeouts: { expect: -1 } })).toThrow(/timeouts.expect/u);
     expect(() => defineTermwrightConfig({ command: [] })).toThrow(/must not be empty/u);
-    expect(() => defineTermwrightConfig({ requiredCapabilities: ['made-up' as never] })).toThrow(/unknown capability/u);
-    expect(() => defineTermwrightConfig({ requiredCapabilities: ['semantic-tree', 'semantic-tree'] })).toThrow(/duplicate capability/u);
-    expect(() => defineTermwrightConfig({ trace: 'sometimes' as never })).toThrow(/config.trace must be one of/u);
-    expect(() => defineTermwrightConfig({ profiles: { ci: { rows: -5 } } })).toThrow(/profiles.ci.rows/u);
+    expect(() => defineTermwrightConfig({ requiredCapabilities: ['made-up' as never] })).toThrow(
+      /unknown capability/u,
+    );
+    expect(() =>
+      defineTermwrightConfig({ requiredCapabilities: ['semantic-tree', 'semantic-tree'] }),
+    ).toThrow(/duplicate capability/u);
+    expect(() => defineTermwrightConfig({ trace: 'sometimes' as never })).toThrow(
+      /config.trace must be one of/u,
+    );
+    expect(() => defineTermwrightConfig({ profiles: { ci: { rows: -5 } } })).toThrow(
+      /profiles.ci.rows/u,
+    );
     expect(() =>
       defineTermwrightConfig({ palette: { name: 'short', colors: ['#000000'] } }),
     ).toThrow(/exactly 16 entries/u);
@@ -77,7 +89,10 @@ describe('resolveTermwrightConfig', () => {
   });
 
   it('freezes project capability requirements for every fixture launch', () => {
-    const config = resolveTermwrightConfig({ requiredCapabilities: ['semantic-tree', 'paired-revisions'] }, {});
+    const config = resolveTermwrightConfig(
+      { requiredCapabilities: ['semantic-tree', 'paired-revisions'] },
+      {},
+    );
     expect(config.requiredCapabilities).toEqual(['semantic-tree', 'paired-revisions']);
     expect(Object.isFrozen(config.requiredCapabilities)).toBe(true);
   });
@@ -89,20 +104,29 @@ describe('resolveTermwrightConfig', () => {
   });
 
   it('refuses to run against a profile that does not exist', () => {
-    expect(() => resolveTermwrightConfig({ profiles: { ci: {} } }, { TERMWRIGHT_PROFILE: 'nope' })).toThrow(
-      /does not match any configured profile \(ci\)/u,
-    );
+    expect(() =>
+      resolveTermwrightConfig({ profiles: { ci: {} } }, { TERMWRIGHT_PROFILE: 'nope' }),
+    ).toThrow(/does not match any configured profile \(ci\)/u);
   });
 
   it('merges timeout classes instead of replacing them', () => {
     const config = resolveTermwrightConfig({ timeouts: { expect: 100 } }, {});
-    expect(config.timeouts).toEqual({ action: 5_000, text: 5_000, idle: 2_000, ready: 10_000, exit: 10_000, expect: 100 });
+    expect(config.timeouts).toEqual({
+      action: 5_000,
+      text: 5_000,
+      idle: 2_000,
+      ready: 10_000,
+      exit: 10_000,
+      expect: 100,
+    });
   });
 });
 
 describe('termwrightProjects', () => {
   it('maps named profiles to inherited Vitest projects', () => {
-    const config = defineTermwrightConfig({ profiles: { compact: { columns: 80 }, wide: { columns: 140 } } });
+    const config = defineTermwrightConfig({
+      profiles: { compact: { columns: 80 }, wide: { columns: 140 } },
+    });
     expect(termwrightProjects(config)).toEqual([
       { extends: true, test: { name: 'compact', env: { TERMWRIGHT_PROFILE: 'compact' } } },
       { extends: true, test: { name: 'wide', env: { TERMWRIGHT_PROFILE: 'wide' } } },

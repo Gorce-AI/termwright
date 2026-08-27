@@ -58,7 +58,12 @@ test('opens with Cancel focused and dismisses on Escape', async () => {
 test('moves the focus with Tab and activates with Enter', async () => {
   const onConfirm = vi.fn();
   const dialog = await mountInk(
-    <ConfirmDialog title="Remove?" confirmLabel="Discard" onConfirm={onConfirm} onCancel={vi.fn()} />,
+    <ConfirmDialog
+      title="Remove?"
+      confirmLabel="Discard"
+      onConfirm={onConfirm}
+      onCancel={vi.fn()}
+    />,
     { columns: 40, rows: 8 },
   );
 

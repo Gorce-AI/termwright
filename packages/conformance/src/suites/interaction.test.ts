@@ -107,7 +107,6 @@ describe.skipIf(!ptyAvailable())('pointer interaction', () => {
     expect(inputs).toEqual([]);
     expect(terminal.screen().text()).toContain('ev: none');
   });
-
 });
 
 describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
@@ -183,7 +182,9 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     await terminal.waitForText('ev: FOCUS:out');
 
     await disableFocusReporting(terminal);
-    expect(((await rejection(terminal.window.focus())) as TermwrightError).code).toBe('input-mode-disabled');
+    expect(((await rejection(terminal.window.focus())) as TermwrightError).code).toBe(
+      'input-mode-disabled',
+    );
   });
 
   it('brackets a paste only when the child enabled bracketed paste', async () => {

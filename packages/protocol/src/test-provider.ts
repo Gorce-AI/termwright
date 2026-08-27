@@ -33,11 +33,16 @@ export function hasTermwrightProvider(meta: unknown): meta is TermwrightProvider
   const provider = (termwright as Record<string, unknown>)['provider'];
   if (typeof provider !== 'object' || provider === null) return false;
   const record = provider as Record<string, unknown>;
-  return record['version'] === TERMWRIGHT_PROVIDER_VERSION &&
-    typeof record['id'] === 'string' && record['id'] !== '';
+  return (
+    record['version'] === TERMWRIGHT_PROVIDER_VERSION &&
+    typeof record['id'] === 'string' &&
+    record['id'] !== ''
+  );
 }
 
-export function termwrightProviderDeclaration(meta: unknown): TermwrightProviderDeclaration | undefined {
+export function termwrightProviderDeclaration(
+  meta: unknown,
+): TermwrightProviderDeclaration | undefined {
   if (!hasTermwrightProvider(meta)) return undefined;
   const declaration = meta.termwright?.declaration;
   if (typeof declaration !== 'object' || declaration === null) return undefined;

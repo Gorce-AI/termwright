@@ -54,11 +54,7 @@ export default defineConfig({
         test: {
           name: 'core',
           runner: termwrightRunner,
-          include: [
-            'packages/**/*.test.ts',
-            'compatibility/**/*.test.ts',
-            'scripts/**/*.test.mjs',
-          ],
+          include: ['packages/**/*.test.ts', 'compatibility/**/*.test.ts', 'scripts/**/*.test.mjs'],
           exclude: [
             '**/__fixtures__/**',
             '**/node_modules/**',

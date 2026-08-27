@@ -66,22 +66,26 @@ Project: <${lock.projectUrl}>
       created: lock.sbomCreated,
       creators: ['Tool: Termwright vendored dependency manifest'],
     },
-    packages: [{
-      SPDXID: 'SPDXRef-Package-ConPTY',
-      name: lock.package,
-      versionInfo: lock.version,
-      downloadLocation: lock.url,
-      checksums: [{ algorithm: 'SHA256', checksumValue: lock.sha256 }],
-      filesAnalyzed: true,
-      licenseConcluded: 'MIT',
-      licenseDeclared: 'MIT',
-      copyrightText: 'Copyright (c) Microsoft Corporation. All rights reserved.',
-      externalRefs: [{
-        referenceCategory: 'PACKAGE-MANAGER',
-        referenceType: 'purl',
-        referenceLocator: `pkg:nuget/${lock.package}@${lock.version}`,
-      }],
-    }],
+    packages: [
+      {
+        SPDXID: 'SPDXRef-Package-ConPTY',
+        name: lock.package,
+        versionInfo: lock.version,
+        downloadLocation: lock.url,
+        checksums: [{ algorithm: 'SHA256', checksumValue: lock.sha256 }],
+        filesAnalyzed: true,
+        licenseConcluded: 'MIT',
+        licenseDeclared: 'MIT',
+        copyrightText: 'Copyright (c) Microsoft Corporation. All rights reserved.',
+        externalRefs: [
+          {
+            referenceCategory: 'PACKAGE-MANAGER',
+            referenceType: 'purl',
+            referenceLocator: `pkg:nuget/${lock.package}@${lock.version}`,
+          },
+        ],
+      },
+    ],
     relationships: [
       {
         spdxElementId: 'SPDXRef-DOCUMENT',
@@ -142,10 +146,14 @@ export function extractZipEntries(archive, wanted) {
     const end = start + compressedSize;
     if (end > archive.length) throw new Error(`ConPTY NuGet entry ${name} is truncated`);
     const compressed = archive.subarray(start, end);
-    const bytes = method === 0 ? Buffer.from(compressed)
-      : method === 8 ? inflateRawSync(compressed)
-        : undefined;
-    if (bytes === undefined) throw new Error(`ConPTY NuGet entry ${name} uses compression ${method}`);
+    const bytes =
+      method === 0
+        ? Buffer.from(compressed)
+        : method === 8
+          ? inflateRawSync(compressed)
+          : undefined;
+    if (bytes === undefined)
+      throw new Error(`ConPTY NuGet entry ${name} uses compression ${method}`);
     if (bytes.length !== size) throw new Error(`ConPTY NuGet entry ${name} has the wrong size`);
     found.set(name, bytes);
   }
@@ -155,22 +163,34 @@ export function extractZipEntries(archive, wanted) {
   return found;
 }
 
-export async function prepareConptyAssets({ architecture, destination, archivePath, lock: suppliedLock }) {
+export async function prepareConptyAssets({
+  architecture,
+  destination,
+  archivePath,
+  lock: suppliedLock,
+}) {
   const lock = suppliedLock ?? JSON.parse(await readFile(LOCK_PATH, 'utf8'));
   const assets = lock.assets?.[architecture];
   if (assets === undefined) throw new TypeError(`unsupported ConPTY architecture: ${architecture}`);
-  const archive = archivePath === undefined
-    ? Buffer.from(await (async () => {
-      const response = await fetch(lock.url, { redirect: 'error' });
-      if (!response.ok) throw new Error(`ConPTY NuGet download failed with HTTP ${response.status}`);
-      return response.arrayBuffer();
-    })())
-    : await readFile(archivePath);
+  const archive =
+    archivePath === undefined
+      ? Buffer.from(
+          await (async () => {
+            const response = await fetch(lock.url, { redirect: 'error' });
+            if (!response.ok)
+              throw new Error(`ConPTY NuGet download failed with HTTP ${response.status}`);
+            return response.arrayBuffer();
+          })(),
+        )
+      : await readFile(archivePath);
   const archiveDigest = sha256(archive);
   if (archiveDigest !== lock.sha256) {
     throw new Error(`ConPTY NuGet SHA-256 mismatch: ${archiveDigest}`);
   }
-  const entries = extractZipEntries(archive, new Set(Object.values(assets).map((asset) => asset.entry)));
+  const entries = extractZipEntries(
+    archive,
+    new Set(Object.values(assets).map((asset) => asset.entry)),
+  );
   const destinationRoot = resolve(destination);
   const preparedAssets = new Map();
   for (const [relativePath, asset] of Object.entries(assets)) {
@@ -179,7 +199,11 @@ export async function prepareConptyAssets({ architecture, destination, archivePa
     if (digest !== asset.sha256) throw new Error(`${asset.entry} SHA-256 mismatch: ${digest}`);
     const output = resolve(destinationRoot, relativePath);
     const fromRoot = relative(destinationRoot, output);
-    if (isAbsolute(fromRoot) || fromRoot === '..' || fromRoot.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)) {
+    if (
+      isAbsolute(fromRoot) ||
+      fromRoot === '..' ||
+      fromRoot.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)
+    ) {
       throw new Error(`ConPTY asset escapes its destination: ${relativePath}`);
     }
     preparedAssets.set(relativePath, bytes);
@@ -189,7 +213,8 @@ export async function prepareConptyAssets({ architecture, destination, archivePa
   );
   const metadata = renderConptyMetadata(lock, architecture, assetDigests);
   const expectedMetadata = lock.metadata?.[architecture];
-  if (expectedMetadata === undefined) throw new Error(`ConPTY metadata lock is absent for ${architecture}`);
+  if (expectedMetadata === undefined)
+    throw new Error(`ConPTY metadata lock is absent for ${architecture}`);
   for (const [relativePath, bytes] of metadata) {
     const digest = sha256(bytes);
     if (expectedMetadata[relativePath] !== digest) {
@@ -217,7 +242,10 @@ export async function prepareConptyAssets({ architecture, destination, archivePa
   for (const [relativePath, bytes] of metadata) {
     await writeFile(resolve(destinationRoot, relativePath), bytes, { mode: 0o644 });
   }
-  await writeFile(resolve(destinationRoot, 'conpty-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(
+    resolve(destinationRoot, 'conpty-manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
   return manifest;
 }
 
@@ -231,7 +259,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const destination = argument('--destination');
   const archivePath = argument('--archive');
   if (architecture === undefined || destination === undefined) {
-    throw new TypeError('usage: prepare-conpty-assets --architecture <x64|arm64> --destination <directory> [--archive <nupkg>]');
+    throw new TypeError(
+      'usage: prepare-conpty-assets --architecture <x64|arm64> --destination <directory> [--archive <nupkg>]',
+    );
   }
   const manifest = await prepareConptyAssets({ architecture, destination, archivePath });
   console.log(`prepared ${manifest.package} ${manifest.version} for ${architecture}`);

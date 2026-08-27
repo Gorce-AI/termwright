@@ -1,20 +1,20 @@
-import { z } from "zod";
-import type { SemanticSnapshot } from "./tree.js";
-import type { LogRecord } from "./logs.js";
-import type { ProbeInfo } from "./probe/ir.js";
-import type { ProtocolLimits } from "./limits.js";
-import { PROTOCOL_ID, type ProtocolId } from "./env.js";
-import { ProtocolViolation } from "./errors.js";
-import { projectDto } from "./framing.js";
-import { validateSnapshot } from "./validate.js";
-import { validateLogRecord } from "./logs.js";
-import { probeInfoSchema, validateProbeInfo } from "./probe/validate.js";
+import { z } from 'zod';
+import type { SemanticSnapshot } from './tree.js';
+import type { LogRecord } from './logs.js';
+import type { ProbeInfo } from './probe/ir.js';
+import type { ProtocolLimits } from './limits.js';
+import { PROTOCOL_ID, type ProtocolId } from './env.js';
+import { ProtocolViolation } from './errors.js';
+import { projectDto } from './framing.js';
+import { validateSnapshot } from './validate.js';
+import { validateLogRecord } from './logs.js';
+import { probeInfoSchema, validateProbeInfo } from './probe/validate.js';
 import {
   ADAPTER_CAPABILITIES,
   EVIDENCE_PROVIDER_CAPABILITIES,
   type AdapterCapability,
   type EvidenceProviderRegistration,
-} from "./contract.js";
+} from './contract.js';
 
 /**
  * Wire messages. Transport: length-prefixed JSON frames (see framing.ts).
@@ -22,12 +22,12 @@ import {
  * send errors. All messages are validated against limits BEFORE retention.
  */
 
-export { ADAPTER_CAPABILITIES } from "./contract.js";
-export type { AdapterCapability } from "./contract.js";
+export { ADAPTER_CAPABILITIES } from './contract.js';
+export type { AdapterCapability } from './contract.js';
 
 /** adapter → driver, exactly once, before any other message. */
 export interface HelloMessage {
-  readonly type: "hello";
+  readonly type: 'hello';
   readonly protocol: ProtocolId;
   readonly token: string;
   readonly adapter: { readonly name: string; readonly version: string };
@@ -46,12 +46,12 @@ export interface HelloMessage {
 
 /** driver → adapter, reply to hello. */
 export interface HelloAckMessage {
-  readonly type: "hello-ack";
+  readonly type: 'hello-ack';
   readonly protocol: ProtocolId;
   readonly sessionId: string;
   readonly limits: ProtocolLimits;
   /** Which semantic traffic the driver wants pushed. */
-  readonly subscribe: "snapshots" | "revisions";
+  readonly subscribe: 'snapshots' | 'revisions';
   /** Marker configuration: producer must emit the signed OSC 8487 commit marker. */
   readonly marker: { readonly enabled: boolean };
   /**
@@ -75,13 +75,13 @@ export interface HelloAckMessage {
 
 /** adapter → driver after each committed render (always, regardless of mode). */
 export interface RevisionCommitMessage {
-  readonly type: "revision-commit";
+  readonly type: 'revision-commit';
   readonly revision: number;
 }
 
 /** adapter → driver, full snapshot for a revision (subscribe: 'snapshots'). */
 export interface SnapshotMessage {
-  readonly type: "snapshot";
+  readonly type: 'snapshot';
   readonly snapshot: SemanticSnapshot;
 }
 
@@ -103,7 +103,7 @@ export interface SnapshotMessage {
  * which is the timeout it replaced, only now wearing a false air of precision.
  */
 export interface FrameBeginMessage {
-  readonly type: "frame-begin";
+  readonly type: 'frame-begin';
   readonly revision: number;
 }
 
@@ -115,22 +115,22 @@ export interface FrameBeginMessage {
  * snapshot publication.
  */
 export interface LogMessage {
-  readonly type: "log";
+  readonly type: 'log';
   readonly record: LogRecord;
 }
 
 /** either direction: terminal protocol error; sender closes after emitting. */
 export interface ProtocolErrorMessage {
-  readonly type: "error";
+  readonly type: 'error';
   readonly code:
-    | "bad-token"
-    | "bad-version"
-    | "malformed"
-    | "limit-exceeded"
-    | "duplicate-semantic-key"
-    | "adapter-guarantee-violation"
-    | "capability-provider-violation"
-    | "internal";
+    | 'bad-token'
+    | 'bad-version'
+    | 'malformed'
+    | 'limit-exceeded'
+    | 'duplicate-semantic-key'
+    | 'adapter-guarantee-violation'
+    | 'capability-provider-violation'
+    | 'internal';
   readonly message: string;
 }
 
@@ -158,10 +158,7 @@ export type MessageParseResult<T> =
   | {
       readonly ok: false;
       readonly code:
-        | "bad-version"
-        | "malformed"
-        | "limit-exceeded"
-        | "capability-provider-violation";
+        'bad-version' | 'malformed' | 'limit-exceeded' | 'capability-provider-violation';
       readonly detail: string;
     };
 
@@ -172,16 +169,10 @@ const identifier = z.string().max(MAX_IDENTIFIER_LENGTH);
 const nonEmptyIdentifier = identifier.min(1);
 const safeIndex = z
   .number()
-  .refine(
-    (n) => Number.isSafeInteger(n) && n >= 0,
-    "expected a non-negative safe integer",
-  );
+  .refine((n) => Number.isSafeInteger(n) && n >= 0, 'expected a non-negative safe integer');
 const revisionNumber = z
   .number()
-  .refine(
-    (n) => Number.isSafeInteger(n) && n > 0,
-    "expected a positive safe integer",
-  );
+  .refine((n) => Number.isSafeInteger(n) && n > 0, 'expected a positive safe integer');
 
 /**
  * Limits are an ADDITIVE part of the contract: unknown keys are IGNORED, not
@@ -205,16 +196,16 @@ const limitsSchema = z.object({
 });
 
 const errorFields = {
-  type: z.literal("error"),
+  type: z.literal('error'),
   code: z.enum([
-    "bad-token",
-    "bad-version",
-    "malformed",
-    "limit-exceeded",
-    "duplicate-semantic-key",
-    "adapter-guarantee-violation",
-    "capability-provider-violation",
-    "internal",
+    'bad-token',
+    'bad-version',
+    'malformed',
+    'limit-exceeded',
+    'duplicate-semantic-key',
+    'adapter-guarantee-violation',
+    'capability-provider-violation',
+    'internal',
   ]),
   message: z.string().max(MAX_IDENTIFIER_LENGTH),
 };
@@ -227,30 +218,28 @@ const errorFromDriverSchema = z.object(errorFields);
 
 /** adapter → driver schemas. Snapshot bodies are validated separately. */
 const helloSchema = z.strictObject({
-  type: z.literal("hello"),
+  type: z.literal('hello'),
   protocol: z.literal(PROTOCOL_ID),
   token: nonEmptyIdentifier,
   adapter: z.strictObject({
     name: nonEmptyIdentifier,
     version: nonEmptyIdentifier,
   }),
-  capabilities: z
-    .array(z.enum(ADAPTER_CAPABILITIES))
-    .max(ADAPTER_CAPABILITIES.length),
+  capabilities: z.array(z.enum(ADAPTER_CAPABILITIES)).max(ADAPTER_CAPABILITIES.length),
   probe: probeInfoSchema.optional(),
   providers: z
     .array(
       z.strictObject({
         id: nonEmptyIdentifier,
         version: nonEmptyIdentifier,
-        method: z.enum(["native", "declared"]),
+        method: z.enum(['native', 'declared']),
         capabilities: z
           .array(z.enum(EVIDENCE_PROVIDER_CAPABILITIES))
           .min(1)
           .max(EVIDENCE_PROVIDER_CAPABILITIES.length)
           .refine(
             (values) => new Set(values).size === values.length,
-            "provider capabilities must be unique",
+            'provider capabilities must be unique',
           ),
       }),
     )
@@ -262,8 +251,8 @@ const helloSchema = z.strictObject({
         const id = provider.id;
         if (ids.has(id)) {
           ctx.addIssue({
-            code: "custom",
-            path: [index, "id"],
+            code: 'custom',
+            path: [index, 'id'],
             message: `duplicate provider id ${id}`,
           });
           return;
@@ -275,32 +264,32 @@ const helloSchema = z.strictObject({
 });
 
 const frameBeginSchema = z.strictObject({
-  type: z.literal("frame-begin"),
+  type: z.literal('frame-begin'),
   revision: revisionNumber,
 });
 
 const revisionCommitSchema = z.strictObject({
-  type: z.literal("revision-commit"),
+  type: z.literal('revision-commit'),
   revision: revisionNumber,
 });
 
 const snapshotEnvelopeSchema = z.strictObject({
-  type: z.literal("snapshot"),
+  type: z.literal('snapshot'),
   snapshot: z.unknown(),
 });
 
 const logEnvelopeSchema = z.strictObject({
-  type: z.literal("log"),
+  type: z.literal('log'),
   record: z.unknown(),
 });
 
 /** driver → adapter schemas. */
 const helloAckSchema = z.object({
-  type: z.literal("hello-ack"),
+  type: z.literal('hello-ack'),
   protocol: z.literal(PROTOCOL_ID),
   sessionId: nonEmptyIdentifier,
   limits: limitsSchema,
-  subscribe: z.enum(["snapshots", "revisions"]),
+  subscribe: z.enum(['snapshots', 'revisions']),
   marker: z.object({ enabled: z.boolean() }),
   logs: z
     .object({
@@ -312,39 +301,33 @@ const helloAckSchema = z.object({
 });
 
 function malformed(detail: string): MessageParseResult<never> {
-  return { ok: false, code: "malformed", detail };
+  return { ok: false, code: 'malformed', detail };
 }
 
 /** Projection guard shared by both parsers. */
-function project(
-  value: unknown,
-  limits: ProtocolLimits,
-): MessageParseResult<unknown> {
+function project(value: unknown, limits: ProtocolLimits): MessageParseResult<unknown> {
   try {
     return { ok: true, message: projectDto<unknown>(value, limits.maxDepth) };
   } catch (error) {
     const detail =
-      error instanceof ProtocolViolation
-        ? error.message
-        : "value is not a plain JSON DTO";
-    return error instanceof ProtocolViolation && error.code === "dto-depth"
-      ? { ok: false, code: "limit-exceeded", detail }
+      error instanceof ProtocolViolation ? error.message : 'value is not a plain JSON DTO';
+    return error instanceof ProtocolViolation && error.code === 'dto-depth'
+      ? { ok: false, code: 'limit-exceeded', detail }
       : malformed(detail);
   }
 }
 
 function messageType(value: unknown): string | null {
-  if (typeof value !== "object" || value === null) return null;
+  if (typeof value !== 'object' || value === null) return null;
   const type: unknown = (value as { type?: unknown }).type;
-  return typeof type === "string" ? type : null;
+  return typeof type === 'string' ? type : null;
 }
 
 function check(schema: z.ZodType, value: unknown): string | null {
   const result = schema.safeParse(value);
   if (result.success) return null;
   const issue = result.error.issues[0]!;
-  const where =
-    issue.path.length > 0 ? issue.path.map(String).join(".") : "<root>";
+  const where = issue.path.length > 0 ? issue.path.map(String).join('.') : '<root>';
   return `${where}: ${issue.message}`;
 }
 
@@ -354,24 +337,21 @@ function check(schema: z.ZodType, value: unknown): string | null {
  * contract failures retain their typed provider classification; the rest are
  * `malformed`.
  */
-function checkSnapshot(
-  value: unknown,
-  limits: ProtocolLimits,
-): MessageParseResult<never> | null {
+function checkSnapshot(value: unknown, limits: ProtocolLimits): MessageParseResult<never> | null {
   const result = validateSnapshot(value, limits);
   if (result.ok) return null;
   const overCapacity =
-    result.code === "bytes" ||
-    result.code === "count" ||
-    result.code === "depth" ||
-    result.code === "string-bytes";
+    result.code === 'bytes' ||
+    result.code === 'count' ||
+    result.code === 'depth' ||
+    result.code === 'string-bytes';
   return {
     ok: false,
     code: overCapacity
-      ? "limit-exceeded"
-      : result.code === "provider"
-        ? "capability-provider-violation"
-        : "malformed",
+      ? 'limit-exceeded'
+      : result.code === 'provider'
+        ? 'capability-provider-violation'
+        : 'malformed',
     detail: `snapshot ${result.code}: ${result.detail}`,
   };
 }
@@ -380,20 +360,17 @@ function checkSnapshot(
  * Validate a log record carried inside an envelope, mapping capacity failures
  * onto `limit-exceeded` exactly as snapshots do.
  */
-function checkLogRecord(
-  value: unknown,
-  limits: ProtocolLimits,
-): MessageParseResult<never> | null {
+function checkLogRecord(value: unknown, limits: ProtocolLimits): MessageParseResult<never> | null {
   const result = validateLogRecord(value, limits);
   if (result.ok) return null;
   const overCapacity =
-    result.code === "bytes" ||
-    result.code === "count" ||
-    result.code === "depth" ||
-    result.code === "string-bytes";
+    result.code === 'bytes' ||
+    result.code === 'count' ||
+    result.code === 'depth' ||
+    result.code === 'string-bytes';
   return {
     ok: false,
-    code: overCapacity ? "limit-exceeded" : "malformed",
+    code: overCapacity ? 'limit-exceeded' : 'malformed',
     detail: `log record ${result.code}: ${result.detail}`,
   };
 }
@@ -418,12 +395,12 @@ export function parseAdapterMessage(
   const dto = projected.message;
 
   switch (messageType(dto)) {
-    case "hello": {
+    case 'hello': {
       const protocol: unknown = (dto as { protocol?: unknown }).protocol;
-      if (typeof protocol === "string" && protocol !== PROTOCOL_ID) {
+      if (typeof protocol === 'string' && protocol !== PROTOCOL_ID) {
         return {
           ok: false,
-          code: "bad-version",
+          code: 'bad-version',
           detail: `unsupported protocol ${protocol}`,
         };
       }
@@ -440,41 +417,34 @@ export function parseAdapterMessage(
       }
       return { ok: true, message: dto as HelloMessage };
     }
-    case "revision-commit": {
+    case 'revision-commit': {
       const issue = check(revisionCommitSchema, dto);
       return issue === null
         ? { ok: true, message: dto as RevisionCommitMessage }
         : malformed(issue);
     }
-    case "snapshot": {
+    case 'snapshot': {
       const issue = check(snapshotEnvelopeSchema, dto);
       if (issue !== null) return malformed(issue);
-      const bad = checkSnapshot(
-        (dto as { snapshot: unknown }).snapshot,
-        limits,
-      );
+      const bad = checkSnapshot((dto as { snapshot: unknown }).snapshot, limits);
       return bad ?? { ok: true, message: dto as SnapshotMessage };
     }
-    case "frame-begin": {
+    case 'frame-begin': {
       const issue = check(frameBeginSchema, dto);
-      return issue === null
-        ? { ok: true, message: dto as FrameBeginMessage }
-        : malformed(issue);
+      return issue === null ? { ok: true, message: dto as FrameBeginMessage } : malformed(issue);
     }
-    case "log": {
+    case 'log': {
       const issue = check(logEnvelopeSchema, dto);
       if (issue !== null) return malformed(issue);
       const bad = checkLogRecord((dto as { record: unknown }).record, limits);
       return bad ?? { ok: true, message: dto as LogMessage };
     }
-    case "error": {
+    case 'error': {
       const issue = check(errorSchema, dto);
-      return issue === null
-        ? { ok: true, message: dto as ProtocolErrorMessage }
-        : malformed(issue);
+      return issue === null ? { ok: true, message: dto as ProtocolErrorMessage } : malformed(issue);
     }
     default:
-      return malformed("unknown or missing message type");
+      return malformed('unknown or missing message type');
   }
 }
 
@@ -506,27 +476,23 @@ export function parseDriverMessage(
   const dto = projected.message;
 
   switch (messageType(dto)) {
-    case "hello-ack": {
+    case 'hello-ack': {
       const protocol: unknown = (dto as { protocol?: unknown }).protocol;
-      if (typeof protocol === "string" && protocol !== PROTOCOL_ID) {
+      if (typeof protocol === 'string' && protocol !== PROTOCOL_ID) {
         return {
           ok: false,
-          code: "bad-version",
+          code: 'bad-version',
           detail: `unsupported protocol ${protocol}`,
         };
       }
       const issue = check(helloAckSchema, dto);
-      return issue === null
-        ? { ok: true, message: dto as HelloAckMessage }
-        : malformed(issue);
+      return issue === null ? { ok: true, message: dto as HelloAckMessage } : malformed(issue);
     }
-    case "error": {
+    case 'error': {
       const issue = check(errorFromDriverSchema, dto);
-      return issue === null
-        ? { ok: true, message: dto as ProtocolErrorMessage }
-        : malformed(issue);
+      return issue === null ? { ok: true, message: dto as ProtocolErrorMessage } : malformed(issue);
     }
     default:
-      return malformed("unknown or missing message type");
+      return malformed('unknown or missing message type');
   }
 }

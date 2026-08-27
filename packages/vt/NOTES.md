@@ -5,13 +5,13 @@
 `@xterm/addon-unicode-graphemes` cannot be loaded in this repository's test
 environment. Measured, not assumed:
 
-| How | Result |
-|---|---|
-| plain `node` ESM import | resolves in ~20 ms |
-| vitest, `threads` pool, ESM import | never completes (killed at 40 s+) |
-| vitest, `forks` pool | never completes |
-| vitest, `createRequire` instead of `import` | never completes |
-| 0.4.0 (`latest`) and 0.5.0-beta.299 | both hang identically |
+| How                                         | Result                            |
+| ------------------------------------------- | --------------------------------- |
+| plain `node` ESM import                     | resolves in ~20 ms                |
+| vitest, `threads` pool, ESM import          | never completes (killed at 40 s+) |
+| vitest, `forks` pool                        | never completes                   |
+| vitest, `createRequire` instead of `import` | never completes                   |
+| 0.4.0 (`latest`) and 0.5.0-beta.299         | both hang identically             |
 
 Bisected down to a test file whose only content is the import. `@xterm/headless`
 and `@xterm/addon-unicode11` import fine in the same worker, so it is specific

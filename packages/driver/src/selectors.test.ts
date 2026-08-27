@@ -5,7 +5,9 @@ describe('locator refs', () => {
   it('requires and preserves an explicit locator domain', () => {
     expect(parseRef('semantic:save@7')).toEqual({ kind: 'node', nodeId: 'save', revision: 7 });
     expect(parseRef('screen:2,4,6,1@9')).toEqual({
-      kind: 'rect', rect: { row: 2, column: 4, width: 6, height: 1 }, revision: 9,
+      kind: 'rect',
+      rect: { row: 2, column: 4, width: 6, height: 1 },
+      revision: 9,
     });
     expect(parseRef('save@7')).toBeNull();
     expect(parseRef('grid:2,4,6,1@9')).toBeNull();

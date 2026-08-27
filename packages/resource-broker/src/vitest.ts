@@ -90,7 +90,12 @@ function validateResources(value: TermwrightTestResources): Readonly<TermwrightT
   }
   const record = value as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (key !== 'terminals' && key !== 'traceWriters' && key !== 'nativeHost' && key !== 'hostPressure') {
+    if (
+      key !== 'terminals' &&
+      key !== 'traceWriters' &&
+      key !== 'nativeHost' &&
+      key !== 'hostPressure'
+    ) {
       throw new TypeError(`test.resources() does not recognize ${key}`);
     }
   }
@@ -121,7 +126,11 @@ function validateResources(value: TermwrightTestResources): Readonly<TermwrightT
   if (result.nativeHost !== undefined && result.hostPressure !== undefined) {
     throw new TypeError('test.resources() cannot combine nativeHost and hostPressure');
   }
-  if ((result.terminals ?? 0) === 0 && (result.traceWriters ?? 0) === 0 && result.hostPressure === undefined) {
+  if (
+    (result.terminals ?? 0) === 0 &&
+    (result.traceWriters ?? 0) === 0 &&
+    result.hostPressure === undefined
+  ) {
     throw new RangeError('test.resources() must reserve at least one resource');
   }
   if (result.nativeHost === 'exclusive' && (result.terminals ?? 0) === 0) {
@@ -160,14 +169,17 @@ function markAddedTasks(
   }
 }
 
-function declaredTermwrightMeta(argumentsList: readonly unknown[]): Readonly<Record<string, unknown>> | undefined {
+function declaredTermwrightMeta(
+  argumentsList: readonly unknown[],
+): Readonly<Record<string, unknown>> | undefined {
   const second = argumentsList[1];
   const third = argumentsList[2];
-  const options = typeof second === 'object' && second !== null
-    ? second
-    : typeof third === 'object' && third !== null
-      ? third
-      : undefined;
+  const options =
+    typeof second === 'object' && second !== null
+      ? second
+      : typeof third === 'object' && third !== null
+        ? third
+        : undefined;
   if (options === undefined) return undefined;
   const meta = (options as Record<string, unknown>)['meta'];
   if (typeof meta !== 'object' || meta === null) return undefined;
