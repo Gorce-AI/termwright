@@ -282,8 +282,7 @@ const SCENARIOS = {
     }
   },
   'disconnect-mid-render': () => {
-    socket.write(frame({ type: 'snapshot', snapshot: tree(2, validNodes('Torn')) }));
-    socket.destroy();
+    socket.end(frame({ type: 'snapshot', snapshot: tree(2, validNodes('Torn')) }));
   },
   'hostile-unicode': () => {
     // A lone high surrogate survives JSON.stringify as an escape, so the bytes
