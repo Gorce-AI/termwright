@@ -401,6 +401,17 @@ export function isSupportedCompileCapabilityCandidate(candidate) {
   return candidate.frameworkId === 'charm' && ['github.com/charmbracelet/bubbles', 'charm.land/bubbles/v2'].includes(candidate.package) && candidate.capability === 'bubbles-private-state';
 }
 
+export async function bindLocalTermwrightGoClient(moduleDir, env = process.env, clientDir = join(root, 'clients/go')) {
+  const canonicalClientDir = await realpath(clientDir);
+  await run(
+    'go',
+    ['mod', 'edit', `-replace=github.com/gorce-ai/termwright/clients/go=${canonicalClientDir}`],
+    env,
+    moduleDir,
+  );
+  return canonicalClientDir;
+}
+
 export async function certifyGoCandidateBehavior(candidate) {
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-go-behavior-'));
   const app = join(scratch, 'app');
@@ -421,6 +432,7 @@ export async function certifyGoCandidateBehavior(candidate) {
     launcherPackage = join(root, 'packages/probe-tview/dist/index.js');
     await run('cp', ['-R', `${join(root, 'packages/probe-tview/src/testing/fixture-app')}/.`, app]);
     await run('go', ['mod', 'edit', `-require=${candidate.package}@${candidate.version}`], env, app);
+    await bindLocalTermwrightGoClient(app, env);
   } else if (candidate.frameworkId === 'charm') {
     launcherPackage = join(root, 'packages/probe-charm/dist/index.js');
     const v2 = candidate.package.startsWith('charm.land/');

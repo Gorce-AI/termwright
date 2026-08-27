@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertCandidateSemanticSession,
   assertRustTestDiscovered,
+  bindLocalTermwrightGoClient,
   candidateExecutableName,
   candidateToolchainBlock,
   certificationPlatform,
@@ -137,6 +138,30 @@ async function npmClosureFixture() {
 }
 
 describe('framework candidate evidence binding', () => {
+  it('binds generated tview candidates to the repository-owned Go client before tidy', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-go-client-replace-'));
+    const client = join(directory, 'client');
+    const app = join(directory, 'app');
+    await Promise.all([mkdir(client), mkdir(app)]);
+    await writeFile(join(client, 'go.mod'), 'module github.com/gorce-ai/termwright/clients/go\n\ngo 1.22\n');
+    await writeFile(
+      join(app, 'go.mod'),
+      'module example.com/candidate\n\ngo 1.22\n\nrequire github.com/gorce-ai/termwright/clients/go v0.0.0\n',
+    );
+    try {
+      const canonicalClient = await bindLocalTermwrightGoClient(app, process.env, client);
+      const edited = JSON.parse((await exec('go', ['mod', 'edit', '-json'], { cwd: app })).stdout);
+      expect(edited.Replace).toEqual([
+        {
+          Old: { Path: 'github.com/gorce-ai/termwright/clients/go' },
+          New: { Path: canonicalClient },
+        },
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a zero-test Rust certification filter', () => {
     expect(() => assertRustTestDiscovered('running 0 tests\n\ntest result: ok. 0 passed; 0 failed\n', 'required_contract_test', 'ratatui-core@0.1.2')).toThrow(/was not discovered/u);
     expect(() => assertRustTestDiscovered('required_contract_test: test\n', 'required_contract_test', 'ratatui-core@0.1.2')).not.toThrow();
