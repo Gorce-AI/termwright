@@ -15,7 +15,7 @@
     "deterministic-adversarial-fixture-schedule": 32,
     "display-or-persisted-wall-time-not-correctness-order": 90,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 164,
+    "explicit-external-or-ui-source-polling": 163,
     "explicit-test-selection-reviewed-with-platform-registry": 74,
     "managed-or-diagnostic-background-task": 72,
     "production-polling-review": 1,
@@ -251,12 +251,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-pairing-watchdog');"
-    },
-    {
-      "path": "packages/conformance/src/suites/adversarial.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => codes(terminal)).toContain('adapter-disconnected');"
     },
     {
       "path": "packages/conformance/src/suites/adversarial.test.ts",
