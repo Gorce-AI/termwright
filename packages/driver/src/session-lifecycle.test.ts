@@ -303,10 +303,24 @@ describe('terminal session resource lifecycle', () => {
 
   terminalIt('uses one total ready deadline for startup and required semantic negotiation', async () => {
     vi.useFakeTimers();
+    let releaseAdmission!: () => void;
+    const admissionRelease = new Promise<void>((resolve) => { releaseAdmission = resolve; });
+    let markAdmissionStarted!: () => void;
+    const admissionStarted = new Promise<void>((resolve) => { markAdmissionStarted = resolve; });
+    let releaseCount = 0;
+    const restoreProvider = installTerminalLaunchResourceProvider(async () => {
+      markAdmissionStarted();
+      await admissionRelease;
+      return {
+        async attach(): Promise<void> {},
+        async release(): Promise<void> { releaseCount += 1; },
+      };
+    });
+    let launched: ReturnType<typeof launchTerminalWithBackend> | undefined;
     try {
       const endpoint: { value: string | undefined } = { value: undefined };
       const pty = new ControlledPty();
-      const launched = launchTerminalWithBackend({
+      launched = launchTerminalWithBackend({
         command: ['controlled-app'],
         backend: backendFor(pty, endpoint),
         requiredCapabilities: ['semantic-tree'],
@@ -319,16 +333,27 @@ describe('terminal session resource lifecycle', () => {
         () => { settled = true; },
       );
 
+      await admissionStarted;
       await vi.advanceTimersByTimeAsync(39);
       expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
+      releaseAdmission();
       await expect(launched).rejects.toMatchObject({ code: 'timeout' });
 
-      // The endpoint acquisition consumed the budget. Expiry is checked
+      // Resource admission consumed the budget. Expiry is checked
       // before spawning, so no scarce process is created after the deadline.
       expect(pty.disposeCount).toBe(0);
       expect(endpoint.value).toBeUndefined();
+      expect(releaseCount).toBe(1);
     } finally {
+      releaseAdmission();
+      // A failing intermediate assertion must not strand the admitted launch
+      // under a virtual clock. Drive the same deadline to expiry and await its
+      // rollback before restoring the worker-global provider and real timers.
+      await vi.advanceTimersByTimeAsync(40);
+      const unexpectedTerminal = await launched?.catch(() => undefined);
+      await unexpectedTerminal?.close().catch(() => undefined);
+      restoreProvider();
       vi.useRealTimers();
     }
   });
