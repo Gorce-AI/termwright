@@ -1,10 +1,11 @@
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { connect } from 'node:net';
+import { existsSync } from 'node:fs';
+import { connect, createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AttemptId, RunId } from '@termwright/protocol/run-events';
 import { ResourceBroker, type ResourceCapacities } from './index.js';
 import {
@@ -119,10 +120,16 @@ describe('resource broker transport', () => {
     const controller = new AbortController();
     const broker = new ResourceBroker({ runId: RUN, capacities: CAPACITIES });
     const endpoint = testEndpoint('broker-abort');
-    const startup = startResourceBrokerServer({ broker, runId: RUN, token: TOKEN, endpoint, signal: controller.signal });
+    const listener = createServer();
+    const close = vi.spyOn(listener, 'close');
+    const startup = startResourceBrokerServer(
+      { broker, runId: RUN, token: TOKEN, endpoint, signal: controller.signal },
+      { createServer: () => listener },
+    );
     controller.abort();
     await expect(startup).rejects.toMatchObject({ name: 'AbortError' });
-    await expectConnectionRefused(endpoint);
+    expectEndpointClosed(listener, endpoint);
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it('authenticates a worker and transports leases, metadata, snapshots, and exact release', async () => {
@@ -295,13 +302,7 @@ function testEndpoint(name: string): string {
     : join(tmpdir(), `tw-b-${suffix}.sock`);
 }
 
-async function expectConnectionRefused(endpoint: string): Promise<void> {
-  const socket = connect(endpoint);
-  await new Promise<void>((resolve, reject) => {
-    socket.once('error', () => resolve());
-    socket.once('connect', () => {
-      socket.destroy();
-      reject(new Error(`unexpected listener at ${endpoint}`));
-    });
-  });
+function expectEndpointClosed(server: Server, endpoint: string): void {
+  expect(server.listening).toBe(false);
+  if (process.platform !== 'win32') expect(existsSync(endpoint)).toBe(false);
 }

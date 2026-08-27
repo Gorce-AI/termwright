@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { connect } from 'node:net';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_LIMITS, encodeFrame, ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { ExitStatus } from './api.js';
@@ -133,22 +133,17 @@ function backendFor(
   };
 }
 
-async function expectEndpointClosed(endpoint: string): Promise<void> {
-  if (process.platform !== 'win32') {
-    expect(existsSync(endpoint)).toBe(false);
-    return;
-  }
-  const socket = connect(endpoint);
-  await new Promise<void>((resolve, reject) => {
-    socket.once('connect', () => {
-      socket.destroy();
-      reject(new Error(`semantic endpoint ${endpoint} still accepts connections`));
-    });
-    socket.once('error', () => resolve());
-  });
+function expectEndpointRemoved(endpoint: string): void {
+  // Unix-domain sockets have a filesystem artifact to verify. Windows named
+  // pipes do not: opening a missing pipe is an unbounded operation in libuv,
+  // so a negative connect is not a valid teardown oracle. SemanticChannel's
+  // own tests verify the causal server.close() barrier on every platform.
+  if (process.platform !== 'win32') expect(existsSync(endpoint)).toBe(false);
 }
 
 const terminalIt = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('terminal session resource lifecycle', () => {
   terminalIt(
@@ -250,6 +245,7 @@ describe('terminal session resource lifecycle', () => {
   });
 
   terminalIt('makes PowerShell publish readiness from its launch command without bootstrap input', async () => {
+    const semanticClose = vi.spyOn(SemanticChannel.prototype, 'close');
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({
       initialData: Buffer.from('\u001b]133;A\u0007\u001b]133;B\u0007'),
@@ -280,7 +276,9 @@ describe('terminal session resource lifecycle', () => {
     expect(pty.writeCalls).toEqual([]);
     expect(terminal.shell.status()).toMatchObject({ supported: true, ready: true });
     await terminal.close();
-    await expectEndpointClosed(endpoint.value!);
+    expect(semanticClose).toHaveBeenCalledOnce();
+    expectEndpointRemoved(endpoint.value!);
+    semanticClose.mockRestore();
   });
 
   terminalIt('surfaces an asynchronous backend write failure and still tears down', async () => {
@@ -300,7 +298,7 @@ describe('terminal session resource lifecycle', () => {
     });
 
     expect(pty.disposeCount).toBe(1);
-    await expectEndpointClosed(endpoint.value!);
+    expectEndpointRemoved(endpoint.value!);
   });
 
   terminalIt('uses one total ready deadline for startup and required semantic negotiation', async () => {
@@ -346,7 +344,7 @@ describe('terminal session resource lifecycle', () => {
 
     expect(pty.disposeCount).toBe(1);
     expect(endpoint.value).toBeDefined();
-    await expectEndpointClosed(endpoint.value!);
+    expectEndpointRemoved(endpoint.value!);
   });
 
   it.each([
@@ -419,7 +417,7 @@ describe('terminal session resource lifecycle', () => {
       await expect(terminal.close()).rejects.toMatchObject({ name: 'ResourceCleanupError' });
       expect(pty.disposeCount).toBe(1);
       expect(releaseCount).toBe(0);
-      await expectEndpointClosed(endpoint.value!);
+      expectEndpointRemoved(endpoint.value!);
     } finally {
       restoreProvider();
     }
@@ -464,9 +462,9 @@ describe('terminal session resource lifecycle', () => {
       expect(pty.terminateCount).toBe(1);
       expect(releaseCount).toBe(1);
       // The virtual-clock deadline assertion is complete. Restore the real
-      // scheduler before probing the real Unix socket or Windows named pipe.
+      // scheduler before checking the Unix socket artifact.
       vi.useRealTimers();
-      await expectEndpointClosed(endpoint.value!);
+      expectEndpointRemoved(endpoint.value!);
     } finally {
       restoreProvider();
       vi.useRealTimers();
@@ -488,10 +486,11 @@ describe('terminal session resource lifecycle', () => {
 
     expect(pty.disposeCount).toBe(1);
     expect(await terminal.exit).toEqual({ code: 17, signal: null });
-    await expectEndpointClosed(endpoint.value!);
+    expectEndpointRemoved(endpoint.value!);
   });
 
   terminalIt('attempts later cleanup after a PTY disposer fails', async () => {
+    const semanticClose = vi.spyOn(SemanticChannel.prototype, 'close');
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ failDispose: true });
     const terminal = await launchTerminalWithBackend({
@@ -505,7 +504,9 @@ describe('terminal session resource lifecycle', () => {
     await expect(first).rejects.toMatchObject({ name: 'ResourceCleanupError' });
 
     expect(pty.disposeCount).toBe(1);
-    await expectEndpointClosed(endpoint.value!);
+    expect(semanticClose).toHaveBeenCalledOnce();
+    expectEndpointRemoved(endpoint.value!);
+    semanticClose.mockRestore();
   });
 
   terminalIt('does not invent an exit status when the backend never reports one', async () => {
@@ -535,7 +536,7 @@ describe('terminal session resource lifecycle', () => {
       await closed;
       await exited;
       expect(pty.disposeCount).toBe(1);
-      await expectEndpointClosed(endpoint.value!);
+      expectEndpointRemoved(endpoint.value!);
     } finally {
       vi.useRealTimers();
     }

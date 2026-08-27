@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { connect, createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,15 +21,18 @@ describe('run journal worker transport', () => {
   it('aborts server startup without leaving a listening endpoint', async () => {
     const controller = new AbortController();
     const endpoint = testEndpoint('journal-abort');
+    const listener = createServer();
+    const close = vi.spyOn(listener, 'close');
     const startup = startRunJournalServer({
       runId: createRunId('run'),
       append: () => undefined,
       endpoint,
       signal: controller.signal,
-    });
+    }, { createServer: () => listener });
     controller.abort();
     await expect(startup).rejects.toMatchObject({ name: 'AbortError' });
-    await expectConnectionRefused(endpoint);
+    expectEndpointClosed(listener, endpoint);
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it('host-binds a producer and appends authenticated ordered events', async () => {
@@ -225,10 +229,11 @@ describe('run journal worker transport', () => {
     let markStarted!: () => void;
     const appendGate = new Promise<void>((_resolve, reject) => { rejectAppend = reject; });
     const appendStarted = new Promise<void>((resolve) => { markStarted = resolve; });
+    const listener = createServer();
     const server = await startRunJournalServer({ runId, append: async () => {
       markStarted();
       await appendGate;
-    } });
+    } }, { createServer: () => listener });
     servers.push(server);
     const client = await connectRunJournalWorker({ endpoint: server.endpoint, token: server.token, runId,
       workerId: 'failing-barrier', workerEpoch: 1, handshakeDeadline: deadline() });
@@ -249,7 +254,7 @@ describe('run journal worker transport', () => {
     servers.splice(servers.indexOf(server), 1);
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toEqual([expect.objectContaining({ message: 'persistence failed' })]);
-    await expectConnectionRefused(server.endpoint);
+    expectEndpointClosed(listener, server.endpoint);
   });
 
   it('does not reflect an invalid unbounded request id on the failure path', async () => {
@@ -279,15 +284,11 @@ function testEndpoint(name: string): string {
     : join(tmpdir(), `tw-j-${suffix}.sock`);
 }
 
-async function expectConnectionRefused(endpoint: string): Promise<void> {
-  const socket = connect(endpoint);
-  await new Promise<void>((resolve, reject) => {
-    socket.once('error', () => resolve());
-    socket.once('connect', () => {
-      socket.destroy();
-      reject(new Error(`unexpected listener at ${endpoint}`));
-    });
-  });
+function expectEndpointClosed(server: ReturnType<typeof createServer>, endpoint: string): void {
+  // close() is the authoritative listener barrier. Only Unix sockets leave a
+  // filesystem artifact that can be checked without initiating new I/O.
+  expect(server.listening).toBe(false);
+  if (process.platform !== 'win32') expect(existsSync(endpoint)).toBe(false);
 }
 
 function onceConnected(socket: Socket): Promise<void> {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { connect, createServer } from 'node:net';
+import { existsSync } from 'node:fs';
+import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -52,15 +53,17 @@ describe('shared local transport primitives', () => {
       : join(tmpdir(), `termwright-shared-abort-${randomUUID()}.sock`);
     const controller = new AbortController();
     controller.abort(new Error('cancelled before listen'));
-    await expect(bindLocalEndpoint({ server: createServer(), name: 'shared', endpoint, signal: controller.signal }))
+    const server = createServer();
+    await expect(bindLocalEndpoint({ server, name: 'shared', endpoint, signal: controller.signal }))
       .rejects.toThrow('cancelled before listen');
-    await expectConnectionRefused(endpoint);
+    expectEndpointClosed(server, endpoint);
   });
 
   it('owns endpoint close and cleanup idempotently', async () => {
-    const bound = await bindLocalEndpoint({ server: createServer(), name: 'shared-test' });
+    const server = createServer();
+    const bound = await bindLocalEndpoint({ server, name: 'shared-test' });
     await Promise.all([bound.close(), bound.close()]);
-    await expectConnectionRefused(bound.endpoint);
+    expectEndpointClosed(server, bound.endpoint);
   });
 
   it('removes temporary lifecycle listeners when listen throws synchronously', async () => {
@@ -83,13 +86,7 @@ describe('shared local transport primitives', () => {
   });
 });
 
-async function expectConnectionRefused(endpoint: string): Promise<void> {
-  const socket = connect(endpoint);
-  await new Promise<void>((resolve, reject) => {
-    socket.once('error', () => resolve());
-    socket.once('connect', () => {
-      socket.destroy();
-      reject(new Error(`unexpected listener at ${endpoint}`));
-    });
-  });
+function expectEndpointClosed(server: Server, endpoint: string): void {
+  expect(server.listening).toBe(false);
+  if (process.platform !== 'win32') expect(existsSync(endpoint)).toBe(false);
 }
