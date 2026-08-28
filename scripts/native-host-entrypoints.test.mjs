@@ -702,6 +702,28 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(candidateUnit).toContain('in one toolchain transaction');
     expect(candidateUnit).not.toMatch(/exec\(['"]go['"]/u);
 
+    const handoffTest = await readFile(
+      new URL('./create-manual-compatibility-handoff.test.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(handoffTest).toMatch(
+      /resourceAwareIt\.resources\(\{\s*hostPressure:\s*['"]exclusive['"]\s*\}\)/u,
+    );
+    expect(handoffTest).toContain('signal: context.signal');
+    expect(handoffTest).toContain('context.onTestFinished(async () =>');
+    expect(handoffTest).toContain('createOwnedExecFile(process.execPath');
+    expect(handoffTest).not.toContain("new URL('./create-manual-compatibility-handoff.mjs'");
+
+    const npmArchiveTest = await readFile(
+      new URL('./pack-npm-artifacts.test.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(npmArchiveTest).not.toContain('node:child_process');
+    expect(npmArchiveTest).not.toMatch(/execFileSync\(['"]tar['"]/u);
+    const npmPacking = await readFile(new URL('./pack-npm-artifacts.mjs', import.meta.url), 'utf8');
+    expect(npmPacking).toContain('inspectSafeTarGz(');
+    expect(npmPacking).not.toMatch(/execFileSync\(['"]tar['"]/u);
+
     const availability = await readFile(
       new URL('../packages/test/src/pty-available.ts', import.meta.url),
       'utf8',

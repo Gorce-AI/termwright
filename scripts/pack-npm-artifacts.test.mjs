@@ -1,7 +1,7 @@
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   bootstrapPackageOrder,
@@ -18,17 +18,17 @@ afterEach(() => {
 function archive({ name, windows = false, unsafe = false, addon = true, hosts }) {
   const root = mkdtempSync(join(tmpdir(), 'termwright-pack-check-'));
   temporary.push(root);
-  const packageRoot = join(root, 'package');
-  mkdirSync(join(packageRoot, 'vendor'), { recursive: true });
-  writeFileSync(
-    join(packageRoot, 'package.json'),
-    JSON.stringify({
-      name,
-      version: '0.2.0',
-      repository: { url: 'git+https://github.com/Gorce-AI/termwright.git' },
-    }),
-  );
-  if (addon) writeFileSync(join(packageRoot, 'termwright_pty.node'), 'addon');
+  const entries = [
+    tarEntry(
+      'package/package.json',
+      JSON.stringify({
+        name,
+        version: '0.2.0',
+        repository: { url: 'git+https://github.com/Gorce-AI/termwright.git' },
+      }),
+    ),
+  ];
+  if (addon) entries.push(tarEntry('package/termwright_pty.node', 'addon'));
   if (windows) {
     for (const member of [
       'conpty.dll',
@@ -37,22 +37,34 @@ function archive({ name, windows = false, unsafe = false, addon = true, hosts })
       'THIRD_PARTY_NOTICES.md',
       'SBOM.spdx.json',
     ])
-      writeFileSync(join(packageRoot, 'vendor', member), member);
+      entries.push(tarEntry(`package/vendor/${member}`, member));
     const hostArchitectures =
       hosts ?? (name === '@termwright/pty-win32-x64' ? ['arm64', 'x64'] : ['arm64']);
-    for (const architecture of hostArchitectures) {
-      mkdirSync(join(packageRoot, 'vendor', architecture), { recursive: true });
-      writeFileSync(join(packageRoot, 'vendor', architecture, 'OpenConsole.exe'), architecture);
-    }
+    for (const architecture of hostArchitectures)
+      entries.push(tarEntry(`package/vendor/${architecture}/OpenConsole.exe`, architecture));
   }
-  if (unsafe) writeFileSync(join(packageRoot, 'vendor', 'OpenConsole.exe'), 'unsafe');
+  if (unsafe) entries.push(tarEntry('package/vendor/OpenConsole.exe', 'unsafe'));
   const result = join(root, 'package.tgz');
-  // Git for Windows ships GNU tar, which treats `C:\\...` in an archive
-  // argument as the `host:path` remote-archive syntax. Keep both operands
-  // relative to the isolated working directory so this fixture exercises the
-  // archive contract identically on POSIX and Windows.
-  execFileSync('tar', ['-czf', 'package.tgz', 'package'], { cwd: root });
+  writeFileSync(result, gzipSync(Buffer.concat([...entries, Buffer.alloc(1024)])));
   return result;
+}
+
+function tarEntry(name, contents) {
+  const payload = Buffer.from(contents);
+  const header = Buffer.alloc(512);
+  header.write(name, 0, 100, 'utf8');
+  header.write('0000644\0', 100, 8, 'ascii');
+  header.write('0000000\0', 108, 8, 'ascii');
+  header.write('0000000\0', 116, 8, 'ascii');
+  header.write(`${payload.length.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii');
+  header.write('00000000000\0', 136, 12, 'ascii');
+  header.fill(0x20, 148, 156);
+  header[156] = '0'.charCodeAt(0);
+  header.write('ustar\0', 257, 6, 'ascii');
+  let checksum = 0;
+  for (const byte of header) checksum += byte;
+  header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii');
+  return Buffer.concat([header, payload, Buffer.alloc((512 - (payload.length % 512)) % 512)]);
 }
 
 describe('npm artifact packing contract', () => {

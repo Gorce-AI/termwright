@@ -3,8 +3,9 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { isDirectExecution } from './is-direct-execution.mjs';
+import { inspectSafeTarGz } from './safe-tar.mjs';
 
 const repositoryUrl = 'git+https://github.com/Gorce-AI/termwright.git';
 const nativePackages = [
@@ -59,25 +60,15 @@ export function validatePackageSelection(names, manifests, { bootstrap = false }
 
 export function validatePackedArchive(archive, expectedName) {
   const resolvedArchive = resolve(archive);
-  const archiveDirectory = dirname(resolvedArchive);
-  const archiveFile = basename(resolvedArchive);
-  const members = execFileSync('tar', ['-tf', archiveFile], {
-    cwd: archiveDirectory,
-    encoding: 'utf8',
-  })
-    .trim()
-    .split(/\r?\n/u);
-  if (new Set(members).size !== members.length) fail(`${archive} contains duplicate members`);
-  if (members.some((member) => member.startsWith('/') || member.split('/').includes('..')))
-    fail(`${archive} contains an unsafe member path`);
+  const entries = inspectSafeTarGz(readFileSync(resolvedArchive));
+  const members = entries.map((entry) => entry.path);
   if (!members.includes('package/package.json')) fail(`${archive} carries no package manifest`);
 
-  const manifest = JSON.parse(
-    execFileSync('tar', ['-xOf', archiveFile, 'package/package.json'], {
-      cwd: archiveDirectory,
-      encoding: 'utf8',
-    }),
+  const manifestEntry = entries.find(
+    (entry) => entry.type === '0' && entry.path === 'package/package.json',
   );
+  if (manifestEntry === undefined) fail(`${archive} carries no regular package manifest`);
+  const manifest = JSON.parse(manifestEntry.payload.toString('utf8'));
   if (manifest.name !== expectedName)
     fail(`${archive} contains ${String(manifest.name)} instead of ${expectedName}`);
   if (typeof manifest.version !== 'string' || manifest.version.length === 0)
