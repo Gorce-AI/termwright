@@ -158,6 +158,44 @@ jobs:
             --assessments compatibility/candidate-assessments.json \
             --plan "$PUBLISH_PLAN"
 
+      - name: Preserve manual compatibility handoff
+        if: env.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED != 'true'
+        env:
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          handoff="$RUNNER_TEMP/manual-compatibility-handoff"
+          changed_count="$(node scripts/create-manual-compatibility-handoff.mjs \
+            "$handoff" \
+            "$CANDIDATE_DIR/candidate-registry.json" \
+            "$PUBLISH_PLAN" \
+            "$VERDICT_DIR" \
+            "$SOURCE_RUN_ID" \
+            "$SOURCE_RUN_URL" \
+            "$SOURCE_SHA")"
+          [[ "$changed_count" =~ ^[0-9]+$ ]]
+          {
+            echo '### Manual compatibility handoff'
+            echo
+            echo 'The autonomous writer is disabled. Trusted artifacts were reconciled and validated without minting the repository writer App token or publishing a branch.'
+            echo
+            echo "Source run: $SOURCE_RUN_URL"
+            echo "Source SHA: \`$SOURCE_SHA\`"
+            echo "Changed files: $changed_count"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the manual compatibility handoff
+        if: env.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED != 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: manual-compatibility-handoff-${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/manual-compatibility-handoff
+          if-no-files-found: error
+          retention-days: 30
+
+      # Preserve and upload the deterministic handoff before mutating issue
+      # state. A GitHub issue API failure must not destroy the recovery input.
       - name: Reconcile owned candidate issues with the source run
         shell: bash
         run: |
@@ -188,6 +226,7 @@ jobs:
           fi
 
       - name: Mint the repository-only automation writer token
+        if: env.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED == 'true'
         id: writer-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -197,6 +236,7 @@ jobs:
           permission-pull-requests: write
 
       - name: Publish the exact compatibility allowlist through the writer App
+        if: env.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED == 'true'
         id: publish
         env:
           GH_TOKEN: ${{ steps.writer-token.outputs.token }}

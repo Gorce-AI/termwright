@@ -84,6 +84,10 @@ describe('autonomous workflow security', () => {
       new URL('./autonomous-release-coordinator.mjs', import.meta.url),
       'utf8',
     );
+    const handoffScript = await readFile(
+      new URL('./create-manual-compatibility-handoff.mjs', import.meta.url),
+      'utf8',
+    );
     expect(workflow.match(/--name framework-candidate-result-registry/gu)).toHaveLength(2);
     expect(workflow).not.toContain('--name framework-candidate-registry');
     const reconciler = await readFile(
@@ -189,6 +193,38 @@ describe('autonomous workflow security', () => {
     expect(reconcile).toContain('Typed candidate artifacts reconciled from $SOURCE_RUN_URL.');
     expect(reconcile).not.toContain(
       'Close candidate issues only after the compatibility allowlist merged',
+    );
+    const manualHandoff = reconcile.slice(
+      reconcile.indexOf('      - name: Preserve manual compatibility handoff'),
+      reconcile.indexOf('      - name: Mint the repository-only automation writer token'),
+    );
+    expect(manualHandoff).toContain("if: env.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED != 'true'");
+    expect(manualHandoff).toContain('node scripts/create-manual-compatibility-handoff.mjs');
+    expect(manualHandoff).toContain('candidate-registry.json');
+    expect(handoffScript).toContain("join(handoff, 'publish-plan.json')");
+    expect(handoffScript).toContain("join(handoff, 'source-run.json')");
+    expect(handoffScript).toContain("join(handoff, 'changed-files.txt')");
+    expect(handoffScript).toContain("join(handoff, 'SHA256SUMS')");
+    expect(handoffScript).toContain("['diff', '--cached', '--binary', '--full-index', 'HEAD']");
+    expect(handoffScript).toContain('validateChangedFileObjects');
+    expect(manualHandoff).toContain('Source run: $SOURCE_RUN_URL');
+    expect(manualHandoff).toContain('echo "Source SHA: \\`$SOURCE_SHA\\`"');
+    expect(manualHandoff).toContain(
+      'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6',
+    );
+    expect(manualHandoff).toContain(
+      'name: manual-compatibility-handoff-${{ github.event.workflow_run.id }}',
+    );
+    expect(manualHandoff).not.toMatch(/git push|gh pr (?:create|edit)|create-github-app-token/u);
+    expect(manualHandoff).not.toContain('continue-on-error');
+    expect(reconcile.indexOf('Upload the manual compatibility handoff')).toBeLessThan(
+      reconcile.indexOf('Reconcile owned candidate issues with the source run'),
+    );
+    expect(reconcile).toMatch(
+      /- name: Mint the repository-only automation writer token\n {8}if: env\.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED == 'true'/u,
+    );
+    expect(reconcile).toMatch(
+      /- name: Publish the exact compatibility allowlist through the writer App\n {8}if: env\.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED == 'true'/u,
     );
     expect(
       reconcile.match(/--assessments compatibility\/candidate-assessments\.json/gu),
