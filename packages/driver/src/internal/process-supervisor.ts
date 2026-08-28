@@ -48,6 +48,8 @@ export interface ProcessShutdownOptions {
   readonly gracefulMs: number;
   /** Real backend exit evidence captured before the supervisor subscribed. */
   readonly observedExit?: ExitStatus;
+  /** Closes session-owned input producers immediately before PTY input is disposed. */
+  readonly beforeDispose?: () => void;
 }
 
 const DEFAULT_TIMERS: TimerApi = {
@@ -398,6 +400,11 @@ export class ProcessSupervisor {
       if (deadlineTimer.assigned) this.#timers.clear(deadlineTimer.value);
       else deadlineTimer.clearAfterAssign = true;
       unsubscribe();
+      try {
+        options.beforeDispose?.();
+      } catch (error) {
+        failures.push(error);
+      }
       try {
         this.#pty.dispose();
       } catch (error) {
