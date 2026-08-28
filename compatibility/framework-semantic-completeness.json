@@ -1626,6 +1626,21 @@
           ]
         },
         {
+          "id": "charm-v2.0.8-ea91ff340ca1",
+          "frameworkVersion": "v2.0.8",
+          "modules": [
+            {
+              "name": "charm.land/bubbles/v2",
+              "version": "v2.1.1",
+              "optional": true
+            },
+            {
+              "name": "charm.land/bubbletea/v2",
+              "version": "v2.0.8"
+            }
+          ]
+        },
+        {
           "id": "charm-v2.0.9-ba5de3a6cd17",
           "frameworkVersion": "v2.0.9",
           "modules": [
