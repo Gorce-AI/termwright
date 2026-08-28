@@ -1,4 +1,69 @@
 {
   "schemaVersion": 1,
-  "streams": {}
+  "streams": {
+    "ink": [
+      {
+        "candidateDigest": "sha256:db0f804be01a19049e92fc835f5cdaf5f37e1d2e75904817e8aff259304ee0e5",
+        "patchManifestDigest": null,
+        "publishedAt": "2026-07-16T13:07:31.525Z",
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:76327b91e14236c871d87b5d723cc0da2f5da6bf6523c968958123516e4bfdd8",
+          "cpu": [],
+          "dependencies": {
+            "@alcalzone/ansi-tokenize": "^0.3.0",
+            "ansi-escapes": "^7.3.0",
+            "ansi-styles": "^6.2.3",
+            "auto-bind": "^5.0.1",
+            "chalk": "^5.6.2",
+            "cli-boxes": "^4.0.1",
+            "cli-cursor": "^4.0.0",
+            "cli-truncate": "^6.0.0",
+            "code-excerpt": "^4.0.0",
+            "es-toolkit": "^1.45.1",
+            "indent-string": "^5.0.0",
+            "is-in-ci": "^2.0.0",
+            "patch-console": "^2.0.0",
+            "react-reconciler": "^0.33.0",
+            "scheduler": "^0.27.0",
+            "signal-exit": "^3.0.7",
+            "slice-ansi": "^9.0.0",
+            "stack-utils": "^2.0.6",
+            "string-width": "^8.2.0",
+            "terminal-size": "^4.0.1",
+            "type-fest": "^5.5.0",
+            "widest-line": "^6.0.0",
+            "wrap-ansi": "^10.0.0",
+            "ws": "^8.20.0",
+            "yoga-layout": "~3.2.1"
+          },
+          "dependencyClosure": [],
+          "dependencyRoots": [],
+          "integrity": "sha512-Y43xxa1ZSPvpmfLHcN5o+OdP8Rf8ykkNJEuKYOUNZKT8wXVNLFTtEm1nSDMQkfBH+YANF4Xuu0hhZ4ejqAtN2w==",
+          "libc": [],
+          "optionalDependencies": {},
+          "os": [],
+          "peerDependencies": {
+            "@types/react": ">=19.2.0",
+            "react": ">=19.2.0",
+            "react-devtools-core": ">=6.1.2"
+          },
+          "peerDependenciesMeta": {
+            "@types/react": {
+              "optional": true
+            },
+            "react-devtools-core": {
+              "optional": true
+            }
+          },
+          "registry": "https://registry.npmjs.org",
+          "shasum": "9f5acfdd6de553a20a3109efdcefe0afe763342f",
+          "tarball": "https://registry.npmjs.org/ink/-/ink-7.1.1.tgz",
+          "tarballSha256": "845b3147ec071c67aa2ba8f42825414231ac950500181b005e1677016c51b39a"
+        },
+        "version": "7.1.1"
+      }
+    ]
+  }
 }
