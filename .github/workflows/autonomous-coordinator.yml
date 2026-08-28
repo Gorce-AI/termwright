@@ -331,6 +331,25 @@ jobs:
             echo "path=$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
             echo 'run-id=${{ github.event.workflow_run.id }}' >> "$GITHUB_OUTPUT"
           fi
+      - name: Require one exact CI identity after terminal-state observation
+        shell: bash
+        env:
+          CI_RUN_ID: ${{ steps.event.outputs.run-id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
+          run_json=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID")
+          head_sha=$(jq -r '.head_sha' <<<"$run_json")
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+          runs_json=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&head_sha=$head_sha&per_page=100")
+          mapfile -t run_ids < <(jq -r --arg sha "$head_sha" '
+            .workflow_runs[]
+            | select(.head_sha == $sha and .event == "workflow_dispatch" and .path == ".github/workflows/ci.yml")
+            | .id
+          ' <<<"$runs_json")
+          test "${#run_ids[@]}" -eq 1
+          test "${run_ids[0]}" = "$CI_RUN_ID"
       - id: inspect
         run: node scripts/autonomous-release-coordinator.mjs inspect-ci "${{ steps.event.outputs.path }}"
 

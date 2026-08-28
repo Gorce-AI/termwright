@@ -134,8 +134,11 @@ describe('autonomous workflow security', () => {
     expect(dispatchAction).not.toContain('.run_attempt == 1');
     expect(dispatchAction).toContain('test "$(jq -r \'.run_attempt\' <<<"$run_json")" = 1');
     expect(dispatchAction).toContain('.path == ".github/workflows/ci.yml"');
-    expect(dispatchAction.match(/test "\$\{#run_ids\[@\]\}" -eq 1/gu)).toHaveLength(2);
-    expect(dispatchAction).toContain('test "${run_ids[0]}" = "$run_id"');
+    expect(dispatchAction.match(/test "\$\{#run_ids\[@\]\}" -eq 1/gu)).toHaveLength(1);
+    expect(dispatchAction).not.toContain('test "${run_ids[0]}" = "$run_id"');
+    expect(workflow).toContain('Require one exact CI identity after terminal-state observation');
+    expect(workflow).toContain('test "${#run_ids[@]}" -eq 1');
+    expect(workflow).toContain('test "${run_ids[0]}" = "$CI_RUN_ID"');
     const reconciliation = workflow.slice(
       workflow.indexOf('      - name: Commit only the compatibility allowlist'),
       workflow.indexOf('\n  inspect:'),
