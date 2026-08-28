@@ -11,6 +11,7 @@ import {
   generatedUpdateDirectories,
   reconcile,
   recordVerifiedFrameworkVersion,
+  renderCompatibilityChangeset,
   renderExactPeerRange,
   sameHookProfile,
   verifyGeneratedHookProfile,
@@ -35,6 +36,16 @@ const candidate = {
 };
 
 describe('framework candidate reconciliation', () => {
+  it('renders the generated changeset in the repository Prettier style', () => {
+    expect(
+      renderCompatibilityChangeset(new Set(['@termwright/probe-ink', '@termwright/ink']), [
+        'ink@7.1.1',
+      ]),
+    ).toBe(
+      "---\n'@termwright/ink': patch\n'@termwright/probe-ink': patch\n---\n\nCertify upstream framework releases: ink@7.1.1.\n",
+    );
+  });
+
   it('compares exact-source Ink profiles canonically without OpenTUI chunk machinery', () => {
     const left = {
       version: '7.1.1',
