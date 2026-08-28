@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import { inflateRawSync } from 'node:zlib';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -254,7 +255,7 @@ function argument(name) {
   return index < 0 ? undefined : process.argv[index + 1];
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isDirectExecution(import.meta.url)) {
   const architecture = argument('--architecture');
   const destination = argument('--destination');
   const archivePath = argument('--archive');

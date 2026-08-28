@@ -5,6 +5,7 @@ public static class TermwrightConsoleMarkerProbe {
   [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr GetStdHandle(int id);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetConsoleMode(IntPtr h, out uint mode);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleMode(IntPtr h, uint mode);
+  [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
 }
 "@
 Add-Type -TypeDefinition $source
@@ -69,9 +70,25 @@ try {
     [Console]::Error.WriteLine("MARKER_PROCESS_SHUTDOWN_TIMEOUT")
     exit 49
   }
-  $markerProcess.Refresh()
-  if ($markerProcess.ExitCode -ne 0) {
-    [Console]::Error.WriteLine("MARKER_PROCESS_EXIT:" + $markerProcess.ExitCode)
+  # Windows is the authority for the native child status. PowerShell 5.1 can
+  # leave the adapted Process.ExitCode property null after the timed overload
+  # of WaitForExit(), which incorrectly compares as non-zero. Query the still
+  # owned process handle directly and reject both an unavailable status and
+  # STILL_ACTIVE after the exit signal.
+  $markerExitCode = [uint32]0
+  if (-not [TermwrightConsoleMarkerProbe]::GetExitCodeProcess(
+    $markerProcess.Handle,
+    [ref]$markerExitCode
+  )) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_EXIT_CODE_UNAVAILABLE")
+    exit 50
+  }
+  if ($markerExitCode -eq 259) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_STILL_ACTIVE_AFTER_EXIT")
+    exit 51
+  }
+  if ($markerExitCode -ne 0) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_EXIT:" + $markerExitCode)
     exit 47
   }
 } finally {

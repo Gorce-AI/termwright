@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const repositoryUrl = 'git+https://github.com/Gorce-AI/termwright.git';
 const nativePackages = [
@@ -231,6 +231,6 @@ export function packNpmArtifacts(options) {
   return artifacts;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isDirectExecution(import.meta.url)) {
   packNpmArtifacts(parseArguments(process.argv.slice(2)));
 }

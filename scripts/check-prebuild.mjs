@@ -3,7 +3,8 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const BINARY = 'termwright_pty.node';
@@ -264,7 +265,7 @@ async function main(argv) {
   if (missing > 0 && !allowMissing) throw new Error(`${missing} required prebuild(s) are absent`);
 }
 
-if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isDirectExecution(import.meta.url)) {
   main(process.argv.slice(2)).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { argv } from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const digest = async (path) =>
   createHash('sha256')
@@ -83,7 +83,7 @@ export async function verifyWindowsPtyVerdict(
   return verdict;
 }
 
-if (argv[1] === fileURLToPath(import.meta.url)) {
+if (isDirectExecution(import.meta.url, argv[1])) {
   if (argv[2] === undefined) {
     throw new TypeError(
       'usage: verify-windows-pty-verdict.mjs <artifact-package-directory> [verdict-filename]',

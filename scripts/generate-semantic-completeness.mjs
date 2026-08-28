@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const registryUrl = new URL('../compatibility/registry.json', import.meta.url);
 const outputUrl = new URL('../compatibility/framework-semantic-completeness.json', import.meta.url);
@@ -133,6 +132,6 @@ async function main() {
   );
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (isDirectExecution(import.meta.url)) {
   await main();
 }

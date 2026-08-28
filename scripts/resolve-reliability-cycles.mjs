@@ -1,5 +1,4 @@
-import { resolve as resolvePath } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 export const MINIMUM_CERTIFIED_CYCLES = 250;
 export const MAXIMUM_CERTIFIED_CYCLES = 10_000;
@@ -18,8 +17,7 @@ export function resolveReliabilityCycles(input = '') {
   return String(cycles);
 }
 
-const invokedPath = process.argv[1];
-if (invokedPath !== undefined && pathToFileURL(resolvePath(invokedPath)).href === import.meta.url) {
+if (isDirectExecution(import.meta.url)) {
   try {
     console.log(resolveReliabilityCycles(process.argv[2]));
   } catch (error) {

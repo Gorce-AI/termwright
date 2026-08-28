@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { access, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import {
   canonicalJson,
   compareVersions,
@@ -16,6 +16,7 @@ import {
   recordExecutableVariant,
 } from './prepare-framework-candidate.mjs';
 import { renderGeometryPage } from '../website/scripts/check-geometry-matrix.mjs';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -598,10 +599,7 @@ async function main(argv) {
   await writeFile(planPath, canonicalJson(result.plan));
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

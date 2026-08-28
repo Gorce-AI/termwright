@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { access, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { deriveHookInstrumentationProfile } from './certify-framework-candidate.mjs';
 import { canonicalJson, downloadVerifiedNpmTarball } from './discover-framework-candidates.mjs';
 import {
@@ -12,6 +12,7 @@ import {
   removeMaterializedCandidateSource,
 } from './prepare-framework-candidate.mjs';
 import { finishWithCleanups } from './cleanup-resources.mjs';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -325,10 +326,7 @@ async function main(argv) {
   }
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

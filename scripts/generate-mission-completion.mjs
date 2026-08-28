@@ -3,6 +3,7 @@
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const outputUrl = new URL('../docs/architecture/audit/mission-completion.json', import.meta.url);
 
@@ -464,8 +465,7 @@ export function buildMissionCompletionReport() {
   };
 }
 
-const isDirect =
-  process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+const isDirect = isDirectExecution(import.meta.url);
 if (isDirect) {
   const report = buildMissionCompletionReport();
   for (const section of report.sections) {

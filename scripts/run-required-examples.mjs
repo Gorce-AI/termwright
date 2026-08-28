@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import { pnpmInvocation } from './package-manager-command.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -53,6 +53,6 @@ export async function runRequiredExamples(options = {}) {
   await waitForExit(spawnProcess(command, args, { cwd: repositoryRoot, env, stdio: 'inherit' }));
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (isDirectExecution(import.meta.url)) {
   await runRequiredExamples();
 }

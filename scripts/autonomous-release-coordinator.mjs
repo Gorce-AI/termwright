@@ -2,7 +2,7 @@
 
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const SHA = /^[0-9a-f]{40}$/u;
 const GITHUB_LOGIN = /^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
@@ -918,10 +918,7 @@ async function main(argv) {
   }
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

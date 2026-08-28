@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import { renderMcpToolSurfaceMarkdown } from '../packages/mcp/dist/docs.js';
 
 const START = '<!-- BEGIN GENERATED MCP TOOL SURFACE -->';
@@ -50,6 +50,6 @@ async function main() {
   );
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (isDirectExecution(import.meta.url)) {
   await main();
 }

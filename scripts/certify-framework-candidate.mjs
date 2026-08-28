@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import {
   canonicalJson,
   compareVersions,
@@ -1120,10 +1121,7 @@ async function main(argv) {
   }
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

@@ -1,6 +1,6 @@
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const execFile = promisify(execFileCallback);
 
@@ -69,4 +69,4 @@ async function main() {
   process.exitCode = 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
+if (isDirectExecution(import.meta.url)) await main();

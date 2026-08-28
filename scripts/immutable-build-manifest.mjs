@@ -12,7 +12,8 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { dirname, relative, resolve, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 export const IMMUTABLE_BUILD_MANIFEST_KIND = 'termwright-immutable-build-inputs';
 export const IMMUTABLE_BUILD_MANIFEST_VERSION = 2;
@@ -378,10 +379,7 @@ function record(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   if (process.argv.length !== 3 || process.argv[2] !== '--write') {
     throw new Error('usage: immutable-build-manifest.mjs --write');
   }

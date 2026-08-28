@@ -14,6 +14,7 @@
 
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import {
   chmod,
   lstat,
@@ -886,10 +887,7 @@ function parseArguments(argv) {
   return { outputDir, sourceRevision, ecosystems, skipExistingTests, initializeOnly };
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   try {
     const options = parseArguments(process.argv.slice(2));
     if (options.initializeOnly) {

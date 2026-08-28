@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { checkNpmReleaseReadiness } from './check-npm-release-readiness.mjs';
 
 const roots = [];
+const exec = promisify(execFile);
 const message = 'Package retired; use @termwright/ink instead.';
 const policy = {
   schemaVersion: 1,
@@ -63,6 +66,22 @@ function response(status, body) {
 }
 
 describe('npm release namespace readiness', () => {
+  it('executes the CLI through a symlink instead of silently bypassing the gate', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tw-npm-readiness-cli-'));
+    roots.push(root);
+    const linkedDirectory = join(root, 'scripts-link');
+    await symlink(
+      resolve(import.meta.dirname),
+      linkedDirectory,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    const linkedScript = join(linkedDirectory, 'check-npm-release-readiness.mjs');
+
+    await expect(
+      exec(process.execPath, [linkedScript, '--expect-missing', join(root, 'missing.json')]),
+    ).rejects.toMatchObject({ code: 1 });
+  });
+
   it('accepts the primary release only when every active name exists', async () => {
     await expect(
       checkNpmReleaseReadiness({

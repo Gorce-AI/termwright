@@ -2,7 +2,7 @@
 
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const registry = 'https://registry.npmjs.org';
 
@@ -178,10 +178,7 @@ async function main() {
   );
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;

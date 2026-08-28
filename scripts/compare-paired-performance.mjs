@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { builtinModules } from 'node:module';
 import { dirname, relative, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import {
   capturePerformanceBaseline,
   comparePerformanceBaseline,
@@ -10,6 +10,7 @@ import {
   validateBaselinePolicy,
 } from '../packages/performance/dist/controller/baseline-controller.js';
 import { loadPerformanceObservations } from './performance-observations.mjs';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import {
   PERFORMANCE_HARNESS_FILES,
   PERFORMANCE_HARNESS_FINGERPRINT_KIND,
@@ -446,9 +447,6 @@ async function main(argv) {
   if (failureCount > 0) process.exitCode = 1;
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   await main(process.argv.slice(2));
 }
