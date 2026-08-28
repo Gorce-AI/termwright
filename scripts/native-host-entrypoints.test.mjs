@@ -62,7 +62,8 @@ function expectArtifactStep(job, action, name, path) {
 }
 
 describe('the native host is the only Termwright test entrypoint', () => {
-  it('parses the exact packed PTY certification payload', () => {
+  it('parses the exact packed PTY certification payload', async () => {
+    const source = await readFile(new URL('./check-installed-pty.mjs', import.meta.url), 'utf8');
     expect(() =>
       execFileSync(
         execPath,
@@ -73,6 +74,12 @@ describe('the native host is the only Termwright test entrypoint', () => {
         { stdio: 'pipe' },
       ),
     ).not.toThrow();
+    expect(source).toMatch(
+      /if \(process\.platform === 'win32'\) \{\n  \/\/ A passthrough ConPTY preserves the application's WriteConsole boundaries\./u,
+    );
+    expect(source).toContain(
+      "const fragmentedSyntax = spawnSync(process.execPath, ['--check', '-']",
+    );
   });
 
   it('keeps repository and release certification single-attempt', async () => {
@@ -331,6 +338,10 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const releaseJobs = Object.fromEntries(
       workflowJobBlocks(release).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]),
     );
+    const ptyPrebuildAction = await readFile(
+      new URL('../.github/actions/build-pty-prebuild/action.yml', import.meta.url),
+      'utf8',
+    );
     expect(
       releaseJobs.verify.match(
         /^          pnpm test -- --resource-profile ci --json -- --project=.*$/gmu,
@@ -343,13 +354,17 @@ describe('the native host is the only Termwright test entrypoint', () => {
     );
     expect(releaseJobs.verify).toMatch(/^        run: pnpm test:tview-race$/mu);
     expect(releaseJobs.verify).toMatch(/^        run: pnpm test:go-toolexec$/mu);
-    expect(releaseJobs.prebuilds).toContain(
-      'node scripts/check-prebuild.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"',
+    expect(releaseJobs.prebuilds).toContain('uses: ./.github/actions/build-pty-prebuild');
+    expect(releaseJobs.prebuilds).toContain('platform: ${{ matrix.platform }}');
+    expect(releaseJobs.prebuilds).toContain('architecture: ${{ matrix.arch }}');
+    expect(ptyPrebuildAction).toContain('node-gyp install --ensure --target="$node_version"');
+    expect(ptyPrebuildAction).toContain(
+      'node-gyp rebuild --target="$node_version" --arch=${{ inputs.architecture }}',
     );
-    expect(releaseJobs.prebuilds).toContain('--nodedir="$node_root"');
-    expect(releaseJobs.prebuilds).toContain('node scripts/check-installed-pty.mjs "$install_dir"');
+    expect(ptyPrebuildAction).toContain('--nodedir="$node_root"');
+    expect(ptyPrebuildAction).toContain('node scripts/check-installed-pty.mjs "$install_dir"');
+    expect(ptyPrebuildAction).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(releaseJobs.prebuilds).toContain("bun-version: '1.4.0'");
-    expect(releaseJobs.prebuilds).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(releaseJobs['certify-x64-on-arm64']).toContain('runs-on: windows-11-arm');
     expect(releaseJobs['certify-x64-on-arm64']).toContain('architecture: x64');
     expect(releaseJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
@@ -360,10 +375,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
       workflowJobBlocks(preview).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]),
     );
     expect(previewJobs.prebuilds).toContain("bun-version: '1.4.0'");
-    expect(previewJobs.prebuilds).toContain('--nodedir="$node_root"');
-    expect(previewJobs.prebuilds).toContain(
-      'scripts/check-installed-pty.mjs "$install_dir" --verdict "$verdict"',
-    );
+    expect(previewJobs.prebuilds).toContain('uses: ./.github/actions/build-pty-prebuild');
     expect(previewJobs['certify-x64-on-arm64']).toContain('runs-on: windows-11-arm');
     expect(previewJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
     expect(previewJobs['certify-x64-on-arm64']).toContain('certification-verdict-arm64-host.json');
@@ -372,7 +384,10 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(releaseJobs.prebuilds).toContain('runner: ubuntu-22.04 }');
     expect(releaseJobs.prebuilds).toContain('runner: ubuntu-22.04-arm }');
     expect(releaseJobs.prebuilds).toContain("macos_target: '13.5'");
-    expect(releaseJobs.prebuilds).toContain('MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}');
+    expect(releaseJobs.prebuilds).toContain('macos-deployment-target: ${{ matrix.macos_target }}');
+    expect(ptyPrebuildAction).toContain(
+      'MACOSX_DEPLOYMENT_TARGET: ${{ inputs.macos-deployment-target }}',
+    );
     expect(releaseJobs.prebuilds).not.toMatch(/^\s+CXX:/mu);
     const setupWorkspace = await readFile(
       new URL('../.github/actions/setup-js-workspace/action.yml', import.meta.url),

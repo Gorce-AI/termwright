@@ -5,7 +5,8 @@
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect } from 'vitest';
+import { createServer, type Server, type Socket } from 'node:net';
+import { afterEach, describe, expect, onTestFinished } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import type { ActionEvent, ActionStartedEvent, SessionDiagnostic, TerminalHarness } from './api.js';
 import { AmbiguousLocatorError, ProbeAttachFailedError, TermwrightError } from './errors.js';
@@ -38,6 +39,124 @@ function ptyAvailable(): boolean {
 }
 
 const sessions: TerminalHarness[] = [];
+
+interface FixtureControl {
+  readonly port: number;
+  readonly ready: Promise<void>;
+  releaseMarker(): Promise<void>;
+  releaseCommit(): Promise<void>;
+  close(): Promise<void>;
+}
+
+async function createFixtureControl(): Promise<FixtureControl> {
+  let peer: Socket | undefined;
+  let closed = false;
+  let readySettled = false;
+  let closePromise: Promise<void> | undefined;
+  let resolveReady!: () => void;
+  let rejectReady!: (error: Error) => void;
+  let resolveRelease: (() => void) | undefined;
+  let rejectRelease: ((error: Error) => void) | undefined;
+  let expectedAcknowledgement: number | undefined;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  // The child may fail before launch() returns and before the test reaches its
+  // explicit await. Own that rejection from construction time.
+  void ready.catch(() => undefined);
+  const failPending = (error: Error): void => {
+    if (!readySettled) {
+      readySettled = true;
+      rejectReady(error);
+    }
+    rejectRelease?.(error);
+    resolveRelease = undefined;
+    rejectRelease = undefined;
+  };
+  const server: Server = createServer((socket) => {
+    if (peer !== undefined) {
+      socket.destroy(new Error('fixture control accepts exactly one connection'));
+      return;
+    }
+    peer = socket;
+    socket.setNoDelay(true);
+    socket.on('data', (chunk) => {
+      for (const byte of chunk) {
+        if (byte === 0x52) {
+          readySettled = true;
+          resolveReady(); // R: fixture is ready.
+        }
+        if (byte === expectedAcknowledgement) {
+          resolveRelease?.();
+          resolveRelease = undefined;
+          rejectRelease = undefined;
+          expectedAcknowledgement = undefined;
+        }
+      }
+    });
+    socket.on('error', (error) => {
+      failPending(error);
+    });
+    socket.on('end', () => failPending(new Error('fixture control ended before completion')));
+    socket.on('close', () => failPending(new Error('fixture control closed before completion')));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    server.close();
+    throw new Error('fixture control did not receive a TCP port');
+  }
+  server.on('error', failPending);
+
+  return {
+    port: address.port,
+    ready,
+    releaseMarker: () => sendFixtureCommand('M', 0x4d),
+    releaseCommit: () => sendFixtureCommand('C', 0x41),
+    close: async () => {
+      closePromise ??= (async () => {
+        if (closed) return;
+        closed = true;
+        failPending(new Error('fixture control owner closed'));
+        peer?.destroy();
+        if (!server.listening) return;
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error instanceof Error) reject(error);
+            else resolve();
+          });
+        });
+      })();
+      await closePromise;
+    },
+  };
+
+  async function sendFixtureCommand(command: 'M' | 'C', acknowledgement: number): Promise<void> {
+    if (peer === undefined) throw new Error('fixture control is not connected');
+    if (resolveRelease !== undefined) throw new Error('fixture release is already pending');
+    expectedAcknowledgement = acknowledgement;
+    const acknowledged = new Promise<void>((resolve, reject) => {
+      resolveRelease = resolve;
+      rejectRelease = reject;
+    });
+    // Own the ACK failure before awaiting the independent write callback.
+    void acknowledged.catch(() => undefined);
+    await new Promise<void>((resolve, reject) => {
+      peer?.write(command, (error) => {
+        if (error instanceof Error) reject(error);
+        else resolve();
+      });
+    });
+    await acknowledged;
+  }
+}
 
 /** Launches a fixture with extra argv, for fixtures that take flags. */
 async function launchWith(
@@ -1692,95 +1811,118 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
   });
 
   it('waits for a pending focus frame before choosing a keyboard strategy', async () => {
-    const terminal = await launch('semantic-app.mjs', {
-      semanticNegotiationMs: 5_000,
-      env: {
-        TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
-        TERMWRIGHT_FIXTURE_PENDING_FOCUS_FRAME: '1',
-      },
-    });
-    await terminal.getByTestId('approve').resolve();
+    const control = await createFixtureControl();
+    onTestFinished(() => control.close());
+    try {
+      const terminal = await launch('semantic-app.mjs', {
+        semanticNegotiationMs: 5_000,
+        env: {
+          TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
+          TERMWRIGHT_FIXTURE_PENDING_FOCUS_FRAME: '1',
+          TERMWRIGHT_FIXTURE_FOCUS_CONTROL_PORT: String(control.port),
+        },
+      });
+      await control.ready;
+      await terminal.getByTestId('approve').resolve();
 
-    const beforePendingFocus = terminal.checkpoint();
-    await terminal.write('F');
-    await terminal.waitForText('[Reject]');
-    let startedActionId: string | undefined;
-    const offStarted = terminal.events.on('action-start', (event) => {
-      if (event.api === 'activate') startedActionId = event.actionId;
-    });
-    const completed = new Promise<string>((resolve) => {
-      const off = terminal.events.on('action', (event) => {
-        if (event.api !== 'activate') return;
-        off();
-        resolve(event.actionId);
+      const beforePendingFocus = terminal.checkpoint();
+      await terminal.write('F');
+      await terminal.waitForText('[Reject]');
+      let startedActionId: string | undefined;
+      const offStarted = terminal.events.on('action-start', (event) => {
+        if (event.api === 'activate') startedActionId = event.actionId;
       });
-    });
-    const waiting = new Promise<SessionDiagnostic>((resolve) => {
-      const off = terminal.events.on('diagnostic', (event) => {
-        if (
-          event.code !== 'action-observation-wait' ||
-          event.observationState !== 'semantic-frame-open'
-        )
-          return;
-        off();
-        resolve(event);
+      const completed = new Promise<string>((resolve) => {
+        const off = terminal.events.on('action', (event) => {
+          if (event.api !== 'activate') return;
+          off();
+          resolve(event.actionId);
+        });
       });
-    });
-    let activationSettled = false;
-    // Own both settlements immediately. If an assertion below fails, fixture
-    // teardown closes the session and the pending action rejects; a `.finally`
-    // branch would mirror that rejection into a promise the failed test no
-    // longer awaits, turning the useful assertion failure into an unhandled
-    // rejection. This outcome promise always resolves while preserving the
-    // action error for the normal assertion path below.
-    const activationOutcome = terminal
-      .getByTestId('reject')
-      .activate()
-      .then(
-        (receipt) => {
-          activationSettled = true;
-          return { ok: true as const, receipt };
-        },
-        (error: unknown) => {
-          activationSettled = true;
-          return { ok: false as const, error };
-        },
+      const waiting = new Promise<SessionDiagnostic>((resolve) => {
+        const off = terminal.events.on('diagnostic', (event) => {
+          if (
+            event.code !== 'action-observation-wait' ||
+            event.observationState !== 'semantic-frame-open'
+          )
+            return;
+          off();
+          resolve(event);
+        });
+      });
+      let activationSettled = false;
+      // Own both settlements immediately. If an assertion below fails, fixture
+      // teardown closes the session and the pending action rejects; a `.finally`
+      // branch would mirror that rejection into a promise the failed test no
+      // longer awaits, turning the useful assertion failure into an unhandled
+      // rejection. This outcome promise always resolves while preserving the
+      // action error for the normal assertion path below.
+      const activationOutcome = terminal
+        .getByTestId('reject')
+        .activate()
+        .then(
+          (receipt) => {
+            activationSettled = true;
+            return { ok: true as const, receipt };
+          },
+          (error: unknown) => {
+            activationSettled = true;
+            return { ok: false as const, error };
+          },
+        );
+
+      const waitDiagnostic = await waiting;
+      offStarted();
+      expect(activationSettled).toBe(false);
+      expect(waitDiagnostic.actionId).toBe(startedActionId);
+      const whileFocusFrameOpen = terminal.checkpoint();
+      // Screen revisions are transport observations: one logical initial
+      // frame can span multiple PTY chunks before its marker, so its exact
+      // paired revision is not fixed at 1. The causal contract is stronger:
+      // the published pair is unchanged, while the visible Reject frame has
+      // advanced the screen beyond that still-published pair.
+      expect(beforePendingFocus.semanticRevision).toBe(1);
+      expect(beforePendingFocus.pairedScreenRevision).not.toBeNull();
+      expect(whileFocusFrameOpen.semanticRevision).toBe(beforePendingFocus.semanticRevision);
+      expect(whileFocusFrameOpen.pairedScreenRevision).toBe(
+        beforePendingFocus.pairedScreenRevision,
       );
+      if (whileFocusFrameOpen.pairedScreenRevision === null) {
+        throw new Error('the initial semantic revision lost its paired screen');
+      }
+      expect(whileFocusFrameOpen.screenRevision).toBeGreaterThan(
+        whileFocusFrameOpen.pairedScreenRevision,
+      );
+      expect(terminal.screen().text()).toContain('[Reject]');
 
-    const waitDiagnostic = await waiting;
-    offStarted();
-    expect(activationSettled).toBe(false);
-    expect(waitDiagnostic.actionId).toBe(startedActionId);
-    const whileFocusFrameOpen = terminal.checkpoint();
-    // Screen revisions are transport observations: one logical initial
-    // frame can span multiple PTY chunks before its marker, so its exact
-    // paired revision is not fixed at 1. The causal contract is stronger:
-    // the published pair is unchanged, while the visible Reject frame has
-    // advanced the screen beyond that still-published pair.
-    expect(beforePendingFocus.semanticRevision).toBe(1);
-    expect(beforePendingFocus.pairedScreenRevision).not.toBeNull();
-    expect(whileFocusFrameOpen.semanticRevision).toBe(beforePendingFocus.semanticRevision);
-    expect(whileFocusFrameOpen.pairedScreenRevision).toBe(beforePendingFocus.pairedScreenRevision);
-    if (whileFocusFrameOpen.pairedScreenRevision === null) {
-      throw new Error('the initial semantic revision lost its paired screen');
+      const markerObserved = new Promise<void>((resolve) => {
+        const off = terminal.events.on('semantic-revision', (event) => {
+          if (event.revision !== 2) return;
+          off();
+          resolve();
+        });
+      });
+      // Two acknowledged phases force the adverse cross-transport ordering:
+      // the driver publishes marker-paired revision 2 while FRAME_END is still
+      // withheld, and only the second command may deliver that commit.
+      await control.releaseMarker();
+      await markerObserved;
+      expect(activationSettled).toBe(false);
+      expect(terminal.checkpoint().semanticRevision).toBe(2);
+
+      await control.releaseCommit();
+      const activation = await activationOutcome;
+      if (!activation.ok) throw activation.error;
+      const { receipt } = activation;
+      expect(await completed).toBe(waitDiagnostic.actionId);
+
+      expect(receipt.plan.strategy).toBe('authoritative-activate');
+      expect(receipt.before.semanticRevision).toBe(2);
+      expect(receipt.before.pairedScreenRevision).not.toBeNull();
+      await terminal.waitForText('ACTIVATED reject');
+    } finally {
+      await control.close();
     }
-    expect(whileFocusFrameOpen.screenRevision).toBeGreaterThan(
-      whileFocusFrameOpen.pairedScreenRevision,
-    );
-    expect(terminal.screen().text()).toContain('[Reject]');
-
-    // C is a test-only causal release. The fixture exits non-zero if the
-    // action recipe emits any input before this point.
-    await terminal.write('C');
-    const activation = await activationOutcome;
-    if (!activation.ok) throw activation.error;
-    const { receipt } = activation;
-    expect(await completed).toBe(waitDiagnostic.actionId);
-
-    expect(receipt.plan.strategy).toBe('authoritative-activate');
-    expect(receipt.before.semanticRevision).toBe(2);
-    expect(receipt.before.pairedScreenRevision).not.toBeNull();
-    await terminal.waitForText('ACTIVATED reject');
   });
 
   it('returns only after a required semantic capability is frozen as supported', async () => {

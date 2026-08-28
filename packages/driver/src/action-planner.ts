@@ -26,6 +26,7 @@ import {
   CapabilityUnavailableError,
   InputModeDisabledError,
   NotActionableError,
+  PendingObservationError,
   StaleSnapshotError,
   TermwrightError,
 } from './errors.js';
@@ -1198,12 +1199,13 @@ export class ActionPlanner {
   #requireSettledObservation(intent: ActionIntent): void {
     const state = this.#ctx.actionObservationState();
     if (state === 'settled') return;
-    throw new StaleSnapshotError(
+    throw new PendingObservationError(
       `${intent.kind} cannot be planned while the committed observation is ${state}`,
       this.#ctx.errorDiagnostics({
         suggestion:
           'retry after terminal parsing and semantic frame pairing reach one committed observation',
       }),
+      state,
     );
   }
 

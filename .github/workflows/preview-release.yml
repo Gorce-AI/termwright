@@ -3,13 +3,18 @@ name: Preview release
 # Installable builds of a pull request, published to pkg-pr-new rather than to
 # npm. Nothing here touches the real registry, and no version is consumed.
 #
-# Opt-in per PR: add the `pr preview` label. A preview of every PR would be
-# noise, and a preview built from an unreviewed fork is not something to hand
-# people a one-line install command for by default.
+# Opt-in per PR: first install the pkg-pr-new GitHub App for this repository,
+# then add the `pr preview` label. The service rejects publication when its app
+# is absent, so the label is an assertion that this repository prerequisite is
+# already satisfied. A preview of every PR would be noise, and a preview built
+# from an unreviewed fork is not something to hand people a one-line install
+# command for by default.
+# `pr preview artifacts` is the registry-independent channel: it produces one
+# sealed downloadable bundle and never calls the hosted publishing service.
 
 on:
   pull_request:
-    types: [labeled, synchronize]
+    types: [labeled, unlabeled, synchronize]
 
 concurrency:
   group: preview-${{ github.event.pull_request.number }}
@@ -20,7 +25,7 @@ permissions:
 
 jobs:
   prebuilds:
-    if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    if: contains(github.event.pull_request.labels.*.name, 'pr preview') || contains(github.event.pull_request.labels.*.name, 'pr preview artifacts')
     name: preview PTY prebuild (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
@@ -53,34 +58,11 @@ jobs:
         with:
           bun-version: '1.4.0'
       - run: pnpm install --frozen-lockfile
-      - name: Compile and verify
-        working-directory: packages/pty
-        shell: bash
-        env:
-          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}
-        run: |
-          node_root="$(node -p 'require("node:path").dirname(require("node:path").dirname(process.execPath)).replaceAll("\\\\", "/")')"
-          test -f "$node_root/include/node/node.h"
-          pnpm exec node-gyp rebuild --nodedir="$node_root" --arch=${{ matrix.arch }}
-          if [[ "${{ matrix.platform }}" == "win32" ]]; then
-            node ../../scripts/stage-vendored-conpty.mjs --architecture "${{ matrix.arch }}" --destination build/Release/vendor
-          fi
-          cp build/Release/termwright_pty.node "../pty-${{ matrix.platform }}-${{ matrix.arch }}/termwright_pty.node"
-          node ../../scripts/check-prebuild.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"
-      - name: Exercise the exact preview Windows bundle
-        if: matrix.platform == 'win32'
-        shell: bash
-        run: |
-          set -euo pipefail
-          pack_dir="$RUNNER_TEMP/termwright-preview-pty-packs"
-          install_dir="$RUNNER_TEMP/termwright-preview-pty-install"
-          mkdir -p "$pack_dir" "$install_dir"
-          pnpm --dir "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}" pack --pack-destination "$pack_dir"
-          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
-          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
-          verdict="packages/pty-${{ matrix.platform }}-${{ matrix.arch }}/certification-verdict.json"
-          TERMWRIGHT_REQUIRE_BUN=1 node scripts/check-installed-pty.mjs "$install_dir" --verdict "$verdict"
-          node scripts/verify-windows-pty-verdict.mjs "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}"
+      - uses: ./.github/actions/build-pty-prebuild
+        with:
+          platform: ${{ matrix.platform }}
+          architecture: ${{ matrix.arch }}
+          macos-deployment-target: ${{ matrix.macos_target }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: preview-pty-${{ matrix.platform }}-${{ matrix.arch }}
@@ -89,7 +71,7 @@ jobs:
           retention-days: 1
 
   certify-x64-on-arm64:
-    if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    if: contains(github.event.pull_request.labels.*.name, 'pr preview') || contains(github.event.pull_request.labels.*.name, 'pr preview artifacts')
     name: certify preview PTY x64 on Windows ARM64
     needs: prebuilds
     runs-on: windows-11-arm
@@ -142,7 +124,7 @@ jobs:
           retention-days: 1
 
   preview:
-    if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    if: contains(github.event.pull_request.labels.*.name, 'pr preview') || contains(github.event.pull_request.labels.*.name, 'pr preview artifacts')
     needs: [prebuilds, certify-x64-on-arm64]
     runs-on: ubuntu-latest
     steps:
@@ -152,6 +134,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # Parent identity is part of the artifact contract. A depth-one
+          # checkout marks the synthetic merge as shallow and hides `%P`.
+          fetch-depth: 2
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
@@ -190,6 +175,46 @@ jobs:
         run: node scripts/verify-windows-pty-verdict.mjs preview-prebuilds/preview-pty-win32-x64 certification-verdict-arm64-host.json
       - run: pnpm build
 
+      - name: Pack and seal the downloadable preview
+        shell: bash
+        env:
+          MERGE_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          for commit in "$MERGE_SHA" "$HEAD_SHA" "$BASE_SHA"; do
+            [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          done
+          test "$(git rev-parse HEAD)" = "$MERGE_SHA"
+          read -r merge_base merge_head extra < <(git show -s --format=%P HEAD)
+          test -z "${extra:-}"
+          test "$merge_base" = "$BASE_SHA"
+          test "$merge_head" = "$HEAD_SHA"
+          mkdir -p preview
+          pnpm pack:npm-artifacts -- --output preview/npm --manifest preview/npm-manifest.json --source-sha "$MERGE_SHA"
+          node -e 'const fs = require("node:fs"); fs.writeFileSync("preview/build-identity.json", JSON.stringify({schemaVersion: 1, mergeCommit: process.env.MERGE_SHA, headCommit: process.env.HEAD_SHA, baseCommit: process.env.BASE_SHA}, null, 2) + "\n")'
+          install_dir="$RUNNER_TEMP/termwright-preview-driver"
+          mkdir -p "$install_dir"
+          npm install --prefix "$install_dir" \
+            preview/npm/termwright-protocol-*.tgz \
+            preview/npm/termwright-vt-*.tgz \
+            preview/npm/termwright-pty-linux-x64-*.tgz \
+            preview/npm/termwright-pty-[0-9]*.tgz \
+            preview/npm/termwright-driver-*.tgz
+          node scripts/check-installed-driver.mjs "$install_dir"
+          (cd preview && find npm npm-manifest.json build-identity.json -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd preview && sha256sum --check SHA256SUMS)
+
+      - name: Upload the sealed downloadable preview
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: preview-npm-${{ github.sha }}
+          path: preview
+          if-no-files-found: error
+          retention-days: 7
+
       # pkg-pr-new serves each package straight from the build, so a reviewer
       # installs the PR with `npm i https://pkg.pr.new/@termwright/driver@<pr>`.
-      - run: pnpm dlx pkg-pr-new@0.0.88 publish --pnpm './packages/*'
+      - if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+        run: pnpm dlx pkg-pr-new@0.0.88 publish --pnpm './packages/*'

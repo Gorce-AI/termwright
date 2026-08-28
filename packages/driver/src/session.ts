@@ -668,19 +668,26 @@ class TerminalSession implements TerminalHarness, LocatorContext {
               );
               this.#notifyChange();
             },
-            onSnapshot: (snapshot) => this.#pairing.offerSnapshot(snapshot),
+            onSnapshot: (snapshot) => {
+              this.#pairing.offerSnapshot(snapshot);
+              this.#notifyChange();
+            },
             onLogRecord: (record) => this.#publishLogRecord(record),
             onCommit: (revision) => {
               // FRAME_END in the probe lifecycle: the frame this revision was
               // drawn in is over, whether or not its beginning was announced.
               this.#pairing.frameClosed(revision);
+              this.#notifyChange();
               this.#diagnostic(
                 'revision-commit',
                 `the adapter reported committing revision ${revision}; pairing still waits for its render marker`,
                 { revision },
               );
             },
-            onFrameBegin: (revision) => this.#pairing.frameOpened(revision),
+            onFrameBegin: (revision) => {
+              this.#pairing.frameOpened(revision);
+              this.#notifyChange();
+            },
             onDiagnostic: (code, detail, about) => this.#diagnostic(code, detail, about),
             onProtocolViolation: (error, wireCode) => {
               this.#violation =

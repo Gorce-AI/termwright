@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: AmbiguousLocatorError
 
-Defined in: [driver/src/errors.ts:80](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L80)
+Defined in: [driver/src/errors.ts:94](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L94)
 
 Strict-mode violation: a locator matched more than one node.
 
@@ -25,7 +25,7 @@ Strict-mode violation: a locator matched more than one node.
 
 > **new AmbiguousLocatorError**(`message`, `candidates`, `diagnostics`): `AmbiguousLocatorError`
 
-Defined in: [driver/src/errors.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L81)
+Defined in: [driver/src/errors.ts:95](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L95)
 
 #### Parameters
 

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    "@termwright/pty-darwin-arm64",
+    "@termwright/pty-darwin-x64",
+    "@termwright/pty-linux-arm64",
+    "@termwright/pty-linux-x64",
+    "@termwright/pty-win32-arm64",
+    "@termwright/pty-win32-x64",
+    "@termwright/evidence-provider",
+    "@termwright/resource-broker",
+    "@termwright/run-history",
+    "@termwright/run-journal-transport",
+    "@termwright/pty"
+  ]
+}

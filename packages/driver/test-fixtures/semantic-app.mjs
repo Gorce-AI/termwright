@@ -34,6 +34,7 @@ const forgedMarkerProbe = process.env['TERMWRIGHT_FIXTURE_FORGED_MARKER'] === '1
 const terminalMouseEnabled = process.env['TERMWRIGHT_FIXTURE_MOUSE_MODE'] !== '0';
 const firstTreeDelay = Number(process.env['TERMWRIGHT_FIXTURE_FIRST_TREE_DELAY'] ?? '0');
 const pendingFocusFrame = process.env['TERMWRIGHT_FIXTURE_PENDING_FOCUS_FRAME'] === '1';
+const focusControlPort = Number(process.env['TERMWRIGHT_FIXTURE_FOCUS_CONTROL_PORT'] ?? '0');
 const unpairedRefreshDelay = Number(
   process.env['TERMWRIGHT_FIXTURE_UNPAIRED_REFRESH_DELAY'] ?? '100',
 );
@@ -93,6 +94,8 @@ function render() {
 
 let outputQueue = Promise.resolve();
 let pendingFocusCommit = null;
+let focusControl = null;
+let pendingFocusMarkerWritten = false;
 
 function writeAndFlush(data) {
   return new Promise((resolve, reject) => {
@@ -103,8 +106,60 @@ function writeAndFlush(data) {
   });
 }
 
+function writeSocketAndFlush(target, data) {
+  return new Promise((resolve, reject) => {
+    if (target === null) {
+      reject(new Error('semantic socket is unavailable'));
+      return;
+    }
+    target.write(data, (error) => {
+      if (error instanceof Error) reject(error);
+      else resolve();
+    });
+  });
+}
+
 function enqueueOutput(task) {
   outputQueue = outputQueue.then(task).catch(() => process.exit(4));
+}
+
+function releasePendingFocusMarker() {
+  if (pendingFocusCommit === null) process.exit(6);
+  if (pendingFocusMarkerWritten) process.exit(6);
+  pendingFocusMarkerWritten = true;
+  enqueueOutput(async () => {
+    const pending = pendingFocusCommit;
+    if (pending === null) process.exit(6);
+    await writeAndFlush(encodeMarker(token, pending.sessionId, pending.revision));
+    await writeSocketAndFlush(focusControl, 'M');
+  });
+}
+
+function releasePendingFocusCommit() {
+  if (pendingFocusCommit === null || !pendingFocusMarkerWritten) process.exit(6);
+  const pending = pendingFocusCommit;
+  pendingFocusCommit = null;
+  enqueueOutput(async () => {
+    await writeSocketAndFlush(
+      pending.socket,
+      encodeFrame({ type: 'revision-commit', revision: pending.revision }, 1024 * 1024),
+    );
+    await writeSocketAndFlush(focusControl, 'A');
+  });
+}
+
+if (pendingFocusFrame && Number.isInteger(focusControlPort) && focusControlPort > 0) {
+  focusControl = connect({ host: '127.0.0.1', port: focusControlPort }, () => {
+    focusControl.write('R');
+  });
+  focusControl.on('data', (chunk) => {
+    for (const byte of chunk) {
+      if (byte === 0x4d) releasePendingFocusMarker();
+      else if (byte === 0x43) releasePendingFocusCommit();
+      else process.exit(6);
+    }
+  });
+  focusControl.on('error', () => process.exit(6));
 }
 
 function draw() {
@@ -593,21 +648,10 @@ process.stdin.on('data', (chunk) => {
     process.stdout.write('BYE\r\n');
     process.exit(0);
   }
-  if (text === 'C' && pendingFocusCommit !== null) {
-    const pending = pendingFocusCommit;
-    pendingFocusCommit = null;
-    enqueueOutput(async () => {
-      pending.socket?.write(
-        encodeFrame({ type: 'revision-commit', revision: pending.revision }, 1024 * 1024),
-      );
-      await writeAndFlush(encodeMarker(token, pending.sessionId, pending.revision));
-    });
-    return;
-  }
   if (pendingFocusCommit !== null) {
     // The paired action barrier must emit no recipe input while the fixture
-    // holds this revision open. Any byte other than the explicit test release
-    // proves that the driver crossed the causal boundary early.
+    // holds this revision open. The release travels over a separate acknowledged
+    // control channel, so any PTY byte proves the driver crossed the boundary.
     process.exit(5);
   }
   if (text === 'g') {
@@ -671,11 +715,12 @@ process.stdin.on('data', (chunk) => {
       sessionId,
       socket,
     };
+    pendingFocusMarkerWritten = false;
     socket?.write(encodeFrame({ type: 'frame-begin', revision: pendingRevision }, 1024 * 1024));
     socket?.write(encodeFrame({ type: 'snapshot', snapshot: pendingSnapshot }, 1024 * 1024));
-    // The test releases commit+marker with C only after an action has started.
-    // This causal gate proves the action really waits for pairing; elapsed time
-    // and runner speed cannot decide which branch the test covers.
+    // The test releases marker and commit as two acknowledged phases only after
+    // an action starts. That forces marker observation while FRAME_END remains
+    // withheld; runner speed cannot decide which branch the test covers.
     enqueueOutput(() => writeAndFlush(pendingFrame));
     return;
   }

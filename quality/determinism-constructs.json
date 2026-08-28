@@ -10,7 +10,7 @@
     "platformSkips": "additionally governed by quality/platform-deviations.json"
   },
   "summary": {
-    "bounded-deadline-or-managed-background-task": 40,
+    "bounded-deadline-or-managed-background-task": 41,
     "deadline-or-scheduler-regression-test": 58,
     "deterministic-adversarial-fixture-schedule": 32,
     "display-or-persisted-wall-time-not-correctness-order": 90,
@@ -20,7 +20,7 @@
     "managed-or-diagnostic-background-task": 72,
     "production-polling-review": 1,
     "production-process-isolation-review": 39,
-    "test-observer-or-intentional-background-task": 13,
+    "test-observer-or-intentional-background-task": 15,
     "test-process-isolation-review": 39
   },
   "findings": [
@@ -545,6 +545,12 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())(\"the child's environment\", () => {"
+    },
+    {
+      "path": "packages/conformance/src/support/probe-process-shutdown.ts",
+      "kind": "timer",
+      "classification": "bounded-deadline-or-managed-background-task",
+      "excerpt": "timer = setTimeout(() => {"
     },
     {
       "path": "packages/conformance/src/support/probe.ts",
@@ -1103,6 +1109,18 @@
       "kind": "fire-and-forget",
       "classification": "test-observer-or-intentional-background-task",
       "excerpt": "void launched.then("
+    },
+    {
+      "path": "packages/driver/src/session.pty.test.ts",
+      "kind": "fire-and-forget",
+      "classification": "test-observer-or-intentional-background-task",
+      "excerpt": "void acknowledged.catch(() => undefined);"
+    },
+    {
+      "path": "packages/driver/src/session.pty.test.ts",
+      "kind": "fire-and-forget",
+      "classification": "test-observer-or-intentional-background-task",
+      "excerpt": "void ready.catch(() => undefined);"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",

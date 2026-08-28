@@ -1,0 +1,59 @@
+name: Build and certify a PTY prebuild
+description: Compile, stage, pack, and exercise one native PTY platform package.
+inputs:
+  platform:
+    description: Node platform identifier
+    required: true
+  architecture:
+    description: Node architecture identifier
+    required: true
+  macos-deployment-target:
+    description: Minimum macOS deployment target
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Compile the native addon
+      working-directory: packages/pty
+      shell: bash
+      env:
+        MACOSX_DEPLOYMENT_TARGET: ${{ inputs.macos-deployment-target }}
+      run: |
+        set -euo pipefail
+        if [[ "${{ inputs.platform }}" == "win32" ]]; then
+          node_version="$(node -p 'process.versions.node')"
+          pnpm exec node-gyp install --ensure --target="$node_version"
+          pnpm exec node-gyp rebuild --target="$node_version" --arch=${{ inputs.architecture }}
+          node ../../scripts/stage-vendored-conpty.mjs --architecture "${{ inputs.architecture }}" --destination build/Release/vendor
+        else
+          node_root="$(node -p 'require("node:path").dirname(require("node:path").dirname(process.execPath))')"
+          test -f "$node_root/include/node/node.h"
+          pnpm exec node-gyp rebuild --nodedir="$node_root" --arch=${{ inputs.architecture }}
+        fi
+    - run: pnpm --filter @termwright/pty build
+      shell: bash
+    - name: Place and verify the native package
+      shell: bash
+      run: |
+        set -euo pipefail
+        cp packages/pty/build/Release/termwright_pty.node \
+          "packages/pty-${{ inputs.platform }}-${{ inputs.architecture }}/termwright_pty.node"
+        node scripts/check-prebuild.mjs "${{ inputs.platform }}" "${{ inputs.architecture }}"
+    - name: Exercise the exact packed native bundle
+      shell: bash
+      run: |
+        set -euo pipefail
+        pack_dir="$RUNNER_TEMP/termwright-pty-packs-${{ inputs.platform }}-${{ inputs.architecture }}"
+        install_dir="$RUNNER_TEMP/termwright-pty-install-${{ inputs.platform }}-${{ inputs.architecture }}"
+        mkdir -p "$pack_dir" "$install_dir"
+        pnpm --dir "packages/pty-${{ inputs.platform }}-${{ inputs.architecture }}" pack --pack-destination "$pack_dir"
+        pnpm --dir packages/pty pack --pack-destination "$pack_dir"
+        npm install --prefix "$install_dir" "$pack_dir"/*.tgz
+        if [[ "${{ inputs.platform }}" == "win32" ]]; then
+          verdict="packages/pty-${{ inputs.platform }}-${{ inputs.architecture }}/certification-verdict.json"
+          TERMWRIGHT_REQUIRE_BUN=1 node scripts/check-installed-pty.mjs "$install_dir" --verdict "$verdict"
+          node scripts/verify-windows-pty-verdict.mjs "packages/pty-${{ inputs.platform }}-${{ inputs.architecture }}"
+        else
+          node scripts/check-installed-pty.mjs "$install_dir"
+        fi

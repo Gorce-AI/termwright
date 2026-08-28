@@ -76,6 +76,20 @@ export class StaleSnapshotError extends TermwrightError {
   }
 }
 
+/** @internal A stale plan caused specifically by an in-flight observation boundary. */
+export class PendingObservationError extends StaleSnapshotError {
+  readonly observationState: 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
+
+  constructor(
+    message: string,
+    diagnostics: ErrorDiagnostics,
+    observationState: 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending',
+  ) {
+    super(message, diagnostics);
+    this.observationState = observationState;
+  }
+}
+
 /** Strict-mode violation: a locator matched more than one node. */
 export class AmbiguousLocatorError extends TermwrightError {
   constructor(

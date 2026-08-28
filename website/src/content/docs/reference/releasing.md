@@ -58,12 +58,33 @@ just at release time.
 
 ## Preview packages
 
-| Channel    | What it is                                                         | How to install                                     |
-| ---------- | ------------------------------------------------------------------ | -------------------------------------------------- |
-| PR preview | A build of an open pull request, on pkg-pr-new. Never touches npm. | `npm i https://pkg.pr.new/@termwright/driver@<pr>` |
+| Channel              | What it is                                                                 | How to install                                             |
+| -------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| PR preview           | A build of an open pull request, on pkg-pr-new. Never touches npm.         | `npm i https://pkg.pr.new/@termwright/driver@<pr>`         |
+| PR preview artifacts | A checksummed GitHub artifact containing all locally installable tarballs. | Download, verify, and install the current-platform subset. |
 
 PR previews are opt-in per pull request. They provide installable artifacts for
-review without consuming a package version or changing an npm dist-tag.
+review without consuming a package version or changing an npm dist-tag. A repository
+owner must install the `pkg-pr-new` GitHub App before adding the `pr preview` label; the
+label deliberately means that the external publishing prerequisite is ready.
+
+Use the `pr preview artifacts` label when the GitHub App is unavailable or a review needs
+the exact downloadable package set. The artifact name includes the synthetic merge commit;
+`build-identity.json` also records the PR head and base commits, while `SHA256SUMS` seals the
+metadata and every tarball. This channel never claims a pkg-pr-new URL and never touches npm.
+After downloading, verify `sha256sum --check SHA256SUMS`, then install only the dependency
+closure for the platform under test. For example, on Linux x64:
+
+```sh
+npm install \
+  npm/termwright-protocol-*.tgz \
+  npm/termwright-vt-*.tgz \
+  npm/termwright-pty-linux-x64-*.tgz \
+  npm/termwright-pty-[0-9]*.tgz \
+  npm/termwright-driver-*.tgz
+```
+
+Do not install native prebuild tarballs for other operating systems or architectures.
 
 ## Older lines
 
