@@ -169,7 +169,7 @@ describe('autonomous workflow security', () => {
       'canonical autonomous PR identity differs from its commit association',
     );
     expect(reconciler).toContain(
-      "join(root, 'compatibility/framework-semantic-completeness.json')",
+      "join(repositoryRoot, 'compatibility/framework-semantic-completeness.json')",
     );
     expect(reconciler).toContain('renderSemanticCompletenessReport(compatibility)');
     expect(workflow).toContain('automation/workflow-heartbeat');

@@ -63,11 +63,100 @@ export function generatedUpdateName(candidate) {
 }
 
 export function renderCompatibilityChangeset(packages, candidates) {
-  const frontmatter = [...packages]
-    .sort()
-    .map((name) => `'${name}': patch`)
-    .join('\n');
-  return `---\n${frontmatter}\n---\n\nCertify upstream framework releases: ${candidates.join(', ')}.\n`;
+  const packageEntries = [...packages].sort();
+  const candidateEntries = [...candidates].sort();
+  if (packageEntries.some((name) => !/^@?[A-Za-z0-9][A-Za-z0-9@/._-]*$/u.test(name)))
+    throw new Error('generated compatibility changeset has an invalid package name');
+  if (
+    candidateEntries.some(
+      (candidate) => !/^[A-Za-z0-9][A-Za-z0-9._-]*@v?[A-Za-z0-9][A-Za-z0-9.+_-]*$/u.test(candidate),
+    ) ||
+    new Set(candidateEntries).size !== candidateEntries.length
+  )
+    throw new Error('generated compatibility changeset has invalid candidate entries');
+  const frontmatter = packageEntries.map((name) => `'${name}': patch`).join('\n');
+  return `---\n${frontmatter}\n---\n\nCertify upstream framework releases: ${candidateEntries.join(', ')}.\n`;
+}
+
+export function parseCompatibilityChangeset(source) {
+  const parsed = source.match(
+    /^---\n(?<frontmatter>(?:[^\n]+\n)+)---\n\nCertify upstream framework releases: (?<candidates>[^\n]+)\.\n$/u,
+  );
+  if (parsed?.groups === undefined)
+    throw new Error('existing generated compatibility changeset has an unexpected shape');
+
+  const packages = parsed.groups.frontmatter
+    .trimEnd()
+    .split('\n')
+    .map((line) => {
+      const entry = line.match(/^'([^'\r\n]+)': patch$/u);
+      if (entry === null)
+        throw new Error('existing generated compatibility changeset has invalid frontmatter');
+      return entry[1];
+    });
+  const candidates = parsed.groups.candidates.split(', ');
+  if (
+    new Set(packages).size !== packages.length ||
+    new Set(candidates).size !== candidates.length ||
+    candidates.some((candidate) => candidate.length === 0) ||
+    candidates.join(', ') !== parsed.groups.candidates
+  )
+    throw new Error('existing generated compatibility changeset has duplicate or invalid entries');
+  const result = { packages: new Set(packages), candidates };
+  if (renderCompatibilityChangeset(result.packages, result.candidates) !== source)
+    throw new Error('existing generated compatibility changeset is not canonical');
+  return result;
+}
+
+function requireCertifiedChangesetCandidates(candidates, ledger) {
+  for (const candidate of candidates) {
+    const separator = candidate.lastIndexOf('@');
+    const stream = candidate.slice(0, separator);
+    const version = candidate.slice(separator + 1);
+    if (!(ledger.streams?.[stream] ?? []).some((entry) => entry.version === version))
+      throw new Error(`generated compatibility changeset retains uncertified ${candidate}`);
+  }
+}
+
+function sameStringSet(left, right) {
+  return left.size === right.size && [...left].every((entry) => right.has(entry));
+}
+
+export function compatibilityChangesetPackages(candidates, streams) {
+  const packages = new Set();
+  for (const candidate of candidates) {
+    const separator = candidate.lastIndexOf('@');
+    const streamId = candidate.slice(0, separator);
+    const stream = streams.find((entry) => entry.id === streamId);
+    if (stream === undefined)
+      throw new Error(`generated compatibility changeset has unknown stream ${streamId}`);
+    if (stream.frameworkId !== 'textual') {
+      packages.add(
+        stream.frameworkId === 'ratatui' ? 'termwright' : `@termwright/probe-${stream.frameworkId}`,
+      );
+    }
+    if (stream.frameworkId === 'ink') packages.add('@termwright/ink');
+  }
+  return packages;
+}
+
+export function mergeCompatibilityChangeset(existing, candidates, ledger, streams) {
+  const previous =
+    existing === null
+      ? { packages: new Set(), candidates: [] }
+      : parseCompatibilityChangeset(existing);
+  const expectedPreviousPackages = compatibilityChangesetPackages(previous.candidates, streams);
+  if (!sameStringSet(previous.packages, expectedPreviousPackages))
+    throw new Error(
+      'existing generated compatibility changeset package set does not match its candidates',
+    );
+  const mergedCandidates = [...new Set([...previous.candidates, ...candidates])].sort();
+  requireCertifiedChangesetCandidates(mergedCandidates, ledger);
+
+  return renderCompatibilityChangeset(
+    compatibilityChangesetPackages(mergedCandidates, streams),
+    mergedCandidates,
+  );
 }
 
 export function reconcile(registry, ledger, verdicts, context = {}) {
@@ -377,11 +466,11 @@ export function renderExactPeerRange(versions) {
   return [...new Set(versions)].sort(compareVersions).join(' || ');
 }
 
-async function updateCertifiedHookPeerRanges(frameworkId, versions) {
+async function updateCertifiedHookPeerRanges(frameworkId, versions, repositoryRoot = root) {
   if (frameworkId !== 'ink') return;
   const range = renderExactPeerRange(versions);
   for (const relativePath of ['packages/ink/package.json', 'packages/probe-ink/package.json']) {
-    const path = join(root, relativePath);
+    const path = join(repositoryRoot, relativePath);
     const manifest = JSON.parse(await readFile(path, 'utf8'));
     if (manifest.peerDependencies?.ink === undefined)
       throw new Error(`${relativePath}: missing Ink peer dependency`);
@@ -390,12 +479,12 @@ async function updateCertifiedHookPeerRanges(frameworkId, versions) {
   }
 }
 
-async function main(argv) {
+export async function main(argv, repositoryRoot = root) {
   let registryPath;
   let verdictDirectory;
-  let ledgerPath = join(root, 'compatibility/certified-upstreams.json');
-  let assessmentsPath = join(root, 'compatibility/candidate-assessments.json');
-  let planPath = join(root, 'upstream-publish-plan.json');
+  let ledgerPath = join(repositoryRoot, 'compatibility/certified-upstreams.json');
+  let assessmentsPath = join(repositoryRoot, 'compatibility/candidate-assessments.json');
+  let planPath = join(repositoryRoot, 'upstream-publish-plan.json');
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--registry') registryPath = resolve(argv[++i]);
     else if (argv[i] === '--verdicts') verdictDirectory = resolve(argv[++i]);
@@ -410,7 +499,7 @@ async function main(argv) {
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
   const assessments = JSON.parse(await readFile(assessmentsPath, 'utf8'));
   const config = JSON.parse(
-    await readFile(join(root, 'compatibility/upstream-patches.json'), 'utf8'),
+    await readFile(join(repositoryRoot, 'compatibility/upstream-patches.json'), 'utf8'),
   );
   validateCandidateAssessments(
     assessments,
@@ -429,7 +518,26 @@ async function main(argv) {
     strictArtifacts: true,
     assessments,
   });
-  let compatibility = JSON.parse(await readFile(join(root, 'compatibility/registry.json'), 'utf8'));
+  let mergedCompatibilityChangeset;
+  if (result.plan.green.length > 0) {
+    const packages = compatibilityChangesetPackages(result.plan.green, config.streams);
+    if (packages.size > 0) {
+      const changesetPath = join(repositoryRoot, '.changeset/framework-compatibility-auto.md');
+      const existingChangeset = await readFile(changesetPath, 'utf8').catch((error) => {
+        if (error?.code === 'ENOENT') return null;
+        throw error;
+      });
+      mergedCompatibilityChangeset = mergeCompatibilityChangeset(
+        existingChangeset,
+        result.plan.green,
+        result.ledger,
+        config.streams,
+      );
+    }
+  }
+  let compatibility = JSON.parse(
+    await readFile(join(repositoryRoot, 'compatibility/registry.json'), 'utf8'),
+  );
   const updates = await generatedUpdateDirectories(verdictDirectory);
   const expectedUpdateNames = registry.candidates
     .filter(
@@ -486,7 +594,7 @@ async function main(argv) {
         });
         const profilePath =
           candidate.frameworkId === 'opentui'
-            ? join(root, 'packages/probe-opentui/src/certified-runtime.json')
+            ? join(repositoryRoot, 'packages/probe-opentui/src/certified-runtime.json')
             : undefined;
         if (profilePath === undefined)
           throw new Error(`${candidate.id}: unsupported runtime-hook profile framework`);
@@ -510,7 +618,10 @@ async function main(argv) {
         updateDirectory: matched,
         expectedRevision,
       });
-      const profilePath = join(root, 'packages/probe-ink/src/certified-instrumentation.json');
+      const profilePath = join(
+        repositoryRoot,
+        'packages/probe-ink/src/certified-instrumentation.json',
+      );
       const document = JSON.parse(await readFile(profilePath, 'utf8'));
       const existing = document.profiles.find((entry) => entry.version === candidate.version);
       if (existing === undefined) document.profiles.push(profile);
@@ -521,6 +632,7 @@ async function main(argv) {
       await updateCertifiedHookPeerRanges(
         candidate.frameworkId,
         document.profiles.map((entry) => entry.version),
+        repositoryRoot,
       );
       recordVerifiedFrameworkVersion(compatibility, candidate);
       continue;
@@ -539,7 +651,7 @@ async function main(argv) {
       const expectedTarget = candidate.patch.path.split('/').slice(0, -1).join('/');
       if (metadata.targetPath !== expectedTarget)
         throw new Error(`${candidate.id}: generated update targets a different patch directory`);
-      const target = join(root, metadata.targetPath);
+      const target = join(repositoryRoot, metadata.targetPath);
       if (
         await access(target).then(
           () => true,
@@ -554,7 +666,7 @@ async function main(argv) {
       });
       manifest = JSON.parse(await readFile(join(target, 'manifest.json'), 'utf8'));
     } else if (candidate.patch.status === 'ready') {
-      manifest = JSON.parse(await readFile(join(root, candidate.patch.path), 'utf8'));
+      manifest = JSON.parse(await readFile(join(repositoryRoot, candidate.patch.path), 'utf8'));
     } else
       throw new Error(
         `${candidate.id}: green verdict has unsupported patch state ${candidate.patch.status}`,
@@ -562,38 +674,31 @@ async function main(argv) {
     compatibility = proposeCompatibilityUpdate(compatibility, candidate, manifest);
     compatibility = recordExecutableVariant(compatibility, candidate, verdict.executableResolution);
   }
-  const geometryPagePath = join(root, 'website/src/content/docs/reference/geometry-visibility.md');
+  const geometryPagePath = join(
+    repositoryRoot,
+    'website/src/content/docs/reference/geometry-visibility.md',
+  );
   const geometryPage = renderGeometryPage(
     await readFile(geometryPagePath, 'utf8'),
     compatibility,
-    JSON.parse(await readFile(join(root, 'clients/test-vectors/capability-graph.json'), 'utf8')),
+    JSON.parse(
+      await readFile(join(repositoryRoot, 'clients/test-vectors/capability-graph.json'), 'utf8'),
+    ),
   );
-  await writeFile(join(root, 'compatibility/registry.json'), canonicalJson(compatibility));
   await writeFile(
-    join(root, 'compatibility/framework-semantic-completeness.json'),
+    join(repositoryRoot, 'compatibility/registry.json'),
+    canonicalJson(compatibility),
+  );
+  await writeFile(
+    join(repositoryRoot, 'compatibility/framework-semantic-completeness.json'),
     renderSemanticCompletenessReport(compatibility),
   );
   await writeFile(geometryPagePath, geometryPage);
-  if (result.plan.green.length > 0) {
-    const packages = new Set();
-    for (const candidate of registry.candidates.filter((entry) =>
-      result.plan.green.includes(entry.id),
-    )) {
-      if (candidate.frameworkId !== 'textual') {
-        packages.add(
-          candidate.frameworkId === 'ratatui'
-            ? 'termwright'
-            : `@termwright/probe-${candidate.frameworkId}`,
-        );
-      }
-      if (candidate.frameworkId === 'ink') packages.add('@termwright/ink');
-    }
-    if (packages.size > 0)
-      await writeFile(
-        join(root, '.changeset/framework-compatibility-auto.md'),
-        renderCompatibilityChangeset(packages, result.plan.green),
-      );
-  }
+  if (mergedCompatibilityChangeset !== undefined)
+    await writeFile(
+      join(repositoryRoot, '.changeset/framework-compatibility-auto.md'),
+      mergedCompatibilityChangeset,
+    );
   await writeFile(ledgerPath, canonicalJson(result.ledger));
   await writeFile(assessmentsPath, canonicalJson(result.assessments));
   await writeFile(planPath, canonicalJson(result.plan));
