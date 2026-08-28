@@ -258,6 +258,33 @@ describe('autonomous workflow security', () => {
     expect(seal).toContain('npm-bootstrap-artifacts-${{ needs.authorize.outputs.commit }}');
   });
 
+  it('keeps hosted and downloadable PR previews distinct and sealed', async () => {
+    const workflow = await readWorkflow('preview-release.yml');
+    const preview = jobBlock(workflow, 'preview');
+    const eitherPreview =
+      "contains(github.event.pull_request.labels.*.name, 'pr preview') || contains(github.event.pull_request.labels.*.name, 'pr preview artifacts')";
+
+    expect(workflow).toContain('types: [labeled, unlabeled, synchronize]');
+    expect(workflow.split(eitherPreview)).toHaveLength(4);
+    expect(preview).toContain('--manifest preview/npm-manifest.json --source-sha "$MERGE_SHA"');
+    expect(preview).toContain('mergeCommit: process.env.MERGE_SHA');
+    expect(preview).toContain('headCommit: process.env.HEAD_SHA');
+    expect(preview).toContain('baseCommit: process.env.BASE_SHA');
+    expect(preview).toContain('test "$(git rev-parse HEAD)" = "$MERGE_SHA"');
+    expect(preview).toContain('test "$merge_base" = "$BASE_SHA"');
+    expect(preview).toContain('test "$merge_head" = "$HEAD_SHA"');
+    expect(preview).toContain('node scripts/check-installed-driver.mjs "$install_dir"');
+    expect(preview).toContain('sha256sum --check SHA256SUMS');
+    expect(preview).toContain('name: preview-npm-${{ github.sha }}');
+    expect(preview).toMatch(
+      /- if: contains\(github\.event\.pull_request\.labels\.\*\.name, 'pr preview'\)\n {8}run: pnpm dlx pkg-pr-new/u,
+    );
+    expect(preview.indexOf('Upload the sealed downloadable preview')).toBeLessThan(
+      preview.indexOf('pnpm dlx pkg-pr-new'),
+    );
+    expect(preview).not.toContain('continue-on-error');
+  });
+
   it('pins every external action in the autonomous and release workflows to a full commit SHA', async () => {
     for (const name of [
       'ci.yml',

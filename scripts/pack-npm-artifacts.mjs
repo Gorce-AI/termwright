@@ -125,8 +125,12 @@ export function parseArguments(arguments_) {
     }
   }
   if (!options.output) fail('--output is required');
-  if ((options.manifest === undefined) !== (options.packageList === undefined))
-    fail('--manifest and --package-list must be supplied together');
+  if (options.packageList !== undefined && options.manifest === undefined)
+    fail('--package-list requires --manifest');
+  if (options.manifest !== undefined && options.sourceSha === undefined)
+    fail('--manifest requires --source-sha');
+  if (options.sourceSha !== undefined && options.manifest === undefined)
+    fail('--source-sha requires --manifest');
   if (options.sourceSha !== undefined && !/^[0-9a-f]{40}$/u.test(options.sourceSha))
     fail('--source-sha must be a lowercase 40-character Git SHA');
   return options;

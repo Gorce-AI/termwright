@@ -9,10 +9,12 @@ name: Preview release
 # already satisfied. A preview of every PR would be noise, and a preview built
 # from an unreviewed fork is not something to hand people a one-line install
 # command for by default.
+# `pr preview artifacts` is the registry-independent channel: it produces one
+# sealed downloadable bundle and never calls the hosted publishing service.
 
 on:
   pull_request:
-    types: [labeled, synchronize]
+    types: [labeled, unlabeled, synchronize]
 
 concurrency:
   group: preview-${{ github.event.pull_request.number }}
@@ -23,7 +25,7 @@ permissions:
 
 jobs:
   prebuilds:
-    if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    if: contains(github.event.pull_request.labels.*.name, 'pr preview') || contains(github.event.pull_request.labels.*.name, 'pr preview artifacts')
     name: preview PTY prebuild (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
@@ -69,7 +71,7 @@ jobs:
           retention-days: 1
 
   certify-x64-on-arm64:
-    if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    if: contains(github.event.pull_request.labels.*.name, 'pr preview') || contains(github.event.pull_request.labels.*.name, 'pr preview artifacts')
     name: certify preview PTY x64 on Windows ARM64
     needs: prebuilds
     runs-on: windows-11-arm
@@ -122,7 +124,7 @@ jobs:
           retention-days: 1
 
   preview:
-    if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    if: contains(github.event.pull_request.labels.*.name, 'pr preview') || contains(github.event.pull_request.labels.*.name, 'pr preview artifacts')
     needs: [prebuilds, certify-x64-on-arm64]
     runs-on: ubuntu-latest
     steps:
@@ -170,6 +172,46 @@ jobs:
         run: node scripts/verify-windows-pty-verdict.mjs preview-prebuilds/preview-pty-win32-x64 certification-verdict-arm64-host.json
       - run: pnpm build
 
+      - name: Pack and seal the downloadable preview
+        shell: bash
+        env:
+          MERGE_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          for commit in "$MERGE_SHA" "$HEAD_SHA" "$BASE_SHA"; do
+            [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          done
+          test "$(git rev-parse HEAD)" = "$MERGE_SHA"
+          read -r merge_base merge_head extra < <(git show -s --format=%P HEAD)
+          test -z "${extra:-}"
+          test "$merge_base" = "$BASE_SHA"
+          test "$merge_head" = "$HEAD_SHA"
+          mkdir -p preview
+          pnpm pack:npm-artifacts -- --output preview/npm --manifest preview/npm-manifest.json --source-sha "$MERGE_SHA"
+          node -e 'const fs = require("node:fs"); fs.writeFileSync("preview/build-identity.json", JSON.stringify({schemaVersion: 1, mergeCommit: process.env.MERGE_SHA, headCommit: process.env.HEAD_SHA, baseCommit: process.env.BASE_SHA}, null, 2) + "\n")'
+          install_dir="$RUNNER_TEMP/termwright-preview-driver"
+          mkdir -p "$install_dir"
+          npm install --prefix "$install_dir" \
+            preview/npm/termwright-protocol-*.tgz \
+            preview/npm/termwright-vt-*.tgz \
+            preview/npm/termwright-pty-linux-x64-*.tgz \
+            preview/npm/termwright-pty-[0-9]*.tgz \
+            preview/npm/termwright-driver-*.tgz
+          node scripts/check-installed-driver.mjs "$install_dir"
+          (cd preview && find npm npm-manifest.json build-identity.json -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd preview && sha256sum --check SHA256SUMS)
+
+      - name: Upload the sealed downloadable preview
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: preview-npm-${{ github.sha }}
+          path: preview
+          if-no-files-found: error
+          retention-days: 7
+
       # pkg-pr-new serves each package straight from the build, so a reviewer
       # installs the PR with `npm i https://pkg.pr.new/@termwright/driver@<pr>`.
-      - run: pnpm dlx pkg-pr-new@0.0.88 publish --pnpm './packages/*'
+      - if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+        run: pnpm dlx pkg-pr-new@0.0.88 publish --pnpm './packages/*'

@@ -74,6 +74,25 @@ describe('npm artifact packing contract', () => {
     expect(() => parseArguments(['--', '--output', 'out', '--publish', 'true'])).toThrow(
       'unknown argument: --publish',
     );
+    expect(
+      parseArguments([
+        '--output',
+        'preview/npm',
+        '--manifest',
+        'preview/manifest.json',
+        '--source-sha',
+        'b'.repeat(40),
+      ]),
+    ).toMatchObject({ packageList: undefined, manifest: 'preview/manifest.json' });
+    expect(() => parseArguments(['--output', 'out', '--package-list', 'packages.json'])).toThrow(
+      '--package-list requires --manifest',
+    );
+    expect(() => parseArguments(['--output', 'out', '--manifest', 'manifest.json'])).toThrow(
+      '--manifest requires --source-sha',
+    );
+    expect(() => parseArguments(['--output', 'out', '--source-sha', 'c'.repeat(40)])).toThrow(
+      '--source-sha requires --manifest',
+    );
   });
 
   it('requires all native packages before the wrapper in the bootstrap plan', () => {
