@@ -21,11 +21,15 @@ runs:
         MACOSX_DEPLOYMENT_TARGET: ${{ inputs.macos-deployment-target }}
       run: |
         set -euo pipefail
-        node_root="$(node -p 'require("node:path").dirname(require("node:path").dirname(process.execPath)).replaceAll("\\\\", "/")')"
-        test -f "$node_root/include/node/node.h"
-        pnpm exec node-gyp rebuild --nodedir="$node_root" --arch=${{ inputs.architecture }}
         if [[ "${{ inputs.platform }}" == "win32" ]]; then
+          node_version="$(node -p 'process.versions.node')"
+          pnpm exec node-gyp install --ensure --target="$node_version"
+          pnpm exec node-gyp rebuild --target="$node_version" --arch=${{ inputs.architecture }}
           node ../../scripts/stage-vendored-conpty.mjs --architecture "${{ inputs.architecture }}" --destination build/Release/vendor
+        else
+          node_root="$(node -p 'require("node:path").dirname(require("node:path").dirname(process.execPath))')"
+          test -f "$node_root/include/node/node.h"
+          pnpm exec node-gyp rebuild --nodedir="$node_root" --arch=${{ inputs.architecture }}
         fi
     - run: pnpm --filter @termwright/pty build
       shell: bash

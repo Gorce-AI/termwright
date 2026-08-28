@@ -577,52 +577,53 @@ if (!pressureValid || !pressure.session.sawRealEof) {
 }
 pressure.session.dispose();
 
-// A passthrough ConPTY preserves the application's WriteConsole boundaries.
-// Keep JavaScript out of the TSFN callback until the child exits and prove the
-// native reader continues draining more than the former 64-event limit. The
-// 10-second process wait is only a failure watchdog; process exit is the
-// causal success boundary.
-console.log('[pty-cert] fragmented-console-delivery');
-const fragmentedPayloadBytes = 6 * 1024 * 1024;
-const fragmentedSentinel = 'FRAGMENTED_CONSOLE_SENTINEL';
-const fragmented = collect([
-  'process.stdin.resume();',
-  'process.stdin.once("data", () => {',
-  '  const payload = Buffer.alloc(' + fragmentedPayloadBytes + ', 0x58);',
-  '  process.stdout.write(payload, () => {',
-  '    process.stdout.write(' + JSON.stringify(fragmentedSentinel) + ', () => process.exit(0));',
-  '  });',
-  '});',
-].join(''));
-fragmented.session.write(Buffer.from('go\\r'));
-const fragmentedWait = spawnSync('powershell.exe', [
-  '-NoLogo',
-  '-NoProfile',
-  '-NonInteractive',
-  '-Command',
-  '$target = Get-Process -Id ' + fragmented.session.pid +
-    ' -ErrorAction SilentlyContinue; if ($null -ne $target -and -not $target.WaitForExit(10000)) { exit 71 }',
-], { encoding: 'utf8' });
-if (fragmentedWait.status !== 0) {
+if (process.platform === 'win32') {
+  // A passthrough ConPTY preserves the application's WriteConsole boundaries.
+  // Keep JavaScript out of the TSFN callback until the child exits and prove the
+  // native reader continues draining more than the former 64-event limit. The
+  // 10-second process wait is only a failure watchdog; process exit is the
+  // causal success boundary.
+  console.log('[pty-cert] fragmented-console-delivery');
+  const fragmentedPayloadBytes = 6 * 1024 * 1024;
+  const fragmentedSentinel = 'FRAGMENTED_CONSOLE_SENTINEL';
+  const fragmented = collect([
+    'process.stdin.resume();',
+    'process.stdin.once("data", () => {',
+    '  const payload = Buffer.alloc(' + fragmentedPayloadBytes + ', 0x58);',
+    '  process.stdout.write(payload, () => {',
+    '    process.stdout.write(' + JSON.stringify(fragmentedSentinel) + ', () => process.exit(0));',
+    '  });',
+  ].join(''));
+  fragmented.session.write(Buffer.from('go\\r'));
+  const fragmentedWait = spawnSync('powershell.exe', [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    '$target = Get-Process -Id ' + fragmented.session.pid +
+      ' -ErrorAction SilentlyContinue; if ($null -ne $target -and -not $target.WaitForExit(10000)) { exit 71 }',
+  ], { encoding: 'utf8' });
+  if (fragmentedWait.status !== 0) {
+    fragmented.session.dispose();
+    throw new Error('fragmented console writer did not reach process exit ' +
+      '(helper ' + fragmentedWait.status + '): ' + fragmentedWait.stderr);
+  }
+  await fragmented.session.outputEnded;
+  const fragmentedOutput = Buffer.concat(fragmented.output);
+  const fragmentedSentinelBytes = Buffer.from(fragmentedSentinel);
+  const fragmentedSentinelAt = fragmentedOutput.indexOf(fragmentedSentinelBytes);
+  let fragmentedPayloadStart = fragmentedSentinelAt;
+  while (fragmentedPayloadStart > 0 && fragmentedOutput[fragmentedPayloadStart - 1] === 0x58) {
+    fragmentedPayloadStart -= 1;
+  }
+  const fragmentedConsoleDeliveryValid =
+    fragmentedSentinelAt >= fragmentedPayloadBytes &&
+    fragmentedSentinelAt - fragmentedPayloadStart === fragmentedPayloadBytes &&
+    fragmented.session.sawRealEof;
   fragmented.session.dispose();
-  throw new Error('fragmented console writer did not reach process exit ' +
-    '(helper ' + fragmentedWait.status + '): ' + fragmentedWait.stderr);
-}
-await fragmented.session.outputEnded;
-const fragmentedOutput = Buffer.concat(fragmented.output);
-const fragmentedSentinelBytes = Buffer.from(fragmentedSentinel);
-const fragmentedSentinelAt = fragmentedOutput.indexOf(fragmentedSentinelBytes);
-let fragmentedPayloadStart = fragmentedSentinelAt;
-while (fragmentedPayloadStart > 0 && fragmentedOutput[fragmentedPayloadStart - 1] === 0x58) {
-  fragmentedPayloadStart -= 1;
-}
-const fragmentedConsoleDeliveryValid =
-  fragmentedSentinelAt >= fragmentedPayloadBytes &&
-  fragmentedSentinelAt - fragmentedPayloadStart === fragmentedPayloadBytes &&
-  fragmented.session.sawRealEof;
-fragmented.session.dispose();
-if (!fragmentedConsoleDeliveryValid) {
-  throw new Error('installed addon did not preserve fragmented console delivery through EOF');
+  if (!fragmentedConsoleDeliveryValid) {
+    throw new Error('installed addon did not preserve fragmented console delivery through EOF');
+  }
 }
 
 console.log('ran native PTY lifecycle and flow-control certification');

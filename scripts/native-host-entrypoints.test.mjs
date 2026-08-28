@@ -62,7 +62,8 @@ function expectArtifactStep(job, action, name, path) {
 }
 
 describe('the native host is the only Termwright test entrypoint', () => {
-  it('parses the exact packed PTY certification payload', () => {
+  it('parses the exact packed PTY certification payload', async () => {
+    const source = await readFile(new URL('./check-installed-pty.mjs', import.meta.url), 'utf8');
     expect(() =>
       execFileSync(
         execPath,
@@ -73,6 +74,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
         { stdio: 'pipe' },
       ),
     ).not.toThrow();
+    expect(source).toMatch(
+      /if \(process\.platform === 'win32'\) \{\n  \/\/ A passthrough ConPTY preserves the application's WriteConsole boundaries\./u,
+    );
   });
 
   it('keeps repository and release certification single-attempt', async () => {
@@ -350,6 +354,10 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(releaseJobs.prebuilds).toContain('uses: ./.github/actions/build-pty-prebuild');
     expect(releaseJobs.prebuilds).toContain('platform: ${{ matrix.platform }}');
     expect(releaseJobs.prebuilds).toContain('architecture: ${{ matrix.arch }}');
+    expect(ptyPrebuildAction).toContain('node-gyp install --ensure --target="$node_version"');
+    expect(ptyPrebuildAction).toContain(
+      'node-gyp rebuild --target="$node_version" --arch=${{ inputs.architecture }}',
+    );
     expect(ptyPrebuildAction).toContain('--nodedir="$node_root"');
     expect(ptyPrebuildAction).toContain('node scripts/check-installed-pty.mjs "$install_dir"');
     expect(ptyPrebuildAction).toContain('scripts/verify-windows-pty-verdict.mjs');
