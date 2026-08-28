@@ -171,6 +171,12 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('dispatch-pending-changesets');
     expect(workflow).toContain('refresh-heartbeat');
     expect(coordinator).toContain('framework-semantic-completeness');
+    expect(coordinator).toContain(
+      'const pr = await githubApi(`/repos/${repository}/pulls/${association.number}`)',
+    );
+    expect(coordinator).toContain(
+      'canonical autonomous PR identity differs from its commit association',
+    );
     expect(reconciler).toContain(
       "join(root, 'compatibility/framework-semantic-completeness.json')",
     );

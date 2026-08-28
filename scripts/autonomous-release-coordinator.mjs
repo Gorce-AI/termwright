@@ -608,8 +608,8 @@ async function inspectCi(event) {
     await paged(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest`, 'jobs'),
   );
   const current = await defaultHead(repository, branch);
-  const prs = await paged(`/repos/${repository}/commits/${run.head_sha}/pulls`);
-  const recognized = prs.filter(
+  const associations = await paged(`/repos/${repository}/commits/${run.head_sha}/pulls`);
+  const recognized = associations.filter(
     (pr) =>
       pr.head?.ref === 'automation/framework-compatibility' ||
       pr.head?.ref === 'automation/workflow-heartbeat' ||
@@ -619,7 +619,12 @@ async function inspectCi(event) {
     return { kind: 'none', headSha: run.head_sha, baseSha: current };
   }
   if (recognized.length !== 1) throw new Error('CI commit is attached to multiple autonomous PRs');
-  const pr = recognized[0];
+  const association = recognized[0];
+  if (!Number.isSafeInteger(association.number) || association.number < 1)
+    throw new Error('CI commit association has an invalid PR number');
+  const pr = await githubApi(`/repos/${repository}/pulls/${association.number}`);
+  if (pr.number !== association.number || pr.head?.sha !== run.head_sha)
+    throw new Error('canonical autonomous PR identity differs from its commit association');
   if (run.head_branch !== pr.head?.ref)
     throw new Error('CI run branch does not match the autonomous PR head');
   const kind =
