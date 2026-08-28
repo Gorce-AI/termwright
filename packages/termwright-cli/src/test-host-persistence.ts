@@ -255,6 +255,8 @@ export class RunHistoryPersistence {
     readonly totalRunMs: number;
     readonly finalizationReserveMs: number;
     readonly writer?: RunManifestWriter;
+    /** Test-host seam: production omits this and captures the repository itself. */
+    readonly gitProvenance?: RunStartProvenance['git'];
   }): Promise<RunHistoryPersistence> {
     const start: RunStartProvenance = Object.freeze({
       invocationId: options.invocationId,
@@ -281,7 +283,10 @@ export class RunHistoryPersistence {
         finalizationReserveMs: options.finalizationReserveMs,
       }),
       ci: Object.freeze(captureCiProvenance(process.env)),
-      git: await captureGitProvenance(options.cwd),
+      git:
+        options.gitProvenance === undefined
+          ? await captureGitProvenance(options.cwd)
+          : options.gitProvenance,
     });
     const transaction = await beginRunManifest(options.runsDir, start, {
       ...(options.writer === undefined ? {} : { writer: options.writer }),

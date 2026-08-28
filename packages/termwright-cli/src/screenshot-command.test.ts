@@ -15,7 +15,21 @@ const renderPngMock = vi.hoisted(() =>
 
 vi.mock('@termwright/screenshot', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@termwright/screenshot')>();
-  renderPngMock.mockImplementation(actual.renderPng);
+  // The renderer's real PNG and scale contracts live in @termwright/screenshot.
+  // These command tests own trace reconstruction, option forwarding and file
+  // output, so keep their raster boundary deterministic and independent of
+  // native resvg/host load.
+  renderPngMock.mockImplementation((frame, options) => {
+    const scale = options?.scale ?? 1;
+    return {
+      png: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      width: frame.columns * 8 * scale,
+      height: frame.rows * 16 * scale,
+      selfContained: true,
+      fallbackCharacters: [],
+      systemFontsLoaded: false,
+    };
+  });
   return { ...actual, renderPng: renderPngMock };
 });
 

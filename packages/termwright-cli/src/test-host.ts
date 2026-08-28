@@ -7,7 +7,11 @@ import {
   type ResourceBrokerServer,
 } from '@termwright/resource-broker/transport';
 import { startRunJournalServer, type RunJournalServer } from '@termwright/run-journal-transport';
-import { type NativeRunAttempt, type RunManifestWriter } from '@termwright/run-history';
+import {
+  type NativeRunAttempt,
+  type RunManifestWriter,
+  type RunStartProvenance,
+} from '@termwright/run-history';
 import {
   RunEventProducer,
   RunIdFactory,
@@ -212,6 +216,7 @@ export class TermwrightTestHost {
   readonly #cwd: string;
   readonly #runsDir: string;
   readonly #runManifestWriter: RunManifestWriter | undefined;
+  readonly #gitProvenance: RunStartProvenance['git'] | undefined;
   readonly #timeouts: TermwrightHostTimeouts;
   readonly #skipDeclarations: readonly NativeTestSkipDeclaration[];
   readonly #projects = new Map<string, ProjectId>();
@@ -232,6 +237,7 @@ export class TermwrightTestHost {
     engine: TermwrightVitestEngine,
     options: TermwrightTestHostOptions,
     ids = new RunIdFactory(),
+    gitProvenance: RunStartProvenance['git'] | undefined = undefined,
   ) {
     this.#engine = engine;
     this.#filters = Object.freeze([...(options.filters ?? [])]);
@@ -241,6 +247,7 @@ export class TermwrightTestHost {
     this.#cwd = options.cwd;
     this.#runsDir = options.runsDir;
     this.#runManifestWriter = options.runManifestWriter;
+    this.#gitProvenance = gitProvenance;
     this.#timeouts = resolveHostTimeouts(options.timeouts);
     this.#skipDeclarations = Object.freeze([...(options.skipDeclarations ?? [])]);
     this.#ids = ids;
@@ -292,9 +299,10 @@ export class TermwrightTestHost {
   static fromEngine(
     engine: TermwrightVitestEngine,
     options: TermwrightTestHostOptions,
+    dependencies: { readonly gitProvenance?: RunStartProvenance['git'] } = {},
   ): TermwrightTestHost {
     assertCertifiedVitestRuntime(engine.version);
-    return new TermwrightTestHost(engine, options);
+    return new TermwrightTestHost(engine, options, new RunIdFactory(), dependencies.gitProvenance);
   }
 
   requestRun(request: RunRequest = {}): RunHandle {
@@ -1213,6 +1221,7 @@ export class TermwrightTestHost {
       totalRunMs: budget.totalMs,
       finalizationReserveMs: budget.finalizationReserveMs,
       ...(this.#runManifestWriter === undefined ? {} : { writer: this.#runManifestWriter }),
+      ...(this.#gitProvenance === undefined ? {} : { gitProvenance: this.#gitProvenance }),
     });
   }
 
