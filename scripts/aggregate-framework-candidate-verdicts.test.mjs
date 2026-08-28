@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
   aggregateCandidate,
+  inventoryPlatformVerdicts,
   requiredPlatforms,
   writeTrustedPatchUpdates,
   writeTrustedRuntimeUpdate,
@@ -46,12 +47,13 @@ async function fixture(states, updateName = null, fixtureCandidate = candidate) 
   const root = await mkdtemp(join(tmpdir(), 'termwright-platform-verdicts-'));
   const inputs = join(root, 'inputs');
   const output = join(root, 'output');
+  await mkdir(inputs, { recursive: true });
   for (const [platform, state] of Object.entries(states)) {
     const directory = join(inputs, `framework-candidate-result-0-${platform}`);
-    await mkdir(directory, { recursive: true });
+    await mkdir(directory);
     if (updateName !== null) await mkdir(join(directory, updateName), { recursive: true });
     await writeFile(
-      join(directory, 'verdict-0.json'),
+      join(directory, `verdict-0-${platform}.json`),
       JSON.stringify({
         schemaVersion: 1,
         kind: 'termwright-framework-candidate-verdict',
@@ -187,6 +189,73 @@ describe('framework candidate platform aggregation', () => {
     expect(requiredPlatforms({ frameworkId: 'charm' })).toEqual(['linux']);
   });
 
+  it('inventories the exact merged namespace across candidates and platforms', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'termwright-merged-verdicts-'));
+    const inputs = join(root, 'inputs');
+    const ink = { ...candidate, id: 'ink@7.1.1', frameworkId: 'ink' };
+    await mkdir(inputs);
+    for (const [slot, entry, platforms] of [
+      [0, candidate, ['linux', 'macos']],
+      [1, ink, ['linux']],
+    ]) {
+      for (const platform of platforms) {
+        const directory = join(inputs, `framework-candidate-result-${slot}-${platform}`);
+        await mkdir(directory);
+        await writeFile(
+          join(directory, `verdict-${slot}-${platform}.json`),
+          JSON.stringify({
+            schemaVersion: 1,
+            kind: 'termwright-framework-candidate-verdict',
+            candidateId: entry.id,
+            candidateDigest: entry.candidateDigest,
+            sourceRevision: revision,
+            platform,
+            state: 'green',
+            detail: `${platform} detail`,
+          }),
+        );
+      }
+    }
+
+    const inventory = await inventoryPlatformVerdicts({
+      candidates: [candidate, ink],
+      inputs,
+      sourceRevision: revision,
+    });
+    expect(
+      inventory
+        .get(0)
+        ?.map(({ platform }) => platform)
+        .sort(),
+    ).toEqual(['linux', 'macos']);
+    expect(inventory.get(1)?.map(({ platform }) => platform)).toEqual(['linux']);
+
+    const registryPath = join(root, 'candidate-registry.json');
+    const registryBytes = '{"trusted":true}\n';
+    const registryDirectory = join(inputs, 'framework-candidate-result-registry');
+    await writeFile(registryPath, registryBytes);
+    await mkdir(registryDirectory);
+    await writeFile(join(registryDirectory, 'candidate-registry.json'), registryBytes);
+    await expect(
+      inventoryPlatformVerdicts({
+        candidates: [candidate, ink],
+        inputs,
+        registryPath,
+        sourceRevision: revision,
+      }),
+    ).resolves.toBeInstanceOf(Map);
+
+    await writeFile(join(inputs, 'unexpected.json'), '{}');
+    await expect(
+      inventoryPlatformVerdicts({
+        candidates: [candidate, ink],
+        inputs,
+        registryPath,
+        sourceRevision: revision,
+      }),
+    ).rejects.toThrow(/unexpected artifact shape/u);
+  });
+
   it('requires both OpenTUI platforms to be green', async () => {
     const { inputs, output } = await fixture({ linux: 'green', macos: 'red' });
     const verdict = await aggregateCandidate({
@@ -215,6 +284,55 @@ describe('framework candidate platform aggregation', () => {
 
     expect(verdict.state).toBe('green');
     expect(written).toEqual(verdict);
+  });
+
+  it('accepts one platform verdict in the deterministic merged namespace', async () => {
+    const ink = { ...candidate, id: 'ink@7.1.1', frameworkId: 'ink' };
+    const { inputs, output } = await fixture({ linux: 'green' }, null, ink);
+
+    await expect(
+      aggregateCandidate({ candidate: ink, slot: 0, inputs, output, sourceRevision: revision }),
+    ).resolves.toMatchObject({ state: 'green', candidateId: ink.id });
+  });
+
+  it('supports direct aggregation for a nonzero registry slot', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'termwright-nonzero-slot-'));
+    const inputs = join(root, 'inputs');
+    const output = join(root, 'output');
+    const ink = { ...candidate, id: 'ink@7.1.1', frameworkId: 'ink' };
+    await mkdir(inputs);
+    const directory = join(inputs, 'framework-candidate-result-2-linux');
+    await mkdir(directory);
+    await writeFile(
+      join(directory, 'verdict-2-linux.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        kind: 'termwright-framework-candidate-verdict',
+        candidateId: ink.id,
+        candidateDigest: ink.candidateDigest,
+        sourceRevision: revision,
+        platform: 'linux',
+        state: 'green',
+        detail: 'linux detail',
+      }),
+    );
+
+    await expect(
+      aggregateCandidate({ candidate: ink, slot: 2, inputs, output, sourceRevision: revision }),
+    ).resolves.toMatchObject({ state: 'green', candidateId: ink.id });
+  });
+
+  it('rejects an oversized platform verdict before parsing it', async () => {
+    const ink = { ...candidate, id: 'ink@7.1.1', frameworkId: 'ink' };
+    const exact = await fixture({ linux: 'green' }, null, ink);
+    await writeFile(
+      join(exact.inputs, 'framework-candidate-result-0-linux', 'verdict-0-linux.json'),
+      Buffer.alloc(64 * 1024 + 1),
+    );
+
+    await expect(
+      aggregateCandidate({ candidate: ink, slot: 0, ...exact, sourceRevision: revision }),
+    ).rejects.toThrow(/platform verdict is oversized/u);
   });
 
   it('fails closed when a required platform artifact is absent or disagrees', async () => {
@@ -250,7 +368,7 @@ describe('framework candidate platform aggregation', () => {
       const verdictPath = join(
         inputs,
         `framework-candidate-result-0-${platform}`,
-        'verdict-0.json',
+        `verdict-0-${platform}.json`,
       );
       await writeFile(
         verdictPath,
@@ -312,7 +430,11 @@ describe('framework candidate platform aggregation', () => {
       ],
     };
     for (const platform of ['linux', 'windows']) {
-      const path = join(exact.inputs, `framework-candidate-result-0-${platform}`, 'verdict-0.json');
+      const path = join(
+        exact.inputs,
+        `framework-candidate-result-0-${platform}`,
+        `verdict-0-${platform}.json`,
+      );
       const verdict = JSON.parse(await readFile(path, 'utf8'));
       await writeFile(path, JSON.stringify({ ...verdict, executableResolution }));
     }
@@ -332,7 +454,7 @@ describe('framework candidate platform aggregation', () => {
     const windowsVerdict = join(
       forged.inputs,
       'framework-candidate-result-0-windows',
-      'verdict-0.json',
+      'verdict-0-windows.json',
     );
     const document = JSON.parse(await readFile(windowsVerdict, 'utf8'));
     await writeFile(windowsVerdict, JSON.stringify({ ...document, platform: 'linux' }));
@@ -362,6 +484,26 @@ describe('framework candidate platform aggregation', () => {
     ).rejects.toThrow(/unexpected artifact shape/u);
   });
 
+  it('rejects a Windows verdict smuggled through the Linux artifact', async () => {
+    const forged = await fixture({ linux: 'green', windows: 'green' }, null, tcellCandidate);
+    const windowsVerdict = await readFile(
+      join(forged.inputs, 'framework-candidate-result-0-windows', 'verdict-0-windows.json'),
+    );
+    await writeFile(
+      join(forged.inputs, 'framework-candidate-result-0-linux', 'verdict-0-windows.json'),
+      windowsVerdict,
+    );
+
+    await expect(
+      aggregateCandidate({
+        candidate: tcellCandidate,
+        slot: 0,
+        ...forged,
+        sourceRevision: revision,
+      }),
+    ).rejects.toThrow(/unexpected artifact shape/u);
+  });
+
   it('rejects a generated namespace from an untrusted green needs-patch process', async () => {
     const updateName = `candidate-update-${'b'.repeat(16)}`;
     const patchCandidate = {
@@ -376,7 +518,7 @@ describe('framework candidate platform aggregation', () => {
       const verdictPath = join(
         inputs,
         `framework-candidate-result-0-${platform}`,
-        'verdict-0.json',
+        `verdict-0-${platform}.json`,
       );
       const verdict = JSON.parse(await readFile(verdictPath, 'utf8'));
       await writeFile(
@@ -411,7 +553,7 @@ describe('framework candidate platform aggregation', () => {
     const directory = join(inputs, 'framework-candidate-result-0-linux');
     await mkdir(directory, { recursive: true });
     await writeFile(
-      join(directory, 'verdict-0.json'),
+      join(directory, 'verdict-0-linux.json'),
       JSON.stringify({
         schemaVersion: 1,
         kind: 'termwright-framework-candidate-verdict',

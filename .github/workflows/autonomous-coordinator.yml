@@ -51,7 +51,7 @@ jobs:
           test "$SOURCE_BRANCH" = "$DEFAULT_BRANCH"
           test "$SOURCE_REPOSITORY" = "$GITHUB_REPOSITORY"
           gh api "/repos/$GITHUB_REPOSITORY/assignees/$ISSUE_OWNER" >/dev/null
-          gh label create upstream-compatibility --color 0E8A16 \
+          gh label create upstream-compatibility --repo "$GITHUB_REPOSITORY" --color 0E8A16 \
             --description 'Automated upstream compatibility candidate' --force
           title='[compatibility] daily certification workflow failed'
           body_file="$(mktemp)"
@@ -61,10 +61,12 @@ jobs:
           number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all&labels=upstream-compatibility&per_page=100" \
             | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .user.login == "github-actions[bot]" and .title == $title) | .number' | sed -n '1p')"
           if [ -n "$number" ]; then
-            gh issue reopen "$number" || true
-            gh issue edit "$number" --body-file "$body_file" --add-assignee "$ISSUE_OWNER"
+            gh issue reopen "$number" --repo "$GITHUB_REPOSITORY" || true
+            gh issue edit "$number" --repo "$GITHUB_REPOSITORY" \
+              --body-file "$body_file" --add-assignee "$ISSUE_OWNER"
           else
-            gh issue create --title "$title" --label upstream-compatibility \
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --label upstream-compatibility \
               --assignee "$ISSUE_OWNER" --body-file "$body_file"
           fi
 
@@ -122,7 +124,7 @@ jobs:
             echo "SOURCE_RUN_ID=$RUN_ID"
           } >> "$GITHUB_ENV"
           mkdir -p "$CANDIDATE_DIR" "$VERDICT_DIR"
-          gh run download "$RUN_ID" --name framework-candidate-registry --dir "$CANDIDATE_DIR"
+          gh run download "$RUN_ID" --name framework-candidate-result-registry --dir "$CANDIDATE_DIR"
           mapfile -t verdict_artifacts < <(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
             --jq '.artifacts[] | select(.expired == false and (.name | startswith("framework-verdict-"))) | .name')
           candidate_count=$(jq '.candidates | length' "$CANDIDATE_DIR/candidate-registry.json")
@@ -333,7 +335,7 @@ jobs:
           fs.writeFileSync(process.argv[4], JSON.stringify({ repository: event.repository, workflow_run: workflowRun }));
           NODE
           node scripts/autonomous-release-coordinator.mjs validate-upstream "$work/source-run-event.json" "$BASE_SHA"
-          gh run download "$SOURCE_RUN_ID" --name framework-candidate-registry --dir "$candidates"
+          gh run download "$SOURCE_RUN_ID" --name framework-candidate-result-registry --dir "$candidates"
           mapfile -t verdict_artifacts < <(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" \
             --jq '.artifacts[] | select(.expired == false and (.name | startswith("framework-verdict-"))) | .name')
           candidate_count=$(jq '.candidates | length' "$candidates/candidate-registry.json")

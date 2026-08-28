@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { access, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deriveHookInstrumentationProfile } from './certify-framework-candidate.mjs';
 import { canonicalJson, downloadVerifiedNpmTarball } from './discover-framework-candidates.mjs';
@@ -22,30 +22,6 @@ export const requiredPlatforms = (candidate) =>
       ? ['linux', 'windows']
       : ['linux'];
 
-async function treeDigest(directory, omittedFile) {
-  const files = [];
-  const visit = async (current) => {
-    for (const entry of (await readdir(current, { withFileTypes: true })).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
-      const path = join(current, entry.name);
-      if (entry.isDirectory()) await visit(path);
-      else if (entry.isFile() && path !== omittedFile) {
-        const relativePath = relative(directory, path).split('\\').join('/');
-        files.push({
-          path: relativePath,
-          sha256: createHash('sha256')
-            .update(await readFile(path))
-            .digest('hex'),
-        });
-      } else if (!entry.isFile())
-        throw new Error(`platform result contains a non-regular entry: ${path}`);
-    }
-  };
-  await visit(directory);
-  return createHash('sha256').update(canonicalJson(files)).digest('hex');
-}
-
 function validateVerdict(verdict, candidate, sourceRevision, platform) {
   if (
     verdict.schemaVersion !== 1 ||
@@ -62,38 +38,94 @@ function validateVerdict(verdict, candidate, sourceRevision, platform) {
     throw new Error(`${candidate.id}: invalid or stale ${platform} verdict`);
 }
 
-async function validatePlatformArtifactShape(result, slot) {
-  const entries = await readdir(result.directory, { withFileTypes: true });
-  const expected = [`verdict-${slot}.json`];
+export async function inventoryPlatformVerdicts({
+  candidates,
+  inputs,
+  registryPath,
+  sourceRevision,
+}) {
+  const expected = candidates.flatMap((candidate, slot) =>
+    candidate === undefined
+      ? []
+      : requiredPlatforms(candidate).map((platform) => ({
+          candidate,
+          filename: `verdict-${slot}-${platform}.json`,
+          platform,
+          slot,
+        })),
+  );
+  const entries = await readdir(inputs, { withFileTypes: true });
+  const actualNames = entries.map(({ name }) => name).sort();
+  const expectedNames = [
+    ...expected.map(({ platform, slot }) => `framework-candidate-result-${slot}-${platform}`),
+    ...(registryPath === undefined ? [] : ['framework-candidate-result-registry']),
+  ].sort();
   if (
-    entries
-      .map((entry) => entry.name)
-      .sort()
-      .join('\0') !== expected.join('\0')
-  ) {
-    throw new Error(
-      `${result.verdict.candidateId}: platform certifier emitted an unexpected artifact shape`,
-    );
+    entries.some((entry) => !entry.isDirectory()) ||
+    actualNames.join('\0') !== expectedNames.join('\0')
+  )
+    throw new Error('platform certifier emitted an unexpected artifact shape');
+
+  if (registryPath !== undefined) {
+    const directory = join(inputs, 'framework-candidate-result-registry');
+    const registryEntries = await readdir(directory, { withFileTypes: true });
+    if (
+      registryEntries.length !== 1 ||
+      registryEntries[0].name !== 'candidate-registry.json' ||
+      !registryEntries[0].isFile()
+    )
+      throw new Error('candidate registry artifact has an unexpected shape');
+    const [trustedRegistry, sentinelRegistry] = await Promise.all([
+      readFile(registryPath),
+      readFile(join(directory, 'candidate-registry.json')),
+    ]);
+    if (!trustedRegistry.equals(sentinelRegistry))
+      throw new Error('candidate registry artifacts disagree');
   }
-  for (const entry of entries) {
-    if (entry.name === `verdict-${slot}.json` ? !entry.isFile() : !entry.isDirectory()) {
-      throw new Error(
-        `${result.verdict.candidateId}: platform certifier artifact has an unexpected type`,
-      );
-    }
+
+  const bySlot = new Map();
+  for (const { candidate, filename, platform, slot } of expected) {
+    const directory = join(inputs, `framework-candidate-result-${slot}-${platform}`);
+    const artifactEntries = await readdir(directory, { withFileTypes: true });
+    if (
+      artifactEntries.length !== 1 ||
+      artifactEntries[0].name !== filename ||
+      !artifactEntries[0].isFile()
+    )
+      throw new Error(`${candidate.id}: platform certifier emitted an unexpected artifact shape`);
+    const verdictPath = join(directory, filename);
+    const metadata = await stat(verdictPath);
+    if (metadata.size > 64 * 1024)
+      throw new Error(`${candidate.id}: platform verdict is oversized`);
+    const bytes = await readFile(verdictPath);
+    const verdict = JSON.parse(bytes.toString('utf8'));
+    validateVerdict(verdict, candidate, sourceRevision, platform);
+    const results = bySlot.get(slot) ?? [];
+    results.push({ platform, verdict, verdictPath });
+    bySlot.set(slot, results);
   }
+  return bySlot;
 }
 
-export async function aggregateCandidate({ candidate, slot, inputs, output, sourceRevision }) {
-  const results = [];
-  for (const platform of requiredPlatforms(candidate)) {
-    const directory = join(inputs, `framework-candidate-result-${slot}-${platform}`);
-    const verdictPath = join(directory, `verdict-${slot}.json`);
-    const verdict = JSON.parse(await readFile(verdictPath, 'utf8'));
-    validateVerdict(verdict, candidate, sourceRevision, platform);
-    results.push({ directory, platform, verdict, verdictPath });
-  }
-  await Promise.all(results.map((result) => validatePlatformArtifactShape(result, slot)));
+export async function aggregateCandidate({
+  candidate,
+  slot,
+  inputs,
+  output,
+  sourceRevision,
+  platformResults,
+}) {
+  const results =
+    platformResults ??
+    (
+      await inventoryPlatformVerdicts({
+        candidates: Array.from({ length: slot + 1 }, (_, index) =>
+          index === slot ? candidate : undefined,
+        ),
+        inputs,
+        sourceRevision,
+      })
+    ).get(slot);
 
   const green = results.every(({ verdict }) => verdict.state === 'green');
   let executableResolution;
@@ -135,15 +167,6 @@ export async function aggregateCandidate({ candidate, slot, inputs, output, sour
   };
 
   await mkdir(output, { recursive: true });
-  if (green) {
-    const [canonical, ...others] = results;
-    const expected = await treeDigest(canonical.directory, canonical.verdictPath);
-    for (const result of others) {
-      if ((await treeDigest(result.directory, result.verdictPath)) !== expected) {
-        throw new Error(`${candidate.id}: green platform artifacts disagree`);
-      }
-    }
-  }
   await writeFile(join(output, `verdict-${slot}.json`), canonicalJson(aggregate));
   return aggregate;
 }
@@ -269,14 +292,20 @@ async function main(argv) {
   }
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
   const sourceRevision = process.env.GITHUB_SHA ?? 'local-unpinned';
+  const platformVerdicts = await inventoryPlatformVerdicts({
+    candidates: registry.candidates,
+    inputs,
+    registryPath,
+    sourceRevision,
+  });
   const trustedUpdates = [];
   for (const [slot, candidate] of registry.candidates.entries()) {
     const aggregate = await aggregateCandidate({
       candidate,
       slot,
-      inputs,
       output,
       sourceRevision,
+      platformResults: platformVerdicts.get(slot),
     });
     if (aggregate.state === 'green') trustedUpdates.push(candidate);
   }
