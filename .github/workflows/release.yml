@@ -172,8 +172,16 @@ jobs:
         run: |
           set -euo pipefail
           head_sha=$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq '.object.sha')
-          existing=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&head_sha=$head_sha" --jq '.total_count')
-          if [ "$existing" = 0 ]; then gh workflow run ci.yml --ref "$BRANCH"; fi
+          echo "head-sha=$head_sha" >> "$GITHUB_OUTPUT"
+        id: version-ci
+      - uses: ./.github/actions/dispatch-autonomous-ci
+        if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          branch: release-pr/${{ inputs.target }}
+          head-sha: ${{ steps.version-ci.outputs.head-sha }}
+          default-branch: ${{ inputs.target }}
 
   detect:
     name: authorize exact merged Version PR

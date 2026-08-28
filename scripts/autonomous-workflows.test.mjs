@@ -76,8 +76,14 @@ describe('autonomous workflow security', () => {
     expect(aggregate).toContain("python-version: '3.12'");
   });
 
-  it('coordinates only completed workflow_run events and never checks out the PR head in a write-token job', async () => {
+  it('coordinates exact completed CI through a trusted continuation without checking out PR code in a write-token job', async () => {
     const workflow = await readWorkflow('autonomous-coordinator.yml');
+    const release = await readWorkflow('release.yml');
+    const ci = await readWorkflow('ci.yml');
+    const dispatchAction = await readFile(
+      new URL('../.github/actions/dispatch-autonomous-ci/action.yml', import.meta.url),
+      'utf8',
+    );
     const coordinator = await readFile(
       new URL('./autonomous-release-coordinator.mjs', import.meta.url),
       'utf8',
@@ -89,11 +95,17 @@ describe('autonomous workflow security', () => {
       'utf8',
     );
     expect(workflow).toContain('workflow_run:');
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toContain('ci_run_id:');
     expect(workflow).toContain(
       'TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}',
     );
     expect(workflow).toContain('types: [completed]');
-    expect(workflow).toContain('autonomous-coordinator-${{ github.event.repository.full_name }}');
+    expect(workflow).toContain('autonomous-ci-observer-{0}-{1}');
+    expect(workflow).toContain('autonomous-coordinator-{0}');
+    expect(workflow).toContain('group: autonomous-coordinator-${{ github.repository }}');
+    expect(workflow).not.toContain('group: autonomous-merge-${{ needs.inspect.outputs.head-sha }}');
+    expect(workflow).not.toContain('timeout-minutes: 60');
     expect(workflow).not.toMatch(/ref:\s*\$\{\{\s*github\.event\.workflow_run\.head_sha\s*\}\}/u);
     expect(workflow).toContain('Version PR differs from the deterministic transformation');
     expect(workflow).toContain(
@@ -103,6 +115,27 @@ describe('autonomous workflow security', () => {
       "workflows: ['Framework compatibility candidates', 'CI', 'Release']",
     );
     expect(workflow).not.toContain('rerun-failed-jobs');
+    expect(workflow).not.toContain('gh run rerun');
+    expect(dispatchAction).not.toMatch(/rerun|retry|sleep/u);
+    expect(workflow).toContain('gh run watch "$CI_RUN_ID" --exit-status');
+    expect(workflow).toContain(
+      'gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID" > "$run_json"',
+    );
+    expect(workflow).toContain(
+      'JSON.stringify({ repository: dispatch.repository, workflow_run: workflowRun })',
+    );
+    expect(workflow.match(/uses: \.\/\.github\/actions\/dispatch-autonomous-ci/gu)).toHaveLength(1);
+    expect(release.match(/uses: \.\/\.github\/actions\/dispatch-autonomous-ci/gu)).toHaveLength(1);
+    expect(ci).not.toContain('actions: write');
+    expect(ci).not.toContain('autonomous-coordinator.yml');
+    expect(dispatchAction).toContain('gh workflow run ci.yml --ref "$BRANCH"');
+    expect(dispatchAction).toContain('--ref "$DEFAULT_BRANCH"');
+    expect(dispatchAction).toContain('-f ci_run_id="$run_id"');
+    expect(dispatchAction).not.toContain('.run_attempt == 1');
+    expect(dispatchAction).toContain('test "$(jq -r \'.run_attempt\' <<<"$run_json")" = 1');
+    expect(dispatchAction).toContain('.path == ".github/workflows/ci.yml"');
+    expect(dispatchAction.match(/test "\$\{#run_ids\[@\]\}" -eq 1/gu)).toHaveLength(2);
+    expect(dispatchAction).toContain('test "${run_ids[0]}" = "$run_id"');
     const reconciliation = workflow.slice(
       workflow.indexOf('      - name: Commit only the compatibility allowlist'),
       workflow.indexOf('\n  inspect:'),
@@ -169,6 +202,9 @@ describe('autonomous workflow security', () => {
     );
     expect(publish).toContain('Source certification run: $SOURCE_RUN_ID');
     expect(publish).not.toContain('Source certification run: $RUN_ID');
+    expect(publish).toContain('echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"');
+    expect(publish).toContain('branch: ${{ steps.publish.outputs.branch }}');
+    expect(publish).not.toContain('branch: ${{ env.BRANCH }}');
     expect(publish).toContain('node scripts/resolve-push-lease.mjs "$push_remote" "$target_ref"');
     expect(publish).toContain('git push --force-with-lease="$target_ref:$expected_remote_sha"');
     expect(publish).toContain(
@@ -193,7 +229,7 @@ describe('autonomous workflow security', () => {
     const merge = jobBlock(workflow, 'merge');
     expect(merge).toContain('issues: write');
     expect(merge).toContain('Close candidate issues only after the compatibility allowlist merged');
-    expect(merge.indexOf('coordinate-ci "$GITHUB_EVENT_PATH"')).toBeLessThan(
+    expect(merge.indexOf('coordinate-ci "${{ steps.event.outputs.path }}"')).toBeLessThan(
       merge.indexOf('gh issue close "$number"'),
     );
     expect(merge).toContain('closed only after the compatibility allowlist merged');
