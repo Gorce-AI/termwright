@@ -398,8 +398,8 @@ describe('framework candidate evidence binding', () => {
     const packageDirectory = (key, name) => join(directory, '.pnpm', key, 'node_modules', name);
     const rootPackage = packageDirectory('root@1.0.0', 'root');
     const stringWidth = packageDirectory('string-width@7.2.0', 'string-width');
-    const stripAnsi71 = packageDirectory('strip-ansi@7.1.2', 'strip-ansi');
-    const stripAnsi72 = packageDirectory('strip-ansi@7.2.0', 'strip-ansi');
+    const stripAnsi71 = join(rootPackage, 'node_modules', 'strip-ansi');
+    const stripAnsi72 = join(dirname(stringWidth), 'strip-ansi');
     try {
       await Promise.all(
         [rootPackage, stringWidth, stripAnsi71, stripAnsi72].map((path) =>
@@ -425,10 +425,15 @@ describe('framework candidate evidence binding', () => {
         ),
       ]);
       await mkdir(join(rootPackage, 'node_modules'), { recursive: true });
-      await symlink(stringWidth, join(rootPackage, 'node_modules', 'string-width'), 'dir');
-      await symlink(stripAnsi71, join(rootPackage, 'node_modules', 'strip-ansi'), 'dir');
-      await symlink(stripAnsi72, join(dirname(stringWidth), 'strip-ansi'), 'dir');
+      await symlink(
+        stringWidth,
+        join(rootPackage, 'node_modules', 'string-width'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
 
+      await expect(installedDependencyFrom(rootPackage, 'strip-ansi')).resolves.toMatchObject({
+        manifest: { version: '7.1.2' },
+      });
       const child = await installedDependencyFrom(rootPackage, 'string-width');
       expect(child.directory).toBe(await realpath(stringWidth));
       await expect(installedDependencyFrom(child.directory, 'strip-ansi')).resolves.toMatchObject({
