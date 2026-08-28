@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { bindLocalTermwrightGoClient } from './certify-framework-candidate.mjs';
 
 const run = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -171,6 +172,29 @@ async function certify(name, operation) {
 
 try {
   await run('go', ['version']);
+
+  // Real toolchain ownership belongs to this process-level certification, not
+  // to Vitest's short unit-test callback budget. The command must finish before
+  // the shared scratch root is removed, including on Windows where its cwd is locked.
+  await certify('candidate client replacement transaction', async () => {
+    const fixtureRoot = await scratch('candidate-client-replacement');
+    const client = join(fixtureRoot, 'client');
+    const app = join(fixtureRoot, 'app');
+    await Promise.all([mkdir(client), mkdir(app)]);
+    await writeFile(
+      join(client, 'go.mod'),
+      'module github.com/gorce-ai/termwright/clients/go\n\ngo 1.22\n',
+      'utf8',
+    );
+    await writeFile(
+      join(app, 'go.mod'),
+      'module example.com/candidate\n\ngo 1.22\n\nrequire github.com/gorce-ai/termwright/clients/go v0.0.0\n',
+      'utf8',
+    );
+    const canonicalClient = await realpath(client);
+    const bound = await bindLocalTermwrightGoClient(app, process.env, client);
+    assert(bound === canonicalClient, 'candidate certification bound a non-canonical Go client');
+  });
 
   await certify('owned source digest refusal', async () => {
     const fixtureRoot = await scratch('source-mismatch');
