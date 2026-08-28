@@ -26,6 +26,7 @@ package tea
 // without a position rather than inventing coordinates.
 
 import (
+	"errors"
 	"io"
 	"reflect"
 	"strconv"
@@ -54,21 +55,25 @@ type termwrightProbeState struct {
 	client    *protocol.Client
 	publisher atomic.Pointer[protocol.PublicationQueue]
 
-	ids       map[string]string
-	nextID    int
-	rendering atomic.Bool
-	frameMu   sync.Mutex
-	nextFrame atomic.Uint64
-	latest    map[*cursedRenderer]*termwrightStagedFrame
-	queued    map[*cursedRenderer]*termwrightStagedFrame
-	published map[*cursedRenderer]uint64
-	ready     chan struct{}
-	shutdown  sync.Once
-	closed    atomic.Bool
-	frames    atomic.Uint64
-	dropped   atomic.Uint64
-	failed    atomic.Bool
-	failure   atomic.Pointer[termwrightFailure]
+	ids              map[string]string
+	nextID           int
+	rendering        atomic.Bool
+	frameMu          sync.Mutex
+	nextFrame        atomic.Uint64
+	latest           map[*cursedRenderer]*termwrightStagedFrame
+	queued           map[*cursedRenderer]*termwrightStagedFrame
+	published        map[*cursedRenderer]uint64
+	ready            chan struct{}
+	shutdown         sync.Once
+	recoveryStopOnce sync.Once
+	recoveryWorkers  sync.WaitGroup
+	recoveryStop     chan struct{}
+	recovering       map[*cursedRenderer]bool
+	closed           atomic.Bool
+	frames           atomic.Uint64
+	dropped          atomic.Uint64
+	failed           atomic.Bool
+	failure          atomic.Pointer[termwrightFailure]
 }
 
 type termwrightFailure struct {
@@ -78,8 +83,13 @@ type termwrightFailure struct {
 
 type termwrightStagedFrame struct {
 	sequence uint64
+	program  *Program
 	view     View
 	snapshot *protocol.Snapshot
+}
+
+type termwrightRecoveryMsg struct {
+	renderer *cursedRenderer
 }
 
 var (
@@ -141,12 +151,14 @@ func newTermwrightProbe() *termwrightProbeState {
 		return nil
 	}
 	p := &termwrightProbeState{
-		client:    client,
-		ids:       make(map[string]string),
-		latest:    make(map[*cursedRenderer]*termwrightStagedFrame),
-		queued:    make(map[*cursedRenderer]*termwrightStagedFrame),
-		published: make(map[*cursedRenderer]uint64),
-		ready:     make(chan struct{}),
+		client:       client,
+		ids:          make(map[string]string),
+		latest:       make(map[*cursedRenderer]*termwrightStagedFrame),
+		queued:       make(map[*cursedRenderer]*termwrightStagedFrame),
+		published:    make(map[*cursedRenderer]uint64),
+		ready:        make(chan struct{}),
+		recoveryStop: make(chan struct{}),
+		recovering:   make(map[*cursedRenderer]bool),
 	}
 	go func() {
 		defer close(p.ready)
@@ -167,7 +179,7 @@ func newTermwrightProbe() *termwrightProbeState {
 	return p
 }
 
-func (p *termwrightProbeState) publish(writer io.Writer, frame *termwrightStagedFrame) bool {
+func (p *termwrightProbeState) publish(renderer *cursedRenderer, writer io.Writer, frame *termwrightStagedFrame) bool {
 	if p.failed.Load() {
 		return false
 	}
@@ -178,6 +190,14 @@ func (p *termwrightProbeState) publish(writer io.Writer, frame *termwrightStaged
 	marker, err := publisher.TryPublish(frame.snapshot)
 	if err != nil || marker == "" {
 		p.dropped.Add(1)
+		if errors.Is(err, protocol.ErrPublicationQueueFull) {
+			p.requestAuthoritativeReplay(renderer, publisher.ReadyAfterDrop)
+			return false
+		}
+		if errors.Is(err, protocol.ErrPublicationQueueBusy) {
+			p.requestAuthoritativeReplay(renderer, publisher.ReadyAfterBusy)
+			return false
+		}
 		message := "Bubble Tea rendered a frame that semantic publication did not admit"
 		if err != nil {
 			message += ": " + err.Error()
@@ -186,6 +206,56 @@ func (p *termwrightProbeState) publish(writer io.Writer, frame *termwrightStaged
 		return false
 	}
 	return p.writeMarker(writer, marker)
+}
+
+// requestAuthoritativeReplay turns a transient non-blocking admission refusal
+// into a fresh framework-owned render. The rejected snapshot receives neither
+// a revision nor a marker. Once admission can make progress, a private message
+// re-enters Bubble Tea's event loop, where the current model is observed again
+// before the renderer baseline is invalidated and flushed with a new marker.
+func (p *termwrightProbeState) requestAuthoritativeReplay(renderer *cursedRenderer, readiness func() <-chan struct{}) {
+	if renderer == nil || readiness == nil || p.recoveryStop == nil {
+		return
+	}
+	if !p.frameMu.TryLock() {
+		p.requestSemanticFailure("adapter-guarantee-violation", "Bubble Tea semantic recovery could not be coalesced without waiting in the renderer")
+		return
+	}
+	if p.closed.Load() || p.recovering[renderer] {
+		p.frameMu.Unlock()
+		return
+	}
+	p.recovering[renderer] = true
+	p.recoveryWorkers.Add(1)
+	p.frameMu.Unlock()
+	ready := readiness()
+
+	go func() {
+		defer p.recoveryWorkers.Done()
+		select {
+		case <-ready:
+		case <-p.recoveryStop:
+			p.frameMu.Lock()
+			delete(p.recovering, renderer)
+			p.frameMu.Unlock()
+			return
+		}
+
+		p.frameMu.Lock()
+		frame := p.latest[renderer]
+		p.frameMu.Unlock()
+		if !p.closed.Load() && frame != nil && frame.program != nil {
+			frame.program.Send(termwrightRecoveryMsg{renderer: renderer})
+		}
+	}()
+}
+
+func (p *termwrightProbeState) beginRecoveryRender(renderer *cursedRenderer) bool {
+	p.frameMu.Lock()
+	defer p.frameMu.Unlock()
+	delete(p.recovering, renderer)
+	frame := p.latest[renderer]
+	return !p.closed.Load() && frame != nil && frame.sequence > p.published[renderer]
 }
 
 // termwrightTryBeginOutputCommit makes FRAME -> MARKER atomic without ever
@@ -278,11 +348,42 @@ func termwrightShutdown(p *termwrightProbeState) {
 		return
 	}
 	p.shutdown.Do(func() {
+		if p.recoveryStop != nil {
+			p.recoveryStopOnce.Do(func() { close(p.recoveryStop) })
+		}
+		p.frameMu.Lock()
+		p.frameMu.Unlock()
+		p.recoveryWorkers.Wait()
 		<-p.ready
+		p.frameMu.Lock()
+		pending := false
+		for renderer, frame := range p.latest {
+			if frame != nil && frame.sequence > p.published[renderer] {
+				pending = true
+				break
+			}
+		}
+		p.frameMu.Unlock()
+		if pending && p.failure.Load() == nil {
+			failure := &termwrightFailure{
+				code:    "semantic-publication-refused",
+				message: "Bubble Tea stopped with an authoritative semantic frame still awaiting causal publication",
+			}
+			if p.failure.CompareAndSwap(nil, failure) {
+				p.failed.Store(true)
+			}
+		}
 		if publisher := p.publisher.Swap(nil); publisher != nil {
+			if failure := p.failure.Load(); failure != nil {
+				publisher.Fail(failure.code, failure.message)
+			}
 			publisher.Shutdown()
 		} else if p.client != nil {
-			_ = p.client.Close()
+			if failure := p.failure.Load(); failure != nil {
+				_ = p.client.Fail(failure.code, failure.message)
+			} else {
+				_ = p.client.Close()
+			}
 		}
 	})
 }
@@ -330,7 +431,7 @@ func termwrightAfterRendererFlush(renderer *cursedRenderer, outputOK bool) {
 		p.failOutput("Bubble Tea renderer did not commit the complete terminal frame")
 		return
 	}
-	if p.publish(renderer.w, frame) {
+	if p.publish(renderer, renderer.w, frame) {
 		if !p.frameMu.TryLock() {
 			p.failSemantic("adapter-guarantee-violation", "Bubble Tea semantic publication committed while frame state was contended")
 			return
@@ -340,9 +441,12 @@ func termwrightAfterRendererFlush(renderer *cursedRenderer, outputOK bool) {
 	}
 }
 
-func (p *termwrightProbeState) queueFrame(renderer *cursedRenderer, frame *termwrightStagedFrame) {
+func (p *termwrightProbeState) queueFrame(renderer *cursedRenderer, frame *termwrightStagedFrame, force bool) {
 	renderer.mu.Lock()
 	renderer.view = frame.view
+	if force {
+		renderer.lastView = nil
+	}
 	if !p.frameMu.TryLock() {
 		renderer.mu.Unlock()
 		p.failSemantic("adapter-guarantee-violation", "Bubble Tea semantic frame staging was contended")
@@ -1026,6 +1130,21 @@ func (p *termwrightProbeState) tryBeginModelObservation() bool {
 // together with the concrete renderer state. The ticker's successful flush is
 // the only place that can publish the revision and its in-band marker.
 func termwrightRenderAndObserve(program *Program, model Model) {
+	termwrightRenderAndObserveMode(program, model, false)
+}
+
+func termwrightRecoverAndObserve(program *Program, model Model, recovery termwrightRecoveryMsg) {
+	probe := termwrightProbeForRender()
+	if probe == nil || recovery.renderer == nil || program.renderer != recovery.renderer {
+		return
+	}
+	if !probe.beginRecoveryRender(recovery.renderer) {
+		return
+	}
+	termwrightRenderAndObserveMode(program, model, true)
+}
+
+func termwrightRenderAndObserveMode(program *Program, model Model, force bool) {
 	view := model.View()
 	probe := termwrightProbeForRender()
 	renderer, supported := program.renderer.(*cursedRenderer)
@@ -1052,6 +1171,6 @@ func termwrightRenderAndObserve(program *Program, model Model) {
 		renderer.render(view)
 		return
 	}
-	frame := &termwrightStagedFrame{sequence: probe.nextFrame.Add(1), view: view, snapshot: snapshot}
-	probe.queueFrame(renderer, frame)
+	frame := &termwrightStagedFrame{sequence: probe.nextFrame.Add(1), program: program, view: view, snapshot: snapshot}
+	probe.queueFrame(renderer, frame, force)
 }

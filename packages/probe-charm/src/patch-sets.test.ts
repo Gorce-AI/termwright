@@ -199,7 +199,11 @@ describe.skipIf(!hasGo)('the patch sets', () => {
       );
       expect(dormantLookup).toContain('termwrightProbeMode.Load()');
       expect(dormantLookup).not.toMatch(/Lock\(|FromEnv|go func|Dial|Start\(/u);
-      expect(probe).toContain('p.publish(renderer.w, frame)');
+      expect(probe).toContain('p.publish(renderer, renderer.w, frame)');
+      expect(probe).toContain('publisher.ReadyAfterDrop');
+      expect(probe).toContain('publisher.ReadyAfterBusy');
+      expect(probe).toContain('frame.program.Send(termwrightRecoveryMsg{renderer: renderer})');
+      expect(probe).toContain('termwrightRenderAndObserveMode(program, model, true)');
       expect(probe).toContain('protocol.NewPublicationQueue(client, 2)');
       expect(probe).toContain('publisher.TryPublish(frame.snapshot)');
       expect(probe).not.toContain('p.client.Publish(frame.snapshot)');
@@ -295,7 +299,11 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     );
     expect(dormantLookup).toContain('termwrightProbeMode.Load()');
     expect(dormantLookup).not.toMatch(/Lock\(|FromEnv|go func|Dial|Start\(/u);
-    expect(probe).toContain('p.publish(r.out, frame)');
+    expect(probe).toContain('p.publish(r, r.out, frame)');
+    expect(probe).toContain('publisher.ReadyAfterDrop');
+    expect(probe).toContain('publisher.ReadyAfterBusy');
+    expect(probe).toContain('frame.program.Send(termwrightRecoveryMsg{renderer: renderer})');
+    expect(probe).toContain('termwrightRenderAndObserveMode(p, model, true)');
     expect(probe).toContain('protocol.NewPublicationQueue(client, 2)');
     expect(probe).toContain('publisher.TryPublish(frame.snapshot)');
     expect(probe).not.toContain('p.client.Publish(frame.snapshot)');

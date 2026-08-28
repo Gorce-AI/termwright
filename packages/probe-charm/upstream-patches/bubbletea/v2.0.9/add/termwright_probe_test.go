@@ -2,6 +2,7 @@ package tea
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"reflect"
 	"runtime"
@@ -38,6 +39,28 @@ type termwrightRenderModel struct{ Scalar int }
 func (termwrightRenderModel) Init() Cmd                 { return nil }
 func (m termwrightRenderModel) Update(Msg) (Model, Cmd) { return m, nil }
 func (termwrightRenderModel) View() View                { return View{Content: "CONCURRENT-FRAME"} }
+
+type termwrightRecoveryModel struct{ Text string }
+
+func (termwrightRecoveryModel) Init() Cmd                 { return nil }
+func (m termwrightRecoveryModel) Update(Msg) (Model, Cmd) { return m, nil }
+func (m termwrightRecoveryModel) View() View              { return View{Content: m.Text} }
+
+type termwrightEventLoopModel struct {
+	Text    string
+	updates *int
+	views   *int
+}
+
+func (termwrightEventLoopModel) Init() Cmd { return nil }
+func (m termwrightEventLoopModel) Update(Msg) (Model, Cmd) {
+	*m.updates++
+	return m, nil
+}
+func (m termwrightEventLoopModel) View() View {
+	*m.views++
+	return View{Content: m.Text}
+}
 
 func TestTermwrightWalkerPreservesStructureAndDeclaresOpaqueGaps(t *testing.T) {
 	deep := &termwrightWalkDeep{}
@@ -498,5 +521,170 @@ func TestTermwrightConcurrentRunsDrainOnlyAfterLastOwner(t *testing.T) {
 	termwrightShutdown(probe)
 	if !probe.closed.Load() {
 		t.Fatal("last Program owner did not close publication admission")
+	}
+}
+
+func TestTermwrightAdmissionRecoveryCoalescesAndObservesFreshModel(t *testing.T) {
+	renderer := newCursedRenderer(io.Discard, nil, 80, 24)
+	program := &Program{
+		ctx:      context.Background(),
+		msgs:     make(chan Msg, 1),
+		renderer: renderer,
+		width:    80,
+		height:   24,
+	}
+	ready := make(chan struct{})
+	probe := &termwrightProbeState{
+		ids:          make(map[string]string),
+		latest:       make(map[*cursedRenderer]*termwrightStagedFrame),
+		queued:       make(map[*cursedRenderer]*termwrightStagedFrame),
+		published:    make(map[*cursedRenderer]uint64),
+		recoveryStop: make(chan struct{}),
+		recovering:   make(map[*cursedRenderer]bool),
+	}
+	probe.nextFrame.Store(1)
+	probe.latest[renderer] = &termwrightStagedFrame{
+		sequence: 1,
+		program:  program,
+		view:     View{Content: "STALE"},
+	}
+	readinessCalls := 0
+	readiness := func() <-chan struct{} {
+		readinessCalls++
+		return ready
+	}
+
+	probe.requestAuthoritativeReplay(renderer, readiness)
+	probe.requestAuthoritativeReplay(renderer, readiness)
+	if readinessCalls != 1 {
+		t.Fatalf("recovery was not coalesced: readiness called %d times", readinessCalls)
+	}
+	select {
+	case msg := <-program.msgs:
+		t.Fatalf("recovery escaped before admission became ready: %+v", msg)
+	default:
+	}
+
+	close(ready)
+	recovery := (<-program.msgs).(termwrightRecoveryMsg)
+	previous, previousMode := termwrightProbe, termwrightProbeMode.Load()
+	termwrightProbe = probe
+	termwrightProbeMode.Store(termwrightProbeModeActive)
+	t.Cleanup(func() {
+		termwrightProbe = previous
+		termwrightProbeMode.Store(previousMode)
+	})
+	termwrightRecoverAndObserve(program, termwrightRecoveryModel{Text: "FRESH"}, recovery)
+	probe.recoveryWorkers.Wait()
+
+	frame := probe.latest[renderer]
+	if frame == nil || frame.sequence <= 1 || frame.view.Content != "FRESH" {
+		t.Fatalf("recovery reused the rejected snapshot instead of observing the current model: %+v", frame)
+	}
+	if renderer.lastView != nil {
+		t.Fatalf("recovery did not invalidate the renderer baseline: %+v", renderer.lastView)
+	}
+}
+
+func TestTermwrightAdmissionRecoveryNeverWaitsForCoalescerOwnership(t *testing.T) {
+	renderer := newCursedRenderer(io.Discard, nil, 80, 24)
+	probe := &termwrightProbeState{
+		recoveryStop: make(chan struct{}),
+		recovering:   make(map[*cursedRenderer]bool),
+	}
+	probe.frameMu.Lock()
+	probe.requestAuthoritativeReplay(renderer, func() <-chan struct{} {
+		t.Fatal("contended recovery must fail closed before creating a waiter")
+		return nil
+	})
+	probe.frameMu.Unlock()
+	if failure := probe.failure.Load(); failure == nil || failure.code != "adapter-guarantee-violation" {
+		t.Fatalf("contended recovery did not fail closed without waiting: %+v", failure)
+	}
+}
+
+func TestTermwrightShutdownCancelsPendingAdmissionRecovery(t *testing.T) {
+	renderer := newCursedRenderer(io.Discard, nil, 80, 24)
+	ready := make(chan struct{})
+	started := make(chan struct{})
+	close(started)
+	probe := &termwrightProbeState{
+		latest:       map[*cursedRenderer]*termwrightStagedFrame{renderer: {sequence: 1}},
+		published:    make(map[*cursedRenderer]uint64),
+		ready:        started,
+		recoveryStop: make(chan struct{}),
+		recovering:   make(map[*cursedRenderer]bool),
+	}
+	probe.requestAuthoritativeReplay(renderer, func() <-chan struct{} { return ready })
+
+	termwrightLifecycleMu.Lock()
+	previousProbe, previousRuns := termwrightProbe, termwrightActiveRuns
+	termwrightProbe, termwrightActiveRuns = probe, 1
+	termwrightLifecycleMu.Unlock()
+	t.Cleanup(func() {
+		termwrightLifecycleMu.Lock()
+		termwrightProbe, termwrightActiveRuns = previousProbe, previousRuns
+		termwrightLifecycleMu.Unlock()
+	})
+	termwrightShutdown(probe)
+	if !probe.closed.Load() {
+		t.Fatal("shutdown returned without closing pending recovery admission")
+	}
+	if failure := probe.failure.Load(); failure == nil || failure.code != "semantic-publication-refused" {
+		t.Fatalf("shutdown silently discarded an unpublished final semantic frame: %+v", failure)
+	}
+}
+
+func TestTermwrightPrivateRecoveryUsesTheRealEventLoopWithoutReachingUserCode(t *testing.T) {
+	writer := &termwrightCapturedWriter{}
+	renderer := newCursedRenderer(writer, nil, 80, 24)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	filters := 0
+	program := &Program{
+		ctx:      ctx,
+		msgs:     make(chan Msg, 2),
+		errs:     make(chan error, 1),
+		renderer: renderer,
+		width:    80,
+		height:   24,
+		filter: func(_ Model, msg Msg) Msg {
+			filters++
+			return msg
+		},
+	}
+	probe := &termwrightProbeState{
+		ids:        make(map[string]string),
+		latest:     make(map[*cursedRenderer]*termwrightStagedFrame),
+		queued:     make(map[*cursedRenderer]*termwrightStagedFrame),
+		published:  make(map[*cursedRenderer]uint64),
+		recovering: map[*cursedRenderer]bool{renderer: true},
+	}
+	probe.nextFrame.Store(1)
+	probe.latest[renderer] = &termwrightStagedFrame{sequence: 1, program: program, view: View{Content: "STALE"}}
+	previous, previousMode := termwrightProbe, termwrightProbeMode.Load()
+	termwrightProbe = probe
+	termwrightProbeMode.Store(termwrightProbeModeActive)
+	t.Cleanup(func() {
+		termwrightProbe = previous
+		termwrightProbeMode.Store(previousMode)
+	})
+
+	updates, views := 0, 0
+	model := termwrightEventLoopModel{Text: "FRESH", updates: &updates, views: &views}
+	program.msgs <- termwrightRecoveryMsg{renderer: renderer}
+	program.msgs <- Quit()
+	returned, err := program.eventLoop(model, make(chan Cmd))
+	if err != nil || returned == nil {
+		t.Fatalf("event loop recovery failed: model=%+v err=%v", returned, err)
+	}
+	if filters != 1 || updates != 0 || views != 1 {
+		t.Fatalf("private recovery leaked into user code or rendered more than once: filters=%d updates=%d views=%d", filters, updates, views)
+	}
+	if err := renderer.flush(false); err != nil {
+		t.Fatalf("forced recovery flush failed: %v", err)
+	}
+	if !bytes.Contains(writer.Bytes(), []byte("FRESH")) {
+		t.Fatalf("real renderer did not write the fresh recovery view: %q", writer.Bytes())
 	}
 }

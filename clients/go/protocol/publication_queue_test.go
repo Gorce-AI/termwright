@@ -131,6 +131,25 @@ func TestPublicationQueueSignalsCapacityAfterARejectedRevision(t *testing.T) {
 	}
 }
 
+func TestPublicationQueueReadyAfterDropNeverWaitsForQueueOwnership(t *testing.T) {
+	release := make(chan struct{})
+	close(release)
+	client := queuedTestClient(&controlledConn{started: make(chan struct{}), release: release})
+	queue, err := NewPublicationQueue(client, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue.mu.Lock()
+	ready := queue.ReadyAfterDrop()
+	select {
+	case <-ready:
+	default:
+		t.Fatal("idle capacity edge was not already ready")
+	}
+	queue.mu.Unlock()
+	queue.Shutdown()
+}
+
 func TestPublicationWorkerFailureFailsClosedWithoutLaterMarker(t *testing.T) {
 	conn := &controlledConn{started: make(chan struct{}), release: make(chan struct{}), fail: errors.New("broken writer")}
 	client := queuedTestClient(conn)
@@ -217,6 +236,38 @@ func TestPublicationQueueTryPublishNeverWaitsForLifecycleOrAdmissionLocks(t *tes
 		t.Fatalf("busy refusal consumed revision %d", client.Revision())
 	}
 	queue.Shutdown()
+}
+
+func TestPublicationQueueReadyAfterBusyWaitsForEveryAdmissionOwner(t *testing.T) {
+	for _, hold := range []struct {
+		name   string
+		lock   func(*PublicationQueue)
+		unlock func(*PublicationQueue)
+	}{
+		{"queue", func(q *PublicationQueue) { q.mu.Lock() }, func(q *PublicationQueue) { q.mu.Unlock() }},
+		{"publisher", func(q *PublicationQueue) { q.client.publishMu.Lock() }, func(q *PublicationQueue) { q.client.publishMu.Unlock() }},
+		{"client", func(q *PublicationQueue) { q.client.mu.Lock() }, func(q *PublicationQueue) { q.client.mu.Unlock() }},
+	} {
+		t.Run(hold.name, func(t *testing.T) {
+			release := make(chan struct{})
+			close(release)
+			client := queuedTestClient(&controlledConn{started: make(chan struct{}), release: release})
+			queue, err := NewPublicationQueue(client, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hold.lock(queue)
+			ready := queue.ReadyAfterBusy()
+			select {
+			case <-ready:
+				t.Fatal("busy edge closed while its admission owner was still active")
+			default:
+			}
+			hold.unlock(queue)
+			<-ready
+			queue.Shutdown()
+		})
+	}
 }
 
 func TestPublicationQueueTryPublishPerformsNoSynchronousDebugIO(t *testing.T) {
