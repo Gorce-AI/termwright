@@ -1931,11 +1931,11 @@
       "certification": {
         "adapterVersion": "0.2.0",
         "checksumSources": [
+          "packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json",
+          "packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json",
           "packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json",
           "packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json",
-          "packages/probe-charm/upstream-patches/bubbletea/v2.0.9/manifest.json",
-          "packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json",
-          "packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json"
+          "packages/probe-charm/upstream-patches/bubbletea/v2.0.9/manifest.json"
         ],
         "ids": [
           "charm@v1.3.10/0.2.0",
@@ -2094,6 +2094,21 @@
                 "name": "charm.land/bubbles/v2",
                 "optional": true,
                 "version": "v2.1.1"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v1.3.10",
+            "id": "charm-v1.3.10-668483feddee",
+            "modules": [
+              {
+                "name": "github.com/charmbracelet/bubbles",
+                "optional": true,
+                "version": "v1.0.0"
+              },
+              {
+                "name": "github.com/charmbracelet/bubbletea",
+                "version": "v1.3.10"
               }
             ]
           },
