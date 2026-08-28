@@ -134,6 +134,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # Parent identity is part of the artifact contract. A depth-one
+          # checkout marks the synthetic merge as shallow and hides `%P`.
+          fetch-depth: 2
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:

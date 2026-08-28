@@ -266,6 +266,7 @@ describe('autonomous workflow security', () => {
 
     expect(workflow).toContain('types: [labeled, unlabeled, synchronize]');
     expect(workflow.split(eitherPreview)).toHaveLength(4);
+    expect(preview).toContain('fetch-depth: 2');
     expect(preview).toContain('--manifest preview/npm-manifest.json --source-sha "$MERGE_SHA"');
     expect(preview).toContain('mergeCommit: process.env.MERGE_SHA');
     expect(preview).toContain('headCommit: process.env.HEAD_SHA');
