@@ -61,6 +61,14 @@ export function generatedUpdateName(candidate) {
   return null;
 }
 
+export function renderCompatibilityChangeset(packages, candidates) {
+  const frontmatter = [...packages]
+    .sort()
+    .map((name) => `'${name}': patch`)
+    .join('\n');
+  return `---\n${frontmatter}\n---\n\nCertify upstream framework releases: ${candidates.join(', ')}.\n`;
+}
+
 export function reconcile(registry, ledger, verdicts, context = {}) {
   const assessments = validateCandidateAssessments(
     context.assessments ?? { schemaVersion: 1, streams: {} },
@@ -579,14 +587,10 @@ async function main(argv) {
       }
       if (candidate.frameworkId === 'ink') packages.add('@termwright/ink');
     }
-    const frontmatter = [...packages]
-      .sort()
-      .map((name) => `"${name}": patch`)
-      .join('\n');
     if (packages.size > 0)
       await writeFile(
         join(root, '.changeset/framework-compatibility-auto.md'),
-        `---\n${frontmatter}\n---\n\nCertify upstream framework releases: ${result.plan.green.join(', ')}.\n`,
+        renderCompatibilityChangeset(packages, result.plan.green),
       );
   }
   await writeFile(ledgerPath, canonicalJson(result.ledger));
