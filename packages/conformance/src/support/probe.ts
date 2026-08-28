@@ -48,6 +48,7 @@ import type { Terminal } from '@xterm/headless';
 import { createNativePtyBackend, type PtyProcess } from '@termwright/driver/experimental';
 import { environment } from './pty.js';
 import { ProbePeerOwner } from './probe-peer-owner.js';
+import { ProbeProcessShutdown } from './probe-process-shutdown.js';
 import { ProbeStartupTransaction } from './probe-startup.js';
 
 /** How a fixture is started. Everything else about it is opaque to the probe. */
@@ -151,7 +152,7 @@ export class AdapterProbe {
   #exit: { code: number | null; signal: string | null } | null = null;
   /** Where the adapter writes its own account of attaching, if it writes one. */
   #debugFile: string | null = null;
-  #stopPromise: Promise<void> | null = null;
+  readonly #shutdown: ProbeProcessShutdown;
   readonly #changeWaiters = new Set<() => void>();
 
   private constructor(
@@ -173,6 +174,24 @@ export class AdapterProbe {
       rows: size.rows,
       allowProposedApi: true,
       scrollback: 1_000,
+    });
+    this.#shutdown = new ProbeProcessShutdown({
+      pty,
+      closeAdmission: () =>
+        this.#server === null ? Promise.resolve() : this.#peers.close(this.#server),
+      drainParser: () =>
+        new Promise<void>((resolve, reject) => {
+          try {
+            this.#terminal.write('', resolve);
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
+        }),
+      disposeParser: () => {
+        this.#notifyChange();
+        this.#terminal.dispose();
+      },
+      removeArtifacts: () => this.#removeArtifacts(),
     });
   }
 
@@ -229,6 +248,7 @@ export class AdapterProbe {
       pty.onData((data) => probe.#onData(data));
       pty.onExit((status) => {
         probe.#exit = status;
+        probe.#shutdown.observeExit(status);
         probe.#notifyChange();
       });
       peers.activate((socket) => probe.#onConnection(socket as Socket));
@@ -397,33 +417,11 @@ export class AdapterProbe {
 
   /** Stops the child and releases the endpoint. Idempotent. */
   stop(): Promise<void> {
-    this.#stopPromise ??= this.#stop();
-    return this.#stopPromise;
+    return this.#shutdown.stop();
   }
 
-  async #stop(): Promise<void> {
-    // Stop admission first. A connection accepted by the OS but delivered to
-    // JavaScript later is rejected by #peers.admit(), so the server-close
-    // barrier cannot acquire an unowned peer while cleanup is in progress.
-    const serverClosed =
-      this.#server === null ? Promise.resolve() : this.#peers.close(this.#server);
+  async #removeArtifacts(): Promise<void> {
     const failures: unknown[] = [];
-    for (const dispose of [
-      () => this.#pty.dispose(),
-      () => this.#notifyChange(),
-      () => this.#terminal.dispose(),
-    ]) {
-      try {
-        dispose();
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    try {
-      await serverClosed;
-    } catch (error) {
-      failures.push(error);
-    }
     if (this.#directory !== null) {
       try {
         await rm(this.#directory, { recursive: true, force: true });
@@ -438,8 +436,10 @@ export class AdapterProbe {
         failures.push(error);
       }
     }
+    this.#notifyChange();
     if (failures.length === 1) throw failures[0];
-    if (failures.length > 1) throw new AggregateError(failures, 'adapter probe cleanup failed');
+    if (failures.length > 1)
+      throw new AggregateError(failures, 'adapter probe artifact cleanup failed');
   }
 
   // -------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import {
   AmbiguousLocatorError,
   CapabilityUnavailableError,
   NotActionableError,
+  PendingObservationError,
   StaleSnapshotError,
 } from '../errors.js';
 import { ActionRetryController, assertBeforeActionInput } from './action-retry.js';
@@ -94,6 +95,58 @@ describe('locator action retry policy', () => {
     expect(ctx.waitForChange).toHaveBeenCalledOnce();
     expect(ctx.actionObservationWait).toHaveBeenCalledOnce();
     expect(ctx.actionObservationWait).toHaveBeenCalledWith('action:pending', 'parser-in-flight');
+  });
+
+  it('arms before reading state so a frame-close wake cannot be lost', async () => {
+    const controller = new ActionRetryController(1_000);
+    const stale = new PendingObservationError('frame pending', diagnostics, 'semantic-frame-open');
+
+    let state: 'semantic-frame-open' | 'settled' = 'semantic-frame-open';
+    let armed = false;
+    let wake: (() => void) | undefined;
+    const wait = new Promise<void>((resolve) => {
+      wake = resolve;
+    });
+    const ctx = {
+      checkpoint: () => stamp(12),
+      actionObservationState: () => {
+        expect(armed).toBe(true);
+        state = 'settled';
+        wake?.();
+        return state;
+      },
+      waitForChange: vi.fn(async () => undefined),
+      armChange: vi.fn(() => {
+        armed = true;
+        return { wait: () => wait, cancel: vi.fn() };
+      }),
+    };
+
+    await controller.retry(stale, ctx, 'action:frame');
+    expect(ctx.armChange).toHaveBeenCalledOnce();
+    expect(ctx.waitForChange).not.toHaveBeenCalled();
+  });
+
+  it('does not re-plan on a marker revision while its semantic frame remains open', async () => {
+    const controller = new ActionRetryController(1_000);
+    const stale = new StaleSnapshotError('frame pending', diagnostics);
+    await controller.retry(stale, { checkpoint: () => stamp(1), waitForChange: vi.fn() });
+
+    let state: 'semantic-frame-open' | 'settled' = 'semantic-frame-open';
+    let waits = 0;
+    await controller.retry(
+      stale,
+      {
+        checkpoint: () => stamp(2),
+        actionObservationState: () => state,
+        waitForChange: async () => {
+          waits += 1;
+          state = 'settled';
+        },
+      },
+      'action:frame',
+    );
+    expect(waits).toBe(1);
   });
 
   it('checks the monotonic deadline immediately after a wait', async () => {

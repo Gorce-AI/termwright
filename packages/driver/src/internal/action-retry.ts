@@ -1,6 +1,11 @@
 import type { ObservationStamp } from '@termwright/protocol';
 import type { ErrorDiagnostics } from '../api.js';
-import { NotActionableError, StaleSnapshotError, TimeoutError } from '../errors.js';
+import {
+  NotActionableError,
+  PendingObservationError,
+  StaleSnapshotError,
+  TimeoutError,
+} from '../errors.js';
 import { Deadline, type MonotonicClock as Clock, systemMonotonicClock } from './deadline.js';
 
 export interface ActionRetryContext {
@@ -9,6 +14,7 @@ export interface ActionRetryContext {
     'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
   /** Wall-clock deadline retained at the session boundary; the budget itself is monotonic. */
   waitForChange(deadline: number): Promise<void>;
+  armChange?(deadline: number): { wait(): Promise<void>; cancel(): void };
   actionObservationWait?(
     actionId: string,
     state: 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending',
@@ -85,23 +91,45 @@ export class ActionRetryController {
 
     // A stale plan proves a newer observation already exists. Re-plan once
     // immediately; repeated stale races must wait for another committed frame.
-    if (error instanceof StaleSnapshotError && this.#staleRetries++ === 0) return;
+    if (
+      error instanceof StaleSnapshotError &&
+      !(error instanceof PendingObservationError) &&
+      this.#staleRetries++ === 0
+    )
+      return;
 
     const failedAt = error.actionability?.checkpoint ?? ctx.checkpoint();
-    if (relevantObservationChanged(error, failedAt, ctx.checkpoint())) return;
-    const observationState = ctx.actionObservationState?.();
-    const pendingObservation = observationState !== undefined && observationState !== 'settled';
-    if (pendingObservation && actionId !== undefined) {
-      ctx.actionObservationWait?.(actionId, observationState);
-    }
+    let waitForObservationSettlement = error instanceof PendingObservationError;
+    let reportedObservationWait = false;
 
     for (;;) {
-      await ctx.waitForChange(this.deadline);
+      // Register before reading either state. A marker and its semantic commit
+      // use independent transports, so the transition that makes an action
+      // safe can happen between any two JavaScript statements.
+      const armed = ctx.armChange?.(this.deadline);
+      const observationState = ctx.actionObservationState?.();
+      if (observationState !== undefined && observationState !== 'settled') {
+        waitForObservationSettlement = true;
+        if (!reportedObservationWait && actionId !== undefined) {
+          reportedObservationWait = true;
+          ctx.actionObservationWait?.(actionId, observationState);
+        }
+      }
+      if (waitForObservationSettlement) {
+        if (observationState === 'settled') {
+          armed?.cancel();
+          return;
+        }
+      } else if (relevantObservationChanged(error, failedAt, ctx.checkpoint())) {
+        armed?.cancel();
+        return;
+      }
+
+      if (armed === undefined) await ctx.waitForChange(this.deadline);
+      else await armed.wait();
       // Expiry wins immediately after every wait, before another resolution or
       // any device operation can consume time or emit bytes.
       if (this.expired()) throw error;
-      if (pendingObservation && ctx.actionObservationState?.() === 'settled') return;
-      if (relevantObservationChanged(error, failedAt, ctx.checkpoint())) return;
       // Status/log/output notifications can wake the session without a paired
       // observation. Stay here rather than creating a re-plan storm.
     }
