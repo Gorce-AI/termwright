@@ -2,13 +2,17 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { digestTree } from './prepare-framework-candidate.mjs';
 import { canonicalJson, selectCandidates } from './discover-framework-candidates.mjs';
 import {
   addCertifiedRuntimeProfile,
+  compatibilityChangesetPackages,
   generatedUpdateName,
   generatedUpdateDirectories,
+  main as reconcileMain,
+  mergeCompatibilityChangeset,
+  parseCompatibilityChangeset,
   reconcile,
   recordVerifiedFrameworkVersion,
   renderCompatibilityChangeset,
@@ -35,6 +39,12 @@ const candidate = {
   candidateDigest: `sha256:${'c'.repeat(64)}`,
 };
 
+const compatibilityStreams = [
+  { id: 'ink', frameworkId: 'ink' },
+  { id: 'bubbletea-v1', frameworkId: 'charm' },
+  { id: 'textual', frameworkId: 'textual' },
+];
+
 describe('framework candidate reconciliation', () => {
   it('renders the generated changeset in the repository Prettier style', () => {
     expect(
@@ -44,6 +54,206 @@ describe('framework candidate reconciliation', () => {
     ).toBe(
       "---\n'@termwright/ink': patch\n'@termwright/probe-ink': patch\n---\n\nCertify upstream framework releases: ink@7.1.1.\n",
     );
+  });
+
+  it('accumulates unconsumed compatibility release entries without duplication', () => {
+    const ledger = {
+      streams: {
+        ink: [{ version: '7.1.1' }],
+        'bubbletea-v1': [{ version: 'v1.3.10' }],
+      },
+    };
+    const existing = renderCompatibilityChangeset(
+      new Set(['@termwright/probe-ink', '@termwright/ink']),
+      ['ink@7.1.1'],
+    );
+    expect(
+      mergeCompatibilityChangeset(
+        existing,
+        ['bubbletea-v1@v1.3.10', 'ink@7.1.1'],
+        ledger,
+        compatibilityStreams,
+      ),
+    ).toBe(
+      "---\n'@termwright/ink': patch\n'@termwright/probe-charm': patch\n'@termwright/probe-ink': patch\n---\n\nCertify upstream framework releases: bubbletea-v1@v1.3.10, ink@7.1.1.\n",
+    );
+
+    const once = mergeCompatibilityChangeset(
+      existing,
+      ['bubbletea-v1@v1.3.10'],
+      ledger,
+      compatibilityStreams,
+    );
+    expect(
+      mergeCompatibilityChangeset(once, ['bubbletea-v1@v1.3.10'], ledger, compatibilityStreams),
+    ).toBe(once);
+    expect(
+      mergeCompatibilityChangeset(
+        renderCompatibilityChangeset(new Set(['@termwright/probe-charm']), [
+          'bubbletea-v1@v1.3.10',
+        ]),
+        ['ink@7.1.1'],
+        ledger,
+        compatibilityStreams,
+      ),
+    ).toBe(once);
+  });
+
+  it('fails closed instead of replacing an unexpected generated changeset', () => {
+    expect(() =>
+      mergeCompatibilityChangeset(
+        "---\n'@termwright/ink': patch\n---\n\nHand-written release note.\n",
+        ['bubbletea-v1@v1.3.10'],
+        { streams: { 'bubbletea-v1': [{ version: 'v1.3.10' }] } },
+        compatibilityStreams,
+      ),
+    ).toThrow(/unexpected shape/u);
+    expect(() =>
+      parseCompatibilityChangeset(
+        "---\n'@termwright/ink': minor\n---\n\nCertify upstream framework releases: ink@7.1.1.\n",
+      ),
+    ).toThrow(/frontmatter/u);
+    expect(() =>
+      parseCompatibilityChangeset(
+        "---\n'@termwright/ink': patch\n'@termwright/ink': patch\n---\n\nCertify upstream framework releases: ink@7.1.1.\n",
+      ),
+    ).toThrow(/duplicate/u);
+    expect(() =>
+      parseCompatibilityChangeset(
+        "---\n'@termwright/ink': patch\n---\n\nCertify upstream framework releases: ink@7.1.1, ink@7.1.1.\n",
+      ),
+    ).toThrow(/duplicate/u);
+    expect(() =>
+      parseCompatibilityChangeset(
+        "---\n'@termwright/probe-ink': patch\n'@termwright/ink': patch\n---\n\nCertify upstream framework releases: ink@7.1.1.\n",
+      ),
+    ).toThrow(/not canonical/u);
+  });
+
+  it('starts a new accumulator only when no generated changeset exists', () => {
+    expect(
+      mergeCompatibilityChangeset(
+        null,
+        ['bubbletea-v1@v1.3.10'],
+        { streams: { 'bubbletea-v1': [{ version: 'v1.3.10' }] } },
+        compatibilityStreams,
+      ),
+    ).toBe(
+      "---\n'@termwright/probe-charm': patch\n---\n\nCertify upstream framework releases: bubbletea-v1@v1.3.10.\n",
+    );
+  });
+
+  it('leaves the compatibility changeset untouched for Textual-only certification', () => {
+    expect(compatibilityChangesetPackages(['textual@8.2.8'], compatibilityStreams)).toEqual(
+      new Set(),
+    );
+  });
+
+  it('rejects a retained candidate that is absent from the resulting ledger', () => {
+    const existing = renderCompatibilityChangeset(
+      new Set(['@termwright/ink', '@termwright/probe-ink']),
+      ['ink@7.1.1'],
+    );
+    expect(() =>
+      mergeCompatibilityChangeset(
+        existing,
+        ['bubbletea-v1@v1.3.10'],
+        { streams: { 'bubbletea-v1': [{ version: 'v1.3.10' }] } },
+        compatibilityStreams,
+      ),
+    ).toThrow(/uncertified ink@7\.1\.1/u);
+  });
+
+  it('rejects retained package entries that do not exactly match retained candidates', () => {
+    const ledger = { streams: { ink: [{ version: '7.1.1' }] } };
+    for (const packages of [
+      new Set(['@termwright/probe-ink']),
+      new Set(['@termwright/ink', '@termwright/probe-ink', 'unrelated-package']),
+    ]) {
+      const existing = renderCompatibilityChangeset(packages, ['ink@7.1.1']);
+      expect(() =>
+        mergeCompatibilityChangeset(existing, ['ink@7.1.1'], ledger, compatibilityStreams),
+      ).toThrow(/package set does not match/u);
+    }
+  });
+
+  it('aborts reconciliation before the first write when the accumulator is invalid', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-reconcile-preflight-'));
+    const verdictDirectory = join(directory, 'verdicts');
+    await mkdir(join(directory, '.changeset'), { recursive: true });
+    await mkdir(join(directory, 'compatibility'), { recursive: true });
+    await mkdir(verdictDirectory);
+    const registryPath = join(directory, 'candidate-registry.json');
+    const ledgerPath = join(directory, 'compatibility/certified-upstreams.json');
+    const assessmentsPath = join(directory, 'compatibility/candidate-assessments.json');
+    const planPath = join(directory, 'publish-plan.json');
+    const changesetPath = join(directory, '.changeset/framework-compatibility-auto.md');
+    const sourceRevision = 'a'.repeat(40);
+    const greenCandidate = {
+      ...candidate,
+      id: 'bubbletea-v1@v1.3.10',
+      streamId: 'bubbletea-v1',
+      frameworkId: 'charm',
+      version: 'v1.3.10',
+      mode: 'capability',
+      capability: 'bubbletea-render-observation',
+      capabilityStrategy: 'compile-conformance',
+      patch: { status: 'not-applicable', path: null, manifestDigest: null },
+    };
+    const ledgerSource = '{"schemaVersion":1,"streams":{}}\n';
+    const assessmentsSource = '{"schemaVersion":1,"streams":{}}\n';
+    const malformedChangeset =
+      "---\n'@termwright/ink': minor\n---\n\nCertify upstream framework releases: ink@7.1.1.\n";
+    await writeFile(
+      join(directory, 'compatibility/upstream-patches.json'),
+      JSON.stringify({ streams: compatibilityStreams }),
+    );
+    await writeFile(registryPath, JSON.stringify({ candidates: [greenCandidate] }));
+    await writeFile(ledgerPath, ledgerSource);
+    await writeFile(assessmentsPath, assessmentsSource);
+    await writeFile(changesetPath, malformedChangeset);
+    await writeFile(
+      join(verdictDirectory, 'verdict-0.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        kind: 'termwright-framework-candidate-verdict',
+        candidateId: greenCandidate.id,
+        candidateDigest: greenCandidate.candidateDigest,
+        sourceRevision,
+        state: 'green',
+        detail: 'green',
+        executableResolution: {},
+      }),
+    );
+
+    vi.stubEnv('GITHUB_SHA', sourceRevision);
+    vi.stubEnv('SOURCE_RUN_URL', 'https://github.com/owner/repo/actions/runs/1');
+    vi.stubEnv('ISSUE_OWNER', 'owner');
+    try {
+      await expect(
+        reconcileMain(
+          [
+            '--registry',
+            registryPath,
+            '--verdicts',
+            verdictDirectory,
+            '--ledger',
+            ledgerPath,
+            '--assessments',
+            assessmentsPath,
+            '--plan',
+            planPath,
+          ],
+          directory,
+        ),
+      ).rejects.toThrow(/frontmatter/u);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(await readFile(changesetPath, 'utf8')).toBe(malformedChangeset);
+    expect(await readFile(ledgerPath, 'utf8')).toBe(ledgerSource);
+    expect(await readFile(assessmentsPath, 'utf8')).toBe(assessmentsSource);
+    await expect(readFile(planPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('compares exact-source Ink profiles canonically without OpenTUI chunk machinery', () => {
