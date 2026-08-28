@@ -235,6 +235,29 @@ describe('autonomous workflow security', () => {
     expect(workflow.match(/persist-credentials: false/gu)?.length).toBeGreaterThanOrEqual(8);
   });
 
+  it('keeps the one-time npm bootstrap path artifact-only and fail-closed', async () => {
+    const workflow = await readWorkflow('npm-bootstrap-artifacts.yml');
+    const authorize = jobBlock(workflow, 'authorize');
+    const prebuilds = jobBlock(workflow, 'prebuilds');
+    const seal = jobBlock(workflow, 'seal');
+
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toMatch(/^permissions:\n {2}contents: read$/mu);
+    expect(workflow).not.toMatch(/id-token:\s*write|contents:\s*write|packages:\s*write/u);
+    expect(workflow).not.toMatch(/npm publish|NPM_TOKEN|NODE_AUTH_TOKEN|environment:/u);
+    expect(authorize).toContain('Require the exact current default-branch SHA');
+    expect(workflow.match(/--expect-missing scripts\/npm-bootstrap-packages\.json/gu)).toHaveLength(
+      2,
+    );
+    expect(prebuilds.match(/- \{ platform: /gu)).toHaveLength(6);
+    expect(prebuilds).toContain('uses: ./.github/actions/build-pty-prebuild');
+    expect(seal).toContain('node scripts/check-prebuild.mjs --all');
+    expect(seal).toContain('--package-list scripts/npm-bootstrap-packages.json');
+    expect(seal).toContain('node scripts/verify-npm-bootstrap-artifacts.mjs bootstrap');
+    expect(seal).toContain('sha256sum --check SHA256SUMS');
+    expect(seal).toContain('npm-bootstrap-artifacts-${{ needs.authorize.outputs.commit }}');
+  });
+
   it('pins every external action in the autonomous and release workflows to a full commit SHA', async () => {
     for (const name of [
       'ci.yml',
@@ -245,6 +268,7 @@ describe('autonomous workflow security', () => {
       'upstream-candidates.yml',
       'autonomous-coordinator.yml',
       'release.yml',
+      'npm-bootstrap-artifacts.yml',
     ]) {
       const workflow = await readWorkflow(name);
       for (const line of workflow.split('\n').filter((value) => /^\s*(?:- )?uses:/u.test(value))) {
@@ -366,6 +390,7 @@ describe('autonomous workflow security', () => {
   it('uses only reviewed Node 24 artifact actions in release automation', async () => {
     const workflows = [
       await readWorkflow('release.yml'),
+      await readWorkflow('npm-bootstrap-artifacts.yml'),
       await readWorkflow('upstream-candidates.yml'),
       await readFile(
         new URL('../.github/actions/upload-termwright-runs/action.yml', import.meta.url),

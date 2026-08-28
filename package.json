@@ -39,7 +39,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "pack:npm-artifacts": "node scripts/pack-npm-artifacts.mjs"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.0",

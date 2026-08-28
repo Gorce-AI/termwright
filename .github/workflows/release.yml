@@ -295,45 +295,13 @@ jobs:
         with:
           bun-version: '1.4.0'
       - run: pnpm install --frozen-lockfile
-      - name: Compile
-        working-directory: packages/pty
-        shell: bash
-        env:
-          # Match Node's supported macOS floor instead of inheriting the
-          # runner SDK's current host version into the published binary.
-          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}
-        run: |
-          node_root="$(node -p 'require("node:path").dirname(require("node:path").dirname(process.execPath)).replaceAll("\\\\", "/")')"
-          test -f "$node_root/include/node/node.h"
-          pnpm exec node-gyp rebuild --nodedir="$node_root" --arch=${{ matrix.arch }}
-          if [[ "${{ matrix.platform }}" == "win32" ]]; then
-            node ../../scripts/stage-vendored-conpty.mjs --architecture "${{ matrix.arch }}" --destination build/Release/vendor
-          fi
-      - run: pnpm --filter @termwright/pty build
-      - name: Place the binary in its prebuild package
-        shell: bash
-        run: |
-          set -euo pipefail
-          cp packages/pty/build/Release/termwright_pty.node \
-             "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}/termwright_pty.node"
-          node scripts/check-prebuild.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"
-      - name: Exercise the packed addon on its native host
-        shell: bash
-        run: |
-          set -euo pipefail
-          pack_dir="$RUNNER_TEMP/termwright-pty-packs"
-          install_dir="$RUNNER_TEMP/termwright-pty-install"
-          mkdir -p "$pack_dir" "$install_dir"
-          pnpm --dir "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}" pack --pack-destination "$pack_dir"
-          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
-          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
-          if [[ "${{ matrix.platform }}" == "win32" ]]; then
-            verdict="packages/pty-${{ matrix.platform }}-${{ matrix.arch }}/certification-verdict.json"
-            TERMWRIGHT_REQUIRE_BUN=1 node scripts/check-installed-pty.mjs "$install_dir" --verdict "$verdict"
-            node scripts/verify-windows-pty-verdict.mjs "packages/pty-${{ matrix.platform }}-${{ matrix.arch }}"
-          else
-            node scripts/check-installed-pty.mjs "$install_dir"
-          fi
+      # Match Node's supported macOS floor instead of inheriting the runner
+      # SDK's current host version into the published binary.
+      - uses: ./.github/actions/build-pty-prebuild
+        with:
+          platform: ${{ matrix.platform }}
+          architecture: ${{ matrix.arch }}
+          macos-deployment-target: ${{ matrix.macos_target }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-pty-${{ matrix.platform }}-${{ matrix.arch }}
@@ -535,45 +503,7 @@ jobs:
         run: pnpm test:go-toolexec
 
       - name: Pack npm packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release/npm
-          for directory in packages/*/; do
-            private=$(node -p "require('./${directory}package.json').private === true")
-            [ "$private" = "true" ] && continue
-            archive=$(cd "$directory" && pnpm pack --pack-destination "$GITHUB_WORKSPACE/release/npm" | tail -n 1)
-            test -f "$archive"
-            manifest=$(tar -xOf "$archive" package/package.json)
-            if grep -q 'workspace:' <<<"$manifest"; then
-              echo "::error::$archive contains an unexpanded workspace dependency"
-              exit 1
-            fi
-            repository=$(node -p "JSON.parse(process.argv[1]).repository?.url ?? ''" "$manifest")
-            if [ "$repository" != 'git+https://github.com/Gorce-AI/termwright.git' ]; then
-              echo "::error::$archive does not identify the repository required for npm provenance"
-              exit 1
-            fi
-            # Every prebuild needs its addon. Windows additionally needs the
-            # exact vendored ConPTY runtime; a partial package must fail closed.
-            case "$directory" in
-              packages/pty-*)
-                if ! tar -tf "$archive" | grep -qx 'package/termwright_pty.node'; then
-                  echo "::error::$archive carries no addon; a prebuild package without its binary is an empty promise"
-                  exit 1
-                fi
-                if [[ "$directory" == packages/pty-win32-* ]]; then
-                  for member in package/vendor/conpty.dll package/vendor/conpty-manifest.json package/vendor/LICENSE.microsoft-terminal.txt package/vendor/THIRD_PARTY_NOTICES.md package/vendor/SBOM.spdx.json; do
-                    tar -tf "$archive" | grep -qx "$member" || { echo "::error::$archive carries no $member"; exit 1; }
-                  done
-                  if tar -tf "$archive" | grep -qx 'package/vendor/OpenConsole.exe'; then
-                    echo "::error::$archive has an unsafe sibling OpenConsole.exe"
-                    exit 1
-                  fi
-                fi
-                ;;
-            esac
-          done
+        run: pnpm pack:npm-artifacts -- --output release/npm
 
       - name: Verify packed driver without workspace patch state
         shell: bash
