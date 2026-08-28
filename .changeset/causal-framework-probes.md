@@ -11,9 +11,6 @@ observes render geometry at runtime instead of patching generated render-loop
 operations; Bubble Tea commits staged model observations after renderer flush;
 its frame-to-marker admission is non-blocking and fails concurrent/reentrant
 flushes closed before output rather than stalling a render loop;
-transient queue saturation or admission ownership now coalesces one causal
-event-loop replay that observes the current model and forces a real renderer
-flush, while transport and integrity failures remain fail-closed;
 disabled Bubble Tea probing is cached once and leaves later render/flush calls
 as allocation-free atomic no-ops;
 and tview chains public draw hooks to arm only the final call through its screen
