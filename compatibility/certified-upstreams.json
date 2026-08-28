@@ -1,6 +1,47 @@
 {
   "schemaVersion": 1,
   "streams": {
+    "bubbles-v2": [
+      {
+        "candidateDigest": "sha256:4aee45a1ce8f2bf2ccf183aea213acb1ad5c96c32df0e04a1c28eeb12a4633b7",
+        "patchManifestDigest": null,
+        "publishedAt": "2026-07-04T11:39:48Z",
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:GE6M31gaWZVXzGw73OeuTTgy4lX+OtkH0E5ymnNsHxo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:7r55WzBxpo/R3z98hGmY7KKPd3ET6vsf0Fb9sDHOV60=",
+          "zipSha256": "24579b6f253484f6ce0f7a7619dde3e08f7f086c7c4d6030a2a3b13032129bc1"
+        },
+        "version": "v2.1.1"
+      },
+      {
+        "candidateDigest": "sha256:a0e66720eb41e321618ca5d3bc9c85eea808cc36cad7b8555661f8a50a66d175",
+        "patchManifestDigest": null,
+        "publishedAt": "2026-08-21T08:01:07Z",
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:wdMgn+sje1KNXdwFizIWjbf328fIUBxqEmJ/vYPo8yc=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:9GEMewcejrNtVIxZ9Y2wSsWJamsWNsXa8MpMLnH4yI4=",
+          "zipSha256": "ea1a4e6c72d5b5c7ed6eaf149b3ce1357d86be3478d6105661ae64f8923f768f"
+        },
+        "version": "v2.2.0"
+      },
+      {
+        "candidateDigest": "sha256:1ac7846881787ee1ef22ff79eee97e5274758e1cd33ff6ab1a8f822b625b0f13",
+        "patchManifestDigest": null,
+        "publishedAt": "2026-08-24T09:13:59Z",
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:wdMgn+sje1KNXdwFizIWjbf328fIUBxqEmJ/vYPo8yc=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:Fq1+qm5hV6GkvzLQDhCBpXXE5tLgvh1PRriCLwSvIQU=",
+          "zipSha256": "64292cdc965e4cdd81fae7b9b26f77ced179321ab014f49a442b4789078b0024"
+        },
+        "version": "v2.2.1"
+      }
+    ],
     "bubbletea-v1": [
       {
         "candidateDigest": "sha256:de7f308fa7805ffbae1663ecf4f3d7300dfafcdc4c7bc830e659adf1bfe6f61e",
