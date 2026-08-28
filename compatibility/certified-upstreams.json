@@ -1,6 +1,21 @@
 {
   "schemaVersion": 1,
   "streams": {
+    "bubbletea-v1": [
+      {
+        "candidateDigest": "sha256:de7f308fa7805ffbae1663ecf4f3d7300dfafcdc4c7bc830e659adf1bfe6f61e",
+        "patchManifestDigest": "sha256:c4ca650c4df5ebafe1957da4ac47cbde9bf59c7cfd582caa0d4ee07b5a5492b3",
+        "publishedAt": "2025-09-17T20:11:15Z",
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:ORQfo0fk8U+po9VaNvnV95UPWA1BitP1E0N6xJPlHr4=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:otUDHWMMzQSB0Pkc87rm691KZ3SWa4KUlvF9nRvCICw=",
+          "zipSha256": "8afc524c11d18878b0ac3426fd3318fdf05ad576e65883c597996296c1b27117"
+        },
+        "version": "v1.3.10"
+      }
+    ],
     "ink": [
       {
         "candidateDigest": "sha256:db0f804be01a19049e92fc835f5cdaf5f37e1d2e75904817e8aff259304ee0e5",
