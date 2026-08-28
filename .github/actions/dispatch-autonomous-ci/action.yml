@@ -1,0 +1,72 @@
+name: Dispatch autonomous CI
+description: Dispatch exact CI and a trusted continuation that observes its terminal result
+
+inputs:
+  branch:
+    description: Exact automation branch to certify
+    required: true
+  head-sha:
+    description: Exact automation commit to certify
+    required: true
+  default-branch:
+    description: Trusted branch containing the coordinator workflow
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Dispatch exact CI and trusted continuation
+      shell: bash
+      env:
+        BRANCH: ${{ inputs.branch }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        DEFAULT_BRANCH: ${{ inputs.default-branch }}
+      run: |
+        set -euo pipefail
+        [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+        test "$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq '.object.sha')" = "$HEAD_SHA"
+
+        runs_json=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&head_sha=$HEAD_SHA&per_page=100")
+        mapfile -t run_ids < <(jq -r --arg sha "$HEAD_SHA" '
+          .workflow_runs[]
+          | select(.head_sha == $sha and .event == "workflow_dispatch" and .path == ".github/workflows/ci.yml")
+          | .id
+        ' <<<"$runs_json")
+
+        if (( ${#run_ids[@]} == 0 )); then
+          run_url=$(gh workflow run ci.yml --ref "$BRANCH")
+          expected_prefix="https://github.com/$GITHUB_REPOSITORY/actions/runs/"
+          [[ "$run_url" == "$expected_prefix"* ]]
+          run_id=${run_url#"$expected_prefix"}
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          runs_json=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&head_sha=$HEAD_SHA&per_page=100")
+          mapfile -t run_ids < <(jq -r --arg sha "$HEAD_SHA" '
+            .workflow_runs[]
+            | select(.head_sha == $sha and .event == "workflow_dispatch" and .path == ".github/workflows/ci.yml")
+            | .id
+          ' <<<"$runs_json")
+          test "${#run_ids[@]}" -eq 1
+          test "${run_ids[0]}" = "$run_id"
+        else
+          test "${#run_ids[@]}" -eq 1
+          run_id=${run_ids[0]}
+        fi
+
+        run_json=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$run_id")
+        test "$(jq -r '.head_sha' <<<"$run_json")" = "$HEAD_SHA"
+        test "$(jq -r '.head_branch' <<<"$run_json")" = "$BRANCH"
+        test "$(jq -r '.event' <<<"$run_json")" = workflow_dispatch
+        test "$(jq -r '.run_attempt' <<<"$run_json")" = 1
+        test "$(jq -r '.path' <<<"$run_json")" = .github/workflows/ci.yml
+
+        continuation_url=$(gh workflow run autonomous-coordinator.yml \
+          --ref "$DEFAULT_BRANCH" \
+          -f ci_run_id="$run_id")
+        expected_continuation_prefix="https://github.com/$GITHUB_REPOSITORY/actions/runs/"
+        [[ "$continuation_url" == "$expected_continuation_prefix"* ]]
+        continuation_id=${continuation_url#"$expected_continuation_prefix"}
+        [[ "$continuation_id" =~ ^[0-9]+$ ]]
+        {
+          echo "Exact CI: $run_id"
+          echo "Trusted continuation: $continuation_id"
+        } >> "$GITHUB_STEP_SUMMARY"
