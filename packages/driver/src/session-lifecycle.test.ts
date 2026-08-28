@@ -8,6 +8,7 @@ import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe
 import { installTerminalLaunchResourceProvider } from './launch-resources.js';
 import { SemanticChannel } from './semantic.js';
 import { CLOSE_GRACE_MS, launchTerminalWithBackend } from './session.js';
+import { VtScreen } from './vt.js';
 
 class ControlledPty implements PtyProcess {
   readonly pid = 42;
@@ -19,12 +20,14 @@ class ControlledPty implements PtyProcess {
   terminateCount = 0;
   readonly #failExitRegistration: boolean;
   readonly #failDispose: boolean;
+  readonly #failWrite: boolean;
   readonly #emitExitOnDispose: boolean;
   readonly #failSignal: PtySignal | undefined;
   readonly #status: ExitStatus;
   readonly #neverAttach: boolean;
   readonly #treeState: 'gone' | 'unsupported' | 'throw';
   readonly #onAttach: (() => void) | undefined;
+  readonly #onDispose: (() => void) | undefined;
   readonly #initialData: Uint8Array | undefined;
   readonly #exitListeners = new Set<(status: ExitStatus) => void>();
   readonly #writeErrorListeners = new Set<(error: Error) => void>();
@@ -33,6 +36,7 @@ class ControlledPty implements PtyProcess {
     options: {
       readonly failExitRegistration?: boolean;
       readonly failDispose?: boolean;
+      readonly failWrite?: boolean;
       readonly emitExitOnDispose?: boolean;
       readonly failSignal?: PtySignal;
       readonly status?: ExitStatus;
@@ -40,11 +44,13 @@ class ControlledPty implements PtyProcess {
       readonly lifecycle?: PtyProcess['lifecycle'];
       readonly treeState?: 'gone' | 'unsupported' | 'throw';
       readonly onAttach?: () => void;
+      readonly onDispose?: () => void;
       readonly initialData?: Uint8Array;
     } = {},
   ) {
     this.#failExitRegistration = options.failExitRegistration ?? false;
     this.#failDispose = options.failDispose ?? false;
+    this.#failWrite = options.failWrite ?? false;
     this.#emitExitOnDispose = options.emitExitOnDispose ?? true;
     this.#failSignal = options.failSignal;
     this.#status = options.status ?? { code: 0, signal: null };
@@ -52,10 +58,12 @@ class ControlledPty implements PtyProcess {
     this.lifecycle = options.lifecycle ?? { tree: 'posix-process-group', outputDrain: 'eof' };
     this.#treeState = options.treeState ?? 'gone';
     this.#onAttach = options.onAttach;
+    this.#onDispose = options.onDispose;
     this.#initialData = options.initialData;
   }
 
   write(data: Uint8Array): void {
+    if (this.#failWrite) throw new Error('write failed');
     this.writeCalls.push(Uint8Array.from(data));
   }
   resize(columns: number, rows: number): void {
@@ -105,6 +113,7 @@ class ControlledPty implements PtyProcess {
   }
   dispose(): void {
     this.disposeCount += 1;
+    this.#onDispose?.();
     if (this.#emitExitOnDispose) {
       for (const listener of [...this.#exitListeners]) listener(this.#status);
     }
@@ -148,6 +157,70 @@ const terminalIt = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 afterEach(() => vi.restoreAllMocks());
 
 describe('terminal session resource lifecycle', () => {
+  terminalIt('disconnects delayed terminal replies before closing PTY input', async () => {
+    const teardown: string[] = [];
+    let responseListener: Parameters<VtScreen['onResponse']>[0] | undefined;
+    const originalOnResponse = VtScreen.prototype.onResponse;
+    const responseSpy = vi.spyOn(VtScreen.prototype, 'onResponse').mockImplementation(function (
+      this: VtScreen,
+      listener,
+    ) {
+      responseListener = listener;
+      const unsubscribe = originalOnResponse.call(this, listener);
+      return () => {
+        teardown.push('terminal-response');
+        unsubscribe();
+      };
+    });
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const pty = new ControlledPty({
+      onDispose: () => {
+        teardown.push('pty');
+        responseListener?.({ data: '\u001b[1;1R', kind: 'emulator' });
+      },
+    });
+    const terminal = await launchTerminalWithBackend({
+      command: ['controlled-app'],
+      backend: backendFor(pty, endpoint),
+    });
+
+    await terminal.close();
+
+    expect(teardown).toEqual(['terminal-response', 'pty']);
+    expect(pty.writeCalls).toEqual([]);
+    expect(
+      terminal
+        .diagnostics()
+        .filter((entry) => entry.code === 'terminal-response-after-input-close'),
+    ).toHaveLength(1);
+    responseSpy.mockRestore();
+  });
+
+  terminalIt('surfaces a terminal reply write failure through session lifecycle', async () => {
+    let responseListener: Parameters<VtScreen['onResponse']>[0] | undefined;
+    const originalOnResponse = VtScreen.prototype.onResponse;
+    const responseSpy = vi.spyOn(VtScreen.prototype, 'onResponse').mockImplementation(function (
+      this: VtScreen,
+      listener,
+    ) {
+      responseListener = listener;
+      return originalOnResponse.call(this, listener);
+    });
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const terminal = await launchTerminalWithBackend({
+      command: ['controlled-app'],
+      backend: backendFor(new ControlledPty({ failWrite: true }), endpoint),
+    });
+
+    responseListener?.({ data: '\u001b[1;1R', kind: 'emulator' });
+
+    await expect(terminal.waitForText('never')).rejects.toMatchObject({
+      code: 'pty-backend-failed',
+    });
+    await expect(terminal.close()).rejects.toMatchObject({ code: 'pty-backend-failed' });
+    responseSpy.mockRestore();
+  });
+
   terminalIt('negotiates the configured semantic frame queue capacity', async () => {
     const originalListen = SemanticChannel.listen.bind(SemanticChannel);
     let negotiatedCapacity: number | undefined;

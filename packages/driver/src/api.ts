@@ -885,6 +885,8 @@ export type DiagnosticCode =
   | 'ready-shell-integration'
   /** The terminal emulator answered an application query through PTY stdin. */
   | 'terminal-response'
+  /** A scheduled emulator reply arrived after the owned process tree lost PTY input. */
+  | 'terminal-response-after-input-close'
   /**
    * Input was sent while the mode governing it was unverifiable — recorded
    * once per session and mode, since it describes the platform rather than the

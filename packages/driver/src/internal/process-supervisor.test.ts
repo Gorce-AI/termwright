@@ -116,6 +116,40 @@ function supervisor(
 }
 
 describe('ProcessSupervisor', () => {
+  it('closes input producers immediately before disposing the PTY', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty();
+    const teardown: string[] = [];
+    pty.dispose = () => {
+      teardown.push('pty');
+      pty.disposeCount += 1;
+    };
+
+    await supervisor(pty, clock).shutdown({
+      deadline: clock.now + 1_000,
+      gracefulMs: 100,
+      beforeDispose: () => teardown.push('input-producers'),
+    });
+
+    expect(teardown).toEqual(['input-producers', 'pty']);
+  });
+
+  it('still disposes the PTY when an input producer fails to close', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty();
+
+    await expect(
+      supervisor(pty, clock).shutdown({
+        deadline: clock.now + 1_000,
+        gracefulMs: 100,
+        beforeDispose: () => {
+          throw new Error('bridge close failed');
+        },
+      }),
+    ).rejects.toThrow(/bridge close failed/u);
+    expect(pty.disposeCount).toBe(1);
+  });
+
   it('uses the same lazy monotonic clock domain as callers of the default supervisor', async () => {
     const pty = new FakePty();
     const process = new ProcessSupervisor(pty);
