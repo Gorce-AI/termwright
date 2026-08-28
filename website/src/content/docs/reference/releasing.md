@@ -63,7 +63,9 @@ just at release time.
 | PR preview | A build of an open pull request, on pkg-pr-new. Never touches npm. | `npm i https://pkg.pr.new/@termwright/driver@<pr>` |
 
 PR previews are opt-in per pull request. They provide installable artifacts for
-review without consuming a package version or changing an npm dist-tag.
+review without consuming a package version or changing an npm dist-tag. A repository
+owner must install the `pkg-pr-new` GitHub App before adding the `pr preview` label; the
+label deliberately means that the external publishing prerequisite is ready.
 
 ## Older lines
 

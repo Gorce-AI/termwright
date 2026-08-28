@@ -3,9 +3,12 @@ name: Preview release
 # Installable builds of a pull request, published to pkg-pr-new rather than to
 # npm. Nothing here touches the real registry, and no version is consumed.
 #
-# Opt-in per PR: add the `pr preview` label. A preview of every PR would be
-# noise, and a preview built from an unreviewed fork is not something to hand
-# people a one-line install command for by default.
+# Opt-in per PR: first install the pkg-pr-new GitHub App for this repository,
+# then add the `pr preview` label. The service rejects publication when its app
+# is absent, so the label is an assertion that this repository prerequisite is
+# already satisfied. A preview of every PR would be noise, and a preview built
+# from an unreviewed fork is not something to hand people a one-line install
+# command for by default.
 
 on:
   pull_request:
