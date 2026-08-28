@@ -47,7 +47,11 @@ function archive({ name, windows = false, unsafe = false, addon = true, hosts })
   }
   if (unsafe) writeFileSync(join(packageRoot, 'vendor', 'OpenConsole.exe'), 'unsafe');
   const result = join(root, 'package.tgz');
-  execFileSync('tar', ['-czf', result, 'package'], { cwd: root });
+  // Git for Windows ships GNU tar, which treats `C:\\...` in an archive
+  // argument as the `host:path` remote-archive syntax. Keep both operands
+  // relative to the isolated working directory so this fixture exercises the
+  // archive contract identically on POSIX and Windows.
+  execFileSync('tar', ['-czf', 'package.tgz', 'package'], { cwd: root });
   return result;
 }
 

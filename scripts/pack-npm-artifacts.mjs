@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repositoryUrl = 'git+https://github.com/Gorce-AI/termwright.git';
@@ -58,7 +58,13 @@ export function validatePackageSelection(names, manifests, { bootstrap = false }
 }
 
 export function validatePackedArchive(archive, expectedName) {
-  const members = execFileSync('tar', ['-tf', archive], { encoding: 'utf8' })
+  const resolvedArchive = resolve(archive);
+  const archiveDirectory = dirname(resolvedArchive);
+  const archiveFile = basename(resolvedArchive);
+  const members = execFileSync('tar', ['-tf', archiveFile], {
+    cwd: archiveDirectory,
+    encoding: 'utf8',
+  })
     .trim()
     .split(/\r?\n/u);
   if (new Set(members).size !== members.length) fail(`${archive} contains duplicate members`);
@@ -67,7 +73,10 @@ export function validatePackedArchive(archive, expectedName) {
   if (!members.includes('package/package.json')) fail(`${archive} carries no package manifest`);
 
   const manifest = JSON.parse(
-    execFileSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8' }),
+    execFileSync('tar', ['-xOf', archiveFile, 'package/package.json'], {
+      cwd: archiveDirectory,
+      encoding: 'utf8',
+    }),
   );
   if (manifest.name !== expectedName)
     fail(`${archive} contains ${String(manifest.name)} instead of ${expectedName}`);
