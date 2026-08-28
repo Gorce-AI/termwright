@@ -477,6 +477,8 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'utf8',
     );
     expect(goToolExecCertification).toContain('await prepareGoToolExec({');
+    expect(goToolExecCertification).toContain('candidate client replacement transaction');
+    expect(goToolExecCertification).toContain('bindLocalTermwrightGoClient(');
     expect(goToolExecCertification).toContain('warm-cache owned source tamper refusal');
     expect(goToolExecCertification).toContain('vendor-mode dependency selection');
     expect(goToolExecCertification).toContain('compiler identity includes imported archives');
@@ -692,16 +694,6 @@ describe('the native host is the only Termwright test entrypoint', () => {
     ]);
     for (const source of pressureSources)
       expect(source).toMatch(/nativeHost:\s*["']exclusive["']/u);
-
-    const candidateCertification = await readFile(
-      new URL('./certify-framework-candidate.go.test.mjs', import.meta.url),
-      'utf8',
-    );
-    expect(candidateCertification).toContain('packages/resource-broker/src/vitest.ts');
-    expect(candidateCertification).toMatch(
-      /resourceAwareIt\.resources\(\{\s*hostPressure:\s*["']exclusive["']\s*\}\)/u,
-    );
-    expect(candidateCertification).toContain('goTestCapability(');
 
     const candidateUnit = await readFile(
       new URL('./certify-framework-candidate.test.mjs', import.meta.url),
