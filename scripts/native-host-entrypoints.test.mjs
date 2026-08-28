@@ -77,6 +77,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(source).toMatch(
       /if \(process\.platform === 'win32'\) \{\n  \/\/ A passthrough ConPTY preserves the application's WriteConsole boundaries\./u,
     );
+    expect(source).toContain(
+      "const fragmentedSyntax = spawnSync(process.execPath, ['--check', '-']",
+    );
   });
 
   it('keeps repository and release certification single-attempt', async () => {

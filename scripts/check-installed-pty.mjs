@@ -586,14 +586,26 @@ if (process.platform === 'win32') {
   console.log('[pty-cert] fragmented-console-delivery');
   const fragmentedPayloadBytes = 6 * 1024 * 1024;
   const fragmentedSentinel = 'FRAGMENTED_CONSOLE_SENTINEL';
-  const fragmented = collect([
+  const fragmentedSource = [
     'process.stdin.resume();',
     'process.stdin.once("data", () => {',
     '  const payload = Buffer.alloc(' + fragmentedPayloadBytes + ', 0x58);',
     '  process.stdout.write(payload, () => {',
     '    process.stdout.write(' + JSON.stringify(fragmentedSentinel) + ', () => process.exit(0));',
     '  });',
-  ].join(''));
+    '});',
+  ].join('');
+  const fragmentedSyntax = spawnSync(process.execPath, ['--check', '-'], {
+    encoding: 'utf8',
+    input: fragmentedSource,
+  });
+  if (fragmentedSyntax.status !== 0) {
+    throw new Error(
+      'fragmented console fixture is invalid: ' +
+        (fragmentedSyntax.stderr || fragmentedSyntax.stdout),
+    );
+  }
+  const fragmented = collect(fragmentedSource);
   fragmented.session.write(Buffer.from('go\\r'));
   const fragmentedWait = spawnSync('powershell.exe', [
     '-NoLogo',
@@ -622,7 +634,16 @@ if (process.platform === 'win32') {
     fragmented.session.sawRealEof;
   fragmented.session.dispose();
   if (!fragmentedConsoleDeliveryValid) {
-    throw new Error('installed addon did not preserve fragmented console delivery through EOF');
+    throw new Error(
+      'installed addon did not preserve fragmented console delivery through EOF: ' +
+        JSON.stringify({
+          outputBytes: fragmentedOutput.length,
+          sentinelAt: fragmentedSentinelAt,
+          payloadRunBytes: fragmentedSentinelAt - fragmentedPayloadStart,
+          sawRealEof: fragmented.session.sawRealEof,
+          tail: fragmentedOutput.subarray(Math.max(0, fragmentedOutput.length - 256)).toString('hex'),
+        }),
+    );
   }
 }
 
