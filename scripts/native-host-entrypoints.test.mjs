@@ -220,6 +220,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'packages/probe-charm/**/*.test.ts',
       'packages/probe-go/**/*.test.ts',
       'packages/probe-tview/**/*.test.ts',
+      'scripts/**/*.go.test.mjs',
     ]);
     const coreProject = rootConfig.test.projects.find((project) => project.test.name === 'core');
     for (const packageName of ['probe-charm', 'probe-go', 'probe-tview']) {
@@ -676,6 +677,23 @@ describe('the native host is the only Termwright test entrypoint', () => {
     ]);
     for (const source of pressureSources)
       expect(source).toMatch(/nativeHost:\s*["']exclusive["']/u);
+
+    const candidateCertification = await readFile(
+      new URL('./certify-framework-candidate.go.test.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(candidateCertification).toContain('packages/resource-broker/src/vitest.ts');
+    expect(candidateCertification).toMatch(
+      /resourceAwareIt\.resources\(\{\s*hostPressure:\s*["']exclusive["']\s*\}\)/u,
+    );
+    expect(candidateCertification).toContain('goTestCapability(');
+
+    const candidateUnit = await readFile(
+      new URL('./certify-framework-candidate.test.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(candidateUnit).toContain('in one toolchain transaction');
+    expect(candidateUnit).not.toMatch(/exec\(['"]go['"]/u);
 
     const availability = await readFile(
       new URL('../packages/test/src/pty-available.ts', import.meta.url),

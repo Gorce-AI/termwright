@@ -523,14 +523,41 @@ export async function bindLocalTermwrightGoClient(
   moduleDir,
   env = process.env,
   clientDir = join(root, 'clients/go'),
+  runCommand = run,
 ) {
   const canonicalClientDir = await realpath(clientDir);
-  await run(
+  const result = await runCommand(
     'go',
-    ['mod', 'edit', `-replace=github.com/gorce-ai/termwright/clients/go=${canonicalClientDir}`],
+    [
+      'mod',
+      'edit',
+      '-json',
+      `-replace=github.com/gorce-ai/termwright/clients/go=${canonicalClientDir}`,
+    ],
     env,
     moduleDir,
   );
+  let edited;
+  try {
+    edited = JSON.parse(result.stdout);
+  } catch (error) {
+    throw new Error('go mod edit returned malformed JSON while binding the Termwright Go client', {
+      cause: error,
+    });
+  }
+  const replacements = Array.isArray(edited?.Replace) ? edited.Replace : [];
+  const exact = replacements.filter(
+    (replacement) =>
+      replacement?.Old?.Path === 'github.com/gorce-ai/termwright/clients/go' &&
+      replacement?.Old?.Version === undefined &&
+      replacement?.New?.Path === canonicalClientDir &&
+      replacement?.New?.Version === undefined,
+  );
+  if (exact.length !== 1) {
+    throw new Error(
+      `go mod edit did not report the exact Termwright Go client replacement ${JSON.stringify(canonicalClientDir)}`,
+    );
+  }
   return canonicalClientDir;
 }
 

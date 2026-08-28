@@ -56,7 +56,10 @@ export default defineConfig({
         test: {
           name: 'go-integration',
           runner: termwrightRunner,
-          include: goIntegrationPackages.map((name) => `packages/${name}/**/*.test.ts`),
+          include: [
+            ...goIntegrationPackages.map((name) => `packages/${name}/**/*.test.ts`),
+            'scripts/**/*.go.test.mjs',
+          ],
           exclude: ['**/__fixtures__/**', '**/node_modules/**', '**/dist/**'],
         },
       },
@@ -70,6 +73,7 @@ export default defineConfig({
             '**/__fixtures__/**',
             '**/node_modules/**',
             '**/dist/**',
+            'scripts/**/*.go.test.mjs',
             ...goIntegrationPackages.map((name) => `packages/${name}/**`),
             ...configuredPackages.map((name) => `packages/${name}/**`),
           ],

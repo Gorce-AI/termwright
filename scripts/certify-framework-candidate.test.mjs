@@ -148,30 +148,62 @@ async function npmClosureFixture() {
 }
 
 describe('framework candidate evidence binding', () => {
-  it('binds generated tview candidates to the repository-owned Go client before tidy', async () => {
+  it('binds and verifies the repository-owned Go client in one toolchain transaction', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-go-client-replace-'));
     const client = join(directory, 'client');
     const app = join(directory, 'app');
     await Promise.all([mkdir(client), mkdir(app)]);
-    await writeFile(
-      join(client, 'go.mod'),
-      'module github.com/gorce-ai/termwright/clients/go\n\ngo 1.22\n',
-    );
-    await writeFile(
-      join(app, 'go.mod'),
-      'module example.com/candidate\n\ngo 1.22\n\nrequire github.com/gorce-ai/termwright/clients/go v0.0.0\n',
-    );
+    const canonicalClient = await realpath(client);
+    const env = { PATH: '/toolchain' };
+    const calls = [];
     try {
-      const canonicalClient = await bindLocalTermwrightGoClient(app, process.env, client);
-      const edited = JSON.parse((await exec('go', ['mod', 'edit', '-json'], { cwd: app })).stdout);
-      expect(edited.Replace).toEqual([
-        {
-          Old: { Path: 'github.com/gorce-ai/termwright/clients/go' },
-          New: { Path: canonicalClient },
-        },
+      await expect(
+        bindLocalTermwrightGoClient(app, env, client, async (...arguments_) => {
+          calls.push(arguments_);
+          return {
+            stdout: JSON.stringify({
+              Replace: [
+                {
+                  Old: { Path: 'github.com/gorce-ai/termwright/clients/go' },
+                  New: { Path: canonicalClient },
+                },
+              ],
+            }),
+            stderr: '',
+          };
+        }),
+      ).resolves.toBe(canonicalClient);
+      expect(calls).toEqual([
+        [
+          'go',
+          [
+            'mod',
+            'edit',
+            '-json',
+            `-replace=github.com/gorce-ai/termwright/clients/go=${canonicalClient}`,
+          ],
+          env,
+          app,
+        ],
       ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['malformed JSON', '{'],
+    ['a mismatched replacement', JSON.stringify({ Replace: [] })],
+  ])('fails closed when go mod edit returns %s', async (_label, stdout) => {
+    const client = await mkdtemp(join(tmpdir(), 'tw-go-client-invalid-'));
+    try {
+      await expect(
+        bindLocalTermwrightGoClient('/candidate', {}, client, async () => ({ stdout, stderr: '' })),
+      ).rejects.toThrow(
+        /malformed JSON|did not report the exact Termwright Go client replacement/u,
+      );
+    } finally {
+      await rm(client, { recursive: true, force: true });
     }
   });
 
