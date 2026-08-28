@@ -11,6 +11,7 @@ import {
   compatibilitySourceRunId,
   nextHeartbeatRecord,
   pendingChangesetFiles,
+  requireUnchangedDefaultHead,
   releaseDispatchTitle,
   requireReproducedVersionTree,
   shouldDispatchRelease,
@@ -510,6 +511,27 @@ describe('trusted autonomous coordinator', () => {
       validateBranchProtection({ ...protection, enforce_admins: { enabled: false } }),
     ).toThrow(/administrators/u);
     expect(() =>
+      validateBranchProtection({ ...protection, required_pull_request_reviews: null }),
+    ).toThrow(/require pull requests/u);
+    expect(() =>
+      validateBranchProtection({
+        ...protection,
+        required_pull_request_reviews: {
+          ...protection.required_pull_request_reviews,
+          require_last_push_approval: undefined,
+        },
+      }),
+    ).toThrow(/explicitly disabled/u);
+    expect(() =>
+      validateBranchProtection({
+        ...protection,
+        required_pull_request_reviews: {
+          ...protection.required_pull_request_reviews,
+          require_code_owner_reviews: undefined,
+        },
+      }),
+    ).toThrow(/explicitly disabled/u);
+    expect(() =>
       validateBranchProtection({
         ...protection,
         required_pull_request_reviews: {
@@ -539,6 +561,15 @@ describe('trusted autonomous coordinator', () => {
     expect(() =>
       validateBranchProtection({
         ...protection,
+        required_pull_request_reviews: {
+          ...protection.required_pull_request_reviews,
+          require_code_owner_reviews: true,
+        },
+      }),
+    ).toThrow(/code-owner/u);
+    expect(() =>
+      validateBranchProtection({
+        ...protection,
         required_status_checks: {
           ...protection.required_status_checks,
           checks: [
@@ -559,6 +590,29 @@ describe('trusted autonomous coordinator', () => {
         },
       }),
     ).toThrow(/GitHub Actions app/u);
+    expect(() => validateBranchProtection({ ...protection, restrictions: {} })).toThrow(
+      /push restrictions/u,
+    );
+    expect(() => validateBranchProtection({ ...protection, restrictions: undefined })).toThrow(
+      /push restrictions/u,
+    );
+    expect(() =>
+      validateBranchProtection({ ...protection, allow_force_pushes: { enabled: true } }),
+    ).toThrow(/force pushes/u);
+    expect(() =>
+      validateBranchProtection({ ...protection, allow_deletions: { enabled: true } }),
+    ).toThrow(/deletion/u);
+    expect(() =>
+      validateBranchProtection({ ...protection, allow_force_pushes: undefined }),
+    ).toThrow(/force pushes/u);
+    expect(() => validateBranchProtection({ ...protection, allow_deletions: undefined })).toThrow(
+      /deletion/u,
+    );
+  });
+
+  it('refuses a stale autonomous PR immediately before merge', () => {
+    expect(() => requireUnchangedDefaultHead(base, base)).not.toThrow();
+    expect(() => requireUnchangedDefaultHead(head, base)).toThrow(/stale PR base/u);
   });
 
   it('rejects a Version PR with a tampered package script via exact reproduced-tree binding', () => {
