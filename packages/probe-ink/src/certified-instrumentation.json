@@ -1,11 +1,11 @@
 {
-  "schemaVersion": 1,
   "framework": "ink",
   "profiles": [
     {
-      "version": "7.1.1",
+      "coreSha256": "f632f6176e593183f0c0bb6e4a6e8a28d65f1c3899a33a84d4a95d26e1a82a58",
       "rendererSha256": "9e72b27731c38daac7e9f978e24f7bf1210c5cc26bf973e30f08c3ad4a9fe374",
-      "coreSha256": "f632f6176e593183f0c0bb6e4a6e8a28d65f1c3899a33a84d4a95d26e1a82a58"
+      "version": "7.1.1"
     }
-  ]
+  ],
+  "schemaVersion": 1
 }
