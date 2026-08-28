@@ -111,6 +111,10 @@ describe('native PTY prebuild architecture guard', () => {
       await mkdir(join(root, 'scripts'), { recursive: true });
       await mkdir(join(root, 'packages', 'pty-darwin-arm64'), { recursive: true });
       await cp(fileURLToPath(new URL('./check-prebuild.mjs', import.meta.url)), script);
+      await cp(
+        fileURLToPath(new URL('./is-direct-execution.mjs', import.meta.url)),
+        join(root, 'scripts', 'is-direct-execution.mjs'),
+      );
       const executableScript = await realpath(script);
       await expect(
         execute(process.execPath, [executableScript, 'darwin', 'arm64', '--allow-missing']),
