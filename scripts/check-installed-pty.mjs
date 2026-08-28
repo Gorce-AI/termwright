@@ -612,13 +612,16 @@ if (process.platform === 'win32') {
     '-NoProfile',
     '-NonInteractive',
     '-Command',
-    '$target = Get-Process -Id ' + fragmented.session.pid +
-      ' -ErrorAction SilentlyContinue; if ($null -ne $target -and -not $target.WaitForExit(10000)) { exit 71 }',
+    'try { $target = [Diagnostics.Process]::GetProcessById(' + fragmented.session.pid + ') } ' +
+      'catch [ArgumentException] { exit 0 } ' +
+      'catch { [Console]::Error.WriteLine($_.Exception.ToString()); exit 72 }; ' +
+      'if (-not $target.WaitForExit(10000)) { exit 71 }; exit 0',
   ], { encoding: 'utf8' });
   if (fragmentedWait.status !== 0) {
     fragmented.session.dispose();
     throw new Error('fragmented console writer did not reach process exit ' +
-      '(helper ' + fragmentedWait.status + '): ' + fragmentedWait.stderr);
+      '(helper ' + fragmentedWait.status + '): ' +
+      (fragmentedWait.error?.message ?? fragmentedWait.stderr));
   }
   await fragmented.session.outputEnded;
   const fragmentedOutput = Buffer.concat(fragmented.output);

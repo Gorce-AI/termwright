@@ -886,7 +886,11 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        `$target = Get-Process -Id ${handle.pid} -ErrorAction SilentlyContinue; if ($null -ne $target -and -not $target.WaitForExit(10000)) { exit 71 }`,
+        `try { $target = [Diagnostics.Process]::GetProcessById(${handle.pid}) } ` +
+          `catch [ArgumentException] { exit 0 } ` +
+          `catch { [Console]::Error.WriteLine($_.Exception.ToString()); exit 72 }; ` +
+          `if (-not $target.WaitForExit(10000)) { exit 71 }; ` +
+          `exit 0`,
       ],
       { encoding: 'utf8' },
     );
@@ -894,7 +898,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       handle.dispose();
       throw new Error(
         `fragmented console writer did not reach process exit ` +
-          `(helper ${String(waited.status)}): ${waited.stderr}`,
+          `(helper ${String(waited.status)}): ${waited.error?.message ?? waited.stderr}`,
       );
     }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +10,11 @@ import {
 } from '@termwright/protocol';
 import { connectRunJournalWorker } from '@termwright/run-journal-transport';
 import { connectResourceBrokerWorker } from '@termwright/resource-broker/transport';
-import { NODE_RUN_MANIFEST_WRITER, readRunManifest } from '@termwright/run-history';
+import {
+  NODE_RUN_MANIFEST_WRITER,
+  readRunManifest,
+  type RunManifestWriter,
+} from '@termwright/run-history';
 import type { TermwrightRunnerContext } from '@termwright/test/runner';
 import type { UserConsoleLog } from 'vitest';
 import type { TestCase, TestModule, TestRunResult } from 'vitest/node';
@@ -24,6 +28,7 @@ import {
   assertFirstWorkflowAttempt,
   describeFailure,
   type TermwrightHostDeadlineRuntime,
+  type TermwrightTestHostOptions,
   type TermwrightVitestEngine,
 } from './test-host.js';
 import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
@@ -197,7 +202,7 @@ describe('TermwrightTestHost', () => {
     engine.tests = [testCase('native-hung', 'hung worker')];
     engine.runResult = result(engine.tests);
     engine.runError = new TermwrightHostTimeoutError('Vitest execution', 250);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
 
     const completion = await host.requestRun().completed;
 
@@ -221,7 +226,7 @@ describe('TermwrightTestHost', () => {
     engine.tests = [testCase('native-output', 'writes output')];
     engine.runResult = result(engine.tests);
     engine.consoleContent = `prefix:${'🧪'.repeat(7_000)}:suffix`;
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
 
     const completion = await host.requestRun().completed;
 
@@ -254,7 +259,7 @@ describe('TermwrightTestHost', () => {
       testCase('native-b', 'duplicate title'),
     ];
     engine.runResult = result(engine.tests);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const firstHandle = host.requestRun();
     expect(firstHandle.runId).toMatch(/^run:/u);
     const first = await firstHandle.completed;
@@ -313,7 +318,7 @@ describe('TermwrightTestHost', () => {
     const pureUnit = testCase('native-unit', 'pure unit', 'passed', 0, false);
     engine.tests = [pureUnit];
     engine.runResult = result([pureUnit]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('passed');
     expect(completion.catalog?.tests).toHaveLength(1);
@@ -336,7 +341,7 @@ describe('TermwrightTestHost', () => {
     });
     engine.tests = [pressure];
     engine.runResult = result([pressure]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     await host.requestRun().completed;
     expect(engine.contexts.at(-1)?.tasks['native-pressure']?.resourceReservation).toEqual({
       ptySession: 1,
@@ -357,7 +362,7 @@ describe('TermwrightTestHost', () => {
     });
     engine.tests = [pressure];
     engine.runResult = result([pressure]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     await host.requestRun().completed;
     expect(engine.contexts.at(-1)?.tasks['host-pressure']?.resourceReservation).toEqual({
       nativeHostPressure: 4,
@@ -383,7 +388,7 @@ describe('TermwrightTestHost', () => {
     );
     engine.tests = [pressure];
     engine.runResult = result([pressure]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     await host.requestRun().completed;
     expect(engine.contexts.at(-1)?.tasks['terminal-host-pressure']?.resourceReservation).toEqual({
       ptySession: 1,
@@ -397,7 +402,7 @@ describe('TermwrightTestHost', () => {
   it('collects without execution through the legal scheduled/finalizing lifecycle', async () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-discovery', 'discovered only')];
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const completion = await host.requestRun({ execute: false }).completed;
     expect(completion.state).toBe('skipped');
     expect(engine.contexts.at(-1)?.tasks).toEqual({});
@@ -418,7 +423,7 @@ describe('TermwrightTestHost', () => {
     const retried = testCase('native-retry', 'eventually passes', 'passed', 1);
     engine.tests = [retried];
     engine.runResult = result([retried]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     expect((await host.requestRun().completed).state).toBe('flaky');
     await host.close();
   });
@@ -427,7 +432,7 @@ describe('TermwrightTestHost', () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-current', 'current test')];
     engine.runResult = result([testCase('native-previous', 'previous test')]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
 
     const completion = await host.requestRun().completed;
 
@@ -444,7 +449,7 @@ describe('TermwrightTestHost', () => {
     const skipped = testCase('native-skipped', 'not applicable', 'skipped');
     engine.tests = [skipped];
     engine.runResult = result([skipped]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     expect((await host.requestRun().completed).state).toBe('skipped');
     await host.close();
   });
@@ -455,7 +460,7 @@ describe('TermwrightTestHost', () => {
     const skipped = testCase('native-optional', 'platform-only', 'skipped');
     engine.tests = [passed, skipped];
     engine.runResult = result([passed, skipped]);
-    const host = TermwrightTestHost.fromEngine(engine, {
+    const host = hostFromEngine(engine, {
       ...hostOptions(),
       skipDeclarations: [
         {
@@ -504,7 +509,7 @@ describe('TermwrightTestHost', () => {
     const skipped = testCase('native-optional', 'silently disappeared', 'skipped');
     engine.tests = [passed, skipped];
     engine.runResult = result([passed, skipped]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('passed-with-skips');
     expect(completion.skipPolicy).toMatchObject({
@@ -524,7 +529,7 @@ describe('TermwrightTestHost', () => {
     const fullEngine = new FakeEngine();
     fullEngine.tests = [testCase('native-passed', 'works')];
     fullEngine.runResult = result(fullEngine.tests);
-    const fullHost = TermwrightTestHost.fromEngine(fullEngine, {
+    const fullHost = hostFromEngine(fullEngine, {
       ...hostOptions(),
       skipDeclarations: [declaration],
     });
@@ -537,7 +542,7 @@ describe('TermwrightTestHost', () => {
     const targetedEngine = new FakeEngine();
     targetedEngine.tests = [testCase('native-passed', 'works')];
     targetedEngine.runResult = result(targetedEngine.tests);
-    const targetedHost = TermwrightTestHost.fromEngine(targetedEngine, {
+    const targetedHost = hostFromEngine(targetedEngine, {
       ...hostOptions(),
       filters: ['packages/example.test.ts'],
       skipDeclarations: [declaration],
@@ -560,7 +565,7 @@ describe('TermwrightTestHost', () => {
     );
     engine.tests = [skipped];
     engine.runResult = result([skipped]);
-    const host = TermwrightTestHost.fromEngine(engine, {
+    const host = hostFromEngine(engine, {
       ...hostOptions(),
       skipDeclarations: [
         {
@@ -737,7 +742,7 @@ describe('TermwrightTestHost', () => {
     const failed = testCase('native-failed', 'failed case', 'failed', 0, true, [transported]);
     engine.tests = [failed];
     engine.runResult = result([failed]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('failed');
     expect(completion.failures[0]?.errors[0]).toContain('assertion transported from worker');
@@ -748,8 +753,8 @@ describe('TermwrightTestHost', () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-history', 'persist me')];
     engine.runResult = result(engine.tests);
-    const options = hostOptions();
-    const host = TermwrightTestHost.fromEngine(engine, options);
+    const options = hostOptions({ durable: true });
+    const host = hostFromEngine(engine, options);
     const completion = await host.requestRun().completed;
     const record = await readRunManifest(options.runsDir, completion.runId);
     expect(record.state).toBe('complete');
@@ -760,6 +765,7 @@ describe('TermwrightTestHost', () => {
       status: 'passed',
       engine: { name: 'vitest', version: CERTIFIED_VITEST_VERSION },
       runtime: { node: process.version, platform: process.platform, arch: process.arch },
+      git: null,
     });
     expect(record.manifest.durationMs).toBeGreaterThanOrEqual(0);
     expect(record.manifest.attempts[0]?.attemptId).toMatch(/^attempt:/u);
@@ -783,7 +789,7 @@ describe('TermwrightTestHost', () => {
   it('classifies collection faults as infrastructure and journal faults as incomplete', async () => {
     const collectionEngine = new FakeEngine();
     collectionEngine.collectionErrors = [new Error('worker channel closed')];
-    const collectionHost = TermwrightTestHost.fromEngine(collectionEngine, hostOptions());
+    const collectionHost = hostFromEngine(collectionEngine, hostOptions());
     const failed = await collectionHost.requestRun().completed;
     expect(failed.state).toBe('infrastructure-failed');
     expect(failed.error).toBeInstanceOf(AggregateError);
@@ -801,8 +807,8 @@ describe('TermwrightTestHost', () => {
     const sinkEngine = new FakeEngine();
     sinkEngine.tests = [testCase('native-a', 'passes')];
     sinkEngine.runResult = result(sinkEngine.tests);
-    const sinkOptions = hostOptions();
-    const sinkHost = TermwrightTestHost.fromEngine(sinkEngine, {
+    const sinkOptions = hostOptions({ durable: true });
+    const sinkHost = hostFromEngine(sinkEngine, {
       ...sinkOptions,
       journalSink: () => {
         throw new Error('ENOSPC');
@@ -837,7 +843,7 @@ describe('TermwrightTestHost', () => {
     engine.runStarted = () => {
       started = true;
     };
-    const host = TermwrightTestHost.fromEngine(engine, { ...hostOptions(), filters: ['mixed'] });
+    const host = hostFromEngine(engine, { ...hostOptions(), filters: ['mixed'] });
 
     const completion = await host.requestRun().completed;
 
@@ -851,7 +857,7 @@ describe('TermwrightTestHost', () => {
   it('fails closed when Vitest reports a failed collection module without error evidence', async () => {
     const engine = new FakeEngine();
     engine.collectionModules = [testModule('/workspace/opaque-failure.test.ts', [], 'failed')];
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
 
     const completion = await host.requestRun().completed;
 
@@ -866,8 +872,8 @@ describe('TermwrightTestHost', () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-full-disk', 'disk fills')];
     engine.runResult = result(engine.tests);
-    const options = hostOptions();
-    const host = TermwrightTestHost.fromEngine(engine, {
+    const options = hostOptions({ durable: true });
+    const host = hostFromEngine(engine, {
       ...options,
       runManifestWriter: {
         ...NODE_RUN_MANIFEST_WRITER,
@@ -898,7 +904,7 @@ describe('TermwrightTestHost', () => {
     engine.tests = [testCase('native-lost-worker', 'worker disappears')];
     engine.runResult = result(engine.tests);
     engine.omitFinished = true;
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('infrastructure-failed');
     expect(String(completion.error)).toContain('attempt journal incomplete');
@@ -915,7 +921,7 @@ describe('TermwrightTestHost', () => {
     engine.tests = [testCase('native-admission', 'scheduler rejects admission', 'failed')];
     engine.runResult = result(engine.tests);
     engine.omitAttemptLifecycle = true;
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
 
     const completion = await host.requestRun().completed;
 
@@ -947,7 +953,7 @@ describe('TermwrightTestHost', () => {
       new Error('listener leaked past its test'),
       'a rejection that was never an Error',
     ]);
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('infrastructure-failed');
     // Vitest owns the only copy of these errors. If the host does not lift them
@@ -976,7 +982,7 @@ describe('TermwrightTestHost', () => {
     ];
     engine.runResult = result(engine.tests);
     engine.leakLease = true;
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('infrastructure-failed');
     expect(String(completion.error)).toContain('finished with 1 active resource leases');
@@ -999,7 +1005,7 @@ describe('TermwrightTestHost', () => {
     engine.blockRun = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const run = host.requestRun();
     await until(() => engine.contexts.length >= 2);
     expect(await host.stop(createRunId('run'))).toBe(false);
@@ -1020,7 +1026,7 @@ describe('TermwrightTestHost', () => {
     engine.blockRun = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const host = hostFromEngine(engine, hostOptions());
     const watching = host.watch();
     await until(() => engine.contexts.length >= 2);
     engine.sourceListener?.('/workspace/a.ts');
@@ -1230,12 +1236,40 @@ class ManualDeadlineRuntime implements TermwrightHostDeadlineRuntime {
   }
 }
 
-function hostOptions() {
-  return {
+const EPHEMERAL_RUN_MANIFEST_WRITER: RunManifestWriter = Object.freeze({
+  async mkdir() {},
+  async exists() {
+    return false;
+  },
+  async writeExclusive() {},
+  async syncDirectory() {},
+  async rename() {},
+});
+
+function hostFromEngine(
+  engine: TermwrightVitestEngine,
+  options: TermwrightTestHostOptions = hostOptions(),
+): TermwrightTestHost {
+  // Repository discovery belongs to the production open() boundary. Running
+  // it here would launch real git processes for every injected-engine unit
+  // case without exercising additional host behavior.
+  const host = TermwrightTestHost.fromEngine(engine, options, { gitProvenance: null });
+  onTestFinished(() => host.close());
+  return host;
+}
+
+function hostOptions(options: { readonly durable?: boolean } = {}): TermwrightTestHostOptions {
+  const common = {
     cwd: process.cwd(),
-    runsDir: mkdtempSync(join(tmpdir(), 'termwright-host-history-')),
+    runsDir:
+      options.durable === true
+        ? mkdtempSync(join(tmpdir(), 'termwright-host-history-'))
+        : join(tmpdir(), 'termwright-ephemeral-host-history'),
     resourceProfile: TERMWRIGHT_RESOURCE_PROFILES.local,
   } as const;
+  return options.durable === true
+    ? common
+    : { ...common, runManifestWriter: EPHEMERAL_RUN_MANIFEST_WRITER };
 }
 
 function testCase(

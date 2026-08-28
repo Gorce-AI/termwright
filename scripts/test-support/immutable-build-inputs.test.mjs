@@ -130,6 +130,45 @@ describe('immutable workspace build inputs', () => {
     ).rejects.toThrow(/artifact changed after the build/u);
   });
 
+  it('does not rebuild for generated native certification evidence', async () => {
+    const built = await workspace();
+    const verdict = join(built.root, 'packages', 'fixture', 'certification-verdict.json');
+    const hostedVerdict = join(
+      built.root,
+      'packages',
+      'fixture',
+      'certification-verdict-arm64-host.json',
+    );
+
+    await writeFile(verdict, '{"status":"passed"}\n');
+    await writeFile(hostedVerdict, '{"status":"passed"}\n');
+    await expect(
+      verifyImmutableWorkspaceBuild({
+        root: built.root,
+        manifestPath: built.manifestPath,
+      }),
+    ).resolves.toEqual([]);
+
+    await writeFile(verdict, '{"status":"failed"}\n');
+    await expect(
+      verifyImmutableWorkspaceBuild({
+        root: built.root,
+        manifestPath: built.manifestPath,
+      }),
+    ).resolves.toEqual([]);
+
+    await writeFile(
+      join(built.root, 'packages', 'fixture', 'certification-verdict-build-config.json'),
+      '{"status":"passed"}\n',
+    );
+    await expect(
+      verifyImmutableWorkspaceBuild({
+        root: built.root,
+        manifestPath: built.manifestPath,
+      }),
+    ).resolves.toContain('workspace build sources changed');
+  });
+
   it('rejects a root script reached from the workspace build declaration after it changes', async () => {
     const built = await workspace();
     await writeFile(built.rootBuildScript, 'export const buildVersion = 2;\n');

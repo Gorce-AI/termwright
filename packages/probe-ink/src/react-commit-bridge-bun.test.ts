@@ -1,9 +1,11 @@
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 
 const execFileAsync = promisify(execFile);
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 describe('Ink React bridge under Bun', () => {
   it('observes a real committed Ink containerInfo without a skipped compatibility path', async () => {

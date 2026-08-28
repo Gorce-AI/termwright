@@ -171,6 +171,10 @@ async function packageBuildMetadata(packageRoot) {
 
 function isPackageBuildMetadata(name) {
   if (name.endsWith('.node')) return false;
+  // Native certification is run evidence produced after the workspace build,
+  // not an input to any package build or a published package artifact.
+  if (name === 'certification-verdict.json' || name === 'certification-verdict-arm64-host.json')
+    return false;
   if (/^(?:README|LICENSE|NOTICE|CHANGELOG)(?:\.|$)/iu.test(name) || name.endsWith('.md'))
     return false;
   if (/^(?:vitest|playwright)(?:\.|-)/u.test(name)) return false;
