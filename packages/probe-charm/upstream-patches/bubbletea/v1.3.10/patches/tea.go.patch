@@ -1,17 +1,23 @@
 --- a/tea.go
 +++ b/tea.go
-@@ -502 +502,2 @@
+@@ -391,0 +392,5 @@
++			if recovery, ok := msg.(termwrightRecoveryMsg); ok {
++				termwrightRecoverAndObserve(p, model, recovery)
++				continue
++			}
++
+@@ -502 +507,2 @@
 -			p.renderer.write(model.View()) // send view to renderer
 +			// Injected by termwright: the loop's frame.
 +			termwrightRenderAndObserve(p, model)
-@@ -578,0 +580,2 @@
+@@ -578,0 +585,2 @@
 +	termwrightRunProbe := termwrightBeforeRun()
 +	defer termwrightShutdown(termwrightRunProbe)
-@@ -700 +703,2 @@
+@@ -700 +708,2 @@
 -	p.renderer.write(model.View())
 +	// Injected by termwright: the first frame.
 +	termwrightRenderAndObserve(p, model)
-@@ -739 +743,2 @@
+@@ -739 +748,2 @@
 -		p.renderer.write(model.View())
 +		// Injected by termwright: the last frame.
 +		termwrightRenderAndObserve(p, model)

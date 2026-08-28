@@ -1,9 +1,15 @@
 --- a/tea.go
 +++ b/tea.go
-@@ -888 +888,2 @@
+@@ -752,0 +753,5 @@
++			if recovery, ok := msg.(termwrightRecoveryMsg); ok {
++				termwrightRecoverAndObserve(p, model, recovery)
++				continue
++			}
++
+@@ -888 +893,2 @@
 -		p.renderer.render(model.View()) // send view to renderer
 +		// Injected by termwright: capture now, commit only after renderer flush.
 +		termwrightRenderAndObserve(p, model)
-@@ -991,0 +993,2 @@
+@@ -991,0 +998,2 @@
 +	termwrightRunProbe := termwrightBeforeRun()
 +	defer termwrightShutdown(termwrightRunProbe)

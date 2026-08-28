@@ -42,8 +42,10 @@ type PublicationQueue struct {
 	failed       atomic.Bool
 	drops        atomic.Uint64
 	saturated    bool
-	ready        chan struct{}
+	ready        atomic.Pointer[publicationReadiness]
 }
+
+type publicationReadiness struct{ done chan struct{} }
 
 // NewPublicationQueue starts one ordered worker for a connected client.
 // Capacity must be positive. Construct it only after Client.Start succeeds;
@@ -70,14 +72,14 @@ func NewPublicationQueue(client *Client, capacity int) (*PublicationQueue, error
 	if alreadyOwned {
 		return nil, ErrPublicationQueueOwnsClient
 	}
-	ready := make(chan struct{})
-	close(ready)
+	ready := &publicationReadiness{done: make(chan struct{})}
+	close(ready.done)
 	queue := &PublicationQueue{
 		client: client,
 		jobs:   make(chan *preparedPublication, capacity),
 		done:   make(chan struct{}),
-		ready:  ready,
 	}
+	queue.ready.Store(ready)
 	go queue.run()
 	return queue, nil
 }
@@ -150,7 +152,7 @@ func (q *PublicationQueue) publishLocked(snapshot *Snapshot, nonBlocking bool) (
 		q.drops.Add(1)
 		if !q.saturated {
 			q.saturated = true
-			q.ready = make(chan struct{})
+			q.ready.Store(&publicationReadiness{done: make(chan struct{})})
 		}
 		return "", ErrPublicationQueueFull
 	}
@@ -170,9 +172,27 @@ func (q *PublicationQueue) Dropped() uint64 { return q.drops.Load() }
 // When the queue has not refused an admission, the returned channel is already
 // closed. Call this after observing ErrPublicationQueueFull.
 func (q *PublicationQueue) ReadyAfterDrop() <-chan struct{} {
-	q.mu.Lock()
-	ready := q.ready
-	q.mu.Unlock()
+	return q.ready.Load().done
+}
+
+// ReadyAfterBusy closes after every lock that can make TryPublish return
+// ErrPublicationQueueBusy has completed its current critical section. It is a
+// causal admission edge for recovery coordinators, not permission to replay a
+// refused snapshot: the framework must render and snapshot fresh state.
+//
+// The call itself only starts a waiter and returns its channel. Lock acquisition
+// happens in that waiter, so render callbacks never wait for admission owners.
+func (q *PublicationQueue) ReadyAfterBusy() <-chan struct{} {
+	ready := make(chan struct{})
+	go func() {
+		q.mu.Lock()
+		q.client.publishMu.Lock()
+		q.client.mu.Lock()
+		q.client.mu.Unlock()
+		q.client.publishMu.Unlock()
+		q.mu.Unlock()
+		close(ready)
+	}()
 	return ready
 }
 
@@ -242,7 +262,7 @@ func (q *PublicationQueue) signalReadyAfterDrop() {
 	q.mu.Lock()
 	if q.saturated {
 		q.saturated = false
-		close(q.ready)
+		close(q.ready.Load().done)
 	}
 	q.mu.Unlock()
 }
