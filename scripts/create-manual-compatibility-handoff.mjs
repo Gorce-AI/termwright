@@ -50,6 +50,13 @@ async function filesBelow(root) {
   return result;
 }
 
+export function checksumArtifactPath(relativePath, pathSeparator = sep) {
+  const artifactPath = relativePath.split(pathSeparator).join('/');
+  if (/[\r\n\\]/u.test(artifactPath))
+    throw new Error(`handoff path cannot be represented safely in SHA256SUMS: ${artifactPath}`);
+  return artifactPath;
+}
+
 export async function createManualCompatibilityHandoff({
   destination,
   candidateRegistry,
@@ -118,9 +125,7 @@ export async function createManualCompatibilityHandoff({
     .sort((left, right) => left.localeCompare(right));
   const sums = [];
   for (const path of material) {
-    const artifactPath = relative(handoff, path).split(sep).join('/');
-    if (/[\r\n\\]/u.test(artifactPath))
-      throw new Error(`handoff path cannot be represented safely in SHA256SUMS: ${artifactPath}`);
+    const artifactPath = checksumArtifactPath(relative(handoff, path));
     const digest = createHash('sha256')
       .update(await readFile(path))
       .digest('hex');

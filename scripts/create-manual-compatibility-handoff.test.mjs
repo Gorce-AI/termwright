@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { checksumArtifactPath } from './create-manual-compatibility-handoff.mjs';
 
 const execFile = promisify(execFileCallback);
 const script = fileURLToPath(new URL('./create-manual-compatibility-handoff.mjs', import.meta.url));
@@ -118,9 +119,13 @@ describe('manual compatibility handoff', () => {
     await expect(create(context)).rejects.toThrow(/2 MiB safety bound/u);
   });
 
-  it('rejects verdict paths that cannot be represented safely in SHA256SUMS', async () => {
-    const context = await fixture();
-    await writeFile(join(context.inputs, 'verdicts', 'bad\nname.json'), '{}\n');
-    await expect(create(context)).rejects.toThrow(/cannot be represented safely/u);
+  it('normalizes Windows separators while rejecting unsafe literal artifact names', () => {
+    expect(checksumArtifactPath('verdicts\\result.json', '\\')).toBe('verdicts/result.json');
+    expect(() => checksumArtifactPath('verdicts/bad\nname.json', '/')).toThrow(
+      /cannot be represented safely/u,
+    );
+    expect(() => checksumArtifactPath('verdicts/bad\\name.json', '/')).toThrow(
+      /cannot be represented safely/u,
+    );
   });
 });
