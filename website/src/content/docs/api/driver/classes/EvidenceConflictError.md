@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: EvidenceConflictError
 
-Defined in: [driver/src/errors.ts:146](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L146)
+Defined in: [driver/src/errors.ts:160](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L160)
 
 Two authoritative producers supplied incompatible facts for one revision.
 
@@ -25,7 +25,7 @@ Two authoritative producers supplied incompatible facts for one revision.
 
 > **new EvidenceConflictError**(`message`, `diagnostics`): `EvidenceConflictError`
 
-Defined in: [driver/src/errors.ts:147](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L147)
+Defined in: [driver/src/errors.ts:161](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L161)
 
 #### Parameters
 
