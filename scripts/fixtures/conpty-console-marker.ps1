@@ -5,6 +5,7 @@ public static class TermwrightConsoleMarkerProbe {
   [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr GetStdHandle(int id);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetConsoleMode(IntPtr h, out uint mode);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleMode(IntPtr h, uint mode);
+  [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
 }
 "@
 Add-Type -TypeDefinition $source
@@ -62,8 +63,34 @@ try {
   $reader = $null
   $pipe.Dispose()
   $pipe = $null
-  $markerProcess.WaitForExit()
-  if (-not $markerProcess.HasExited) { exit 49 }
+  # A deadline is diagnostic containment, not evidence: success still requires
+  # the real child-exit event. Name a leaked marker process directly instead of
+  # letting the outer Vitest deadline hide the owned handle that remained live.
+  if (-not $markerProcess.WaitForExit(10000)) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_SHUTDOWN_TIMEOUT")
+    exit 49
+  }
+  # Windows is the authority for the native child status. PowerShell 5.1 can
+  # leave the adapted Process.ExitCode property null after the timed overload
+  # of WaitForExit(), which incorrectly compares as non-zero. Query the still
+  # owned process handle directly and reject both an unavailable status and
+  # STILL_ACTIVE after the exit signal.
+  $markerExitCode = [uint32]0
+  if (-not [TermwrightConsoleMarkerProbe]::GetExitCodeProcess(
+    $markerProcess.Handle,
+    [ref]$markerExitCode
+  )) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_EXIT_CODE_UNAVAILABLE")
+    exit 50
+  }
+  if ($markerExitCode -eq 259) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_STILL_ACTIVE_AFTER_EXIT")
+    exit 51
+  }
+  if ($markerExitCode -ne 0) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_EXIT:" + $markerExitCode)
+    exit 47
+  }
 } finally {
   if ($writer) { $writer.Dispose() }
   if ($reader) { $reader.Dispose() }

@@ -3,7 +3,8 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 export const PERFORMANCE_HARNESS_FINGERPRINT_KIND = 'termwright-performance-harness-fingerprint';
 export const PERFORMANCE_HARNESS_FINGERPRINT_VERSION = 1;
@@ -40,6 +41,7 @@ export const PERFORMANCE_HARNESS_FILES = Object.freeze(
     'quality/stress/terminal-concurrency.test.ts',
     'quality/stress/vitest.config.ts',
     'scripts/collect-quality-performance.mjs',
+    'scripts/is-direct-execution.mjs',
     'scripts/performance-environment.mjs',
     'scripts/quality-performance-checkpoint.mjs',
     'scripts/quality-performance-timing.mjs',
@@ -147,9 +149,6 @@ async function main(argv) {
   else await writeFile(resolve(options.output), output, 'utf8');
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   await main(process.argv.slice(2));
 }

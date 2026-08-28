@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
@@ -123,9 +123,6 @@ async function main(argv) {
   );
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   await main(process.argv.slice(2));
 }

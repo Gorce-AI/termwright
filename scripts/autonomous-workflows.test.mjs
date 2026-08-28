@@ -80,10 +80,6 @@ describe('autonomous workflow security', () => {
     const workflow = await readWorkflow('autonomous-coordinator.yml');
     const release = await readWorkflow('release.yml');
     const ci = await readWorkflow('ci.yml');
-    const dispatchAction = await readFile(
-      new URL('../.github/actions/dispatch-autonomous-ci/action.yml', import.meta.url),
-      'utf8',
-    );
     const coordinator = await readFile(
       new URL('./autonomous-release-coordinator.mjs', import.meta.url),
       'utf8',
@@ -95,13 +91,18 @@ describe('autonomous workflow security', () => {
       'utf8',
     );
     expect(workflow).toContain('workflow_run:');
-    expect(workflow).toContain('workflow_dispatch:');
-    expect(workflow).toContain('ci_run_id:');
+    expect(workflow).not.toContain('workflow_dispatch:');
     expect(workflow).toContain(
       'TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}',
     );
     expect(workflow).toContain('types: [completed]');
     expect(workflow).toContain('autonomous-ci-observer-{0}-{1}');
+    expect(workflow).toContain(
+      'github.event.workflow_run.actor.login == vars.AUTOMATION_WRITER_LOGIN',
+    );
+    expect(workflow).toContain(
+      'github.event.workflow_run.triggering_actor.login == vars.AUTOMATION_WRITER_LOGIN',
+    );
     expect(workflow).toContain('autonomous-coordinator-{0}');
     expect(workflow).toContain('group: autonomous-coordinator-${{ github.repository }}');
     expect(workflow).not.toContain('group: autonomous-merge-${{ needs.inspect.outputs.head-sha }}');
@@ -116,31 +117,17 @@ describe('autonomous workflow security', () => {
     );
     expect(workflow).not.toContain('rerun-failed-jobs');
     expect(workflow).not.toContain('gh run rerun');
-    expect(dispatchAction).not.toMatch(/rerun|retry|sleep/u);
-    expect(workflow).toContain('gh run watch "$CI_RUN_ID" --exit-status');
-    expect(workflow).toContain(
-      'gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID" > "$run_json"',
-    );
-    expect(workflow).toContain(
-      'JSON.stringify({ repository: dispatch.repository, workflow_run: workflowRun })',
-    );
-    expect(workflow.match(/uses: \.\/\.github\/actions\/dispatch-autonomous-ci/gu)).toHaveLength(1);
-    expect(release.match(/uses: \.\/\.github\/actions\/dispatch-autonomous-ci/gu)).toHaveLength(1);
+    expect(workflow).not.toContain('gh run watch');
+    expect(workflow).not.toContain('checks: write');
+    expect(workflow).not.toContain('dispatch-autonomous-ci');
+    expect(release).not.toContain('dispatch-autonomous-ci');
     expect(ci).not.toContain('actions: write');
     expect(ci).not.toContain('autonomous-coordinator.yml');
-    expect(dispatchAction).toContain('gh workflow run ci.yml --ref "$BRANCH"');
-    expect(dispatchAction).toContain('--ref "$DEFAULT_BRANCH"');
-    expect(dispatchAction).toContain('-f ci_run_id="$run_id"');
-    expect(dispatchAction).not.toContain('.run_attempt == 1');
-    expect(dispatchAction).toContain('test "$(jq -r \'.run_attempt\' <<<"$run_json")" = 1');
-    expect(dispatchAction).toContain('.path == ".github/workflows/ci.yml"');
-    expect(dispatchAction.match(/test "\$\{#run_ids\[@\]\}" -eq 1/gu)).toHaveLength(1);
-    expect(dispatchAction).not.toContain('test "${run_ids[0]}" = "$run_id"');
     expect(workflow).toContain('Require one exact CI identity after terminal-state observation');
     expect(workflow).toContain('test "${#run_ids[@]}" -eq 1');
     expect(workflow).toContain('test "${run_ids[0]}" = "$CI_RUN_ID"');
     const reconciliation = workflow.slice(
-      workflow.indexOf('      - name: Commit only the compatibility allowlist'),
+      workflow.indexOf('      - name: Publish the exact compatibility allowlist'),
       workflow.indexOf('\n  inspect:'),
     );
     const manualGuard = reconciliation.indexOf(
@@ -207,13 +194,10 @@ describe('autonomous workflow security', () => {
       reconcile.match(/--assessments compatibility\/candidate-assessments\.json/gu),
     ).toHaveLength(1);
     const publish = reconcile.slice(
-      reconcile.indexOf('      - name: Commit only the compatibility allowlist'),
+      reconcile.indexOf('      - name: Publish the exact compatibility allowlist'),
     );
     expect(publish).toContain('Source certification run: $SOURCE_RUN_ID');
     expect(publish).not.toContain('Source certification run: $RUN_ID');
-    expect(publish).toContain('echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"');
-    expect(publish).toContain('branch: ${{ steps.publish.outputs.branch }}');
-    expect(publish).not.toContain('branch: ${{ env.BRANCH }}');
     expect(publish).toContain('node scripts/resolve-push-lease.mjs "$push_remote" "$target_ref"');
     expect(publish).toContain('git push --force-with-lease="$target_ref:$expected_remote_sha"');
     expect(publish).toContain(
@@ -244,13 +228,36 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain(
       '"https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"',
     );
+    const writerReconcile = jobBlock(workflow, 'reconcile');
+    expect(writerReconcile).toContain('environment: trusted-autonomous-release');
+    expect(writerReconcile).toContain('actions: write');
+    expect(writerReconcile).toContain('permission-contents: write');
+    expect(writerReconcile).toContain('permission-pull-requests: write');
+    expect(writerReconcile).toContain(
+      'WRITER_LOGIN: ${{ steps.writer-token.outputs.app-slug }}[bot]',
+    );
+    expect(writerReconcile).toContain('GH_TOKEN: ${{ steps.writer-token.outputs.token }}');
+    expect(writerReconcile).toContain('GITHUB_TOKEN: ${{ github.token }}');
+    expect(writerReconcile).toContain(
+      'test "$(jq -r \'.user.login\' /tmp/pr.json)" = "$WRITER_LOGIN"',
+    );
+    expect(writerReconcile.indexOf('gh pr edit "$BRANCH"')).toBeLessThan(
+      writerReconcile.indexOf('git push --force-with-lease'),
+    );
+    expect(writerReconcile.indexOf('git push --force-with-lease')).toBeLessThan(
+      writerReconcile.indexOf('if [ -z "$number" ]; then'),
+    );
     const merge = jobBlock(workflow, 'merge');
+    expect(merge).toContain('needs: inspect');
     expect(merge).toContain('environment: trusted-autonomous-release');
     expect(merge).toContain(
       'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1',
     );
+    expect(merge).toContain('client-id: ${{ vars.BRANCH_POLICY_APP_CLIENT_ID }}');
+    expect(merge).not.toContain('app-id:');
     expect(merge).toContain('permission-administration: read');
     expect(merge).toContain('BRANCH_POLICY_TOKEN: ${{ steps.branch-policy-token.outputs.token }}');
+    expect(merge).toContain('AUTOMATION_PR_AUTHOR: ${{ vars.AUTOMATION_WRITER_LOGIN }}');
     expect(merge).not.toContain('skip-token-revoke');
     expect(merge).toContain('issues: write');
     expect(merge).toContain('Close candidate issues only after the compatibility allowlist merged');
@@ -283,6 +290,11 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('expected_sha:');
     expect(workflow).toContain('version_pr:');
     expect(workflow).not.toMatch(/^\s{2}push:/mu);
+    const prepare = jobBlock(workflow, 'prepare');
+    expect(prepare).toContain('contents: read');
+    expect(prepare).not.toMatch(/^ {6}(?:actions|contents|pull-requests): write$/mu);
+    expect(prepare).toContain('permission-contents: write');
+    expect(prepare).toContain('permission-pull-requests: write');
     expect(workflow).toContain('validate-version-pr');
     expect(workflow).toContain('Independently reproduce the merged Version PR tree');
     expect(workflow).toContain(
@@ -292,7 +304,7 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('verify-published-artifact.mjs pypi');
     expect(workflow).toContain('verify-published-artifact.mjs crate');
     expect(workflow).toContain('find npm pypi crates');
-    expect(workflow).toContain('token: ${{ github.token }}');
+    expect(workflow).toContain('token: ${{ steps.writer-token.outputs.token }}');
     expect(workflow.match(/persist-credentials: false/gu)?.length).toBeGreaterThanOrEqual(8);
   });
 

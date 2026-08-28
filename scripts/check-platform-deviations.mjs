@@ -1,6 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import ts from 'typescript';
 
 const registryPath = 'quality/platform-deviations.json';
@@ -272,4 +272,4 @@ async function collectSources(path, output) {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
+if (isDirectExecution(import.meta.url)) await main();

@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 export const PERFORMANCE_ROUND_SEAL_KIND = 'termwright-performance-round-seal';
 export const PERFORMANCE_ROUND_SEAL_VERSION = 1;
@@ -174,9 +174,6 @@ async function main(argv) {
   await writeFile(resolve(options.output), `${JSON.stringify(seal, null, 2)}\n`, 'utf8');
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   await main(process.argv.slice(2));
 }

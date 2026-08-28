@@ -1,22 +1,16 @@
 name: Trusted autonomous coordinator
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('Coordinate exact CI run {0}', inputs.ci_run_id) || format('Coordinate {0} @ {1}', github.event.workflow_run.name, github.event.workflow_run.head_sha) }}
+run-name: Coordinate ${{ github.event.workflow_run.name }} @ ${{ github.event.workflow_run.head_sha }}
 
 on:
-  workflow_dispatch:
-    inputs:
-      ci_run_id:
-        description: 'Exact bot-dispatched CI run to observe and validate'
-        required: true
-        type: string
   workflow_run:
     workflows: ['Framework compatibility candidates', 'CI', 'Release']
     types: [completed]
 
 concurrency:
-  # Source/release events remain one repository-wide state machine. An exact-CI
-  # observer has its own run-id key: GitHub keeps only one pending member of a
-  # concurrency group, so sharing the source group could discard a callback.
-  group: ${{ (github.event_name == 'workflow_dispatch' || github.event.workflow_run.name == 'CI') && format('autonomous-ci-observer-{0}-{1}', github.repository, github.event_name == 'workflow_dispatch' && inputs.ci_run_id || github.event.workflow_run.id) || format('autonomous-coordinator-{0}', github.repository) }}
+  # Source/release events remain one repository-wide state machine. Each CI
+  # completion has its own callback key so GitHub cannot discard it while a
+  # source reconciliation is still active.
+  group: ${{ github.event.workflow_run.name == 'CI' && format('autonomous-ci-observer-{0}-{1}', github.repository, github.event.workflow_run.id) || format('autonomous-coordinator-{0}', github.repository) }}
   cancel-in-progress: false
 
 permissions: {}
@@ -82,12 +76,13 @@ jobs:
     if: >-
       github.event.workflow_run.name == 'Framework compatibility candidates'
     runs-on: ubuntu-latest
+    environment: trusted-autonomous-release
     timeout-minutes: 20
     permissions:
       actions: write
-      contents: write
+      contents: read
       issues: write
-      pull-requests: write
+      pull-requests: read
     env:
       GH_TOKEN: ${{ github.token }}
       BRANCH: automation/framework-compatibility
@@ -192,8 +187,21 @@ jobs:
             gh issue close "$deadman_number" --comment "Typed candidate artifacts reconciled from $SOURCE_RUN_URL."
           fi
 
-      - name: Commit only the compatibility allowlist and dispatch exact CI
+      - name: Mint the repository-only automation writer token
+        id: writer-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.AUTOMATION_WRITER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_WRITER_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Publish the exact compatibility allowlist through the writer App
         id: publish
+        env:
+          GH_TOKEN: ${{ steps.writer-token.outputs.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          WRITER_LOGIN: ${{ steps.writer-token.outputs.app-slug }}[bot]
         shell: bash
         run: |
           set -euo pipefail
@@ -221,21 +229,20 @@ jobs:
             summary='Automated 30-day schedule heartbeat. This PR never dispatches a release.'
           fi
           node scripts/autonomous-release-coordinator.mjs validate-files "$kind" "${changed[@]}"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          writer_id=$(gh api "/users/$WRITER_LOGIN" --jq '.id')
+          [[ "$writer_id" =~ ^[1-9][0-9]*$ ]]
+          git config user.name "$WRITER_LOGIN"
+          git config user.email "$writer_id+$WRITER_LOGIN@users.noreply.github.com"
           git add -- "${changed[@]}"
           git commit -m "$title"
           target_ref="refs/heads/$BRANCH"
           push_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           expected_remote_sha="$(node scripts/resolve-push-lease.mjs "$push_remote" "$target_ref")"
-          git push --force-with-lease="$target_ref:$expected_remote_sha" \
-            "$push_remote" \
-            "HEAD:$target_ref"
           head_sha=$(git rev-parse HEAD)
           number=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then
             gh api "/repos/$GITHUB_REPOSITORY/pulls/$number" > /tmp/pr.json
-            test "$(jq -r '.user.login' /tmp/pr.json)" = 'github-actions[bot]'
+            test "$(jq -r '.user.login' /tmp/pr.json)" = "$WRITER_LOGIN"
             test "$(jq -r '.base.ref' /tmp/pr.json)" = '${{ github.event.repository.default_branch }}'
             test "$(jq -r '.head.ref' /tmp/pr.json)" = "$BRANCH"
             test "$(jq -r '.head.repo.full_name' /tmp/pr.json)" = "$GITHUB_REPOSITORY"
@@ -243,7 +250,14 @@ jobs:
               --body "$summary
 
           Source certification run: $SOURCE_RUN_ID"
-          else
+          fi
+          # For an existing PR, finalize its metadata before the App-authored
+          # push emits synchronize and starts CI. For a new PR, push first and
+          # create it once with final metadata so opened is the causal trigger.
+          git push --force-with-lease="$target_ref:$expected_remote_sha" \
+            "$push_remote" \
+            "HEAD:$target_ref"
+          if [ -z "$number" ]; then
             gh pr create --head "$BRANCH" --base '${{ github.event.repository.default_branch }}' \
               --title "$title" \
               --body "$summary
@@ -256,23 +270,17 @@ jobs:
             jq -r '"Certified: " + ((.green | join(", ")) // "") + "\nAssessed red: " + ([.issues[].key] | join(", "))' "$PUBLISH_PLAN" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "head-sha=$head_sha" >> "$GITHUB_OUTPUT"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/dispatch-autonomous-ci
-        if: steps.publish.outputs.head-sha != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        with:
-          branch: ${{ steps.publish.outputs.branch }}
-          head-sha: ${{ steps.publish.outputs.head-sha }}
-          default-branch: ${{ github.event.repository.default_branch }}
 
   inspect:
     name: validate exact autonomous PR and CI
     if: >-
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.name == 'CI' &&
-       github.event.workflow_run.event == 'workflow_dispatch') ||
-      github.event_name == 'workflow_dispatch'
+      github.event.workflow_run.name == 'CI' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == vars.AUTOMATION_WRITER_LOGIN &&
+      github.event.workflow_run.triggering_actor.login == vars.AUTOMATION_WRITER_LOGIN &&
+      (github.event.workflow_run.head_branch == 'automation/framework-compatibility' ||
+       github.event.workflow_run.head_branch == 'automation/workflow-heartbeat' ||
+       github.event.workflow_run.head_branch == 'release-pr/main')
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -290,6 +298,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ github.token }}
       ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
+      AUTOMATION_PR_AUTHOR: ${{ vars.AUTOMATION_WRITER_LOGIN }}
     steps:
       - name: Reject workflow reruns
         shell: bash
@@ -299,38 +308,13 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Resolve the exact completed CI event
+      - name: Bind the exact completed pull-request CI event
         id: event
         shell: bash
-        env:
-          CI_RUN_ID: ${{ inputs.ci_run_id }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
-            # This observes GitHub's authoritative terminal run state. It is
-            # not a product/test quiet window and supplies no evidence itself;
-            # inspect-ci below still validates the completed run and every job.
-            gh run watch "$CI_RUN_ID" --exit-status
-            run_json="$RUNNER_TEMP/exact-ci-run.json"
-            event_json="$RUNNER_TEMP/exact-ci-event.json"
-            gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID" > "$run_json"
-            node - "$GITHUB_EVENT_PATH" "$run_json" "$event_json" <<'NODE'
-          const fs = require('node:fs');
-          const dispatch = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          const workflowRun = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
-          fs.writeFileSync(
-            process.argv[4],
-            JSON.stringify({ repository: dispatch.repository, workflow_run: workflowRun }),
-          );
-          NODE
-            echo "path=$event_json" >> "$GITHUB_OUTPUT"
-            echo "run-id=$CI_RUN_ID" >> "$GITHUB_OUTPUT"
-          else
-            echo "path=$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
-            echo 'run-id=${{ github.event.workflow_run.id }}' >> "$GITHUB_OUTPUT"
-          fi
+          echo "path=$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+          echo 'run-id=${{ github.event.workflow_run.id }}' >> "$GITHUB_OUTPUT"
       - name: Require one exact CI identity after terminal-state observation
         shell: bash
         env:
@@ -342,10 +326,10 @@ jobs:
           run_json=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID")
           head_sha=$(jq -r '.head_sha' <<<"$run_json")
           [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
-          runs_json=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&head_sha=$head_sha&per_page=100")
+          runs_json=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$head_sha&per_page=100")
           mapfile -t run_ids < <(jq -r --arg sha "$head_sha" '
             .workflow_runs[]
-            | select(.head_sha == $sha and .event == "workflow_dispatch" and .path == ".github/workflows/ci.yml")
+            | select(.head_sha == $sha and .event == "pull_request" and .path == ".github/workflows/ci.yml")
             | .id
           ' <<<"$runs_json")
           test "${#run_ids[@]}" -eq 1
@@ -497,7 +481,7 @@ jobs:
         id: branch-policy-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.BRANCH_POLICY_APP_ID }}
+          client-id: ${{ vars.BRANCH_POLICY_APP_CLIENT_ID }}
           private-key: ${{ secrets.BRANCH_POLICY_APP_PRIVATE_KEY }}
           permission-administration: read
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -532,6 +516,7 @@ jobs:
           BRANCH_POLICY_TOKEN: ${{ steps.branch-policy-token.outputs.token }}
           ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
           AUTOMATION_TREE_VERIFIED: ${{ needs.inspect.outputs.tree-verified }}
+          AUTOMATION_PR_AUTHOR: ${{ vars.AUTOMATION_WRITER_LOGIN }}
         run: node scripts/autonomous-release-coordinator.mjs coordinate-ci "${{ steps.event.outputs.path }}"
 
       - name: Close candidate issues only after the compatibility allowlist merged

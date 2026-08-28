@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "scope": "@termwright",
+  "packages": [
+    {
+      "name": "@termwright/ink-testing",
+      "replacement": "@termwright/ink",
+      "deprecationMessage": "Package retired; use @termwright/ink instead."
+    }
+  ]
+}

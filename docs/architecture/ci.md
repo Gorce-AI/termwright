@@ -82,6 +82,25 @@ coordinator independently checks all expanded job names as defense in depth.
 Branch protection requires this gate instead of maintaining a parallel list of
 matrix-expanded contexts.
 
+Pull requests created with the workflow `GITHUB_TOKEN` are held by GitHub as
+`action_required`; approving such a suite turns it into a second attempt, which
+the first-attempt contract correctly rejects. Autonomous branches and pull
+requests are therefore written by a dedicated repository-only GitHub App with
+only `Contents: write` and `Pull requests: write`. Its `opened` and
+`synchronize` events start the ordinary `pull_request` CI once, without an
+approval or a duplicate dispatched suite. The coordinator accepts only that
+App-authored, exact-PR-associated first attempt, checks every expanded job and
+reproduces the complete head tree before merge. The native `certification gate`
+remains the sole required branch-protection context.
+
+The writer App has no Administration, Actions, Checks or Workflows permission,
+no webhook or event subscriptions and no branch-protection bypass. Keep its
+client ID and private key as `AUTOMATION_WRITER_APP_CLIENT_ID` and
+`AUTOMATION_WRITER_APP_PRIVATE_KEY` in the exact-`main`
+`trusted-autonomous-release` environment. Record its exact bot login (including
+the `[bot]` suffix) in the repository variable `AUTOMATION_WRITER_LOGIN`; both
+the PR and the causal CI actor must match it.
+
 The coordinator validates the complete administrative branch-protection
 resource before every autonomous merge. A dedicated GitHub App installed only
 on this repository supplies a short-lived `Administration: read` token; it has
@@ -92,11 +111,11 @@ an unreadable policy or any policy drift fails before merge. Immediately before
 the merge request, the coordinator also requires the default branch to remain at
 the PR's certified base SHA.
 
-Provision that reader as a dedicated GitHub App with no webhook or subscribed
+Provision the policy reader as a separate dedicated GitHub App with no webhook or subscribed
 events, repository `Administration: read` as its only explicit permission, and
-an installation limited to this repository. Store its App ID and private key as
-the `BRANCH_POLICY_APP_ID` and `BRANCH_POLICY_APP_PRIVATE_KEY` secrets of the
-`trusted-autonomous-release` environment, not as repository-level secrets. That
+an installation limited to this repository. Store its client ID as the
+`BRANCH_POLICY_APP_CLIENT_ID` environment variable and its private key as the
+`BRANCH_POLICY_APP_PRIVATE_KEY` environment secret, not at repository scope. That
 environment must use a selected-branch policy containing exactly `main`, with no
 tag or wildcard policies. The pinned token action scopes
 each short-lived token to the current repository and revokes it after the job.

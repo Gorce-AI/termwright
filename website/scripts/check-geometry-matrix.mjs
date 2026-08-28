@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { isDirectExecution } from '../../scripts/is-direct-execution.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pagePath = resolve(here, '../src/content/docs/reference/geometry-visibility.md');
@@ -210,5 +211,4 @@ async function main() {
   }
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1]))
-  await main();
+if (isDirectExecution(import.meta.url)) await main();

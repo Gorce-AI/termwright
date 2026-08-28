@@ -86,6 +86,7 @@ describe('paired performance harness fingerprint', () => {
 
   it('excludes the production subject and dependency lockfile', () => {
     expect(PERFORMANCE_HARNESS_FILES).not.toContain('pnpm-lock.yaml');
+    expect(PERFORMANCE_HARNESS_FILES).toContain('scripts/is-direct-execution.mjs');
     expect(PERFORMANCE_HARNESS_FILES).not.toContain('scripts/performance-harness-fingerprint.mjs');
     expect(PERFORMANCE_HARNESS_FILES).not.toContain('scripts/performance-observations.mjs');
     expect(PERFORMANCE_HARNESS_FILES.some((path) => path.startsWith('packages/driver/'))).toBe(

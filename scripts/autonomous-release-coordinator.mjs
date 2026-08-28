@@ -2,7 +2,7 @@
 
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 
 const SHA = /^[0-9a-f]{40}$/u;
 const GITHUB_LOGIN = /^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
@@ -235,20 +235,57 @@ export function validateRequiredCiJobs(jobs) {
     throw new Error(`CI has non-success required jobs: ${ungreen.join(', ')}`);
 }
 
-export function validateTrustedCiRun(run, { repository }) {
+export function validateTrustedCiRun(run, { repository, automationAuthor }) {
   if (run?.name !== 'CI' || run?.status !== 'completed')
     throw new Error('unexpected coordinator event');
   if (run.path !== '.github/workflows/ci.yml')
     throw new Error('CI run used an unexpected workflow file');
-  if (run.event !== 'workflow_dispatch' || run.conclusion !== 'success')
-    throw new Error('automation requires an explicitly dispatched, successful CI run');
+  if (run.event !== 'pull_request' || run.conclusion !== 'success')
+    throw new Error('automation requires a successful pull-request CI run');
   if (run.run_attempt !== 1) throw new Error('automation requires a clean first-attempt CI run');
+  if (
+    typeof automationAuthor !== 'string' ||
+    !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?\[bot\]$/u.test(automationAuthor)
+  )
+    throw new Error('automation writer login is not configured as an exact GitHub App bot');
+  if (run.actor?.login !== automationAuthor || run.triggering_actor?.login !== automationAuthor)
+    throw new Error('CI was not causally triggered by the configured automation writer App');
   if (
     run.head_repository?.full_name !== repository ||
     run.repository?.full_name !== repository ||
     !SHA.test(run.head_sha ?? '')
   )
     throw new Error('CI run repository or SHA is untrusted');
+  if (
+    run.pull_requests?.length !== 1 ||
+    run.pull_requests[0]?.head?.sha !== run.head_sha ||
+    run.pull_requests[0]?.head?.ref !== run.head_branch ||
+    !SHA.test(run.pull_requests[0]?.base?.sha ?? '')
+  )
+    throw new Error('CI run is not bound to one exact pull-request head and base');
+}
+
+export function validateCiPrAssociation(
+  association,
+  pr,
+  { repositoryId, defaultBranch, defaultHead, requireCanonicalBaseSha = true },
+) {
+  if (!Number.isSafeInteger(repositoryId) || repositoryId < 1)
+    throw new Error('repository identity is unavailable for CI association validation');
+  if (
+    association?.number !== pr?.number ||
+    association?.head?.sha !== pr?.head?.sha ||
+    association?.head?.ref !== pr?.head?.ref ||
+    association?.head?.repo?.id !== repositoryId ||
+    pr?.head?.repo?.id !== repositoryId ||
+    association?.base?.sha !== defaultHead ||
+    (requireCanonicalBaseSha && association?.base?.sha !== pr?.base?.sha) ||
+    association?.base?.ref !== defaultBranch ||
+    pr?.base?.ref !== defaultBranch ||
+    association?.base?.repo?.id !== repositoryId ||
+    pr?.base?.repo?.id !== repositoryId
+  )
+    throw new Error('CI workflow association differs from the exact canonical PR head or base');
 }
 
 export function validateTrustedUpstreamRun(run, { repository, defaultBranch, defaultHead }) {
@@ -370,7 +407,15 @@ export function validateAutomationPr(
   kind,
   pr,
   files,
-  { repository, defaultBranch, headSha, defaultHead, requireOpen = true, requireBaseSha = true },
+  {
+    repository,
+    defaultBranch,
+    headSha,
+    defaultHead,
+    automationAuthor,
+    requireOpen = true,
+    requireBaseSha = true,
+  },
 ) {
   const expected = prShape[kind]?.(defaultBranch);
   if (expected === undefined) throw new Error(`unknown PR kind ${kind}`);
@@ -384,7 +429,7 @@ export function validateAutomationPr(
     (requireBaseSha && pr.base?.sha !== defaultHead)
   )
     throw new Error(`${kind} PR base is stale or unexpected`);
-  if (pr.user?.login !== 'github-actions[bot]' || pr.title !== expected.title)
+  if (pr.user?.login !== automationAuthor || pr.title !== expected.title)
     throw new Error(`${kind} PR author or title is unexpected`);
   if (requireOpen && (pr.state !== 'open' || pr.merged_at !== null))
     throw new Error(`${kind} PR is not open`);
@@ -608,7 +653,8 @@ async function inspectCi(event) {
   const run = event.workflow_run;
   const repository = event.repository.full_name;
   const branch = event.repository.default_branch;
-  validateTrustedCiRun(run, { repository });
+  const automationAuthor = process.env.AUTOMATION_PR_AUTHOR;
+  validateTrustedCiRun(run, { repository, automationAuthor });
   validateRequiredCiJobs(
     await paged(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest`, 'jobs'),
   );
@@ -645,6 +691,7 @@ async function inspectCi(event) {
     defaultBranch: branch,
     headSha: run.head_sha,
     defaultHead: current,
+    automationAuthor,
     requireOpen: !alreadyMerged,
     requireBaseSha: !alreadyMerged,
   });
@@ -657,6 +704,12 @@ async function inspectCi(event) {
       throw new Error(`merged ${kind} PR is not an exact squash commit`);
     trustedBase = mergeCommit.parents[0].sha;
   }
+  validateCiPrAssociation(run.pull_requests[0], pr, {
+    repositoryId: event.repository.id,
+    defaultBranch: branch,
+    defaultHead: trustedBase,
+    requireCanonicalBaseSha: !alreadyMerged,
+  });
   const tree = await githubApi(`/repos/${repository}/git/trees/${run.head_sha}?recursive=1`);
   if (tree.truncated === true) throw new Error('PR head tree response was truncated');
   validateChangedFileObjects(files, tree);
@@ -826,6 +879,7 @@ async function main(argv) {
       defaultBranch: event.inputs.target,
       headSha: pr.head.sha,
       defaultHead: event.inputs.expected_sha,
+      automationAuthor: process.env.AUTOMATION_PR_AUTHOR,
       requireOpen: false,
       requireBaseSha: false,
     });
@@ -864,10 +918,7 @@ async function main(argv) {
   }
 }
 
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
+if (isDirectExecution(import.meta.url)) {
   main(process.argv.slice(2)).catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

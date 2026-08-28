@@ -3,6 +3,7 @@
 import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import { sha256 } from './prepare-conpty-assets.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -59,7 +60,7 @@ function argument(name) {
   return index < 0 ? undefined : process.argv[index + 1];
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isDirectExecution(import.meta.url)) {
   const requestedArchitecture = argument('--architecture');
   if (requestedArchitecture === undefined && process.platform !== 'win32') {
     console.log(`no vendored ConPTY runtime is needed for ${process.platform}-${process.arch}`);

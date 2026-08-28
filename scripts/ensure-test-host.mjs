@@ -2,8 +2,8 @@
 
 import { access } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDirectExecution } from './is-direct-execution.mjs';
 import { verifyImmutableWorkspaceBuild } from './immutable-build-manifest.mjs';
 import { pnpmInvocation } from './package-manager-command.mjs';
 
@@ -86,6 +86,6 @@ function recoverableManifestError(error) {
   );
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (isDirectExecution(import.meta.url)) {
   await ensureTestHost();
 }
