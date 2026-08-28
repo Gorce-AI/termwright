@@ -4,30 +4,66 @@ import { createHash } from 'node:crypto';
 import { execFile as execFileCallback } from 'node:child_process';
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
-import { promisify } from 'node:util';
 import {
   validateChangedFileObjects,
   validateChangedFiles,
 } from './autonomous-release-coordinator.mjs';
 import { isDirectExecution } from './is-direct-execution.mjs';
 
-const execFile = promisify(execFileCallback);
 const SHA = /^[0-9a-f]{40}$/u;
 
-async function git(args, options = {}) {
-  return execFile('git', args, { maxBuffer: 32 * 1024 * 1024, ...options });
+export function createOwnedExecFile(command, { cwd, signal, maxBuffer = 32 * 1024 * 1024 } = {}) {
+  const activeCloses = new Set();
+  let closing = false;
+  const run = (args, options = {}) => {
+    if (closing) throw new Error(`owned ${command} process group is closing`);
+    let child;
+    const completed = new Promise((resolveCompleted) => {
+      child = execFileCallback(
+        command,
+        args,
+        {
+          maxBuffer,
+          cwd,
+          ...options,
+          ...(signal === undefined ? {} : { signal }),
+        },
+        (error, stdout, stderr) => {
+          resolveCompleted({ error, stdout, stderr });
+        },
+      );
+    });
+    const closed = new Promise((resolveClose) => child.once('close', resolveClose));
+    activeCloses.add(closed);
+    void closed.finally(() => activeCloses.delete(closed));
+    return Promise.all([completed, closed]).then(([result]) => {
+      if (result.error !== null) throw result.error;
+      return { stdout: result.stdout, stderr: result.stderr };
+    });
+  };
+  return {
+    run,
+    close: async () => {
+      closing = true;
+      while (activeCloses.size > 0) await Promise.allSettled([...activeCloses]);
+    },
+  };
 }
 
-async function regularIndexEntry(path) {
+function ownedGit(repository, signal) {
+  return createOwnedExecFile('git', { cwd: repository, signal });
+}
+
+async function regularIndexEntry(path, runGit) {
   try {
-    await git(['cat-file', '-e', `:${path}`]);
+    await runGit(['cat-file', '-e', `:${path}`]);
   } catch (error) {
     if (error?.code === 128) return null;
     throw error;
   }
   const [{ stdout: stage }, { stdout: sizeText }] = await Promise.all([
-    git(['ls-files', '--stage', '-z', '--', path], { encoding: 'buffer' }),
-    git(['cat-file', '-s', `:${path}`]),
+    runGit(['ls-files', '--stage', '-z', '--', path], { encoding: 'buffer' }),
+    runGit(['cat-file', '-s', `:${path}`]),
   ]);
   const terminator = stage.indexOf(0);
   if (terminator < 0) throw new Error(`changed path has an invalid index entry: ${path}`);
@@ -65,25 +101,50 @@ export async function createManualCompatibilityHandoff({
   sourceRunId,
   sourceRunUrl,
   sourceSha,
+  repository = process.cwd(),
+  signal,
 }) {
   if (!SHA.test(sourceSha)) throw new Error('source SHA must be an exact 40-character SHA');
   if (!/^[1-9][0-9]*$/u.test(sourceRunId)) throw new Error('source run id must be numeric');
   if (!/^https:\/\/github\.com\//u.test(sourceRunUrl))
     throw new Error('source run URL must be an HTTPS GitHub URL');
 
-  const { stdout: head } = await git(['rev-parse', 'HEAD']);
+  const git = ownedGit(repository, signal);
+  try {
+    return await createHandoff(
+      {
+        destination,
+        candidateRegistry,
+        publishPlan,
+        verdicts,
+        sourceRunId,
+        sourceRunUrl,
+        sourceSha,
+      },
+      git.run,
+    );
+  } finally {
+    await git.close();
+  }
+}
+
+async function createHandoff(
+  { destination, candidateRegistry, publishPlan, verdicts, sourceRunId, sourceRunUrl, sourceSha },
+  runGit,
+) {
+  const { stdout: head } = await runGit(['rev-parse', 'HEAD']);
   if (head.trim() !== sourceSha) throw new Error('source SHA does not match repository HEAD');
   const [{ stdout: tracked }, { stdout: untracked }] = await Promise.all([
-    git(['diff', '--name-only', '-z', 'HEAD'], { encoding: 'buffer' }),
-    git(['ls-files', '-z', '--others', '--exclude-standard'], { encoding: 'buffer' }),
+    runGit(['diff', '--name-only', '-z', 'HEAD'], { encoding: 'buffer' }),
+    runGit(['ls-files', '-z', '--others', '--exclude-standard'], { encoding: 'buffer' }),
   ]);
   const changed = [
     ...new Set(Buffer.concat([tracked, untracked]).toString('utf8').split('\0').filter(Boolean)),
   ].sort((left, right) => left.localeCompare(right));
   if (changed.length > 0) {
     validateChangedFiles('compatibility', changed);
-    await git(['add', '-A', '--', ...changed]);
-    const { stdout: staged } = await git(['diff', '--cached', '--name-only', '-z', 'HEAD'], {
+    await runGit(['add', '-A', '--', ...changed]);
+    const { stdout: staged } = await runGit(['diff', '--cached', '--name-only', '-z', 'HEAD'], {
       encoding: 'buffer',
     });
     const stagedPaths = [...new Set(staged.toString('utf8').split('\0').filter(Boolean))].sort(
@@ -91,7 +152,9 @@ export async function createManualCompatibilityHandoff({
     );
     if (JSON.stringify(stagedPaths) !== JSON.stringify(changed))
       throw new Error('staged patch paths differ from the validated change inventory');
-    const entries = (await Promise.all(changed.map(regularIndexEntry))).filter(Boolean);
+    const entries = (
+      await Promise.all(changed.map((path) => regularIndexEntry(path, runGit)))
+    ).filter(Boolean);
     const entryPaths = new Set(entries.map((entry) => entry.path));
     validateChangedFileObjects(
       changed.map((filename) => ({
@@ -108,7 +171,7 @@ export async function createManualCompatibilityHandoff({
     join(handoff, 'changed-files.txt'),
     changed.length === 0 ? '' : `${changed.join('\n')}\n`,
   );
-  const { stdout: patch } = await git(['diff', '--cached', '--binary', '--full-index', 'HEAD'], {
+  const { stdout: patch } = await runGit(['diff', '--cached', '--binary', '--full-index', 'HEAD'], {
     encoding: 'buffer',
   });
   await writeFile(join(handoff, 'reconciliation.patch'), patch);

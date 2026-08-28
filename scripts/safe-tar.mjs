@@ -78,12 +78,11 @@ function verifyHeaderChecksum(header) {
 }
 
 /**
- * Extract a registry tarball without ever materializing links, devices or an
- * attacker-controlled path. The complete archive is authenticated/validated
- * before the first destination write, so a malformed archive leaves no
- * partial source tree behind.
+ * Inspect a registry tarball without accepting links, devices or an
+ * attacker-controlled path. Extraction uses this complete validation before
+ * the first destination write, so malformed input leaves no partial tree.
  */
-export async function safeExtractTarGz(bytes, destination, options = {}) {
+export function inspectSafeTarGz(bytes, options = {}) {
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
   const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
   const stripComponents = options.stripComponents ?? 0;
@@ -175,6 +174,11 @@ export async function safeExtractTarGz(bytes, destination, options = {}) {
     }
   }
 
+  return entries;
+}
+
+export async function safeExtractTarGz(bytes, destination, options = {}) {
+  const entries = inspectSafeTarGz(bytes, options);
   for (const entry of entries
     .filter((item) => item.type === '5')
     .sort((a, b) => a.path.localeCompare(b.path))) {
