@@ -19,6 +19,7 @@ import {
   validateBranchProtection,
   validateChangedFiles,
   validateChangedFileObjects,
+  validateCiPrAssociation,
   validateIssueOwner,
   validateRequiredCiJobs,
   validateTrustedCiRun,
@@ -30,6 +31,7 @@ const repository = 'owner/repo';
 const defaultBranch = 'main';
 const base = 'a'.repeat(40);
 const head = 'b'.repeat(40);
+const automationAuthor = 'termwright-automation-writer[bot]';
 
 function scalar(value) {
   const trimmed = value.trim();
@@ -321,17 +323,35 @@ describe('trusted autonomous coordinator', () => {
       name: 'CI',
       path: '.github/workflows/ci.yml',
       status: 'completed',
-      event: 'workflow_dispatch',
+      event: 'pull_request',
       conclusion: 'success',
       run_attempt: 1,
       head_sha: head,
       head_repository: { full_name: repository },
       repository: { full_name: repository },
+      actor: { login: automationAuthor },
+      triggering_actor: { login: automationAuthor },
+      head_branch: 'automation/framework-compatibility',
+      pull_requests: [
+        {
+          head: { sha: head, ref: 'automation/framework-compatibility' },
+          base: { sha: base, ref: defaultBranch },
+        },
+      ],
     };
-    expect(() => validateTrustedCiRun(run, { repository })).not.toThrow();
-    expect(() => validateTrustedCiRun({ ...run, run_attempt: 2 }, { repository })).toThrow(
-      /clean first-attempt/u,
-    );
+    expect(() => validateTrustedCiRun(run, { repository, automationAuthor })).not.toThrow();
+    expect(() =>
+      validateTrustedCiRun({ ...run, run_attempt: 2 }, { repository, automationAuthor }),
+    ).toThrow(/clean first-attempt/u);
+    expect(() =>
+      validateTrustedCiRun(
+        { ...run, triggering_actor: { login: 'github-actions[bot]' } },
+        { repository, automationAuthor },
+      ),
+    ).toThrow(/automation writer App/u);
+    expect(() =>
+      validateTrustedCiRun({ ...run, pull_requests: [] }, { repository, automationAuthor }),
+    ).toThrow(/one exact pull-request/u);
   });
 
   it('accepts only the exact automation PR identity and file set', () => {
@@ -339,7 +359,7 @@ describe('trusted autonomous coordinator', () => {
       state: 'open',
       merged_at: null,
       title: 'chore(compatibility): reconcile upstream candidates',
-      user: { login: 'github-actions[bot]' },
+      user: { login: automationAuthor },
       changed_files: 1,
       head: {
         sha: head,
@@ -353,7 +373,7 @@ describe('trusted autonomous coordinator', () => {
         'compatibility',
         pr,
         [{ filename: 'compatibility/certified-upstreams.json', status: 'modified' }],
-        { repository, defaultBranch, headSha: head, defaultHead: base },
+        { repository, defaultBranch, headSha: head, defaultHead: base, automationAuthor },
       ),
     ).not.toThrow();
     expect(() =>
@@ -366,6 +386,7 @@ describe('trusted autonomous coordinator', () => {
           defaultBranch,
           headSha: head,
           defaultHead: base,
+          automationAuthor,
         },
       ),
     ).toThrow(/author/u);
@@ -379,6 +400,7 @@ describe('trusted autonomous coordinator', () => {
           defaultBranch,
           headSha: head,
           defaultHead: base,
+          automationAuthor,
         },
       ),
     ).toThrow(/incomplete/u);
@@ -398,6 +420,7 @@ describe('trusted autonomous coordinator', () => {
           defaultBranch,
           headSha: head,
           defaultHead: base,
+          automationAuthor,
         },
       ),
     ).toThrow(/renames a forbidden/u);
@@ -411,9 +434,56 @@ describe('trusted autonomous coordinator', () => {
         'heartbeat',
         heartbeatPr,
         [{ filename: 'compatibility/workflow-heartbeat.json', status: 'modified' }],
-        { repository, defaultBranch, headSha: head, defaultHead: base },
+        { repository, defaultBranch, headSha: head, defaultHead: base, automationAuthor },
       ),
     ).not.toThrow();
+  });
+
+  it('binds the workflow association to the exact canonical PR and base', () => {
+    const repositoryId = 123;
+    const pr = {
+      number: 45,
+      head: {
+        sha: head,
+        ref: 'automation/framework-compatibility',
+        repo: { id: repositoryId },
+      },
+      base: { sha: base, ref: defaultBranch, repo: { id: repositoryId } },
+    };
+    const association = {
+      number: 45,
+      head: {
+        sha: head,
+        ref: 'automation/framework-compatibility',
+        repo: { id: repositoryId },
+      },
+      base: { sha: base, ref: defaultBranch, repo: { id: repositoryId } },
+    };
+    const options = { repositoryId, defaultBranch, defaultHead: base };
+    expect(() => validateCiPrAssociation(association, pr, options)).not.toThrow();
+    for (const altered of [
+      { ...association, number: 46 },
+      { ...association, base: { ...association.base, sha: 'c'.repeat(40) } },
+      { ...association, base: { ...association.base, ref: 'other' } },
+      { ...association, base: { ...association.base, repo: { id: 999 } } },
+      { ...association, head: { ...association.head, repo: { id: 999 } } },
+    ]) {
+      expect(() => validateCiPrAssociation(altered, pr, options)).toThrow(/canonical PR/u);
+    }
+    const mergedPr = { ...pr, base: { ...pr.base, sha: 'd'.repeat(40) } };
+    expect(() =>
+      validateCiPrAssociation(association, mergedPr, {
+        ...options,
+        requireCanonicalBaseSha: false,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validateCiPrAssociation(
+        { ...association, base: { ...association.base, sha: 'e'.repeat(40) } },
+        mergedPr,
+        { ...options, requireCanonicalBaseSha: false },
+      ),
+    ).toThrow(/canonical PR/u);
   });
 
   it('deduplicates an exact release dispatch', () => {

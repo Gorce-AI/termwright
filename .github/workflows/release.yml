@@ -46,10 +46,9 @@ jobs:
     name: prepare Version PR
     if: inputs.mode == 'prepare'
     runs-on: ubuntu-latest
+    environment: trusted-autonomous-release
     permissions:
-      actions: write
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Reject workflow reruns
         shell: bash
@@ -141,47 +140,33 @@ jobs:
           NODE
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Mint the repository-only automation writer token
+        if: steps.version.outputs.changed == 'true'
+        id: writer-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.AUTOMATION_WRITER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_WRITER_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Open or update the Version PR
         if: steps.version.outputs.changed == 'true'
         id: pr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
-          token: ${{ github.token }}
+          token: ${{ steps.writer-token.outputs.token }}
           base: ${{ inputs.target }}
           branch: release-pr/${{ inputs.target }}
           delete-branch: true
           commit-message: 'chore(release): version packages'
           title: 'chore(release): version packages (${{ inputs.target }})'
-          labels: release
           body: |
             This PR applies the pending changesets to `${{ inputs.target }}`.
 
             The trusted coordinator will reproduce this transformation from the
             base commit. Only an exact tree match plus the complete required CI
             suite may be merged and explicitly dispatched for publication.
-
-      # Pull requests created with GITHUB_TOKEN do not emit pull_request events.
-      # workflow_dispatch is the documented exception, so explicitly attach the
-      # normal CI suite to the generated branch and its commit.
-      - name: Start CI for the Version PR
-        if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: release-pr/${{ inputs.target }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          head_sha=$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq '.object.sha')
-          echo "head-sha=$head_sha" >> "$GITHUB_OUTPUT"
-        id: version-ci
-      - uses: ./.github/actions/dispatch-autonomous-ci
-        if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          branch: release-pr/${{ inputs.target }}
-          head-sha: ${{ steps.version-ci.outputs.head-sha }}
-          default-branch: ${{ inputs.target }}
 
   detect:
     name: authorize exact merged Version PR
@@ -218,6 +203,7 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUTOMATION_PR_AUTHOR: ${{ vars.AUTOMATION_WRITER_LOGIN }}
           REPOSITORY: ${{ github.repository }}
           COMMIT: ${{ inputs.expected_sha }}
           TARGET: ${{ inputs.target }}

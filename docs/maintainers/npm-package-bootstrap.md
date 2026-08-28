@@ -46,6 +46,20 @@ For each newly created package, configure npm trusted publishing for:
 - workflow: `release.yml`
 - environment: `npm-publish`
 
+The old `@termwright/ink-testing` package was retired when component testing moved into
+`@termwright/ink`. Keep the name as explicit registry history, but deprecate every published
+version with the exact reviewed message:
+
+```sh
+npm deprecate '@termwright/ink-testing@*' 'Package retired; use @termwright/ink instead.'
+npm view '@termwright/ink-testing@0.2.0' deprecated --json
+```
+
+Do not unpublish it and do not add a compatibility package to the workspace. The readiness
+gate inventories the complete npm organization and fails if an undeclared package appears or
+any retired version lacks its exact deprecation message.
+
 Finally, run `pnpm check:npm-release-readiness` from the same reviewed commit. It must say
-that every public workspace package exists. Trusted-publisher configuration is registry
-state and must be reviewed separately before anyone authorizes the normal release gate.
+that every public workspace package exists and the namespace retirement policy is exact.
+Trusted-publisher configuration is registry state and must be reviewed separately before
+anyone authorizes the normal release gate.

@@ -451,14 +451,21 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     sessions.push(app);
     await app.waitForText('Sign in');
 
+    const password = app.getByRole('textbox', { name: 'Password' });
+    expect((await password.semanticState())?.focused).not.toBe(true);
     await app.press('Tab');
+    // Input delivery is ordered, but the application processes it on its own
+    // update loop. The semantic focus revision is the causal acknowledgement
+    // that Tab has been applied; typing before it can target the prior field.
+    await password.waitFor({ state: 'focused' });
+    expect((await password.semanticState())?.focused).toBe(true);
     await app.type('hunter2');
     // Proof the application really received it, so the assertions below are
     // about withholding rather than about nothing having happened. Bubbles
     // masks with '*' by default, one per character.
     await app.waitForText('*******');
 
-    const value = await app.getByRole('textbox', { name: 'Password' }).textContent();
+    const value = await password.textContent();
     expect(value).not.toContain('hunter2');
 
     // And the whole published tree is checked, not just that one node — a

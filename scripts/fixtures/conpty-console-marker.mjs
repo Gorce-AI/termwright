@@ -19,20 +19,22 @@ const server = createServer((socket) => {
       if (command === 'GO') {
         writeWindowsConsoleMarker(1, process.env.TW_MARKER_TEXT ?? '');
         // DONE proves that the synchronous native write and mode restoration
-        // both returned. End our side of the control channel at the same
-        // boundary; the PowerShell peer closes its handle before waiting for
-        // this process, so neither runtime owns a circular shutdown wait.
-        socket.end('DONE\n');
+        // both returned. Once Node/Bun confirms that DONE was handed to the
+        // pipe, close both of our handles ourselves. Process lifetime must not
+        // depend on when the PowerShell peer reports its half-close: Node 24
+        // can otherwise keep the listening server alive after the child has
+        // no more protocol work, which in turn prevents authoritative ConPTY
+        // EOF in the parent test.
+        socket.end('DONE\n', () => {
+          socket.destroy();
+          server.close();
+        });
       } else {
         throw new Error(`unexpected marker control command ${JSON.stringify(command)}`);
       }
     }
   });
   socket.write('READY\n');
-});
-
-server.on('connection', (socket) => {
-  socket.once('close', () => server.close());
 });
 
 server.listen(`\\\\.\\pipe\\${controlPipe}`);

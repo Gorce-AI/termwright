@@ -62,8 +62,18 @@ try {
   $reader = $null
   $pipe.Dispose()
   $pipe = $null
-  $markerProcess.WaitForExit()
-  if (-not $markerProcess.HasExited) { exit 49 }
+  # A deadline is diagnostic containment, not evidence: success still requires
+  # the real child-exit event. Name a leaked marker process directly instead of
+  # letting the outer Vitest deadline hide the owned handle that remained live.
+  if (-not $markerProcess.WaitForExit(10000)) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_SHUTDOWN_TIMEOUT")
+    exit 49
+  }
+  $markerProcess.Refresh()
+  if ($markerProcess.ExitCode -ne 0) {
+    [Console]::Error.WriteLine("MARKER_PROCESS_EXIT:" + $markerProcess.ExitCode)
+    exit 47
+  }
 } finally {
   if ($writer) { $writer.Dispose() }
   if ($reader) { $reader.Dispose() }

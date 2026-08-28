@@ -1230,12 +1230,10 @@ jobs:
           pnpm check:packed-private-boundaries
 
       - name: Every Version PR package already exists on npm
-        # The `release` label also exempts docs/tests-only package changes from
-        # changesets. Registry readiness belongs only to the bot-owned Version
-        # PR branch, never to every PR carrying that label. The release bot
-        # dispatches CI explicitly because a GITHUB_TOKEN-created PR does not
-        # emit pull_request workflows, while the PR form remains useful for a
-        # trusted manually opened replacement.
+        # Registry readiness belongs only to the exact same-repository Version
+        # PR branch. The dedicated writer App creates a normal pull_request
+        # event, so this gate runs in the same first-attempt CI as every other
+        # required check.
         if: >-
           (github.event_name == 'pull_request' &&
            github.event.pull_request.head.repo.full_name == github.repository &&
