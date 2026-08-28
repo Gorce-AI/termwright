@@ -229,6 +229,15 @@ describe('autonomous workflow security', () => {
     expect(coordinator).toContain('pending changesets remain queued');
     expect(coordinator).toContain("releaseDecision === 'prepare'");
     expect(coordinator).toContain("releaseDecision === 'prepare' || releaseDecision === 'publish'");
+    expect(coordinator).toContain(
+      'requireUnchangedDefaultHead(await defaultHead(repository, branch), inspected.baseSha)',
+    );
+    expect(coordinator).toContain(
+      '`/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`',
+    );
+    expect(coordinator).toMatch(
+      /branches\/\$\{encodeURIComponent\(branch\)\}\/protection`[^]*process\.env\.BRANCH_POLICY_TOKEN/u,
+    );
     expect(coordinator).not.toMatch(
       /validateBranchProtection\([\s\S]*?\);\n  assertReleaseStateQuiescent\(/u,
     );
@@ -236,6 +245,13 @@ describe('autonomous workflow security', () => {
       '"https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"',
     );
     const merge = jobBlock(workflow, 'merge');
+    expect(merge).toContain('environment: trusted-autonomous-release');
+    expect(merge).toContain(
+      'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1',
+    );
+    expect(merge).toContain('permission-administration: read');
+    expect(merge).toContain('BRANCH_POLICY_TOKEN: ${{ steps.branch-policy-token.outputs.token }}');
+    expect(merge).not.toContain('skip-token-revoke');
     expect(merge).toContain('issues: write');
     expect(merge).toContain('Close candidate issues only after the compatibility allowlist merged');
     expect(merge.indexOf('coordinate-ci "${{ steps.event.outputs.path }}"')).toBeLessThan(

@@ -82,6 +82,25 @@ coordinator independently checks all expanded job names as defense in depth.
 Branch protection requires this gate instead of maintaining a parallel list of
 matrix-expanded contexts.
 
+The coordinator validates the complete administrative branch-protection
+resource before every autonomous merge. A dedicated GitHub App installed only
+on this repository supplies a short-lived `Administration: read` token; it has
+no write permission and is distinct from the workflow token used to merge. The
+private key is held by the `trusted-autonomous-release` environment, whose
+deployment policy selects exactly the `main` branch. Missing credentials,
+an unreadable policy or any policy drift fails before merge. Immediately before
+the merge request, the coordinator also requires the default branch to remain at
+the PR's certified base SHA.
+
+Provision that reader as a dedicated GitHub App with no webhook or subscribed
+events, repository `Administration: read` as its only explicit permission, and
+an installation limited to this repository. Store its App ID and private key as
+the `BRANCH_POLICY_APP_ID` and `BRANCH_POLICY_APP_PRIVATE_KEY` secrets of the
+`trusted-autonomous-release` environment, not as repository-level secrets. That
+environment must use a selected-branch policy containing exactly `main`, with no
+tag or wildcard policies. The pinned token action scopes
+each short-lived token to the current repository and revokes it after the job.
+
 ## Why this remains one workflow
 
 Moving jobs mechanically into independent workflow files changes check

@@ -471,11 +471,11 @@ export function validateBranchProtection(protection) {
       'unattended automation requires zero approving reviews; exact tree reproduction and strict CI are its merge authorization',
     );
   }
-  if (protection.required_pull_request_reviews.require_last_push_approval === true) {
-    throw new Error('last-push approval blocks the bot-owned unattended PR flow');
+  if (protection.required_pull_request_reviews.require_last_push_approval !== false) {
+    throw new Error('last-push approval must be explicitly disabled for unattended automation');
   }
-  if (protection.required_pull_request_reviews.require_code_owner_reviews === true) {
-    throw new Error('code-owner approval blocks the bot-owned unattended PR flow');
+  if (protection.required_pull_request_reviews.require_code_owner_reviews !== false) {
+    throw new Error('code-owner approval must be explicitly disabled for unattended automation');
   }
   const bypass = protection.required_pull_request_reviews.bypass_pull_request_allowances;
   if (
@@ -486,15 +486,20 @@ export function validateBranchProtection(protection) {
     throw new Error(
       'pull-request review bypass allowances are incompatible with autonomous release safety',
     );
-  if (protection.restrictions != null)
+  if (protection.restrictions !== null)
     throw new Error(
       'default-branch push restrictions can silently block the coordinator merge token',
     );
   if (
-    protection.allow_force_pushes?.enabled === true ||
-    protection.allow_deletions?.enabled === true
+    protection.allow_force_pushes?.enabled !== false ||
+    protection.allow_deletions?.enabled !== false
   )
     throw new Error('default branch must forbid force pushes and deletion');
+}
+
+export function requireUnchangedDefaultHead(actual, expected) {
+  if (actual !== expected)
+    throw new Error('default branch advanced after exact CI; refusing to merge a stale PR base');
 }
 
 export function validateIssueOwner(owner) {
@@ -519,9 +524,9 @@ export function compatibilitySourceRunId(body) {
   return matches[0][1];
 }
 
-async function githubApi(path, options = {}) {
-  const token = process.env.GITHUB_TOKEN;
-  if (typeof token !== 'string' || token.length === 0) throw new Error('GITHUB_TOKEN is required');
+async function githubApi(path, options = {}, token = process.env.GITHUB_TOKEN) {
+  if (typeof token !== 'string' || token.length === 0)
+    throw new Error('the required GitHub API token is missing');
   const response = await fetch(`https://api.github.com${path}`, {
     ...options,
     headers: {
@@ -689,8 +694,15 @@ async function coordinateCi(event) {
     );
     return;
   }
+  // Branch policy is read with a separate, current-repository GitHub App token
+  // that has Administration:read and no write permissions. GITHUB_TOKEN remains
+  // the only credential used for PR, issue, workflow and merge mutations.
   validateBranchProtection(
-    await githubApi(`/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`),
+    await githubApi(
+      `/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`,
+      {},
+      process.env.BRANCH_POLICY_TOKEN,
+    ),
   );
   let releaseAllowed = false;
   if (kind === 'compatibility') {
@@ -709,6 +721,8 @@ async function coordinateCi(event) {
       defaultBranch: branch,
     });
   }
+  if (!inspected.alreadyMerged)
+    requireUnchangedDefaultHead(await defaultHead(repository, branch), inspected.baseSha);
   const merged = inspected.alreadyMerged
     ? { merged: true, sha: inspected.mergedSha }
     : await githubApi(`/repos/${repository}/pulls/${pr.number}/merge`, {
