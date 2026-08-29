@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  changedConsumableChangesets,
   changedFiles,
   changesetDecision,
   isConsumableChangesetPath,
@@ -47,6 +48,38 @@ describe('pull-request changeset policy', () => {
         [],
       ).publishable,
     ).toEqual(['packages/driver/src/session.ts']);
+  });
+
+  it('accepts a modified accumulator changeset for later compatibility batches', () => {
+    expect(
+      changesetDecision(
+        ['packages/probe-opentui/src/certified-runtime.json'],
+        ['.changeset/framework-compatibility-auto.md'],
+      ).needsChangeset,
+    ).toBe(false);
+  });
+
+  it('considers added and modified changesets but excludes deleted ones at the git boundary', async () => {
+    const invocations = [];
+    const runGit = async (...invocation) => {
+      invocations.push(invocation);
+      return {
+        stdout:
+          '.changeset/new.md\0.changeset/framework-compatibility-auto.md\0.changeset/README.md\0.changeset/nested/fake.md\0',
+      };
+    };
+
+    await expect(changedConsumableChangesets('BASE', 'HEAD', '/repo', runGit)).resolves.toEqual([
+      '.changeset/new.md',
+      '.changeset/framework-compatibility-auto.md',
+    ]);
+    expect(invocations).toEqual([
+      [
+        'git',
+        ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=AM', 'BASE', 'HEAD', '--'],
+        { cwd: '/repo' },
+      ],
+    ]);
   });
 
   it('accepts only direct changeset files consumed by the release workflow', () => {
