@@ -1322,7 +1322,7 @@
           {
             "addedUnits": [
               {
-                "sourceDigest": "sha256:11a4c07f4294f0c27aac1a78bcd0212f6851c110060d4275b87fc5cc80f007fd",
+                "sourceDigest": "sha256:2ad78d0fc4401272af043b31f8b3d377f36616e2057bb981be67239eaf3880a1",
                 "target": "zz_termwright_marker.go"
               }
             ],
@@ -1333,7 +1333,9 @@
             "requiredSymbols": [
               "baseScreen.screenImpl",
               "cScreen.out",
-              "cScreen.vten"
+              "cScreen.fini",
+              "Windows.GetConsoleMode",
+              "Windows.SetConsoleMode"
             ],
             "sourcePatching": false,
             "tier": "T1"

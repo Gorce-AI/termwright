@@ -560,6 +560,23 @@ export async function bindLocalTermwrightGoClient(
   return canonicalClientDir;
 }
 
+async function assertTviewCandidateSession(session, candidateId) {
+  await session.waitForText('readme.md');
+  await assertCandidateSemanticSession(session, candidateId);
+  await session.getByRole('button', { name: 'Save' }).waitFor({ state: 'attached' });
+  const initial = await session.waitForCommittedObservation();
+  if (initial.semanticRevision === null)
+    throw new Error(`${candidateId}: initial semantic tree has no committed revision`);
+  await session.press('r');
+  await session.waitForText('status: ready redraw:1');
+  const redrawn = await session.waitForCommittedObservation();
+  if (redrawn.semanticRevision === null || redrawn.semanticRevision <= initial.semanticRevision) {
+    throw new Error(`${candidateId}: causal redraw did not publish a newer semantic tree`);
+  }
+  await assertCandidateSemanticSession(session, candidateId);
+  await session.press('Tab');
+}
+
 export async function certifyGoCandidateBehavior(candidate) {
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-go-behavior-'));
   const app = join(scratch, 'app');
@@ -657,24 +674,10 @@ export async function certifyGoCandidateBehavior(candidate) {
   });
   try {
     await session.waitForText(candidate.frameworkId === 'tview' ? 'readme.md' : 'candidate');
-    await assertCandidateSemanticSession(session, candidate.id);
     if (candidate.frameworkId === 'tview') {
-      await session.getByRole('button', { name: 'Save' }).waitFor({ state: 'attached' });
-      const initial = await session.waitForCommittedObservation();
-      if (initial.semanticRevision === null)
-        throw new Error(`${candidate.id}: initial semantic tree has no committed revision`);
-      await session.press('r');
-      await session.waitForText('status: ready redraw:1');
-      const redrawn = await session.waitForCommittedObservation();
-      if (
-        redrawn.semanticRevision === null ||
-        redrawn.semanticRevision <= initial.semanticRevision
-      ) {
-        throw new Error(`${candidate.id}: causal redraw did not publish a newer semantic tree`);
-      }
-      await assertCandidateSemanticSession(session, candidate.id);
-      await session.press('Tab');
+      await assertTviewCandidateSession(session, candidate.id);
     } else {
+      await assertCandidateSemanticSession(session, candidate.id);
       const spinner = session.getByRole('status');
       await spinner.waitFor({ state: 'attached' });
       const state = await spinner.semanticState();
@@ -686,6 +689,24 @@ export async function certifyGoCandidateBehavior(candidate) {
     }
   } finally {
     await session.close();
+  }
+  if (
+    process.platform === 'win32' &&
+    candidate.package === 'github.com/gdamore/tcell/v2' &&
+    candidate.capability === 'tcell-same-writer-marker'
+  ) {
+    const legacy = await driver.launchTerminal({
+      command: [binary],
+      columns: 80,
+      rows: 24,
+      env: { TCELL_VTMODE: 'disable' },
+      requiredCapabilities: ['semantic-tree'],
+    });
+    try {
+      await assertTviewCandidateSession(legacy, `${candidate.id} (legacy Console API)`);
+    } finally {
+      await legacy.close();
+    }
   }
   const modules =
     candidate.frameworkId === 'tview'
