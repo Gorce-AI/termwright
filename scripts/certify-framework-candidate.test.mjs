@@ -176,15 +176,11 @@ describe('framework candidate evidence binding', () => {
       expect(calls).toEqual([
         [
           'go',
-          [
-            'mod',
-            'edit',
-            '-json',
-            `-replace=github.com/gorce-ai/termwright/clients/go=${canonicalClient}`,
-          ],
+          ['mod', 'edit', `-replace=github.com/gorce-ai/termwright/clients/go=${canonicalClient}`],
           env,
           app,
         ],
+        ['go', ['mod', 'edit', '-json'], env, app],
       ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
