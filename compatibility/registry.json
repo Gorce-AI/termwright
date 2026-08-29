@@ -2129,12 +2129,42 @@
           },
           {
             "frameworkVersion": "v2.0.9",
+            "id": "charm-v2.0.9-767971f08dd5",
+            "modules": [
+              {
+                "name": "charm.land/bubbles/v2",
+                "optional": true,
+                "version": "v2.2.0"
+              },
+              {
+                "name": "charm.land/bubbletea/v2",
+                "version": "v2.0.9"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v2.0.9",
             "id": "charm-v2.0.9-ba5de3a6cd17",
             "modules": [
               {
                 "name": "charm.land/bubbles/v2",
                 "optional": true,
                 "version": "v2.1.1"
+              },
+              {
+                "name": "charm.land/bubbletea/v2",
+                "version": "v2.0.9"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v2.0.9",
+            "id": "charm-v2.0.9-c08df8ad01ae",
+            "modules": [
+              {
+                "name": "charm.land/bubbles/v2",
+                "optional": true,
+                "version": "v2.2.1"
               },
               {
                 "name": "charm.land/bubbletea/v2",
