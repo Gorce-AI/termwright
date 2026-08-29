@@ -19,11 +19,11 @@ export function isPublishablePackagePath(path) {
   return true;
 }
 
-export function changesetDecision(packagePaths, addedChangesets) {
+export function changesetDecision(packagePaths, changedChangesets) {
   const publishable = packagePaths.filter(isPublishablePackagePath);
   return {
     publishable,
-    needsChangeset: publishable.length > 0 && addedChangesets.length === 0,
+    needsChangeset: publishable.length > 0 && changedChangesets.length === 0,
   };
 }
 
@@ -42,6 +42,15 @@ export async function changedFiles(base, head, args, cwd, runGit = execFile) {
   return stdout.split('\0').filter(Boolean);
 }
 
+export async function changedConsumableChangesets(base, head, cwd, runGit = execFile) {
+  // Compatibility certification intentionally accumulates releases in one generated
+  // changeset until the next Version PR consumes it. Therefore a later certification
+  // modifies an existing consumable changeset instead of adding another file.
+  return (await changedFiles(base, head, ['--diff-filter=AM'], cwd, runGit)).filter(
+    isConsumableChangesetPath,
+  );
+}
+
 async function main() {
   const base = process.env['BASE'];
   const head = process.env['HEAD'];
@@ -49,21 +58,19 @@ async function main() {
   const packagePaths = (await changedFiles(base, head, [])).filter((path) =>
     path.startsWith('packages/'),
   );
-  const addedChangesets = (await changedFiles(base, head, ['--diff-filter=A'])).filter(
-    isConsumableChangesetPath,
-  );
-  const decision = changesetDecision(packagePaths, addedChangesets);
+  const changedChangesets = await changedConsumableChangesets(base, head);
+  const decision = changesetDecision(packagePaths, changedChangesets);
 
   if (decision.publishable.length === 0) {
     console.log('no publishable package changes — tests and documentation do not need a changeset');
     return;
   }
   if (!decision.needsChangeset) {
-    console.log(`changeset present:\n${addedChangesets.join('\n')}`);
+    console.log(`changeset present:\n${changedChangesets.join('\n')}`);
     return;
   }
   console.error(
-    '::error::this PR changes published package contents but adds no changeset. Run `pnpm changeset`, or use the release exemption only for an intentional non-versioned change.',
+    '::error::this PR changes published package contents but adds or updates no changeset. Run `pnpm changeset`, or use the release exemption only for an intentional non-versioned change.',
   );
   console.error(`Publishable files:\n${decision.publishable.join('\n')}`);
   process.exitCode = 1;
