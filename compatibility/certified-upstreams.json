@@ -1,6 +1,21 @@
 {
   "schemaVersion": 1,
   "streams": {
+    "bubbles-v1": [
+      {
+        "candidateDigest": "sha256:21f9c9e7353d5ce1134989369b9cde0cc7c6b6cdba38406cde2a957bdf11fe57",
+        "patchManifestDigest": null,
+        "publishedAt": "2026-02-09T11:18:24Z",
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:9d/Zd5GdnauMI5ivUIVisuEm3ave1XwXtD1ckyV6r3E=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:12J8/ak/uCZEMQ6KU7pcfwceyjLlWsDLAxB5fXonfvc=",
+          "zipSha256": "b245dafe1f179d4f0ce17b950ce12ac884ab0c7f69fd2d2f282be68e373d5468"
+        },
+        "version": "v1.0.0"
+      }
+    ],
     "bubbles-v2": [
       {
         "candidateDigest": "sha256:4aee45a1ce8f2bf2ccf183aea213acb1ad5c96c32df0e04a1c28eeb12a4633b7",
