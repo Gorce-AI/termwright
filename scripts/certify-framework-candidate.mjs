@@ -527,17 +527,15 @@ export async function bindLocalTermwrightGoClient(
   runCommand = run,
 ) {
   const canonicalClientDir = await realpath(clientDir);
-  const result = await runCommand(
+  await runCommand(
     'go',
-    [
-      'mod',
-      'edit',
-      '-json',
-      `-replace=github.com/gorce-ai/termwright/clients/go=${canonicalClientDir}`,
-    ],
+    ['mod', 'edit', `-replace=github.com/gorce-ai/termwright/clients/go=${canonicalClientDir}`],
     env,
     moduleDir,
   );
+  // `go mod edit -json` is a print mode and does not persist edits. Verify in a
+  // separate invocation only after the replacement has been written to go.mod.
+  const result = await runCommand('go', ['mod', 'edit', '-json'], env, moduleDir);
   let edited;
   try {
     edited = JSON.parse(result.stdout);

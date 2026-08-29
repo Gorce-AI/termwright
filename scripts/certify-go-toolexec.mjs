@@ -186,14 +186,40 @@ try {
       'module github.com/gorce-ai/termwright/clients/go\n\ngo 1.22\n',
       'utf8',
     );
+    await writeFile(join(client, 'client.go'), 'package termwrightclient\n', 'utf8');
     await writeFile(
       join(app, 'go.mod'),
       'module example.com/candidate\n\ngo 1.22\n\nrequire github.com/gorce-ai/termwright/clients/go v0.0.0\n',
       'utf8',
     );
+    await writeFile(
+      join(app, 'main.go'),
+      'package main\n\nimport _ "github.com/gorce-ai/termwright/clients/go"\n\nfunc main() {}\n',
+      'utf8',
+    );
     const canonicalClient = await realpath(client);
-    const bound = await bindLocalTermwrightGoClient(app, process.env, client);
+    const candidateEnvironment = { ...process.env, GOWORK: 'off', GOPROXY: 'off' };
+    const bound = await bindLocalTermwrightGoClient(app, candidateEnvironment, client);
     assert(bound === canonicalClient, 'candidate certification bound a non-canonical Go client');
+    assert(
+      (await readFile(join(app, 'go.mod'), 'utf8')).includes(
+        `replace github.com/gorce-ai/termwright/clients/go => ${canonicalClient}`,
+      ),
+      'candidate certification did not persist the local Go client replacement',
+    );
+    await run('go', ['mod', 'tidy'], { cwd: app, env: candidateEnvironment });
+    const resolvedClient = JSON.parse(
+      (
+        await run('go', ['list', '-m', '-json', 'github.com/gorce-ai/termwright/clients/go'], {
+          cwd: app,
+          env: candidateEnvironment,
+        })
+      ).stdout,
+    );
+    assert(
+      resolvedClient?.Replace?.Dir === canonicalClient,
+      'candidate certification did not resolve the Termwright Go client from the bound directory',
+    );
   });
 
   await certify('owned source digest refusal', async () => {
