@@ -131,9 +131,6 @@ export async function prepareInstrumentedBuild(options: PrepareOptions): Promise
   });
 
   const builtModules: string[] = tea.built ? [flavour.module] : [];
-  const bubblesModule = BUBBLES_MODULES[flavour.major];
-  const bubblesVersion = flavour.companions[bubblesModule];
-
   const clientDir = options.clientDir ?? (await defaultClientDir(env));
   const replaces = [
     { from: flavour.module, to: tea.dir },
@@ -154,30 +151,48 @@ export async function prepareInstrumentedBuild(options: PrepareOptions): Promise
     replaces,
   });
   const buildEnv = { ...env, PWD: moduleDir, GOWORK: workspaceFile };
-  const bubblesToolExec =
-    bubblesVersion === undefined
-      ? null
-      : await prepareBubblesToolExec({
-          moduleDir,
-          module: bubblesModule,
-          version: bubblesVersion,
-          patchSetDir: requireBubblesUnitProfile(flavour.major, bubblesModule),
-          outputDir: join(dirname(workspaceFile), 'bubbles-toolexec'),
-          env: buildEnv,
-        });
+  const bubbles = await prepareBubblesCapability({
+    moduleDir,
+    major: flavour.major,
+    companions: flavour.companions,
+    outputDir: join(dirname(workspaceFile), 'bubbles-toolexec'),
+    env: buildEnv,
+  });
 
   return {
     moduleDir,
     flavour,
     workspaceFile,
     copyDir: tea.dir,
-    goArgs: bubblesToolExec?.goArgs ?? [],
-    toolExecFile: bubblesToolExec?.wrapperFile ?? null,
-    injectedModules: bubblesToolExec === null ? [] : [bubblesModule],
-    env: bubblesToolExec?.env ?? buildEnv,
+    goArgs: bubbles.toolExec?.goArgs ?? [],
+    toolExecFile: bubbles.toolExec?.wrapperFile ?? null,
+    injectedModules: bubbles.module === null ? [] : [bubbles.module],
+    env: bubbles.toolExec?.env ?? buildEnv,
     built: tea.built,
     builtModules,
   };
+}
+
+/** @internal Shared with hermetic tests of the production profile-selection path. */
+export async function prepareBubblesCapability(options: {
+  readonly moduleDir: string;
+  readonly major: CharmMajor;
+  readonly companions: Readonly<Record<string, string>>;
+  readonly outputDir: string;
+  readonly env: NodeJS.ProcessEnv;
+}) {
+  const module = BUBBLES_MODULES[options.major];
+  const version = options.companions[module];
+  if (version === undefined) return { module: null, toolExec: null } as const;
+  const toolExec = await prepareBubblesToolExec({
+    moduleDir: options.moduleDir,
+    module,
+    version,
+    patchSetDir: requireBubblesUnitProfile(options.major, module),
+    outputDir: options.outputDir,
+    env: options.env,
+  });
+  return { module, toolExec } as const;
 }
 
 async function prepareBubblesToolExec(options: {
