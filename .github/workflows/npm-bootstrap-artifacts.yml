@@ -66,19 +66,15 @@ jobs:
         with:
           ref: ${{ needs.authorize.outputs.commit }}
           persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: '9.4.0'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
-          cache: pnpm
       - name: Reconfirm registry scope immediately before sealing
         run: node scripts/check-npm-release-readiness.mjs --expect-missing scripts/npm-bootstrap-packages.json
       - name: Pack dependency-free prerelease placeholders outside the latest tag
         env:
           SOURCE_SHA: ${{ needs.authorize.outputs.commit }}
-        run: pnpm pack:npm-artifacts -- --artifact-mode bootstrap-placeholders --output bootstrap/npm --package-list scripts/npm-bootstrap-packages.json --manifest bootstrap/bootstrap-manifest.json --source-sha "$SOURCE_SHA"
+        run: node scripts/pack-npm-artifacts.mjs --artifact-mode bootstrap-placeholders --output bootstrap/npm --package-list scripts/npm-bootstrap-packages.json --manifest bootstrap/bootstrap-manifest.json --source-sha "$SOURCE_SHA"
       - name: Seal and independently verify inventory
         shell: bash
         env:
