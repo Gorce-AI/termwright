@@ -1359,6 +1359,216 @@
                 "version": "v0.42.0"
               }
             ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-18aad08a864c",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.4"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-1bb732a1e7e7",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.9.0"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-2e1f9f85038d",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.12.0"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-37b57eaa9d3e",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.8"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-38a8ea4ccad9",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.10.0"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-5864606874f6",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.11.0"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-636140b3ccdf",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.12.1"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-6abf383bff5b",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.3"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-728ee5922685",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.2"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-79f0a59f1a53",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.7"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-8c0a3723188a",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.1"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-a86c7107e699",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.12.2"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-ac516fbc1a34",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.0"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-dd8928ca7f9e",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.5"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
+          },
+          {
+            "frameworkVersion": "v0.42.0",
+            "id": "tview-v0.42.0-f1c124300df5",
+            "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.13.6"
+              },
+              {
+                "name": "github.com/rivo/tview",
+                "version": "v0.42.0"
+              }
+            ]
           }
         ]
       },
