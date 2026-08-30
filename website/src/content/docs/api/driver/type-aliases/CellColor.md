@@ -13,7 +13,7 @@ editUrl: false
 
 > **CellColor** = \{ `kind`: `"default"`; \} \| \{ `index`: `number`; `kind`: `"palette"`; \} \| \{ `b`: `number`; `g`: `number`; `kind`: `"rgb"`; `r`: `number`; \}
 
-Defined in: [driver/src/api.ts:409](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L409)
+Defined in: [driver/src/api.ts:411](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L411)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 

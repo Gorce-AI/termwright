@@ -13,7 +13,7 @@ editUrl: false
 
 > **LocatorForDomain**\<`D`\> = `D` *extends* `"semantic"` ? [`SemanticLocator`](../../interfaces/semanticlocator/) : [`ScreenLocator`](../../interfaces/screenlocator/)
 
-Defined in: [driver/src/api.ts:673](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L673)
+Defined in: [driver/src/api.ts:675](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L675)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 

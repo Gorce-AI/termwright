@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TextLocatorOptions
 
-Defined in: [driver/src/api.ts:519](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L519)
+Defined in: [driver/src/api.ts:521](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L521)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -40,4 +40,4 @@ await terminal.close();
 
 > `readonly` `optional` **exact?**: `boolean`
 
-Defined in: [driver/src/api.ts:520](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L520)
+Defined in: [driver/src/api.ts:522](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L522)
