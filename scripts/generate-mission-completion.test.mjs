@@ -24,19 +24,22 @@ describe('mission completion report', () => {
     ).toEqual([]);
     expect(report.releaseReadiness).toMatchObject({
       status: 'blocked',
+      blockingScope: 'external-release-infrastructure-state-only',
       technicalMissionPartialSections: [],
+      registryConfiguration: expect.stringContaining('remaining npm registry blockers'),
+      automationConfiguration: expect.stringContaining('remaining GitHub configuration blockers'),
     });
     expect(report.releaseReadiness.missingNpmRegistryBootstraps).toHaveLength(11);
   });
 
-  it('binds completed claims to reviewed first-attempt Windows evidence', () => {
+  it('binds completed claims to reviewed PR and post-merge first-attempt evidence', () => {
     const report = buildMissionCompletionReport();
 
-    expect(report.baselineHead).toBe('7cac4160c94868448c74e9b09ed7c082a2f3ef26');
+    expect(report.baselineHead).toBe('6f4ea467e6a8fd2b7789d9eb955557a414f0f59d');
     expect(report.baselineCiEvidence).toMatchObject({
       runId: '32918115508',
       headSha: '60f4db96df7611121e4ebec47dbdba99cbb40a21',
-      mergedAs: report.baselineHead,
+      mergedAs: '7cac4160c94868448c74e9b09ed7c082a2f3ef26',
     });
     expect(report.vitestReliabilityEvidence.jobs).toEqual([
       expect.objectContaining({
@@ -50,8 +53,28 @@ describe('mission completion report', () => {
     ]);
     expect(report.postMergeRegressionEvidence).toMatchObject({
       runId: '32919169129',
-      headSha: report.baselineHead,
-      status: expect.stringContaining('awaiting first-attempt CI'),
+      headSha: '7cac4160c94868448c74e9b09ed7c082a2f3ef26',
+      status: expect.stringContaining('resolved'),
+    });
+    expect(report.postMergeRegressionEvidence.status).not.toContain('awaiting');
+    expect(report.finalCertificationEvidence).toMatchObject({
+      treeSha: 'b2386e2a9a4e18953a9c896e99e7437a29c97581',
+      pr: {
+        runId: '33311771962',
+        headSha: '56feb020668ea43b8dc85246a356caf4f70307b2',
+        runAttempt: 1,
+        jobsPassed: 41,
+        jobsTotal: 41,
+        conclusion: 'success',
+      },
+      postMerge: {
+        runId: '33312798807',
+        headSha: report.baselineHead,
+        runAttempt: 1,
+        jobsPassed: 41,
+        jobsTotal: 41,
+        conclusion: 'success',
+      },
     });
     expect([53, 70, 81, 110, 114].map((section) => report.sections[section - 1]?.status)).toEqual([
       'already-fixed',

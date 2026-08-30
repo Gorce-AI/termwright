@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-08-26",
-  "baselineHead": "7cac4160c94868448c74e9b09ed7c082a2f3ef26",
+  "capturedAt": "2026-08-30",
+  "baselineHead": "6f4ea467e6a8fd2b7789d9eb955557a414f0f59d",
   "policy": {
     "productMode": "termwright-native-host-only",
     "backwardsCompatibility": false,
@@ -10,6 +10,7 @@
   },
   "releaseReadiness": {
     "status": "blocked",
+    "blockingScope": "external-release-infrastructure-state-only",
     "technicalMissionPartialSections": [],
     "missingNpmRegistryBootstraps": [
       "@termwright/evidence-provider",
@@ -24,7 +25,8 @@
       "@termwright/run-history",
       "@termwright/run-journal-transport"
     ],
-    "registryConfiguration": "Trusted-publisher configuration is registry-side state and remains unverified until the bootstrap packages exist and the release workflow can prove it."
+    "registryConfiguration": "The remaining npm registry blockers are to publish the reviewed bootstrap versions, configure release.yml / npm-publish as the trusted publisher for every new name, and deprecate @termwright/ink-testing@0.2.0 with the exact reviewed message.",
+    "automationConfiguration": "The remaining GitHub configuration blockers are to install the separate repository-only automation-writer and branch-policy-reader Apps, provide their trusted-autonomous-release environment credentials and AUTOMATION_WRITER_LOGIN, then explicitly authorize publication with TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED=true."
   },
   "baselineCiEvidence": {
     "runId": "32918115508",
@@ -47,11 +49,40 @@
     "observedAt": "2026-08-26",
     "platform": "windows-latest / Node 22",
     "failingTest": "packages/ink/src/fixture-rerender.test.ts",
-    "status": "root-caused; correction implemented in the current change and awaiting first-attempt CI",
+    "status": "resolved; retained as historical failure evidence",
+    "resolution": "The generation-bound correction is present in the final certified tree and completed both the PR and post-merge 41/41 first-attempt certification runs.",
     "classification": [
       "The same Git tree later exposed an Ink rerender race on a first-attempt main-branch run, so the successful PR run alone does not establish repeatable Windows stability.",
       "The old FIFO next-onRender boundary allowed a stale Ink callback to consume a newer mutation boundary and publish an authentic semantic revision paired with the previous screen.",
       "The correction binds each explicit mutation to a generation committed through the hidden Ink host node and binds control acknowledgements to command identities; no timeout, retry, sleep, skip, or weaker assertion is used."
+    ]
+  },
+  "finalCertificationEvidence": {
+    "treeSha": "b2386e2a9a4e18953a9c896e99e7437a29c97581",
+    "pr": {
+      "runId": "33311771962",
+      "headSha": "56feb020668ea43b8dc85246a356caf4f70307b2",
+      "runAttempt": 1,
+      "jobsPassed": 41,
+      "jobsTotal": 41,
+      "conclusion": "success",
+      "url": "https://github.com/Gorce-AI/termwright/actions/runs/33311771962",
+      "observedAt": "2026-08-30"
+    },
+    "postMerge": {
+      "runId": "33312798807",
+      "headSha": "6f4ea467e6a8fd2b7789d9eb955557a414f0f59d",
+      "runAttempt": 1,
+      "jobsPassed": 41,
+      "jobsTotal": 41,
+      "conclusion": "success",
+      "url": "https://github.com/Gorce-AI/termwright/actions/runs/33312798807",
+      "observedAt": "2026-08-30"
+    },
+    "classification": [
+      "The reviewed PR head and squash-merged main commit have the same Git tree.",
+      "Both independent workflow executions completed all 41 jobs successfully on attempt 1; no rerun supplied release evidence.",
+      "The matrix repeated Linux, macOS and Windows Node 22/24 builds, Windows x64/ARM64 native PTY contracts, lifecycle stress, framework conformance, Bun OpenTUI, deterministic coverage and 50 native cycles, resource/leak barriers, examples, clients, website and release hygiene."
     ]
   },
   "vitestReliabilityEvidence": {
@@ -88,7 +119,7 @@
       "Windows runs through @termwright/pty, whose native ConPTY session owns the pseudoconsole, both pipe ends and a job object created before the root could run; this is the same certified Windows implementation formerly packaged separately as @termwright/conpty.",
       "Certified on real Windows for Node 22 and 24: a stream that ends because the pipe ended with its last byte delivered, a codepoint split byte-by-byte across reads and reassembled, a tree proven empty by the job, a hard kill mid-burst, input reaching a silent child, a descendant delivering its own output in order, and a console-attached descendant not surviving its root.",
       "A descendant detached from the console does survive its root and is still owned and killable by the job, which is what identifies the console as what ends the other one.",
-      "The unified package defines six prebuilds for Darwin, Linux and Windows on x64 and arm64; the release remains blocked until fresh CI certifies each real artifact and a clean packed consumer install.",
+      "The unified package defines six prebuilds for Darwin, Linux and Windows on x64 and arm64; the final certification matrix exercises the native implementations and clean packed selection, while the bootstrap workflow materializes the exact six release artifacts from an authorized default-branch SHA.",
       "There is no fallback: a machine that cannot load its exact native addon raises rather than silently substituting a weaker output boundary.",
       "The Termwright-owned POSIX implementation removes the former private node-pty boundary and exposes the same authoritative EOF, exit and tree lifecycle contract without a timer or causal-output workaround."
     ]
