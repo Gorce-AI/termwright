@@ -46,6 +46,30 @@ const compatibilityStreams = [
 ];
 
 describe('framework candidate reconciliation', () => {
+  it('keeps the checked-in compatibility accumulator canonical and internally consistent when present', async () => {
+    const [source, ledgerSource, manifestSource] = await Promise.all([
+      readFile(
+        join(import.meta.dirname, '../.changeset/framework-compatibility-auto.md'),
+        'utf8',
+      ).catch((error) => {
+        if (error?.code === 'ENOENT') return null;
+        throw error;
+      }),
+      readFile(join(import.meta.dirname, '../compatibility/certified-upstreams.json'), 'utf8'),
+      readFile(join(import.meta.dirname, '../compatibility/upstream-patches.json'), 'utf8'),
+    ]);
+    if (source === null) return;
+
+    expect(
+      mergeCompatibilityChangeset(
+        source,
+        [],
+        JSON.parse(ledgerSource),
+        JSON.parse(manifestSource).streams,
+      ),
+    ).toBe(source);
+  });
+
   it('renders the generated changeset in the repository Prettier style', () => {
     expect(
       renderCompatibilityChangeset(new Set(['@termwright/probe-ink', '@termwright/ink']), [
