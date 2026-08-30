@@ -97,6 +97,8 @@ jobs:
 
       - name: Apply pending changesets
         id: version
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -394,6 +396,7 @@ jobs:
       - name: Independently reproduce the merged Version PR tree
         env:
           BASE_COMMIT: ${{ needs.detect.outputs.base }}
+          GITHUB_TOKEN: ${{ github.token }}
           RELEASE_COMMIT: ${{ needs.detect.outputs.commit }}
         shell: bash
         run: |

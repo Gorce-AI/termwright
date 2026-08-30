@@ -15,6 +15,14 @@ function jobBlock(workflow, jobName) {
     : workflow.slice(start, start + marker.length + nextJob);
 }
 
+function stepBlock(job, stepName) {
+  const marker = `      - name: ${stepName}\n`;
+  const start = job.indexOf(marker);
+  expect(start, `step ${stepName} must exist`).toBeGreaterThan(-1);
+  const nextStep = job.slice(start + marker.length).search(/^      - /mu);
+  return nextStep === -1 ? job.slice(start) : job.slice(start, start + marker.length + nextStep);
+}
+
 describe('autonomous workflow security', () => {
   it('keeps write privileges out of upstream certification', async () => {
     const workflow = await readWorkflow('upstream-candidates.yml');
@@ -305,6 +313,7 @@ describe('autonomous workflow security', () => {
 
   it('makes release prepare and publish explicit, SHA-bound dispatch modes with no push trigger', async () => {
     const workflow = await readWorkflow('release.yml');
+    const coordinatorWorkflow = await readWorkflow('autonomous-coordinator.yml');
     const npmPublish = jobBlock(workflow, 'npm');
     const finalize = jobBlock(workflow, 'finalize');
     expect(workflow).toContain(
@@ -333,6 +342,25 @@ describe('autonomous workflow security', () => {
     expect(prepare).not.toMatch(/^ {6}(?:actions|contents|pull-requests): write$/mu);
     expect(prepare).toContain('permission-contents: write');
     expect(prepare).toContain('permission-pull-requests: write');
+    const versionSteps = [
+      stepBlock(prepare, 'Apply pending changesets'),
+      stepBlock(jobBlock(workflow, 'verify'), 'Independently reproduce the merged Version PR tree'),
+      stepBlock(
+        jobBlock(coordinatorWorkflow, 'inspect'),
+        'Reproduce the Version PR from trusted base code and compare the entire Git tree',
+      ),
+    ];
+    for (const step of versionSteps) {
+      expect(step).toContain('GITHUB_TOKEN: ${{ github.token }}');
+      expect(step).toContain('pnpm changeset version');
+    }
+    for (const readOnlyJob of [
+      prepare,
+      jobBlock(workflow, 'verify'),
+      jobBlock(coordinatorWorkflow, 'inspect'),
+    ]) {
+      expect(readOnlyJob).not.toMatch(/^ {6}(?:actions|contents|pull-requests): write$/mu);
+    }
     expect(workflow).toContain('validate-version-pr');
     expect(workflow).toContain('Independently reproduce the merged Version PR tree');
     expect(workflow).toContain(
