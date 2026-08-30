@@ -13,7 +13,7 @@ describe('Ink React bridge under Bun', () => {
     const inkUrl = import.meta.resolve('ink');
     const reconcilerUrl = inkUrl.replace(/index\.js$/u, 'reconciler.js');
     const script = `
-      import {PassThrough} from 'node:stream';
+      import {Writable} from 'node:stream';
       import {createElement} from 'react';
       import {activateInkRendererObservation} from ${JSON.stringify(bridgeUrl)};
       const ink = await import(${JSON.stringify(inkUrl)});
@@ -26,16 +26,23 @@ describe('Ink React bridge under Bun', () => {
           nodeName: event.root.nodeName,
         });
       });
-      const stdout = new PassThrough();
+      // This test observes React commits, not terminal input or output. A raw
+      // PassThrough accidentally made Ink's lifecycle depend on Bun's
+      // Windows Transform lifecycle. Use a probe-owned output-only sink whose
+      // write callback is the causal completion signal Ink expects.
+      const stdout = new Writable({
+        write(_chunk, _encoding, callback) { callback(); },
+      });
       Object.defineProperties(stdout, {
         columns: {value: 20}, rows: {value: 8}, isTTY: {value: true},
       });
       const instance = ink.render(createElement(ink.Text, null, 'bun-bridge'), {
-        stdout, patchConsole: false, interactive: true,
+        stdout, patchConsole: false, interactive: false,
       });
       await instance.waitUntilRenderFlush();
+      const exited = instance.waitUntilExit();
       instance.unmount();
-      await instance.waitUntilExit();
+      await exited;
       release();
       console.log(JSON.stringify(commits));
     `;
