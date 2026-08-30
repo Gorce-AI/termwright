@@ -3572,6 +3572,32 @@
           "zipSha256": "a8990d22693e7a2805688943a5ae6212708ee81146bc3a0842efe0b2d7b98108"
         },
         "version": "v2.13.8"
+      },
+      {
+        "candidateDigest": "sha256:314fffb59eb5d4edee54905b8781db953618cd63c6518b0fd8c6f4f69a61f514",
+        "patchManifestDigest": null,
+        "publishedAt": "2026-04-20T06:02:32Z",
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:uI5l3DYPcFvHINKlGft+en23evOKL+dwtD21QR8ejVA=",
+          "zipSha256": "6db38818b17a7ede413eba4ca3c37867ee0a6af778233592ed8fa403c7876354"
+        },
+        "version": "v2.13.9"
+      },
+      {
+        "candidateDigest": "sha256:668cfed019fb8f922d2efd597a08a5362ceff40ad415a5f43da47158abc0e654",
+        "patchManifestDigest": null,
+        "publishedAt": "2026-05-06T16:35:18Z",
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:Afs3JKt83HnhuUKdZ3MnxUgOqQRWftj5JyDqv1LLynA=",
+          "zipSha256": "7664c451b58bb5fe7469e3dbda3711ac1d24206c13fff62f045e9e62ed1f2217"
+        },
+        "version": "v2.13.10"
       }
     ]
   }
