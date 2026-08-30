@@ -26,7 +26,7 @@ const termwrightMarkerOutputMode = uint32(0x0001 | 0x0004) // processed output +
 // TermwrightWriteMarker is defined on baseScreen because NewConsoleScreen
 // returns *baseScreen, whose embedded screenImpl interface otherwise hides
 // methods implemented only by the concrete *cScreen.
-func (b *baseScreen) TermwrightWriteMarker(marker string) error {
+func (b *baseScreen) TermwrightWriteMarker(marker string) (resultErr error) {
 	s, ok := b.screenImpl.(*cScreen)
 	if !ok {
 		return errors.New("tcell: screen is not the Windows console implementation")
@@ -36,9 +36,6 @@ func (b *baseScreen) TermwrightWriteMarker(marker string) error {
 	if s.fini {
 		return errors.New("tcell: screen is finalized")
 	}
-	if !s.vten {
-		return errors.New("tcell: Windows console has no VT output capability")
-	}
 	encoded := utf16.Encode([]rune(marker))
 	if len(encoded) == 0 {
 		return nil
@@ -47,17 +44,34 @@ func (b *baseScreen) TermwrightWriteMarker(marker string) error {
 	if ok, _, err := termwrightGetConsoleMode.Call(uintptr(s.out), uintptr(unsafe.Pointer(&originalMode))); ok == 0 {
 		return err
 	}
-	if ok, _, err := termwrightSetConsoleMode.Call(uintptr(s.out), uintptr(originalMode|termwrightMarkerOutputMode)); ok == 0 {
-		return err
+	// Inspect the real writer capability instead of tcell's historical `vten`
+	// implementation field. tcell <= 2.11 used that field to select a legacy
+	// renderer, while >= 2.12 requires VT during screen initialization and no
+	// longer declares it. Vendored ordered-passthrough ConPTY serializes both
+	// legacy Console API output and VT on this handle, so a legacy frame can be
+	// followed by a temporarily VT-enabled marker without weakening ordering.
+	if originalMode&termwrightMarkerOutputMode != termwrightMarkerOutputMode {
+		if ok, _, err := termwrightSetConsoleMode.Call(uintptr(s.out), uintptr(originalMode|termwrightMarkerOutputMode)); ok == 0 {
+			return err
+		}
+		defer func() {
+			restored, _, restoreErr := termwrightSetConsoleMode.Call(uintptr(s.out), uintptr(originalMode))
+			if restored == 0 && resultErr == nil {
+				resultErr = restoreErr
+			}
+		}()
+		var activeMode uint32
+		if ok, _, err := termwrightGetConsoleMode.Call(uintptr(s.out), uintptr(unsafe.Pointer(&activeMode))); ok == 0 {
+			return err
+		}
+		if activeMode&termwrightMarkerOutputMode != termwrightMarkerOutputMode {
+			return errors.New("tcell: active Windows console output could not enable VT processing")
+		}
 	}
 	var written uint32
 	writeErr := syscall.WriteConsole(s.out, &encoded[0], uint32(len(encoded)), &written, nil)
-	restored, _, restoreErr := termwrightSetConsoleMode.Call(uintptr(s.out), uintptr(originalMode))
 	if writeErr != nil {
 		return writeErr
-	}
-	if restored == 0 {
-		return restoreErr
 	}
 	if written != uint32(len(encoded)) {
 		return io.ErrShortWrite

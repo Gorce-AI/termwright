@@ -81,8 +81,14 @@ complete accepted snapshot.
 The marker is written after admission and through the same sink as `Show`:
 
 - Unix uses public `Screen.Tty()`;
-- Windows uses a T1 tcell unit which reaches `cScreen`'s active console handle
-  and preserves the VT mode needed by the private OSC marker.
+- Windows uses a T1 tcell unit which reaches `cScreen`'s framework-owned console
+  handle and verifies its live output mode with `GetConsoleMode` before writing
+  the private OSC marker. It does not depend on tcell's former private `vten`
+  switch: tcell 2.12 removed that field when its Windows backend made VT support
+  mandatory. For an older legacy render, vendored ordered-passthrough ConPTY
+  preserves the Console API writes on the same stream; the unit enables VT only
+  around the marker, verifies the mode, and restores every unrelated flag on
+  every exit path.
 
 There is no stdout fallback. Admission refusal, worker failure, partial marker
 write or missing sink closes semantic publication. Timeouts remain watchdogs,

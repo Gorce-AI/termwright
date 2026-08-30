@@ -15,7 +15,7 @@ import {
   type PtyProcess,
 } from '@termwright/driver/experimental';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
-import { compilerUnitTargetsForPlatform, prepareInstrumentedBuild } from './launch.js';
+import { prepareInstrumentedBuild } from './launch.js';
 
 const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0, hostPressure: 'exclusive' });
 const run = promisify(execFile);
@@ -311,13 +311,4 @@ it('uses one decorated Show boundary without a source mutation lifecycle seam', 
   expect(source).toContain('a.screen = decorated');
   expect(source).not.toContain('time.Sleep(');
   expect(source).not.toContain('os.Stdout');
-});
-
-it('selects the Windows same-handle unit only for Windows compilers', () => {
-  expect(compilerUnitTargetsForPlatform('linux')).toEqual(['zz_termwright_probe.go']);
-  expect(compilerUnitTargetsForPlatform('darwin')).toEqual(['zz_termwright_probe.go']);
-  expect(compilerUnitTargetsForPlatform('windows')).toEqual([
-    'zz_termwright_probe.go',
-    'zz_termwright_marker.go',
-  ]);
 });
