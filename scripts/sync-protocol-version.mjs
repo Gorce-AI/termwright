@@ -40,6 +40,31 @@ const check = process.argv.includes('--check');
 const SOURCE = 'packages/protocol/package.json';
 const COMPATIBILITY_REGISTRY = 'compatibility/registry.json';
 const COMPATIBILITY_VERSION_ENTRIES = 12;
+const compatibilityAddedUnitSources = [
+  {
+    framework: 'tview',
+    capability: 'private-widget-state',
+    target: 'zz_termwright_probe.go',
+    source: 'packages/probe-tview/assets/tview_probe.go.txt',
+  },
+  {
+    framework: 'tview',
+    capability: 'same-writer-marker',
+    target: 'zz_termwright_marker.go',
+    source: 'packages/probe-tview/assets/tcell_marker_windows.go.txt',
+    transform: (source) => source.replace(/^\/\/go:build windows\n\n/u, ''),
+  },
+];
+const cargoLockstepPackages = new Set([
+  'termwright-protocol',
+  'termwright-probe-ratatui',
+  'termwright-ratatui',
+]);
+const cargoDependencyManifests = [
+  'clients/rust/Cargo.toml',
+  'clients/rust-probe/Cargo.toml',
+  'clients/rust-ratatui/Cargo.toml',
+];
 const patchChecksums = [
   {
     source: 'packages/probe-charm/upstream-patches/bubbletea/v1.3.10/add/termwright_probe.go',
@@ -174,12 +199,6 @@ const targets = [
     render: (version) => `version = "${version}"`,
   },
   {
-    file: 'clients/rust-probe/Cargo.toml',
-    pattern: /(?<=termwright-protocol = \{ path = "\.\.\/rust", version = ")([^"]+)(?=" \})/,
-    render: (version) => version,
-    whole: true,
-  },
-  {
     file: 'clients/rust-probe/Cargo.lock',
     pattern: /(?<=name = "termwright-probe-ratatui"\nversion = ")([^"]+)(?=")/,
     render: (version) => version,
@@ -195,13 +214,6 @@ const targets = [
     file: 'clients/rust-ratatui/Cargo.toml',
     pattern: /^version = "(.+)"$/m,
     render: (version) => `version = "${version}"`,
-  },
-  {
-    file: 'clients/rust-ratatui/Cargo.toml',
-    pattern:
-      /(?<=termwright-probe-ratatui = \{ path = "\.\.\/rust-probe", version = ")([^"]+)(?=" \})/,
-    render: (version) => version,
-    whole: true,
   },
   {
     file: 'clients/rust-ratatui/Cargo.lock',
@@ -253,6 +265,115 @@ const targets = [
   },
 ];
 
+/**
+ * Cargo path dependencies still need a registry version for `cargo package`.
+ * Keep every dependency edge between the lockstep crates on the release
+ * version, regardless of which crate happens to depend on which. This is
+ * deliberately graph-shaped rather than a list of known edges: adding a new
+ * direct dependency cannot be forgotten by the release transform.
+ */
+export function rewriteCargoPathDependencies(source, version, file = 'Cargo.toml') {
+  const changes = [];
+  const output = source.replace(
+    /^(\s*([A-Za-z0-9_-]+)\s*=\s*\{[^\r\n]*\bpath\s*=\s*"[^"]+"[^\r\n]*\}\s*(?:#.*)?)$/gm,
+    (line, _declaration, packageName) => {
+      if (!cargoLockstepPackages.has(packageName)) return line;
+
+      const versionPattern = /(\bversion\s*=\s*")([^"]+)(")/;
+      const match = versionPattern.exec(line);
+      if (match === null) {
+        throw new Error(
+          `${file}: path dependency ${packageName} must declare a registry version for publishing`,
+        );
+      }
+      if (match[2] === version) return line;
+
+      changes.push({ packageName, current: match[2] });
+      return line.replace(versionPattern, `$1${version}$3`);
+    },
+  );
+
+  return { output, changes };
+}
+
+export function synchronizeCompatibilityRegistry(registry, version, addedUnitDigests) {
+  const drift = [];
+  const unmatchedAddedUnits = new Set(addedUnitDigests.keys());
+  let packageVersionEntries = 0;
+  let changed = false;
+
+  for (const framework of registry.frameworks ?? []) {
+    for (const owner of [framework.probe, framework.annotations]) {
+      if (owner === null || typeof owner?.packageVersion !== 'string') continue;
+      packageVersionEntries += 1;
+      const expectedVersion = owner.packageVersion.startsWith('v') ? `v${version}` : version;
+      if (owner.packageVersion === expectedVersion) continue;
+      drift.push({ file: COMPATIBILITY_REGISTRY, current: owner.packageVersion });
+      owner.packageVersion = expectedVersion;
+      changed = true;
+    }
+
+    const adapterVersion = framework.probe?.packageVersion;
+    if (typeof adapterVersion !== 'string') {
+      fail(`${COMPATIBILITY_REGISTRY}: ${framework.id ?? '<unknown>'} has no probe packageVersion`);
+    }
+    if (framework.certification?.adapterVersion !== adapterVersion) {
+      drift.push({
+        file: COMPATIBILITY_REGISTRY,
+        current: framework.certification?.adapterVersion ?? '<missing adapterVersion>',
+      });
+      framework.certification.adapterVersion = adapterVersion;
+      changed = true;
+    }
+
+    const capabilityId =
+      framework.certification.strategy === 'compile-and-behavioral-capability'
+        ? 'compile-capability'
+        : 'runtime-capability';
+    const expectedIds =
+      framework.versions.policy === 'capability'
+        ? [`${framework.id}@${capabilityId}/${adapterVersion}`]
+        : framework.versions.verified.map(
+            (frameworkVersion) => `${framework.id}@${frameworkVersion}/${adapterVersion}`,
+          );
+    if (JSON.stringify(framework.certification.ids) !== JSON.stringify(expectedIds)) {
+      drift.push({
+        file: COMPATIBILITY_REGISTRY,
+        current: (framework.certification.ids ?? []).join(', ') || '<missing certification ids>',
+      });
+      framework.certification.ids = expectedIds;
+      changed = true;
+    }
+
+    for (const intervention of framework.instrumentation?.interventions ?? []) {
+      for (const unit of intervention.addedUnits ?? []) {
+        const key = `${framework.id}/${intervention.capability}/${unit.target}`;
+        const expectedDigest = addedUnitDigests.get(key);
+        if (expectedDigest === undefined) continue;
+        unmatchedAddedUnits.delete(key);
+        if (unit.sourceDigest === expectedDigest) continue;
+        drift.push({ file: COMPATIBILITY_REGISTRY, current: unit.sourceDigest });
+        unit.sourceDigest = expectedDigest;
+        changed = true;
+      }
+    }
+  }
+
+  if (packageVersionEntries !== COMPATIBILITY_VERSION_ENTRIES) {
+    fail(
+      `${COMPATIBILITY_REGISTRY}: expected ${COMPATIBILITY_VERSION_ENTRIES} ` +
+        `Termwright packageVersion entries, found ${packageVersionEntries}`,
+    );
+  }
+  if (unmatchedAddedUnits.size > 0) {
+    throw new Error(
+      `${COMPATIBILITY_REGISTRY}: configured added units not found: ${[...unmatchedAddedUnits].join(', ')}`,
+    );
+  }
+
+  return { changed, drift };
+}
+
 async function main() {
   const manifest = JSON.parse(await readFile(path.join(root, SOURCE), 'utf8'));
   const version = manifest.version;
@@ -281,6 +402,29 @@ async function main() {
     console.log(`updated ${target.file}: ${current} -> ${version}`);
   }
 
+  for (const target of cargoDependencyManifests) {
+    const file = path.join(root, target);
+    const before = await readFile(file, 'utf8');
+    let rewritten;
+    try {
+      rewritten = rewriteCargoPathDependencies(before, version, target);
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
+
+    for (const change of rewritten.changes) {
+      drift.push({ file: `${target} (${change.packageName})`, current: change.current });
+    }
+    if (!check && rewritten.changes.length > 0) {
+      await writeFile(file, rewritten.output);
+      for (const change of rewritten.changes) {
+        console.log(
+          `updated ${target} dependency ${change.packageName}: ${change.current} -> ${version}`,
+        );
+      }
+    }
+  }
+
   // Exact Bubble Tea probe sources are copied into upstream framework modules.
   // Their manifests intentionally pin the exact resulting bytes, so changing
   // the handshake version must refresh those checksums in the same operation.
@@ -303,37 +447,26 @@ async function main() {
     console.log(`updated ${target.manifest}: ${target.manifestSource} -> ${expected}`);
   }
 
-  // The compatibility registry is executable release metadata: its drift
-  // test compares these package versions with npm, Python, Go and Rust
-  // manifests. Changesets cannot update a JSON document outside package.json,
-  // so leaving this out would make every generated Version PR fail its own
-  // release-hygiene gate. Go module versions retain their leading `v`.
+  // The compatibility registry is executable release metadata. Besides its
+  // package versions, certification identities and owned-unit digests are
+  // derived from release-versioned sources and must move in the same operation.
   const registryFile = path.join(root, COMPATIBILITY_REGISTRY);
-  const registryBefore = await readFile(registryFile, 'utf8');
-  const packageVersionPattern = /"packageVersion": "(v?)([^"]+)"/g;
-  const registryVersions = [...registryBefore.matchAll(packageVersionPattern)];
-  if (registryVersions.length !== COMPATIBILITY_VERSION_ENTRIES) {
-    fail(
-      `${COMPATIBILITY_REGISTRY}: expected ${COMPATIBILITY_VERSION_ENTRIES} ` +
-        `Termwright packageVersion entries, found ${registryVersions.length}`,
-    );
+  const registry = JSON.parse(await readFile(registryFile, 'utf8'));
+  const addedUnitDigests = new Map();
+  for (const unit of compatibilityAddedUnitSources) {
+    const raw = await readFile(path.join(root, unit.source), 'utf8');
+    const source = unit.transform === undefined ? raw : unit.transform(raw);
+    const key = `${unit.framework}/${unit.capability}/${unit.target}`;
+    if (addedUnitDigests.has(key)) {
+      throw new Error(`${COMPATIBILITY_REGISTRY}: duplicate added-unit source mapping: ${key}`);
+    }
+    addedUnitDigests.set(key, `sha256:${createHash('sha256').update(source).digest('hex')}`);
   }
-  const registryDrift = registryVersions.filter((match) => match[2] !== version);
-  for (const match of registryDrift) {
-    drift.push({
-      file: COMPATIBILITY_REGISTRY,
-      current: `${match[1]}${match[2]}`,
-    });
-  }
-  if (!check && registryDrift.length > 0) {
-    const after = registryBefore.replace(
-      packageVersionPattern,
-      (_whole, prefix) => `"packageVersion": "${prefix}${version}"`,
-    );
-    await writeFile(registryFile, after);
-    console.log(
-      `updated ${COMPATIBILITY_REGISTRY}: ${registryDrift.length} package version entries -> ${version}`,
-    );
+  const registrySync = synchronizeCompatibilityRegistry(registry, version, addedUnitDigests);
+  drift.push(...registrySync.drift);
+  if (!check && registrySync.changed) {
+    await writeFile(registryFile, `${JSON.stringify(registry, null, 2)}\n`);
+    console.log(`updated ${COMPATIBILITY_REGISTRY}: derived release metadata -> ${version}`);
   }
 
   if (drift.length === 0) {
@@ -362,4 +495,9 @@ function fail(message) {
   process.exit(1);
 }
 
-await main();
+if (
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  await main();
+}
