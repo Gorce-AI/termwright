@@ -3599,6 +3599,21 @@
         },
         "version": "v2.13.10"
       }
+    ],
+    "tview": [
+      {
+        "candidateDigest": "sha256:027849edb4167ceda37f050817b77d0bf0728453e42b57d5b8d3787e5409dd5a",
+        "patchManifestDigest": null,
+        "publishedAt": "2025-08-27T19:41:14Z",
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:cSfIYfhpSGCjp3r/ECJb+GKS7cGJnqV8vfjQPwoXyfY=",
+          "proxy": "https://proxy.golang.org",
+          "sum": "h1:b/ftp+RxtDsHSaynXTbJb+/n/BxDEi+W3UfF5jILK6c=",
+          "zipSha256": "49acb1cd8fcda0bda8702e25283b6651e444fb5f21deca81157299be624b9b12"
+        },
+        "version": "v0.42.0"
+      }
     ]
   }
 }
