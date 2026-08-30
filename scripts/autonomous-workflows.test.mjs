@@ -347,7 +347,6 @@ describe('autonomous workflow security', () => {
   it('keeps the one-time npm bootstrap path artifact-only and fail-closed', async () => {
     const workflow = await readWorkflow('npm-bootstrap-artifacts.yml');
     const authorize = jobBlock(workflow, 'authorize');
-    const prebuilds = jobBlock(workflow, 'prebuilds');
     const seal = jobBlock(workflow, 'seal');
 
     expect(workflow).toContain('workflow_dispatch:');
@@ -358,9 +357,10 @@ describe('autonomous workflow security', () => {
     expect(workflow.match(/--expect-missing scripts\/npm-bootstrap-packages\.json/gu)).toHaveLength(
       2,
     );
-    expect(prebuilds.match(/- \{ platform: /gu)).toHaveLength(6);
-    expect(prebuilds).toContain('uses: ./.github/actions/build-pty-prebuild');
-    expect(seal).toContain('node scripts/check-prebuild.mjs --all');
+    expect(workflow).not.toMatch(/prebuilds:|build-pty-prebuild|setup-bun|check-prebuild/u);
+    expect(seal).toContain('pack and seal registry bootstrap placeholders');
+    expect(seal).toContain('Pack dependency-free prerelease placeholders outside the latest tag');
+    expect(seal).toContain('--artifact-mode bootstrap-placeholders');
     expect(seal).toContain('--package-list scripts/npm-bootstrap-packages.json');
     expect(seal).toContain('node scripts/verify-npm-bootstrap-artifacts.mjs bootstrap');
     expect(seal).toContain('sha256sum --check SHA256SUMS');

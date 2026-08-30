@@ -9,6 +9,14 @@ import { checkNpmReleaseReadiness } from './check-npm-release-readiness.mjs';
 const roots = [];
 const exec = promisify(execFile);
 const message = 'Package retired; use @termwright/ink instead.';
+const bootstrapMessage = 'Registry bootstrap placeholder; install version 0.3.0 or newer.';
+const bootstrapPolicy = {
+  schemaVersion: 2,
+  version: '0.0.0-bootstrap.0',
+  tag: 'bootstrap',
+  deprecationMessage: bootstrapMessage,
+  packages: ['@termwright/new-package'],
+};
 const policy = {
   schemaVersion: 1,
   scope: '@termwright',
@@ -25,25 +33,37 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function workspace(names = ['@termwright/ink', '@termwright/new-package']) {
+async function workspace(
+  names = ['@termwright/ink', '@termwright/new-package'],
+  version = '0.2.0',
+) {
   const root = await mkdtemp(join(tmpdir(), 'tw-npm-readiness-'));
   roots.push(root);
   await Promise.all(
     names.map(async (name, index) => {
       const directory = join(root, `package-${index}`);
       await mkdir(directory);
-      await writeFile(join(directory, 'package.json'), `${JSON.stringify({ name })}\n`);
+      await writeFile(join(directory, 'package.json'), `${JSON.stringify({ name, version })}\n`);
     }),
   );
   return root;
 }
 
-function fetcher({ inventory, deprecated = message, inventoryStatus = 200, retiredVersions }) {
+function fetcher({
+  inventory,
+  deprecated = message,
+  inventoryStatus = 200,
+  retiredVersions,
+  bootstrapPackument,
+}) {
   return async (url) => {
     if (url.includes('/-/org/termwright/package')) {
       return response(inventoryStatus, inventory);
     }
-    if (url.endsWith('%40termwright%2Fnew-package')) return response(404, {});
+    if (url.endsWith('%40termwright%2Fnew-package'))
+      return bootstrapPackument === undefined
+        ? response(404, {})
+        : response(200, bootstrapPackument);
     if (url.endsWith('%40termwright%2Fink-testing')) {
       return response(200, {
         versions: retiredVersions ?? { '0.2.0': { deprecated } },
@@ -108,12 +128,124 @@ describe('npm release namespace readiness', () => {
       checkNpmReleaseReadiness({
         packagesRoot: await workspace(),
         retiredPolicy: policy,
+        bootstrapPolicy,
         expectedMissing: ['@termwright/new-package'],
         fetchImpl: fetcher({
           inventory: { '@termwright/ink': 'write', '@termwright/ink-testing': 'write' },
         }),
       }),
     ).resolves.toContain('exactly the reviewed 1-package bootstrap scope');
+  });
+
+  it('accepts only the exact deprecated non-latest registry bootstrap placeholder', async () => {
+    const exact = {
+      versions: {
+        '0.0.0-bootstrap.0': { deprecated: bootstrapMessage },
+      },
+      'dist-tags': { bootstrap: '0.0.0-bootstrap.0' },
+    };
+    await expect(
+      checkNpmReleaseReadiness({
+        packagesRoot: await workspace(),
+        retiredPolicy: policy,
+        bootstrapPolicy,
+        fetchImpl: fetcher({
+          inventory: {
+            '@termwright/ink': 'write',
+            '@termwright/ink-testing': 'write',
+            '@termwright/new-package': 'write',
+          },
+          bootstrapPackument: exact,
+        }),
+      }),
+    ).resolves.toContain('every public workspace package exists');
+
+    const afterFunctionalRelease = {
+      versions: {
+        '0.0.0-bootstrap.0': { deprecated: bootstrapMessage },
+        '0.3.0': {},
+      },
+      'dist-tags': { bootstrap: '0.0.0-bootstrap.0', latest: '0.3.0' },
+    };
+    await expect(
+      checkNpmReleaseReadiness({
+        packagesRoot: await workspace(undefined, '0.3.0'),
+        retiredPolicy: policy,
+        bootstrapPolicy,
+        fetchImpl: fetcher({
+          inventory: {
+            '@termwright/ink': 'write',
+            '@termwright/ink-testing': 'write',
+            '@termwright/new-package': 'write',
+          },
+          bootstrapPackument: afterFunctionalRelease,
+        }),
+      }),
+    ).resolves.toContain('every public workspace package exists');
+
+    for (const bootstrapPackument of [
+      { versions: {}, 'dist-tags': { bootstrap: '0.0.0-bootstrap.0' } },
+      {
+        versions: { '0.0.0-bootstrap.0': {} },
+        'dist-tags': { bootstrap: '0.0.0-bootstrap.0' },
+      },
+      {
+        versions: { '0.0.0-bootstrap.0': { deprecated: bootstrapMessage } },
+        'dist-tags': { latest: '0.0.0-bootstrap.0' },
+      },
+      {
+        versions: { '0.0.0-bootstrap.0': { deprecated: bootstrapMessage } },
+        'dist-tags': { bootstrap: '0.0.0-bootstrap.0', latest: '9.9.9' },
+      },
+      {
+        versions: {
+          '0.0.0-bootstrap.0': { deprecated: bootstrapMessage },
+          '9.9.9': {},
+        },
+        'dist-tags': { bootstrap: '0.0.0-bootstrap.0', latest: '9.9.9' },
+      },
+      {
+        versions: {
+          '0.0.0-bootstrap.0': { deprecated: bootstrapMessage },
+          '9.9.9': {},
+        },
+        'dist-tags': { bootstrap: '0.0.0-bootstrap.0' },
+      },
+      {
+        versions: {
+          '0.0.0-bootstrap.0': { deprecated: bootstrapMessage },
+          '0.3.0-rc.1': {},
+        },
+        'dist-tags': { bootstrap: '0.0.0-bootstrap.0' },
+      },
+      {
+        versions: {
+          '0.0.0-bootstrap.0': {
+            deprecated: bootstrapMessage,
+            dependencies: { '@termwright/protocol': '0.2.0' },
+          },
+        },
+        'dist-tags': { bootstrap: '0.0.0-bootstrap.0' },
+      },
+    ]) {
+      await expect(
+        checkNpmReleaseReadiness({
+          packagesRoot: await workspace(),
+          retiredPolicy: policy,
+          bootstrapPolicy,
+          fetchImpl: fetcher({
+            inventory: {
+              '@termwright/ink': 'write',
+              '@termwright/ink-testing': 'write',
+              '@termwright/new-package': 'write',
+            },
+            bootstrapPackument,
+          }),
+        }),
+      ).rejects.toThrow(
+        /bootstrap|deprecated|latest|administrative placeholder|reviewed functional release/u,
+      );
+    }
   });
 
   it('rejects an unreviewed package in the npm organization inventory', async () => {
