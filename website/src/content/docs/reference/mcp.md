@@ -18,7 +18,7 @@ trace APIs. Every tool declares input and output schemas and returns
 | `terminal.launch` | Starts a program in a real pseudo-terminal and returns a terminal handle plus the first snapshot. The child gets a minimal environment unless envMode is "inherit"; values passed in env are never echoed back. |
 | `terminal.capabilities` | What this session supports: whether a semantic tree is published, which adapter publishes it, and the terminal geometry. Call it before relying on role-based targeting. |
 | `terminal.snapshot` | One typed view of the terminal: compact semantic refs, visible text, cursor, terminal modes and scroll position. variant "full" writes the complete dump (text, ANSI, HTML, semantic tree) to disk and returns only refs plus the file path. The returned revision is the cursor for terminal.capture_since. |
-| `terminal.capture_since` | Incremental view: the screen rows that differ and the semantic subtrees that were added, removed or updated since the given cursor. The cursor must be a revision this server handed out earlier (snapshot or capture_since); older cursors fail with history-truncated. |
+| `terminal.capture_since` | Incremental view: the screen rows that differ and the semantic subtrees that were added, removed or updated in the latest committed semantic tree since the given cursor. A screen change alone does not imply a future semantic commit; wait for an explicit semantic state when the caller requires one. The cursor must be a revision this server handed out earlier (snapshot or capture_since); older cursors fail with history-truncated. |
 | `terminal.query` | Resolves a target to refs without acting on it. Use it to check how many nodes a locator matches before clicking, or to turn a role/name into a ref. |
 | `terminal.checkpoint` | Returns the atomic session/contract/screen/semantic identity used by revision-safe actions and waits. |
 | `terminal.actionability` | Runs the same ActionPlanner used by execution, but sends no input. Reports every authoritative requirement and the chosen strategy or typed rejection. |
@@ -73,9 +73,11 @@ snapshot after their revision becomes stale.
 ## Capture cursors
 
 `terminal.snapshot` returns a screen revision. `terminal.capture_since` accepts
-that revision as `cursor` and returns only changed rows and semantic subtrees.
-The server retains the last 16 captures per terminal. Unknown or expired
-cursors return `history-truncated`.
+that revision as `cursor` and returns only changed rows and changes in the latest
+committed semantic tree. A wait for PTY text proves visual output only; when a
+semantic result matters, wait for its explicit locator state before capturing.
+The server retains the last 16 captures per terminal. Unknown or expired cursors
+return `history-truncated`.
 
 ## Sessions and limits
 

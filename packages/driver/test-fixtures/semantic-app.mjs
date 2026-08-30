@@ -34,6 +34,10 @@ const forgedMarkerProbe = process.env['TERMWRIGHT_FIXTURE_FORGED_MARKER'] === '1
 const terminalMouseEnabled = process.env['TERMWRIGHT_FIXTURE_MOUSE_MODE'] !== '0';
 const firstTreeDelay = Number(process.env['TERMWRIGHT_FIXTURE_FIRST_TREE_DELAY'] ?? '0');
 const pendingFocusFrame = process.env['TERMWRIGHT_FIXTURE_PENDING_FOCUS_FRAME'] === '1';
+// Holds every semantic signal until after the new PTY frame is visible. This
+// reproduces the cross-channel gap where screen-only output and the prefix of
+// a future semantic render are deliberately indistinguishable to the driver.
+const screenFirstFocusFrame = process.env['TERMWRIGHT_FIXTURE_SCREEN_FIRST_FRAME'] === '1';
 const focusControlPort = Number(process.env['TERMWRIGHT_FIXTURE_FOCUS_CONTROL_PORT'] ?? '0');
 const unpairedRefreshDelay = Number(
   process.env['TERMWRIGHT_FIXTURE_UNPAIRED_REFRESH_DELAY'] ?? '100',
@@ -148,7 +152,34 @@ function releasePendingFocusCommit() {
   });
 }
 
-if (pendingFocusFrame && Number.isInteger(focusControlPort) && focusControlPort > 0) {
+function releaseScreenFirstFocusFrame() {
+  if (!screenFirstFocusFrame || pendingFocusCommit === null) process.exit(6);
+  const pending = pendingFocusCommit;
+  pendingFocusCommit = null;
+  enqueueOutput(async () => {
+    await writeSocketAndFlush(
+      pending.socket,
+      encodeFrame({ type: 'snapshot', snapshot: pending.snapshot }, 1024 * 1024),
+    );
+    await writeSocketAndFlush(
+      pending.socket,
+      encodeFrame({ type: 'revision-commit', revision: pending.revision }, 1024 * 1024),
+    );
+    await writeAndFlush(encodeMarker(token, pending.sessionId, pending.revision));
+    await writeSocketAndFlush(focusControl, 'S');
+  });
+}
+
+function confirmScreenFirstFocusHeld() {
+  if (!screenFirstFocusFrame || pendingFocusCommit === null) process.exit(6);
+  enqueueOutput(() => writeSocketAndFlush(focusControl, 'H'));
+}
+
+if (
+  (pendingFocusFrame || screenFirstFocusFrame) &&
+  Number.isInteger(focusControlPort) &&
+  focusControlPort > 0
+) {
   focusControl = connect({ host: '127.0.0.1', port: focusControlPort }, () => {
     focusControl.write('R');
   });
@@ -156,6 +187,8 @@ if (pendingFocusFrame && Number.isInteger(focusControlPort) && focusControlPort 
     for (const byte of chunk) {
       if (byte === 0x4d) releasePendingFocusMarker();
       else if (byte === 0x43) releasePendingFocusCommit();
+      else if (byte === 0x53) releaseScreenFirstFocusFrame();
+      else if (byte === 0x48) confirmScreenFirstFocusHeld();
       else process.exit(6);
     }
   });
@@ -722,6 +755,20 @@ process.stdin.on('data', (chunk) => {
     // an action starts. That forces marker observation while FRAME_END remains
     // withheld; runner speed cannot decide which branch the test covers.
     enqueueOutput(() => writeAndFlush(pendingFrame));
+    return;
+  }
+  if (text === 'F' && screenFirstFocusFrame) {
+    revision += 1;
+    focused = 'reject';
+    pendingFocusCommit = {
+      revision,
+      sessionId,
+      socket,
+      snapshot: fullSnapshot(),
+    };
+    // No frame-begin, snapshot, commit or marker is emitted yet. Seeing this
+    // frame therefore cannot tell the driver whether semantics will follow.
+    enqueueOutput(() => writeAndFlush(render()));
     return;
   }
   if (text === 'R') {

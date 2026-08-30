@@ -102,6 +102,10 @@ const CONVENTIONS = [
     'be re-resolved in later revisions; frame-local identities and grid refs must be refreshed.',
   'terminal.snapshot returns a screen revision; pass it to terminal.capture_since as cursor to get ' +
     'only the rows and semantic subtrees that changed.',
+  'A wait for PTY text proves visual output, not that a future semantic frame has committed. When ' +
+    'semantic state matters, wait for its explicit locator condition before capture_since.',
+  'A semantic postcondition proves a new commit only when the baseline did not already satisfy it; ' +
+    "choose a condition that represents the action's actual state change.",
   'Any name or text argument may be written as "/pattern/flags" to match as a regular expression.',
   TARGETING_GUIDANCE.precedence,
   'Locators are strict: more than one match fails with kind "ambiguous-locator" unless nth is given.',
@@ -156,8 +160,9 @@ export function buildUsage(): string {
     'typical loop',
     '  terminal.launch {command:["node","app.js"]}   -> terminal "t1" + first snapshot',
     '  terminal.snapshot {terminal:"t1"}             -> refs semantic:n8@42 + visible text + revision',
-    '  terminal.click {terminal:"t1", ref:"semantic:n8@42"} -> real mouse report through the PTY',
-    '  terminal.wait_for {terminal:"t1", wait:"text", text:"Approved"}',
+    '  terminal.click {terminal:"t1", ref:"semantic:n9@42"} -> real mouse report through the PTY',
+    '  terminal.wait_for {terminal:"t1", wait:"text", text:"Rejected"}',
+    '  terminal.wait_for {terminal:"t1", wait:"focused", testId:"reject"} -> changed semantic state',
     '  terminal.capture_since {terminal:"t1", cursor:42} -> only what changed',
     '  terminal.close {terminal:"t1"}',
     '',

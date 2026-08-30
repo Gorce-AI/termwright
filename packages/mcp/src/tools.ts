@@ -73,16 +73,19 @@ function optionalTimeout(timeout: number | undefined): { timeout?: number } {
 }
 
 /**
- * Lets parser work and semantic frames commit before a read tool reports.
+ * Lets already-observable parser work and semantic frames commit before a read
+ * tool reports.
  *
  * A screen revision lands before the semantic revision that belongs to it (the
- * tree arrives on the socket, the render-commit marker in the byte stream). Two
- * things go wrong without this wait: a snapshot taken right after `wait_for
- * text` reports `semanticTree: unavailable` for a program that does publish one,
- * and `capture_since` reports changed *rows* with no changed *subtrees* because
- * it caught the pair mid-flight. The driver owns this causal boundary. It does
- * not require global silence, so a spinner elsewhere cannot block a snapshot
- * of an already committed frame.
+ * tree arrives on the socket, the render-commit marker in the byte stream).
+ * Once either half or an open frame is visible, the driver owns the causal
+ * boundary and this wait cannot catch the pair mid-flight. Before either signal
+ * arrives, screen-only output is indistinguishable from output that a future
+ * semantic frame will describe. Callers that require that future semantic
+ * state must wait for its explicit condition (for example `focused`) rather
+ * than infer it from a screen-text wait. This does not require global silence,
+ * so an unrelated spinner cannot block a snapshot of an already committed
+ * frame.
  */
 async function settleSemantics(entry: TerminalEntry): Promise<void> {
   const deadline = performance.now() + FIRST_TREE_SETTLE_MS;
@@ -506,7 +509,9 @@ const captureSince = defineTool({
   title: 'What changed since a revision',
   description:
     'Incremental view: the screen rows that differ and the semantic subtrees that were added, ' +
-    'removed or updated since the given cursor. The cursor must be a revision this server ' +
+    'removed or updated in the latest committed semantic tree since the given cursor. A screen ' +
+    'change alone does not imply a future semantic commit; wait for an explicit semantic state ' +
+    'when the caller requires one. The cursor must be a revision this server ' +
     'handed out earlier (snapshot or capture_since); older cursors fail with history-truncated.',
   inputSchema: {
     terminal: terminalId,

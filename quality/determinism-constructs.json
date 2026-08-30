@@ -19,7 +19,7 @@
     "explicit-test-selection-reviewed-with-platform-registry": 74,
     "managed-or-diagnostic-background-task": 72,
     "production-polling-review": 1,
-    "production-process-isolation-review": 39,
+    "production-process-isolation-review": 40,
     "test-observer-or-intentional-background-task": 15,
     "test-process-isolation-review": 39
   },
@@ -1505,6 +1505,12 @@
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
       "excerpt": "const providerInputModes = process.env['TERMWRIGHT_FIXTURE_INPUT_MODES'] === '1';"
+    },
+    {
+      "path": "packages/driver/test-fixtures/semantic-app.mjs",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "const screenFirstFocusFrame = process.env['TERMWRIGHT_FIXTURE_SCREEN_FIRST_FRAME'] === '1';"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
