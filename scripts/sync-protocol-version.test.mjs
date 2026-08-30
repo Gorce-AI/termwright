@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   rewriteCargoPathDependencies,
   synchronizeCompatibilityRegistry,
+  synchronizeReleaseDerivedMetadata,
 } from './sync-protocol-version.mjs';
 
 describe('Cargo protocol lockstep release transform', () => {
@@ -112,5 +113,39 @@ describe('compatibility registry release metadata', () => {
     ).toThrow(
       'compatibility/registry.json: configured added units not found: tview/private-widget-state/stale_target.go',
     );
+  });
+
+  it('regenerates the downstream geometry projection from the synchronized registry', () => {
+    const registry = JSON.parse(readFileSync('compatibility/registry.json', 'utf8'));
+    const geometryPage = readFileSync(
+      'website/src/content/docs/reference/geometry-visibility.md',
+      'utf8',
+    );
+    const capabilityGraph = JSON.parse(
+      readFileSync('clients/test-vectors/capability-graph.json', 'utf8'),
+    );
+
+    const result = synchronizeReleaseDerivedMetadata({
+      registry,
+      version: '0.3.0',
+      addedUnitDigests: new Map(),
+      geometryPage,
+      capabilityGraph,
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.geometryChanged).toBe(true);
+    expect(result.renderedGeometryPage).toContain('ink@7.1.1/0.3.0');
+    expect(result.renderedGeometryPage).not.toContain('ink@7.1.1/0.2.0');
+
+    expect(
+      synchronizeReleaseDerivedMetadata({
+        registry: JSON.parse(JSON.stringify(registry)),
+        version: '0.3.0',
+        addedUnitDigests: new Map(),
+        geometryPage: result.renderedGeometryPage,
+        capabilityGraph,
+      }),
+    ).toMatchObject({ changed: false, drift: [], geometryChanged: false });
   });
 });
