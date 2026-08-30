@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalState
 
-Defined in: [driver/src/api.ts:332](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L332)
+Defined in: [driver/src/api.ts:334](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L334)
 
 Coherent terminal state for tests and diagnostics.
 
@@ -21,7 +21,7 @@ Coherent terminal state for tests and diagnostics.
 
 > **snapshot**(): [`TerminalStateSnapshot`](../terminalstatesnapshot/)
 
-Defined in: [driver/src/api.ts:333](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L333)
+Defined in: [driver/src/api.ts:335](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L335)
 
 #### Returns
 

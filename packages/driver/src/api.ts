@@ -176,8 +176,10 @@ export interface TerminalHarness {
     options: { readonly after: ObservationStamp } & WaitOptions,
   ): Promise<ObservationStamp>;
   /**
-   * Waits until parser work and semantic frame pairing caused by prior input
-   * have committed. This is not a quiet/global-idle heuristic.
+   * Waits until currently observable parser work, semantic frame pairing and
+   * provider-evidence invalidation have committed. This cannot predict a
+   * future semantic frame before either of its causal signals reaches the
+   * driver, and it is not a quiet/global-idle heuristic.
    */
   waitForCommittedObservation(opts?: WaitOptions): Promise<ObservationStamp>;
   /**

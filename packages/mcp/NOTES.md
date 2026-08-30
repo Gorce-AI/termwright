@@ -72,21 +72,22 @@ MCP-flavoured advice ("call terminal.snapshot again") lives in the server
 instructions and in `SKILL.md`, per error kind, rather than by rewriting what the
 driver said.
 
-## `settleSemantics` — reads wait for renders to pair
+## `settleSemantics` — reads wait for observable renders to pair
 
-A screen revision lands before the semantic revision it belongs to: the tree
-arrives on the socket, the render-commit marker in the byte stream, and only the
-pair is observable. Two symptoms follow if a read tool does not wait. A snapshot
-taken right after `wait_for text` reports `semanticTree: unavailable` for a
-program that does publish a tree. And `capture_since` reports changed _rows_ with
-no changed _subtrees_, because it caught the pair mid-flight — this one was
-intermittent in the end-to-end suite, and an agent polling `capture_since` after
-an action would have hit exactly the same race.
+A screen revision may land before the semantic revision it belongs to: the tree
+arrives on the socket, the render-commit marker in the PTY byte stream, and only
+the pair is observable. Once a frame-begin, tree or marker reaches the driver,
+`tools.ts: settleSemantics()` calls `settled()` and
+`waitForCommittedObservation()` so a read cannot cut through that known
+in-flight pair. The bounded wait is authoritative and errors are not swallowed.
 
-`tools.ts: settleSemantics()` therefore calls the public `waitForQuiet()` before
-every read: 2 s for a session still waiting for its first tree, 250 ms to let an
-in-flight render pair. Timeouts are swallowed — a session with no observable tree
-is reported honestly rather than made to look broken.
+There is an unavoidable earlier boundary: before any semantic signal reaches
+the driver, a changed screen is indistinguishable from legal screen-only output.
+Neither `wait_for text` nor `capture_since` may guess that a future tree will
+arrive. An operation that requires semantic state must wait for that explicit
+condition (`focused`, `checked`, `selected`, and so on), then call
+`capture_since`. This keeps screen-only applications and independent status
+animation non-blocking without reintroducing a quiet-window heuristic.
 
 ## Structured errors travel in `_meta`, not in `structuredContent`
 

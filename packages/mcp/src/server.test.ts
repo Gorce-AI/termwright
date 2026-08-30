@@ -199,9 +199,19 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     });
     expect(waited.isError, waited.text).toBe(false);
 
-    // capture_since crosses the driver's committed-observation barrier. The
-    // same lossless cursor therefore returns screen rows and paired semantic
-    // subtrees together without polling scheduler timing.
+    // PTY text and semantic frames travel over independent channels. The text
+    // wait proves the visual result, while this explicit semantic postcondition
+    // proves that the paired tree describing the click has committed. Inferring
+    // the latter from text would race the semantic socket on fast hosts.
+    const focused = await call('terminal.wait_for', {
+      terminal,
+      wait: 'focused',
+      testId: 'reject',
+    });
+    expect(focused.isError, focused.text).toBe(false);
+
+    // capture_since now compares two causally established observations and
+    // must preserve both visual and semantic changes.
     const since = await call('terminal.capture_since', { terminal, cursor });
 
     expect(since.isError, since.text).toBe(false);

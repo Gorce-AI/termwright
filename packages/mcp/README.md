@@ -49,14 +49,23 @@ Terminal t1 100x30 revision 42
 semanticTree: available
 dialog "Permission" ref=semantic:n7@42 bounds=(8,20,40,9) modal
   button "Approve" ref=semantic:n8@42 bounds=(14,23,11,1) focused
+  button "Reject" ref=semantic:n9@42 bounds=(14,36,10,1)
 visible text:
 …
 
-// terminal.click        { "terminal": "t1", "ref": "semantic:n8@42" }
-// terminal.wait_for     { "terminal": "t1", "wait": "text", "text": "Approved" }
+// terminal.click        { "terminal": "t1", "ref": "semantic:n9@42" }
+// terminal.wait_for     { "terminal": "t1", "wait": "text", "text": "Rejected" }
+// terminal.wait_for     { "terminal": "t1", "wait": "focused", "testId": "reject" }
 // terminal.capture_since{ "terminal": "t1", "cursor": 42 }  -> changed rows + subtrees
 // terminal.close        { "terminal": "t1" }
 ```
+
+The text wait proves the PTY output. When the next operation requires a semantic
+result, wait for that explicit state (`focused`, `checked`, `selected`, …)
+before capturing. The condition must represent a change from the baseline; an
+already-satisfied condition proves no new commit. Screen-only output and the
+prefix of a future semantic frame are intentionally indistinguishable until the
+probe publishes a causal signal.
 
 Streamable HTTP, for hosts that connect over a socket:
 
@@ -117,7 +126,7 @@ stderr. stdio has no TTL: there, EOF on the pipe is the signal.
 | `terminal.launch` | Starts a program in a real pseudo-terminal and returns a terminal handle plus the first snapshot. The child gets a minimal environment unless envMode is "inherit"; values passed in env are never echoed back. |
 | `terminal.capabilities` | What this session supports: whether a semantic tree is published, which adapter publishes it, and the terminal geometry. Call it before relying on role-based targeting. |
 | `terminal.snapshot` | One typed view of the terminal: compact semantic refs, visible text, cursor, terminal modes and scroll position. variant "full" writes the complete dump (text, ANSI, HTML, semantic tree) to disk and returns only refs plus the file path. The returned revision is the cursor for terminal.capture_since. |
-| `terminal.capture_since` | Incremental view: the screen rows that differ and the semantic subtrees that were added, removed or updated since the given cursor. The cursor must be a revision this server handed out earlier (snapshot or capture_since); older cursors fail with history-truncated. |
+| `terminal.capture_since` | Incremental view: the screen rows that differ and the semantic subtrees that were added, removed or updated in the latest committed semantic tree since the given cursor. A screen change alone does not imply a future semantic commit; wait for an explicit semantic state when the caller requires one. The cursor must be a revision this server handed out earlier (snapshot or capture_since); older cursors fail with history-truncated. |
 | `terminal.query` | Resolves a target to refs without acting on it. Use it to check how many nodes a locator matches before clicking, or to turn a role/name into a ref. |
 | `terminal.checkpoint` | Returns the atomic session/contract/screen/semantic identity used by revision-safe actions and waits. |
 | `terminal.actionability` | Runs the same ActionPlanner used by execution, but sends no input. Reports every authoritative requirement and the chosen strategy or typed rejection. |
@@ -217,8 +226,10 @@ snapshot when either becomes stale.
 
 `terminal.snapshot` also returns a screen `revision`; pass it back as the
 `cursor` of `terminal.capture_since` to get only the rows and semantic subtrees
-that changed. Cursors the server never handed out fail with `history-truncated`
-(the last 16 captures per terminal are retained).
+that changed in the latest committed tree. A changed screen does not promise a
+future semantic commit; wait for an explicit semantic condition when one is
+required. Cursors the server never handed out fail with `history-truncated` (the
+last 16 captures per terminal are retained).
 
 Programs without a framework probe or custom semantic producer report
 `semanticTree: unavailable`. There are no invented roles: target physical

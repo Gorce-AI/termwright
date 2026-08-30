@@ -45,6 +45,8 @@ interface FixtureControl {
   readonly ready: Promise<void>;
   releaseMarker(): Promise<void>;
   releaseCommit(): Promise<void>;
+  releaseSemanticFrame(): Promise<void>;
+  confirmSemanticFrameHeld(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -120,6 +122,8 @@ async function createFixtureControl(): Promise<FixtureControl> {
     ready,
     releaseMarker: () => sendFixtureCommand('M', 0x4d),
     releaseCommit: () => sendFixtureCommand('C', 0x41),
+    releaseSemanticFrame: () => sendFixtureCommand('S', 0x53),
+    confirmSemanticFrameHeld: () => sendFixtureCommand('H', 0x48),
     close: async () => {
       closePromise ??= (async () => {
         if (closed) return;
@@ -138,7 +142,10 @@ async function createFixtureControl(): Promise<FixtureControl> {
     },
   };
 
-  async function sendFixtureCommand(command: 'M' | 'C', acknowledgement: number): Promise<void> {
+  async function sendFixtureCommand(
+    command: 'M' | 'C' | 'S' | 'H',
+    acknowledgement: number,
+  ): Promise<void> {
     if (peer === undefined) throw new Error('fixture control is not connected');
     if (resolveRelease !== undefined) throw new Error('fixture release is already pending');
     expectedAcknowledgement = acknowledgement;
@@ -1920,6 +1927,57 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
       expect(receipt.before.semanticRevision).toBe(2);
       expect(receipt.before.pairedScreenRevision).not.toBeNull();
       await terminal.waitForText('ACTIVATED reject');
+    } finally {
+      await control.close();
+    }
+  });
+
+  it('does not infer a future semantic commit from a screen-first frame', async () => {
+    const control = await createFixtureControl();
+    onTestFinished(() => control.close());
+    try {
+      const terminal = await launch('semantic-app.mjs', {
+        semanticNegotiationMs: 5_000,
+        env: {
+          TERMWRIGHT_FIXTURE_SCREEN_FIRST_FRAME: '1',
+          TERMWRIGHT_FIXTURE_FOCUS_CONTROL_PORT: String(control.port),
+        },
+      });
+      await control.ready;
+      await terminal.settled();
+      const before = terminal.checkpoint();
+
+      await terminal.write('F');
+      await terminal.waitForText('[Reject]');
+
+      // With no semantic signal visible yet, the driver must not manufacture
+      // a pending frame: this screen could equally be unrelated output. Its
+      // committed observation is therefore still the previous semantic pair.
+      const visibleOnly = await terminal.waitForCommittedObservation();
+      expect(visibleOnly.screenRevision).toBeGreaterThan(before.screenRevision);
+      expect(visibleOnly.semanticRevision).toBe(before.semanticRevision);
+      expect(visibleOnly.pairedScreenRevision).toBe(before.pairedScreenRevision);
+
+      const focusOutcome = terminal
+        .getByTestId('reject')
+        .waitFor({ state: 'focused' })
+        .then(
+          () => ({ ok: true as const }),
+          (error: unknown) => ({ ok: false as const, error }),
+        );
+      const beforeRelease = await Promise.race([
+        focusOutcome.then(() => 'focus-settled' as const),
+        control.confirmSemanticFrameHeld().then(() => 'semantic-held' as const),
+      ]);
+      expect(beforeRelease).toBe('semantic-held');
+
+      await control.releaseSemanticFrame();
+      const focused = await focusOutcome;
+      if (!focused.ok) throw focused.error;
+      expect(terminal.checkpoint().semanticRevision).toBeGreaterThan(before.semanticRevision ?? 0);
+      expect(await terminal.getByTestId('reject').semanticState()).toMatchObject({
+        focused: true,
+      });
     } finally {
       await control.close();
     }

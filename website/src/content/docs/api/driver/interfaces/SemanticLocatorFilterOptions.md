@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticLocatorFilterOptions
 
-Defined in: [driver/src/api.ts:679](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L679)
+Defined in: [driver/src/api.ts:681](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L681)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **has?**: [`SemanticLocator`](../semanticlocator/)
 
-Defined in: [driver/src/api.ts:681](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L681)
+Defined in: [driver/src/api.ts:683](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L683)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:681](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **hasNot?**: [`SemanticLocator`](../semanticlocator/)
 
-Defined in: [driver/src/api.ts:682](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L682)
+Defined in: [driver/src/api.ts:684](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L684)
 
 ***
 
@@ -52,4 +52,4 @@ Defined in: [driver/src/api.ts:682](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **hasText?**: `string` \| `RegExp`
 
-Defined in: [driver/src/api.ts:680](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L680)
+Defined in: [driver/src/api.ts:682](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L682)

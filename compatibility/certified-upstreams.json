@@ -3364,6 +3364,42 @@
         "version": "0.5.9"
       }
     ],
+    "ratatui-core": [
+      {
+        "candidateDigest": "sha256:2b22828f4cc10bf5601a819911c0bd0ab73e20564749af84002f25e599851ef6",
+        "patchManifestDigest": "sha256:90b1fc16439cd87898386dd2d2a4f6a982ff4eac78b73cf177feed7c5b1e276c",
+        "publishedAt": "2026-06-19T08:53:24.416378Z",
+        "source": {
+          "checksum": "cbb175c433c8e28a809d1f5773a2ae96e68c0ce40db865cbab1020bf33ae479c",
+          "registry": "https://crates.io"
+        },
+        "version": "0.1.2"
+      }
+    ],
+    "ratatui-crossterm": [
+      {
+        "candidateDigest": "sha256:ffa5e38c6df8dfa2f9b5616b62df37c53162ad7d12d92a1bf959ce97492de344",
+        "patchManifestDigest": "sha256:f0d84ef7f44aa1711ace0c573c8169c76a669f66cbfbea216c9e818e06894b62",
+        "publishedAt": "2026-06-19T08:53:38.802112Z",
+        "source": {
+          "checksum": "567584a3b0e6a8203c23de40b4861497266725eb5363dbfd18a1edd603cca9f0",
+          "registry": "https://crates.io"
+        },
+        "version": "0.1.2"
+      }
+    ],
+    "ratatui-widgets": [
+      {
+        "candidateDigest": "sha256:6ff0ff02911367d2079ca01cfa79bde26f2dd6de94dbd7d435e7c1b16ab959d0",
+        "patchManifestDigest": "sha256:ba78359dbfb4710039a7b06abfa0ceaf17af2de41a6f306a4ac92c092c592d56",
+        "publishedAt": "2026-06-19T08:53:48.243935Z",
+        "source": {
+          "checksum": "66e3d19bcc9130ca376277d93b60767ff121ace3be06f5f95f81dd68956407d1",
+          "registry": "https://crates.io"
+        },
+        "version": "0.3.2"
+      }
+    ],
     "tcell-v2": [
       {
         "candidateDigest": "sha256:74ca39f0d3349fead558ffe431086374066dcaee95fe12421fcd3a86ed88c34b",
@@ -3598,6 +3634,35 @@
           "zipSha256": "7664c451b58bb5fe7469e3dbda3711ac1d24206c13fff62f045e9e62ed1f2217"
         },
         "version": "v2.13.10"
+      }
+    ],
+    "textual": [
+      {
+        "candidateDigest": "sha256:038252ca5c59e91cd10ebfa9f43935e60cfc89079532e8287e1b4d228f87ac53",
+        "patchManifestDigest": null,
+        "publishedAt": "2026-06-30T06:51:24.495173Z",
+        "source": {
+          "filename": "textual-8.2.8.tar.gz",
+          "files": [
+            {
+              "filename": "textual-8.2.8.tar.gz",
+              "packagetype": "sdist",
+              "sha256": "3f106a9fbc73e39dd266c9712432087de78a6d644084c7c241d6a25c3169115b",
+              "url": "https://files.pythonhosted.org/packages/00/21/39a76b01bd5eea82a04baaca7580e105d8c59450df03998345bb2cfb307b/textual-8.2.8.tar.gz"
+            },
+            {
+              "filename": "textual-8.2.8-py3-none-any.whl",
+              "packagetype": "bdist_wheel",
+              "sha256": "267375fd402dc8d981457212efa71f0e3365fd17bba144ba9bb3ed7563cb374a",
+              "url": "https://files.pythonhosted.org/packages/fb/be/35261223d9416a0751cdff1c7b4a6f881387218a12d439fe22fefebc8c04/textual-8.2.8-py3-none-any.whl"
+            }
+          ],
+          "packagetype": "sdist",
+          "registry": "https://pypi.org",
+          "sha256": "3f106a9fbc73e39dd266c9712432087de78a6d644084c7c241d6a25c3169115b",
+          "url": "https://files.pythonhosted.org/packages/00/21/39a76b01bd5eea82a04baaca7580e105d8c59450df03998345bb2cfb307b/textual-8.2.8.tar.gz"
+        },
+        "version": "8.2.8"
       }
     ],
     "tview": [
