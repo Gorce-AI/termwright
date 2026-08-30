@@ -809,15 +809,34 @@ jobs:
             version=$(node -p "JSON.parse(process.argv[1]).version" "$manifest")
             state=$(node scripts/verify-published-artifact.mjs npm "$archive")
             if [ "$state" = exact ]; then
-              echo "::notice::$name@$version already exists; skipping"
+              tag_state=$(node scripts/verify-published-artifact.mjs npm-tag "$name" "$DIST_TAG" "$version")
+              if [ "$tag_state" != exact ]; then
+                echo "::error::$name@$version exists exactly, but dist-tag $DIST_TAG does not point to it (state: $tag_state). Repair the registry tag with an owner credential, then start a new first-attempt release run."
+                exit 1
+              fi
+              echo "::notice::$name@$version and dist-tag $DIST_TAG already exist exactly; skipping"
             elif [ "$state" = missing ]; then
               npm publish --access public --tag "$DIST_TAG" --workspaces=false \
                 --ignore-scripts "$archive"
+              deadline=$((SECONDS + 300))
+              while true; do
+                state=$(node scripts/verify-published-artifact.mjs npm "$archive")
+                tag_state=$(node scripts/verify-published-artifact.mjs npm-tag "$name" "$DIST_TAG" "$version")
+                if [ "$state" = exact ] && [ "$tag_state" = exact ]; then
+                  break
+                fi
+                if (( SECONDS >= deadline )); then
+                  echo "::error::$name@$version or dist-tag $DIST_TAG did not become exact (artifact: $state, tag: $tag_state)"
+                  exit 1
+                fi
+                sleep 15
+              done
             else
               echo "::error::unexpected npm verification state: $state"
               exit 1
             fi
           done
+          node scripts/check-npm-release-readiness.mjs
 
   finalize:
     name: publish GitHub Release
@@ -848,6 +867,8 @@ jobs:
 
             while IFS= read -r package; do
               npm view "$package@$VERSION" version >/dev/null 2>&1 || missing+=("npm:$package")
+              tag_state=$(node scripts/verify-published-artifact.mjs npm-tag "$package" latest "$VERSION")
+              [ "$tag_state" = exact ] || missing+=("npm-tag:$package:$tag_state")
             done < <(node - <<'NODE'
           const { readdirSync, readFileSync } = require('node:fs');
           for (const directory of readdirSync('packages').sort()) {

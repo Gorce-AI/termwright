@@ -305,6 +305,8 @@ describe('autonomous workflow security', () => {
 
   it('makes release prepare and publish explicit, SHA-bound dispatch modes with no push trigger', async () => {
     const workflow = await readWorkflow('release.yml');
+    const npmPublish = jobBlock(workflow, 'npm');
+    const finalize = jobBlock(workflow, 'finalize');
     expect(workflow).toContain(
       'TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}',
     );
@@ -339,6 +341,16 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('verify-published-artifact.mjs npm');
     expect(workflow).toContain('verify-published-artifact.mjs pypi');
     expect(workflow).toContain('verify-published-artifact.mjs crate');
+    expect(npmPublish).toContain(
+      'verify-published-artifact.mjs npm-tag "$name" "$DIST_TAG" "$version"',
+    );
+    expect(npmPublish).toContain('node scripts/check-npm-release-readiness.mjs');
+    expect(npmPublish.indexOf('npm publish --access public')).toBeLessThan(
+      npmPublish.lastIndexOf('verify-published-artifact.mjs npm "$archive"'),
+    );
+    expect(finalize).toContain(
+      'verify-published-artifact.mjs npm-tag "$package" latest "$VERSION"',
+    );
     expect(workflow).toContain('find npm pypi crates');
     expect(workflow).toContain('token: ${{ steps.writer-token.outputs.token }}');
     expect(workflow.match(/persist-credentials: false/gu)?.length).toBeGreaterThanOrEqual(8);
@@ -360,7 +372,7 @@ describe('autonomous workflow security', () => {
     expect(workflow).not.toMatch(/prebuilds:|build-pty-prebuild|setup-bun|check-prebuild/u);
     expect(seal).toContain('pack and seal registry bootstrap placeholders');
     expect(seal).not.toMatch(/pnpm\/action-setup|pnpm pack:npm-artifacts/u);
-    expect(seal).toContain('Pack dependency-free prerelease placeholders outside the latest tag');
+    expect(seal).toContain('Pack dependency-free prerelease placeholders for the bootstrap tag');
     expect(seal).toContain('node scripts/pack-npm-artifacts.mjs');
     expect(seal).toContain('--artifact-mode bootstrap-placeholders');
     expect(seal).toContain('--package-list scripts/npm-bootstrap-packages.json');

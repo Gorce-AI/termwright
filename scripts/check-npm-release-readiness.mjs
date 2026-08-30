@@ -107,9 +107,19 @@ function validatePublishedBootstrap(name, workspaceVersion, packument, policy, e
       );
   }
   const latest = packument?.['dist-tags']?.latest;
-  if (latest === policy.version) {
-    errors.push(`${name}@${policy.version} must never be published or promoted as latest`);
-  } else if (latest !== undefined) {
+  const functionalVersions = Object.keys(packument?.versions ?? {}).filter(
+    (publishedVersion) => publishedVersion !== policy.version,
+  );
+  if (latest === undefined) {
+    errors.push(
+      `${name} must keep a latest tag: npm assigns the first published version to latest until the first functional release replaces it`,
+    );
+  } else if (latest === policy.version) {
+    if (functionalVersions.length > 0)
+      errors.push(
+        `${name} latest must move from the deprecated bootstrap placeholder to the reviewed functional release`,
+      );
+  } else {
     const latestManifest = packument?.versions?.[latest];
     const parsedLatest = parseStableVersion(latest);
     if (

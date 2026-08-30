@@ -22,6 +22,12 @@ export function verifyNpmMetadata(metadata, expected) {
   }
 }
 
+export function verifyNpmTagMetadata(metadata, expected) {
+  const actual = metadata?.['dist-tags']?.[expected.tag];
+  if (actual === undefined) return 'missing';
+  return actual === expected.version ? 'exact' : 'different';
+}
+
 export function verifyPypiMetadata(metadata, expectedFiles, version) {
   if (metadata?.info?.version !== version)
     throw new Error(`termwright ${version} exists on PyPI with unexpected metadata`);
@@ -73,6 +79,12 @@ async function verifyNpm(archive) {
   return 'exact';
 }
 
+async function verifyNpmTag(name, tag, version) {
+  const metadata = await registryJson(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
+  if (metadata === null) return 'missing';
+  return verifyNpmTagMetadata(metadata, { tag, version });
+}
+
 async function verifyPypi(directory, version) {
   const expected = new Map();
   for (const name of (await readdir(directory)).sort())
@@ -102,14 +114,16 @@ async function main(argv) {
   const result =
     registry === 'npm' && args.length === 1
       ? await verifyNpm(resolve(args[0]))
-      : registry === 'pypi' && args.length === 2
-        ? await verifyPypi(resolve(args[0]), args[1])
-        : registry === 'crate' && args.length === 3
-          ? await verifyCrate(resolve(args[0]), args[1], args[2])
-          : null;
+      : registry === 'npm-tag' && args.length === 3
+        ? await verifyNpmTag(args[0], args[1], args[2])
+        : registry === 'pypi' && args.length === 2
+          ? await verifyPypi(resolve(args[0]), args[1])
+          : registry === 'crate' && args.length === 3
+            ? await verifyCrate(resolve(args[0]), args[1], args[2])
+            : null;
   if (result === null)
     throw new Error(
-      'usage: verify-published-artifact.mjs npm <tgz> | pypi <directory> <version> | crate <crate> <name> <version>',
+      'usage: verify-published-artifact.mjs npm <tgz> | npm-tag <name> <tag> <version> | pypi <directory> <version> | crate <crate> <name> <version>',
     );
   process.stdout.write(`${result}\n`);
 }

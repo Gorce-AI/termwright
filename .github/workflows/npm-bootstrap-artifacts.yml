@@ -71,7 +71,7 @@ jobs:
           node-version: '22'
       - name: Reconfirm registry scope immediately before sealing
         run: node scripts/check-npm-release-readiness.mjs --expect-missing scripts/npm-bootstrap-packages.json
-      - name: Pack dependency-free prerelease placeholders outside the latest tag
+      - name: Pack dependency-free prerelease placeholders for the bootstrap tag
         env:
           SOURCE_SHA: ${{ needs.authorize.outputs.commit }}
         run: node scripts/pack-npm-artifacts.mjs --artifact-mode bootstrap-placeholders --output bootstrap/npm --package-list scripts/npm-bootstrap-packages.json --manifest bootstrap/bootstrap-manifest.json --source-sha "$SOURCE_SHA"

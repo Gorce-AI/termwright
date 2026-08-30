@@ -176,14 +176,19 @@ Version PR can merge. From a clean, reviewed `main` commit, generate the sealed
 dependency-free `0.0.0-bootstrap.0` administrative placeholder, publish it with
 `--access public --tag bootstrap` and 2FA, deprecate that exact placeholder, then
 configure `release.yml` in the `npm-publish` environment with allowed action
-`npm publish` as its trusted publisher. The placeholder must never receive the
-`latest` tag. Verify every published placeholder against its sealed tarball with
-`verify-published-artifact.mjs` and require the result `exact`; registry metadata alone is
-not an integrity receipt. The first functional package is the normal `0.3.0` release. Run
-`pnpm check:npm-release-readiness` afterward. Both Version PR CI and the publish
-workflow fail closed while any public workspace package has no registry name or
-does not match the reviewed bootstrap contract; this prevents discovering a
-missing trust anchor only after tags, crates, or Python artifacts have shipped.
+`npm publish` as its trusted publisher. npm assigns the first publication of a
+brand-new name to `latest` even when the requested tag is `bootstrap`, and rejects
+removing the package's only `latest` tag. This transient alias is accepted only
+while the exact placeholder is the sole version; deprecate it immediately and do
+not try to remove `latest`. Verify every published placeholder against its sealed
+tarball with `verify-published-artifact.mjs` and require the result `exact`;
+registry metadata alone is not an integrity receipt. The first functional package
+is the normal `0.3.0` GitHub release, which must replace `latest` while leaving
+`bootstrap` pinned to the placeholder. Run `pnpm check:npm-release-readiness`
+afterward. Both Version PR CI and the publish workflow fail closed while any
+public workspace package has no registry name or does not match either phase of
+the reviewed bootstrap contract; this prevents discovering a missing trust anchor
+only after tags, crates, or Python artifacts have shipped.
 
 Retries never treat version existence as success by itself. npm integrity,
 the complete PyPI distribution file set, and crates.io checksums must match the
