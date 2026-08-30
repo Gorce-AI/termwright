@@ -20,7 +20,12 @@ import { afterEach, describe, expect } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { CharmDetectionError } from './detect.js';
-import { CharmPrepareError, CLIENT_MODULE, prepareInstrumentedBuild } from './launch.js';
+import {
+  CharmPrepareError,
+  CLIENT_MODULE,
+  prepareBubblesCapability,
+  prepareInstrumentedBuild,
+} from './launch.js';
 
 const run = promisify(execFile);
 const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
@@ -66,6 +71,65 @@ async function writeModule(
     'utf8',
   );
   await writeFile(join(dir, 'main.go'), source, 'utf8');
+}
+
+async function writeLocalBubblesModule(dir: string, compatible: boolean): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, 'go.mod'),
+    'module github.com/charmbracelet/bubbles\n\ngo 1.24.0\n',
+    'utf8',
+  );
+  const sources: Readonly<Record<string, string>> = compatible
+    ? {
+        spinner:
+          'type Spinner struct { Frames []string }\ntype Model struct { frame int; Spinner Spinner }\n',
+        progress: 'type Model struct { percentShown float64; targetPercent float64 }\n',
+        filepicker:
+          'type entry struct{}\nfunc (entry) Name() string { return "entry" }\ntype Model struct { selected int; files []entry }\n',
+        list: 'type Model struct { statusMessage string }\n',
+        table: 'type Model struct { start int; end int; rows [][]string }\n',
+      }
+    : Object.fromEntries(
+        ['spinner', 'progress', 'filepicker', 'list', 'table'].map((name) => [
+          name,
+          'type Model struct{}\n',
+        ]),
+      );
+  await Promise.all(
+    Object.entries(sources).map(async ([name, source]) => {
+      const packageDir = join(dir, name);
+      await mkdir(packageDir, { recursive: true });
+      await writeFile(join(packageDir, `${name}.go`), `package ${name}\n\n${source}`, 'utf8');
+    }),
+  );
+}
+
+async function writeLocalBubblesConsumer(
+  app: string,
+  bubbles: string,
+  version: string,
+): Promise<void> {
+  await writeModule(app, [`github.com/charmbracelet/bubbles ${version}`]);
+  const goMod = await readFile(join(app, 'go.mod'), 'utf8');
+  await writeFile(
+    join(app, 'go.mod'),
+    `${goMod}\nreplace github.com/charmbracelet/bubbles => ${JSON.stringify(bubbles)}\n`,
+    'utf8',
+  );
+}
+
+function offlineGoEnv(dir: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GOFLAGS: '',
+    GOMODCACHE: join(dir, 'empty-modcache'),
+    GONOSUMDB: '*',
+    GOPROXY: 'off',
+    GOSUMDB: 'off',
+    GOTOOLCHAIN: 'local',
+    GOWORK: 'off',
+  };
 }
 
 async function snapshot(dir: string): Promise<Readonly<Record<string, Buffer>>> {
@@ -258,53 +322,42 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
   it('admits Bubbles by compiling the owned capability profile, never by a near-enough version guess', async () => {
     const dir = await scratch('tw-charm-launch-companion-');
     const app = join(dir, 'app');
-    await writeModule(app, [
-      'github.com/charmbracelet/bubbletea v1.3.10',
-      'github.com/charmbracelet/bubbles v0.21.0',
-    ]);
-    const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') };
+    const bubbles = join(dir, 'bubbles');
+    await writeLocalBubblesModule(bubbles, true);
+    await writeLocalBubblesConsumer(app, bubbles, 'v0.21.0');
 
-    const prepared = await prepareInstrumentedBuild({ moduleDir: app, env });
-    expect(prepared.flavour.companions['github.com/charmbracelet/bubbles']).toBe('v0.21.0');
-    expect(prepared.injectedModules).toEqual(['github.com/charmbracelet/bubbles']);
-  }, 600_000);
+    const prepared = await prepareBubblesCapability({
+      moduleDir: app,
+      major: 'v1',
+      companions: { 'github.com/charmbracelet/bubbles': 'v0.21.0' },
+      outputDir: join(dir, 'tool-exec'),
+      env: offlineGoEnv(dir),
+    });
+    expect(prepared.module).toBe('github.com/charmbracelet/bubbles');
+    expect(prepared.toolExec?.goArgs).toEqual(['-toolexec', expect.any(String)]);
+  });
 
   it('fails closed when a resolved Bubbles module lacks the owned private-state capability', async () => {
     const dir = await scratch('tw-charm-launch-incompatible-companion-');
     const app = join(dir, 'app');
     const bubbles = join(dir, 'bubbles');
-    await writeModule(app, [
-      'github.com/charmbracelet/bubbletea v1.3.10',
-      'github.com/charmbracelet/bubbles v1.0.0',
-    ]);
-    await mkdir(bubbles, { recursive: true });
-    await writeFile(
-      join(bubbles, 'go.mod'),
-      'module github.com/charmbracelet/bubbles\n\ngo 1.24.0\n',
-      'utf8',
-    );
-    for (const name of ['spinner', 'progress', 'filepicker', 'list', 'table']) {
-      const packageDir = join(bubbles, name);
-      await mkdir(packageDir, { recursive: true });
-      await writeFile(
-        join(packageDir, `${name}.go`),
-        `package ${name}\n\ntype Model struct{}\n`,
-        'utf8',
-      );
-    }
-    const goMod = await readFile(join(app, 'go.mod'), 'utf8');
-    await writeFile(
-      join(app, 'go.mod'),
-      `${goMod}\nreplace github.com/charmbracelet/bubbles => ${JSON.stringify(bubbles)}\n`,
-      'utf8',
-    );
-    const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') };
-    await expect(prepareInstrumentedBuild({ moduleDir: app, env })).rejects.toMatchObject({
+    await writeLocalBubblesModule(bubbles, false);
+    await writeLocalBubblesConsumer(app, bubbles, 'v1.0.0');
+
+    await expect(
+      prepareBubblesCapability({
+        moduleDir: app,
+        major: 'v1',
+        companions: { 'github.com/charmbracelet/bubbles': 'v1.0.0' },
+        outputDir: join(dir, 'tool-exec'),
+        env: offlineGoEnv(dir),
+      }),
+    ).rejects.toMatchObject({
       code: 'unsupported-capability',
       module: 'github.com/charmbracelet/bubbles',
       version: 'v1.0.0',
     });
-  }, 600_000);
+  });
 
   it('refuses vendor mode instead of silently changing the dependency graph', async () => {
     const dir = await scratch('tw-charm-launch-vendor-');
