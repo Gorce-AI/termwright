@@ -1,5 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "version": "0.0.0-bootstrap.0",
+  "tag": "bootstrap",
+  "deprecationMessage": "Registry bootstrap placeholder; install version 0.3.0 or newer.",
   "packages": [
     "@termwright/pty-darwin-arm64",
     "@termwright/pty-darwin-x64",

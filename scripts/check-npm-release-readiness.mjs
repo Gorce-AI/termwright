@@ -47,13 +47,101 @@ function validateRetiredPolicy(policy, active) {
   return new Map(policy.packages.map((entry) => [entry.name, entry]));
 }
 
+function validateBootstrapPolicy(policy, active) {
+  if (
+    policy?.schemaVersion !== 2 ||
+    policy.version !== '0.0.0-bootstrap.0' ||
+    policy.tag !== 'bootstrap' ||
+    typeof policy.deprecationMessage !== 'string' ||
+    policy.deprecationMessage.trim() !== policy.deprecationMessage ||
+    policy.deprecationMessage.length === 0 ||
+    !Array.isArray(policy.packages)
+  )
+    throw new Error('npm bootstrap policy must define the reviewed prerelease contract');
+  if (new Set(policy.packages).size !== policy.packages.length)
+    throw new Error('npm bootstrap policy contains duplicate package names');
+  for (const name of policy.packages) {
+    if (typeof name !== 'string' || !active.has(name))
+      throw new Error(`invalid npm bootstrap package: ${String(name)}`);
+  }
+  return policy;
+}
+
+function parseStableVersion(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  return match?.slice(1).map(Number);
+}
+
+function compareStableVersions(left, right) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index];
+  }
+  return 0;
+}
+
+function validatePublishedBootstrap(name, workspaceVersion, packument, policy, errors) {
+  const manifest = packument?.versions?.[policy.version];
+  if (manifest === undefined) {
+    errors.push(`${name} is missing the reviewed registry bootstrap ${policy.version}`);
+    return;
+  }
+  if (manifest.deprecated !== policy.deprecationMessage)
+    errors.push(
+      `${name}@${policy.version} must be deprecated with the exact message: ${policy.deprecationMessage}`,
+    );
+  if (packument?.['dist-tags']?.[policy.tag] !== policy.version)
+    errors.push(`${name} must keep dist-tag ${policy.tag} on ${policy.version}`);
+  const parsedWorkspace = parseStableVersion(workspaceVersion);
+  const firstFunctional = [0, 3, 0];
+  for (const publishedVersion of Object.keys(packument?.versions ?? {})) {
+    if (publishedVersion === policy.version) continue;
+    const parsedPublished = parseStableVersion(publishedVersion);
+    if (
+      parsedPublished === undefined ||
+      parsedWorkspace === undefined ||
+      compareStableVersions(parsedPublished, firstFunctional) < 0 ||
+      compareStableVersions(parsedPublished, parsedWorkspace) > 0
+    )
+      errors.push(
+        `${name}@${publishedVersion} is not a reviewed functional release at or below workspace version ${workspaceVersion}`,
+      );
+  }
+  const latest = packument?.['dist-tags']?.latest;
+  if (latest === policy.version) {
+    errors.push(`${name}@${policy.version} must never be published or promoted as latest`);
+  } else if (latest !== undefined) {
+    const latestManifest = packument?.versions?.[latest];
+    const parsedLatest = parseStableVersion(latest);
+    if (
+      latestManifest === undefined ||
+      parsedLatest === undefined ||
+      parsedWorkspace === undefined ||
+      compareStableVersions(parsedLatest, firstFunctional) < 0 ||
+      compareStableVersions(parsedLatest, parsedWorkspace) > 0 ||
+      (typeof latestManifest.deprecated === 'string' && latestManifest.deprecated.length > 0)
+    )
+      errors.push(
+        `${name} latest tag ${String(latest)} is not a reviewed functional release at or below workspace version ${workspaceVersion}`,
+      );
+  }
+  if (
+    manifest.dependencies !== undefined ||
+    manifest.optionalDependencies !== undefined ||
+    manifest.peerDependencies !== undefined ||
+    manifest.scripts !== undefined ||
+    manifest.bin !== undefined
+  )
+    errors.push(`${name}@${policy.version} is not a dependency-free administrative placeholder`);
+}
+
 export async function checkNpmReleaseReadiness({
   packagesRoot,
   retiredPolicy,
+  bootstrapPolicy,
   expectedMissing,
   fetchImpl = fetch,
 }) {
-  const active = new Set();
+  const activeVersions = new Map();
   const directories = await readdir(packagesRoot, { withFileTypes: true });
   for (const entry of directories.filter((candidate) => candidate.isDirectory())) {
     let manifest;
@@ -65,11 +153,20 @@ export async function checkNpmReleaseReadiness({
       if (error?.code === 'ENOENT') continue;
       throw error;
     }
-    if (manifest.private !== true) active.add(manifest.name);
+    if (manifest.private !== true) {
+      if (typeof manifest.name !== 'string' || typeof manifest.version !== 'string')
+        throw new Error(`public workspace package ${entry.name} has no name or version`);
+      activeVersions.set(manifest.name, manifest.version);
+    }
   }
+  const active = new Set(activeVersions.keys());
   const retired = validateRetiredPolicy(retiredPolicy, active);
+  const bootstrap =
+    bootstrapPolicy === undefined ? undefined : validateBootstrapPolicy(bootstrapPolicy, active);
+  const bootstrapNames = new Set(bootstrap?.packages ?? []);
   const missing = [];
   const errors = [];
+  const bootstrapPackuments = new Map();
 
   await Promise.all(
     [...active].map(async (name) => {
@@ -79,8 +176,23 @@ export async function checkNpmReleaseReadiness({
       });
       if (response.status === 404) missing.push(name);
       else if (!response.ok) errors.push(`${name}: registry returned HTTP ${response.status}`);
+      else if (bootstrapNames.has(name)) {
+        try {
+          bootstrapPackuments.set(name, await response.json());
+        } catch {
+          errors.push(`${name}: registry returned malformed JSON`);
+        }
+      }
     }),
   );
+
+  if (bootstrap !== undefined) {
+    for (const name of bootstrap.packages) {
+      const packument = bootstrapPackuments.get(name);
+      if (packument !== undefined)
+        validatePublishedBootstrap(name, activeVersions.get(name), packument, bootstrap, errors);
+    }
+  }
 
   const expected = expectedMissing === undefined ? undefined : [...expectedMissing].sort();
   const actualMissing = [...missing].sort();
@@ -148,7 +260,7 @@ export async function checkNpmReleaseReadiness({
 
   if (errors.length > 0) throw new Error(errors.join('\n'));
   return expected === undefined
-    ? 'every public workspace package exists on npm and the namespace retirement policy is exact'
+    ? `every public workspace package exists on npm${bootstrap === undefined ? '' : ', the bootstrap placeholder policy is exact,'} and the namespace retirement policy is exact`
     : `npm registry is missing exactly the reviewed ${expected.length}-package bootstrap scope and the namespace retirement policy is exact`;
 }
 
@@ -160,19 +272,23 @@ async function main() {
     if (!path || process.argv.length !== packageListArgument + 2)
       throw new Error('--expect-missing requires exactly one package-list path');
     const plan = JSON.parse(await readFile(resolve(path), 'utf8'));
-    if (plan.schemaVersion !== 1 || !Array.isArray(plan.packages))
+    if (plan.schemaVersion !== 2 || !Array.isArray(plan.packages))
       throw new Error(
-        'expected-missing package list must use schemaVersion 1 and a packages array',
+        'expected-missing package list must use schemaVersion 2 and a packages array',
       );
     expectedMissing = plan.packages;
   }
   const retiredPolicy = JSON.parse(
     await readFile(resolve(import.meta.dirname, 'npm-retired-packages.json'), 'utf8'),
   );
+  const bootstrapPolicy = JSON.parse(
+    await readFile(resolve(import.meta.dirname, 'npm-bootstrap-packages.json'), 'utf8'),
+  );
   console.log(
     await checkNpmReleaseReadiness({
       packagesRoot: resolve(import.meta.dirname, '../packages'),
       retiredPolicy,
+      bootstrapPolicy,
       expectedMissing,
     }),
   );

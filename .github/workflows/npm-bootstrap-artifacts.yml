@@ -53,109 +53,9 @@ jobs:
       - name: Require exactly the reviewed eleven missing npm names
         run: node scripts/check-npm-release-readiness.mjs --expect-missing scripts/npm-bootstrap-packages.json
 
-  prebuilds:
-    name: bootstrap PTY prebuild (${{ matrix.platform }}-${{ matrix.arch }})
-    needs: authorize
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { platform: win32, arch: x64, runner: windows-2022 }
-          - { platform: win32, arch: arm64, runner: windows-11-arm }
-          - { platform: linux, arch: x64, runner: ubuntu-22.04 }
-          - { platform: linux, arch: arm64, runner: ubuntu-22.04-arm }
-          - { platform: darwin, arch: x64, runner: macos-15-intel, macos_target: '13.5' }
-          - { platform: darwin, arch: arm64, runner: macos-15, macos_target: '13.5' }
-    steps:
-      - name: Reject workflow reruns
-        shell: bash
-        run: test "$GITHUB_RUN_ATTEMPT" = 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ needs.authorize.outputs.commit }}
-          persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: '9.4.0'
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          cache: pnpm
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: matrix.platform == 'win32'
-        with:
-          bun-version: '1.4.0'
-      - run: pnpm install --frozen-lockfile
-      - uses: ./.github/actions/build-pty-prebuild
-        with:
-          platform: ${{ matrix.platform }}
-          architecture: ${{ matrix.arch }}
-          macos-deployment-target: ${{ matrix.macos_target }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: bootstrap-native-pty-${{ matrix.platform }}-${{ matrix.arch }}
-          path: packages/pty-${{ matrix.platform }}-${{ matrix.arch }}
-          if-no-files-found: error
-          retention-days: 7
-
-  certify-x64-on-arm64:
-    name: certify bootstrap PTY x64 on Windows ARM64
-    needs: [authorize, prebuilds]
-    runs-on: windows-11-arm
-    timeout-minutes: 25
-    steps:
-      - name: Reject workflow reruns
-        shell: bash
-        run: test "$GITHUB_RUN_ATTEMPT" = 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ needs.authorize.outputs.commit }}
-          persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: '9.4.0'
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: '22'
-          architecture: x64
-          cache: pnpm
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: '1.4.0'
-          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-windows-x64.zip
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: bootstrap-native-pty-win32-x64
-          path: packages/pty-win32-x64
-      - run: pnpm --filter @termwright/pty build
-      - name: Exercise the exact x64 bundle under emulation
-        shell: bash
-        env:
-          TERMWRIGHT_REQUIRE_BUN: '1'
-        run: |
-          set -euo pipefail
-          pack_dir="$RUNNER_TEMP/termwright-bootstrap-x64-packs"
-          install_dir="$RUNNER_TEMP/termwright-bootstrap-x64-install"
-          mkdir -p "$pack_dir" "$install_dir"
-          node scripts/check-prebuild.mjs win32 x64
-          pnpm --dir packages/pty-win32-x64 pack --pack-destination "$pack_dir"
-          pnpm --dir packages/pty pack --pack-destination "$pack_dir"
-          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
-          node scripts/check-installed-pty.mjs "$install_dir" --verdict packages/pty-win32-x64/certification-verdict-arm64-host.json
-          node scripts/verify-windows-pty-verdict.mjs packages/pty-win32-x64 certification-verdict-arm64-host.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: bootstrap-pty-win32-x64-arm64-host-verdict
-          path: packages/pty-win32-x64/certification-verdict-arm64-host.json
-          if-no-files-found: error
-          retention-days: 7
-
   seal:
-    name: build, pack, and seal bootstrap artifacts
-    needs: [authorize, prebuilds, certify-x64-on-arm64]
+    name: pack and seal registry bootstrap placeholders
+    needs: authorize
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -173,48 +73,20 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          pattern: bootstrap-native-pty-*
-          path: bootstrap-prebuilds
-          merge-multiple: false
-      - name: Install and verify all six native packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-arm64 win32-x64; do
-            source="bootstrap-prebuilds/bootstrap-native-pty-$target"
-            if [[ "$target" == win32-* ]]; then
-              node scripts/verify-windows-pty-verdict.mjs "$source"
-            fi
-            cp "$source/termwright_pty.node" "packages/pty-$target/termwright_pty.node"
-            if [[ "$target" == win32-* ]]; then
-              rm -rf "packages/pty-$target/vendor"
-              cp -R "$source/vendor" "packages/pty-$target/vendor"
-            fi
-          done
-          node scripts/check-prebuild.mjs --all
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: bootstrap-pty-win32-x64-arm64-host-verdict
-          path: bootstrap-prebuilds/bootstrap-native-pty-win32-x64
-      - name: Verify native ARM64-host evidence for the x64 Windows package
-        run: node scripts/verify-windows-pty-verdict.mjs bootstrap-prebuilds/bootstrap-native-pty-win32-x64 certification-verdict-arm64-host.json
-      - run: pnpm build
-      - run: pnpm check:packed-private-boundaries
       - name: Reconfirm registry scope immediately before sealing
         run: node scripts/check-npm-release-readiness.mjs --expect-missing scripts/npm-bootstrap-packages.json
-      - name: Pack the reviewed package set in dependency order
+      - name: Pack dependency-free prerelease placeholders outside the latest tag
         env:
           SOURCE_SHA: ${{ needs.authorize.outputs.commit }}
-        run: pnpm pack:npm-artifacts -- --output bootstrap/npm --package-list scripts/npm-bootstrap-packages.json --manifest bootstrap/bootstrap-manifest.json --source-sha "$SOURCE_SHA"
+        run: pnpm pack:npm-artifacts -- --artifact-mode bootstrap-placeholders --output bootstrap/npm --package-list scripts/npm-bootstrap-packages.json --manifest bootstrap/bootstrap-manifest.json --source-sha "$SOURCE_SHA"
       - name: Seal and independently verify inventory
         shell: bash
+        env:
+          SOURCE_SHA: ${{ needs.authorize.outputs.commit }}
         run: |
           set -euo pipefail
           cp docs/maintainers/npm-package-bootstrap.md bootstrap/OWNER-CHECKLIST.md
-          node scripts/verify-npm-bootstrap-artifacts.mjs bootstrap
+          node scripts/verify-npm-bootstrap-artifacts.mjs bootstrap --expected-sha "$SOURCE_SHA"
           (cd bootstrap && find npm bootstrap-manifest.json OWNER-CHECKLIST.md -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
           (cd bootstrap && sha256sum --check SHA256SUMS)
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

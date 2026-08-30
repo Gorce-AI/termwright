@@ -2,12 +2,27 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { isDirectExecution } from './is-direct-execution.mjs';
 import { inspectSafeTarGz } from './safe-tar.mjs';
 
 const repositoryUrl = 'git+https://github.com/Gorce-AI/termwright.git';
+export const bootstrapVersion = '0.0.0-bootstrap.0';
+export const bootstrapTag = 'bootstrap';
+export const bootstrapArtifactKind = 'registry-bootstrap-placeholders-v1';
+export const bootstrapDeprecationMessage =
+  'Registry bootstrap placeholder; install version 0.3.0 or newer.';
 const nativePackages = [
   '@termwright/pty-darwin-arm64',
   '@termwright/pty-darwin-x64',
@@ -58,7 +73,11 @@ export function validatePackageSelection(names, manifests, { bootstrap = false }
     );
 }
 
-export function validatePackedArchive(archive, expectedName) {
+function bootstrapDiagnostic(name) {
+  return `${name}@${bootstrapVersion} is a registry bootstrap placeholder; install ${name}@^0.3.0.`;
+}
+
+export function validatePackedArchive(archive, expectedName, { bootstrap = false } = {}) {
   const resolvedArchive = resolve(archive);
   const entries = inspectSafeTarGz(readFileSync(resolvedArchive));
   const members = entries.map((entry) => entry.path);
@@ -78,6 +97,45 @@ export function validatePackedArchive(archive, expectedName) {
   if (manifest.repository?.url !== repositoryUrl)
     fail(`${archive} does not identify the repository required for npm provenance`);
 
+  if (bootstrap) {
+    const expectedMembers = [
+      'package/LICENSE',
+      'package/README.md',
+      'package/index.d.ts',
+      'package/index.js',
+      'package/package.json',
+    ];
+    if (JSON.stringify([...members].sort()) !== JSON.stringify(expectedMembers))
+      fail(`${archive} has invalid registry bootstrap placeholder inventory`);
+    if (
+      manifest.version !== bootstrapVersion ||
+      manifest.publishConfig?.access !== 'public' ||
+      manifest.publishConfig?.tag !== bootstrapTag ||
+      manifest.type !== 'module' ||
+      JSON.stringify(manifest.exports) !==
+        JSON.stringify({ '.': { types: './index.d.ts', import: './index.js' } })
+    )
+      fail(`${archive} has an invalid registry bootstrap placeholder manifest`);
+    if (
+      manifest.dependencies !== undefined ||
+      manifest.optionalDependencies !== undefined ||
+      manifest.peerDependencies !== undefined ||
+      manifest.scripts !== undefined ||
+      manifest.bin !== undefined
+    )
+      fail(
+        `${archive} registry bootstrap placeholder must not declare dependencies or executables`,
+      );
+    const entry = entries.find((candidate) => candidate.path === 'package/index.js');
+    if (
+      entry?.type !== '0' ||
+      entry.payload.toString('utf8') !==
+        `throw new Error(${JSON.stringify(bootstrapDiagnostic(expectedName))});\n`
+    )
+      fail(`${archive} has an invalid registry bootstrap placeholder diagnostic`);
+    return manifest;
+  }
+
   if (nativePackages.includes(expectedName)) {
     if (!members.includes('package/termwright_pty.node'))
       fail(`${archive} carries no addon; a prebuild package without its binary is incomplete`);
@@ -96,6 +154,47 @@ export function validatePackedArchive(archive, expectedName) {
   return manifest;
 }
 
+function packBootstrapPlaceholder({ name, output, pnpmCli, root }) {
+  const temporary = mkdtempSync(join(tmpdir(), 'termwright-npm-bootstrap-'));
+  try {
+    writeFileSync(
+      join(temporary, 'package.json'),
+      `${JSON.stringify(
+        {
+          name,
+          version: bootstrapVersion,
+          description: `Registry bootstrap placeholder for ${name}; install ^0.3.0.`,
+          license: 'MIT',
+          type: 'module',
+          exports: { '.': { types: './index.d.ts', import: './index.js' } },
+          files: ['index.js', 'index.d.ts', 'README.md', 'LICENSE'],
+          repository: { type: 'git', url: repositoryUrl },
+          publishConfig: { access: 'public', tag: bootstrapTag },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    writeFileSync(
+      join(temporary, 'README.md'),
+      `# ${name}\n\nThis prerelease exists only to establish the npm package name before Termwright 0.3.0 trusted publishing. Install ${name}@^0.3.0 for the functional package.\n`,
+    );
+    writeFileSync(
+      join(temporary, 'index.js'),
+      `throw new Error(${JSON.stringify(bootstrapDiagnostic(name))});\n`,
+    );
+    writeFileSync(join(temporary, 'index.d.ts'), 'export {};\n');
+    copyFileSync(join(root, 'LICENSE'), join(temporary, 'LICENSE'));
+    execFileSync(
+      process.execPath,
+      [pnpmCli, '--dir', temporary, 'pack', '--pack-destination', output],
+      { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] },
+    );
+  } finally {
+    rmSync(temporary, { force: true, recursive: true });
+  }
+}
+
 export function parseArguments(arguments_) {
   if (arguments_[0] === '--') arguments_ = arguments_.slice(1);
   const options = {
@@ -103,6 +202,7 @@ export function parseArguments(arguments_) {
     packageList: undefined,
     manifest: undefined,
     sourceSha: undefined,
+    artifactMode: 'standard',
   };
   for (let index = 0; index < arguments_.length; index += 2) {
     const value = arguments_[index + 1];
@@ -120,6 +220,9 @@ export function parseArguments(arguments_) {
       case '--source-sha':
         options.sourceSha = value;
         break;
+      case '--artifact-mode':
+        options.artifactMode = value;
+        break;
       default:
         fail(`unknown argument: ${arguments_[index]}`);
     }
@@ -133,6 +236,10 @@ export function parseArguments(arguments_) {
     fail('--source-sha requires --manifest');
   if (options.sourceSha !== undefined && !/^[0-9a-f]{40}$/u.test(options.sourceSha))
     fail('--source-sha must be a lowercase 40-character Git SHA');
+  if (options.artifactMode !== 'standard' && options.artifactMode !== 'bootstrap-placeholders')
+    fail('--artifact-mode must be standard or bootstrap-placeholders');
+  if (options.artifactMode === 'bootstrap-placeholders' && options.packageList === undefined)
+    fail('bootstrap-placeholders artifact mode requires --package-list');
   return options;
 }
 
@@ -170,30 +277,45 @@ export function packNpmArtifacts(options) {
 
   const manifests = workspaceManifests(root);
   let names = [...manifests.keys()].sort();
+  const bootstrap = options.artifactMode === 'bootstrap-placeholders';
   if (options.packageList) {
     const plan = JSON.parse(readFileSync(resolve(root, options.packageList), 'utf8'));
-    if (plan.schemaVersion !== 1 || !Array.isArray(plan.packages))
-      fail('bootstrap package list must use schemaVersion 1 and a packages array');
+    if (
+      !Array.isArray(plan.packages) ||
+      (bootstrap
+        ? plan.schemaVersion !== 2 ||
+          plan.version !== bootstrapVersion ||
+          plan.tag !== bootstrapTag ||
+          plan.deprecationMessage !== bootstrapDeprecationMessage
+        : plan.schemaVersion !== 1)
+    )
+      fail('bootstrap package list does not match the reviewed placeholder policy');
     names = plan.packages;
   }
-  validatePackageSelection(names, manifests, { bootstrap: options.packageList !== undefined });
+  validatePackageSelection(names, manifests, { bootstrap });
 
   const pnpmCli = process.env.npm_execpath;
   if (!pnpmCli) fail('npm_execpath is missing; invoke this script through pnpm');
   const artifacts = [];
   for (const [order, name] of names.entries()) {
-    const { directory } = manifests.get(name);
     const before = new Set(readdirSync(output));
-    execFileSync(
-      process.execPath,
-      [pnpmCli, '--dir', `packages/${directory}`, 'pack', '--pack-destination', output],
-      { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] },
-    );
+    if (bootstrap) {
+      packBootstrapPlaceholder({ name, output, pnpmCli, root });
+    } else {
+      const { directory } = manifests.get(name);
+      execFileSync(
+        process.execPath,
+        [pnpmCli, '--dir', `packages/${directory}`, 'pack', '--pack-destination', output],
+        { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] },
+      );
+    }
     const created = readdirSync(output).filter((file) => !before.has(file));
     if (created.length !== 1 || !created[0].endsWith('.tgz'))
       fail(`packing ${name} created an unexpected inventory: ${created.join(', ')}`);
     const archive = join(output, created[0]);
-    const manifest = validatePackedArchive(archive, name);
+    const manifest = validatePackedArchive(archive, name, {
+      bootstrap,
+    });
     artifacts.push({
       order: order + 1,
       name,
@@ -209,8 +331,16 @@ export function packNpmArtifacts(options) {
       resolve(root, options.manifest),
       `${JSON.stringify(
         {
-          schemaVersion: 1,
+          schemaVersion: bootstrap ? 2 : 1,
           sourceCommit: options.sourceSha,
+          ...(bootstrap
+            ? {
+                artifactKind: bootstrapArtifactKind,
+                publicationTag: bootstrapTag,
+                bootstrapVersion,
+                deprecationMessage: bootstrapDeprecationMessage,
+              }
+            : {}),
           packageCount: artifacts.length,
           publicationOrder: artifacts,
         },

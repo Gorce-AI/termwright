@@ -343,7 +343,7 @@ export function buildMissionCompletionReport() {
         '@termwright/run-journal-transport',
       ],
       registryConfiguration:
-        'The remaining npm registry blockers are to publish the reviewed bootstrap versions, configure release.yml / npm-publish as the trusted publisher for every new name, and deprecate @termwright/ink-testing@0.2.0 with the exact reviewed message.',
+        'The remaining npm registry blockers are to publish and deprecate the reviewed dependency-free 0.0.0-bootstrap.0 placeholders under the bootstrap tag, configure release.yml / npm-publish with allowed action npm publish as the trusted publisher for every new name, and deprecate @termwright/ink-testing@0.2.0 with the exact reviewed message.',
       automationConfiguration:
         'The remaining GitHub configuration blockers are to install the separate repository-only automation-writer and branch-policy-reader Apps, provide their trusted-autonomous-release environment credentials and AUTOMATION_WRITER_LOGIN, then explicitly authorize publication with TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED=true.',
     },
@@ -439,7 +439,7 @@ export function buildMissionCompletionReport() {
         'Windows runs through @termwright/pty, whose native ConPTY session owns the pseudoconsole, both pipe ends and a job object created before the root could run; this is the same certified Windows implementation formerly packaged separately as @termwright/conpty.',
         'Certified on real Windows for Node 22 and 24: a stream that ends because the pipe ended with its last byte delivered, a codepoint split byte-by-byte across reads and reassembled, a tree proven empty by the job, a hard kill mid-burst, input reaching a silent child, a descendant delivering its own output in order, and a console-attached descendant not surviving its root.',
         'A descendant detached from the console does survive its root and is still owned and killable by the job, which is what identifies the console as what ends the other one.',
-        'The unified package defines six prebuilds for Darwin, Linux and Windows on x64 and arm64; the final certification matrix exercises the native implementations and clean packed selection, while the bootstrap workflow materializes the exact six release artifacts from an authorized default-branch SHA.',
+        'The unified package defines six prebuilds for Darwin, Linux and Windows on x64 and arm64; the final certification and release matrices exercise and materialize the native implementations, while the one-time npm bootstrap workflow emits only dependency-free non-latest registry placeholders from an authorized default-branch SHA.',
         'There is no fallback: a machine that cannot load its exact native addon raises rather than silently substituting a weaker output boundary.',
         'The Termwright-owned POSIX implementation removes the former private node-pty boundary and exposes the same authoritative EOF, exit and tree lifecycle contract without a timer or causal-output workaround.',
       ],

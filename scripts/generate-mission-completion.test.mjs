@@ -30,6 +30,8 @@ describe('mission completion report', () => {
       automationConfiguration: expect.stringContaining('remaining GitHub configuration blockers'),
     });
     expect(report.releaseReadiness.missingNpmRegistryBootstraps).toHaveLength(11);
+    expect(report.releaseReadiness.registryConfiguration).toContain('0.0.0-bootstrap.0');
+    expect(report.releaseReadiness.registryConfiguration).toContain('bootstrap tag');
   });
 
   it('binds completed claims to reviewed PR and post-merge first-attempt evidence', () => {

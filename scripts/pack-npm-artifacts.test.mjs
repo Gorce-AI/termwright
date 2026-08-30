@@ -1,14 +1,20 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  bootstrapArtifactKind,
+  bootstrapDeprecationMessage,
   bootstrapPackageOrder,
+  bootstrapTag,
+  bootstrapVersion,
+  packNpmArtifacts,
   parseArguments,
   validatePackageSelection,
   validatePackedArchive,
 } from './pack-npm-artifacts.mjs';
+import { verifyNpmBootstrapArtifacts } from './verify-npm-bootstrap-artifacts.mjs';
 
 const temporary = [];
 afterEach(() => {
@@ -49,6 +55,40 @@ function archive({ name, windows = false, unsafe = false, addon = true, hosts })
   return result;
 }
 
+function placeholderArchive(name, override = {}, { diagnostic, extraEntry } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'termwright-bootstrap-check-'));
+  temporary.push(root);
+  const manifest = {
+    name,
+    version: bootstrapVersion,
+    license: 'MIT',
+    type: 'module',
+    exports: { '.': { types: './index.d.ts', import: './index.js' } },
+    files: ['index.js', 'index.d.ts', 'README.md', 'LICENSE'],
+    repository: {
+      type: 'git',
+      url: 'git+https://github.com/Gorce-AI/termwright.git',
+    },
+    publishConfig: { access: 'public', tag: bootstrapTag },
+    ...override,
+  };
+  const expectedDiagnostic = `${name}@${bootstrapVersion} is a registry bootstrap placeholder; install ${name}@^0.3.0.`;
+  const entries = [
+    tarEntry('package/package.json', JSON.stringify(manifest)),
+    tarEntry('package/LICENSE', 'license'),
+    tarEntry('package/README.md', 'readme'),
+    tarEntry('package/index.d.ts', 'export {};\n'),
+    tarEntry(
+      'package/index.js',
+      `throw new Error(${JSON.stringify(diagnostic ?? expectedDiagnostic)});\n`,
+    ),
+  ];
+  if (extraEntry !== undefined) entries.push(tarEntry(extraEntry, 'unexpected'));
+  const result = join(root, 'package.tgz');
+  writeFileSync(result, gzipSync(Buffer.concat([...entries, Buffer.alloc(1024)])));
+  return result;
+}
+
 function tarEntry(name, contents) {
   const payload = Buffer.from(contents);
   const header = Buffer.alloc(512);
@@ -72,6 +112,8 @@ describe('npm artifact packing contract', () => {
     expect(
       parseArguments([
         '--',
+        '--artifact-mode',
+        'bootstrap-placeholders',
         '--output',
         'bootstrap/npm',
         '--package-list',
@@ -86,6 +128,7 @@ describe('npm artifact packing contract', () => {
       packageList: 'scripts/npm-bootstrap-packages.json',
       manifest: 'bootstrap/bootstrap-manifest.json',
       sourceSha: 'a'.repeat(40),
+      artifactMode: 'bootstrap-placeholders',
     });
     expect(() => parseArguments(['--', '--output', 'out', '--publish', 'true'])).toThrow(
       'unknown argument: --publish',
@@ -99,7 +142,11 @@ describe('npm artifact packing contract', () => {
         '--source-sha',
         'b'.repeat(40),
       ]),
-    ).toMatchObject({ packageList: undefined, manifest: 'preview/manifest.json' });
+    ).toMatchObject({
+      artifactMode: 'standard',
+      packageList: undefined,
+      manifest: 'preview/manifest.json',
+    });
     expect(() => parseArguments(['--output', 'out', '--package-list', 'packages.json'])).toThrow(
       '--package-list requires --manifest',
     );
@@ -109,6 +156,9 @@ describe('npm artifact packing contract', () => {
     expect(() => parseArguments(['--output', 'out', '--source-sha', 'c'.repeat(40)])).toThrow(
       '--source-sha requires --manifest',
     );
+    expect(() =>
+      parseArguments(['--output', 'out', '--artifact-mode', 'bootstrap-placeholders']),
+    ).toThrow('requires --package-list');
   });
 
   it('requires all native packages before the wrapper in the bootstrap plan', () => {
@@ -121,6 +171,95 @@ describe('npm artifact packing contract', () => {
     expect(() => validatePackageSelection(reordered, manifests, { bootstrap: true })).toThrow(
       'must exactly match the reviewed publication order',
     );
+  });
+
+  it('defines dependency-free prerelease placeholders that cannot become latest implicitly', () => {
+    expect(bootstrapArtifactKind).toBe('registry-bootstrap-placeholders-v1');
+    expect(bootstrapVersion).toBe('0.0.0-bootstrap.0');
+    expect(bootstrapTag).toBe('bootstrap');
+    const name = '@termwright/run-history';
+    expect(
+      validatePackedArchive(placeholderArchive(name), name, { bootstrap: true }),
+    ).toMatchObject({
+      name,
+      version: bootstrapVersion,
+      publishConfig: { access: 'public', tag: bootstrapTag },
+    });
+    expect(() =>
+      validatePackedArchive(
+        placeholderArchive(name, { dependencies: { '@termwright/protocol': '0.2.0' } }),
+        name,
+        { bootstrap: true },
+      ),
+    ).toThrow('must not declare dependencies');
+    expect(() =>
+      validatePackedArchive(
+        placeholderArchive(name, { scripts: { postinstall: 'node exploit.js' } }),
+        name,
+        { bootstrap: true },
+      ),
+    ).toThrow('must not declare dependencies or executables');
+    expect(() =>
+      validatePackedArchive(
+        placeholderArchive(name, { publishConfig: { access: 'public', tag: 'latest' } }),
+        name,
+        { bootstrap: true },
+      ),
+    ).toThrow('invalid registry bootstrap placeholder manifest');
+    expect(() =>
+      validatePackedArchive(placeholderArchive(name, { version: '0.2.0' }), name, {
+        bootstrap: true,
+      }),
+    ).toThrow('invalid registry bootstrap placeholder manifest');
+    expect(() =>
+      validatePackedArchive(
+        placeholderArchive(name, {}, { diagnostic: 'wrong diagnostic' }),
+        name,
+        { bootstrap: true },
+      ),
+    ).toThrow('invalid registry bootstrap placeholder diagnostic');
+    expect(() =>
+      validatePackedArchive(
+        placeholderArchive(name, {}, { extraEntry: 'package/termwright_pty.node' }),
+        name,
+        { bootstrap: true },
+      ),
+    ).toThrow('invalid registry bootstrap placeholder inventory');
+  });
+
+  it('generates and independently verifies the complete sealed bootstrap set', () => {
+    const root = mkdtempSync(join(tmpdir(), 'termwright-bootstrap-integration-'));
+    temporary.push(root);
+    const manifestPath = join(root, 'bootstrap-manifest.json');
+    const artifacts = packNpmArtifacts({
+      output: join(root, 'npm'),
+      packageList: 'scripts/npm-bootstrap-packages.json',
+      manifest: manifestPath,
+      sourceSha: 'd'.repeat(40),
+      artifactMode: 'bootstrap-placeholders',
+    });
+    expect(artifacts).toHaveLength(11);
+    expect(artifacts.map((entry) => entry.name)).toEqual(bootstrapPackageOrder);
+    expect(new Set(artifacts.map((entry) => entry.version))).toEqual(new Set([bootstrapVersion]));
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    expect(manifest).toMatchObject({
+      schemaVersion: 2,
+      artifactKind: bootstrapArtifactKind,
+      publicationTag: bootstrapTag,
+      bootstrapVersion,
+      deprecationMessage: bootstrapDeprecationMessage,
+      packageCount: 11,
+    });
+    expect(verifyNpmBootstrapArtifacts(root, { expectedSourceCommit: 'd'.repeat(40) })).toContain(
+      'verified 11 npm bootstrap archives',
+    );
+    expect(() =>
+      verifyNpmBootstrapArtifacts(root, { expectedSourceCommit: 'e'.repeat(40) }),
+    ).toThrow('does not match reviewed commit');
+    writeFileSync(join(root, 'npm', 'unexpected.txt'), 'not an archive');
+    expect(() =>
+      verifyNpmBootstrapArtifacts(root, { expectedSourceCommit: 'd'.repeat(40) }),
+    ).toThrow('archive inventory');
   });
 
   it('accepts a complete Windows native archive and rejects an incomplete or unsafe one', () => {

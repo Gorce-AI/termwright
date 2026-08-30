@@ -172,13 +172,18 @@ only in the registry job that uses it.
 
 npm trusted publishing is configured on an existing package, so a brand-new
 public package name needs a one-time interactive bootstrap before its first
-Version PR can merge. From a clean, reviewed `main` commit, build and pack that
-package, publish its current pre-release version with `--access public` and 2FA,
-then configure `release.yml` in the `npm-publish` environment as its trusted
-publisher. Run `pnpm check:npm-release-readiness` afterward. Both Version PR CI
-and the publish workflow fail closed while any public workspace package has no
-registry name; this prevents discovering a missing trust anchor only after
-tags, crates, or Python artifacts have already shipped.
+Version PR can merge. From a clean, reviewed `main` commit, generate the sealed
+dependency-free `0.0.0-bootstrap.0` administrative placeholder, publish it with
+`--access public --tag bootstrap` and 2FA, deprecate that exact placeholder, then
+configure `release.yml` in the `npm-publish` environment with allowed action
+`npm publish` as its trusted publisher. The placeholder must never receive the
+`latest` tag. Verify every published placeholder against its sealed tarball with
+`verify-published-artifact.mjs` and require the result `exact`; registry metadata alone is
+not an integrity receipt. The first functional package is the normal `0.3.0` release. Run
+`pnpm check:npm-release-readiness` afterward. Both Version PR CI and the publish
+workflow fail closed while any public workspace package has no registry name or
+does not match the reviewed bootstrap contract; this prevents discovering a
+missing trust anchor only after tags, crates, or Python artifacts have shipped.
 
 Retries never treat version existence as success by itself. npm integrity,
 the complete PyPI distribution file set, and crates.io checksums must match the
