@@ -2,18 +2,9 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  copyFileSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { isDirectExecution } from './is-direct-execution.mjs';
 import { inspectSafeTarGz } from './safe-tar.mjs';
 
@@ -77,6 +68,37 @@ function bootstrapDiagnostic(name) {
   return `${name}@${bootstrapVersion} is a registry bootstrap placeholder; install ${name}@^0.3.0.`;
 }
 
+function bootstrapManifest(name) {
+  return {
+    name,
+    version: bootstrapVersion,
+    description: `Registry bootstrap placeholder for ${name}; install ^0.3.0.`,
+    license: 'MIT',
+    type: 'module',
+    exports: { '.': { types: './index.d.ts', import: './index.js' } },
+    files: ['index.js', 'index.d.ts', 'README.md', 'LICENSE'],
+    repository: { type: 'git', url: repositoryUrl },
+    publishConfig: { access: 'public', tag: bootstrapTag },
+  };
+}
+
+function bootstrapReadme(name) {
+  return `# ${name}\n\nThis prerelease exists only to establish the npm package name before Termwright 0.3.0 trusted publishing. Install ${name}@^0.3.0 for the functional package.\n`;
+}
+
+function bootstrapFiles(name, root) {
+  return new Map([
+    ['package/LICENSE', readFileSync(join(root, 'LICENSE'))],
+    ['package/README.md', Buffer.from(bootstrapReadme(name))],
+    ['package/index.d.ts', Buffer.from('export {};\n')],
+    [
+      'package/index.js',
+      Buffer.from(`throw new Error(${JSON.stringify(bootstrapDiagnostic(name))});\n`),
+    ],
+    ['package/package.json', Buffer.from(`${JSON.stringify(bootstrapManifest(name), null, 2)}\n`)],
+  ]);
+}
+
 export function validatePackedArchive(archive, expectedName, { bootstrap = false } = {}) {
   const resolvedArchive = resolve(archive);
   const entries = inspectSafeTarGz(readFileSync(resolvedArchive));
@@ -108,15 +130,6 @@ export function validatePackedArchive(archive, expectedName, { bootstrap = false
     if (JSON.stringify([...members].sort()) !== JSON.stringify(expectedMembers))
       fail(`${archive} has invalid registry bootstrap placeholder inventory`);
     if (
-      manifest.version !== bootstrapVersion ||
-      manifest.publishConfig?.access !== 'public' ||
-      manifest.publishConfig?.tag !== bootstrapTag ||
-      manifest.type !== 'module' ||
-      JSON.stringify(manifest.exports) !==
-        JSON.stringify({ '.': { types: './index.d.ts', import: './index.js' } })
-    )
-      fail(`${archive} has an invalid registry bootstrap placeholder manifest`);
-    if (
       manifest.dependencies !== undefined ||
       manifest.optionalDependencies !== undefined ||
       manifest.peerDependencies !== undefined ||
@@ -126,13 +139,14 @@ export function validatePackedArchive(archive, expectedName, { bootstrap = false
       fail(
         `${archive} registry bootstrap placeholder must not declare dependencies or executables`,
       );
-    const entry = entries.find((candidate) => candidate.path === 'package/index.js');
-    if (
-      entry?.type !== '0' ||
-      entry.payload.toString('utf8') !==
-        `throw new Error(${JSON.stringify(bootstrapDiagnostic(expectedName))});\n`
-    )
-      fail(`${archive} has an invalid registry bootstrap placeholder diagnostic`);
+    if (JSON.stringify(manifest) !== JSON.stringify(bootstrapManifest(expectedName)))
+      fail(`${archive} has an invalid registry bootstrap placeholder manifest`);
+    const expectedFiles = bootstrapFiles(expectedName, resolve(import.meta.dirname, '..'));
+    for (const entry of entries) {
+      const expected = expectedFiles.get(entry.path);
+      if (entry.type !== '0' || expected === undefined || !entry.payload.equals(expected))
+        fail(`${archive} has invalid registry bootstrap placeholder contents`);
+    }
     return manifest;
   }
 
@@ -154,45 +168,33 @@ export function validatePackedArchive(archive, expectedName, { bootstrap = false
   return manifest;
 }
 
-function packBootstrapPlaceholder({ name, output, pnpmCli, root }) {
-  const temporary = mkdtempSync(join(tmpdir(), 'termwright-npm-bootstrap-'));
-  try {
-    writeFileSync(
-      join(temporary, 'package.json'),
-      `${JSON.stringify(
-        {
-          name,
-          version: bootstrapVersion,
-          description: `Registry bootstrap placeholder for ${name}; install ^0.3.0.`,
-          license: 'MIT',
-          type: 'module',
-          exports: { '.': { types: './index.d.ts', import: './index.js' } },
-          files: ['index.js', 'index.d.ts', 'README.md', 'LICENSE'],
-          repository: { type: 'git', url: repositoryUrl },
-          publishConfig: { access: 'public', tag: bootstrapTag },
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    writeFileSync(
-      join(temporary, 'README.md'),
-      `# ${name}\n\nThis prerelease exists only to establish the npm package name before Termwright 0.3.0 trusted publishing. Install ${name}@^0.3.0 for the functional package.\n`,
-    );
-    writeFileSync(
-      join(temporary, 'index.js'),
-      `throw new Error(${JSON.stringify(bootstrapDiagnostic(name))});\n`,
-    );
-    writeFileSync(join(temporary, 'index.d.ts'), 'export {};\n');
-    copyFileSync(join(root, 'LICENSE'), join(temporary, 'LICENSE'));
-    execFileSync(
-      process.execPath,
-      [pnpmCli, '--dir', temporary, 'pack', '--pack-destination', output],
-      { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] },
-    );
-  } finally {
-    rmSync(temporary, { force: true, recursive: true });
-  }
+function tarEntry(path, contents) {
+  const payload = Buffer.isBuffer(contents) ? contents : Buffer.from(contents);
+  const header = Buffer.alloc(512);
+  header.write(path, 0, 100, 'utf8');
+  header.write('0000644\0', 100, 8, 'ascii');
+  header.write('0000000\0', 108, 8, 'ascii');
+  header.write('0000000\0', 116, 8, 'ascii');
+  header.write(`${payload.length.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii');
+  header.write('00000000000\0', 136, 12, 'ascii');
+  header.fill(0x20, 148, 156);
+  header[156] = '0'.charCodeAt(0);
+  header.write('ustar\0', 257, 6, 'ascii');
+  header.write('00', 263, 2, 'ascii');
+  let checksum = 0;
+  for (const byte of header) checksum += byte;
+  header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii');
+  return Buffer.concat([header, payload, Buffer.alloc((512 - (payload.length % 512)) % 512)]);
+}
+
+function packBootstrapPlaceholder({ name, output, root }) {
+  const files = bootstrapFiles(name, root);
+  const tar = Buffer.concat([
+    ...[...files].map(([path, contents]) => tarEntry(path, contents)),
+    Buffer.alloc(1024),
+  ]);
+  const filename = `${name.slice(1).replace('/', '-')}-${bootstrapVersion}.tgz`;
+  writeFileSync(join(output, filename), gzipSync(tar, { level: 9 }));
 }
 
 export function parseArguments(arguments_) {
@@ -295,12 +297,12 @@ export function packNpmArtifacts(options) {
   validatePackageSelection(names, manifests, { bootstrap });
 
   const pnpmCli = process.env.npm_execpath;
-  if (!pnpmCli) fail('npm_execpath is missing; invoke this script through pnpm');
+  if (!bootstrap && !pnpmCli) fail('npm_execpath is missing; invoke this script through pnpm');
   const artifacts = [];
   for (const [order, name] of names.entries()) {
     const before = new Set(readdirSync(output));
     if (bootstrap) {
-      packBootstrapPlaceholder({ name, output, pnpmCli, root });
+      packBootstrapPlaceholder({ name, output, root });
     } else {
       const { directory } = manifests.get(name);
       execFileSync(

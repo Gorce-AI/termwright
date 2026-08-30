@@ -359,7 +359,9 @@ describe('autonomous workflow security', () => {
     );
     expect(workflow).not.toMatch(/prebuilds:|build-pty-prebuild|setup-bun|check-prebuild/u);
     expect(seal).toContain('pack and seal registry bootstrap placeholders');
+    expect(seal).not.toMatch(/pnpm\/action-setup|pnpm pack:npm-artifacts/u);
     expect(seal).toContain('Pack dependency-free prerelease placeholders outside the latest tag');
+    expect(seal).toContain('node scripts/pack-npm-artifacts.mjs');
     expect(seal).toContain('--artifact-mode bootstrap-placeholders');
     expect(seal).toContain('--package-list scripts/npm-bootstrap-packages.json');
     expect(seal).toContain('node scripts/verify-npm-bootstrap-artifacts.mjs bootstrap');

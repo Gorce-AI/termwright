@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -61,6 +61,7 @@ function placeholderArchive(name, override = {}, { diagnostic, extraEntry } = {}
   const manifest = {
     name,
     version: bootstrapVersion,
+    description: `Registry bootstrap placeholder for ${name}; install ^0.3.0.`,
     license: 'MIT',
     type: 'module',
     exports: { '.': { types: './index.d.ts', import: './index.js' } },
@@ -74,9 +75,12 @@ function placeholderArchive(name, override = {}, { diagnostic, extraEntry } = {}
   };
   const expectedDiagnostic = `${name}@${bootstrapVersion} is a registry bootstrap placeholder; install ${name}@^0.3.0.`;
   const entries = [
-    tarEntry('package/package.json', JSON.stringify(manifest)),
-    tarEntry('package/LICENSE', 'license'),
-    tarEntry('package/README.md', 'readme'),
+    tarEntry('package/package.json', `${JSON.stringify(manifest, null, 2)}\n`),
+    tarEntry('package/LICENSE', readFileSync(resolve(import.meta.dirname, '../LICENSE'))),
+    tarEntry(
+      'package/README.md',
+      `# ${name}\n\nThis prerelease exists only to establish the npm package name before Termwright 0.3.0 trusted publishing. Install ${name}@^0.3.0 for the functional package.\n`,
+    ),
     tarEntry('package/index.d.ts', 'export {};\n'),
     tarEntry(
       'package/index.js',
@@ -217,7 +221,7 @@ describe('npm artifact packing contract', () => {
         name,
         { bootstrap: true },
       ),
-    ).toThrow('invalid registry bootstrap placeholder diagnostic');
+    ).toThrow('invalid registry bootstrap placeholder contents');
     expect(() =>
       validatePackedArchive(
         placeholderArchive(name, {}, { extraEntry: 'package/termwright_pty.node' }),
@@ -253,6 +257,20 @@ describe('npm artifact packing contract', () => {
     expect(verifyNpmBootstrapArtifacts(root, { expectedSourceCommit: 'd'.repeat(40) })).toContain(
       'verified 11 npm bootstrap archives',
     );
+    const secondRoot = mkdtempSync(join(tmpdir(), 'termwright-bootstrap-reproduction-'));
+    temporary.push(secondRoot);
+    const secondManifestPath = join(secondRoot, 'bootstrap-manifest.json');
+    const reproduced = packNpmArtifacts({
+      output: join(secondRoot, 'npm'),
+      packageList: 'scripts/npm-bootstrap-packages.json',
+      manifest: secondManifestPath,
+      sourceSha: 'd'.repeat(40),
+      artifactMode: 'bootstrap-placeholders',
+    });
+    expect(reproduced.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 }))).toEqual(
+      artifacts.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 })),
+    );
+    expect(readFileSync(secondManifestPath, 'utf8')).toBe(readFileSync(manifestPath, 'utf8'));
     expect(() =>
       verifyNpmBootstrapArtifacts(root, { expectedSourceCommit: 'e'.repeat(40) }),
     ).toThrow('does not match reviewed commit');
