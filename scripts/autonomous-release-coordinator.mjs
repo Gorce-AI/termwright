@@ -159,7 +159,9 @@ const versionFiles = [
   /^clients\/README\.md$/u,
   /^clients\/python\/(?:pyproject\.toml|uv\.lock|src\/termwright\/__init__\.py|src\/termwright_probe\/__init__\.py)$/u,
   /^clients\/(?:rust|rust-probe|rust-ratatui)\/(?:Cargo\.toml|Cargo\.lock)$/u,
+  /^examples\/ratatui-list\/(?:app|build-tool)\/Cargo\.lock$/u,
   /^compatibility\/registry\.json$/u,
+  /^website\/src\/content\/docs\/reference\/geometry-visibility\.md$/u,
 ];
 
 const heartbeatFiles = [/^compatibility\/workflow-heartbeat\.json$/u];

@@ -33,12 +33,15 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { renderGeometryPage } from '../website/scripts/check-geometry-matrix.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const check = process.argv.includes('--check');
 
 const SOURCE = 'packages/protocol/package.json';
 const COMPATIBILITY_REGISTRY = 'compatibility/registry.json';
+const CAPABILITY_GRAPH = 'clients/test-vectors/capability-graph.json';
+const GEOMETRY_PAGE = 'website/src/content/docs/reference/geometry-visibility.md';
 const COMPATIBILITY_VERSION_ENTRIES = 12;
 const compatibilityAddedUnitSources = [
   {
@@ -234,6 +237,36 @@ const targets = [
     whole: true,
   },
   {
+    file: 'examples/ratatui-list/app/Cargo.lock',
+    pattern: /(?<=name = "termwright-ratatui"\nversion = ")([^"]+)(?=")/,
+    render: (version) => version,
+    whole: true,
+  },
+  {
+    file: 'examples/ratatui-list/app/Cargo.lock',
+    pattern: /(?<=name = "termwright-probe-ratatui"\nversion = ")([^"]+)(?=")/,
+    render: (version) => version,
+    whole: true,
+  },
+  {
+    file: 'examples/ratatui-list/app/Cargo.lock',
+    pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
+    render: (version) => version,
+    whole: true,
+  },
+  {
+    file: 'examples/ratatui-list/build-tool/Cargo.lock',
+    pattern: /(?<=name = "termwright-probe-ratatui"\nversion = ")([^"]+)(?=")/,
+    render: (version) => version,
+    whole: true,
+  },
+  {
+    file: 'examples/ratatui-list/build-tool/Cargo.lock',
+    pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
+    render: (version) => version,
+    whole: true,
+  },
+  {
     file: 'clients/README.md',
     pattern: /(?<=`termwright` )(\S+)(?=\s+\(PyPI\))/,
     render: (version) => version,
@@ -374,6 +407,22 @@ export function synchronizeCompatibilityRegistry(registry, version, addedUnitDig
   return { changed, drift };
 }
 
+export function synchronizeReleaseDerivedMetadata({
+  registry,
+  version,
+  addedUnitDigests,
+  geometryPage,
+  capabilityGraph,
+}) {
+  const registrySync = synchronizeCompatibilityRegistry(registry, version, addedUnitDigests);
+  const renderedGeometryPage = renderGeometryPage(geometryPage, registry, capabilityGraph);
+  return {
+    ...registrySync,
+    geometryChanged: renderedGeometryPage !== geometryPage,
+    renderedGeometryPage,
+  };
+}
+
 async function main() {
   const manifest = JSON.parse(await readFile(path.join(root, SOURCE), 'utf8'));
   const version = manifest.version;
@@ -452,6 +501,9 @@ async function main() {
   // derived from release-versioned sources and must move in the same operation.
   const registryFile = path.join(root, COMPATIBILITY_REGISTRY);
   const registry = JSON.parse(await readFile(registryFile, 'utf8'));
+  const geometryFile = path.join(root, GEOMETRY_PAGE);
+  const geometryPage = await readFile(geometryFile, 'utf8');
+  const capabilityGraph = JSON.parse(await readFile(path.join(root, CAPABILITY_GRAPH), 'utf8'));
   const addedUnitDigests = new Map();
   for (const unit of compatibilityAddedUnitSources) {
     const raw = await readFile(path.join(root, unit.source), 'utf8');
@@ -462,11 +514,24 @@ async function main() {
     }
     addedUnitDigests.set(key, `sha256:${createHash('sha256').update(source).digest('hex')}`);
   }
-  const registrySync = synchronizeCompatibilityRegistry(registry, version, addedUnitDigests);
+  const registrySync = synchronizeReleaseDerivedMetadata({
+    registry,
+    version,
+    addedUnitDigests,
+    geometryPage,
+    capabilityGraph,
+  });
   drift.push(...registrySync.drift);
+  if (registrySync.geometryChanged) {
+    drift.push({ file: GEOMETRY_PAGE, current: 'generated content is stale' });
+  }
   if (!check && registrySync.changed) {
     await writeFile(registryFile, `${JSON.stringify(registry, null, 2)}\n`);
     console.log(`updated ${COMPATIBILITY_REGISTRY}: derived release metadata -> ${version}`);
+  }
+  if (!check && registrySync.geometryChanged) {
+    await writeFile(geometryFile, registrySync.renderedGeometryPage);
+    console.log(`updated ${GEOMETRY_PAGE}: generated compatibility matrices -> ${version}`);
   }
 
   if (drift.length === 0) {

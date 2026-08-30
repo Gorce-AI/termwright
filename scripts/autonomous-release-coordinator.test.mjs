@@ -243,6 +243,25 @@ describe('trusted autonomous coordinator', () => {
     );
   });
 
+  it('allows only the exact generated release projections added by the version transform', () => {
+    expect(() =>
+      validateChangedFiles('version', [
+        'compatibility/registry.json',
+        'website/src/content/docs/reference/geometry-visibility.md',
+        'examples/ratatui-list/app/Cargo.lock',
+        'examples/ratatui-list/build-tool/Cargo.lock',
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateChangedFiles('version', [
+        'website/src/content/docs/reference/geometry-visibility.md.bak',
+      ]),
+    ).toThrow(/forbidden path/u);
+    expect(() =>
+      validateChangedFiles('version', ['examples/ratatui-list/other/Cargo.lock']),
+    ).toThrow(/forbidden path/u);
+  });
+
   it('refreshes a source-bound heartbeat only every 30 days and rejects time rollback', () => {
     const run = {
       id: 123,
