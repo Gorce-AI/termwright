@@ -15,15 +15,21 @@ describe('generated geometry and certification reference', () => {
     const registry = JSON.parse(await readFile(registryUrl, 'utf8'));
     const graph = JSON.parse(await readFile(graphUrl, 'utf8'));
     const candidate = structuredClone(registry);
-    candidate.frameworks
-      .find((entry) => entry.id === 'opentui')
-      .certification.ids.push('opentui@0.5.4/0.2.0');
+    const opentui = candidate.frameworks.find((entry) => entry.id === 'opentui');
+    const suppliedId = `opentui@synthetic-render-test/${opentui.certification.adapterVersion}`;
+    expect(opentui.certification.ids).not.toContain(suppliedId);
+    opentui.certification.ids.push(suppliedId);
 
     const rendered = renderGeometryPage(page, candidate, graph);
+    const startMarker = '<!-- geometry-matrices:start -->';
+    const endMarker = '<!-- geometry-matrices:end -->';
 
-    expect(rendered).toContain('opentui@0.5.3/0.2.0<br>opentui@0.5.4/0.2.0');
-    expect(rendered.slice(0, rendered.indexOf('<!-- geometry-matrices:start -->'))).toBe(
-      page.slice(0, page.indexOf('<!-- geometry-matrices:start -->')),
+    expect(rendered).toContain(opentui.certification.ids.join('<br>'));
+    expect(rendered.slice(0, rendered.indexOf(startMarker))).toBe(
+      page.slice(0, page.indexOf(startMarker)),
+    );
+    expect(rendered.slice(rendered.indexOf(endMarker) + endMarker.length)).toBe(
+      page.slice(page.indexOf(endMarker) + endMarker.length),
     );
     expect(renderGeometryPage(rendered, candidate, graph)).toBe(rendered);
   });

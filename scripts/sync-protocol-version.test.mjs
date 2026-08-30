@@ -7,6 +7,16 @@ import {
   synchronizeReleaseDerivedMetadata,
 } from './sync-protocol-version.mjs';
 
+function repositoryVersion() {
+  return JSON.parse(readFileSync('packages/protocol/package.json', 'utf8')).version;
+}
+
+function nextPatchVersion(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/u.exec(version);
+  if (match === null) throw new Error(`unsupported test version: ${version}`);
+  return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
+}
+
 describe('Cargo protocol lockstep release transform', () => {
   it('updates every local edge between published Termwright crates', () => {
     const source = `[dependencies]
@@ -57,22 +67,28 @@ fixture-helper = { path = "../fixture-helper", version = "0.2.0" }
 describe('compatibility registry release metadata', () => {
   it('moves package, certification and owned T1 source identities atomically', () => {
     const registry = JSON.parse(readFileSync('compatibility/registry.json', 'utf8'));
+    const currentVersion = repositoryVersion();
+    const targetVersion = nextPatchVersion(currentVersion);
+    for (const framework of registry.frameworks) {
+      expect(framework.probe.packageVersion.replace(/^v/u, '')).toBe(currentVersion);
+    }
     const tview = registry.frameworks.find(({ id }) => id === 'tview');
     const unit = tview.instrumentation.interventions
       .find(({ capability }) => capability === 'private-widget-state')
       .addedUnits.find(({ target }) => target === 'zz_termwright_probe.go');
-    const digest = 'sha256:release-versioned-owned-unit';
+    const firstDigest = `sha256:${'a'.repeat(64)}`;
+    const digest = unit.sourceDigest === firstDigest ? `sha256:${'b'.repeat(64)}` : firstDigest;
 
     const result = synchronizeCompatibilityRegistry(
       registry,
-      '0.3.0',
+      targetVersion,
       new Map([['tview/private-widget-state/zz_termwright_probe.go', digest]]),
     );
 
     expect(result.changed).toBe(true);
     expect(unit.sourceDigest).toBe(digest);
     for (const framework of registry.frameworks) {
-      expect(framework.probe.packageVersion).toMatch(/^v?0\.3\.0$/u);
+      expect(framework.probe.packageVersion.replace(/^v/u, '')).toBe(targetVersion);
       expect(framework.certification.adapterVersion).toBe(framework.probe.packageVersion);
       expect(framework.certification.ids).toEqual(
         framework.versions.policy === 'capability'
@@ -88,14 +104,14 @@ describe('compatibility registry release metadata', () => {
             ),
       );
       if (framework.annotations !== null) {
-        expect(framework.annotations.packageVersion).toMatch(/^v?0\.3\.0$/u);
+        expect(framework.annotations.packageVersion.replace(/^v/u, '')).toBe(targetVersion);
       }
     }
 
     expect(
       synchronizeCompatibilityRegistry(
         registry,
-        '0.3.0',
+        targetVersion,
         new Map([['tview/private-widget-state/zz_termwright_probe.go', digest]]),
       ),
     ).toEqual({ changed: false, drift: [] });
@@ -117,6 +133,12 @@ describe('compatibility registry release metadata', () => {
 
   it('regenerates the downstream geometry projection from the synchronized registry', () => {
     const registry = JSON.parse(readFileSync('compatibility/registry.json', 'utf8'));
+    const ink = registry.frameworks.find(({ id }) => id === 'ink');
+    const currentAdapterVersion = ink.probe.packageVersion;
+    const currentCertificationIds = [...ink.certification.ids];
+    const currentVersion = repositoryVersion();
+    expect(currentAdapterVersion.replace(/^v/u, '')).toBe(currentVersion);
+    const targetVersion = nextPatchVersion(currentVersion);
     const geometryPage = readFileSync(
       'website/src/content/docs/reference/geometry-visibility.md',
       'utf8',
@@ -127,7 +149,7 @@ describe('compatibility registry release metadata', () => {
 
     const result = synchronizeReleaseDerivedMetadata({
       registry,
-      version: '0.3.0',
+      version: targetVersion,
       addedUnitDigests: new Map(),
       geometryPage,
       capabilityGraph,
@@ -135,13 +157,15 @@ describe('compatibility registry release metadata', () => {
 
     expect(result.changed).toBe(true);
     expect(result.geometryChanged).toBe(true);
-    expect(result.renderedGeometryPage).toContain('ink@7.1.1/0.3.0');
-    expect(result.renderedGeometryPage).not.toContain('ink@7.1.1/0.2.0');
+    expect(result.renderedGeometryPage).toContain(ink.certification.ids.join('<br>'));
+    for (const oldId of currentCertificationIds) {
+      expect(result.renderedGeometryPage).not.toContain(oldId);
+    }
 
     expect(
       synchronizeReleaseDerivedMetadata({
         registry: JSON.parse(JSON.stringify(registry)),
-        version: '0.3.0',
+        version: targetVersion,
         addedUnitDigests: new Map(),
         geometryPage: result.renderedGeometryPage,
         capabilityGraph,
