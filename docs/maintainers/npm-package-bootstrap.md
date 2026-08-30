@@ -5,11 +5,15 @@ GitHub workflow only builds and seals dependency-free `0.0.0-bootstrap.0` placeh
 has read-only permissions, receives no npm credential, cannot publish, and cannot enable the
 autonomous release gate.
 
-The placeholders use the `bootstrap` dist-tag, never `latest`. They exist only so an npm
-owner can configure trusted publishing before the first functional `0.3.0` release. They
-throw a precise diagnostic if imported explicitly. Do not bootstrap the current workspace
-packages as `0.2.0`: they consume new `@termwright/protocol` subpaths that the published
-protocol `0.2.0` does not provide, so those archives would install but fail at runtime.
+The placeholders are published explicitly with the `bootstrap` dist-tag. For a brand-new
+package name, npm also assigns the first published version to `latest` and rejects removing
+the package's only `latest` tag. This transient registry invariant is accepted only while no
+functional version exists: the placeholder is immediately deprecated and throws a precise
+diagnostic if imported. The full `0.3.0` GitHub release must replace `latest`, while
+`bootstrap` remains pinned to the administrative version. Do not bootstrap the current
+workspace packages as `0.2.0`: they consume new `@termwright/protocol` subpaths that the
+published protocol `0.2.0` does not provide, so those archives would install but fail at
+runtime.
 
 ## Retire the superseded package first
 
@@ -79,13 +83,14 @@ npm view '<name>' dist-tags --json
 node /path/to/termwright/scripts/verify-published-artifact.mjs npm ./npm/<archive>.tgz
 ```
 
-The version and deprecation message must be exact. The tags must contain
-`"bootstrap": "0.0.0-bootstrap.0"` and must not contain `latest`. The immutable artifact
-comparison is mandatory after every publication, not only after an ambiguous response.
-Continue only after it reports `exact`; `missing` means that archive still needs publishing.
-Do not continue after an ambiguous response or a checksum/inventory discrepancy. If
-publication stops after some packages, retain and resume from the same sealed artifact; do
-not regenerate it after the registry scope has changed.
+The version and deprecation message must be exact. Until the first functional release, npm
+will expose both `"bootstrap": "0.0.0-bootstrap.0"` and
+`"latest": "0.0.0-bootstrap.0"`; do not attempt to remove the only `latest` tag. The
+immutable artifact comparison is mandatory after every publication, not only after an
+ambiguous response. Continue only after it reports `exact`; `missing` means that archive
+still needs publishing. Do not continue after an ambiguous response or a
+checksum/inventory discrepancy. If publication stops after some packages, retain and resume
+from the same sealed artifact; do not regenerate it after the registry scope has changed.
 
 For each newly created package, configure npm trusted publishing for:
 
@@ -103,4 +108,5 @@ Finally, run `pnpm check:npm-release-readiness` from the same reviewed commit. I
 that every public workspace package exists and the namespace retirement policy is exact.
 Trusted-publisher configuration is registry state and must be reviewed separately before
 anyone authorizes the normal release gate. The normal release must publish the complete
-functional `0.3.0` packages under `latest`; never promote the placeholder tag.
+functional `0.3.0` packages under `latest`, replacing every transient placeholder `latest`;
+never move or remove the `bootstrap` tag.

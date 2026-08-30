@@ -177,7 +177,7 @@ describe('npm artifact packing contract', () => {
     );
   });
 
-  it('defines dependency-free prerelease placeholders that cannot become latest implicitly', () => {
+  it('defines dependency-free prerelease placeholders that request only the bootstrap tag', () => {
     expect(bootstrapArtifactKind).toBe('registry-bootstrap-placeholders-v1');
     expect(bootstrapVersion).toBe('0.0.0-bootstrap.0');
     expect(bootstrapTag).toBe('bootstrap');

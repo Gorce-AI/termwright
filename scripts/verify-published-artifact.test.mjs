@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   verifyCrateMetadata,
   verifyNpmMetadata,
+  verifyNpmTagMetadata,
   verifyPypiMetadata,
 } from './verify-published-artifact.mjs';
 
@@ -20,6 +21,17 @@ describe('immutable registry retry verification', () => {
         expected,
       ),
     ).toThrow(/different immutable content/u);
+  });
+
+  it('distinguishes an exact npm dist-tag from missing and different targets', () => {
+    const expected = { tag: 'latest', version: '0.3.0' };
+    expect(verifyNpmTagMetadata({ 'dist-tags': { latest: '0.3.0' } }, expected)).toBe('exact');
+    expect(
+      verifyNpmTagMetadata({ 'dist-tags': { bootstrap: '0.0.0-bootstrap.0' } }, expected),
+    ).toBe('missing');
+    expect(verifyNpmTagMetadata({ 'dist-tags': { latest: '0.0.0-bootstrap.0' } }, expected)).toBe(
+      'different',
+    );
   });
 
   it('rejects a partial or changed PyPI file set', () => {
