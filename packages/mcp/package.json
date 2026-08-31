@@ -1,6 +1,6 @@
 {
   "name": "@termwright/mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "thin MCP server over the public driver API",
   "license": "MIT",
   "repository": {
