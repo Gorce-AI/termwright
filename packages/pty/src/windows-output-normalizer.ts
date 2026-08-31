@@ -57,30 +57,7 @@ export function encodeConPtyApplicationInput(
   // VK/scan identity observed by ReadConsoleInput applications.
   return kind === 'key' && data.byteLength === 1 && data[0] === 0x1b
     ? Buffer.from('\x1b[27;1;27;1;0;1_', 'ascii')
-    : kind === 'key'
-      ? encodeWin32InputModeKeyInput(data)
-      : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-}
-
-function encodeWin32InputModeKeyInput(data: Uint8Array): Buffer {
-  let text: string;
-  try {
-    // `ignoreBOM: true` means "do not treat U+FEFF as a decoder signature".
-    // A key payload is text entered by the application user, so every valid
-    // code unit—including a leading U+FEFF—must become a KEY_EVENT.
-    text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(data);
-  } catch {
-    throw new TypeError('ConPTY key input must be valid UTF-8');
-  }
-
-  let encoded = '';
-  // W32IM carries the UTF-16 UnicodeChar from KEY_EVENT_RECORD. Iterating
-  // code units (rather than UTF-8 bytes or Unicode scalars) preserves both
-  // ordinary terminal escape sequences and Windows surrogate pairs.
-  for (let index = 0; index < text.length; index += 1) {
-    encoded += `\u001b[0;0;${text.charCodeAt(index)};1;0;1_`;
-  }
-  return Buffer.from(encoded, 'ascii');
+    : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 }
 
 export class ConPtyTerminalResponseTransport {

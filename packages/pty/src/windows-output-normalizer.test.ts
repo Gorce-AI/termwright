@@ -204,23 +204,14 @@ describe('ConPTY terminal-response routing', () => {
     ).toBe([27, 91, 51, 59, 55, 82].map((byte) => `\x1b[0;0;${byte};1;0;1_`).join(''));
   });
 
-  it('encodes physical keys as W32IM without changing explicitly raw input', () => {
+  it('encodes a physical lone Escape without changing raw or compound input', () => {
     expect(encodeConPtyApplicationInput(Buffer.from('\x1b'), 'key')).toEqual(
       Buffer.from('\x1b[27;1;27;1;0;1_', 'ascii'),
     );
-    expect(encodeConPtyApplicationInput(Buffer.from('T'), 'key')).toEqual(
-      Buffer.from('\x1b[0;0;84;1;0;1_', 'ascii'),
+    expect(encodeConPtyApplicationInput(Buffer.from('T'), 'key')).toEqual(Buffer.from('T'));
+    expect(encodeConPtyApplicationInput(Buffer.from('\x1b[A'), 'key')).toEqual(
+      Buffer.from('\x1b[A'),
     );
-    expect(encodeConPtyApplicationInput(Buffer.from('\x1b[A'), 'key').toString('ascii')).toBe(
-      [27, 91, 65].map((codeUnit) => `\x1b[0;0;${codeUnit};1;0;1_`).join(''),
-    );
-    expect(encodeConPtyApplicationInput(Buffer.from('😀'), 'key').toString('ascii')).toBe(
-      [0xd83d, 0xde00].map((codeUnit) => `\x1b[0;0;${codeUnit};1;0;1_`).join(''),
-    );
-    expect(encodeConPtyApplicationInput(Buffer.from('\uFEFF'), 'key')).toEqual(
-      Buffer.from('\x1b[0;0;65279;1;0;1_', 'ascii'),
-    );
-    expect(() => encodeConPtyApplicationInput(Buffer.from([0xff]), 'key')).toThrow(/valid UTF-8/u);
     expect(encodeConPtyApplicationInput(Buffer.from('\x1b'), 'raw')).toEqual(Buffer.from('\x1b'));
   });
 });

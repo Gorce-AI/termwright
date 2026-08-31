@@ -142,11 +142,10 @@ host uses a separate private `OSC 8488` RPC with a random 128-bit token for its
 cursor shadow: the emulator reads the cursor at the request's exact parser
 position, and only the matching live response is routed raw and consumed by
 OpenConsole. Superseded host replies cannot leak to the application. The
-split-safe startup grammar separately identifies host DA1. Physical key input
-uses the same public Win32 Input Mode carrier so applications consuming
-`ReadConsoleInput` receive real `KEY_EVENT`s; explicitly raw, paste, and mouse
-input keeps its ordinary byte path. Terminal responses remain excluded from
-input events and action receipts. No primer,
+split-safe startup grammar separately identifies host DA1. User input remains
+on the ordinary path except for a physical lone Escape, which uses an explicit
+Win32 record after OpenConsole has enabled its trailing-ESC heuristic. Terminal
+responses remain excluded from input events and action receipts. No primer,
 timeout, retry, quiet window, or pending-capture guess is positive evidence.
 
 ## Floods: the pairing timeout was measuring our own backlog

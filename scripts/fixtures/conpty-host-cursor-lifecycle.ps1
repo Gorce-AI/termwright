@@ -22,6 +22,7 @@ public static class TermwrightHostCursorLifecycleProbe {
   private const uint ENABLE_LINE_INPUT = 0x00000002;
   private const uint ENABLE_ECHO_INPUT = 0x00000004;
   private const uint ENABLE_WINDOW_INPUT = 0x00000008;
+  private const uint ENABLE_VIRTUAL_TERMINAL_INPUT = 0x00000200;
   private const ushort KEY_EVENT = 0x0001;
   private const ushort WINDOW_BUFFER_SIZE_EVENT = 0x0004;
   private static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
@@ -211,7 +212,15 @@ public static class TermwrightHostCursorLifecycleProbe {
 
   private static int PrepareInput(IntPtr input, out uint originalMode) {
     if (!GetConsoleMode(input, out originalMode)) return 60;
-    var mode = (originalMode | ENABLE_WINDOW_INPUT) & ~ENABLE_LINE_INPUT & ~ENABLE_ECHO_INPUT;
+    // This fixture validates KEY_EVENT and WINDOW_BUFFER_SIZE_EVENT records
+    // through ReadConsoleInputW. VT input mode deliberately serializes those
+    // records back to terminal sequences before storage, so retaining an
+    // inherited ENABLE_VIRTUAL_TERMINAL_INPUT would test the opposite API
+    // contract and make a semantic KEY_EVENT impossible by construction.
+    var mode = (originalMode | ENABLE_WINDOW_INPUT) &
+               ~ENABLE_LINE_INPUT &
+               ~ENABLE_ECHO_INPUT &
+               ~ENABLE_VIRTUAL_TERMINAL_INPUT;
     return SetConsoleMode(input, mode) ? 0 : 61;
   }
 
