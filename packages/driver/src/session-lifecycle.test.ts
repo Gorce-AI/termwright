@@ -508,37 +508,38 @@ describe('terminal session resource lifecycle', () => {
   terminalIt(
     'keeps required semantic negotiation open past the ordinary discovery window',
     async () => {
-      // Fake only the contract's clocks. Node's named-pipe/socket scheduler is
-      // real transport and must keep its native next-tick/immediate ordering.
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      vi.useFakeTimers();
       let markSpawned!: () => void;
       const spawned = new Promise<void>((resolve) => {
         markSpawned = resolve;
       });
       const endpoint: { value: string | undefined; token?: string } = { value: undefined };
-      const originalListen = SemanticChannel.listen.bind(SemanticChannel);
-      let markHandshakeAdmitted!: () => void;
-      const handshakeAdmitted = new Promise<void>((resolve) => {
-        markHandshakeAdmitted = resolve;
-      });
-      vi.spyOn(SemanticChannel, 'listen').mockImplementation((options, dependencies) =>
-        originalListen(
-          {
-            ...options,
-            hooks: {
-              ...options.hooks,
-              onNegotiationStateChange: (state) => {
-                options.hooks.onNegotiationStateChange?.(state);
-                if (state.admissionOpen && state.pendingHandshakes === 1) {
-                  markHandshakeAdmitted();
-                }
-              },
-            },
+      let completeAttach!: () => void;
+      let discoveryState: { admissionOpen: boolean; pendingHandshakes: number } | undefined;
+      const listenSpy = vi.spyOn(SemanticChannel, 'listen').mockImplementation(async (options) => {
+        const channel = {
+          endpoint: 'controlled-semantic-endpoint',
+          closeAdmission: () => {
+            discoveryState = {
+              admissionOpen: false,
+              pendingHandshakes: 1,
+            };
+            options.hooks.onNegotiationStateChange?.(discoveryState);
           },
-          dependencies,
-        ),
-      );
-      let socket: ReturnType<typeof connect> | undefined;
+          close: async () => undefined,
+        } as unknown as SemanticChannel;
+        completeAttach = () =>
+          options.hooks.onAttach({
+            protocol: 'termwright/2',
+            adapter: { name: 'controlled-adapter', version: '1.0.0' },
+            capabilities: ['tree', 'render-revisions'],
+            markerEnabled: true,
+            logsEnabled: false,
+            probe: null,
+            providers: [],
+          });
+        return channel;
+      });
       let launched: ReturnType<typeof launchTerminalWithBackend> | undefined;
       try {
         launched = launchTerminalWithBackend({
@@ -550,29 +551,13 @@ describe('terminal session resource lifecycle', () => {
         });
         await spawned;
 
-        // Admit the peer just before ordinary discovery closes, then cross
-        // that boundary without consuming real wall clock. Its independent
-        // hello deadline keeps required-capability negotiation alive.
-        await vi.advanceTimersByTimeAsync(1_900);
-        socket = connect(endpoint.value!);
-        await new Promise<void>((resolve, reject) => {
-          socket!.once('connect', resolve);
-          socket!.once('error', reject);
-        });
-        await handshakeAdmitted;
-        await vi.advanceTimersByTimeAsync(200);
-        socket.write(
-          encodeFrame(
-            {
-              type: 'hello',
-              protocol: 'termwright/2',
-              token: endpoint.token,
-              adapter: { name: 'controlled-adapter', version: '1.0.0' },
-              capabilities: ['tree', 'render-revisions'],
-            },
-            DEFAULT_LIMITS.maxFrameBytes,
-          ),
-        );
+        // SemanticChannel's real-socket suite owns transport admission and
+        // hello-deadline behavior. This lifecycle test supplies the resulting
+        // admitted state directly, so a Windows named pipe is never coupled to
+        // Vitest's virtual clock.
+        await vi.advanceTimersByTimeAsync(2_100);
+        expect(discoveryState).toEqual({ admissionOpen: false, pendingHandshakes: 1 });
+        completeAttach();
 
         // Launch resolution is the causal assertion under test: onAttach
         // settled the required contract and woke the launch change journal.
@@ -585,10 +570,10 @@ describe('terminal session resource lifecycle', () => {
         );
         await terminal.close();
       } finally {
-        socket?.destroy();
         await vi.advanceTimersByTimeAsync(3_000);
         const terminal = await launched?.catch(() => undefined);
         await terminal?.close().catch(() => undefined);
+        listenSpy.mockRestore();
         vi.useRealTimers();
       }
     },
