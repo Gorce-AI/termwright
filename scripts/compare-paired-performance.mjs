@@ -228,7 +228,7 @@ export function aggregateObservations(samples) {
   };
 }
 
-function assertCompatibleSamples(samples) {
+export function assertCompatibleSamples(samples) {
   const first = samples[0];
   if (first === undefined) throw new Error('paired performance produced no samples');
   for (let index = 1; index < samples.length; index += 1) {
