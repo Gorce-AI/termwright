@@ -329,9 +329,9 @@ if (process.platform === 'win32') {
   const resizing = { session: resizeSession, text: () => Buffer.concat(resizeOutput).toString('utf8') };
   let resizeStatus;
   resizeSession.onExit((status) => { resizeStatus = status; });
-  let startupCprAnswered = false;
   let startupDaAnswered = false;
-  let runtimeCprAnswered = false;
+  const hostCursorAnswered = new Set();
+  let runtimeHostCursorAnswered = false;
   let applicationCprAnswered = false;
   let escapeSent = false;
   let responseFailure;
@@ -340,31 +340,30 @@ if (process.platform === 'win32') {
     resizeOutput.push(Buffer.from(data));
     const observed = resizing.text();
     try {
+      for (const match of observed.matchAll(/\x1b\]8488;(twh-cpr-v1:q:([0-9a-f]{32}))\x07/g)) {
+        const payload = match[1];
+        const token = match[2];
+        if (hostCursorAnswered.has(payload)) continue;
+        hostCursorAnswered.add(payload);
+        const runtime = observed.indexOf('RESIZE-READY') >= 0;
+        resizeStage = runtime ? 'runtime-host-cursor-rpc' : 'startup-host-cursor-rpc';
+        const response =
+          controlEsc + ']8488;twh-cpr-v1:r:' + token + (runtime ? ':3:17' : ':1:1') + '\x07';
+        const route = resizeSession.writeTerminalResponse(Buffer.from(response, 'ascii'));
+        if (route !== 'host-control') throw new Error('host cursor RPC used route ' + route);
+        if (runtime) runtimeHostCursorAnswered = true;
+      }
       const startupDa = observed.indexOf(controlEsc + '[c');
       if (!startupDaAnswered && startupDa >= 0) {
-        const startupCpr = observed.lastIndexOf(controlEsc + '[6n', startupDa);
-        if (startupCpr >= 0 && !startupCprAnswered) {
-          resizeStage = 'startup-cpr';
-          const cprRoute = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[1;1R', 'ascii'));
-          if (cprRoute !== 'conpty-cpr-arbitrated') throw new Error('startup CPR used route ' + cprRoute);
-          startupCprAnswered = true;
-        }
         resizeStage = 'startup-da1';
         const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[?1;2c', 'ascii'));
         if (route !== 'host-control') throw new Error('startup DA1 used route ' + route);
         startupDaAnswered = true;
       }
-      const ready = observed.indexOf('RESIZE-READY');
-      if (!runtimeCprAnswered && ready >= 0 && observed.indexOf(controlEsc + '[6n', ready) >= 0) {
-        resizeStage = 'runtime-host-cpr';
-        const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[3;17R', 'ascii'));
-        if (route !== 'conpty-cpr-arbitrated') throw new Error('runtime CPR used route ' + route);
-        runtimeCprAnswered = true;
-      }
       if (!applicationCprAnswered && observed.includes(';APP-DSR:' + controlEsc + '[6n')) {
         resizeStage = 'application-cpr';
         const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[9;17R', 'ascii'));
-        if (route !== 'conpty-cpr-arbitrated') throw new Error('application CPR used route ' + route);
+        if (route !== 'application-win32-input') throw new Error('application CPR used route ' + route);
         applicationCprAnswered = true;
       }
       if (!escapeSent && observed.includes(';APP-CPR:1b5b393b313752;ESC-READY')) {
@@ -388,14 +387,14 @@ if (process.platform === 'win32') {
   }
   const resizeEvidence = resizing.text();
   const resizeValid = responseFailure === undefined &&
-    startupDaAnswered && runtimeCprAnswered && applicationCprAnswered && escapeSent &&
+    startupDaAnswered && runtimeHostCursorAnswered && applicationCprAnswered && escapeSent &&
     resizeStatus?.code === 0 &&
-    resizeEvidence.includes('RESIZED:120x40;HOST-CPR:16,2;PRIMER-LEAK:false') &&
+    resizeEvidence.includes('RESIZED:120x40;HOST-CPR:16,2;HOST-REPLY-LEAK:false') &&
     resizeEvidence.includes(';APP-CPR:1b5b393b313752') &&
     resizeEvidence.includes(';ESC:1b;VK:27;SCAN:1;REPEAT:1') && resizeSession.sawRealEof;
   resizeSession.dispose();
   if (!resizeValid) {
-    throw new Error('Win32 did not certify runtime/application CPR arbitration after resize: ' +
+    throw new Error('Win32 did not certify host cursor RPC and application CPR after resize: ' +
       JSON.stringify({ status: resizeStatus, output: resizeEvidence, responseFailure: String(responseFailure ?? '') }));
   }
 

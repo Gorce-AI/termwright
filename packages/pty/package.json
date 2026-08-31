@@ -27,6 +27,9 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. test -- -- --run packages/pty"
   },
+  "dependencies": {
+    "@termwright/protocol": "workspace:*"
+  },
   "optionalDependencies": {
     "@termwright/pty-darwin-arm64": "workspace:*",
     "@termwright/pty-darwin-x64": "workspace:*",

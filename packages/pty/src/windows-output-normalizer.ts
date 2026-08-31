@@ -8,12 +8,13 @@
  * divided at any byte by the anonymous output pipe.
  */
 
+import { parseConPtyHostCursorResponse } from '@termwright/protocol';
+
 const ESC = 0x1b;
 
 const bytes = (...values: number[]): Buffer => Buffer.from(values);
 
 const DA1 = bytes(ESC, 0x5b, 0x63);
-const DSRCPR = bytes(ESC, 0x5b, 0x36, 0x6e);
 const WINDOW_DEICONIFY = bytes(ESC, 0x5b, 0x31, 0x74);
 const WINDOW_ICONIFY = bytes(ESC, 0x5b, 0x32, 0x74);
 const FOCUS_ON = bytes(ESC, 0x5b, 0x3f, 0x31, 0x30, 0x30, 0x34, 0x68);
@@ -21,6 +22,9 @@ const FOCUS_OFF = bytes(ESC, 0x5b, 0x3f, 0x31, 0x30, 0x30, 0x34, 0x6c);
 const WIN32_ON = bytes(ESC, 0x5b, 0x3f, 0x39, 0x30, 0x30, 0x31, 0x68);
 const WIN32_OFF = bytes(ESC, 0x5b, 0x3f, 0x39, 0x30, 0x30, 0x31, 0x6c);
 const RIS = bytes(ESC, 0x63);
+const HOST_CURSOR_REQUEST_PREFIX = Buffer.from('\x1b]8488;twh-cpr-v1:q:', 'ascii');
+const HOST_CURSOR_REQUEST_TOKEN_BYTES = 32;
+const HOST_CURSOR_REPLY_NAMESPACE = Buffer.from('\x1b]8488;twh-cpr-v1:r:', 'ascii');
 
 interface Rewrite {
   readonly input: Buffer;
@@ -28,9 +32,8 @@ interface Rewrite {
   readonly hostQueries?: readonly ConPtyHostQuery[];
 }
 
-export type ConPtyHostQuery = 'cursor-position' | 'primary-device-attributes';
-export type ConPtyTerminalResponseRoute =
-  'host-control' | 'conpty-cpr-arbitrated' | 'application-win32-input';
+export type ConPtyHostQuery = 'primary-device-attributes';
+export type ConPtyTerminalResponseRoute = 'host-control' | 'application-win32-input';
 
 export function encodeWin32InputModeTerminalResponse(data: Uint8Array): Buffer {
   let encoded = '';
@@ -57,27 +60,18 @@ export function encodeConPtyApplicationInput(
     : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 }
 
-const CPR_ARBITRATION_PRIMER = Buffer.from('\x1b[27;0;0;1;8;1_', 'ascii');
-
 export class ConPtyTerminalResponseTransport {
-  #cprArbitrationPrimed = false;
-
   encode(route: ConPtyTerminalResponseRoute, data: Uint8Array): Buffer {
     if (route === 'application-win32-input') {
       return encodeWin32InputModeTerminalResponse(data);
     }
-    const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-    if (route !== 'conpty-cpr-arbitrated' || this.#cprArbitrationPrimed) return bytes;
-    this.#cprArbitrationPrimed = true;
-    return Buffer.concat([CPR_ARBITRATION_PRIMER, bytes]);
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
   }
 }
 
-function isHostResponse(query: ConPtyHostQuery, response: Buffer): boolean {
+function isHostResponse(response: Buffer): boolean {
   const text = response.toString('ascii');
-  return query === 'cursor-position'
-    ? /^\x1b\[\d+;\d+R$/u.test(text)
-    : /^\x1b\[\?[\d;]*c$/u.test(text);
+  return /^\x1b\[\?[\d;]*c$/u.test(text);
 }
 
 /**
@@ -98,23 +92,19 @@ export class ConPtyTerminalResponseRouter {
   route(response: Uint8Array): ConPtyTerminalResponseRoute {
     const bytes = Buffer.from(response.buffer, response.byteOffset, response.byteLength);
     const query = this.#hostQueries[0];
-    // OpenConsole's input parser is itself the authoritative CPR provenance
-    // seam. With a pending host capture it consumes the report and updates its
-    // shadow cursor; otherwise its Win32-input branch passes the same raw CPR
-    // through to the application. This also covers runtime host DSRs emitted
-    // after resize or unknown VT, which are byte-identical to application DSRs.
-    if (isHostResponse('cursor-position', bytes)) {
-      if (query === 'cursor-position') {
-        this.#hostQueries.shift();
-        return 'conpty-cpr-arbitrated';
-      }
-      if (query !== undefined) {
-        throw new Error(`terminal answered ${query} ConPTY host query with an unexpected response`);
-      }
-      return 'conpty-cpr-arbitrated';
+    // Cursor synchronization is a private request-addressed OSC RPC in the
+    // pinned host. Standard CPR is therefore always application-owned and can
+    // never be stolen by a host capture state.
+    if (parseConPtyHostCursorResponse(bytes) !== null) return 'host-control';
+    // The versioned reply prefix is reserved to the pinned host. A stale or
+    // malformed reply must still travel raw to OpenConsole, which consumes it
+    // fail-closed; encoding it as W32IM would expose host control bytes to the
+    // application input queue. Other OSC 8488 payloads remain application-owned.
+    if (bytes.subarray(0, HOST_CURSOR_REPLY_NAMESPACE.length).equals(HOST_CURSOR_REPLY_NAMESPACE)) {
+      return 'host-control';
     }
     if (query === undefined) return 'application-win32-input';
-    if (!isHostResponse(query, bytes)) {
+    if (!isHostResponse(bytes)) {
       throw new Error(`terminal answered ${query} ConPTY host query with an unexpected response`);
     }
     this.#hostQueries.shift();
@@ -123,25 +113,6 @@ export class ConPtyTerminalResponseRouter {
 }
 
 const STARTUP_REWRITES: readonly Rewrite[] = [
-  ...[WINDOW_DEICONIFY, WINDOW_ICONIFY].flatMap((windowReport): readonly Rewrite[] => [
-    {
-      input: Buffer.concat([windowReport, DSRCPR, DA1, FOCUS_ON, WIN32_ON]),
-      output: Buffer.concat([windowReport, DSRCPR, DA1]),
-      hostQueries: ['cursor-position', 'primary-device-attributes'],
-    },
-    {
-      input: Buffer.concat([windowReport, DA1, FOCUS_ON, WIN32_ON]),
-      output: Buffer.concat([windowReport, DA1]),
-      hostQueries: ['primary-device-attributes'],
-    },
-  ]),
-  {
-    // With cursor inheritance VtIo asks for the cursor position before DA1.
-    // Both queries are real transport output; only the modes belong to host.
-    input: Buffer.concat([DSRCPR, DA1, FOCUS_ON, WIN32_ON]),
-    output: Buffer.concat([DSRCPR, DA1]),
-    hostQueries: ['cursor-position', 'primary-device-attributes'],
-  },
   {
     // VtIo's ordinary startup handshake.
     input: Buffer.concat([DA1, FOCUS_ON, WIN32_ON]),
@@ -149,6 +120,36 @@ const STARTUP_REWRITES: readonly Rewrite[] = [
     hostQueries: ['primary-device-attributes'],
   },
 ];
+
+type StartupPassThrough =
+  | { readonly kind: 'complete'; readonly length: number }
+  | {
+      readonly kind: 'partial';
+    }
+  | null;
+
+function startupPassThrough(input: Buffer, offset: number): StartupPassThrough {
+  for (const fixed of [WINDOW_DEICONIFY, WINDOW_ICONIFY]) {
+    if (!hasPrefixAt(input, offset, fixed)) continue;
+    return input.length - offset < fixed.length
+      ? { kind: 'partial' }
+      : { kind: 'complete', length: fixed.length };
+  }
+  if (!hasPrefixAt(input, offset, HOST_CURSOR_REQUEST_PREFIX)) return null;
+  const remaining = input.length - offset;
+  if (remaining < HOST_CURSOR_REQUEST_PREFIX.length) return { kind: 'partial' };
+  const tokenStart = offset + HOST_CURSOR_REQUEST_PREFIX.length;
+  const availableToken = Math.min(HOST_CURSOR_REQUEST_TOKEN_BYTES, input.length - tokenStart);
+  for (let index = 0; index < availableToken; index += 1) {
+    const byte = input[tokenStart + index]!;
+    const hexadecimal = (byte >= 0x30 && byte <= 0x39) || (byte >= 0x61 && byte <= 0x66);
+    if (!hexadecimal) return null;
+  }
+  const total = HOST_CURSOR_REQUEST_PREFIX.length + HOST_CURSOR_REQUEST_TOKEN_BYTES + 1;
+  if (remaining < total) return { kind: 'partial' };
+  if (input[offset + total - 1] !== 0x07) return null;
+  return { kind: 'complete', length: total };
+}
 
 const HOST_REWRITES: readonly Rewrite[] = [
   // AdaptDispatch reinjects these immediately after the child reset that
@@ -195,6 +196,21 @@ export class ConPtyControlPlaneNormalizer {
     let offset = 0;
 
     while (offset < input.length) {
+      if (this.#atStreamStart) {
+        const passThrough = startupPassThrough(input, offset);
+        if (passThrough?.kind === 'partial') {
+          if (literalStart < offset) output.push(input.subarray(literalStart, offset));
+          this.#pending = Buffer.from(input.subarray(offset));
+          return output.length === 0 ? Buffer.alloc(0) : Buffer.concat(output);
+        }
+        if (passThrough?.kind === 'complete') {
+          if (literalStart < offset) output.push(input.subarray(literalStart, offset));
+          output.push(input.subarray(offset, offset + passThrough.length));
+          offset += passThrough.length;
+          literalStart = offset;
+          continue;
+        }
+      }
       const rewrites = this.#atStreamStart
         ? [...STARTUP_REWRITES, ...HOST_REWRITES]
         : HOST_REWRITES;

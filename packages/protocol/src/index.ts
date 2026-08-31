@@ -17,5 +17,6 @@ export * from './accesskit.js';
 export * from './probe/index.js';
 export * from './messages.js';
 export * from './marker.js';
+export * from './conpty-host-rpc.js';
 export * from './framing.js';
 export * from './validate.js';

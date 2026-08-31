@@ -159,7 +159,7 @@ export interface PtyHandle {
   writeApplicationInput?(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): void;
   writeTerminalResponse?(
     data: Uint8Array,
-  ): 'host-control' | 'conpty-cpr-arbitrated' | 'application-direct' | 'application-win32-input';
+  ): 'host-control' | 'application-direct' | 'application-win32-input';
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
   treeState(): 'alive' | 'gone' | 'unsupported';

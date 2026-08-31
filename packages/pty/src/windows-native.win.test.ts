@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect } from 'vitest';
+import { encodeConPtyHostCursorResponse, parseConPtyHostCursorRequest } from '@termwright/protocol';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { bunTestCapability } from '../../../scripts/test-support/bun-runtime.mjs';
 import {
@@ -53,6 +54,31 @@ function collect(handle: WindowsPtyHandle): { text(): string } {
 
 function node(script: string): readonly string[] {
   return [process.execPath, '-e', script];
+}
+
+const HOST_CURSOR_REQUEST = /\x1b\]8488;(twh-cpr-v1:q:[0-9a-f]{32})\x07/gu;
+
+function answerHostCursorRequests(
+  handle: WindowsPtyHandle,
+  output: string,
+  answered: Set<string>,
+): void {
+  for (const match of output.matchAll(HOST_CURSOR_REQUEST)) {
+    const payload = match[1];
+    if (payload === undefined || answered.has(payload)) continue;
+    const request = parseConPtyHostCursorRequest(payload);
+    if (request === null) throw new Error(`invalid ConPTY host cursor request: ${payload}`);
+    answered.add(payload);
+    const runtime = output.indexOf('RESIZE-READY') >= 0;
+    expect(
+      handle.writeTerminalResponse(
+        Buffer.from(
+          encodeConPtyHostCursorResponse(request, runtime ? 3 : 1, runtime ? 17 : 1),
+          'ascii',
+        ),
+      ),
+    ).toBe('host-control');
+  }
 }
 
 function windowsAddonPath(): string {
@@ -277,7 +303,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     handle.dispose();
   });
 
-  it('lets ConPTY arbitrate runtime host and application CPR without leaking its primer', async () => {
+  it('routes addressed host cursor RPC separately from application CPR without leaking host replies', async () => {
     const fixture = fileURLToPath(
       new URL('../../../scripts/fixtures/conpty-observable-resize.ps1', import.meta.url),
     );
@@ -298,19 +324,17 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     });
     const output = collect(handle);
     const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+    const answeredHostCursorRequests = new Set<string>();
 
     try {
+      const answerHostQueries = (): void => {
+        answerHostCursorRequests(handle, output.text(), answeredHostCursorRequests);
+      };
+      handle.onData(answerHostQueries);
+      answerHostQueries();
       // Complete OpenConsole's certified startup handshake causally. This is
       // the one query whose provenance is established by the startup prefix.
       expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
-      const startup = output.text();
-      const startupDa = startup.indexOf('\x1b[c');
-      const startupCpr = startup.lastIndexOf('\x1b[6n', startupDa);
-      if (startupCpr >= 0) {
-        expect(handle.writeTerminalResponse(Buffer.from('\x1b[1;1R', 'ascii'))).toBe(
-          'conpty-cpr-arbitrated',
-        );
-      }
       expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
 
       expect(
@@ -320,33 +344,32 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(handle.resize(120, 40)).toBe(true);
 
       // The fixture waits for the resize event and then calls
-      // GetConsoleScreenBufferInfo. The pinned runtime emits this standalone,
-      // host-owned DSR only then. There is no byte-level distinction between
-      // it and the application's later DSR; OpenConsole's capture state is the
-      // provenance authority.
-      expect(
-        await waitForMarker(handle, output, /RESIZE-READY[\s\S]*\x1b\[6n/u, 10_000),
-        output.text(),
-      ).toBeDefined();
-      expect(handle.writeTerminalResponse(Buffer.from('\x1b[3;17R', 'ascii'))).toBe(
-        'conpty-cpr-arbitrated',
-      );
-
-      // The runtime consumed that CPR and committed its coordinates. The same
-      // write primed CPR pass-through with a swallowed Ctrl+Esc W32IM record;
-      // the fixture proves no such record reached the application's queue,
-      // disables VT input, and emits its own DSR.
+      // GetConsoleScreenBufferInfo. The pinned runtime emits an addressed
+      // private query only then; standard DSR remains application-owned.
       expect(
         await waitForMarker(
           handle,
           output,
-          /HOST-CPR:16,2;PRIMER-LEAK:false;APP-DSR:\x1b\[6n/u,
+          /RESIZE-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+
+      // The runtime consumed only its matching token and committed the cursor.
+      // The fixture proves no host reply reached the application queue,
+      // disables VT input, and emits an ordinary application DSR.
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /HOST-CPR:16,2;HOST-REPLY-LEAK:false;APP-DSR:\x1b\[6n/u,
           10_000,
         ),
         output.text(),
       ).toBeDefined();
       expect(handle.writeTerminalResponse(Buffer.from('\x1b[9;17R', 'ascii'))).toBe(
-        'conpty-cpr-arbitrated',
+        'application-win32-input',
       );
 
       expect(
@@ -357,7 +380,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
 
       const [status] = await Promise.all([exited, handle.outputEnded]);
       expect(status, output.text()).toEqual({ code: 0, signal: null });
-      expect(output.text()).toContain('RESIZED:120x40;HOST-CPR:16,2;PRIMER-LEAK:false');
+      expect(output.text()).toContain('RESIZED:120x40;HOST-CPR:16,2;HOST-REPLY-LEAK:false');
       expect(output.text()).toContain(';APP-CPR:1b5b393b313752');
       expect(output.text()).toContain(';ESC:1b;VK:27;SCAN:1;REPEAT:1');
       expect(handle.sawRealEof).toBe(true);

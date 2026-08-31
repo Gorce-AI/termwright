@@ -9,7 +9,7 @@ import {
 } from './windows-output-normalizer.js';
 
 const DA1 = '\x1b[c';
-const DSRCPR = '\x1b[6n';
+const HOST_CURSOR_REQUEST = '\x1b]8488;twh-cpr-v1:q:0123456789abcdef0123456789abcdef\x07';
 const FOCUS_ON = '\x1b[?1004h';
 const FOCUS_OFF = '\x1b[?1004l';
 const WIN32_ON = '\x1b[?9001h';
@@ -59,16 +59,19 @@ describe('ConPTY control-plane output normalization', () => {
     everySplit(`${DA1}${FOCUS_ON}${WIN32_ON}app`, `${DA1}app`);
   });
 
-  it('keeps startup DSRCPR and DA1 while removing host modes at every split', () => {
-    everySplit(`${DSRCPR}${DA1}${FOCUS_ON}${WIN32_ON}app`, `${DSRCPR}${DA1}app`);
+  it('keeps the addressed startup cursor RPC while removing host modes at every split', () => {
+    everySplit(
+      `${HOST_CURSOR_REQUEST}${DA1}${FOCUS_ON}${WIN32_ON}app`,
+      `${HOST_CURSOR_REQUEST}${DA1}app`,
+    );
   });
 
-  it('classifies the exact startup queries once and in causal order', () => {
-    const source = Buffer.from(`${DSRCPR}${DA1}${FOCUS_ON}${WIN32_ON}app`);
+  it('classifies only the exact startup DA host query', () => {
+    const source = Buffer.from(`${HOST_CURSOR_REQUEST}${DA1}${FOCUS_ON}${WIN32_ON}app`);
     for (const chunks of [[source], [...source].map((byte) => Buffer.of(byte))]) {
       expect(normalizeWithQueries(chunks)).toEqual({
-        output: Buffer.from(`${DSRCPR}${DA1}app`),
-        queries: ['cursor-position', 'primary-device-attributes'],
+        output: Buffer.from(`${HOST_CURSOR_REQUEST}${DA1}app`),
+        queries: ['primary-device-attributes'],
       });
     }
     expect(normalizeWithQueries([Buffer.from(`x${DA1}${FOCUS_ON}${WIN32_ON}`)]).queries).toEqual(
@@ -78,7 +81,10 @@ describe('ConPTY control-plane output normalization', () => {
 
   it('recognizes the startup handshake after a pseudo-window report', () => {
     everySplit(`\x1b[1t${DA1}${FOCUS_ON}${WIN32_ON}app`, `\x1b[1t${DA1}app`);
-    everySplit(`\x1b[2t${DSRCPR}${DA1}${FOCUS_ON}${WIN32_ON}app`, `\x1b[2t${DSRCPR}${DA1}app`);
+    everySplit(
+      `\x1b[2t${HOST_CURSOR_REQUEST}${DA1}${FOCUS_ON}${WIN32_ON}app`,
+      `\x1b[2t${HOST_CURSOR_REQUEST}${DA1}app`,
+    );
   });
 
   it('removes only the focus mode reinjected after a child reset', () => {
@@ -118,13 +124,14 @@ describe('ConPTY control-plane output normalization', () => {
       `${RIS}${WIN32_ON}${FOCUS_ON}`,
       `${DA1}${FOCUS_ON}x${WIN32_ON}`,
       `x${DA1}${FOCUS_ON}${WIN32_ON}`,
+      `${HOST_CURSOR_REQUEST.replace('abcdef', 'ABCDEF')}${DA1}${FOCUS_ON}${WIN32_ON}`,
     ];
     for (const sequence of sequences) everySplit(sequence, sequence);
   });
 
   it('releases every incomplete candidate verbatim at EOF', () => {
     const candidates = [
-      `${DSRCPR}${DA1}${FOCUS_ON}${WIN32_ON}`,
+      `${HOST_CURSOR_REQUEST}${DA1}${FOCUS_ON}${WIN32_ON}`,
       `${DA1}${FOCUS_ON}${WIN32_ON}`,
       `${FOCUS_OFF}${FOCUS_ON}`,
       `${WIN32_OFF}${WIN32_ON}`,
@@ -148,14 +155,17 @@ describe('ConPTY control-plane output normalization', () => {
 });
 
 describe('ConPTY terminal-response routing', () => {
-  it('routes structurally certified host replies raw and later application replies via W32IM', () => {
+  it('routes only addressed host replies raw and every standard CPR via W32IM', () => {
     const router = new ConPtyTerminalResponseRouter();
-    router.noteHostQuery('cursor-position');
     router.noteHostQuery('primary-device-attributes');
 
-    expect(router.route(Buffer.from('\x1b[1;1R'))).toBe('conpty-cpr-arbitrated');
     expect(router.route(Buffer.from('\x1b[?1;2c'))).toBe('host-control');
-    expect(router.route(Buffer.from('\x1b[3;7R'))).toBe('conpty-cpr-arbitrated');
+    expect(router.route(Buffer.from('\x1b[3;7R'))).toBe('application-win32-input');
+    expect(
+      router.route(
+        Buffer.from('\x1b]8488;twh-cpr-v1:r:0123456789abcdef0123456789abcdef:3:7\x07', 'ascii'),
+      ),
+    ).toBe('host-control');
     expect(encodeWin32InputModeTerminalResponse(Buffer.from('\x1b[3;7R')).toString('ascii')).toBe(
       [27, 91, 51, 59, 55, 82].map((byte) => `\x1b[0;0;${byte};1;0;1_`).join(''),
     );
@@ -169,14 +179,29 @@ describe('ConPTY terminal-response routing', () => {
     );
   });
 
-  it('atomically primes the first raw CPR and never exposes the swallowed Ctrl+Esc twice', () => {
+  it('never exposes malformed or stale versioned host replies as application input', () => {
+    const router = new ConPtyTerminalResponseRouter();
+    for (const response of [
+      '\x1b]8488;twh-cpr-v1:r:stale:3:7\x07',
+      '\x1b]8488;twh-cpr-v1:r:0123456789abcdef0123456789abcdef:0:7\x07',
+    ]) {
+      expect(router.route(Buffer.from(response, 'ascii'))).toBe('host-control');
+    }
+    expect(router.route(Buffer.from('\x1b]8488;application-owned\x07', 'ascii'))).toBe(
+      'application-win32-input',
+    );
+  });
+
+  it('preserves an addressed host reply and encodes an application reply', () => {
     const transport = new ConPtyTerminalResponseTransport();
+    const host = Buffer.from(
+      '\x1b]8488;twh-cpr-v1:r:0123456789abcdef0123456789abcdef:1:1\x07',
+      'ascii',
+    );
+    expect(transport.encode('host-control', host)).toEqual(host);
     expect(
-      transport.encode('conpty-cpr-arbitrated', Buffer.from('\x1b[1;1R')).toString('ascii'),
-    ).toBe('\x1b[27;0;0;1;8;1_\x1b[1;1R');
-    expect(
-      transport.encode('conpty-cpr-arbitrated', Buffer.from('\x1b[3;7R')).toString('ascii'),
-    ).toBe('\x1b[3;7R');
+      transport.encode('application-win32-input', Buffer.from('\x1b[3;7R')).toString('ascii'),
+    ).toBe([27, 91, 51, 59, 55, 82].map((byte) => `\x1b[0;0;${byte};1;0;1_`).join(''));
   });
 
   it('encodes a physical lone Escape without changing raw or compound input', () => {

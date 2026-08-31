@@ -44,10 +44,7 @@ describe('the native PTY driver adapter', () => {
 
   it('delegates Windows response provenance while POSIX writes the response raw', () => {
     const windowsResponse = vi.fn<
-      (
-        data: Uint8Array,
-      ) =>
-        'host-control' | 'conpty-cpr-arbitrated' | 'application-direct' | 'application-win32-input'
+      (data: Uint8Array) => 'host-control' | 'application-direct' | 'application-win32-input'
     >(() => 'application-win32-input');
     const windowsSession = fakeSession({ writeTerminalResponse: windowsResponse });
     const posixSession = fakeSession();
@@ -87,7 +84,7 @@ describe('the native PTY driver adapter', () => {
     );
   });
 
-  it('sends a lone Windows Escape key through Win32 Input Mode after CPR arbitration', () => {
+  it('sends a lone Windows Escape key through Win32 Input Mode', () => {
     const applicationInput =
       vi.fn<(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw') => void>();
     const session = fakeSession({ writeApplicationInput: applicationInput });

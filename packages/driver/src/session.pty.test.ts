@@ -319,14 +319,10 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
         .filter((entry) => entry.code === 'terminal-response')
         .map((entry) => /\(([^,]+),/u.exec(entry.detail)?.[1])
         .sort();
-      // The application-owned OSC color and synchronized-output replies stay
-      // observable. CPR is intentionally absent: OpenConsole arbitrates the
-      // byte-identical host/application cursor report below this API layer.
-      expect(responseKinds).toEqual(
-        process.platform === 'win32'
-          ? ['background-color', 'emulator']
-          : ['background-color', 'emulator', 'emulator'],
-      );
+      // Every application-owned reply stays observable on every platform.
+      // The pinned OpenConsole uses a separate addressed private RPC for its
+      // cursor shadow, so ordinary CPR is never captured as host control.
+      expect(responseKinds).toEqual(['background-color', 'emulator', 'emulator']);
     } finally {
       unsubscribe();
     }

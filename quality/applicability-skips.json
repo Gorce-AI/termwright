@@ -152,9 +152,9 @@
       "required": true
     },
     {
-      "id": "conpty-non-windows-cpr-arbitration",
+      "id": "conpty-non-windows-host-cursor-rpc",
       "file": "packages/pty/src/windows-native.win.test.ts",
-      "fullName": "lets ConPTY arbitrate runtime host and application CPR without leaking its primer",
+      "fullName": "routes addressed host cursor RPC separately from application CPR without leaking host replies",
       "platforms": [
         "aix",
         "android",

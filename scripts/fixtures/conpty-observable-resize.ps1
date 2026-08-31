@@ -12,7 +12,6 @@ public static class TermwrightResizeProbe {
   private const ushort KEY_EVENT = 0x0001;
   private const ushort WINDOW_BUFFER_SIZE_EVENT = 0x0004;
   private const ushort VK_ESCAPE = 0x001b;
-  private const uint CTRL_PRESSED = 0x000c;
 
   [StructLayout(LayoutKind.Sequential)]
   public struct COORD {
@@ -118,7 +117,7 @@ public static class TermwrightResizeProbe {
            written == (uint)bytes.Length;
   }
 
-  private static bool PrimerLeaked(IntPtr input) {
+  private static bool HostReplyLeaked(IntPtr input) {
     uint count;
     if (!GetNumberOfConsoleInputEvents(input, out count)) throw new InvalidOperationException("input-count");
     if (count == 0) return false;
@@ -127,10 +126,7 @@ public static class TermwrightResizeProbe {
     if (!PeekConsoleInputW(input, records, count, out read)) throw new InvalidOperationException("input-peek");
     for (var index = 0; index < (int)read; index++) {
       var record = records[index];
-      if (record.EventType == KEY_EVENT &&
-          record.KeyEvent.KeyDown &&
-          record.KeyEvent.VirtualKeyCode == VK_ESCAPE &&
-          (record.KeyEvent.ControlKeyState & CTRL_PRESSED) != 0) {
+      if (record.EventType == KEY_EVENT && record.KeyEvent.KeyDown) {
         return true;
       }
     }
@@ -172,25 +168,25 @@ public static class TermwrightResizeProbe {
 
         // This call is the runtime host-query seam under test. Resize marks
         // OpenConsole's cursor shadow dirty; GetConsoleScreenBufferInfo emits
-        // a host-owned DSR CPR and blocks until the hosting terminal replies.
+        // a request-addressed private RPC and blocks for its matching reply.
         CONSOLE_SCREEN_BUFFER_INFO info;
         if (!GetConsoleScreenBufferInfo(output, out info)) return 44;
         var columns = info.Window.Right - info.Window.Left + 1;
         var rows = info.Window.Bottom - info.Window.Top + 1;
-        var primerLeaked = PrimerLeaked(input);
+        var hostReplyLeaked = HostReplyLeaked(input);
         Console.Out.Write(
           "RESIZED:" + columns + "x" + rows +
           ";HOST-CPR:" + info.CursorPosition.X + "," + info.CursorPosition.Y +
-          ";PRIMER-LEAK:" + (primerLeaked ? "true" : "false")
+          ";HOST-REPLY-LEAK:" + (hostReplyLeaked ? "true" : "false")
         );
         Console.Out.Flush();
         if (columns != expectedColumns || rows != expectedRows) return 45;
         if (info.CursorPosition.X != 16 || info.CursorPosition.Y != 2) return 46;
-        if (primerLeaked) return 47;
+        if (hostReplyLeaked) return 47;
 
         // Remove resize/focus records before the byte-oriented application
-        // query. VT input is deliberately disabled: the raw CPR must still be
-        // passed through byte-for-byte by ConPTY's CPR arbitration branch.
+        // query. VT input is deliberately disabled: ordinary application CPR
+        // must still arrive through Win32 Input Mode without host capture.
         if (!FlushConsoleInputBuffer(input)) return 48;
         var byteInputMode = originalMode &
           ~ENABLE_LINE_INPUT &
