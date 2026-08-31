@@ -4,7 +4,7 @@
     "provider": "termwright-patched-openconsole",
     "upstreamCommit": "dd494ac79a82a04e1e7252a91c8939a3c3039908",
     "upstreamArchiveSha256": "785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2",
-    "patchSha256": "193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492",
+    "patchSha256": "41da3024330ad209b0d10a491584dc6958e721d40fa7bfa0c1aef7049c47bfbe",
     "hostCursorRpc": "twh-cpr-v1",
     "mode": "ordered-vt-passthrough",
     "buildConfiguration": "Release",
@@ -13,7 +13,7 @@
   "sourceManifest": {
     "repositoryPath": "packages/pty/upstream-patches/openconsole/dd494ac79a82a04e1e7252a91c8939a3c3039908/manifest.json",
     "artifactPath": "source-manifest.json",
-    "sha256": "7889fcac6bde4dd746a7a391a24bfc24dccda6f338c2ad36e963e84bccaafd55"
+    "sha256": "b437b60762be9018b7e6cd76377c142e335cf36ccaebf98d400489db9ffcebf3"
   },
   "artifact": {
     "requiredStatus": "uncertified-bootstrap-output"
@@ -35,25 +35,25 @@
     "x64": {
       "conpty.dll": {
         "artifactPath": "x64/conpty.dll",
-        "sha256": "a5d33beb890767e6a29fae6475c8271178a997099495b181bcb5e75a2232df6e"
+        "sha256": "90b53fc9e5fb5ce1cc0f01323cb490ee7ac285d952738c1e7ef0eeb10ec80c65"
       },
       "x64/OpenConsole.exe": {
         "artifactPath": "x64/OpenConsole.exe",
-        "sha256": "c053c95486b13a47e5be2bab643e4ae585a1441ffead2e091d499fa08330be5b"
+        "sha256": "1dfd8a2e993583d953269eac78538d3dbae202b772088831628f98e2061dca4f"
       },
       "arm64/OpenConsole.exe": {
         "artifactPath": "arm64/OpenConsole.exe",
-        "sha256": "da5101893563a9b565e7a5bbed44c5257cb4a9de86401f38910f1e56c696e92b"
+        "sha256": "2653fd7f591ff88403981356dd686f0832703233051d2cf2e02b20ca0be6ec5f"
       }
     },
     "arm64": {
       "conpty.dll": {
         "artifactPath": "arm64/conpty.dll",
-        "sha256": "61ffb4cc10e4601365b9a7f5bc2da3a874aed62cc8366a516f7fe7ec54825aab"
+        "sha256": "8ca6e69842b2a2be07c766e7c2a8f5eeb455fe6f51e0b8d45cfdbaa6501cd26a"
       },
       "arm64/OpenConsole.exe": {
         "artifactPath": "arm64/OpenConsole.exe",
-        "sha256": "da5101893563a9b565e7a5bbed44c5257cb4a9de86401f38910f1e56c696e92b"
+        "sha256": "2653fd7f591ff88403981356dd686f0832703233051d2cf2e02b20ca0be6ec5f"
       }
     }
   },
@@ -61,14 +61,14 @@
     "x64": {
       "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
       "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
-      "THIRD_PARTY_NOTICES.md": "e7d1ce8d46edbae041fa8ada05cc12ab1a2d13793584db4f558a4e53113eaa1a",
-      "SBOM.spdx.json": "09fadb12463e8ea517e2e44b8fcbba220dc481c5a852f86cc020e70c88503cc0"
+      "THIRD_PARTY_NOTICES.md": "ba3a935d386fbc5c82be33e951aebddcb12c59df0a9540dd9e433f8c67849141",
+      "SBOM.spdx.json": "975b9b6705adf299a841864424beb85280efe37ea7d3b43de235aac4dfec0275"
     },
     "arm64": {
       "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
       "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
-      "THIRD_PARTY_NOTICES.md": "e7d1ce8d46edbae041fa8ada05cc12ab1a2d13793584db4f558a4e53113eaa1a",
-      "SBOM.spdx.json": "37c860c02d1b4f0004e25aa272aa9153669d13432561364cd521ed1ab13e26d9"
+      "THIRD_PARTY_NOTICES.md": "ba3a935d386fbc5c82be33e951aebddcb12c59df0a9540dd9e433f8c67849141",
+      "SBOM.spdx.json": "e7bbca771a0e3a6f1224e72401b97edaa0334f0454448b9fd51c35bd93c935c1"
     }
   }
 }
