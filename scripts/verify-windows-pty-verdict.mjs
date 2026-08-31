@@ -31,7 +31,7 @@ export async function verifyWindowsPtyVerdict(
     verdict.runtime?.provider !== 'termwright-patched-openconsole' ||
     verdict.runtime?.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
     verdict.runtime?.patchSha256 !==
-      '46b5389036d2d9624d23d270147100559b211d3d5edac88cf003735ad5bb21bc' ||
+      '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c' ||
     verdict.runtime?.hostCursorRpc !== 'twh-cpr-v1' ||
     Object.hasOwn(verdict.runtime ?? {}, 'package') ||
     Object.hasOwn(verdict.runtime ?? {}, 'version') ||

@@ -439,7 +439,7 @@ index fc7d83d..1c8791a 100644
 
  // Assumes that it will find <m> in the calling environment.
  #define TraceConsoleAPICallWithOrigin(ApiName, ...)                  \
-@@ -43,6 +46,100 @@ constexpr T saturate(auto val)
+@@ -43,6 +46,99 @@ constexpr T saturate(auto val)
      return val < min ? min : (val > max ? max : val);
  }
 
@@ -521,10 +521,9 @@ index fc7d83d..1c8791a 100644
 +                return false;
 +            }
 +
-+            CONSOLE_SCREEN_BUFFER_INFOEX info{};
++            auto& info = static_cast<ConsoleScreenBufferInfoWaitReply*>(outputData)->value;
 +            info.cbSize = sizeof(info);
 +            _api->GetConsoleScreenBufferInfoExImpl(*_screenBuffer, info);
-+            fillScreenBufferInfoReply(static_cast<ConsoleScreenBufferInfoWaitReply*>(outputData)->value, info);
 +            *replyStatus = STATUS_SUCCESS;
 +            return true;
 +        }
@@ -540,7 +539,7 @@ index fc7d83d..1c8791a 100644
  [[nodiscard]] HRESULT ApiDispatchers::ServerGetConsoleCP(_Inout_ CONSOLE_API_MSG* const m,
                                                           _Inout_ BOOL* const /*pbReplyPending*/)
  {
-@@ -581,8 +678,9 @@ constexpr T saturate(auto val)
+@@ -581,8 +677,9 @@ constexpr T saturate(auto val)
  }
 
  [[nodiscard]] HRESULT ApiDispatchers::ServerGetConsoleScreenBufferInfo(_Inout_ CONSOLE_API_MSG* const m,
@@ -551,7 +550,7 @@ index fc7d83d..1c8791a 100644
      const auto a = &m->u.consoleMsgL2.GetConsoleScreenBufferInfo;
 
      CONSOLE_SCREEN_BUFFER_INFOEX ex = { 0 };
-@@ -594,29 +692,34 @@ constexpr T saturate(auto val)
+@@ -594,29 +691,34 @@ constexpr T saturate(auto val)
      SCREEN_INFORMATION* pObj;
      RETURN_IF_FAILED(pObjectHandle->GetScreenBuffer(GENERIC_READ, &pObj));
 
@@ -605,8 +604,23 @@ index fc7d83d..1c8791a 100644
 
      TraceConsoleAPICallWithOrigin(
          "GetConsoleScreenBufferInfo",
+diff --git a/src/server/ApiSorter.h b/src/server/ApiSorter.h
+index 6366b28..0920896 100644
+--- a/src/server/ApiSorter.h
++++ b/src/server/ApiSorter.h
+@@ -26,9 +26,10 @@ typedef HRESULT (*PCONSOLE_API_ROUTINE)(_Inout_ PCONSOLE_API_MSG m, _Inout_ PBOO
+ // 0x01 stands for level 1 API (layers are 1-based)
+ // 0x000004 stands for the 5th one down in the layer structure (call IDs are 0-based)
+ // clang-format off
+ #define API_NUMBER_GETCONSOLEINPUT 0x01000004
+ #define API_NUMBER_READCONSOLE     0x01000005
+ #define API_NUMBER_WRITECONSOLE    0x01000006
++#define API_NUMBER_GETCONSOLESCREENBUFFERINFO 0x02000007
+ // clang-format on
+
+ class ApiSorter
 diff --git a/src/server/IWaitRoutine.h b/src/server/IWaitRoutine.h
-index b213c26..649a29c 100644
+index b213c26..2ed50ac 100644
 --- a/src/server/IWaitRoutine.h
 +++ b/src/server/IWaitRoutine.h
 @@ -26,6 +26,11 @@ enum class ReplyDataType
@@ -615,7 +629,7 @@ index b213c26..649a29c 100644
 
 +struct ConsoleScreenBufferInfoWaitReply
 +{
-+    CONSOLE_SCREENBUFFERINFO_MSG value{};
++    CONSOLE_SCREEN_BUFFER_INFOEX value{};
 +};
 +
  class IWaitRoutine
@@ -645,13 +659,25 @@ index aed40e1..6126c3c 100644
      default:
      {
          FAIL_FAST_HR(E_NOTIMPL); // we shouldn't be getting a wait/notify on API numbers we don't support.
-@@ -236,6 +242,10 @@ bool ConsoleWaitBlock::Notify(const WaitTerminationReason TerminationReason)
+@@ -236,6 +242,22 @@ bool ConsoleWaitBlock::Notify(const WaitTerminationReason TerminationReason)
              auto a = &(_WaitReplyMessage.u.consoleMsgL1.WriteConsoleW);
              a->NumBytes = gsl::narrow<ULONG>(NumBytes);
          }
 +        else if (API_NUMBER_GETCONSOLESCREENBUFFERINFO == _WaitReplyMessage.msgHeader.ApiNumber)
 +        {
-+            _WaitReplyMessage.u.consoleMsgL2.GetConsoleScreenBufferInfo = screenBufferInfo.value;
++            const auto& info = screenBufferInfo.value;
++            auto& reply = _WaitReplyMessage.u.consoleMsgL2.GetConsoleScreenBufferInfo;
++            reply.FullscreenSupported = !!info.bFullscreenSupported;
++            CopyMemory(reply.ColorTable, info.ColorTable, sizeof(reply.ColorTable));
++            reply.CursorPosition = info.dwCursorPosition;
++            reply.MaximumWindowSize = info.dwMaximumWindowSize;
++            reply.Size = info.dwSize;
++            reply.ScrollPosition.X = info.srWindow.Left;
++            reply.ScrollPosition.Y = info.srWindow.Top;
++            reply.CurrentWindowSize.X = info.srWindow.Right - info.srWindow.Left;
++            reply.CurrentWindowSize.Y = info.srWindow.Bottom - info.srWindow.Top;
++            reply.Attributes = info.wAttributes;
++            reply.PopupAttributes = info.wPopupAttributes;
 +        }
 
          _WaitReplyMessage.ReleaseMessageBuffers();

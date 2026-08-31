@@ -26,7 +26,7 @@ struct ConPtyRuntimeInfo {
   std::string upstream_commit =
       "dd494ac79a82a04e1e7252a91c8939a3c3039908";
   std::string patch_sha256 =
-      "46b5389036d2d9624d23d270147100559b211d3d5edac88cf003735ad5bb21bc";
+      "839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c";
   std::string host_cursor_rpc = "twh-cpr-v1";
   std::string mode = "ordered-vt-passthrough";
   std::string policy = "strict";

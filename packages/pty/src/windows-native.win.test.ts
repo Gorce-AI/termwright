@@ -325,7 +325,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     expect(runtime).toMatchObject({
       provider: 'termwright-patched-openconsole',
       upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
-      patchSha256: '46b5389036d2d9624d23d270147100559b211d3d5edac88cf003735ad5bb21bc',
+      patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c',
       hostCursorRpc: 'twh-cpr-v1',
       mode: 'ordered-vt-passthrough',
       policy: 'strict',
@@ -837,7 +837,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         [
           `const addon = require(${JSON.stringify(sourceAddon)});`,
           'const info = addon.conPtyRuntimeInfo();',
-          "if (info.provider !== 'termwright-patched-openconsole' || info.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' || info.patchSha256 !== '46b5389036d2d9624d23d270147100559b211d3d5edac88cf003735ad5bb21bc' || info.hostCursorRpc !== 'twh-cpr-v1' || info.assetsValidated !== true) process.exit(9);",
+          "if (info.provider !== 'termwright-patched-openconsole' || info.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' || info.patchSha256 !== '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c' || info.hostCursorRpc !== 'twh-cpr-v1' || info.assetsValidated !== true) process.exit(9);",
         ].join(''),
       ],
       { cwd: hostileCwd, encoding: 'utf8' },

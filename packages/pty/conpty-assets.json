@@ -4,7 +4,7 @@
     "provider": "termwright-patched-openconsole",
     "upstreamCommit": "dd494ac79a82a04e1e7252a91c8939a3c3039908",
     "upstreamArchiveSha256": "785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2",
-    "patchSha256": "46b5389036d2d9624d23d270147100559b211d3d5edac88cf003735ad5bb21bc",
+    "patchSha256": "839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c",
     "hostCursorRpc": "twh-cpr-v1",
     "mode": "ordered-vt-passthrough",
     "buildConfiguration": "Release",
@@ -13,7 +13,7 @@
   "sourceManifest": {
     "repositoryPath": "packages/pty/upstream-patches/openconsole/dd494ac79a82a04e1e7252a91c8939a3c3039908/manifest.json",
     "artifactPath": "source-manifest.json",
-    "sha256": "52221962ade386a2507f9450af32352e95e96bcaa977c6501d27e1ba23afdd66"
+    "sha256": "eaacfbb61ac186e61e45707a92efa1f606f0e3c88c472c24abb3fde0ef68c81b"
   },
   "artifact": {
     "requiredStatus": "uncertified-bootstrap-output"

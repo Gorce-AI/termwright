@@ -16,7 +16,7 @@ async function fixture() {
       architecture: 'x64',
       provider: 'termwright-patched-openconsole',
       upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
-      patchSha256: '46b5389036d2d9624d23d270147100559b211d3d5edac88cf003735ad5bb21bc',
+      patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c',
       hostCursorRpc: 'twh-cpr-v1',
       mode: 'ordered-vt-passthrough',
     })}\n`,
@@ -33,7 +33,7 @@ async function fixture() {
     runtime: {
       provider: 'termwright-patched-openconsole',
       upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
-      patchSha256: '46b5389036d2d9624d23d270147100559b211d3d5edac88cf003735ad5bb21bc',
+      patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c',
       hostCursorRpc: 'twh-cpr-v1',
       mode: 'ordered-vt-passthrough',
       policy: 'strict',
