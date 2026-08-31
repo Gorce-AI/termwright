@@ -80,6 +80,8 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(source).toContain(
       "const fragmentedSyntax = spawnSync(process.execPath, ['--check', '-']",
     );
+    expect(source).toContain('attachHostControlResponder(handle');
+    expect(source).toContain("stdio: ['ignore', 'inherit', 'inherit']");
   });
 
   it('keeps repository and release certification single-attempt', async () => {
@@ -104,6 +106,8 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(ci).toMatch(/^env:\n(?: {2}.*\n)* {2}TERMWRIGHT_RETRIES: '0'$/mu);
     expect(ci).toContain("TERMWRIGHT_REQUIRE_GO: '1'");
     expect(release).toContain("TERMWRIGHT_REQUIRE_GO: '1'");
+    expect(ci).toContain("GOPROXY: 'https://proxy.golang.org'");
+    expect(release).toContain("GOPROXY: 'https://proxy.golang.org'");
     for (const [workflow, jobId] of [
       [ci, 'build'],
       [ci, 'windows-driver-native'],

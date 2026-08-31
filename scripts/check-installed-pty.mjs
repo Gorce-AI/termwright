@@ -49,6 +49,7 @@ const probe = `
 	const { createServer } = await import('node:net');
 	const { spawnSync } = await import('node:child_process');
 	const { createHash, createHmac } = await import('node:crypto');
+	const { encodeConPtyHostCursorResponse, parseConPtyHostCursorRequest } = await import('@termwright/protocol');
 	const pty = await import('@termwright/pty');
 if (!pty.ptyAvailable()) {
   console.error('resolved no addon: ' + (pty.ptyUnavailableReason?.() ?? 'no reason reported'));
@@ -90,6 +91,31 @@ const handle = pty.spawnPty({
 });
 const chunks = [];
 handle.onData((data) => chunks.push(Buffer.from(data)));
+const attachHostControlResponder = (session, text) => {
+  const answeredCursorRequests = new Set();
+  let answeredPrimaryDeviceAttributes = false;
+  const answer = () => {
+    const observed = text();
+    if (!answeredPrimaryDeviceAttributes && observed.includes('\x1b[c')) {
+      answeredPrimaryDeviceAttributes = true;
+      const route = session.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'));
+      if (route !== 'host-control') throw new Error('startup DA1 used route ' + route);
+    }
+    for (const match of observed.matchAll(/\x1b\]8488;(twh-cpr-v1:q:[0-9a-f]{32})\x07/g)) {
+      const payload = match[1];
+      if (answeredCursorRequests.has(payload)) continue;
+      const request = parseConPtyHostCursorRequest(payload);
+      if (request === null) throw new Error('invalid ConPTY host cursor request: ' + payload);
+      answeredCursorRequests.add(payload);
+      const response = encodeConPtyHostCursorResponse(request, 1, 1);
+      const route = session.writeTerminalResponse(Buffer.from(response, 'ascii'));
+      if (route !== 'host-control') throw new Error('host cursor RPC used route ' + route);
+    }
+  };
+  session.onData(answer);
+  answer();
+};
+attachHostControlResponder(handle, () => Buffer.concat(chunks).toString('utf8'));
 const exited = new Promise((resolve) => handle.onExit(resolve));
 const [status] = await Promise.all([exited, handle.outputEnded]);
 const text = Buffer.concat(chunks).toString('utf8');
@@ -117,7 +143,9 @@ const collect = (source, executable = process.execPath) => {
   const session = pty.spawnPty({ command: command(source, executable), env: environment, columns: 80, rows: 24 });
   const output = [];
   session.onData((data) => output.push(Buffer.from(data)));
-  return { session, output, text: () => Buffer.concat(output).toString('utf8') };
+  const collected = { session, output, text: () => Buffer.concat(output).toString('utf8') };
+  attachHostControlResponder(session, collected.text);
+  return collected;
 };
 
 if (process.platform === 'win32') {
@@ -172,6 +200,7 @@ if (process.platform === 'win32') {
   const legacyOutput = [];
   legacySession.onData((data) => legacyOutput.push(Buffer.from(data)));
   const legacy = { session: legacySession, text: () => Buffer.concat(legacyOutput).toString('utf8') };
+  attachHostControlResponder(legacySession, legacy.text);
   await legacy.session.outputEnded;
   const legacyBytes = legacy.text();
   let legacyCursor = legacyBytes.indexOf('A0000\x1b]8487;TW_LEGACY;A;0000\x07');
@@ -203,6 +232,7 @@ if (process.platform === 'win32') {
   });
   const inactiveOutput = [];
   inactiveSession.onData((data) => inactiveOutput.push(Buffer.from(data)));
+  attachHostControlResponder(inactiveSession, () => Buffer.concat(inactiveOutput).toString('utf8'));
   await inactiveSession.outputEnded;
   const inactiveBytes = Buffer.concat(inactiveOutput).toString('utf8');
   const beforeBuffer = inactiveBytes.indexOf('ACTIVE-BEFORE\x1b]8487;TW_BUFFER;BEFORE\x07');
@@ -229,6 +259,7 @@ if (process.platform === 'win32') {
     });
     const markerOutput = [];
     markerSession.onData((data) => markerOutput.push(Buffer.from(data)));
+    attachHostControlResponder(markerSession, () => Buffer.concat(markerOutput).toString('utf8'));
     const markerExited = new Promise((resolve) => markerSession.onExit(resolve));
     const [markerStatus] = await Promise.all([markerExited, markerSession.outputEnded]);
     const markerBytes = Buffer.concat(markerOutput).toString('utf8');
@@ -775,11 +806,11 @@ const result = spawnSync(execPath, [certifierPath], {
     ),
     TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath,
   },
-  stdio: ['ignore', 'pipe', 'pipe'],
+  // Certification stage markers must remain visible while the child runs. A
+  // buffered pipe hid the exact causal boundary whenever a runner watchdog
+  // terminated a stuck certifier.
+  stdio: ['ignore', 'inherit', 'inherit'],
 });
-
-if (result.stdout) process.stdout.write(result.stdout);
-if (result.stderr) process.stderr.write(result.stderr);
 if (result.status !== 0) {
   console.error(
     `the installed @termwright/pty failed on ${platform}-${arch}: ` +
