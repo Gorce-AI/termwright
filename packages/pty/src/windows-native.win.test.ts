@@ -31,6 +31,12 @@ const bun =
   windows &&
   bunTestCapability(() => spawnSync('bun', ['--version'], { stdio: 'ignore' }).status === 0);
 
+// Closing the ConPTY input generates CTRL_CLOSE_EVENT for attached console
+// processes. Windows lets their handlers finish cleanup and then terminates
+// them with this exact native status; returning TRUE does not turn it into a
+// normal exit.
+const STATUS_CONTROL_C_EXIT = 0xc000_013a;
+
 // These are behavioral certifications of the vendored native host, not normal
 // application sessions. They exercise OpenConsole, PowerShell, Node/Bun,
 // process trees and high-volume native channels. Reserving the complete host
@@ -50,6 +56,12 @@ function collect(handle: WindowsPtyHandle): { text(): string } {
       return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8');
     },
   };
+}
+
+function diagnosticTail(output: string): string {
+  const maxCharacters = 4_096;
+  if (output.length <= maxCharacters) return output;
+  return `[${output.length - maxCharacters} earlier characters omitted]\n${output.slice(-maxCharacters)}`;
 }
 
 function node(script: string): readonly string[] {
@@ -791,18 +803,22 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(rawRequests).toHaveLength(2);
       expect(new Set(rawRequests)).toHaveProperty('size', 2);
 
-      // No cursor response is sent. This closes only the parent-owned input
-      // writer; the still-live fixture must publish its completion through the
-      // independently open output pipe before exiting normally.
+      // No cursor response is sent. Closing the parent-owned input writer
+      // produces CTRL_CLOSE_EVENT. Both handlers must finish their causal
+      // cleanup and publish through the independently open output pipe before
+      // Windows applies STATUS_CONTROL_C_EXIT to the root process.
       handle.closeInput();
       handle.closeInput();
       expect(() => handle.write(Buffer.from('after-eof'))).toThrow(/ConPTY input is closed/u);
 
       const [status] = await Promise.all([exited, handle.outputEnded]);
-      expect(status, output.text()).toEqual({ code: 0, signal: null });
       expect(output.text()).toContain('EOF-A-WAITER');
       expect(output.text()).toContain('EOF-B-WAITER');
       expect(handle.sawRealEof).toBe(true);
+      expect(status, diagnosticTail(output.text())).toEqual({
+        code: STATUS_CONTROL_C_EXIT,
+        signal: null,
+      });
     } finally {
       handle.dispose();
     }
