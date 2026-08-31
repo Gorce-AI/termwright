@@ -106,13 +106,38 @@ try {
         Assert-Sha256 $path $property.Value.sha256After "Upstream source $($property.Name) after patch"
     }
 
+    # The global upstream packages.config also covers PGO, TAEF tests and the
+    # Windows Terminal UI. Their packages live on Microsoft-internal feeds and
+    # are not inputs to the two ConPTY targets. Materialize a verified filtered
+    # copy instead of requiring private credentials or substituting packages.
+    $upstreamPackagesConfig = Join-Path $sourceRoot "dep/nuget/packages.config"
+    [xml] $packages = Get-Content -Raw -LiteralPath $upstreamPackagesConfig
+    foreach ($excluded in $manifest.build.excludedOptionalInternalPackages) {
+        $matches = @($packages.packages.package | Where-Object {
+            $_.id -eq $excluded.id -and $_.version -eq $excluded.version
+        })
+        if ($matches.Count -ne 1) {
+            throw "Expected exactly one optional internal package $($excluded.id) $($excluded.version), found $($matches.Count)."
+        }
+        $null = $packages.packages.RemoveChild($matches[0])
+    }
+    $publicPackagesConfig = Join-Path $scratch "public-packages.config"
+    $packages.Save($publicPackagesConfig)
+
     $nuget = Join-Path $sourceRoot "dep/nuget/nuget.exe"
-    & $nuget restore (Join-Path $sourceRoot "dep/nuget/packages.config") -PackagesDirectory (Join-Path $sourceRoot "packages") -NonInteractive
+    & $nuget restore $publicPackagesConfig `
+        -PackagesDirectory (Join-Path $sourceRoot "packages") `
+        -Source "https://api.nuget.org/v3/index.json" `
+        -NonInteractive
     if ($LASTEXITCODE -ne 0) { throw "NuGet tool dependency restore failed." }
 
     $msbuild = (Get-Command msbuild.exe -ErrorAction Stop).Source
     & (Join-Path $sourceRoot "build/scripts/Set-LatestVCToolsVersion.ps1")
     $targetArgument = "/t:" + ($manifest.build.targets -join ";")
+    $disabledFeatureArguments = @($manifest.build.disabledOptionalFeatures.PSObject.Properties | ForEach-Object {
+        $value = if ($_.Value -is [bool]) { $_.Value.ToString().ToLowerInvariant() } else { [string] $_.Value }
+        "/p:$($_.Name)=$value"
+    })
     foreach ($platform in $manifest.build.platforms) {
         & $msbuild (Join-Path $sourceRoot $manifest.build.solution) `
             $targetArgument `
@@ -121,7 +146,8 @@ try {
             "/p:Configuration=$($manifest.build.configuration)" `
             "/p:Platform=$platform" `
             "/p:GenerateAppxPackageOnBuild=false" `
-            "/p:WindowsTerminalOfficialBuild=false"
+            "/p:WindowsTerminalOfficialBuild=false" `
+            @disabledFeatureArguments
         if ($LASTEXITCODE -ne 0) {
             throw "OpenConsole/ConPTY build failed for $platform."
         }

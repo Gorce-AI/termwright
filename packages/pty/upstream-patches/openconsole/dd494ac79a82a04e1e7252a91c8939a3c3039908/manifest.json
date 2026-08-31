@@ -78,6 +78,28 @@
     "solution": "OpenConsole.slnx",
     "configuration": "Release",
     "targets": ["Conhost\\Host_EXE", "Conhost\\winconptydll"],
+    "disabledOptionalFeatures": {
+      "PGOBuildMode": "",
+      "TerminalTAEF": false,
+      "TerminalThemeHelpers": false
+    },
+    "excludedOptionalInternalPackages": [
+      {
+        "id": "Microsoft.Internal.PGO-Helpers.Cpp",
+        "version": "0.2.34",
+        "feature": "PGOBuildMode"
+      },
+      {
+        "id": "Microsoft.Taef",
+        "version": "10.100.251104001",
+        "feature": "TerminalTAEF"
+      },
+      {
+        "id": "Microsoft.Internal.Windows.Terminal.ThemeHelpers",
+        "version": "0.8.250811004",
+        "feature": "TerminalThemeHelpers"
+      }
+    ],
     "platforms": ["x64", "ARM64"],
     "outputs": {
       "x64": ["bin/x64/Release/conpty.dll", "bin/x64/Release/OpenConsole.exe"],
