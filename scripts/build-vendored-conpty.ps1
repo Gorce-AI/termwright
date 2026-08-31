@@ -35,7 +35,17 @@ if ((Test-Path -LiteralPath $outputRoot) -and (Get-ChildItem -Force -LiteralPath
 }
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 
-$scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("termwright-openconsole-" + [guid]::NewGuid().ToString("N"))
+# NuGet's legacy restore path still uses Win32 MAX_PATH internally. GitHub's
+# user-profile temp directory plus the Microsoft Terminal archive root and
+# package ids exceeds that limit before MSBuild starts. Keep this throwaway
+# source tree at the runner-work drive's short parent; the unique leaf and the
+# finally block preserve isolation and cleanup.
+$scratchParent = if ($env:RUNNER_TEMP) {
+    Split-Path -Parent ([System.IO.Path]::GetFullPath($env:RUNNER_TEMP))
+} else {
+    [System.IO.Path]::GetTempPath()
+}
+$scratch = Join-Path $scratchParent ("twc-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $scratch | Out-Null
 try {
     $archive = if ($SourceArchive) {
