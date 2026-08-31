@@ -12,7 +12,7 @@
   },
   "patch": {
     "path": "host-cursor-rpc.patch",
-    "sha256": "a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527",
+    "sha256": "46b5389036d2d9624d23d270147100559b211d3d5edac88cf003735ad5bb21bc",
     "strip": 1
   },
   "protocol": {
@@ -47,15 +47,23 @@
     },
     "src/host/screenInfo.cpp": {
       "sha256Before": "50c93b8fce3403fc34342bd774844e4ed8506cb3ee36e8c9213a7dba68ae86ce",
-      "sha256After": "32b766b6c52d46fe1397ae537729b14adaae8001bd35c6c96176e16e7ab28e58"
+      "sha256After": "50eb18d241336e45dde8f15611878f700d316114f06b3a8b90f6baac007fa836"
     },
     "src/host/screenInfo.hpp": {
       "sha256Before": "45fa0f839f7dad5bedcc0e4c7b282cda800689dd0e6f5fa66c997897c83134e4",
-      "sha256After": "5d5c96f3c3b0385b6effc1323f5ab9ebb88b7adaa3dc266f55f0268946166a19"
+      "sha256After": "aa904a62a63394b49f3545a62f3b4188b57d39f22f0039e96b6fbf98b7824383"
     },
     "src/server/ApiDispatchers.cpp": {
       "sha256Before": "c7e4ea86b14b35c00550c293e4625d595b5264553f14fa9c7b0835d500fc9154",
-      "sha256After": "ce39c0da3d7068a44cd096f881216bc4f59862e8220e822ac6b73c46012f5c3b"
+      "sha256After": "9991a00edc132e2c4729fe103c04f467b71c38ced2f723ba340636e2fa7c8dd9"
+    },
+    "src/server/IWaitRoutine.h": {
+      "sha256Before": "9f2e6712931815cf3f63647216916d131d21d1570e5accb7efee6b4b8676a396",
+      "sha256After": "442ef9ce1269ee091b6bdbd3ee9cb0cf5cbc6ada149ca33332273ca2b53b45e3"
+    },
+    "src/server/WaitBlock.cpp": {
+      "sha256Before": "88ddee7b5275dccdabd5cb650227b9b4f89ea3e4a16230530bd80226ed338ac4",
+      "sha256After": "9ffddad4e41edcc08af79b17b8944dbcf9a752ac13b57f0020814e5697f2cda7"
     },
     "src/terminal/parser/InputStateMachineEngine.cpp": {
       "sha256Before": "08bb07a77eeead47dec9fbae36e315389446021255f5b0378a4f1fd014ffc621",
