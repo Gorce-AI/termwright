@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +9,7 @@ import { checkNpmReleaseReadiness } from './check-npm-release-readiness.mjs';
 
 const roots = [];
 const exec = promisify(execFile);
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 const message = 'Package retired; use @termwright/ink instead.';
 const bootstrapMessage = 'Registry bootstrap placeholder; install version 0.3.0 or newer.';
 const bootstrapPolicy = {

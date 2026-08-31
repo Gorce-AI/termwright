@@ -40,10 +40,12 @@ async function fixture(context) {
   await writeFile(join(inputs, 'publish-plan.json'), '{"issues":[]}\n');
   await mkdir(join(inputs, 'verdicts'));
   await command('git', ['init', '-q'], repository);
-  await command('git', ['config', 'user.email', 'test@example.com'], repository);
-  await command('git', ['config', 'user.name', 'Test'], repository);
   await command('git', ['add', '.'], repository);
-  await command('git', ['commit', '-qm', 'base'], repository);
+  await command(
+    'git',
+    ['-c', 'user.email=test@example.com', '-c', 'user.name=Test', 'commit', '-qm', 'base'],
+    repository,
+  );
   const { stdout: sourceSha } = await command('git', ['rev-parse', 'HEAD'], repository);
   return {
     root,
@@ -106,7 +108,9 @@ describe('manual compatibility handoff', () => {
 
       // execFile synchronously creates the ChildProcess before run() returns;
       // aborting now exercises the process-close barrier without polling or a timer.
-      const running = owner.run(['-e', 'process.stdin.resume()']);
+      const running = owner.run(['-e', 'process.stdin.resume()'], {
+        input: Buffer.alloc(16 * 1024 * 1024),
+      });
       controller.abort();
       await expect(running).rejects.toMatchObject({ name: 'AbortError' });
       await owner.close();
@@ -114,16 +118,23 @@ describe('manual compatibility handoff', () => {
     },
   );
 
+  hostIt('owns a child stdin failure without leaking an uncaught stream error', async () => {
+    const owner = createOwnedExecFile(process.execPath);
+    try {
+      await expect(
+        owner.run(['-e', 'process.stdin.destroy(); process.exit(0)'], {
+          input: Buffer.alloc(16 * 1024 * 1024),
+        }),
+      ).rejects.toBeInstanceOf(Error);
+    } finally {
+      await owner.close();
+    }
+  });
+
   hostIt(
     'packages an exact binary/deletion patch with verifiable tamper-evident checksums',
     async (testContext) => {
-      const context = await fixture(testContext);
-      await writeFile(join(context.inputs, 'verdicts/SHA256SUMS'), 'nested verdict material\n');
-      await writeFile(
-        join(context.repository, 'compatibility/certified-upstreams.json'),
-        Buffer.from([0, 1, 2, 255]),
-      );
-      await rm(join(context.repository, 'compatibility/candidate-assessments.json'));
+      const context = await changedFixture(testContext);
       const result = await create(context);
       expect(result.changed).toHaveLength(2);
       expect(await readFile(join(context.handoff, 'changed-files.txt'), 'utf8')).toBe(
@@ -138,20 +149,25 @@ describe('manual compatibility handoff', () => {
       );
       await writeFile(join(context.handoff, 'publish-plan.json'), '{"tampered":true}\n');
       await expect(verifyChecksums(context.handoff)).rejects.toThrow(/checksum mismatch/u);
-
-      const clone = join(context.root, 'clone');
-      await context.command('git', ['clone', '-q', context.repository, clone], context.root);
-      await writeFile(join(clone, 'handoff.patch'), patch);
-      await context.command('git', ['apply', '--index', '--binary', 'handoff.patch'], clone);
-      const { stdout: expectedTree } = await context.command(
-        'git',
-        ['write-tree'],
-        context.repository,
-      );
-      const { stdout: actualTree } = await context.command('git', ['write-tree'], clone);
-      expect(actualTree).toBe(expectedTree);
     },
   );
+
+  hostIt('recreates the exact staged tree from its binary/deletion patch', async (testContext) => {
+    const context = await changedFixture(testContext);
+    await create(context);
+    const patch = await readFile(join(context.handoff, 'reconciliation.patch'));
+    const clone = join(context.root, 'clone');
+    await context.command('git', ['clone', '-q', context.repository, clone], context.root);
+    await writeFile(join(clone, 'handoff.patch'), patch);
+    await context.command('git', ['apply', '--index', '--binary', 'handoff.patch'], clone);
+    const { stdout: expectedTree } = await context.command(
+      'git',
+      ['write-tree'],
+      context.repository,
+    );
+    const { stdout: actualTree } = await context.command('git', ['write-tree'], clone);
+    expect(actualTree).toBe(expectedTree);
+  });
 
   hostIt(
     'emits a truly empty change list and patch when reconciliation is unchanged',
@@ -206,3 +222,14 @@ describe('manual compatibility handoff', () => {
     );
   });
 });
+
+async function changedFixture(testContext) {
+  const context = await fixture(testContext);
+  await writeFile(join(context.inputs, 'verdicts/SHA256SUMS'), 'nested verdict material\n');
+  await writeFile(
+    join(context.repository, 'compatibility/certified-upstreams.json'),
+    Buffer.from([0, 1, 2, 255]),
+  );
+  await rm(join(context.repository, 'compatibility/candidate-assessments.json'));
+  return context;
+}

@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import { execFile as execFileCallback } from 'node:child_process';
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import {
   validateChangedFileObjects,
   validateChangedFiles,
@@ -17,6 +19,7 @@ export function createOwnedExecFile(command, { cwd, signal, maxBuffer = 32 * 102
   let closing = false;
   const run = (args, options = {}) => {
     if (closing) throw new Error(`owned ${command} process group is closing`);
+    const { input, ...execOptions } = options;
     let child;
     const completed = new Promise((resolveCompleted) => {
       child = execFileCallback(
@@ -25,7 +28,7 @@ export function createOwnedExecFile(command, { cwd, signal, maxBuffer = 32 * 102
         {
           maxBuffer,
           cwd,
-          ...options,
+          ...execOptions,
           ...(signal === undefined ? {} : { signal }),
         },
         (error, stdout, stderr) => {
@@ -33,11 +36,13 @@ export function createOwnedExecFile(command, { cwd, signal, maxBuffer = 32 * 102
         },
       );
     });
+    const inputCompleted = input === undefined ? Promise.resolve(null) : writeInput(child, input);
     const closed = new Promise((resolveClose) => child.once('close', resolveClose));
     activeCloses.add(closed);
     void closed.finally(() => activeCloses.delete(closed));
-    return Promise.all([completed, closed]).then(([result]) => {
+    return Promise.all([completed, closed, inputCompleted]).then(([result, , inputError]) => {
       if (result.error !== null) throw result.error;
+      if (inputError !== null) throw inputError;
       return { stdout: result.stdout, stderr: result.stderr };
     });
   };
@@ -50,29 +55,70 @@ export function createOwnedExecFile(command, { cwd, signal, maxBuffer = 32 * 102
   };
 }
 
+async function writeInput(child, input) {
+  if (child.stdin === null) return new Error('owned child process has no stdin stream');
+  try {
+    await pipeline(Readable.from([input]), child.stdin);
+    return null;
+  } catch (error) {
+    return error;
+  }
+}
+
 function ownedGit(repository, signal) {
   return createOwnedExecFile('git', { cwd: repository, signal });
 }
 
-async function regularIndexEntry(path, runGit) {
-  try {
-    await runGit(['cat-file', '-e', `:${path}`]);
-  } catch (error) {
-    if (error?.code === 128) return null;
-    throw error;
+async function regularIndexEntries(paths, runGit) {
+  const { stdout } = await runGit(['ls-files', '--stage', '-z', '--', ...paths], {
+    encoding: 'buffer',
+  });
+  const staged = new Map();
+  for (const bytes of splitNullTerminated(stdout)) {
+    const separator = bytes.indexOf(0x09);
+    if (separator < 0) throw new Error('changed path has an invalid index entry');
+    const [mode, object, stageNumber] = bytes.subarray(0, separator).toString('utf8').split(' ');
+    const path = bytes.subarray(separator + 1).toString('utf8');
+    if (stageNumber !== '0' || !paths.includes(path))
+      throw new Error(`changed path has an invalid index entry: ${path}`);
+    staged.set(path, { mode, object });
   }
-  const [{ stdout: stage }, { stdout: sizeText }] = await Promise.all([
-    runGit(['ls-files', '--stage', '-z', '--', path], { encoding: 'buffer' }),
-    runGit(['cat-file', '-s', `:${path}`]),
-  ]);
-  const terminator = stage.indexOf(0);
-  if (terminator < 0) throw new Error(`changed path has an invalid index entry: ${path}`);
-  const record = stage.subarray(0, terminator).toString('utf8');
-  const separator = record.indexOf('\t');
-  const [mode, , stageNumber] = record.slice(0, separator).split(' ');
-  if (separator < 0 || stageNumber !== '0')
-    throw new Error(`changed path has an invalid index entry: ${path}`);
-  return { path, mode, type: 'blob', size: Number(sizeText.trim()) };
+  if (staged.size === 0) return [];
+  const objects = [...new Set([...staged.values()].map((entry) => entry.object))];
+  const { stdout: objectInfo } = await runGit(
+    ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
+    { input: `${objects.join('\n')}\n` },
+  );
+  const sizes = new Map(
+    objectInfo
+      .trim()
+      .split('\n')
+      .map((line) => {
+        const [object, type, size] = line.split(' ');
+        if (type !== 'blob' || !Number.isSafeInteger(Number(size)))
+          throw new Error(`changed path resolves to an invalid Git object: ${object}`);
+        return [object, Number(size)];
+      }),
+  );
+  return paths.flatMap((path) => {
+    const entry = staged.get(path);
+    if (entry === undefined) return [];
+    const size = sizes.get(entry.object);
+    if (size === undefined) throw new Error(`changed path has no Git object metadata: ${path}`);
+    return [{ path, mode: entry.mode, type: 'blob', size }];
+  });
+}
+
+function splitNullTerminated(buffer) {
+  const records = [];
+  let start = 0;
+  for (let index = 0; index < buffer.length; index += 1) {
+    if (buffer[index] !== 0) continue;
+    records.push(buffer.subarray(start, index));
+    start = index + 1;
+  }
+  if (start !== buffer.length) throw new Error('Git returned an unterminated index record');
+  return records;
 }
 
 async function filesBelow(root) {
@@ -152,9 +198,7 @@ async function createHandoff(
     );
     if (JSON.stringify(stagedPaths) !== JSON.stringify(changed))
       throw new Error('staged patch paths differ from the validated change inventory');
-    const entries = (
-      await Promise.all(changed.map((path) => regularIndexEntry(path, runGit)))
-    ).filter(Boolean);
+    const entries = await regularIndexEntries(changed, runGit);
     const entryPaths = new Set(entries.map((entry) => entry.path));
     validateChangedFileObjects(
       changed.map((filename) => ({

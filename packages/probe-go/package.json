@@ -1,6 +1,6 @@
 {
   "name": "@termwright/probe-go",
-  "version": "0.3.0",
+  "version": "0.2.0",
   "description": "shared Go probe machinery: add-only compiler units and exact source-bound patch sets",
   "license": "MIT",
   "repository": {

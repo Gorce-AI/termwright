@@ -100,7 +100,12 @@ jobs:
         with:
           name: preview-pty-win32-x64
           path: packages/pty-win32-x64
-      - run: pnpm --filter @termwright/pty build
+      - name: Build the protocol before the PTY package
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @termwright/protocol build
+          pnpm --filter @termwright/pty build
       - name: Exercise the exact preview x64 bundle under emulation
         shell: bash
         env:

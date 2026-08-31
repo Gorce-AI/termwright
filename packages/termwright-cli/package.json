@@ -1,6 +1,6 @@
 {
   "name": "termwright",
-  "version": "0.3.0",
+  "version": "0.2.0",
   "description": "umbrella package + CLI: ui, codegen, mcp, agent-context, usage, skill",
   "license": "MIT",
   "repository": {

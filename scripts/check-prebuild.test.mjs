@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import {
   assertSourceBuiltConptyLock,
   verifyBinaryArchitecture,
@@ -12,6 +13,7 @@ import {
 } from './check-prebuild.mjs';
 
 const execute = promisify(execFile);
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 function peFixture(machine) {
   const bytes = Buffer.alloc(0x80);

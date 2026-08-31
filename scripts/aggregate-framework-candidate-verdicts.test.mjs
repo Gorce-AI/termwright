@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, vi } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import {
   aggregateCandidate,
   inventoryPlatformVerdicts,
@@ -11,8 +12,10 @@ import {
   writeTrustedRuntimeUpdate,
 } from './aggregate-framework-candidate-verdicts.mjs';
 
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 const revision = 'a'.repeat(40);
 const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const roots = [];
 const candidate = {
   id: 'opentui@0.5.7',
   frameworkId: 'opentui',
@@ -43,8 +46,13 @@ const charmPatchCandidate = {
   patch: { status: 'ready' },
 };
 
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
 async function fixture(states, updateName = null, fixtureCandidate = candidate) {
   const root = await mkdtemp(join(tmpdir(), 'termwright-platform-verdicts-'));
+  roots.push(root);
   const inputs = join(root, 'inputs');
   const output = join(root, 'output');
   await mkdir(inputs, { recursive: true });
@@ -191,6 +199,7 @@ describe('framework candidate platform aggregation', () => {
 
   it('inventories the exact merged namespace across candidates and platforms', async () => {
     const root = await mkdtemp(join(tmpdir(), 'termwright-merged-verdicts-'));
+    roots.push(root);
     const inputs = join(root, 'inputs');
     const ink = { ...candidate, id: 'ink@7.1.1', frameworkId: 'ink' };
     await mkdir(inputs);
@@ -297,6 +306,7 @@ describe('framework candidate platform aggregation', () => {
 
   it('supports direct aggregation for a nonzero registry slot', async () => {
     const root = await mkdtemp(join(tmpdir(), 'termwright-nonzero-slot-'));
+    roots.push(root);
     const inputs = join(root, 'inputs');
     const output = join(root, 'output');
     const ink = { ...candidate, id: 'ink@7.1.1', frameworkId: 'ink' };
@@ -548,6 +558,7 @@ describe('framework candidate platform aggregation', () => {
       candidateDigest: `sha256:${'c'.repeat(64)}`,
     };
     const root = await mkdtemp(join(tmpdir(), 'termwright-textual-verdict-'));
+    roots.push(root);
     const inputs = join(root, 'inputs');
     const output = join(root, 'output');
     const directory = join(inputs, 'framework-candidate-result-0-linux');
@@ -576,6 +587,7 @@ describe('framework candidate platform aggregation', () => {
 
   it('generates a runtime update only inside the trusted aggregate process', async () => {
     const output = await mkdtemp(join(tmpdir(), 'termwright-trusted-runtime-'));
+    roots.push(output);
     await writeTrustedRuntimeUpdate({ candidate, output, sourceRevision: revision });
     const bundle = JSON.parse(await readFile(join(output, runtimeUpdate, 'bundle.json'), 'utf8'));
     expect(bundle).toMatchObject({

@@ -1,6 +1,6 @@
 {
   "name": "@termwright/opentui",
-  "version": "0.3.0",
+  "version": "0.2.0",
   "description": "Optional annotation-only SDK for the zero-config OpenTUI probe",
   "license": "MIT",
   "repository": {

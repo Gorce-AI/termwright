@@ -61,6 +61,12 @@ function expectArtifactStep(job, action, name, path) {
   );
 }
 
+function expectCommandBefore(source, prerequisite, dependent) {
+  expect(source).toContain(prerequisite);
+  expect(source).toContain(dependent);
+  expect(source.indexOf(prerequisite)).toBeLessThan(source.indexOf(dependent));
+}
+
 describe('the native host is the only Termwright test entrypoint', () => {
   it('parses the exact packed PTY certification payload', async () => {
     const source = await readFile(new URL('./check-installed-pty.mjs', import.meta.url), 'utf8');
@@ -388,6 +394,11 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'node-gyp rebuild --target="$node_version" --arch=${{ inputs.architecture }}',
     );
     expect(ptyPrebuildAction).toContain('--nodedir="$node_root"');
+    expectCommandBefore(
+      ptyPrebuildAction,
+      'pnpm --filter @termwright/protocol build',
+      'pnpm --filter @termwright/pty build',
+    );
     expect(ptyPrebuildAction).toContain(
       'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
     );
@@ -399,6 +410,11 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(releaseJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
     expect(releaseJobs['certify-x64-on-arm64']).toContain(
       'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
+    );
+    expectCommandBefore(
+      releaseJobs['certify-x64-on-arm64'],
+      'pnpm --filter @termwright/protocol build',
+      'pnpm --filter @termwright/pty build',
     );
     expect(releaseJobs['certify-x64-on-arm64']).toContain('certification-verdict-arm64-host.json');
     expect(releaseJobs.verify).toContain('scripts/verify-windows-pty-verdict.mjs');
@@ -412,6 +428,11 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(previewJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
     expect(previewJobs['certify-x64-on-arm64']).toContain(
       'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
+    );
+    expectCommandBefore(
+      previewJobs['certify-x64-on-arm64'],
+      'pnpm --filter @termwright/protocol build',
+      'pnpm --filter @termwright/pty build',
     );
     expect(previewJobs['certify-x64-on-arm64']).toContain('certification-verdict-arm64-host.json');
     expect(previewJobs.preview).toContain('scripts/verify-windows-pty-verdict.mjs');
@@ -736,6 +757,28 @@ describe('the native host is the only Termwright test entrypoint', () => {
     );
     expect(candidateUnit).toContain('in one toolchain transaction');
     expect(candidateUnit).not.toMatch(/exec\(['"]go['"]/u);
+
+    const hostPressureUnits = await Promise.all(
+      [
+        './aggregate-framework-candidate-verdicts.test.mjs',
+        './certify-framework-candidate.test.mjs',
+        './certify-upstream-patches.test.mjs',
+        './check-npm-release-readiness.test.mjs',
+        './check-prebuild.test.mjs',
+        './compare-paired-performance.test.mjs',
+        './conformance-tview-fixture.test.mjs',
+        './discover-framework-candidates.test.mjs',
+        './package-subpath-exports.test.mjs',
+        './performance-harness-fingerprint.test.mjs',
+        './test-support/immutable-build-inputs.test.mjs',
+      ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
+    );
+    for (const source of hostPressureUnits) {
+      expect(source).toMatch(
+        /const it = resourceAwareIt\.resources\(\{\s*hostPressure:\s*['"]exclusive['"]\s*\}\)/u,
+      );
+      expect(source).not.toMatch(/import\s*\{[^}]*\bit\b[^}]*\}\s*from\s*['"]vitest['"]/u);
+    }
 
     const handoffTest = await readFile(
       new URL('./create-manual-compatibility-handoff.test.mjs', import.meta.url),

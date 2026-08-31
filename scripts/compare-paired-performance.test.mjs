@@ -3,7 +3,8 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, vi } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 
 import {
   capturePerformanceBaseline,
@@ -19,6 +20,7 @@ vi.mock('./performance-environment.mjs', async (importOriginal) => {
 });
 import {
   aggregateObservations,
+  assertCompatibleSamples,
   comparePairedPerformance as comparePairedPerformanceImpl,
   hashControllerClosure,
 } from './compare-paired-performance.mjs';
@@ -36,6 +38,7 @@ const collector = new URL('./collect-quality-performance.mjs', import.meta.url);
 const referenceSha = 'a'.repeat(40);
 const candidateSha = 'b'.repeat(40);
 let sampleSequence = 0;
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -234,7 +237,7 @@ describe('paired performance comparator', () => {
     ).rejects.toThrow(/policy bytes differ/u);
   });
 
-  it('rejects duplicate raw samples and reused host evidence globally', async () => {
+  it('rejects byte-identical raw input sets copied to a different path', async () => {
     const harness = await harnessFile();
     const repeated = await sample(referenceSha, {});
     const duplicatedDirectory = await mkdtemp(join(tmpdir(), 'termwright-paired-duplicate-'));
@@ -253,47 +256,22 @@ describe('paired performance comparator', () => {
         output: 'unused.json',
       }),
     ).rejects.toThrow(/globally distinct raw input sets/u);
+  });
 
-    const reusedIdentity = '000000000001';
-    const reference = [
-      await sample(referenceSha, { provenanceSeed: reusedIdentity }),
-      await sample(referenceSha, { firstRun: 101, provenanceSeed: reusedIdentity }),
-    ];
-    await expect(
-      comparePairedPerformance({
-        policy: policyPath,
-        referenceSha,
-        reference,
-        referenceHarness: harness,
-        candidateSha,
-        candidate,
-        candidateHarness: harness,
-        output: 'unused.json',
-      }),
-    ).rejects.toThrow(/globally distinct host invocations/u);
+  it('rejects reused host invocation identities globally', () => {
+    const reusedInvocation = compatibleSamples();
+    reusedInvocation[1].provenance.quality.roles.timing.invocationId =
+      reusedInvocation[0].provenance.quality.roles.timing.invocationId;
+    expect(() => assertCompatibleSamples(reusedInvocation)).toThrow(
+      /globally distinct host invocations/u,
+    );
+  });
 
-    const runReference = [
-      await sample(referenceSha, {}),
-      await sample(referenceSha, { firstRun: 102 }),
-    ];
-    const firstQuality = JSON.parse(await readFile(join(runReference[0], 'quality.json'), 'utf8'));
-    const secondQualityPath = join(runReference[1], 'quality.json');
-    const secondQuality = JSON.parse(await readFile(secondQualityPath, 'utf8'));
-    secondQuality.provenance.roles.timing.runs[0].runId =
-      firstQuality.provenance.roles.timing.runs[0].runId;
-    await writeFile(secondQualityPath, JSON.stringify(secondQuality));
-    await expect(
-      comparePairedPerformance({
-        policy: policyPath,
-        referenceSha,
-        reference: runReference,
-        referenceHarness: harness,
-        candidateSha,
-        candidate,
-        candidateHarness: harness,
-        output: 'unused.json',
-      }),
-    ).rejects.toThrow(/globally distinct certified runs/u);
+  it('rejects reused certified run identities globally', () => {
+    const reusedRun = compatibleSamples();
+    reusedRun[1].provenance.quality.roles.timing.runs[0].runId =
+      reusedRun[0].provenance.quality.roles.timing.runs[0].runId;
+    expect(() => assertCompatibleSamples(reusedRun)).toThrow(/globally distinct certified runs/u);
   });
 
   it('rejects a benchmark report swapped after its subject/round seal', async () => {
@@ -474,6 +452,35 @@ function observation(overrides = {}) {
       ...overrides,
     },
   };
+}
+
+function compatibleSamples() {
+  return Array.from({ length: 4 }, (_, sampleIndex) => ({
+    observations: observation(),
+    provenance: {
+      environment: { class: 'test-environment' },
+      rawInputs: Object.fromEntries(
+        ['quality', 'semantic', 'charm', 'opentui'].map((name, inputIndex) => [
+          name,
+          createHash('sha256').update(`${sampleIndex}:${inputIndex}`).digest('hex'),
+        ]),
+      ),
+      quality: {
+        roles: Object.fromEntries(
+          ['timing', 'resourceSoak', 'stress'].map((role, roleIndex) => [
+            role,
+            {
+              invocationId: `invocation:${sampleIndex}:${roleIndex}`,
+              runs: [
+                { runId: `run:${sampleIndex}:${roleIndex}:0` },
+                { runId: `run:${sampleIndex}:${roleIndex}:1` },
+              ],
+            },
+          ]),
+        ),
+      },
+    },
+  }));
 }
 
 function completeObservation(overrides = {}) {

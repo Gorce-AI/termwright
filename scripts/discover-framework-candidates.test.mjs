@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +20,18 @@ import {
 } from './discover-framework-candidates.mjs';
 
 const exec = promisify(execFile);
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
+const roots = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+async function temporary(prefix) {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  roots.push(root);
+  return root;
+}
 
 const source = (digit) => ({
   checksum: digit.repeat(64),
@@ -43,7 +56,7 @@ const config = {
 
 describe('framework candidate discovery', () => {
   it('enumerates a patch published after a newer minor instead of checking only latest', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const result = await selectCandidates({
       rootDir: directory,
       config,
@@ -74,7 +87,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('is bounded, oldest-publication-first, stable-only, and reports the backlog', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const result = await selectCandidates({
       rootDir: directory,
       config,
@@ -110,7 +123,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('gives every pending stream one oldest candidate before another stream gets a second slot', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const fairConfig = {
       maxCandidatesPerRun: 3,
       streams: [
@@ -198,7 +211,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('applies an exact stream filter and an independent bounded dispatch cap', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-stream-discovery-'));
+    const directory = await temporary('tw-stream-discovery-');
     const streamConfig = {
       maxCandidatesPerRun: 16,
       streams: [
@@ -250,7 +263,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('does not turn an add-only candidate into a working-tree patch profile', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-unseeded-discovery-'));
+    const directory = await temporary('tw-unseeded-discovery-');
     const ledger = join(directory, 'ledger.json');
     const assessments = join(directory, 'assessments.json');
     const catalog = join(directory, 'catalog.json');
@@ -304,7 +317,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('discovers add-only capability candidates without inventing an exact patch manifest', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-capability-discovery-'));
+    const directory = await temporary('tw-capability-discovery-');
     const capabilityConfig = {
       maxCandidatesPerRun: 1,
       streams: [
@@ -370,7 +383,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('does not retry an exact red assessment until its artifact or certifier revision changes', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const catalogs = {
       'example-v2': [
         {
@@ -463,7 +476,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('does not resolve an unbounded history of unchanged red assessments before scheduling', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const entries = Array.from({ length: 20 }, (_, index) => ({
       version: `2.0.${index + 1}`,
       publishedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
@@ -499,7 +512,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('resolves the current npm closure when a certifier revision requalifies a red root', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const closure = { dependencyRoots: [], dependencyClosure: [] };
     const npmSource = {
       registry: 'https://registry.npmjs.org',
@@ -621,7 +634,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('fails closed on malformed, duplicate, or unknown-stream assessments', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const catalogs = { 'example-v2': [] };
     const valid = {
       state: 'red',
@@ -668,7 +681,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('marks an exact prepared patch and content-addresses its manifest', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     await mkdir(join(directory, 'patches/example/2.0.1'), { recursive: true });
     await writeFile(
       join(directory, 'patches/example/2.0.1/manifest.json'),
@@ -742,7 +755,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('discovers hook integrations without inventing a patch requirement', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const hookConfig = {
       maxCandidatesPerRun: 2,
       streams: [
@@ -1006,7 +1019,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('reselects the same npm root version when its transitive closure digest changes', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const npmConfig = {
       maxCandidatesPerRun: 2,
       streams: [
@@ -1077,7 +1090,7 @@ describe('framework candidate discovery', () => {
   });
 
   it('reselects the same npm root version when its own immutable artifact evidence drifts', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
+    const directory = await temporary('tw-discovery-');
     const npmConfig = {
       maxCandidatesPerRun: 2,
       streams: [

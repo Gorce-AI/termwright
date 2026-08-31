@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import { pnpmInvocation } from './package-manager-command.mjs';
 
 const exec = promisify(execFile);
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 // `URL.pathname` yields "/D:/a/repo" on Windows, which is not a usable path.
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pnpm = pnpmInvocation([], { env: process.env });
