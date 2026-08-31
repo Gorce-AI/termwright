@@ -148,6 +148,7 @@ try {
             "/restore" `
             "/p:Configuration=$($manifest.build.configuration)" `
             "/p:Platform=$platform" `
+            "/p:PlatformToolset=$($manifest.build.platformToolset)" `
             "/p:GenerateAppxPackageOnBuild=false" `
             "/p:WindowsTerminalOfficialBuild=false" `
             @disabledFeatureArguments
