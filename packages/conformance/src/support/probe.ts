@@ -180,14 +180,7 @@ export class AdapterProbe {
       pty,
       closeAdmission: () =>
         this.#server === null ? Promise.resolve() : this.#peers.close(this.#server),
-      drainParser: () =>
-        new Promise<void>((resolve, reject) => {
-          try {
-            this.#terminal.write('', resolve);
-          } catch (error) {
-            reject(error instanceof Error ? error : new Error(String(error)));
-          }
-        }),
+      drainParser: () => this.#vt.drain(),
       disposeParser: () => {
         this.#notifyChange();
         this.#vt.dispose();
@@ -460,7 +453,7 @@ export class AdapterProbe {
     this.#chunks.push(data);
     this.#bytes += data.length;
     this.#text += Buffer.from(data).toString('utf8');
-    this.#terminal.write(data, () => this.#notifyChange());
+    void this.#vt.write(data).finally(() => this.#notifyChange());
     this.#scanMarkers();
     this.#notifyChange();
   }
