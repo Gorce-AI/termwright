@@ -63,7 +63,7 @@ interface LoadedWindowsBinding {
 export interface WindowsConPtyRuntimeInfo {
   readonly provider: 'termwright-patched-openconsole';
   readonly upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908';
-  readonly patchSha256: '41da3024330ad209b0d10a491584dc6958e721d40fa7bfa0c1aef7049c47bfbe';
+  readonly patchSha256: 'a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527';
   readonly hostCursorRpc: 'twh-cpr-v1';
   readonly mode: 'ordered-vt-passthrough';
   readonly policy: 'strict';
@@ -79,7 +79,7 @@ function assertRuntimeInfoShape(value: WindowsConPtyRuntimeInfo): WindowsConPtyR
   if (
     value.provider !== 'termwright-patched-openconsole' ||
     value.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
-    value.patchSha256 !== '41da3024330ad209b0d10a491584dc6958e721d40fa7bfa0c1aef7049c47bfbe' ||
+    value.patchSha256 !== 'a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527' ||
     value.hostCursorRpc !== 'twh-cpr-v1' ||
     Object.hasOwn(value, 'package') ||
     Object.hasOwn(value, 'version') ||

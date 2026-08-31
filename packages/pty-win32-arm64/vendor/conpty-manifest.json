@@ -3,9 +3,9 @@
   "provider": "termwright-patched-openconsole",
   "upstreamCommit": "dd494ac79a82a04e1e7252a91c8939a3c3039908",
   "upstreamArchiveSha256": "785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2",
-  "patchSha256": "41da3024330ad209b0d10a491584dc6958e721d40fa7bfa0c1aef7049c47bfbe",
+  "patchSha256": "a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527",
   "hostCursorRpc": "twh-cpr-v1",
-  "sourceManifestSha256": "b437b60762be9018b7e6cd76377c142e335cf36ccaebf98d400489db9ffcebf3",
+  "sourceManifestSha256": "b8be27f0127e95dc4dfaf767eb313903a2bd0427eadd8e44e3f48dbd38cf4b5e",
   "build": {
     "configuration": "Release",
     "platformToolset": "v143"
@@ -13,13 +13,13 @@
   "architecture": "arm64",
   "mode": "ordered-vt-passthrough",
   "assets": {
-    "conpty.dll": "8ca6e69842b2a2be07c766e7c2a8f5eeb455fe6f51e0b8d45cfdbaa6501cd26a",
-    "arm64/OpenConsole.exe": "2653fd7f591ff88403981356dd686f0832703233051d2cf2e02b20ca0be6ec5f"
+    "conpty.dll": "5d056f028dbf66323428a9b86c936e2da319db85b1c75ea7c8c7fcaebfd0c4dd",
+    "arm64/OpenConsole.exe": "90d6cf1a7f68cf832b6caff82e8b091641f641ead8664fa0e684cc3b759719bd"
   },
   "metadata": {
     "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
     "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
-    "THIRD_PARTY_NOTICES.md": "ba3a935d386fbc5c82be33e951aebddcb12c59df0a9540dd9e433f8c67849141",
-    "SBOM.spdx.json": "e7bbca771a0e3a6f1224e72401b97edaa0334f0454448b9fd51c35bd93c935c1"
+    "THIRD_PARTY_NOTICES.md": "26ed8f9fa34b66f53bcc479e416717aab1834b2bf5341da83ab1061567893d84",
+    "SBOM.spdx.json": "2fa3f7a89d72d75da728b5a4249da6395302021821f32090904cac42c3e2ce5e"
   }
 }

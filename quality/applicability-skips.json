@@ -190,7 +190,7 @@
     {
       "id": "conpty-non-windows-host-cursor-concurrent-same-buffer",
       "file": "packages/pty/src/windows-native.win.test.ts",
-      "fullName": "routes concurrent cursor requests for one dirty buffer by token and generation",
+      "fullName": "coalesces concurrent cursor waiters for one dirty buffer generation",
       "platforms": [
         "aix",
         "android",
