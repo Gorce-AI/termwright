@@ -94,12 +94,26 @@ handle.onData((data) => chunks.push(Buffer.from(data)));
 const attachHostControlResponder = (session, text) => {
   const answeredCursorRequests = new Set();
   let answeredPrimaryDeviceAttributes = false;
+  const writeHostControl = (response, description) => {
+    let route;
+    try {
+      route = session.writeTerminalResponse(Buffer.from(response, 'ascii'));
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === 'ConPTY input is closed' &&
+        session.treeState() === 'gone'
+      )
+        return;
+      throw error;
+    }
+    if (route !== 'host-control') throw new Error(description + ' used route ' + route);
+  };
   const answer = () => {
     const observed = text();
     if (!answeredPrimaryDeviceAttributes && observed.includes('\x1b[c')) {
       answeredPrimaryDeviceAttributes = true;
-      const route = session.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'));
-      if (route !== 'host-control') throw new Error('startup DA1 used route ' + route);
+      writeHostControl('\x1b[?1;2c', 'startup DA1');
     }
     for (const match of observed.matchAll(/\x1b\]8488;(twh-cpr-v1:q:[0-9a-f]{32})\x07/g)) {
       const payload = match[1];
@@ -108,8 +122,7 @@ const attachHostControlResponder = (session, text) => {
       if (request === null) throw new Error('invalid ConPTY host cursor request: ' + payload);
       answeredCursorRequests.add(payload);
       const response = encodeConPtyHostCursorResponse(request, 1, 1);
-      const route = session.writeTerminalResponse(Buffer.from(response, 'ascii'));
-      if (route !== 'host-control') throw new Error('host cursor RPC used route ' + route);
+      writeHostControl(response, 'host cursor RPC');
     }
   };
   const release = session.onData(answer);
@@ -122,7 +135,11 @@ const closeOwnedInputAfterExit = (session, releaseHostControl) => {
     try {
       releaseHostControl();
     } finally {
-      session.closeInput();
+      // Exit and trailing output can share one native delivery batch. Revoke
+      // the response producer synchronously, then close input after that
+      // batch returns so a reentrant native call cannot abort delivery before
+      // its authoritative EOF event.
+      queueMicrotask(() => session.closeInput());
     }
   });
 };
@@ -719,12 +736,14 @@ if (process.platform === 'win32') {
   const fragmentedPayloadBytes = 6 * 1024 * 1024;
   const fragmentedSentinel = 'FRAGMENTED_CONSOLE_SENTINEL';
   const fragmentedSource = [
-    'process.stdin.resume();',
-    'process.stdin.once("data", () => {',
+    'process.stdout.write("FRAGMENTED-READY", () => {',
+    ' process.stdin.resume();',
+    ' process.stdin.once("data", () => {',
     '  const payload = Buffer.alloc(' + fragmentedPayloadBytes + ', 0x58);',
     '  process.stdout.write(payload, () => {',
     '    process.stdout.write(' + JSON.stringify(fragmentedSentinel) + ', () => process.exit(0));',
     '  });',
+    ' });',
     '});',
   ].join('');
   const fragmentedSyntax = spawnSync(process.execPath, ['--check', '-'], {
@@ -738,6 +757,7 @@ if (process.platform === 'win32') {
     );
   }
   const fragmented = collect(fragmentedSource);
+  await waitForText(fragmented, 'FRAGMENTED-READY');
   fragmented.session.write(Buffer.from('go\\r'));
   const fragmentedWait = spawnSync('powershell.exe', [
     '-NoLogo',
@@ -813,25 +833,29 @@ writeFileSync(certifierPath, probe);
 // Execute a file inside the clean install. Passing this growing conformance
 // program through `node -e` eventually exceeds Windows' command-line limit
 // before Node can start, yielding a non-attributable null exit status.
-const result = spawnSync(execPath, [certifierPath], {
-  cwd: installDirectory,
-  encoding: 'utf8',
-  env: {
-    ...process.env,
-    TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath,
-    TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE: inactiveBufferFixturePath,
-    TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE: consoleMarkerFixturePath,
-    TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(
-      installDirectory,
-      'termwright console marker.mjs',
-    ),
-    TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath,
+const result = spawnSync(
+  execPath,
+  ['--force-node-api-uncaught-exceptions-policy=true', certifierPath],
+  {
+    cwd: installDirectory,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath,
+      TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE: inactiveBufferFixturePath,
+      TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE: consoleMarkerFixturePath,
+      TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(
+        installDirectory,
+        'termwright console marker.mjs',
+      ),
+      TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath,
+    },
+    // Certification stage markers must remain visible while the child runs. A
+    // buffered pipe hid the exact causal boundary whenever a runner watchdog
+    // terminated a stuck certifier.
+    stdio: ['ignore', 'inherit', 'inherit'],
   },
-  // Certification stage markers must remain visible while the child runs. A
-  // buffered pipe hid the exact causal boundary whenever a runner watchdog
-  // terminated a stuck certifier.
-  stdio: ['ignore', 'inherit', 'inherit'],
-});
+);
 if (result.status !== 0) {
   console.error(
     `the installed @termwright/pty failed on ${platform}-${arch}: ` +

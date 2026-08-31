@@ -82,10 +82,14 @@ describe('the native host is the only Termwright test entrypoint', () => {
     );
     expect(source).toContain('attachHostControlResponder(handle');
     expect(source).toContain('const release = session.onData(answer);');
+    expect(source).toContain(
+      "error.message === 'ConPTY input is closed' &&\n        session.treeState() === 'gone'",
+    );
     expect(source).toContain('const closeOwnedInputAfterExit = (session, releaseHostControl) => {');
     expect(source).toContain(
-      'try {\n      releaseHostControl();\n    } finally {\n      session.closeInput();',
+      'try {\n      releaseHostControl();\n    } finally {\n      // Exit and trailing output can share one native delivery batch.',
     );
+    expect(source).toContain('queueMicrotask(() => session.closeInput());');
     expect(source).toContain(
       'closeOwnedInputAfterExit(session, attachHostControlResponder(session, collected.text));',
     );
@@ -94,6 +98,8 @@ describe('the native host is the only Termwright test entrypoint', () => {
     );
     expect(source).toContain('const releaseResizeResponder = resizeSession.onData(() => {');
     expect(source).toContain('closeOwnedInputAfterExit(resizeSession, releaseResizeResponder);');
+    expect(source).toContain("await waitForText(fragmented, 'FRAGMENTED-READY');");
+    expect(source).toContain("'--force-node-api-uncaught-exceptions-policy=true', certifierPath");
     expect(source).toContain("stdio: ['ignore', 'inherit', 'inherit']");
   });
 
