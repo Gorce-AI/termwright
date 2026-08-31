@@ -133,6 +133,7 @@ export class AdapterProbe {
   readonly #pty: PtyProcess;
   readonly #vt: VtScreen;
   readonly #terminal: Terminal;
+  #detachTerminalResponse: (() => void) | null;
   readonly #startedAt = performance.now();
   readonly #messages: RecordedMessage[] = [];
   readonly #markers: RecordedMarker[] = [];
@@ -175,11 +176,14 @@ export class AdapterProbe {
     // replies just like TerminalSession does. Without this bridge the pinned
     // Windows host can block a framework's GCSBI on its private cursor query,
     // leaving the first frame visible while every later draw waits forever.
-    this.#vt.onResponse((response) => this.#writeTerminalResponse(response.data));
+    this.#detachTerminalResponse = this.#vt.onResponse((response) =>
+      this.#writeTerminalResponse(response.data),
+    );
     this.#shutdown = new ProbeProcessShutdown({
       pty,
       closeAdmission: () =>
         this.#server === null ? Promise.resolve() : this.#peers.close(this.#server),
+      closeTerminalResponseAdmission: () => this.#closeTerminalResponseAdmission(),
       drainParser: () => this.#vt.drain(),
       disposeParser: () => {
         this.#notifyChange();
@@ -467,6 +471,11 @@ export class AdapterProbe {
       return;
     }
     write.call(this.#pty, data);
+  }
+
+  #closeTerminalResponseAdmission(): void {
+    this.#detachTerminalResponse?.();
+    this.#detachTerminalResponse = null;
   }
 
   /** Finds render markers in the byte stream and verifies each against the token. */

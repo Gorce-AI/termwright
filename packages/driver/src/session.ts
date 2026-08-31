@@ -793,7 +793,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       (pty) => this.#disposePty(pty),
     );
     this.#assertLaunchTime(deadline, 'spawning the pseudo-terminal');
-    this.#processSupervisor = new ProcessSupervisor(this.#pty);
+    this.#processSupervisor = new ProcessSupervisor(this.#pty, {
+      beforeInputClose: () => this.#closeTerminalResponseBridge(),
+    });
 
     // xterm may schedule a protocol reply after parsing returns. The bridge is
     // admitted only while the child can consume PTY input; teardown closes it
@@ -2401,7 +2403,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   async #disposePty(pty: PtyProcess): Promise<void> {
-    const supervisor = this.#processSupervisor ?? new ProcessSupervisor(pty);
+    const supervisor =
+      this.#processSupervisor ??
+      new ProcessSupervisor(pty, {
+        beforeInputClose: () => this.#closeTerminalResponseBridge(),
+      });
     try {
       await supervisor.shutdown({
         deadline: performance.now() + CLOSE_GRACE_MS,

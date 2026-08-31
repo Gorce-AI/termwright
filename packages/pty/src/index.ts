@@ -160,6 +160,8 @@ export interface PtyHandle {
   writeTerminalResponse?(
     data: Uint8Array,
   ): 'host-control' | 'application-direct' | 'application-win32-input';
+  /** Closes the parent-owned terminal input while preserving output drain. */
+  closeInput?(): void;
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
   treeState(): 'alive' | 'gone' | 'unsupported';
@@ -244,6 +246,9 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
       },
       writeTerminalResponse(data) {
         return session.writeTerminalResponse(data);
+      },
+      closeInput(): void {
+        session.closeInput();
       },
       resize(columns, rows): boolean {
         return session.resize(columns, rows);

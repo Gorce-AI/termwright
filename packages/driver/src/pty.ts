@@ -42,6 +42,8 @@ export interface PtyProcess {
   writeTerminalResponse?(
     data: Uint8Array,
   ): 'host-control' | 'application-direct' | 'application-win32-input';
+  /** Closes owned terminal input without disposing the output producer. */
+  closeInput?(): void;
   resize(columns: number, rows: number): void;
   /** Delivers a POSIX signal. On Windows only `KILL` is supported. */
   signal(sig: PtySignal): void;

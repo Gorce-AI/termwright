@@ -18,6 +18,7 @@ export interface NativePtySessionHandle {
   writeTerminalResponse?(
     data: Uint8Array,
   ): 'host-control' | 'application-direct' | 'application-win32-input';
+  closeInput?(): void;
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
   treeState(): 'alive' | 'gone' | 'unsupported';
@@ -139,6 +140,13 @@ export function createNativePtyBackend(
           session.write(data);
           return 'application-direct';
         },
+        ...(session.closeInput === undefined
+          ? {}
+          : {
+              closeInput(): void {
+                if (!disposed) session.closeInput?.();
+              },
+            }),
         resize(columns, rows): void {
           if (!disposed) session.resize(columns, rows);
         },
@@ -160,11 +168,19 @@ export function createNativePtyBackend(
           : {}),
         async hardKillTree(signal: AbortSignal): Promise<void> {
           signal.throwIfAborted();
-          if (!disposed && !session.signal('KILL')) {
-            throw new ProcessLifecycleError(
-              'cleanup-failed',
-              `the native PTY backend could not terminate its tree on ${platform}`,
-            );
+          try {
+            if (!disposed && !session.signal('KILL')) {
+              throw new ProcessLifecycleError(
+                'cleanup-failed',
+                `the native PTY backend could not terminate its tree on ${platform}`,
+              );
+            }
+          } finally {
+            // A Windows hard teardown owns both rights: execution in the Job
+            // Object and terminal replies entering ConPTY. Closing input after
+            // the kill cancels outstanding OpenConsole host synchronization;
+            // output remains open for the authoritative reader EOF.
+            if (platform === 'win32' && !disposed) session.closeInput?.();
           }
         },
         onData(listener): PtyUnsubscribe {

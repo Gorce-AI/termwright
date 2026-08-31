@@ -6,6 +6,7 @@ const DEFAULT_WATCHDOG_MS = 10_000;
 export interface ProbeProcessShutdownResources {
   readonly pty: PtyProcess;
   readonly closeAdmission: () => Promise<void>;
+  readonly closeTerminalResponseAdmission: () => void;
   readonly drainParser: () => Promise<void>;
   readonly disposeParser: () => void;
   readonly removeArtifacts: () => Promise<void>;
@@ -76,6 +77,16 @@ export class ProbeProcessShutdown {
       failures.push(error);
     }
 
+    // The alive-tree branch revokes replies immediately before hard kill
+    // closes ConPTY input. A process that was already gone keeps the bridge
+    // through its remaining output and parser drain, since a queued host query
+    // can still require a response before OpenConsole publishes EOF.
+    try {
+      this.#resources.closeTerminalResponseAdmission();
+    } catch (error) {
+      failures.push(error);
+    }
+
     for (const dispose of [
       () => this.#resources.pty.dispose(),
       () => this.#resources.disposeParser(),
@@ -118,6 +129,7 @@ export class ProbeProcessShutdown {
             'the PTY exposes no owned-tree kill operation',
         );
       }
+      this.#resources.closeTerminalResponseAdmission();
       await pty.hardKillTree(signal);
     } else if (initialTree === 'unsupported') {
       throw new Error(

@@ -196,6 +196,49 @@ describe('the native PTY driver adapter', () => {
     expect(process.treeState?.()).toBe('gone');
   });
 
+  it('terminates the Windows tree before closing its parent-owned ConPTY input', async () => {
+    const events: string[] = [];
+    const session = fakeSession({
+      signal: vi.fn(() => {
+        events.push('kill-tree');
+        return true;
+      }),
+      closeInput: vi.fn(() => events.push('close-input')),
+    });
+    const process = createNativePtyBackend(() => session, 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+
+    await process.hardKillTree?.(new AbortController().signal);
+
+    expect(events).toEqual(['kill-tree', 'close-input']);
+  });
+
+  it('still closes Windows ConPTY input when owned-tree termination fails', async () => {
+    const events: string[] = [];
+    const session = fakeSession({
+      signal: vi.fn(() => {
+        events.push('kill-tree');
+        throw new Error('job termination failed');
+      }),
+      closeInput: vi.fn(() => events.push('close-input')),
+    });
+    const process = createNativePtyBackend(() => session, 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+
+    await expect(process.hardKillTree?.(new AbortController().signal)).rejects.toThrow(
+      /job termination failed/u,
+    );
+    expect(events).toEqual(['kill-tree', 'close-input']);
+  });
+
   it('preserves a native POSIX signal errno for lifecycle reconciliation', () => {
     const refusal = Object.assign(new Error('kill(PTY process group) failed'), {
       code: 'EPERM',

@@ -380,6 +380,33 @@ describe('ProcessSupervisor', () => {
     expect(pty.disposeCount).toBe(1);
   });
 
+  it('revokes terminal-response producers immediately before ConPTY hard kill', async () => {
+    const clock = new ManualClock();
+    const events: string[] = [];
+    const pty = new FakePty({
+      lifecycle: { tree: 'conpty-console', outputDrain: 'eof' },
+      exitOn: 'KILL',
+    });
+    pty.hardKillTree = async (): Promise<void> => {
+      events.push('kill-tree');
+      pty.hardKillCount += 1;
+      pty.tree = 'gone';
+      pty.emit({ code: null, signal: 'SIGKILL' });
+    };
+    const process = new ProcessSupervisor(pty, {
+      monotonicNow: () => clock.now,
+      timers: clock.timers,
+      platform: 'win32',
+      beforeInputClose: () => events.push('close-terminal-responses'),
+    });
+
+    await expect(
+      process.shutdown({ deadline: clock.now + 1_000, gracefulMs: 100 }),
+    ).resolves.toEqual({ code: null, signal: 'SIGKILL' });
+
+    expect(events).toEqual(['close-terminal-responses', 'kill-tree']);
+  });
+
   it('cancels and settles a ConPTY hard kill at the caller deadline', async () => {
     const clock = new ManualClock();
     const pty = new FakePty({
