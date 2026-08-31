@@ -60,9 +60,10 @@ interface LoadedWindowsBinding {
 
 /** Provenance and behavioral contract of the loaded Windows pseudoconsole. */
 export interface WindowsConPtyRuntimeInfo {
-  readonly provider: 'vendored';
-  readonly package: 'Microsoft.Windows.Console.ConPTY';
-  readonly version: '1.24.260710001';
+  readonly provider: 'termwright-patched-openconsole';
+  readonly upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908';
+  readonly patchSha256: '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492';
+  readonly hostCursorRpc: 'twh-cpr-v1';
   readonly mode: 'ordered-vt-passthrough';
   readonly policy: 'strict';
   readonly selectedHostArchitecture: '' | 'x64' | 'arm64';
@@ -75,9 +76,12 @@ export interface WindowsConPtyRuntimeInfo {
 
 function assertRuntimeInfoShape(value: WindowsConPtyRuntimeInfo): WindowsConPtyRuntimeInfo {
   if (
-    value.provider !== 'vendored' ||
-    value.package !== 'Microsoft.Windows.Console.ConPTY' ||
-    value.version !== '1.24.260710001' ||
+    value.provider !== 'termwright-patched-openconsole' ||
+    value.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
+    value.patchSha256 !== '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492' ||
+    value.hostCursorRpc !== 'twh-cpr-v1' ||
+    Object.hasOwn(value, 'package') ||
+    Object.hasOwn(value, 'version') ||
     value.mode !== 'ordered-vt-passthrough' ||
     value.policy !== 'strict' ||
     (value.selectedHostArchitecture !== '' &&

@@ -22,9 +22,12 @@ using ResizePseudoConsoleFn = HRESULT(WINAPI*)(HPCON, COORD);
 using ClosePseudoConsoleFn = void(WINAPI*)(HPCON);
 
 struct ConPtyRuntimeInfo {
-  std::string provider = "vendored";
-  std::string package = "Microsoft.Windows.Console.ConPTY";
-  std::string version = "1.24.260710001";
+  std::string provider = "termwright-patched-openconsole";
+  std::string upstream_commit =
+      "dd494ac79a82a04e1e7252a91c8939a3c3039908";
+  std::string patch_sha256 =
+      "193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492";
+  std::string host_cursor_rpc = "twh-cpr-v1";
   std::string mode = "ordered-vt-passthrough";
   std::string policy = "strict";
   std::string selected_host_architecture;

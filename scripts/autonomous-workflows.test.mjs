@@ -32,7 +32,9 @@ describe('autonomous workflow security', () => {
     );
     expect(workflow).not.toMatch(/contents:\s*write|pull-requests:\s*write|issues:\s*write/u);
     expect(workflow).not.toContain('git push');
-    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(4);
+    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(
+      workflow.match(/uses: actions\/checkout@/gu)?.length ?? 0,
+    );
     expect(workflow).toContain('--candidate "$CANDIDATE_ID"');
     expect(workflow.match(/--platform "\$CANDIDATE_PLATFORM"/gu)).toHaveLength(2);
     expect(workflow).not.toContain('continue-on-error');

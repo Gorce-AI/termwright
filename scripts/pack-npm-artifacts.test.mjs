@@ -40,6 +40,7 @@ function archive({ name, windows = false, unsafe = false, addon = true, hosts })
       'conpty.dll',
       'conpty-manifest.json',
       'LICENSE.microsoft-terminal.txt',
+      'NOTICE.microsoft-terminal.md',
       'THIRD_PARTY_NOTICES.md',
       'SBOM.spdx.json',
     ])

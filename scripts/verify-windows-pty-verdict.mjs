@@ -23,12 +23,18 @@ export async function verifyWindowsPtyVerdict(
   const manifestPath = join(packageDirectory, 'vendor', 'conpty-manifest.json');
 
   if (
-    verdict.schemaVersion !== 4 ||
+    verdict.schemaVersion !== 5 ||
     verdict.platform !== 'win32' ||
     !['x64', 'arm64'].includes(verdict.architecture) ||
     verdict.addonSha256 !== (await digest(join(packageDirectory, 'termwright_pty.node'))) ||
     verdict.conptyManifestSha256 !== (await digest(manifestPath)) ||
-    verdict.runtime?.provider !== 'vendored' ||
+    verdict.runtime?.provider !== 'termwright-patched-openconsole' ||
+    verdict.runtime?.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
+    verdict.runtime?.patchSha256 !==
+      '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492' ||
+    verdict.runtime?.hostCursorRpc !== 'twh-cpr-v1' ||
+    Object.hasOwn(verdict.runtime ?? {}, 'package') ||
+    Object.hasOwn(verdict.runtime ?? {}, 'version') ||
     verdict.runtime?.assetsValidated !== true ||
     verdict.runtime?.mode !== 'ordered-vt-passthrough' ||
     verdict.runtime?.policy !== 'strict' ||
@@ -71,10 +77,15 @@ export async function verifyWindowsPtyVerdict(
 
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   if (
+    manifest.schemaVersion !== 2 ||
     manifest.architecture !== verdict.architecture ||
     manifest.mode !== 'ordered-vt-passthrough' ||
-    manifest.package !== verdict.runtime.package ||
-    manifest.version !== verdict.runtime.version
+    manifest.provider !== verdict.runtime.provider ||
+    manifest.upstreamCommit !== verdict.runtime.upstreamCommit ||
+    manifest.patchSha256 !== verdict.runtime.patchSha256 ||
+    manifest.hostCursorRpc !== verdict.runtime.hostCursorRpc ||
+    Object.hasOwn(manifest, 'package') ||
+    Object.hasOwn(manifest, 'version')
   ) {
     throw new Error(
       `Windows PTY certification verdict names a different vendored runtime: ${packageDirectory}`,

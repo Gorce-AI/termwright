@@ -1,17 +1,25 @@
 {
-  "schemaVersion": 1,
-  "package": "Microsoft.Windows.Console.ConPTY",
-  "version": "1.24.260710001",
-  "sourceSha256": "175640566a3b59c4b132070ee96c2c77e5ab7edd2e92732a5eb3610bbf63d90e",
+  "schemaVersion": 2,
+  "provider": "termwright-patched-openconsole",
+  "upstreamCommit": "dd494ac79a82a04e1e7252a91c8939a3c3039908",
+  "upstreamArchiveSha256": "785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2",
+  "patchSha256": "193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492",
+  "hostCursorRpc": "twh-cpr-v1",
+  "sourceManifestSha256": "7889fcac6bde4dd746a7a391a24bfc24dccda6f338c2ad36e963e84bccaafd55",
+  "build": {
+    "configuration": "Release",
+    "platformToolset": "v143"
+  },
   "architecture": "arm64",
   "mode": "ordered-vt-passthrough",
   "assets": {
-    "conpty.dll": "db3d173640b172bafd42d5b541b638a9aeec1c7d0e40dd636bf02822a32c912c",
-    "arm64/OpenConsole.exe": "ed7622fd0d3bedc9ab9f122f5e58edf0def9e7999224f52dd395ba9f54edbe09"
+    "conpty.dll": "61ffb4cc10e4601365b9a7f5bc2da3a874aed62cc8366a516f7fe7ec54825aab",
+    "arm64/OpenConsole.exe": "da5101893563a9b565e7a5bbed44c5257cb4a9de86401f38910f1e56c696e92b"
   },
   "metadata": {
     "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
-    "THIRD_PARTY_NOTICES.md": "5992032ea5b0587b854d25dda249a1901907e8fafb8d7e0b250896295fd1e2ca",
-    "SBOM.spdx.json": "e6ade5ed677eacb5dc513ff92e18a85bc0c51b301fa4af77b5f275a0e213c534"
+    "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
+    "THIRD_PARTY_NOTICES.md": "e7d1ce8d46edbae041fa8ada05cc12ab1a2d13793584db4f558a4e53113eaa1a",
+    "SBOM.spdx.json": "37c860c02d1b4f0004e25aa272aa9153669d13432561364cd521ed1ab13e26d9"
   }
 }

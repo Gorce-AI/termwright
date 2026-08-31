@@ -64,15 +64,19 @@ if (process.platform === 'win32') {
   const selectedHostIsValid = process.arch === 'arm64'
     ? runtime.selectedHostArchitecture === 'arm64'
     : runtime.selectedHostArchitecture === 'x64' || runtime.selectedHostArchitecture === 'arm64';
-  if (runtime.provider !== 'vendored' || runtime.package !== 'Microsoft.Windows.Console.ConPTY' ||
-      runtime.version !== '1.24.260710001' || runtime.mode !== 'ordered-vt-passthrough' ||
+  if (runtime.provider !== 'termwright-patched-openconsole' ||
+      runtime.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
+      runtime.patchSha256 !== '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492' ||
+      runtime.hostCursorRpc !== 'twh-cpr-v1' || runtime.mode !== 'ordered-vt-passthrough' ||
       runtime.policy !== 'strict' || runtime.assetsValidated !== true ||
       runtime.coreExports !== true || runtime.failureCode !== '' || runtime.failureWin32 !== 0 ||
+      runtime.orderedMarkerSemantics !== 'marker-authoritative-after-behavioral-certification' ||
+      Object.hasOwn(runtime, 'package') || Object.hasOwn(runtime, 'version') ||
       !selectedHostIsValid) {
-    console.error('the installed addon did not load the certified vendored ConPTY runtime: ' + JSON.stringify(runtime));
+    console.error('the installed addon did not load the pinned patched OpenConsole runtime: ' + JSON.stringify(runtime));
     process.exit(9);
   }
-  console.log('[pty-cert] vendored-conpty ' + JSON.stringify(runtime));
+  console.log('[pty-cert] pinned-patched-openconsole ' + JSON.stringify(runtime));
 }
 // Loading is not running. A binary that loads and then cannot open a
 // pseudoconsole would still satisfy a resolution check, and the point of
@@ -801,7 +805,7 @@ if (verdictPath !== undefined) {
     verdictPath,
     `${JSON.stringify(
       {
-        schemaVersion: 4,
+        schemaVersion: 5,
         platform,
         architecture: arch,
         addonSha256: sha256(addonPath),

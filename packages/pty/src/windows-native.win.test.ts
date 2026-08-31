@@ -250,10 +250,12 @@ async function certifyConsoleMarkerMode(executable: string): Promise<void> {
 
 describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
   it('loads only the pinned, validated passthrough runtime', () => {
-    expect(windowsConPtyRuntimeInfo()).toMatchObject({
-      provider: 'vendored',
-      package: 'Microsoft.Windows.Console.ConPTY',
-      version: '1.24.260710001',
+    const runtime = windowsConPtyRuntimeInfo();
+    expect(runtime).toMatchObject({
+      provider: 'termwright-patched-openconsole',
+      upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
+      patchSha256: '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492',
+      hostCursorRpc: 'twh-cpr-v1',
       mode: 'ordered-vt-passthrough',
       policy: 'strict',
       assetsValidated: true,
@@ -261,6 +263,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       failureCode: '',
       failureWin32: 0,
     });
+    expect(runtime).not.toHaveProperty('package');
+    expect(runtime).not.toHaveProperty('version');
   });
 
   it('writes a console marker with VT enabled and restores the disabled mode', async () => {
@@ -434,7 +438,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         [
           `const addon = require(${JSON.stringify(sourceAddon)});`,
           'const info = addon.conPtyRuntimeInfo();',
-          "if (info.provider !== 'vendored' || info.assetsValidated !== true) process.exit(9);",
+          "if (info.provider !== 'termwright-patched-openconsole' || info.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' || info.patchSha256 !== '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492' || info.hostCursorRpc !== 'twh-cpr-v1' || info.assetsValidated !== true) process.exit(9);",
         ].join(''),
       ],
       { cwd: hostileCwd, encoding: 'utf8' },

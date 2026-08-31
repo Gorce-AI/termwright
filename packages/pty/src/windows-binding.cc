@@ -130,8 +130,9 @@ Napi::Object RuntimeInfo(Napi::Env env) {
   const termwright::ConPtyRuntimeInfo& info = termwright::GetConPtyApi().runtime_info();
   Napi::Object value = Napi::Object::New(env);
   value.Set("provider", Napi::String::New(env, info.provider));
-  value.Set("package", Napi::String::New(env, info.package));
-  value.Set("version", Napi::String::New(env, info.version));
+  value.Set("upstreamCommit", Napi::String::New(env, info.upstream_commit));
+  value.Set("patchSha256", Napi::String::New(env, info.patch_sha256));
+  value.Set("hostCursorRpc", Napi::String::New(env, info.host_cursor_rpc));
   value.Set("mode", Napi::String::New(env, info.mode));
   value.Set("policy", Napi::String::New(env, info.policy));
   value.Set("selectedHostArchitecture",

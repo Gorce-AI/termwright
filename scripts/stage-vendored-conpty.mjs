@@ -3,6 +3,7 @@
 import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyWindowsConptyBundle } from './check-prebuild.mjs';
 import { isDirectExecution } from './is-direct-execution.mjs';
 import { sha256 } from './prepare-conpty-assets.mjs';
 
@@ -21,7 +22,9 @@ export async function stageVendoredConpty({ architecture, destination }) {
   if (architecture !== 'x64' && architecture !== 'arm64') {
     throw new TypeError(`unsupported ConPTY architecture: ${architecture}`);
   }
-  const source = resolve(ROOT, `packages/pty-win32-${architecture}/vendor`);
+  const sourcePackage = resolve(ROOT, `packages/pty-win32-${architecture}`);
+  await verifyWindowsConptyBundle(sourcePackage, architecture);
+  const source = join(sourcePackage, 'vendor');
   const manifest = JSON.parse(await readFile(join(source, 'conpty-manifest.json'), 'utf8'));
   const expected = new Map(Object.entries(manifest.assets));
   const destinationRoot = assertSafeStageDestination(destination);
@@ -73,5 +76,7 @@ if (isDirectExecution(import.meta.url)) {
     process.exit(0);
   }
   const manifest = await stageVendoredConpty({ architecture, destination });
-  console.log(`staged ${manifest.package} ${manifest.version} for ${architecture}`);
+  console.log(
+    `staged ${manifest.provider} ${manifest.upstreamCommit}+${manifest.hostCursorRpc} for ${architecture}`,
+  );
 }
