@@ -508,7 +508,9 @@ describe('terminal session resource lifecycle', () => {
   terminalIt(
     'keeps required semantic negotiation open past the ordinary discovery window',
     async () => {
-      vi.useFakeTimers();
+      // Fake only the contract's clocks. Node's named-pipe/socket scheduler is
+      // real transport and must keep its native next-tick/immediate ordering.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       let markSpawned!: () => void;
       const spawned = new Promise<void>((resolve) => {
         markSpawned = resolve;
@@ -571,11 +573,11 @@ describe('terminal session resource lifecycle', () => {
             DEFAULT_LIMITS.maxFrameBytes,
           ),
         );
-        await new Promise<void>((resolve, reject) => {
-          socket!.once('data', () => resolve());
-          socket!.once('error', reject);
-        });
 
+        // Launch resolution is the causal assertion under test: onAttach
+        // settled the required contract and woke the launch change journal.
+        // A protocol ACK is covered by SemanticChannel's transport tests and
+        // is not part of required-capability readiness.
         const terminal = await launched;
         expect(terminal.contract()?.capabilities['semantic-tree'].status).toBe('supported');
         expect(terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout')).toBe(

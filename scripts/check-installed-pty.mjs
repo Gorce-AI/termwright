@@ -752,8 +752,13 @@ writeFileSync(
   join(installDirectory, 'termwright console marker.mjs'),
   readFileSync(consoleMarkerScriptPath),
 );
+const certifierPath = join(installDirectory, 'termwright-pty-certifier.mjs');
+writeFileSync(certifierPath, probe);
 
-const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
+// Execute a file inside the clean install. Passing this growing conformance
+// program through `node -e` eventually exceeds Windows' command-line limit
+// before Node can start, yielding a non-attributable null exit status.
+const result = spawnSync(execPath, [certifierPath], {
   cwd: installDirectory,
   encoding: 'utf8',
   env: {
@@ -774,7 +779,12 @@ if (result.stdout) process.stdout.write(result.stdout);
 if (result.stderr) process.stderr.write(result.stderr);
 if (result.status !== 0) {
   console.error(
-    `the installed @termwright/pty failed on ${platform}-${arch} (exit ${result.status})`,
+    `the installed @termwright/pty failed on ${platform}-${arch}: ` +
+      JSON.stringify({
+        exit: result.status,
+        signal: result.signal,
+        spawnError: result.error?.message,
+      }),
   );
   exit(1);
 }
