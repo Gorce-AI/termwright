@@ -121,7 +121,10 @@ try {
         }
         $null = $packages.packages.RemoveChild($matches[0])
     }
-    $publicPackagesConfig = Join-Path $scratch "public-packages.config"
+    $publicRestoreRoot = Join-Path $scratch "public-restore"
+    New-Item -ItemType Directory -Path $publicRestoreRoot | Out-Null
+    # Legacy NuGet identifies packages.config input by this exact basename.
+    $publicPackagesConfig = Join-Path $publicRestoreRoot "packages.config"
     $packages.Save($publicPackagesConfig)
 
     $nuget = Join-Path $sourceRoot "dep/nuget/nuget.exe"
