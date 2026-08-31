@@ -53,6 +53,12 @@ try {
   if ($restored -ne $withoutRequiredModes) { exit 46 }
   [Console]::Out.Write("MODE_RESTORED")
 
+  # Authorize teardown only after DONE has been consumed and the restored
+  # mode has been inspected. CLOSED proves the helper received that command
+  # and handed its final response to the pipe without relying on half-close.
+  $writer.WriteLine("CLOSE")
+  if ($reader.ReadLine() -ne "CLOSED") { exit 52 }
+
   # The marker process owns the server while this process owns the client.
   # Close the client before waiting for the server process: waiting first
   # creates a circular close dependency on runtimes that keep a named-pipe

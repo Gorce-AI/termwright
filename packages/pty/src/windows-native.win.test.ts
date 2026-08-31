@@ -4,12 +4,12 @@ import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { describe, expect } from 'vitest';
+import { describe, expect, onTestFinished } from 'vitest';
 import { encodeConPtyHostCursorResponse, parseConPtyHostCursorRequest } from '@termwright/protocol';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { bunTestCapability } from '../../../scripts/test-support/bun-runtime.mjs';
 import {
-  spawnWindowsPty,
+  spawnWindowsPty as spawnUnownedWindowsPty,
   type WindowsPtyExit,
   type WindowsPtyHandle,
   writeWindowsConsoleMarker,
@@ -17,6 +17,23 @@ import {
   windowsCandidatePaths,
   windowsPtyAvailable,
 } from './windows.js';
+
+/**
+ * Gives every native fixture an owner outside its test callback promise.
+ *
+ * A Vitest deadline can finish an attempt while an awaited callback remains
+ * pending, so callback-local `finally` blocks are not a sufficient process
+ * owner. Native disposal synchronously terminates the job and joins its
+ * lifecycle threads; registering it here prevents one failed attempt from
+ * contaminating the next exclusive-host test.
+ */
+function spawnWindowsPty(
+  ...args: Parameters<typeof spawnUnownedWindowsPty>
+): ReturnType<typeof spawnUnownedWindowsPty> {
+  const handle = spawnUnownedWindowsPty(...args);
+  onTestFinished(() => handle.dispose());
+  return handle;
+}
 
 /**
  * The real backend, on the only platform that has one.
