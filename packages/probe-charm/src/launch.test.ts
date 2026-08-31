@@ -25,6 +25,7 @@ import {
   CLIENT_MODULE,
   prepareBubblesCapability,
   prepareInstrumentedBuild,
+  type BubblesCapabilityPlan,
 } from './launch.js';
 
 const run = promisify(execFile);
@@ -71,65 +72,6 @@ async function writeModule(
     'utf8',
   );
   await writeFile(join(dir, 'main.go'), source, 'utf8');
-}
-
-async function writeLocalBubblesModule(dir: string, compatible: boolean): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  await writeFile(
-    join(dir, 'go.mod'),
-    'module github.com/charmbracelet/bubbles\n\ngo 1.24.0\n',
-    'utf8',
-  );
-  const sources: Readonly<Record<string, string>> = compatible
-    ? {
-        spinner:
-          'type Spinner struct { Frames []string }\ntype Model struct { frame int; Spinner Spinner }\n',
-        progress: 'type Model struct { percentShown float64; targetPercent float64 }\n',
-        filepicker:
-          'type entry struct{}\nfunc (entry) Name() string { return "entry" }\ntype Model struct { selected int; files []entry }\n',
-        list: 'type Model struct { statusMessage string }\n',
-        table: 'type Model struct { start int; end int; rows [][]string }\n',
-      }
-    : Object.fromEntries(
-        ['spinner', 'progress', 'filepicker', 'list', 'table'].map((name) => [
-          name,
-          'type Model struct{}\n',
-        ]),
-      );
-  await Promise.all(
-    Object.entries(sources).map(async ([name, source]) => {
-      const packageDir = join(dir, name);
-      await mkdir(packageDir, { recursive: true });
-      await writeFile(join(packageDir, `${name}.go`), `package ${name}\n\n${source}`, 'utf8');
-    }),
-  );
-}
-
-async function writeLocalBubblesConsumer(
-  app: string,
-  bubbles: string,
-  version: string,
-): Promise<void> {
-  await writeModule(app, [`github.com/charmbracelet/bubbles ${version}`]);
-  const goMod = await readFile(join(app, 'go.mod'), 'utf8');
-  await writeFile(
-    join(app, 'go.mod'),
-    `${goMod}\nreplace github.com/charmbracelet/bubbles => ${JSON.stringify(bubbles)}\n`,
-    'utf8',
-  );
-}
-
-function offlineGoEnv(dir: string): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    GOFLAGS: '',
-    GOMODCACHE: join(dir, 'empty-modcache'),
-    GONOSUMDB: '*',
-    GOPROXY: 'off',
-    GOSUMDB: 'off',
-    GOTOOLCHAIN: 'local',
-    GOWORK: 'off',
-  };
 }
 
 async function snapshot(dir: string): Promise<Readonly<Record<string, Buffer>>> {
@@ -319,30 +261,82 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     await expect(failure).rejects.toMatchObject({ code: 'both-majors' });
   }, 300_000);
 
-  it('admits Bubbles by compiling the owned capability profile, never by a near-enough version guess', async () => {
+  it('admits any Bubbles version only after the compiler service accepts the owned capability plan', async () => {
     const dir = await scratch('tw-charm-launch-companion-');
     const app = join(dir, 'app');
-    const bubbles = join(dir, 'bubbles');
-    await writeLocalBubblesModule(bubbles, true);
-    await writeLocalBubblesConsumer(app, bubbles, 'v0.21.0');
+    await mkdir(app, { recursive: true });
+    let receivedPlan: BubblesCapabilityPlan | undefined;
+    let receivedBuild:
+      | {
+          readonly args: readonly string[];
+          readonly cwd: string;
+          readonly env: NodeJS.ProcessEnv;
+        }
+      | undefined;
+    const preparedToolExec = {
+      wrapperFile: join(dir, 'fake-toolexec'),
+      configDigest: `sha256:${'0'.repeat(64)}`,
+      goArgs: ['-toolexec', 'fake'] as const,
+      env: { ...process.env, TW_PREPARED: 'true' },
+      sources: [],
+    };
 
     const prepared = await prepareBubblesCapability({
       moduleDir: app,
       major: 'v1',
       companions: { 'github.com/charmbracelet/bubbles': 'v0.21.0' },
       outputDir: join(dir, 'tool-exec'),
-      env: offlineGoEnv(dir),
+      env: process.env,
+      compilerDependencies: {
+        prepareToolExec: async (plan) => {
+          receivedPlan = plan;
+          return preparedToolExec;
+        },
+        runGo: async (args, options) => {
+          receivedBuild = { args, ...options };
+        },
+      },
     });
     expect(prepared.module).toBe('github.com/charmbracelet/bubbles');
-    expect(prepared.toolExec?.goArgs).toEqual(['-toolexec', expect.any(String)]);
+    expect(prepared.toolExec?.goArgs).toEqual(['-toolexec', 'fake']);
+    expect(receivedPlan).toMatchObject({
+      module: 'github.com/charmbracelet/bubbles',
+      version: 'v0.21.0',
+      moduleDir: app,
+    });
+    expect(receivedPlan?.units).toHaveLength(5);
+    expect(receivedPlan?.units.map((unit) => unit.packagePath)).toEqual([
+      'github.com/charmbracelet/bubbles/spinner',
+      'github.com/charmbracelet/bubbles/progress',
+      'github.com/charmbracelet/bubbles/filepicker',
+      'github.com/charmbracelet/bubbles/list',
+      'github.com/charmbracelet/bubbles/table',
+    ]);
+    for (const unit of receivedPlan?.units ?? []) {
+      expect(unit.targetFile).toBe('zz_termwright_probe.go');
+      expect(unit.sourceDigest).toMatch(/^sha256:[a-f0-9]{64}$/u);
+      expect(unit.source.length).toBeGreaterThan(0);
+    }
+    expect(receivedBuild).toEqual({
+      args: [
+        'build',
+        '-toolexec',
+        'fake',
+        'github.com/charmbracelet/bubbles/spinner',
+        'github.com/charmbracelet/bubbles/progress',
+        'github.com/charmbracelet/bubbles/filepicker',
+        'github.com/charmbracelet/bubbles/list',
+        'github.com/charmbracelet/bubbles/table',
+      ],
+      cwd: app,
+      env: preparedToolExec.env,
+    });
   });
 
-  it('fails closed when a resolved Bubbles module lacks the owned private-state capability', async () => {
+  it('fails closed when the compiler rejects a resolved Bubbles private-state capability', async () => {
     const dir = await scratch('tw-charm-launch-incompatible-companion-');
     const app = join(dir, 'app');
-    const bubbles = join(dir, 'bubbles');
-    await writeLocalBubblesModule(bubbles, false);
-    await writeLocalBubblesConsumer(app, bubbles, 'v1.0.0');
+    await mkdir(app, { recursive: true });
 
     await expect(
       prepareBubblesCapability({
@@ -350,12 +344,25 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
         major: 'v1',
         companions: { 'github.com/charmbracelet/bubbles': 'v1.0.0' },
         outputDir: join(dir, 'tool-exec'),
-        env: offlineGoEnv(dir),
+        env: process.env,
+        compilerDependencies: {
+          prepareToolExec: async (plan) => ({
+            wrapperFile: join(dir, 'fake-toolexec'),
+            configDigest: `sha256:${'0'.repeat(64)}`,
+            goArgs: ['-toolexec', 'fake'],
+            env: plan.env,
+            sources: [],
+          }),
+          runGo: async () => {
+            throw new Error('synthetic private-state mismatch');
+          },
+        },
       }),
     ).rejects.toMatchObject({
       code: 'unsupported-capability',
       module: 'github.com/charmbracelet/bubbles',
       version: 'v1.0.0',
+      message: expect.stringContaining('synthetic private-state mismatch'),
     });
   });
 
