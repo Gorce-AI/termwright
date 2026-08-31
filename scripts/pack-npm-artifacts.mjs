@@ -34,6 +34,7 @@ const windowsMembers = [
   'package/vendor/conpty.dll',
   'package/vendor/conpty-manifest.json',
   'package/vendor/LICENSE.microsoft-terminal.txt',
+  'package/vendor/NOTICE.microsoft-terminal.md',
   'package/vendor/THIRD_PARTY_NOTICES.md',
   'package/vendor/SBOM.spdx.json',
 ];

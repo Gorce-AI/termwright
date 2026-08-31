@@ -17,6 +17,7 @@ class ControlledPty implements PtyProcess {
   readonly resizeCalls: Array<{ columns: number; rows: number }> = [];
   readonly signalCalls: PtySignal[] = [];
   readonly writeCalls: Uint8Array[] = [];
+  readonly terminalResponseWriteCalls: Uint8Array[] = [];
   terminateCount = 0;
   readonly #failExitRegistration: boolean;
   readonly #failDispose: boolean;
@@ -65,6 +66,11 @@ class ControlledPty implements PtyProcess {
   write(data: Uint8Array): void {
     if (this.#failWrite) throw new Error('write failed');
     this.writeCalls.push(Uint8Array.from(data));
+  }
+  writeTerminalResponse(data: Uint8Array): 'application-direct' {
+    if (this.#failWrite) throw new Error('write failed');
+    this.terminalResponseWriteCalls.push(Uint8Array.from(data));
+    return 'application-direct';
   }
   resize(columns: number, rows: number): void {
     this.resizeCalls.push({ columns, rows });
@@ -218,6 +224,33 @@ describe('terminal session resource lifecycle', () => {
       code: 'pty-backend-failed',
     });
     await expect(terminal.close()).rejects.toMatchObject({ code: 'pty-backend-failed' });
+    responseSpy.mockRestore();
+  });
+
+  terminalIt('routes emulator replies through the dedicated PTY response transport', async () => {
+    let responseListener: Parameters<VtScreen['onResponse']>[0] | undefined;
+    const originalOnResponse = VtScreen.prototype.onResponse;
+    const responseSpy = vi.spyOn(VtScreen.prototype, 'onResponse').mockImplementation(function (
+      this: VtScreen,
+      listener,
+    ) {
+      responseListener = listener;
+      return originalOnResponse.call(this, listener);
+    });
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const pty = new ControlledPty();
+    const terminal = await launchTerminalWithBackend({
+      command: ['controlled-app'],
+      backend: backendFor(pty, endpoint),
+    });
+
+    responseListener?.({ data: '\u001b[?2026;2$y', kind: 'emulator' });
+
+    expect(pty.writeCalls).toEqual([]);
+    expect(
+      pty.terminalResponseWriteCalls.map((data) => Buffer.from(data).toString('ascii')),
+    ).toEqual(['\u001b[?2026;2$y']);
+    await terminal.close();
     responseSpy.mockRestore();
   });
 
@@ -468,6 +501,88 @@ describe('terminal session resource lifecycle', () => {
         await unexpectedTerminal?.close().catch(() => undefined);
         restoreProvider();
         vi.useRealTimers();
+      }
+    },
+  );
+
+  terminalIt(
+    'keeps required semantic negotiation open past the ordinary discovery window',
+    async () => {
+      vi.useFakeTimers();
+      let markSpawned!: () => void;
+      const spawned = new Promise<void>((resolve) => {
+        markSpawned = resolve;
+      });
+      const endpoint: { value: string | undefined; token?: string } = { value: undefined };
+      let completeAttach!: () => void;
+      let discoveryState: { admissionOpen: boolean; pendingHandshakes: number } | undefined;
+      const listenSpy = vi.spyOn(SemanticChannel, 'listen').mockImplementation(async (options) => {
+        const channel = {
+          endpoint: 'controlled-semantic-endpoint',
+          closeAdmission: () => {
+            discoveryState = {
+              admissionOpen: false,
+              pendingHandshakes: 1,
+            };
+            options.hooks.onNegotiationStateChange?.(discoveryState);
+          },
+          close: async () => undefined,
+        } as unknown as SemanticChannel;
+        completeAttach = () =>
+          options.hooks.onAttach({
+            protocol: 'termwright/2',
+            adapter: { name: 'controlled-adapter', version: '1.0.0' },
+            capabilities: ['tree', 'render-revisions'],
+            markerEnabled: true,
+            logsEnabled: false,
+            probe: null,
+            providers: [],
+          });
+        return channel;
+      });
+      let launched: ReturnType<typeof launchTerminalWithBackend> | undefined;
+      const pty = new ControlledPty({
+        // This test owns a synthetic backend, not a POSIX process group. A
+        // delegated lifecycle closes synchronously under the fake clock on
+        // every host, while still exercising the real session cleanup path.
+        lifecycle: { tree: 'delegated', outputDrain: 'eof' },
+      });
+      try {
+        launched = launchTerminalWithBackend({
+          command: ['controlled-app'],
+          backend: backendFor(pty, endpoint, markSpawned),
+          requiredCapabilities: ['semantic-tree'],
+          semanticNegotiationMs: 2_000,
+          timeouts: { ready: 3_000 },
+        });
+        await spawned;
+
+        // SemanticChannel's real-socket suite owns transport admission and
+        // hello-deadline behavior. This lifecycle test supplies the resulting
+        // admitted state directly, so a Windows named pipe is never coupled to
+        // Vitest's virtual clock.
+        await vi.advanceTimersByTimeAsync(2_100);
+        expect(discoveryState).toEqual({ admissionOpen: false, pendingHandshakes: 1 });
+        completeAttach();
+
+        // Launch resolution is the causal assertion under test: onAttach
+        // settled the required contract and woke the launch change journal.
+        // A protocol ACK is covered by SemanticChannel's transport tests and
+        // is not part of required-capability readiness.
+        const terminal = await launched;
+        expect(terminal.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+        expect(terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout')).toBe(
+          false,
+        );
+        vi.useRealTimers();
+        await terminal.close();
+        expect(pty.terminateCount).toBe(1);
+        expect(pty.disposeCount).toBe(1);
+      } finally {
+        vi.useRealTimers();
+        const terminal = await launched?.catch(() => undefined);
+        await terminal?.close().catch(() => undefined);
+        listenSpy.mockRestore();
       }
     },
   );

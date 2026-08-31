@@ -118,6 +118,9 @@ class Session {
 
   DWORD pid() const { return pid_; }
   bool Write(const uint8_t* data, size_t length, std::string* error);
+  /// Ends only the terminal-to-console input stream. Output and the owned
+  /// pseudoconsole remain alive until their ordinary causal lifecycle ends.
+  void CloseInput();
   bool Resize(SHORT columns, SHORT rows);
   /// Terminates the whole owned tree. Output keeps flowing until real EOF.
   bool TerminateTree(std::string* error);
@@ -162,6 +165,9 @@ class Session {
   // writer_stop_ before taking this lock, so a write is either already
   // pending and CancelIoEx sees it, or observes the stop and is never issued.
   std::mutex writer_io_mutex_;
+  // Serializes half-close with itself and Dispose. Joining the same native
+  // writer from two callers is undefined even though closing its pipe is not.
+  std::mutex input_close_mutex_;
   std::condition_variable write_signal_;
   std::deque<std::vector<uint8_t>> write_queue_;
   size_t queued_write_bytes_ = 0;

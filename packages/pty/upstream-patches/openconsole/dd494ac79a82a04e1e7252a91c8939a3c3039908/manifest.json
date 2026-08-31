@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "framework": "microsoft/terminal OpenConsole",
+  "tier": "T3",
+  "capability": "request-addressed-host-cursor-rpc",
+  "upstream": {
+    "repository": "https://github.com/microsoft/terminal",
+    "commit": "dd494ac79a82a04e1e7252a91c8939a3c3039908",
+    "archiveUrl": "https://github.com/microsoft/terminal/archive/dd494ac79a82a04e1e7252a91c8939a3c3039908.tar.gz",
+    "archiveSha256": "785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2",
+    "license": "MIT"
+  },
+  "patch": {
+    "path": "host-cursor-rpc.patch",
+    "sha256": "839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c",
+    "strip": 1
+  },
+  "protocol": {
+    "osc": 8488,
+    "request": "ESC ] 8488 ; twh-cpr-v1:q:<32-lowercase-hex-token> BEL",
+    "response": "ESC ] 8488 ; twh-cpr-v1:r:<same-token>:<1-based-row>:<1-based-column> BEL"
+  },
+  "touchedFiles": {
+    "dep/vcpkg-overlay-triplets/arm64-windows-static.cmake": {
+      "sha256Before": "b5d9e4f41c384bb0231b0361af912dfbc31c7b2f877acf27300d9c147acecd17",
+      "sha256After": "f7a28c95bf04a14e1648d9be9824fcc8f51c1897c347ac8b7322df0a7ad5a652"
+    },
+    "dep/vcpkg-overlay-triplets/x64-windows-static.cmake": {
+      "sha256Before": "1801b3f691be4981486da28655cc0287f57d95bb5be8d1938592c201f3eff488",
+      "sha256After": "e408e994a32db495a3af44d16a57e02c8c7005688b024546857ebaa5abfbda7b"
+    },
+    "src/host/VtInputThread.cpp": {
+      "sha256Before": "05c7915efcf84e62bd590429f4d6187fb13cf4c6c5c61cf9656b41f49c148b62",
+      "sha256After": "f0c3b30f42af77332695b7d56e3fba56346e77bf9590eac0e16ff8f9a8fc6d09"
+    },
+    "src/host/VtInputThread.hpp": {
+      "sha256Before": "925cf01d1ec32a45849f00c6dc5b593ec55961b15c60467f0d1a03c05008e703",
+      "sha256After": "f0f29e04e9fe744dce077bf815aa8cc6deb58eef976193b78fb3a82848087072"
+    },
+    "src/host/VtIo.cpp": {
+      "sha256Before": "ab0ac453cb8c03bc798bc922283ec65415760ba82202ffcd6d5222c28946ee62",
+      "sha256After": "a9a64cd502eeb2d37175a4269483d64d5224dd5adb8b12e455d52af967e6785e"
+    },
+    "src/host/VtIo.hpp": {
+      "sha256Before": "acde4ec0c363930dfb7cdab0f7c6c99a77cc00d7c64093c464ab0fa91ccfa486",
+      "sha256After": "9b52f8fd2e4445caed71f594ed0148a84ef63cc6bf29f10447bf4e1789b49d5f"
+    },
+    "src/host/screenInfo.cpp": {
+      "sha256Before": "50c93b8fce3403fc34342bd774844e4ed8506cb3ee36e8c9213a7dba68ae86ce",
+      "sha256After": "50eb18d241336e45dde8f15611878f700d316114f06b3a8b90f6baac007fa836"
+    },
+    "src/host/screenInfo.hpp": {
+      "sha256Before": "45fa0f839f7dad5bedcc0e4c7b282cda800689dd0e6f5fa66c997897c83134e4",
+      "sha256After": "aa904a62a63394b49f3545a62f3b4188b57d39f22f0039e96b6fbf98b7824383"
+    },
+    "src/server/ApiDispatchers.cpp": {
+      "sha256Before": "c7e4ea86b14b35c00550c293e4625d595b5264553f14fa9c7b0835d500fc9154",
+      "sha256After": "5ad2bfd0cbbd0359ef1d61543c13bab5bfba3835348844625cac0a770cfe280f"
+    },
+    "src/server/ApiSorter.h": {
+      "sha256Before": "2e66e140b1a24bde7d10e389e1bb4787f835924548eaf7f653a1014a584ca78a",
+      "sha256After": "31575b436857ef9c380b5bbdbb9e5bd16e00d66720b664a7d3b6a4fac3e9d1d2"
+    },
+    "src/server/IWaitRoutine.h": {
+      "sha256Before": "9f2e6712931815cf3f63647216916d131d21d1570e5accb7efee6b4b8676a396",
+      "sha256After": "3a28d82554c5e81d175a9142357341993ffe0df0b3893988bc09304e55efb048"
+    },
+    "src/server/WaitBlock.cpp": {
+      "sha256Before": "88ddee7b5275dccdabd5cb650227b9b4f89ea3e4a16230530bd80226ed338ac4",
+      "sha256After": "78cd614122dc364b70ef189b8e822ded34610a927e93eb8eb42829b156234320"
+    },
+    "src/terminal/parser/InputStateMachineEngine.cpp": {
+      "sha256Before": "08bb07a77eeead47dec9fbae36e315389446021255f5b0378a4f1fd014ffc621",
+      "sha256After": "ba7969d7e435640f26bfd6af9237ecbfc84e3eaeaf4a4c9bbf6f4b428fc0ae4f"
+    },
+    "src/terminal/parser/InputStateMachineEngine.hpp": {
+      "sha256Before": "e53ab3bb93432070dbeafa1ef29d6518d0aef7d007d837124fa535f08e640524",
+      "sha256After": "974433c1d2484d95a32f9f772c940c2b95826232fd77b540b376bec4579a55ef"
+    },
+    "src/terminal/parser/ut_parser/InputEngineTest.cpp": {
+      "sha256Before": "1d3dae214fdf4e45f66a8de1f6922a4e0c62f6f15f7625df9b26f301c9837e38",
+      "sha256After": "607446c07373cdd08e5a2bedd1774ddce34f966a3ed99f96b14fce090ae9c1d1"
+    },
+    "src/terminal/adapter/IInteractDispatch.hpp": {
+      "sha256Before": "8f73352685b907dadf5a413fc020729bdfdeeb53d045261f14eab295b0932171",
+      "sha256After": "5474410aa577fd30567ece6447e4a4002f0a76368e7ec350b5102cbe7e176057"
+    },
+    "src/terminal/adapter/InteractDispatch.hpp": {
+      "sha256Before": "29a8959b96df6e6524341b74b52091042403a2c954c6a5971bfc4aa279d58b3a",
+      "sha256After": "cbb30e8c44fb194f97c20406fea589ebabf0e25931c88e2d0e16271d3ddf5cbd"
+    },
+    "src/terminal/adapter/InteractDispatch.cpp": {
+      "sha256Before": "fb0a25b27696810200603490d34bf52f76a78ccab71a010520a0840eb85d7bc4",
+      "sha256After": "9091ae96740ed32e57c9fcd270579daeeef094749f05a5f8a84d514fa6548864"
+    }
+  },
+  "build": {
+    "solution": "OpenConsole.slnx",
+    "configuration": "Release",
+    "platformToolset": "v143",
+    "vcpkgTriplets": {
+      "x64": {
+        "path": "dep/vcpkg-overlay-triplets/x64-windows-static.cmake",
+        "targetArchitecture": "x64"
+      },
+      "ARM64": {
+        "path": "dep/vcpkg-overlay-triplets/arm64-windows-static.cmake",
+        "targetArchitecture": "arm64"
+      }
+    },
+    "targets": ["Conhost\\Host_EXE", "Conhost\\winconptydll"],
+    "disabledOptionalFeatures": {
+      "PGOBuildMode": "",
+      "TerminalTAEF": false,
+      "TerminalThemeHelpers": false
+    },
+    "excludedOptionalInternalPackages": [
+      {
+        "id": "Microsoft.Internal.PGO-Helpers.Cpp",
+        "version": "0.2.34",
+        "feature": "PGOBuildMode"
+      },
+      {
+        "id": "Microsoft.Taef",
+        "version": "10.100.251104001",
+        "feature": "TerminalTAEF"
+      },
+      {
+        "id": "Microsoft.Internal.Windows.Terminal.ThemeHelpers",
+        "version": "0.8.250811004",
+        "feature": "TerminalThemeHelpers"
+      }
+    ],
+    "platforms": ["x64", "ARM64"],
+    "outputs": {
+      "x64": ["bin/x64/Release/conpty.dll", "bin/x64/Release/OpenConsole.exe"],
+      "arm64": ["bin/ARM64/Release/conpty.dll", "bin/ARM64/Release/OpenConsole.exe"]
+    }
+  },
+  "binaryDigests": null,
+  "binaryDigestStatus": "bootstrap-required-after-windows-build-and-conformance",
+  "requiredConformance": [
+    "concurrent waiters for one dirty buffer generation share one addressed request and one response wakes them all",
+    "concurrent addressed host cursor requests remain isolated across physical screen-buffer activation changes",
+    "a newer dirty generation supersedes the older request without accepting a late response",
+    "dirty alternate buffer teardown while GCSBI waits cancels without use-after-free or hang",
+    "EOF cancels pending cursor queries across inactive physical and active alternate buffers",
+    "matching host response updates only the exact target and generation",
+    "stale and malformed twh-cpr-v1 responses are consumed without application-input leakage",
+    "foreign OSC 8488 payloads are not claimed by the host RPC",
+    "application DSR remains byte-exact through Win32 input mode",
+    "request generation and output failures fail closed rather than publishing stale cursor state"
+  ]
+}

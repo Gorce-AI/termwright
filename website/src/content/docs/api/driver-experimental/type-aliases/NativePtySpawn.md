@@ -13,7 +13,7 @@ editUrl: false
 
 > **NativePtySpawn** = (`options`) => [`NativePtySessionHandle`](../../interfaces/nativeptysessionhandle/)
 
-Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L27)
+Defined in: [native-pty-backend.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L32)
 
 ## Parameters
 

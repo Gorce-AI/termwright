@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDirectExecution } from './is-direct-execution.mjs';
 
@@ -140,8 +140,64 @@ async function filesBelow(directory, prefix = '') {
   return files;
 }
 
+export function assertSourceBuiltConptyLock(lock) {
+  for (const forbidden of ['package', 'version', 'url', 'sha256']) {
+    if (Object.hasOwn(lock, forbidden)) {
+      throw new Error(`legacy ConPTY lock key is forbidden: ${forbidden}`);
+    }
+  }
+  if (
+    lock.schemaVersion !== 2 ||
+    lock.identity?.provider !== 'termwright-patched-openconsole' ||
+    lock.identity?.hostCursorRpc !== 'twh-cpr-v1' ||
+    lock.identity?.mode !== 'ordered-vt-passthrough' ||
+    typeof lock.identity?.upstreamCommit !== 'string' ||
+    typeof lock.identity?.upstreamArchiveSha256 !== 'string' ||
+    typeof lock.identity?.patchSha256 !== 'string' ||
+    typeof lock.sourceManifest?.sha256 !== 'string'
+  ) {
+    throw new Error('invalid source-built ConPTY asset lock schema');
+  }
+}
+
 export async function verifyWindowsConptyBundle(packageDirectory, architecture) {
   const CONPTY_LOCK = JSON.parse(await readFile(CONPTY_LOCK_PATH, 'utf8'));
+  assertSourceBuiltConptyLock(CONPTY_LOCK);
+  const sourceManifestPath = resolve(ROOT, CONPTY_LOCK.sourceManifest.repositoryPath);
+  if (!sourceManifestPath.startsWith(`${ROOT}${sep}`)) {
+    throw new Error('ConPTY source manifest escapes the repository root');
+  }
+  const sourceManifestBytes = await readFile(sourceManifestPath);
+  if (
+    createHash('sha256').update(sourceManifestBytes).digest('hex') !==
+    CONPTY_LOCK.sourceManifest.sha256
+  ) {
+    throw new Error('repository ConPTY source manifest SHA-256 mismatch');
+  }
+  const sourceManifest = JSON.parse(sourceManifestBytes.toString('utf8'));
+  const patchPath = resolve(dirname(sourceManifestPath), sourceManifest.patch?.path ?? '');
+  if (!patchPath.startsWith(`${dirname(sourceManifestPath)}${sep}`)) {
+    throw new Error('ConPTY T3 patch escapes its source profile');
+  }
+  const patchSha256 = createHash('sha256')
+    .update(await readFile(patchPath))
+    .digest('hex');
+  if (
+    sourceManifest.schemaVersion !== 1 ||
+    sourceManifest.tier !== 'T3' ||
+    sourceManifest.capability !== 'request-addressed-host-cursor-rpc' ||
+    sourceManifest.upstream?.commit !== CONPTY_LOCK.identity.upstreamCommit ||
+    sourceManifest.upstream?.archiveSha256 !== CONPTY_LOCK.identity.upstreamArchiveSha256 ||
+    sourceManifest.patch?.sha256 !== CONPTY_LOCK.identity.patchSha256 ||
+    patchSha256 !== CONPTY_LOCK.identity.patchSha256 ||
+    sourceManifest.protocol?.osc !== 8488 ||
+    !sourceManifest.protocol?.request?.includes('twh-cpr-v1:q:') ||
+    !sourceManifest.protocol?.response?.includes('twh-cpr-v1:r:') ||
+    sourceManifest.build?.configuration !== CONPTY_LOCK.identity.buildConfiguration ||
+    sourceManifest.build?.platformToolset !== CONPTY_LOCK.identity.platformToolset
+  ) {
+    throw new Error('repository ConPTY source profile does not match the pinned T3 runtime');
+  }
   const vendor = join(packageDirectory, 'vendor');
   const assets = CONPTY_LOCK.assets[architecture];
   const metadata = CONPTY_LOCK.metadata[architecture];
@@ -161,15 +217,26 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
     throw new Error(`Windows ConPTY bundle inventory differs: ${actual.join(', ')}`);
   }
   const manifest = JSON.parse(await readFile(join(vendor, 'conpty-manifest.json'), 'utf8'));
+  for (const forbidden of ['package', 'version', 'url', 'sourceSha256']) {
+    if (Object.hasOwn(manifest, forbidden)) {
+      throw new Error(`legacy Windows ConPTY bundle manifest key is forbidden: ${forbidden}`);
+    }
+  }
   const lockedAssetDigests = Object.fromEntries(
     Object.entries(assets).map(([relative, asset]) => [relative, asset.sha256]),
   );
   if (
-    manifest.package !== CONPTY_LOCK.package ||
-    manifest.version !== CONPTY_LOCK.version ||
-    manifest.sourceSha256 !== CONPTY_LOCK.sha256 ||
+    manifest.schemaVersion !== 2 ||
+    manifest.provider !== CONPTY_LOCK.identity.provider ||
+    manifest.upstreamCommit !== CONPTY_LOCK.identity.upstreamCommit ||
+    manifest.upstreamArchiveSha256 !== CONPTY_LOCK.identity.upstreamArchiveSha256 ||
+    manifest.patchSha256 !== CONPTY_LOCK.identity.patchSha256 ||
+    manifest.hostCursorRpc !== CONPTY_LOCK.identity.hostCursorRpc ||
+    manifest.sourceManifestSha256 !== CONPTY_LOCK.sourceManifest.sha256 ||
+    manifest.build?.configuration !== CONPTY_LOCK.identity.buildConfiguration ||
+    manifest.build?.platformToolset !== CONPTY_LOCK.identity.platformToolset ||
     manifest.architecture !== architecture ||
-    manifest.mode !== 'ordered-vt-passthrough' ||
+    manifest.mode !== CONPTY_LOCK.identity.mode ||
     JSON.stringify(manifest.assets) !== JSON.stringify(lockedAssetDigests) ||
     JSON.stringify(manifest.metadata) !== JSON.stringify(metadata)
   ) {
@@ -197,6 +264,7 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
   }
   const sbom = JSON.parse(await readFile(join(vendor, 'SBOM.spdx.json'), 'utf8'));
   const described = sbom.packages?.find((entry) => entry.SPDXID === 'SPDXRef-Package-ConPTY');
+  const upstream = sbom.packages?.find((entry) => entry.SPDXID === 'SPDXRef-Package-Upstream');
   const sbomFiles = new Map(
     (sbom.files ?? []).map((entry) => [
       entry.fileName?.replace(/^\.\//u, ''),
@@ -204,15 +272,42 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
     ]),
   );
   if (
-    described?.name !== CONPTY_LOCK.package ||
-    described.versionInfo !== CONPTY_LOCK.version ||
+    described?.name !== CONPTY_LOCK.identity.provider ||
+    described.versionInfo !==
+      `${CONPTY_LOCK.identity.upstreamCommit}+${CONPTY_LOCK.identity.hostCursorRpc}.` +
+        `${CONPTY_LOCK.identity.patchSha256}.${CONPTY_LOCK.sourceManifest.sha256}` ||
     described.filesAnalyzed !== true ||
-    !described.externalRefs?.some(
+    described.licenseConcluded !== 'NOASSERTION' ||
+    described.licenseDeclared !== 'NOASSERTION' ||
+    described.copyrightText !== 'NOASSERTION' ||
+    upstream?.name !== 'microsoft/terminal' ||
+    upstream.versionInfo !== CONPTY_LOCK.identity.upstreamCommit ||
+    upstream.filesAnalyzed !== false ||
+    upstream.licenseConcluded !== 'NOASSERTION' ||
+    upstream.licenseDeclared !== 'MIT' ||
+    upstream.copyrightText !== 'NOASSERTION' ||
+    !upstream.externalRefs?.some(
       (entry) =>
         entry.referenceType === 'purl' &&
-        entry.referenceLocator === `pkg:nuget/${CONPTY_LOCK.package}@${CONPTY_LOCK.version}`,
+        entry.referenceLocator ===
+          `pkg:github/microsoft/terminal@${CONPTY_LOCK.identity.upstreamCommit}`,
     ) ||
-    Object.entries(assets).some(([relative, asset]) => sbomFiles.get(relative) !== asset.sha256)
+    !sbom.relationships?.some(
+      (entry) =>
+        entry.spdxElementId === 'SPDXRef-Package-ConPTY' &&
+        entry.relationshipType === 'GENERATED_FROM' &&
+        entry.relatedSpdxElement === 'SPDXRef-Package-Upstream',
+    ) ||
+    /nuget/iu.test(JSON.stringify(sbom)) ||
+    JSON.stringify(described.packageVerificationCode?.packageVerificationCodeExcludedFiles) !==
+      JSON.stringify(['conpty-manifest.json', 'SBOM.spdx.json']) ||
+    Object.entries(assets).some(([relative, asset]) => sbomFiles.get(relative) !== asset.sha256) ||
+    Object.entries(metadata).some(
+      ([relative, digest]) => relative !== 'SBOM.spdx.json' && sbomFiles.get(relative) !== digest,
+    ) ||
+    (sbom.files ?? []).some(
+      (file) => file.licenseConcluded !== 'NOASSERTION' || file.copyrightText !== 'NOASSERTION',
+    )
   ) {
     throw new Error('Windows ConPTY SBOM does not describe the sealed binary payload');
   }

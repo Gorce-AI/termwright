@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ExitStatus } from './api.js';
 import {
   createNativePtyBackend,
+  encodeWin32InputModeTerminalResponse,
   NATIVE_PTY_BACKEND_NAME,
   type NativePtySessionHandle,
   type NativePtySpawn,
@@ -26,6 +27,81 @@ function fakeSession(overrides: Partial<NativePtySessionHandle> = {}): NativePty
 }
 
 describe('the native PTY driver adapter', () => {
+  it('encodes each ConPTY terminal-response byte as a synthesized Win32 key event', () => {
+    const response = Buffer.from('\u001b[?2026;2$y', 'ascii');
+    expect(Buffer.from(encodeWin32InputModeTerminalResponse(response)).toString('ascii')).toBe(
+      [27, 91, 63, 50, 48, 50, 54, 59, 50, 36, 121]
+        .map((byte) => `\u001b[0;0;${byte};1;0;1_`)
+        .join(''),
+    );
+  });
+
+  it('rejects a non-ASCII terminal response instead of corrupting its UTF-16 key records', () => {
+    expect(() => encodeWin32InputModeTerminalResponse(Uint8Array.of(0xc3, 0xa9))).toThrow(
+      /non-ASCII byte 0xc3/u,
+    );
+  });
+
+  it('delegates Windows response provenance while POSIX writes the response raw', () => {
+    const windowsResponse = vi.fn<
+      (data: Uint8Array) => 'host-control' | 'application-direct' | 'application-win32-input'
+    >(() => 'application-win32-input');
+    const windowsSession = fakeSession({ writeTerminalResponse: windowsResponse });
+    const posixSession = fakeSession();
+    const windows = createNativePtyBackend(() => windowsSession, 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+    const posix = createNativePtyBackend(() => posixSession, 'linux').spawn({
+      command: ['/app'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+    const response = Buffer.from('\u001b[1;1R', 'ascii');
+
+    windows.writeTerminalResponse?.(response);
+    posix.writeTerminalResponse?.(response);
+
+    expect(windowsResponse).toHaveBeenCalledWith(response);
+    expect(posixSession.write).toHaveBeenCalledWith(response);
+  });
+
+  it('fails closed when a ConPTY implementation lacks provenance-aware response routing', () => {
+    const windows = createNativePtyBackend(() => fakeSession(), 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+    expect(() => windows.writeTerminalResponse?.(Buffer.from('\x1b[1;1R'))).toThrow(
+      /lacks terminal-response provenance routing/u,
+    );
+    expect(() => windows.write(Buffer.from('\x1b'), 'key')).toThrow(
+      /lacks application-input routing/u,
+    );
+  });
+
+  it('sends a lone Windows Escape key through Win32 Input Mode', () => {
+    const applicationInput =
+      vi.fn<(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw') => void>();
+    const session = fakeSession({ writeApplicationInput: applicationInput });
+    const windows = createNativePtyBackend(() => session, 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+
+    windows.write(Buffer.from('\x1b'), 'key');
+    windows.write(Buffer.from('\x1b'), 'raw');
+
+    expect(applicationInput).toHaveBeenNthCalledWith(1, Buffer.from('\x1b'), 'key');
+    expect(applicationInput).toHaveBeenNthCalledWith(2, Buffer.from('\x1b'), 'raw');
+  });
+
   it('exposes authoritative EOF and the native platform ownership model', () => {
     const posix = createNativePtyBackend(() => fakeSession(), 'darwin');
     const windows = createNativePtyBackend(() => fakeSession(), 'win32');
@@ -118,6 +194,49 @@ describe('the native PTY driver adapter', () => {
     expect(failures).toEqual([error]);
     expect(drains).toEqual([1]);
     expect(process.treeState?.()).toBe('gone');
+  });
+
+  it('terminates the Windows tree before closing its parent-owned ConPTY input', async () => {
+    const events: string[] = [];
+    const session = fakeSession({
+      signal: vi.fn(() => {
+        events.push('kill-tree');
+        return true;
+      }),
+      closeInput: vi.fn(() => events.push('close-input')),
+    });
+    const process = createNativePtyBackend(() => session, 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+
+    await process.hardKillTree?.(new AbortController().signal);
+
+    expect(events).toEqual(['kill-tree', 'close-input']);
+  });
+
+  it('still closes Windows ConPTY input when owned-tree termination fails', async () => {
+    const events: string[] = [];
+    const session = fakeSession({
+      signal: vi.fn(() => {
+        events.push('kill-tree');
+        throw new Error('job termination failed');
+      }),
+      closeInput: vi.fn(() => events.push('close-input')),
+    });
+    const process = createNativePtyBackend(() => session, 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+
+    await expect(process.hardKillTree?.(new AbortController().signal)).rejects.toThrow(
+      /job termination failed/u,
+    );
+    expect(events).toEqual(['kill-tree', 'close-input']);
   });
 
   it('preserves a native POSIX signal errno for lifecycle reconciliation', () => {

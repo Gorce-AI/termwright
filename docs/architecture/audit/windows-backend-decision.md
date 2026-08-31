@@ -1,12 +1,14 @@
 # Windows PTY backend — decision record
 
-Status: **accepted, certified, and unified.** Windows uses the Windows branch of
+Status: **accepted and unified; passthrough-runtime certification pending.** Windows uses the Windows branch of
 the Termwright-owned `@termwright/pty` N-API backend. Darwin, Linux, and Windows
 arm64/x64 addons share one conditional loader and six prebuild packages. A
 missing or unloadable addon fails closed; no supported platform falls back to
 node-pty. CI certifies real host behavior and the release matrix validates all
-six native artifacts. Windows additionally ships a pinned standalone ConPTY;
-it never falls back to the Windows inbox conhost.
+six native artifacts. The 0.3 release candidate additionally carries a
+standalone ConPTY built from one pinned Microsoft Terminal source commit with
+one exact-fenced T3 patch. It may ship only after its binaries and behavioral
+contract are certified, and it never falls back to the Windows inbox conhost.
 
 The investigation below is retained as historical decision evidence. Its
 intermediate failures and hypotheses do not describe the current backend.
@@ -194,23 +196,52 @@ a different path, so a marker written after text could appear first in the
 output pipe. `CONOUT$` did not repair the contract: its screen-buffer state and
 the emitted VT stream had no shared acknowledgement.
 
-Termwright now pins `Microsoft.Windows.Console.ConPTY` 1.24.260710001. That
+Termwright pins Microsoft Terminal source commit
+`dd494ac79a82a04e1e7252a91c8939a3c3039908` and applies one exact-fenced T3
+patch for request-addressed host cursor synchronization. `conpty.dll` and
+`OpenConsole.exe` are built together from that same patched tree; mixing a DLL
+and host from different builds is outside the candidate contract. This
 runtime's ConPTY path passes client VT into one ordered output stream without
-the legacy renderer. The addon finds its own module directory, rejects a
-sibling `OpenConsole.exe`, validates the exact DLL and all required native-host
-hashes, loads the DLL by absolute path, verifies the final mapped path, and
-retains one immutable Create/Resize/Close table for every `HPCON`. The addon
-still loads far enough to expose a structured capability report for missing,
-partial, modified, wrong-export, or wrong-layout bundles, but session creation
-fails closed before application code starts.
+the legacy renderer. The addon finds its own module directory, validates the
+exact DLL and all required native-host hashes, loads the DLL by absolute path,
+verifies the final mapped path, and retains one immutable Create/Resize/Close
+table for every `HPCON`. The addon still loads far enough to expose a structured
+capability report for missing, partial, modified, wrong-export, or wrong-layout
+bundles, but session creation fails closed before application code starts.
 
-This is deliberately a scoped claim: a framework must still flush its own
-output before writing its authenticated marker. The certified guarantee is
-that ConPTY does not reorder those already-issued writes. Node, Bun, legacy
+This is deliberately a scoped candidate claim: a framework must still flush
+its own output before writing its authenticated marker. Certification must
+prove that ConPTY does not reorder those already-issued writes. Node, Bun, legacy
 `WriteConsoleW`, rapid A→B→A frames, alternate screen, pressure, resize, and
-real EOF are tested on x64, ARM64, and x64 Node under ARM64 emulation. The old
-quiet window remains only where explicitly requested as a heuristic; it is not
+real EOF are tested on x64, ARM64, and x64 Node under ARM64 emulation. A quiet
+window remains only where a caller explicitly requests a heuristic; it is not
 evidence for authoritative semantic publication.
+
+### Request-addressed host cursor synchronization
+
+The unmodified host used standard DSR/CPR both for its own cursor shadow and for
+application terminal queries. Those byte-identical replies could not carry
+provenance. A rejected experiment tried to prime OpenConsole's input parser
+before a raw CPR, but a later host capture could still consume or retain the
+wrong application reply. The primer and capture-state arbitration are not part
+of the shipped design.
+
+The T3 patch replaces the host-owned query with private `OSC 8488` messages:
+`twh-cpr-v1:q:<32-lowercase-hex-token>` requests the cursor and
+`twh-cpr-v1:r:<same-token>:<row>:<column>` answers it. The token is a fresh
+random 128-bit value. The emulator reads its active cursor at the exact parser
+position of the request. OpenConsole accepts only the matching live token;
+superseded host replies are consumed without entering the application's input
+queue. Ordinary standard DSR/CPR is always application-owned and reaches the
+child through synthesized Win32 Input Mode records. Startup DA1 remains a
+separate raw host-control exchange.
+
+The only positive completion is a matching response for the live request.
+Supersession and session close cancel the waiter fail-closed without publishing
+stale cursor state. No primer, timeout, retry, quiet window, or pending-capture
+guess proves synchronization. A missing RPC capability, mismatched source or
+binary digest, or failed behavioral test keeps the runtime uncertified and
+session creation fails closed.
 
 ### Upstream legacy-API translation risks
 

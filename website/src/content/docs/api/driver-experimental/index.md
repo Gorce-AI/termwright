@@ -17,6 +17,7 @@ Application tests should import from `@termwright/driver` instead.
 ## Classes
 
 - [ProcessLifecycleError](classes/processlifecycleerror/)
+- [VtScreen](classes/vtscreen/)
 
 ## Interfaces
 

@@ -49,6 +49,7 @@ const probe = `
 	const { createServer } = await import('node:net');
 	const { spawnSync } = await import('node:child_process');
 	const { createHash, createHmac } = await import('node:crypto');
+	const { encodeConPtyHostCursorResponse, parseConPtyHostCursorRequest } = await import('@termwright/protocol');
 	const pty = await import('@termwright/pty');
 if (!pty.ptyAvailable()) {
   console.error('resolved no addon: ' + (pty.ptyUnavailableReason?.() ?? 'no reason reported'));
@@ -64,15 +65,19 @@ if (process.platform === 'win32') {
   const selectedHostIsValid = process.arch === 'arm64'
     ? runtime.selectedHostArchitecture === 'arm64'
     : runtime.selectedHostArchitecture === 'x64' || runtime.selectedHostArchitecture === 'arm64';
-  if (runtime.provider !== 'vendored' || runtime.package !== 'Microsoft.Windows.Console.ConPTY' ||
-      runtime.version !== '1.24.260710001' || runtime.mode !== 'ordered-vt-passthrough' ||
+  if (runtime.provider !== 'termwright-patched-openconsole' ||
+      runtime.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
+      runtime.patchSha256 !== '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c' ||
+      runtime.hostCursorRpc !== 'twh-cpr-v1' || runtime.mode !== 'ordered-vt-passthrough' ||
       runtime.policy !== 'strict' || runtime.assetsValidated !== true ||
       runtime.coreExports !== true || runtime.failureCode !== '' || runtime.failureWin32 !== 0 ||
+      runtime.orderedMarkerSemantics !== 'marker-authoritative-after-behavioral-certification' ||
+      Object.hasOwn(runtime, 'package') || Object.hasOwn(runtime, 'version') ||
       !selectedHostIsValid) {
-    console.error('the installed addon did not load the certified vendored ConPTY runtime: ' + JSON.stringify(runtime));
+    console.error('the installed addon did not load the pinned patched OpenConsole runtime: ' + JSON.stringify(runtime));
     process.exit(9);
   }
-  console.log('[pty-cert] vendored-conpty ' + JSON.stringify(runtime));
+  console.log('[pty-cert] pinned-patched-openconsole ' + JSON.stringify(runtime));
 }
 // Loading is not running. A binary that loads and then cannot open a
 // pseudoconsole would still satisfy a resolution check, and the point of
@@ -86,6 +91,62 @@ const handle = pty.spawnPty({
 });
 const chunks = [];
 handle.onData((data) => chunks.push(Buffer.from(data)));
+const attachHostControlResponder = (session, text) => {
+  const answeredCursorRequests = new Set();
+  let answeredPrimaryDeviceAttributes = false;
+  const writeHostControl = (response, description) => {
+    let route;
+    try {
+      route = session.writeTerminalResponse(Buffer.from(response, 'ascii'));
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === 'ConPTY input is closed' &&
+        session.treeState() === 'gone'
+      )
+        return;
+      throw error;
+    }
+    if (route !== 'host-control') throw new Error(description + ' used route ' + route);
+  };
+  const answer = () => {
+    const observed = text();
+    if (!answeredPrimaryDeviceAttributes && observed.includes('\x1b[c')) {
+      answeredPrimaryDeviceAttributes = true;
+      writeHostControl('\x1b[?1;2c', 'startup DA1');
+    }
+    for (const match of observed.matchAll(/\x1b\]8488;(twh-cpr-v1:q:[0-9a-f]{32})\x07/g)) {
+      const payload = match[1];
+      if (answeredCursorRequests.has(payload)) continue;
+      const request = parseConPtyHostCursorRequest(payload);
+      if (request === null) throw new Error('invalid ConPTY host cursor request: ' + payload);
+      answeredCursorRequests.add(payload);
+      const response = encodeConPtyHostCursorResponse(request, 1, 1);
+      writeHostControl(response, 'host cursor RPC');
+    }
+  };
+  const release = session.onData(answer);
+  answer();
+  return release;
+};
+const closeOwnedInputAfterExit = (session, releaseHostControl) => {
+  if (process.platform !== 'win32' || session.closeInput === undefined) return;
+  session.onExit(() => {
+    try {
+      releaseHostControl();
+    } finally {
+      // Exit and trailing output can share one native delivery batch. Revoke
+      // the response producer synchronously, then close input after that
+      // batch returns so a reentrant native call cannot abort delivery before
+      // its authoritative EOF event.
+      queueMicrotask(() => session.closeInput());
+    }
+  });
+};
+closeOwnedInputAfterExit(
+  handle,
+  attachHostControlResponder(handle, () => Buffer.concat(chunks).toString('utf8')),
+);
 const exited = new Promise((resolve) => handle.onExit(resolve));
 const [status] = await Promise.all([exited, handle.outputEnded]);
 const text = Buffer.concat(chunks).toString('utf8');
@@ -113,7 +174,9 @@ const collect = (source, executable = process.execPath) => {
   const session = pty.spawnPty({ command: command(source, executable), env: environment, columns: 80, rows: 24 });
   const output = [];
   session.onData((data) => output.push(Buffer.from(data)));
-  return { session, output, text: () => Buffer.concat(output).toString('utf8') };
+  const collected = { session, output, text: () => Buffer.concat(output).toString('utf8') };
+  closeOwnedInputAfterExit(session, attachHostControlResponder(session, collected.text));
+  return collected;
 };
 
 if (process.platform === 'win32') {
@@ -168,6 +231,7 @@ if (process.platform === 'win32') {
   const legacyOutput = [];
   legacySession.onData((data) => legacyOutput.push(Buffer.from(data)));
   const legacy = { session: legacySession, text: () => Buffer.concat(legacyOutput).toString('utf8') };
+  closeOwnedInputAfterExit(legacySession, attachHostControlResponder(legacySession, legacy.text));
   await legacy.session.outputEnded;
   const legacyBytes = legacy.text();
   let legacyCursor = legacyBytes.indexOf('A0000\x1b]8487;TW_LEGACY;A;0000\x07');
@@ -199,6 +263,10 @@ if (process.platform === 'win32') {
   });
   const inactiveOutput = [];
   inactiveSession.onData((data) => inactiveOutput.push(Buffer.from(data)));
+  closeOwnedInputAfterExit(
+    inactiveSession,
+    attachHostControlResponder(inactiveSession, () => Buffer.concat(inactiveOutput).toString('utf8')),
+  );
   await inactiveSession.outputEnded;
   const inactiveBytes = Buffer.concat(inactiveOutput).toString('utf8');
   const beforeBuffer = inactiveBytes.indexOf('ACTIVE-BEFORE\x1b]8487;TW_BUFFER;BEFORE\x07');
@@ -225,6 +293,10 @@ if (process.platform === 'win32') {
     });
     const markerOutput = [];
     markerSession.onData((data) => markerOutput.push(Buffer.from(data)));
+    closeOwnedInputAfterExit(
+      markerSession,
+      attachHostControlResponder(markerSession, () => Buffer.concat(markerOutput).toString('utf8')),
+    );
     const markerExited = new Promise((resolve) => markerSession.onExit(resolve));
     const [markerStatus] = await Promise.all([markerExited, markerSession.outputEnded]);
     const markerBytes = Buffer.concat(markerOutput).toString('utf8');
@@ -316,8 +388,8 @@ if (process.platform === 'win32') {
 
   // ResizePseudoConsole and the input pipe are independent channels. A public
   // WINDOW_BUFFER_SIZE_EVENT, followed by public geometry inspection in the
-  // child, is the causal acknowledgement. This tests the ConPTY contract below
-  // Node/Bun convenience APIs; no injected input or timing window is a barrier.
+  // child, is the causal acknowledgement. The terminal replies and lone key
+  // below use their dedicated transports; no timing window is a barrier.
   console.log('[pty-cert] observable-resize-win32');
   const resizeSession = pty.spawnPty({
     command: ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', process.env.TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE],
@@ -328,17 +400,75 @@ if (process.platform === 'win32') {
   const resizeOutput = [];
   resizeSession.onData((data) => resizeOutput.push(Buffer.from(data)));
   const resizing = { session: resizeSession, text: () => Buffer.concat(resizeOutput).toString('utf8') };
-  await waitForText(resizing, 'RESIZE-READY');
-  const resizeExited = new Promise((resolve) => resizeSession.onExit(resolve));
-  if (!resizeSession.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
-  const [resizeStatus] = await Promise.all([resizeExited, resizeSession.outputEnded]);
+  let resizeStatus;
+  resizeSession.onExit((status) => { resizeStatus = status; });
+  let startupDaAnswered = false;
+  const hostCursorAnswered = new Set();
+  let runtimeHostCursorAnswered = false;
+  let applicationCprAnswered = false;
+  let escapeSent = false;
+  let responseFailure;
+  let resizeStage = 'startup-handshake';
+  const releaseResizeResponder = resizeSession.onData(() => {
+    const observed = resizing.text();
+    try {
+      for (const match of observed.matchAll(/\x1b\]8488;(twh-cpr-v1:q:([0-9a-f]{32}))\x07/g)) {
+        const payload = match[1];
+        const token = match[2];
+        if (hostCursorAnswered.has(payload)) continue;
+        hostCursorAnswered.add(payload);
+        const runtime = observed.indexOf('RESIZE-READY') >= 0;
+        resizeStage = runtime ? 'runtime-host-cursor-rpc' : 'startup-host-cursor-rpc';
+        const response =
+          controlEsc + ']8488;twh-cpr-v1:r:' + token + (runtime ? ':3:17' : ':1:1') + '\x07';
+        const route = resizeSession.writeTerminalResponse(Buffer.from(response, 'ascii'));
+        if (route !== 'host-control') throw new Error('host cursor RPC used route ' + route);
+        if (runtime) runtimeHostCursorAnswered = true;
+      }
+      const startupDa = observed.indexOf(controlEsc + '[c');
+      if (!startupDaAnswered && startupDa >= 0) {
+        resizeStage = 'startup-da1';
+        const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[?1;2c', 'ascii'));
+        if (route !== 'host-control') throw new Error('startup DA1 used route ' + route);
+        startupDaAnswered = true;
+      }
+      if (!applicationCprAnswered && observed.includes(';APP-DSR:' + controlEsc + '[6n')) {
+        resizeStage = 'application-cpr';
+        const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[9;17R', 'ascii'));
+        if (route !== 'application-win32-input') throw new Error('application CPR used route ' + route);
+        applicationCprAnswered = true;
+      }
+      if (!escapeSent && observed.includes(';APP-CPR:1b5b393b313752;ESC-READY')) {
+        resizeStage = 'physical-escape';
+        resizeSession.writeApplicationInput(Buffer.from(controlEsc, 'ascii'), 'key');
+        escapeSent = true;
+      }
+    } catch (error) {
+      responseFailure ??= error;
+      resizeSession.dispose();
+    }
+  });
+  closeOwnedInputAfterExit(resizeSession, releaseResizeResponder);
+  const resizeWatchdog = startDiagnosticWatchdog(resizing, () => resizeStage);
+  try {
+    await Promise.race([waitForText(resizing, 'RESIZE-READY'), resizeWatchdog.failure]);
+    resizeStage = 'resize-acknowledgement';
+    if (!resizeSession.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
+    await Promise.race([resizeSession.outputEnded, resizeWatchdog.failure]);
+  } finally {
+    resizeWatchdog.cancel();
+  }
   const resizeEvidence = resizing.text();
-  const resizeValid = resizeStatus.code === 0 &&
-    resizeEvidence.includes('RESIZED:120x40') && resizeSession.sawRealEof;
+  const resizeValid = responseFailure === undefined &&
+    startupDaAnswered && runtimeHostCursorAnswered && applicationCprAnswered && escapeSent &&
+    resizeStatus?.code === 0 &&
+    resizeEvidence.includes('RESIZED:120x40;HOST-CPR:16,2;HOST-REPLY-LEAK:false') &&
+    resizeEvidence.includes(';APP-CPR:1b5b393b313752') &&
+    resizeEvidence.includes(';ESC:1b;VK:27;SCAN:1;REPEAT:1') && resizeSession.sawRealEof;
   resizeSession.dispose();
   if (!resizeValid) {
-    throw new Error('Win32 did not publish the expected console geometry after resize: ' +
-      JSON.stringify({ status: resizeStatus, output: resizeEvidence }));
+    throw new Error('Win32 did not certify host cursor RPC and application CPR after resize: ' +
+      JSON.stringify({ status: resizeStatus, output: resizeEvidence, responseFailure: String(responseFailure ?? '') }));
   }
 
   console.log('[pty-cert] split-production-marker');
@@ -437,6 +567,25 @@ function waitForText({ session, text }, marker) {
       else reject(new Error('session ended before causal marker ' + JSON.stringify(marker)));
     }, reject);
   });
+}
+
+// This timeout is not evidence and never admits success. It only turns a
+// broken native causal seam into an attributable certification failure instead
+// of occupying a release runner forever.
+function startDiagnosticWatchdog({ session, text }, stage, timeoutMs = 30_000) {
+  let timer;
+  const failure = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error('installed ConPTY causal proof stalled: ' + JSON.stringify({
+        stage: stage(),
+        output: text(),
+      }));
+      reject(error);
+      try { session.dispose(); } catch {}
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  return { failure, cancel: () => clearTimeout(timer) };
 }
 
 // Certify the bounded input queue in the packed consumer install, on this
@@ -587,12 +736,14 @@ if (process.platform === 'win32') {
   const fragmentedPayloadBytes = 6 * 1024 * 1024;
   const fragmentedSentinel = 'FRAGMENTED_CONSOLE_SENTINEL';
   const fragmentedSource = [
-    'process.stdin.resume();',
-    'process.stdin.once("data", () => {',
+    'process.stdout.write("FRAGMENTED-READY", () => {',
+    ' process.stdin.resume();',
+    ' process.stdin.once("data", () => {',
     '  const payload = Buffer.alloc(' + fragmentedPayloadBytes + ', 0x58);',
     '  process.stdout.write(payload, () => {',
     '    process.stdout.write(' + JSON.stringify(fragmentedSentinel) + ', () => process.exit(0));',
     '  });',
+    ' });',
     '});',
   ].join('');
   const fragmentedSyntax = spawnSync(process.execPath, ['--check', '-'], {
@@ -606,6 +757,7 @@ if (process.platform === 'win32') {
     );
   }
   const fragmented = collect(fragmentedSource);
+  await waitForText(fragmented, 'FRAGMENTED-READY');
   fragmented.session.write(Buffer.from('go\\r'));
   const fragmentedWait = spawnSync('powershell.exe', [
     '-NoLogo',
@@ -675,29 +827,43 @@ writeFileSync(
   join(installDirectory, 'termwright console marker.mjs'),
   readFileSync(consoleMarkerScriptPath),
 );
+const certifierPath = join(installDirectory, 'termwright-pty-certifier.mjs');
+writeFileSync(certifierPath, probe);
 
-const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
-  cwd: installDirectory,
-  encoding: 'utf8',
-  env: {
-    ...process.env,
-    TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath,
-    TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE: inactiveBufferFixturePath,
-    TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE: consoleMarkerFixturePath,
-    TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(
-      installDirectory,
-      'termwright console marker.mjs',
-    ),
-    TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath,
+// Execute a file inside the clean install. Passing this growing conformance
+// program through `node -e` eventually exceeds Windows' command-line limit
+// before Node can start, yielding a non-attributable null exit status.
+const result = spawnSync(
+  execPath,
+  ['--force-node-api-uncaught-exceptions-policy=true', certifierPath],
+  {
+    cwd: installDirectory,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TERMWRIGHT_CONPTY_CAUSAL_FIXTURE: causalFixturePath,
+      TERMWRIGHT_CONPTY_INACTIVE_BUFFER_FIXTURE: inactiveBufferFixturePath,
+      TERMWRIGHT_CONPTY_CONSOLE_MARKER_FIXTURE: consoleMarkerFixturePath,
+      TERMWRIGHT_CONPTY_CONSOLE_MARKER_SCRIPT: join(
+        installDirectory,
+        'termwright console marker.mjs',
+      ),
+      TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath,
+    },
+    // Certification stage markers must remain visible while the child runs. A
+    // buffered pipe hid the exact causal boundary whenever a runner watchdog
+    // terminated a stuck certifier.
+    stdio: ['ignore', 'inherit', 'inherit'],
   },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-
-if (result.stdout) process.stdout.write(result.stdout);
-if (result.stderr) process.stderr.write(result.stderr);
+);
 if (result.status !== 0) {
   console.error(
-    `the installed @termwright/pty failed on ${platform}-${arch} (exit ${result.status})`,
+    `the installed @termwright/pty failed on ${platform}-${arch}: ` +
+      JSON.stringify({
+        exit: result.status,
+        signal: result.signal,
+        spawnError: result.error?.message,
+      }),
   );
   exit(1);
 }
@@ -715,7 +881,7 @@ if (verdictPath !== undefined) {
     verdictPath,
     `${JSON.stringify(
       {
-        schemaVersion: 4,
+        schemaVersion: 5,
         platform,
         architecture: arch,
         addonSha256: sha256(addonPath),

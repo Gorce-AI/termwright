@@ -80,6 +80,27 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(source).toContain(
       "const fragmentedSyntax = spawnSync(process.execPath, ['--check', '-']",
     );
+    expect(source).toContain('attachHostControlResponder(handle');
+    expect(source).toContain('const release = session.onData(answer);');
+    expect(source).toContain(
+      "error.message === 'ConPTY input is closed' &&\n        session.treeState() === 'gone'",
+    );
+    expect(source).toContain('const closeOwnedInputAfterExit = (session, releaseHostControl) => {');
+    expect(source).toContain(
+      'try {\n      releaseHostControl();\n    } finally {\n      // Exit and trailing output can share one native delivery batch.',
+    );
+    expect(source).toContain('queueMicrotask(() => session.closeInput());');
+    expect(source).toContain(
+      'closeOwnedInputAfterExit(session, attachHostControlResponder(session, collected.text));',
+    );
+    expect(source).toContain(
+      'resizeSession.onData((data) => resizeOutput.push(Buffer.from(data)));',
+    );
+    expect(source).toContain('const releaseResizeResponder = resizeSession.onData(() => {');
+    expect(source).toContain('closeOwnedInputAfterExit(resizeSession, releaseResizeResponder);');
+    expect(source).toContain("await waitForText(fragmented, 'FRAGMENTED-READY');");
+    expect(source).toContain("'--force-node-api-uncaught-exceptions-policy=true', certifierPath");
+    expect(source).toContain("stdio: ['ignore', 'inherit', 'inherit']");
   });
 
   it('keeps repository and release certification single-attempt', async () => {
@@ -104,6 +125,8 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(ci).toMatch(/^env:\n(?: {2}.*\n)* {2}TERMWRIGHT_RETRIES: '0'$/mu);
     expect(ci).toContain("TERMWRIGHT_REQUIRE_GO: '1'");
     expect(release).toContain("TERMWRIGHT_REQUIRE_GO: '1'");
+    expect(ci).toContain("GOPROXY: 'https://proxy.golang.org'");
+    expect(release).toContain("GOPROXY: 'https://proxy.golang.org'");
     for (const [workflow, jobId] of [
       [ci, 'build'],
       [ci, 'windows-driver-native'],
@@ -114,6 +137,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
       expect(job, `${jobId} must pin the Go toolchain`).toContain("go-version: '1.25'");
     }
     expect(release).toMatch(/^env:\n {2}TERMWRIGHT_RETRIES: '0'$/mu);
+    expect(ci.match(/pnpm --dir packages\/protocol pack/gu)).toHaveLength(
+      ci.match(/pnpm --dir packages\/pty pack/gu)?.length ?? 0,
+    );
     for (const workflow of [ci, release, reliability]) {
       expect(workflow).toContain("TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'");
     }
@@ -362,12 +388,18 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'node-gyp rebuild --target="$node_version" --arch=${{ inputs.architecture }}',
     );
     expect(ptyPrebuildAction).toContain('--nodedir="$node_root"');
+    expect(ptyPrebuildAction).toContain(
+      'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
+    );
     expect(ptyPrebuildAction).toContain('node scripts/check-installed-pty.mjs "$install_dir"');
     expect(ptyPrebuildAction).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(releaseJobs.prebuilds).toContain("bun-version: '1.4.0'");
     expect(releaseJobs['certify-x64-on-arm64']).toContain('runs-on: windows-11-arm');
     expect(releaseJobs['certify-x64-on-arm64']).toContain('architecture: x64');
     expect(releaseJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
+    expect(releaseJobs['certify-x64-on-arm64']).toContain(
+      'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
+    );
     expect(releaseJobs['certify-x64-on-arm64']).toContain('certification-verdict-arm64-host.json');
     expect(releaseJobs.verify).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(releaseJobs.verify).toContain('certification-verdict-arm64-host.json');
@@ -378,6 +410,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(previewJobs.prebuilds).toContain('uses: ./.github/actions/build-pty-prebuild');
     expect(previewJobs['certify-x64-on-arm64']).toContain('runs-on: windows-11-arm');
     expect(previewJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
+    expect(previewJobs['certify-x64-on-arm64']).toContain(
+      'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
+    );
     expect(previewJobs['certify-x64-on-arm64']).toContain('certification-verdict-arm64-host.json');
     expect(previewJobs.preview).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(previewJobs.preview).toContain('certification-verdict-arm64-host.json');

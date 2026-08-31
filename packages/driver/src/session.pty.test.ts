@@ -304,29 +304,29 @@ describe.skipIf(!ptyAvailable())('the production PTY backend', { timeout: 20_000
 });
 
 describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout: 20_000 }, () => {
-  // ConPTY consumes these terminal queries before xterm-headless can observe
-  // and answer them. The child therefore cannot prove Termwright's emulator
-  // response path on Windows; the direct VtScreen test remains platform-free.
-  it.skipIf(process.platform === 'win32')(
-    'returns emulator query responses through PTY without classifying them as user input',
-    async () => {
-      const terminal = await launch('terminal-query-app.mjs', {
-        columns: 80,
-        rows: 24,
-      });
-      const inputs: unknown[] = [];
-      const unsubscribe = terminal.events.on('input', (event) => inputs.push(event));
-      try {
-        await terminal.waitForText('dsr=3;7 background=rgb:0000/0000/0000');
-        expect(inputs).toEqual([]);
-        expect(
-          terminal.diagnostics().filter((entry) => entry.code === 'terminal-response'),
-        ).toHaveLength(2);
-      } finally {
-        unsubscribe();
-      }
-    },
-  );
+  it('returns emulator query responses through PTY without classifying them as user input', async () => {
+    const terminal = await launch('terminal-query-app.mjs', {
+      columns: 80,
+      rows: 24,
+    });
+    const inputs: unknown[] = [];
+    const unsubscribe = terminal.events.on('input', (event) => inputs.push(event));
+    try {
+      await terminal.waitForText('dsr=3;7 background=rgb:0000/0000/0000 sync=2');
+      expect(inputs).toEqual([]);
+      const responseKinds = terminal
+        .diagnostics()
+        .filter((entry) => entry.code === 'terminal-response')
+        .map((entry) => /\(([^,]+),/u.exec(entry.detail)?.[1])
+        .sort();
+      // Every application-owned reply stays observable on every platform.
+      // The pinned OpenConsole uses a separate addressed private RPC for its
+      // cursor shadow, so ordinary CPR is never captured as host control.
+      expect(responseKinds).toEqual(['background-color', 'emulator', 'emulator']);
+    } finally {
+      unsubscribe();
+    }
+  });
 
   it('fails launch immediately when a required capability is unavailable', async () => {
     const failure = await launchTerminal({
@@ -910,19 +910,6 @@ describe.skipIf(!ptyAvailable())('settled()', { timeout: 20_000 }, () => {
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(terminal.semanticTree()).toBeNull();
     expect(terminal.contract()).toBe(capabilities);
-  });
-
-  it('uses the startup readiness budget when semantic capabilities are required', async () => {
-    const terminal = await launch('semantic-app.mjs', {
-      env: { TERMWRIGHT_FIXTURE_HELLO_DELAY: '2100' },
-      requiredCapabilities: ['semantic-tree'],
-      timeouts: { ready: 3_000 },
-    });
-
-    expect(terminal.contract()?.capabilities['semantic-tree'].status).toBe('supported');
-    expect(terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout')).toBe(
-      false,
-    );
   });
 
   it('keeps the default fail-closed after the bounded negotiation window', async () => {

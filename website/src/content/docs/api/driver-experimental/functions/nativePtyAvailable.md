@@ -13,7 +13,7 @@ editUrl: false
 
 > **nativePtyAvailable**(): `boolean`
 
-Defined in: [native-pty-backend.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L38)
+Defined in: [native-pty-backend.ts:55](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L55)
 
 Loads and validates the native binding without creating an unowned PTY.
 

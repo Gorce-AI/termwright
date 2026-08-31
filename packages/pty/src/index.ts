@@ -18,6 +18,11 @@ import {
 } from './windows.js';
 import { NativeWriteDrainEpoch } from './write-drain-epoch.js';
 
+export {
+  encodeConPtyApplicationInput,
+  encodeWin32InputModeTerminalResponse,
+} from './windows-output-normalizer.js';
+
 type NativeEvent =
   | { readonly type: 'data'; readonly data: Buffer }
   | {
@@ -151,6 +156,12 @@ export interface PtyHandle {
   readonly sawRealEof: boolean;
   readonly endReason: number | undefined;
   write(data: Uint8Array): void;
+  writeApplicationInput?(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): void;
+  writeTerminalResponse?(
+    data: Uint8Array,
+  ): 'host-control' | 'application-direct' | 'application-win32-input';
+  /** Closes the parent-owned terminal input while preserving output drain. */
+  closeInput?(): void;
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
   treeState(): 'alive' | 'gone' | 'unsupported';
@@ -229,6 +240,15 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
       outputEnded: session.outputEnded,
       write(data): void {
         session.write(data);
+      },
+      writeApplicationInput(data, kind): void {
+        session.writeApplicationInput(data, kind);
+      },
+      writeTerminalResponse(data) {
+        return session.writeTerminalResponse(data);
+      },
+      closeInput(): void {
+        session.closeInput();
       },
       resize(columns, rows): boolean {
         return session.resize(columns, rows);

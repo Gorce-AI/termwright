@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect } from 'vitest';
+import { encodeConPtyHostCursorResponse, parseConPtyHostCursorRequest } from '@termwright/protocol';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
 import { bunTestCapability } from '../../../scripts/test-support/bun-runtime.mjs';
 import {
@@ -30,6 +31,12 @@ const bun =
   windows &&
   bunTestCapability(() => spawnSync('bun', ['--version'], { stdio: 'ignore' }).status === 0);
 
+// Closing the ConPTY input generates CTRL_CLOSE_EVENT for attached console
+// processes. Windows lets their handlers finish cleanup and then terminates
+// them with this exact native status; returning TRUE does not turn it into a
+// normal exit.
+const STATUS_CONTROL_C_EXIT = 0xc000_013a;
+
 // These are behavioral certifications of the vendored native host, not normal
 // application sessions. They exercise OpenConsole, PowerShell, Node/Bun,
 // process trees and high-volume native channels. Reserving the complete host
@@ -51,8 +58,99 @@ function collect(handle: WindowsPtyHandle): { text(): string } {
   };
 }
 
+function diagnosticTail(output: string): string {
+  const maxCharacters = 4_096;
+  if (output.length <= maxCharacters) return output;
+  return `[${output.length - maxCharacters} earlier characters omitted]\n${output.slice(-maxCharacters)}`;
+}
+
 function node(script: string): readonly string[] {
   return [process.execPath, '-e', script];
+}
+
+const HOST_CURSOR_REQUEST = /\x1b\]8488;(twh-cpr-v1:q:[0-9a-f]{32})\x07/gu;
+
+function hostCursorRequests(output: string): readonly string[] {
+  return [...output.matchAll(HOST_CURSOR_REQUEST)]
+    .map((match) => match[1])
+    .filter((payload): payload is string => payload !== undefined);
+}
+
+function answerHostCursorRequests(
+  handle: WindowsPtyHandle,
+  output: string,
+  answered: Set<string>,
+): void {
+  for (const match of output.matchAll(HOST_CURSOR_REQUEST)) {
+    const payload = match[1];
+    if (payload === undefined || answered.has(payload)) continue;
+    const request = parseConPtyHostCursorRequest(payload);
+    if (request === null) throw new Error(`invalid ConPTY host cursor request: ${payload}`);
+    answered.add(payload);
+    const runtime = output.indexOf('RESIZE-READY') >= 0;
+    expect(
+      handle.writeTerminalResponse(
+        Buffer.from(
+          encodeConPtyHostCursorResponse(request, runtime ? 3 : 1, runtime ? 17 : 1),
+          'ascii',
+        ),
+      ),
+    ).toBe('host-control');
+  }
+}
+
+function attachHostControlResponder(
+  handle: WindowsPtyHandle,
+  output: { text(): string },
+): () => void {
+  const answeredHostCursorRequests = new Set<string>();
+  let answeredPrimaryDeviceAttributes = false;
+  const answer = (): void => {
+    const observed = output.text();
+    if (!answeredPrimaryDeviceAttributes && observed.includes('\x1b[c')) {
+      answeredPrimaryDeviceAttributes = true;
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
+    }
+    answerHostCursorRequests(handle, observed, answeredHostCursorRequests);
+  };
+  const release = handle.onData(answer);
+  answer();
+  return release;
+}
+
+function answerStartupHostCursorRequests(
+  handle: WindowsPtyHandle,
+  output: string,
+  runtimeReadyMarker: string,
+  answered: Set<string>,
+): void {
+  const readyAt = output.indexOf(runtimeReadyMarker);
+  for (const match of output.matchAll(HOST_CURSOR_REQUEST)) {
+    const payload = match[1];
+    if (payload === undefined || answered.has(payload)) continue;
+    if (readyAt >= 0 && (match.index ?? Number.MAX_SAFE_INTEGER) >= readyAt) continue;
+    const request = parseConPtyHostCursorRequest(payload);
+    if (request === null) throw new Error(`invalid startup host cursor request: ${payload}`);
+    answered.add(payload);
+    expect(
+      handle.writeTerminalResponse(
+        Buffer.from(encodeConPtyHostCursorResponse(request, 1, 1), 'ascii'),
+      ),
+    ).toBe('host-control');
+  }
+}
+
+function hostCursorResponse(payload: string, row: number, column: number): Buffer {
+  const request = parseConPtyHostCursorRequest(payload);
+  if (request === null) throw new Error(`invalid ConPTY host cursor request: ${payload}`);
+  return Buffer.from(encodeConPtyHostCursorResponse(request, row, column), 'ascii');
+}
+
+function win32InputRecordCommand(command: 'B' | 'C' | 'T'): Buffer {
+  // This fixture consumes ReadConsoleInputW records with VT input disabled.
+  // Sending uppercase text through ConPTY's character path would synthesize
+  // an additional Shift record, so express the one record under test directly.
+  return Buffer.from(`\x1b[0;0;${command.charCodeAt(0)};1;0;1_`, 'ascii');
 }
 
 function windowsAddonPath(): string {
@@ -212,22 +310,29 @@ async function certifyConsoleMarkerMode(executable: string): Promise<void> {
     rows: 24,
   });
   const output = collect(handle);
+  const releaseHostControlResponder = attachHostControlResponder(handle, output);
   const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
-  const [status] = await Promise.all([exited, handle.outputEnded]);
+  try {
+    const [status] = await Promise.all([exited, handle.outputEnded]);
 
-  expect(status, output.text()).toEqual({ code: 0, signal: null });
-  expect(output.text()).toContain(marker);
-  expect(output.text()).toContain('MODE_RESTORED');
-  expect(handle.sawRealEof).toBe(true);
-  handle.dispose();
+    expect(status, output.text()).toEqual({ code: 0, signal: null });
+    expect(output.text()).toContain(marker);
+    expect(output.text()).toContain('MODE_RESTORED');
+    expect(handle.sawRealEof).toBe(true);
+  } finally {
+    releaseHostControlResponder();
+    handle.dispose();
+  }
 }
 
 describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
   it('loads only the pinned, validated passthrough runtime', () => {
-    expect(windowsConPtyRuntimeInfo()).toMatchObject({
-      provider: 'vendored',
-      package: 'Microsoft.Windows.Console.ConPTY',
-      version: '1.24.260710001',
+    const runtime = windowsConPtyRuntimeInfo();
+    expect(runtime).toMatchObject({
+      provider: 'termwright-patched-openconsole',
+      upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
+      patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c',
+      hostCursorRpc: 'twh-cpr-v1',
       mode: 'ordered-vt-passthrough',
       policy: 'strict',
       assetsValidated: true,
@@ -235,6 +340,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       failureCode: '',
       failureWin32: 0,
     });
+    expect(runtime).not.toHaveProperty('package');
+    expect(runtime).not.toHaveProperty('version');
   });
 
   it('writes a console marker with VT enabled and restores the disabled mode', async () => {
@@ -275,6 +382,446 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     expect(observed).not.toContain(`\x1b[c${focusOn}${win32On}`);
     expect(handle.sawRealEof).toBe(true);
     handle.dispose();
+  });
+
+  it('routes addressed host cursor RPC separately from application CPR without leaking host replies', async () => {
+    const fixture = fileURLToPath(
+      new URL('../../../scripts/fixtures/conpty-observable-resize.ps1', import.meta.url),
+    );
+    const handle = spawnWindowsPty({
+      command: [
+        'powershell.exe',
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        fixture,
+      ],
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+    const answeredHostCursorRequests = new Set<string>();
+
+    try {
+      const answerHostQueries = (): void => {
+        answerHostCursorRequests(handle, output.text(), answeredHostCursorRequests);
+      };
+      handle.onData(answerHostQueries);
+      answerHostQueries();
+      // Complete OpenConsole's certified startup handshake causally. This is
+      // the one query whose provenance is established by the startup prefix.
+      expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
+
+      expect(
+        await waitForMarker(handle, output, /RESIZE-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.resize(120, 40)).toBe(true);
+
+      // The fixture waits for the resize event and then calls
+      // GetConsoleScreenBufferInfo. The pinned runtime emits an addressed
+      // private query only then; standard DSR remains application-owned.
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /RESIZE-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+
+      // The runtime consumed only its matching token and committed the cursor.
+      // The fixture proves no host reply reached the application queue,
+      // disables VT input, and emits an ordinary application DSR.
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /HOST-CPR:16,2;HOST-REPLY-LEAK:false;APP-DSR:\x1b\[6n/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[9;17R', 'ascii'))).toBe(
+        'application-win32-input',
+      );
+
+      expect(
+        await waitForMarker(handle, output, /APP-CPR:1b5b393b313752;ESC-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      handle.writeApplicationInput(Buffer.from('\x1b', 'ascii'), 'key');
+
+      const [status] = await Promise.all([exited, handle.outputEnded]);
+      expect(status, output.text()).toEqual({ code: 0, signal: null });
+      expect(output.text()).toContain('RESIZED:120x40;HOST-CPR:16,2;HOST-REPLY-LEAK:false');
+      expect(output.text()).toContain(';APP-CPR:1b5b393b313752');
+      expect(output.text()).toContain(';ESC:1b;VK:27;SCAN:1;REPEAT:1');
+      expect(handle.sawRealEof).toBe(true);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  it('cancels a dirty alternate-buffer cursor wait when VT tears the buffer down', async () => {
+    const fixture = fileURLToPath(
+      new URL('../../../scripts/fixtures/conpty-host-cursor-lifecycle.ps1', import.meta.url),
+    );
+    const handle = spawnWindowsPty({
+      command: [
+        'powershell.exe',
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        fixture,
+        '-Scenario',
+        'alt-teardown',
+      ],
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+    const startupRequests = new Set<string>();
+    const answerStartup = (): void => {
+      answerStartupHostCursorRequests(handle, output.text(), 'ALT-READY', startupRequests);
+    };
+    handle.onData(answerStartup);
+    answerStartup();
+
+    try {
+      expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
+      expect(
+        await waitForMarker(handle, output, /ALT-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.resize(120, 40)).toBe(true);
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /ALT-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      const altOutput = output.text().slice(output.text().indexOf('ALT-READY'));
+      const rawRequests = hostCursorRequests(altOutput);
+      expect(rawRequests).toHaveLength(1);
+      const requests = [...new Set(rawRequests)];
+      expect(requests).toHaveLength(1);
+      const [request] = requests;
+      expect(request).toBeDefined();
+
+      handle.write(win32InputRecordCommand('T'));
+      expect(
+        await waitForMarker(handle, output, /ALT-WAIT-RETURNED:ok;STALE-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.writeTerminalResponse(hostCursorResponse(request!, 5, 13))).toBe(
+        'host-control',
+      );
+      handle.write(win32InputRecordCommand('C'));
+
+      const [status] = await Promise.all([exited, handle.outputEnded]);
+      expect(status, output.text()).toEqual({ code: 0, signal: null });
+      expect(output.text()).toContain('ALT-WAIT-RETURNED:ok;STALE-READY;STALE-LEAK:false');
+      expect(handle.sawRealEof).toBe(true);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  it('coalesces concurrent cursor waiters for one dirty buffer generation', async () => {
+    const fixture = fileURLToPath(
+      new URL('../../../scripts/fixtures/conpty-host-cursor-lifecycle.ps1', import.meta.url),
+    );
+    const handle = spawnWindowsPty({
+      command: [
+        'powershell.exe',
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        fixture,
+        '-Scenario',
+        'same-buffer',
+      ],
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+    const startupRequests = new Set<string>();
+    const answerStartup = (): void => {
+      answerStartupHostCursorRequests(handle, output.text(), 'SAME-READY', startupRequests);
+    };
+    handle.onData(answerStartup);
+    answerStartup();
+
+    try {
+      expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
+      expect(
+        await waitForMarker(handle, output, /SAME-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.resize(120, 40)).toBe(true);
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /SAME-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      const sameBufferOutput = output.text().slice(output.text().indexOf('SAME-READY'));
+      const rawRequests = hostCursorRequests(sameBufferOutput);
+      // Both GCSBI calls wait on the same dirty buffer generation. Exactly one
+      // addressed request owns that generation; its response commits the
+      // cursor once and wakes both lifetime-safe waiters.
+      expect(rawRequests).toHaveLength(1);
+      const requests = [...new Set(rawRequests)];
+      expect(requests).toHaveLength(1);
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 7, 31))).toBe(
+        'host-control',
+      );
+
+      expect(
+        await waitForMarker(handle, output, /CONCURRENT-SAME:2:30,6;STALE-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      // Replaying the already-consumed token is stale and remains host-private.
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 9, 41))).toBe(
+        'host-control',
+      );
+      handle.write(win32InputRecordCommand('C'));
+
+      const [status] = await Promise.all([exited, handle.outputEnded]);
+      expect(status, output.text()).toEqual({ code: 0, signal: null });
+      expect(output.text()).toContain('CONCURRENT-SAME:2:30,6;STALE-READY;STALE-LEAK:false');
+      const finalSameBufferOutput = output.text().slice(output.text().indexOf('SAME-READY'));
+      expect(hostCursorRequests(finalSameBufferOutput)).toEqual(rawRequests);
+      expect(handle.sawRealEof).toBe(true);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  it('keeps concurrent cursor requests isolated across physical screen buffers', async () => {
+    const fixture = fileURLToPath(
+      new URL('../../../scripts/fixtures/conpty-host-cursor-lifecycle.ps1', import.meta.url),
+    );
+    const handle = spawnWindowsPty({
+      command: [
+        'powershell.exe',
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        fixture,
+        '-Scenario',
+        'physical-buffers',
+      ],
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+    const startupRequests = new Set<string>();
+    const answerStartup = (): void => {
+      answerStartupHostCursorRequests(
+        handle,
+        output.text(),
+        'PHYSICAL-HELPER-READY',
+        startupRequests,
+      );
+    };
+    handle.onData(answerStartup);
+    answerStartup();
+
+    try {
+      expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /PHYSICAL-A-READY[\s\S]*PHYSICAL-HELPER-READY|PHYSICAL-HELPER-READY[\s\S]*PHYSICAL-A-READY/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      const physicalReadyAt = Math.max(
+        output.text().indexOf('PHYSICAL-A-READY'),
+        output.text().indexOf('PHYSICAL-HELPER-READY'),
+      );
+      expect(handle.resize(120, 40)).toBe(true);
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /(?:PHYSICAL-A-READY[\s\S]*PHYSICAL-HELPER-READY|PHYSICAL-HELPER-READY[\s\S]*PHYSICAL-A-READY)[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      handle.write(win32InputRecordCommand('B'));
+      expect(
+        await waitForMarker(handle, output, /PHYSICAL-B-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.resize(121, 41)).toBe(true);
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /PHYSICAL-B-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      const physicalOutput = output.text().slice(physicalReadyAt);
+      const rawRequests = hostCursorRequests(physicalOutput);
+      expect(rawRequests).toHaveLength(2);
+      const requests = [...new Set(rawRequests)];
+      expect(requests).toHaveLength(2);
+
+      // The fixture publishes A before switching to B, so the tokens have a
+      // deterministic target. Resolve them in reverse order to prove that the
+      // response address, not arrival order or current activity, selects state.
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[1]!, 7, 31))).toBe(
+        'host-control',
+      );
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 4, 11))).toBe(
+        'host-control',
+      );
+
+      const [status] = await Promise.all([exited, handle.outputEnded]);
+      expect(status, output.text()).toEqual({ code: 0, signal: null });
+      expect(output.text()).toContain('MULTI:A=10,3');
+      expect(output.text()).toContain('MULTI:B=30,6');
+      expect(handle.sawRealEof).toBe(true);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  it('wakes cursor waiters on physical and active alternate buffers after real input EOF', async () => {
+    const fixture = fileURLToPath(
+      new URL('../../../scripts/fixtures/conpty-host-cursor-lifecycle.ps1', import.meta.url),
+    );
+    const handle = spawnWindowsPty({
+      command: [
+        'powershell.exe',
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        fixture,
+        '-Scenario',
+        'input-eof',
+      ],
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+    const startupRequests = new Set<string>();
+    const answerStartup = (): void => {
+      answerStartupHostCursorRequests(handle, output.text(), 'EOF-HELPER-READY', startupRequests);
+    };
+    handle.onData(answerStartup);
+    answerStartup();
+
+    try {
+      expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /EOF-A-READY[\s\S]*EOF-HELPER-READY|EOF-HELPER-READY[\s\S]*EOF-A-READY/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      const eofReadyAt = Math.max(
+        output.text().indexOf('EOF-A-READY'),
+        output.text().indexOf('EOF-HELPER-READY'),
+      );
+      expect(handle.resize(120, 40)).toBe(true);
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /(?:EOF-A-READY[\s\S]*EOF-HELPER-READY|EOF-HELPER-READY[\s\S]*EOF-A-READY)[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      handle.write(win32InputRecordCommand('B'));
+      expect(
+        await waitForMarker(handle, output, /EOF-B-ALT-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.resize(121, 41)).toBe(true);
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /EOF-B-ALT-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+
+      const eofOutput = output.text().slice(eofReadyAt);
+      const rawRequests = hostCursorRequests(eofOutput);
+      expect(rawRequests).toHaveLength(2);
+      expect(new Set(rawRequests)).toHaveProperty('size', 2);
+
+      // No cursor response is sent. Closing the parent-owned input writer
+      // produces CTRL_CLOSE_EVENT. Both handlers must finish their causal
+      // cleanup and publish through the independently open output pipe before
+      // Windows applies STATUS_CONTROL_C_EXIT to the root process.
+      handle.closeInput();
+      handle.closeInput();
+      expect(() => handle.write(Buffer.from('after-eof'))).toThrow(/ConPTY input is closed/u);
+
+      const [status] = await Promise.all([exited, handle.outputEnded]);
+      expect(output.text()).toContain('EOF-A-WAITER');
+      expect(output.text()).toContain('EOF-B-WAITER');
+      expect(handle.sawRealEof).toBe(true);
+      expect(status, diagnosticTail(output.text())).toEqual({
+        code: STATUS_CONTROL_C_EXIT,
+        signal: null,
+      });
+    } finally {
+      handle.dispose();
+    }
   });
 
   it('reports a missing or modified runtime while session creation fails closed', () => {
@@ -322,7 +869,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         [
           `const addon = require(${JSON.stringify(sourceAddon)});`,
           'const info = addon.conPtyRuntimeInfo();',
-          "if (info.provider !== 'vendored' || info.assetsValidated !== true) process.exit(9);",
+          "if (info.provider !== 'termwright-patched-openconsole' || info.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' || info.patchSha256 !== '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c' || info.hostCursorRpc !== 'twh-cpr-v1' || info.assetsValidated !== true) process.exit(9);",
         ].join(''),
       ],
       { cwd: hostileCwd, encoding: 'utf8' },
@@ -809,43 +1356,53 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       rows: 24,
     });
     const output = collect(handle);
-    expect(handle.resize(120, 40)).toBe(true);
-    const spoke = await waitForMarker(handle, output, /STDIN_TTY=(\w+),STDOUT_TTY=(\w+)/u, 10_000);
-    const processes = handle.activeProcesses();
-    expect(
-      processes,
-      `child never reported its handles; saw ${JSON.stringify(output.text())}`,
-    ).toBeGreaterThan(0);
-    // A whole line, not a bare keystroke. A console that has not been put into
-    // raw mode delivers input a line at a time, so a lone `x` sits in the
-    // line buffer and the child waits for a carriage return that never comes —
-    // which is what a silent child looks like from the outside. Sending the
-    // return makes the input complete under either mode.
-    // Armed before the write, because the child can be gone before the next
-    // line of this test runs and a listener attached afterwards would wait for
-    // an event that already happened.
-    const exit = new Promise<'exit' | 'budget'>((resolve) => {
-      const timer = setTimeout(() => {
-        release();
-        resolve('budget');
-      }, 10_000);
-      const release = handle.onExit(() => {
-        clearTimeout(timer);
-        release();
-        resolve('exit');
+    const releaseHostControlResponder = attachHostControlResponder(handle, output);
+    try {
+      expect(handle.resize(120, 40)).toBe(true);
+      const spoke = await waitForMarker(
+        handle,
+        output,
+        /STDIN_TTY=(\w+),STDOUT_TTY=(\w+)/u,
+        10_000,
+      );
+      const processes = handle.activeProcesses();
+      expect(
+        processes,
+        `child never reported its handles; saw ${JSON.stringify(output.text())}`,
+      ).toBeGreaterThan(0);
+      // A whole line, not a bare keystroke. A console that has not been put into
+      // raw mode delivers input a line at a time, so a lone `x` sits in the
+      // line buffer and the child waits for a carriage return that never comes —
+      // which is what a silent child looks like from the outside. Sending the
+      // return makes the input complete under either mode.
+      // Armed before the write, because the child can be gone before the next
+      // line of this test runs and a listener attached afterwards would wait for
+      // an event that already happened.
+      const exit = new Promise<'exit' | 'budget'>((resolve) => {
+        const timer = setTimeout(() => {
+          release();
+          resolve('budget');
+        }, 10_000);
+        const release = handle.onExit(() => {
+          clearTimeout(timer);
+          release();
+          resolve('exit');
+        });
       });
-    });
-    handle.write(Buffer.from('x\r'));
-    const exited = await exit;
-    // Naming which wait ran out is the whole difference between a report that
-    // can be acted on and one that says only that something took too long.
-    expect(
-      exited,
-      `child never exited after input; it reported ${spoke?.[0] ?? 'nothing'}, ` +
-        `job members before the write: ${processes}, now: ${handle.activeProcesses()}`,
-    ).toBe('exit');
-    await handle.outputEnded;
-    handle.dispose();
+      handle.write(Buffer.from('x\r'));
+      const exited = await exit;
+      // Naming which wait ran out is the whole difference between a report that
+      // can be acted on and one that says only that something took too long.
+      expect(
+        exited,
+        `child never exited after input; it reported ${spoke?.[0] ?? 'nothing'}, ` +
+          `job members before the write: ${processes}, now: ${handle.activeProcesses()}`,
+      ).toBe('exit');
+      await handle.outputEnded;
+    } finally {
+      releaseHostControlResponder();
+      handle.dispose();
+    }
   });
 
   it('drains a fragmented console frame while the JavaScript edge is busy', async () => {
@@ -913,6 +1470,75 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     expect(sentinelAt - payloadStart).toBe(payloadBytes);
     expect(handle.sawRealEof).toBe(true);
     handle.dispose();
+  });
+
+  it('delivers events produced while a JavaScript delivery callback is executing', async () => {
+    const ready = 'DELIVERY-CALLBACK-READY';
+    const sentinel = 'DELIVERY-CALLBACK-SENTINEL';
+    const script = [
+      'process.stdin.resume();',
+      'process.stdin.once("data", () => {',
+      `  process.stdout.write(${JSON.stringify(sentinel)}, () => process.exit(0));`,
+      '});',
+      `process.stdout.write(${JSON.stringify(ready)});`,
+    ].join('\n');
+    const handle = spawnWindowsPty({
+      command: node(script),
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const releaseHostControlResponder = attachHostControlResponder(handle, output);
+    let enteredDeliveryBarrier = false;
+    let barrierFailure: string | undefined;
+    const releaseBarrier = handle.onData(() => {
+      if (enteredDeliveryBarrier || !output.text().includes(ready)) return;
+      enteredDeliveryBarrier = true;
+
+      // Keep this READY delivery callback executing while the native writer
+      // admits input, emits its drain edge, and the child publishes both its
+      // final data and process exit. Process.WaitForExit is the causal proof;
+      // its finite budget only turns a broken fixture into an attributable
+      // failure. With a one-slot TSFN queue those later edges could report
+      // napi_queue_full and silently close delivery before exit or EOF.
+      handle.write(Buffer.from('go\r'));
+      const waited = spawnSync(
+        'powershell.exe',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `try { $target = [Diagnostics.Process]::GetProcessById(${handle.pid}) } ` +
+            `catch [ArgumentException] { exit 0 } ` +
+            `catch { [Console]::Error.WriteLine($_.Exception.ToString()); exit 72 }; ` +
+            `if (-not $target.WaitForExit(10000)) { exit 71 }; ` +
+            `exit 0`,
+        ],
+        { encoding: 'utf8' },
+      );
+      if (waited.status !== 0) {
+        barrierFailure =
+          `delivery callback child did not reach process exit ` +
+          `(helper ${String(waited.status)}): ${waited.error?.message ?? waited.stderr}`;
+      }
+    });
+
+    try {
+      expect(
+        await waitForMarker(handle, output, new RegExp(sentinel, 'u'), 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(enteredDeliveryBarrier).toBe(true);
+      if (barrierFailure !== undefined) throw new Error(barrierFailure);
+      await handle.outputEnded;
+      expect(handle.sawRealEof).toBe(true);
+    } finally {
+      releaseBarrier();
+      releaseHostControlResponder();
+      handle.dispose();
+    }
   });
 
   it('reassembles a codepoint split across reads', async () => {

@@ -5,7 +5,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { verifyBinaryArchitecture, verifyWindowsConptyBundle } from './check-prebuild.mjs';
+import {
+  assertSourceBuiltConptyLock,
+  verifyBinaryArchitecture,
+  verifyWindowsConptyBundle,
+} from './check-prebuild.mjs';
 
 const execute = promisify(execFile);
 
@@ -60,6 +64,30 @@ describe('native PTY prebuild architecture guard', () => {
       await writeFile(sbom, `${await readFile(sbom, 'utf8')}\n`);
       await expect(verifyWindowsConptyBundle(candidate, 'x64')).rejects.toThrow(
         /metadata SHA-256 mismatch/u,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects legacy lock and bundle manifest identities', async () => {
+    expect(() =>
+      assertSourceBuiltConptyLock({ schemaVersion: 2, url: 'https://example.invalid/legacy' }),
+    ).toThrow(/legacy ConPTY lock key is forbidden: url/u);
+
+    const packages = fileURLToPath(new URL('../packages/', import.meta.url));
+    const root = await mkdtemp(join(tmpdir(), 'tw-conpty-legacy-manifest-'));
+    const candidate = join(root, 'pty-win32-x64');
+    try {
+      await cp(join(packages, 'pty-win32-x64'), candidate, { recursive: true });
+      const manifestPath = join(candidate, 'vendor', 'conpty-manifest.json');
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify({ ...manifest, version: 'legacy' }, null, 2)}\n`,
+      );
+      await expect(verifyWindowsConptyBundle(candidate, 'x64')).rejects.toThrow(
+        /legacy Windows ConPTY bundle manifest key is forbidden: version/u,
       );
     } finally {
       await rm(root, { recursive: true, force: true });

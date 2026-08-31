@@ -2,35 +2,53 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
-  "name": "termwright-vendored-conpty-x64-1.24.260710001",
-  "documentNamespace": "https://github.com/Gorce-AI/termwright/sbom/conpty/x64/1.24.260710001",
+  "name": "termwright-vendored-conpty-x64-dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
+  "documentNamespace": "https://github.com/Gorce-AI/termwright/sbom/conpty/x64/dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
   "creationInfo": {
-    "created": "2026-08-26T00:00:00Z",
+    "created": "2026-08-31T00:00:00Z",
     "creators": [
-      "Tool: Termwright vendored dependency manifest"
+      "Tool: Termwright source-built ConPTY sealer"
     ]
   },
   "packages": [
     {
       "SPDXID": "SPDXRef-Package-ConPTY",
-      "name": "Microsoft.Windows.Console.ConPTY",
-      "versionInfo": "1.24.260710001",
-      "downloadLocation": "https://api.nuget.org/v3-flatcontainer/microsoft.windows.console.conpty/1.24.260710001/microsoft.windows.console.conpty.1.24.260710001.nupkg",
+      "name": "termwright-patched-openconsole",
+      "versionInfo": "dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": true,
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "4c57bd8eba2d128a781765bdb7ac256f2ce37e3a",
+        "packageVerificationCodeExcludedFiles": [
+          "conpty-manifest.json",
+          "SBOM.spdx.json"
+        ]
+      },
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "sourceInfo": "Built from microsoft/terminal dd494ac79a82a04e1e7252a91c8939a3c3039908; archive sha256:785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2; Termwright T3 patch sha256:839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c; source manifest sha256:afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Upstream",
+      "name": "microsoft/terminal",
+      "versionInfo": "dd494ac79a82a04e1e7252a91c8939a3c3039908",
+      "downloadLocation": "https://github.com/microsoft/terminal/archive/dd494ac79a82a04e1e7252a91c8939a3c3039908.tar.gz",
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "175640566a3b59c4b132070ee96c2c77e5ab7edd2e92732a5eb3610bbf63d90e"
+          "checksumValue": "785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2"
         }
       ],
-      "filesAnalyzed": true,
-      "licenseConcluded": "MIT",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Microsoft Corporation. All rights reserved.",
+      "copyrightText": "NOASSERTION",
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:nuget/Microsoft.Windows.Console.ConPTY@1.24.260710001"
+          "referenceLocator": "pkg:github/microsoft/terminal@dd494ac79a82a04e1e7252a91c8939a3c3039908"
         }
       ]
     }
@@ -40,6 +58,11 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-ConPTY"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ConPTY",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-Upstream"
     },
     {
       "spdxElementId": "SPDXRef-Package-ConPTY",
@@ -55,6 +78,21 @@
       "spdxElementId": "SPDXRef-Package-ConPTY",
       "relationshipType": "CONTAINS",
       "relatedSpdxElement": "SPDXRef-File-3"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ConPTY",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-File-4"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ConPTY",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-File-5"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ConPTY",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-File-6"
     }
   ],
   "files": [
@@ -63,36 +101,96 @@
       "fileName": "./conpty.dll",
       "checksums": [
         {
+          "algorithm": "SHA1",
+          "checksumValue": "b521b0c30715346df261f8d98245c887f13d2d39"
+        },
+        {
           "algorithm": "SHA256",
-          "checksumValue": "39fba2713e2495117b1591ae8c32a3b904bea7aa66069cf7815e2844c76d75d8"
+          "checksumValue": "292a296c5fef13eb48b5a45ed9c20e5a35e6e2f4f08be43d8e8aea4b0071ca48"
         }
       ],
-      "licenseConcluded": "MIT",
-      "copyrightText": "Copyright (c) Microsoft Corporation. All rights reserved."
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
     },
     {
       "SPDXID": "SPDXRef-File-2",
       "fileName": "./x64/OpenConsole.exe",
       "checksums": [
         {
+          "algorithm": "SHA1",
+          "checksumValue": "684607abcd4640565dc5b6a4bd9590ffa924ba4c"
+        },
+        {
           "algorithm": "SHA256",
-          "checksumValue": "b7fd936c2668b87b9ecf7b3366dc6568afc1c6f981874cba3e955a1c35cf8160"
+          "checksumValue": "03c461796ecadafd12e53a0f4662346eaebba1bdbfaf899181b04755be01b8b4"
         }
       ],
-      "licenseConcluded": "MIT",
-      "copyrightText": "Copyright (c) Microsoft Corporation. All rights reserved."
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
     },
     {
       "SPDXID": "SPDXRef-File-3",
       "fileName": "./arm64/OpenConsole.exe",
       "checksums": [
         {
+          "algorithm": "SHA1",
+          "checksumValue": "946775087bab7e091ac85702c762c459738d3d7b"
+        },
+        {
           "algorithm": "SHA256",
-          "checksumValue": "ed7622fd0d3bedc9ab9f122f5e58edf0def9e7999224f52dd395ba9f54edbe09"
+          "checksumValue": "b3281f58c784abf453a5bb1e193798c49718f0ac16d9c65400b4500a17fc83d5"
         }
       ],
-      "licenseConcluded": "MIT",
-      "copyrightText": "Copyright (c) Microsoft Corporation. All rights reserved."
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-4",
+      "fileName": "./LICENSE.microsoft-terminal.txt",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "bd44d9087bb3304fe01ba836a35cb7da6f7e9bf9"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-5",
+      "fileName": "./NOTICE.microsoft-terminal.md",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "97bcd98f4ef205dd7061136da7af0cc521d80cbb"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-File-6",
+      "fileName": "./THIRD_PARTY_NOTICES.md",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "36c60001353262aa131dc28e4ad3bc6c1a5d1899"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "bcdc561abefc0ed11e1226fc6b26eba906e713bce369adbfc8f3f88ac72dbf5d"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
     }
   ]
 }

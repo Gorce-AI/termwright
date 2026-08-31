@@ -34,6 +34,8 @@ interface TimerApi {
 export interface ProcessSupervisorOptions {
   readonly monotonicNow?: () => number;
   readonly timers?: TimerApi;
+  /** Revokes terminal-generated input immediately before a hard kill closes it. */
+  readonly beforeInputClose?: () => void;
   /**
    * Which platform's signal repertoire to assume. Defaults to the host's.
    * Injectable because the Windows branch is otherwise only reachable on
@@ -67,6 +69,8 @@ export class ProcessSupervisor {
   readonly #now: () => number;
   readonly #timers: TimerApi;
   readonly #platform: NodeJS.Platform;
+  readonly #beforeInputClose: (() => void) | undefined;
+  #inputProducersClosed = false;
   #shutdownPromise: Promise<ExitStatus> | null = null;
   #observedExit: ExitStatus | null = null;
   #exitTreeFailures: unknown[] | null = null;
@@ -86,6 +90,7 @@ export class ProcessSupervisor {
     this.#now = options.monotonicNow ?? ((): number => globalThis.performance.now());
     this.#timers = options.timers ?? DEFAULT_TIMERS;
     this.#platform = options.platform ?? process.platform;
+    this.#beforeInputClose = options.beforeInputClose;
   }
 
   shutdown(options: ProcessShutdownOptions): Promise<ExitStatus> {
@@ -173,7 +178,7 @@ export class ProcessSupervisor {
         if (this.#pty.killOwnedTreeAtExitBoundary !== undefined) {
           this.#pty.killOwnedTreeAtExitBoundary();
         } else {
-          this.#trySignal('KILL', failures);
+          this.#tryHardKill(failures);
         }
       } catch (error) {
         failures.push(
@@ -297,14 +302,14 @@ export class ProcessSupervisor {
       if (budgetSpent && observed === null) {
         // No time remains for a graceful request or for waiting on one, so the
         // strongest operation available is the only honest one left.
-        this.#trySignal('KILL', failures);
+        this.#tryHardKill(failures);
       } else if (observed !== null) {
         // The backend already proved exit. Do not signal a dead process or
         // wait for a one-shot event that cannot be replayed.
       } else if (!canObserveExit) {
         // We cannot truthfully confirm cleanup, but still attempt the strongest
         // available operation before releasing backend handles.
-        this.#trySignal('KILL', failures);
+        this.#tryHardKill(failures);
       } else if (lifecycle?.tree === 'conpty-console') {
         // Windows cannot deliver POSIX graceful signals through ConPTY. The
         // native backend owns a Job Object and exposes its termination as this
@@ -316,15 +321,16 @@ export class ProcessSupervisor {
               `ConPTY backend for process ${this.#pty.pid} cannot prove complete tree termination`,
             ),
           );
-          this.#trySignal('KILL', failures);
+          this.#tryHardKill(failures);
         } else {
           try {
+            this.#closeInputProducers(failures);
             hardKillController = new AbortController();
             if (deadlineReached) hardKillController.abort();
             await this.#pty.hardKillTree(hardKillController.signal);
           } catch (error) {
             failures.push(error);
-            this.#trySignal('KILL', failures);
+            this.#tryHardKill(failures);
           }
         }
       } else if (lifecycle?.tree === 'delegated') {
@@ -335,7 +341,7 @@ export class ProcessSupervisor {
               `delegated PTY backend for process ${this.#pty.pid} exposes no graceful terminate operation`,
             ),
           );
-          this.#trySignal('KILL', failures);
+          this.#tryHardKill(failures);
         } else {
           try {
             this.#pty.terminate();
@@ -344,7 +350,7 @@ export class ProcessSupervisor {
           }
           const graceDeadline = Math.min(options.deadline, this.#now() + options.gracefulMs);
           if (observed === null) observed = await waitForExit(graceDeadline);
-          if (observed === null) this.#trySignal('KILL', failures);
+          if (observed === null) this.#tryHardKill(failures);
         }
       } else {
         // ConPTY has no hang-up signal: the backend rejects HUP outright, so
@@ -357,7 +363,7 @@ export class ProcessSupervisor {
         if (this.#platform !== 'win32') this.#trySignal('HUP', failures);
         const graceDeadline = Math.min(options.deadline, this.#now() + options.gracefulMs);
         if (observed === null) observed = await waitForExit(graceDeadline);
-        if (observed === null) this.#trySignal('KILL', failures);
+        if (observed === null) this.#tryHardKill(failures);
       }
 
       if (canObserveExit && observed === null) observed = await waitForDeadlineExit();
@@ -432,6 +438,29 @@ export class ProcessSupervisor {
       failures.push(
         isErrno(error, 'EPERM') ? new ProcessSignalPermissionError(signal, error) : error,
       );
+    }
+  }
+
+  #tryHardKill(failures: unknown[]): void {
+    this.#closeInputProducers(failures);
+    try {
+      this.#trySignal('KILL', failures);
+    } finally {
+      try {
+        this.#pty.closeInput?.();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+  }
+
+  #closeInputProducers(failures: unknown[]): void {
+    if (this.#inputProducersClosed) return;
+    this.#inputProducersClosed = true;
+    try {
+      this.#beforeInputClose?.();
+    } catch (error) {
+      failures.push(error);
     }
   }
 

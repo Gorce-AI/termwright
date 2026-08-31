@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   createRunId,
+  DEFAULT_RUN_EVENT_LIMITS,
   RunEventProducer,
   RunIdFactory,
   type RunnerTaskId,
@@ -746,6 +747,58 @@ describe('TermwrightTestHost', () => {
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('failed');
     expect(completion.failures[0]?.errors[0]).toContain('assertion transported from worker');
+    await host.close();
+  });
+
+  it('bounds large multibyte Vitest errors without changing a test failure into infrastructure failure', async () => {
+    const engine = new FakeEngine();
+    const exactCiShape = {
+      message: 'large assertion diff',
+      stack: 'AssertionError: large assertion diff\n    at windows.test.ts:42:7',
+      actual: JSON.stringify([...Buffer.alloc(32 * 1024, 0x61)]),
+      expected: JSON.stringify([...Buffer.alloc(32 * 1024, 0x62)]),
+      diff: 'first differing terminal byte: expected 0x62, received 0x61',
+    };
+    const manyMultibyteErrors = Array.from({ length: 24 }, (_, index) => ({
+      message: `soft assertion ${index}`,
+      stack: `AssertionError: soft assertion ${index}\n${'żółw🙂'.repeat(8_000)}`,
+    }));
+    const failed = testCase('native-large-failure', 'large assertion', 'failed', 0, true, [
+      exactCiShape,
+      ...manyMultibyteErrors,
+    ]);
+    engine.tests = [failed];
+    engine.runResult = result([failed]);
+    const host = hostFromEngine(engine, hostOptions());
+
+    const completion = await host.requestRun().completed;
+
+    expect(completion.state).toBe('failed');
+    expect(completion.error).toBeUndefined();
+    expect(completion.events.some((event) => event.type === 'run.infrastructure-failed')).toBe(
+      false,
+    );
+    const recorded = completion.failures[0]?.errors;
+    expect(recorded?.[0]).toContain('AssertionError: large assertion diff');
+    expect(recorded?.[0]).toContain('at windows.test.ts:42:7');
+    expect(recorded?.[0]).toContain('first differing terminal byte');
+    expect(recorded?.at(-1)).toMatch(/additional test errors? omitted/u);
+    expect(
+      recorded?.some((entry) => entry.endsWith('...[truncated to run-event string budget]')),
+    ).toBe(true);
+    expect(recorded?.every((entry) => !entry.includes('\uFFFD'))).toBe(true);
+    expect(
+      recorded?.every(
+        (entry) => Buffer.byteLength(entry, 'utf8') <= DEFAULT_RUN_EVENT_LIMITS.maxStringBytes,
+      ),
+    ).toBe(true);
+    const failureEvent = completion.events.find((event) => event.type === 'test.failed');
+    const eventErrors = (failureEvent?.payload as { errors?: readonly string[] } | undefined)
+      ?.errors;
+    expect(eventErrors).toEqual(recorded);
+    expect(Buffer.byteLength(JSON.stringify(failureEvent), 'utf8')).toBeLessThanOrEqual(
+      DEFAULT_RUN_EVENT_LIMITS.maxEventBytes,
+    );
     await host.close();
   });
 

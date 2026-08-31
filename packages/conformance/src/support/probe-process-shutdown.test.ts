@@ -48,11 +48,17 @@ function shutdownFor(
     readonly watchdogMs?: number;
   } = {},
 ): ProbeProcessShutdown {
+  let terminalResponsesClosed = false;
   return new ProbeProcessShutdown({
     pty,
     closeAdmission: async () => {
       events.push('close-admission');
       if (options.admissionFailure !== undefined) throw options.admissionFailure;
+    },
+    closeTerminalResponseAdmission: () => {
+      if (terminalResponsesClosed) return;
+      terminalResponsesClosed = true;
+      events.push('close-terminal-responses');
     },
     drainParser: async () => {
       events.push('drain-parser');
@@ -82,7 +88,7 @@ describe('causal AdapterProbe process shutdown', () => {
     });
 
     const stopped = shutdown.stop();
-    expect(events).toEqual(['close-admission', 'kill']);
+    expect(events).toEqual(['close-admission', 'close-terminal-responses', 'kill']);
     shutdown.observeExit({ code: 1, signal: null });
     await Promise.resolve();
     expect(events).not.toContain('dispose-pty');
@@ -97,6 +103,7 @@ describe('causal AdapterProbe process shutdown', () => {
     await stopped;
     expect(events).toEqual([
       'close-admission',
+      'close-terminal-responses',
       'kill',
       'drain-parser',
       'dispose-pty',
@@ -112,7 +119,13 @@ describe('causal AdapterProbe process shutdown', () => {
     shutdown.observeExit({ code: 0, signal: null });
 
     await expect(shutdown.stop()).rejects.toThrow(/without authoritative EOF/u);
-    expect(events).toEqual(['close-admission', 'kill', 'dispose-pty', 'dispose-parser']);
+    expect(events).toEqual([
+      'close-admission',
+      'close-terminal-responses',
+      'kill',
+      'dispose-pty',
+      'dispose-parser',
+    ]);
   });
 
   it('uses one watchdog as a diagnostic and shares one idempotent stop operation', async () => {
@@ -131,7 +144,13 @@ describe('causal AdapterProbe process shutdown', () => {
       await rejected;
       expect(pty.hardKillTree).toHaveBeenCalledOnce();
       expect(pty.dispose).toHaveBeenCalledOnce();
-      expect(events).toEqual(['close-admission', 'kill', 'dispose-pty', 'dispose-parser']);
+      expect(events).toEqual([
+        'close-admission',
+        'close-terminal-responses',
+        'kill',
+        'dispose-pty',
+        'dispose-parser',
+      ]);
     } finally {
       vi.useRealTimers();
     }
@@ -149,6 +168,7 @@ describe('causal AdapterProbe process shutdown', () => {
     expect(events).toEqual([
       'close-admission',
       'drain-parser',
+      'close-terminal-responses',
       'dispose-pty',
       'dispose-parser',
       'remove-artifacts',
@@ -166,6 +186,7 @@ describe('causal AdapterProbe process shutdown', () => {
     expect(events).toEqual([
       'close-admission',
       'drain-parser',
+      'close-terminal-responses',
       'dispose-pty',
       'dispose-parser',
       'remove-artifacts',
@@ -180,6 +201,12 @@ describe('causal AdapterProbe process shutdown', () => {
     shutdown.observeExit({ code: 0, signal: null });
 
     await expect(shutdown.stop()).rejects.toBe(admissionFailure);
-    expect(events).toEqual(['close-admission', 'drain-parser', 'dispose-pty', 'dispose-parser']);
+    expect(events).toEqual([
+      'close-admission',
+      'drain-parser',
+      'close-terminal-responses',
+      'dispose-pty',
+      'dispose-parser',
+    ]);
   });
 });

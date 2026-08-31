@@ -2,24 +2,6 @@
   "version": 1,
   "deviations": [
     {
-      "id": "TW-DEV-CONPTY-TERMINAL-QUERY-INTERCEPTION",
-      "capability": "terminal-query-response",
-      "predicate": "win32",
-      "category": "fundamental-backend-difference",
-      "reason": "ConPTY answers or consumes selected terminal queries before the emulated VT path can observe them; platform-free VT protocol tests cover the emulator path separately.",
-      "evidence": "packages/driver/src/session.pty.test.ts",
-      "issueOrAdr": "CONTRACTS.md §PTY",
-      "removalCondition": "A Windows backend exposes query traffic end to end without ConPTY interception.",
-      "owner": "termwright-core",
-      "revalidate": "each Windows backend certification change",
-      "tests": [
-        [
-          "packages/driver/src/session.pty.test.ts",
-          "returns emulator query responses through PTY without classifying them as user input"
-        ]
-      ]
-    },
-    {
       "id": "TW-DEV-POSIX-PROCESS-GROUP-PROOF",
       "capability": "POSIX process-group lifecycle",
       "predicate": "win32",

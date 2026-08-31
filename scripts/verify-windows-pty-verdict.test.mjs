@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -12,9 +12,12 @@ async function fixture() {
   const addon = Buffer.from('exact-addon');
   const manifest = Buffer.from(
     `${JSON.stringify({
+      schemaVersion: 2,
       architecture: 'x64',
-      package: 'Microsoft.Windows.Console.ConPTY',
-      version: '1.24.260710001',
+      provider: 'termwright-patched-openconsole',
+      upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
+      patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c',
+      hostCursorRpc: 'twh-cpr-v1',
       mode: 'ordered-vt-passthrough',
     })}\n`,
   );
@@ -22,15 +25,16 @@ async function fixture() {
   await writeFile(join(root, 'termwright_pty.node'), addon);
   await writeFile(join(root, 'vendor', 'conpty-manifest.json'), manifest);
   const verdict = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     platform: 'win32',
     architecture: 'x64',
     addonSha256: sha256(addon),
     conptyManifestSha256: sha256(manifest),
     runtime: {
-      provider: 'vendored',
-      package: 'Microsoft.Windows.Console.ConPTY',
-      version: '1.24.260710001',
+      provider: 'termwright-patched-openconsole',
+      upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
+      patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c',
+      hostCursorRpc: 'twh-cpr-v1',
       mode: 'ordered-vt-passthrough',
       policy: 'strict',
       failureCode: '',
@@ -74,7 +78,7 @@ async function fixture() {
 describe('Windows PTY causal verdict', () => {
   it('rejects the previous schema before the extended visual and semantic facts existed', async () => {
     const { root, verdict } = await fixture();
-    verdict.schemaVersion = 3;
+    verdict.schemaVersion = 4;
     await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
     await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
@@ -133,6 +137,43 @@ describe('Windows PTY causal verdict', () => {
     await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
     await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
+
+  it.each(['provider', 'upstreamCommit', 'patchSha256', 'hostCursorRpc'])(
+    'rejects a verdict with a different %s runtime identity',
+    async (field) => {
+      const { root, verdict } = await fixture();
+      verdict.runtime[field] = 'different';
+      await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
+      await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
+    },
+  );
+
+  it.each(['package', 'version'])(
+    'rejects the removed %s runtime compatibility identity',
+    async (field) => {
+      const { root, verdict } = await fixture();
+      verdict.runtime[field] = 'legacy';
+      await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
+      await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
+    },
+  );
+
+  it.each(['provider', 'upstreamCommit', 'patchSha256', 'hostCursorRpc', 'package', 'version'])(
+    'rejects a vendored manifest with a different %s identity',
+    async (field) => {
+      const { root } = await fixture();
+      const manifest = JSON.parse(
+        await readFile(join(root, 'vendor', 'conpty-manifest.json'), 'utf8'),
+      );
+      manifest[field] = 'different';
+      const bytes = Buffer.from(`${JSON.stringify(manifest)}\n`);
+      await writeFile(join(root, 'vendor', 'conpty-manifest.json'), bytes);
+      const verdict = JSON.parse(await readFile(join(root, 'certification-verdict.json'), 'utf8'));
+      verdict.conptyManifestSha256 = sha256(bytes);
+      await writeFile(join(root, 'certification-verdict.json'), `${JSON.stringify(verdict)}\n`);
+      await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/different vendored runtime/u);
+    },
+  );
 
   it('verifies a separately named cross-host verdict against the same bytes', async () => {
     const { root, verdict } = await fixture();

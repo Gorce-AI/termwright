@@ -82,10 +82,15 @@ Windows. Its six optional `@termwright/pty-{platform}-{architecture}` packages
 carry the prebuilt native addons selected by the package manager. They are not
 user-facing adapters. Every supported platform deliberately has no fallback
 PTY: a missing or unloadable matching prebuild is an actionable startup error.
-Windows prebuilds also carry a pinned, hash-validated Microsoft ConPTY runtime.
-It is loaded only from the package directory and never falls back to the inbox
-conhost, whose rendered output path cannot provide Termwright's causal semantic
-frame barrier.
+Windows prebuilds also carry a hash-validated `conpty.dll` and `OpenConsole.exe`
+built together from pinned Microsoft Terminal source commit
+`dd494ac79a82a04e1e7252a91c8939a3c3039908` with Termwright's exact-fenced T3
+host-cursor patch. Release requires the resulting binaries to pass the native
+behavioral certification gate. They are loaded only from the package directory and never
+fall back to the inbox conhost, whose rendered output path cannot provide
+Termwright's causal semantic frame barrier. The private request-addressed
+`OSC 8488` exchange is fail-closed; ordinary DSR/CPR remains application-owned
+through Win32 Input Mode.
 
 Do not import internal `src/` or `dist/` paths. Only package `exports` entries
 are public.

@@ -39,13 +39,8 @@ import {
   type HelloAckMessage,
   type LogRecord,
 } from '@termwright/protocol';
-// `@xterm/headless` is CommonJS: a named ESM import type-checks and passes
-// under vitest's transform, then fails at runtime for anyone importing the
-// built package from plain Node. The default import is the interop that works
-// in both, and is what the driver does.
-import xh from '@xterm/headless';
 import type { Terminal } from '@xterm/headless';
-import { createNativePtyBackend, type PtyProcess } from '@termwright/driver/experimental';
+import { createNativePtyBackend, VtScreen, type PtyProcess } from '@termwright/driver/experimental';
 import { environment } from './pty.js';
 import { ProbePeerOwner } from './probe-peer-owner.js';
 import { ProbeProcessShutdown } from './probe-process-shutdown.js';
@@ -136,7 +131,9 @@ export class AdapterProbe {
   readonly #server: Server | null;
   readonly #directory: string | null;
   readonly #pty: PtyProcess;
+  readonly #vt: VtScreen;
   readonly #terminal: Terminal;
+  #detachTerminalResponse: (() => void) | null;
   readonly #startedAt = performance.now();
   readonly #messages: RecordedMessage[] = [];
   readonly #markers: RecordedMarker[] = [];
@@ -169,27 +166,28 @@ export class AdapterProbe {
     this.#directory = directory;
     this.#pty = pty;
     this.#peers = peers;
-    this.#terminal = new xh.Terminal({
-      cols: size.columns,
+    this.#vt = new VtScreen({
+      columns: size.columns,
       rows: size.rows,
-      allowProposedApi: true,
-      scrollback: 1_000,
+      scrollbackLines: 1_000,
     });
+    this.#terminal = this.#vt.terminal;
+    // This probe is the terminal emulator, so it owns terminal-generated
+    // replies just like TerminalSession does. Without this bridge the pinned
+    // Windows host can block a framework's GCSBI on its private cursor query,
+    // leaving the first frame visible while every later draw waits forever.
+    this.#detachTerminalResponse = this.#vt.onResponse((response) =>
+      this.#writeTerminalResponse(response.data),
+    );
     this.#shutdown = new ProbeProcessShutdown({
       pty,
       closeAdmission: () =>
         this.#server === null ? Promise.resolve() : this.#peers.close(this.#server),
-      drainParser: () =>
-        new Promise<void>((resolve, reject) => {
-          try {
-            this.#terminal.write('', resolve);
-          } catch (error) {
-            reject(error instanceof Error ? error : new Error(String(error)));
-          }
-        }),
+      closeTerminalResponseAdmission: () => this.#closeTerminalResponseAdmission(),
+      drainParser: () => this.#vt.drain(),
       disposeParser: () => {
         this.#notifyChange();
-        this.#terminal.dispose();
+        this.#vt.dispose();
       },
       removeArtifacts: () => this.#removeArtifacts(),
     });
@@ -459,9 +457,25 @@ export class AdapterProbe {
     this.#chunks.push(data);
     this.#bytes += data.length;
     this.#text += Buffer.from(data).toString('utf8');
-    this.#terminal.write(data, () => this.#notifyChange());
+    void this.#vt.write(data).finally(() => this.#notifyChange());
     this.#scanMarkers();
     this.#notifyChange();
+  }
+
+  /** Returns emulator-owned replies without presenting them as user input. */
+  #writeTerminalResponse(response: string): void {
+    const data = Buffer.from(response, 'utf8');
+    const write = this.#pty.writeTerminalResponse;
+    if (write === undefined) {
+      this.#pty.write(data, 'raw');
+      return;
+    }
+    write.call(this.#pty, data);
+  }
+
+  #closeTerminalResponseAdmission(): void {
+    this.#detachTerminalResponse?.();
+    this.#detachTerminalResponse = null;
   }
 
   /** Finds render markers in the byte stream and verifies each against the token. */

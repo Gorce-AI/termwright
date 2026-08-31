@@ -538,6 +538,10 @@ importers:
         version: 4.4.3
 
   packages/pty:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
     optionalDependencies:
       '@termwright/pty-darwin-arm64':
         specifier: workspace:*

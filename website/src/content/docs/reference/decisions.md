@@ -25,11 +25,16 @@ evidence about the fake.
 
 The addon owns the POSIX `forkpty()` master or Windows pseudoconsole directly.
 It observes the operating system's real output EOF, keeps writes ordered and
-owns the complete process group/job. Windows ships a pinned passthrough ConPTY
-beside the addon, validates its exact runtime assets, and fails closed instead
-of using an inbox conhost with non-causal frame emission. No timer, quiet
-window, retry, or private field in another package defines lifecycle
-completion.
+owns the complete process group/job. Windows ships `conpty.dll` and
+`OpenConsole.exe` built together from pinned Microsoft Terminal source commit
+`dd494ac79a82a04e1e7252a91c8939a3c3039908` with an exact-fenced T3 patch. The
+release gate certifies the resulting binaries and behavior. It validates those
+exact runtime assets and fails closed instead of using an inbox
+conhost with non-causal frame emission. A private request-addressed `OSC 8488`
+exchange synchronizes the host's cursor shadow, while ordinary DSR/CPR remains
+application-owned through Win32 Input Mode. No primer, timer, quiet window,
+retry, or private field in another package defines successful synchronization
+or lifecycle completion.
 
 Input admission is capped at 8 MiB and fails synchronously on overflow; an OS
 write failure closes it permanently. Native output crosses a bounded event

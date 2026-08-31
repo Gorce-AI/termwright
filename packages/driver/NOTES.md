@@ -98,11 +98,14 @@ that basis would turn missing evidence into a capability claim, so opaque-child
 pointer actions fail closed while `mouseTracking` or `mouseEncoding` is
 `'unknown'`. No physical pointer bytes are written.
 
-Termwright's pinned `Microsoft.Windows.Console.ConPTY` passthrough runtime does
-forward the child's mouse DECSET, DCS, APC and OSC 8. Its behavior is certified
-on the packaged runtime rather than inferred from the host OS, and Windows now
-uses observable mode tracking just like the POSIX backends. `'unknown'` remains
-only for an embedding that explicitly cannot expose the child's mode stream.
+Termwright's passthrough runtime candidate is built from one pinned Microsoft
+Terminal source commit with one exact-fenced T3 patch; its paired `conpty.dll`
+and `OpenConsole.exe` are required to forward the child's mouse DECSET, DCS,
+APC and OSC 8. Release certification is based on the packaged runtime rather
+than inferred from the host OS. Once that gate passes, Windows uses observable
+mode tracking just like the POSIX backends. `'unknown'` remains for an
+uncertified runtime or an embedding that explicitly cannot expose the child's
+mode stream.
 
 An adapter may make the mode actionable only through an explicit,
 revision-bound evidence provider backed by application production state. The
@@ -126,10 +129,24 @@ reported enabled, for `mouse-app.mjs`, which only ever sends `?1000h` and
 The pinned runtime still emits `?1004h` and `?9001h` for its own control plane:
 at startup, after a child reset, and after RIS. `@termwright/pty` removes only
 those structurally injected SET sequences, split-safely, while preserving DA1,
-an optional cursor-position query, and every original child sequence. The
-driver therefore observes the child's focus request rather than the host's.
+the private host-cursor RPC, and every original child sequence. The driver
+therefore observes the child's focus request rather than the host's.
 Application evidence remains available for embeddings that really do hide
 their input modes; it is not required merely because the platform is Windows.
+
+The host's Win32-input mode also applies in the opposite direction. Application
+replies are encoded byte-for-byte as synthesized `KEY_EVENT`s via the public
+Win32 Input Mode sequence (`CSI Vk;Sc;Uc;Kd;Cs;Rc _`), avoiding a printable tail
+interpreted as keys. Ordinary DSR/CPR is always application-owned. The patched
+host uses a separate private `OSC 8488` RPC with a random 128-bit token for its
+cursor shadow: the emulator reads the cursor at the request's exact parser
+position, and only the matching live response is routed raw and consumed by
+OpenConsole. Superseded host replies cannot leak to the application. The
+split-safe startup grammar separately identifies host DA1. User input remains
+on the ordinary path except for a physical lone Escape, which uses an explicit
+Win32 record after OpenConsole has enabled its trailing-ESC heuristic. Terminal
+responses remain excluded from input events and action receipts. No primer,
+timeout, retry, quiet window, or pending-capture guess is positive evidence.
 
 ## Floods: the pairing timeout was measuring our own backlog
 

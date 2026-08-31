@@ -12,8 +12,10 @@
 
 Ship and verify a pinned modern Microsoft ConPTY runtime on Windows so semantic
 frame markers preserve causal output ordering. Windows sessions now fail closed
-when the complete certified runtime bundle cannot be loaded instead of silently
-using the inbox conhost implementation. The ordered passthrough stream also
+when the complete pinned, hash-verified runtime bundle cannot be loaded instead
+of silently using the inbox conhost implementation. Behavioral certification is
+bound separately to the exact runtime and native conformance verdict. The
+ordered passthrough stream also
 restores authoritative mouse/focus mode observation on Windows, and the tview
 marker writer now brackets its causal write with an exact VT output-mode guard.
 Ink, OpenTUI, and Bubble Tea share the same mode-safe exact-handle marker

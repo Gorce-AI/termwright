@@ -36,6 +36,34 @@ describe('VtScreen', () => {
     expect(screen.cursor()).toMatchObject({ row: 2, column: 6 });
   });
 
+  it('answers an addressed ConPTY host cursor request at its parser position', async () => {
+    const screen = createVt();
+    const responses: TerminalResponse[] = [];
+    screen.onResponse((response) => responses.push(response));
+    const token = '0123456789abcdef0123456789abcdef';
+
+    await screen.write(`\x1b[3;7H\x1b]8488;twh-cpr-v1:q:${token}\x07after`);
+
+    expect(responses).toEqual([
+      {
+        data: `\x1b]8488;twh-cpr-v1:r:${token}:3:7\x07`,
+        kind: 'conpty-host-cursor',
+      },
+    ]);
+    expect(captureRows(screen)[2]?.text).toBe('      after');
+  });
+
+  it('does not claim application-owned payloads that share OSC 8488', async () => {
+    const screen = createVt();
+    const responses: TerminalResponse[] = [];
+    screen.onResponse((response) => responses.push(response));
+
+    await screen.write('\x1b]8488;termwright-tview-fixture-sync:1:end\x07after');
+
+    expect(responses).toEqual([]);
+    expect(captureRows(screen)[0]?.text).toBe('after');
+  });
+
   it('increments a revision per observable state change, not per transport chunk', async () => {
     const screen = createVt();
     expect(screen.revision).toBe(0);

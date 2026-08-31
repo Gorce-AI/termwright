@@ -887,6 +887,8 @@ export type DiagnosticCode =
   | 'ready-shell-integration'
   /** The terminal emulator answered an application query through PTY stdin. */
   | 'terminal-response'
+  /** The terminal emulator answered a pseudoconsole-host query on its private control route. */
+  | 'host-terminal-response'
   /** A scheduled emulator reply arrived after the owned process tree lost PTY input. */
   | 'terminal-response-after-input-close'
   /**

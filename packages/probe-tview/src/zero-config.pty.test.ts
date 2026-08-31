@@ -216,6 +216,18 @@ function syncBoundary(redraw: number, phase: 'begin' | 'end'): string {
   return `\u001b]8488;termwright-tview-fixture-sync:${redraw}:${phase}\u0007`;
 }
 
+function canonicalizeHostControlNonce(bytes: Buffer): Buffer {
+  return Buffer.from(
+    bytes
+      .toString('latin1')
+      .replace(
+        /\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/gu,
+        '\x1b]8488;twh-cpr-v1:q:00000000000000000000000000000000\x07',
+      ),
+    'latin1',
+  );
+}
+
 describe.skipIf(!runnable)('tview T0+T1 injection', () => {
   it('applies the add-only unit and publishes the retained tree after Show', async () => {
     const binary = await fixture({ instrumented: true, linkedModule: true });
@@ -264,12 +276,20 @@ describe.skipIf(!runnable)('tview T0+T1 injection', () => {
       expect(await app.waitForExit()).toMatchObject({ code: 0 });
       await app.close();
     }
-    const reference = captures[0]!.transaction(syncBoundary(2, 'begin'), syncBoundary(2, 'end'));
+    const referenceBytes = captures[0]!.transaction(
+      syncBoundary(2, 'begin'),
+      syncBoundary(2, 'end'),
+    );
+    const injectedBytes = captures[1]!.transaction(
+      syncBoundary(2, 'begin'),
+      syncBoundary(2, 'end'),
+    );
+    const reference = canonicalizeHostControlNonce(referenceBytes);
+    const injectedTransaction = canonicalizeHostControlNonce(injectedBytes);
     expect(reference.includes(Buffer.from('redraw:2'))).toBe(true);
     expect(reference.length).toBeGreaterThan(Buffer.byteLength('redraw:2'));
-    expect(captures[1]!.transaction(syncBoundary(2, 'begin'), syncBoundary(2, 'end'))).toEqual(
-      reference,
-    );
+    expect(injectedBytes.length).toBe(referenceBytes.length);
+    expect(injectedTransaction).toEqual(reference);
     for (const capture of captures) {
       expect(capture.allBytes().includes(Buffer.from('\u001b]8487;'))).toBe(false);
     }

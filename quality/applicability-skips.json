@@ -152,6 +152,96 @@
       "required": true
     },
     {
+      "id": "conpty-non-windows-host-cursor-rpc",
+      "file": "packages/pty/src/windows-native.win.test.ts",
+      "fullName": "routes addressed host cursor RPC separately from application CPR without leaking host replies",
+      "platforms": [
+        "aix",
+        "android",
+        "darwin",
+        "freebsd",
+        "haiku",
+        "linux",
+        "openbsd",
+        "sunos",
+        "cygwin",
+        "netbsd"
+      ],
+      "required": true
+    },
+    {
+      "id": "conpty-non-windows-host-cursor-alt-teardown",
+      "file": "packages/pty/src/windows-native.win.test.ts",
+      "fullName": "cancels a dirty alternate-buffer cursor wait when VT tears the buffer down",
+      "platforms": [
+        "aix",
+        "android",
+        "darwin",
+        "freebsd",
+        "haiku",
+        "linux",
+        "openbsd",
+        "sunos",
+        "cygwin",
+        "netbsd"
+      ],
+      "required": true
+    },
+    {
+      "id": "conpty-non-windows-host-cursor-concurrent-same-buffer",
+      "file": "packages/pty/src/windows-native.win.test.ts",
+      "fullName": "coalesces concurrent cursor waiters for one dirty buffer generation",
+      "platforms": [
+        "aix",
+        "android",
+        "darwin",
+        "freebsd",
+        "haiku",
+        "linux",
+        "openbsd",
+        "sunos",
+        "cygwin",
+        "netbsd"
+      ],
+      "required": true
+    },
+    {
+      "id": "conpty-non-windows-host-cursor-concurrent-physical-buffers",
+      "file": "packages/pty/src/windows-native.win.test.ts",
+      "fullName": "keeps concurrent cursor requests isolated across physical screen buffers",
+      "platforms": [
+        "aix",
+        "android",
+        "darwin",
+        "freebsd",
+        "haiku",
+        "linux",
+        "openbsd",
+        "sunos",
+        "cygwin",
+        "netbsd"
+      ],
+      "required": true
+    },
+    {
+      "id": "conpty-non-windows-host-cursor-input-eof",
+      "file": "packages/pty/src/windows-native.win.test.ts",
+      "fullName": "wakes cursor waiters on physical and active alternate buffers after real input EOF",
+      "platforms": [
+        "aix",
+        "android",
+        "darwin",
+        "freebsd",
+        "haiku",
+        "linux",
+        "openbsd",
+        "sunos",
+        "cygwin",
+        "netbsd"
+      ],
+      "required": true
+    },
+    {
       "id": "conpty-non-windows-runtime-fail-closed",
       "file": "packages/pty/src/windows-native.win.test.ts",
       "fullName": "reports a missing or modified runtime while session creation fails closed",
@@ -806,6 +896,20 @@
       "file": "packages/conformance/src/suites/language-adapters.test.ts",
       "suite": "adapter conformance: termwright (tview)",
       "fullName": "keeps the application alive when the channel is cut",
+      "required": false
+    },
+    {
+      "id": "pty-darwin-fast-exit-tail",
+      "file": "packages/pty/src/index.test.ts",
+      "suite": "the Termwright-owned POSIX PTY",
+      "fullName": "delivers every fast-exit tail before the Darwin PTY hangup",
+      "required": false
+    },
+    {
+      "id": "pty-windows-delivery-callback-edge",
+      "file": "packages/pty/src/windows-native.win.test.ts",
+      "suite": "ConPTY backend",
+      "fullName": "delivers events produced while a JavaScript delivery callback is executing",
       "required": false
     }
   ]

@@ -26,6 +26,7 @@
     "vendor/arm64/OpenConsole.exe",
     "vendor/conpty-manifest.json",
     "vendor/LICENSE.microsoft-terminal.txt",
+    "vendor/NOTICE.microsoft-terminal.md",
     "vendor/THIRD_PARTY_NOTICES.md",
     "vendor/SBOM.spdx.json"
   ],

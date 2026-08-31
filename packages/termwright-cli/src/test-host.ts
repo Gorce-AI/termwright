@@ -13,6 +13,7 @@ import {
   type RunStartProvenance,
 } from '@termwright/run-history';
 import {
+  DEFAULT_RUN_EVENT_LIMITS,
   RunEventProducer,
   RunIdFactory,
   canTransitionRunState,
@@ -582,9 +583,7 @@ export class TermwrightTestHost {
                   nativeTaskId: identity.nativeTaskId,
                   file: identity.file,
                   fullName: identity.fullName,
-                  errors: Object.freeze(
-                    nativeResult.errors.map((error) => describeTestError(error)),
-                  ),
+                  errors: describeTestErrors(nativeResult.errors),
                 });
                 testFailures.push(observed);
                 this.#recordTestFailure(active, identity, observed.errors);
@@ -1102,7 +1101,7 @@ export class TermwrightTestHost {
       eventClass: 'authoritative',
       type: 'run.persistence-failed',
       identity: { invocationId: this.invocationId, runId: active.runId },
-      payload: { stage, detail: describeFailure(error) },
+      payload: { stage, detail: truncateRunEventString(describeFailure(error)) },
     });
     const appended = active.persistence.append(event);
     if (!appended.ok)
@@ -1118,7 +1117,7 @@ export class TermwrightTestHost {
       identity: { invocationId: this.invocationId, runId: active.runId },
       payload: {
         category: infrastructureFailureCategory(error),
-        detail: describeFailure(error).slice(0, 32 * 1024),
+        detail: truncateRunEventString(describeFailure(error)),
       },
     });
     const appended = active.persistence.append(event);
@@ -1447,14 +1446,73 @@ function describeTestError(error: unknown): string {
     const stack = record['stack'];
     if (typeof stack === 'string' && stack.length > 0) {
       const message = typeof record['message'] === 'string' ? record['message'] : '';
-      const rendered = inspect(error, { depth: 16, breakLength: Infinity });
+      const rendered = inspect(error, {
+        depth: 16,
+        breakLength: Infinity,
+        maxArrayLength: 100,
+        maxStringLength: 2_048,
+      });
       const diagnostic = rendered === message || stack.includes(rendered) ? '' : `\n${rendered}`;
-      return `${stack}${diagnostic}`.slice(0, 32 * 1024);
+      return truncateRunEventString(`${stack}${diagnostic}`);
     }
     const message = record['message'];
-    if (typeof message === 'string' && message.length > 0) return message.slice(0, 32 * 1024);
+    if (typeof message === 'string' && message.length > 0) return truncateRunEventString(message);
   }
-  return inspect(error, { depth: 16, breakLength: Infinity }).slice(0, 32 * 1024);
+  return truncateRunEventString(
+    inspect(error, {
+      depth: 16,
+      breakLength: Infinity,
+      maxArrayLength: 100,
+      maxStringLength: 2_048,
+    }),
+  );
+}
+
+const MAX_TEST_FAILURE_ERROR_ENTRIES = 64;
+const MAX_TEST_FAILURE_ERRORS_JSON_BYTES = Math.floor(DEFAULT_RUN_EVENT_LIMITS.maxEventBytes / 4);
+
+function describeTestErrors(errors: readonly unknown[]): readonly string[] {
+  const described: string[] = [];
+  const maxDetailed =
+    errors.length > MAX_TEST_FAILURE_ERROR_ENTRIES
+      ? MAX_TEST_FAILURE_ERROR_ENTRIES - 1
+      : MAX_TEST_FAILURE_ERROR_ENTRIES;
+  let consumed = 0;
+  while (consumed < errors.length && described.length < maxDetailed) {
+    const rendered = describeTestError(errors[consumed]);
+    const remaining = errors.length - consumed - 1;
+    const candidate =
+      remaining === 0
+        ? [...described, rendered]
+        : [...described, rendered, omittedTestErrors(remaining)];
+    if (Buffer.byteLength(JSON.stringify(candidate), 'utf8') > MAX_TEST_FAILURE_ERRORS_JSON_BYTES)
+      break;
+    described.push(rendered);
+    consumed += 1;
+  }
+  const omitted = errors.length - consumed;
+  if (omitted > 0) described.push(omittedTestErrors(omitted));
+  return Object.freeze(described);
+}
+
+function omittedTestErrors(count: number): string {
+  return `...[${count} additional test error${count === 1 ? '' : 's'} omitted to fit the run-event budget]`;
+}
+
+function truncateRunEventString(value: string): string {
+  const maxBytes = DEFAULT_RUN_EVENT_LIMITS.maxStringBytes;
+  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
+  const suffix = '\n...[truncated to run-event string budget]';
+  const contentBudget = maxBytes - Buffer.byteLength(suffix, 'utf8');
+  let used = 0;
+  let prefix = '';
+  for (const codePoint of value) {
+    const bytes = Buffer.byteLength(codePoint, 'utf8');
+    if (used + bytes > contentBudget) break;
+    prefix += codePoint;
+    used += bytes;
+  }
+  return `${prefix}${suffix}`;
 }
 
 interface ObservedAttempt {
