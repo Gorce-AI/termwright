@@ -1562,10 +1562,20 @@ describe('fresh React runner', () => {
       },
     });
 
-    const actionless = page
-      .locator('.tw-case-button')
+    const actionlessCase = page
+      .locator('.tw-case[data-status="passed"]')
       .filter({ hasText: 'records an actionless business rule' });
-    await actionless.click();
+    await actionlessCase.waitFor();
+    const actionless = actionlessCase.locator('.tw-case-button');
+    expect(await actionless.getAttribute('data-execution-id')).toBe(`run:test:${actionlessId}:1`);
+    if ((await actionless.getAttribute('aria-selected')) !== 'true') {
+      await actionless.click();
+      await expect.poll(() => actionless.getAttribute('aria-selected')).toBe('true');
+    }
+    if ((await actionless.getAttribute('aria-expanded')) !== 'true') {
+      await actionless.click();
+      await expect.poll(() => actionless.getAttribute('aria-expanded')).toBe('true');
+    }
     await expect
       .poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count())
       .toBe(1);
