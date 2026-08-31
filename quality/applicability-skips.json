@@ -152,6 +152,24 @@
       "required": true
     },
     {
+      "id": "conpty-non-windows-cpr-arbitration",
+      "file": "packages/pty/src/windows-native.win.test.ts",
+      "fullName": "lets ConPTY arbitrate runtime host and application CPR without leaking its primer",
+      "platforms": [
+        "aix",
+        "android",
+        "darwin",
+        "freebsd",
+        "haiku",
+        "linux",
+        "openbsd",
+        "sunos",
+        "cygwin",
+        "netbsd"
+      ],
+      "required": true
+    },
+    {
       "id": "conpty-non-windows-runtime-fail-closed",
       "file": "packages/pty/src/windows-native.win.test.ts",
       "fullName": "reports a missing or modified runtime while session creation fails closed",
