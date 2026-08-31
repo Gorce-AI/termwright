@@ -77,10 +77,11 @@ describe('launchInkFixture', () => {
   });
 
   it('reacts to keyboard input in raw mode', async () => {
-    const harness = await launch();
+    const harness = await launch({ showFocus: true });
 
+    await harness.waitForText('focus button');
     await harness.press('Tab');
-    await harness.waitForQuiet();
+    await harness.waitForText('focus input');
     await harness.type('ok');
     await harness.waitForText('> ok');
 
