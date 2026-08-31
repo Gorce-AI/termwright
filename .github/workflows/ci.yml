@@ -396,6 +396,7 @@ jobs:
           install_dir="$RUNNER_TEMP/termwright-pty-arm64-install"
           mkdir -p "$pack_dir" "$install_dir"
           node scripts/check-prebuild.mjs win32 arm64
+          pnpm --dir packages/protocol pack --pack-destination "$pack_dir"
           pnpm --dir packages/pty-win32-arm64 pack --pack-destination "$pack_dir"
           pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
@@ -460,6 +461,7 @@ jobs:
           install_dir="$RUNNER_TEMP/termwright-pty-x64-install"
           mkdir -p "$pack_dir" "$install_dir"
           node scripts/check-prebuild.mjs win32 x64
+          pnpm --dir packages/protocol pack --pack-destination "$pack_dir"
           pnpm --dir packages/pty-win32-x64 pack --pack-destination "$pack_dir"
           pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
@@ -553,6 +555,7 @@ jobs:
           install_dir="$RUNNER_TEMP/termwright-pty-install"
           mkdir -p "$pack_dir" "$install_dir"
           node scripts/check-prebuild.mjs win32 x64
+          pnpm --dir packages/protocol pack --pack-destination "$pack_dir"
           pnpm --dir packages/pty-win32-x64 pack --pack-destination "$pack_dir"
           pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz

@@ -541,10 +541,16 @@ describe('terminal session resource lifecycle', () => {
         return channel;
       });
       let launched: ReturnType<typeof launchTerminalWithBackend> | undefined;
+      const pty = new ControlledPty({
+        // This test owns a synthetic backend, not a POSIX process group. A
+        // delegated lifecycle closes synchronously under the fake clock on
+        // every host, while still exercising the real session cleanup path.
+        lifecycle: { tree: 'delegated', outputDrain: 'eof' },
+      });
       try {
         launched = launchTerminalWithBackend({
           command: ['controlled-app'],
-          backend: backendFor(new ControlledPty(), endpoint, markSpawned),
+          backend: backendFor(pty, endpoint, markSpawned),
           requiredCapabilities: ['semantic-tree'],
           semanticNegotiationMs: 2_000,
           timeouts: { ready: 3_000 },
@@ -568,13 +574,15 @@ describe('terminal session resource lifecycle', () => {
         expect(terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout')).toBe(
           false,
         );
+        vi.useRealTimers();
         await terminal.close();
+        expect(pty.terminateCount).toBe(1);
+        expect(pty.disposeCount).toBe(1);
       } finally {
-        await vi.advanceTimersByTimeAsync(3_000);
+        vi.useRealTimers();
         const terminal = await launched?.catch(() => undefined);
         await terminal?.close().catch(() => undefined);
         listenSpy.mockRestore();
-        vi.useRealTimers();
       }
     },
   );

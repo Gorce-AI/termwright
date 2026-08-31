@@ -114,6 +114,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
       expect(job, `${jobId} must pin the Go toolchain`).toContain("go-version: '1.25'");
     }
     expect(release).toMatch(/^env:\n {2}TERMWRIGHT_RETRIES: '0'$/mu);
+    expect(ci.match(/pnpm --dir packages\/protocol pack/gu)).toHaveLength(
+      ci.match(/pnpm --dir packages\/pty pack/gu)?.length ?? 0,
+    );
     for (const workflow of [ci, release, reliability]) {
       expect(workflow).toContain("TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'");
     }
