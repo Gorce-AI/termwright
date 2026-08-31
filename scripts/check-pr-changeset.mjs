@@ -5,7 +5,7 @@ import { isDirectExecution } from './is-direct-execution.mjs';
 const execFile = promisify(execFileCallback);
 
 const nonPublishableSegment = /\/(?:__snapshots__|__tests__|test|tests)\//u;
-const testModule = /(?:^|\.)+(?:spec|test)\.[^/]+$/u;
+const testModule = /(?:^|\.)(?:e2e|spec|test)\.[^/]+$/u;
 const testConfig = /^(?:coverage|vitest)\.config\.[^/]+$/u;
 
 export function isPublishablePackagePath(path) {
