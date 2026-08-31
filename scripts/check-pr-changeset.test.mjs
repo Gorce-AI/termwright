@@ -11,6 +11,7 @@ describe('pull-request changeset policy', () => {
   it.each([
     'packages/probe-opentui/src/runtime-observer.test.ts',
     'packages/ui/src/app/browser-client.spec.ts',
+    'packages/ui/src/app/fresh-app.e2e.ts',
     'packages/driver/tests/session.ts',
     'packages/test/vitest.config.ts',
     'packages/test/coverage.config.mjs',

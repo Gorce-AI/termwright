@@ -155,6 +155,7 @@ const versionFiles = [
   /^pnpm-lock\.yaml$/u,
   /^packages\/[^/]+\/(?:package\.json|CHANGELOG\.md)$/u,
   /^packages\/(?:termwright-cli\/src\/version|mcp\/src\/version|desktop-host\/src\/index|probe-ink\/src\/version|probe-opentui\/src\/version|probe-tview\/src\/launch|probe-charm\/src\/launch)\.ts$/u,
+  /^packages\/probe-tview\/assets\/tview_probe\.go\.txt$/u,
   /^packages\/probe-charm\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
   /^clients\/README\.md$/u,
   /^clients\/python\/(?:pyproject\.toml|uv\.lock|src\/termwright\/__init__\.py|src\/termwright_probe\/__init__\.py)$/u,
