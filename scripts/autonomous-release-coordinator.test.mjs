@@ -250,6 +250,7 @@ describe('trusted autonomous coordinator', () => {
         'website/src/content/docs/reference/geometry-visibility.md',
         'examples/ratatui-list/app/Cargo.lock',
         'examples/ratatui-list/build-tool/Cargo.lock',
+        'packages/probe-tview/assets/tview_probe.go.txt',
       ]),
     ).not.toThrow();
     expect(() =>
@@ -259,6 +260,9 @@ describe('trusted autonomous coordinator', () => {
     ).toThrow(/forbidden path/u);
     expect(() =>
       validateChangedFiles('version', ['examples/ratatui-list/other/Cargo.lock']),
+    ).toThrow(/forbidden path/u);
+    expect(() =>
+      validateChangedFiles('version', ['packages/probe-tview/assets/tview_probe.go.txt.bak']),
     ).toThrow(/forbidden path/u);
   });
 
