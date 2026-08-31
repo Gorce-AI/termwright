@@ -97,9 +97,7 @@ function attachHostControlResponder(
     const observed = output.text();
     if (!answeredPrimaryDeviceAttributes && observed.includes('\x1b[c')) {
       answeredPrimaryDeviceAttributes = true;
-      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe(
-        'host-control',
-      );
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
     }
     answerHostCursorRequests(handle, observed, answeredHostCursorRequests);
   };

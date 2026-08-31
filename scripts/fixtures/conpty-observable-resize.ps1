@@ -43,14 +43,14 @@ public static class TermwrightResizeProbe {
     [FieldOffset(4)] public COORD WindowBufferSize;
   }
 
-  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  [StructLayout(LayoutKind.Explicit, Size = 16, CharSet = CharSet.Unicode)]
   public struct KEY_EVENT_RECORD {
-    [MarshalAs(UnmanagedType.Bool)] public bool KeyDown;
-    public ushort RepeatCount;
-    public ushort VirtualKeyCode;
-    public ushort VirtualScanCode;
-    public char UnicodeChar;
-    public uint ControlKeyState;
+    [FieldOffset(0)] public int KeyDown;
+    [FieldOffset(4)] public ushort RepeatCount;
+    [FieldOffset(6)] public ushort VirtualKeyCode;
+    [FieldOffset(8)] public ushort VirtualScanCode;
+    [FieldOffset(10)] public ushort UnicodeChar;
+    [FieldOffset(12)] public uint ControlKeyState;
   }
 
   [DllImport("kernel32.dll", SetLastError = true)]
@@ -126,7 +126,7 @@ public static class TermwrightResizeProbe {
     if (!PeekConsoleInputW(input, records, count, out read)) throw new InvalidOperationException("input-peek");
     for (var index = 0; index < (int)read; index++) {
       var record = records[index];
-      if (record.EventType == KEY_EVENT && record.KeyEvent.KeyDown) {
+      if (record.EventType == KEY_EVENT && record.KeyEvent.KeyDown != 0) {
         return true;
       }
     }
@@ -147,7 +147,22 @@ public static class TermwrightResizeProbe {
     throw new InvalidOperationException("oversized-cpr");
   }
 
+  private static bool InputRecordLayoutIsExact() {
+    return Marshal.SizeOf(typeof(KEY_EVENT_RECORD)) == 16 &&
+      Marshal.OffsetOf(typeof(KEY_EVENT_RECORD), "KeyDown").ToInt32() == 0 &&
+      Marshal.OffsetOf(typeof(KEY_EVENT_RECORD), "RepeatCount").ToInt32() == 4 &&
+      Marshal.OffsetOf(typeof(KEY_EVENT_RECORD), "VirtualKeyCode").ToInt32() == 6 &&
+      Marshal.OffsetOf(typeof(KEY_EVENT_RECORD), "VirtualScanCode").ToInt32() == 8 &&
+      Marshal.OffsetOf(typeof(KEY_EVENT_RECORD), "UnicodeChar").ToInt32() == 10 &&
+      Marshal.OffsetOf(typeof(KEY_EVENT_RECORD), "ControlKeyState").ToInt32() == 12 &&
+      Marshal.SizeOf(typeof(INPUT_RECORD)) == 20 &&
+      Marshal.OffsetOf(typeof(INPUT_RECORD), "EventType").ToInt32() == 0 &&
+      Marshal.OffsetOf(typeof(INPUT_RECORD), "KeyEvent").ToInt32() == 4 &&
+      Marshal.OffsetOf(typeof(INPUT_RECORD), "WindowBufferSize").ToInt32() == 4;
+  }
+
   public static int Run(short expectedColumns, short expectedRows) {
+    if (!InputRecordLayoutIsExact()) return 40;
     var input = GetStdHandle(STD_INPUT_HANDLE);
     var output = GetStdHandle(STD_OUTPUT_HANDLE);
     uint originalMode;
@@ -213,7 +228,7 @@ public static class TermwrightResizeProbe {
         while (true) {
           uint escapeRead;
           if (!ReadConsoleInputW(input, escapeRecords, 1, out escapeRead)) return 53;
-          if (escapeRead != 1 || escapeRecords[0].EventType != KEY_EVENT || !escapeRecords[0].KeyEvent.KeyDown) continue;
+          if (escapeRead != 1 || escapeRecords[0].EventType != KEY_EVENT || escapeRecords[0].KeyEvent.KeyDown == 0) continue;
           var escape = escapeRecords[0].KeyEvent;
           Console.Out.Write(
             ";ESC:" + ((int)escape.UnicodeChar).ToString("x2") +
@@ -222,7 +237,7 @@ public static class TermwrightResizeProbe {
             ";REPEAT:" + escape.RepeatCount
           );
           Console.Out.Flush();
-          return escape.UnicodeChar == (char)0x1b &&
+          return escape.UnicodeChar == 0x1b &&
             escape.VirtualKeyCode == VK_ESCAPE &&
             escape.VirtualScanCode == 1 &&
             escape.RepeatCount == 1 ? 0 : 54;
