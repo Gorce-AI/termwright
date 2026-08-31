@@ -5,7 +5,7 @@
   "upstreamArchiveSha256": "785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2",
   "patchSha256": "839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c",
   "hostCursorRpc": "twh-cpr-v1",
-  "sourceManifestSha256": "eaacfbb61ac186e61e45707a92efa1f606f0e3c88c472c24abb3fde0ef68c81b",
+  "sourceManifestSha256": "34e9e2e5ccdd2253265b1f6112c7232e463481b6d9a6a2e2dd7ec1e969fde7c0",
   "build": {
     "configuration": "Release",
     "platformToolset": "v143"
@@ -21,6 +21,6 @@
     "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
     "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
     "THIRD_PARTY_NOTICES.md": "bcdc561abefc0ed11e1226fc6b26eba906e713bce369adbfc8f3f88ac72dbf5d",
-    "SBOM.spdx.json": "75641409453fba33186a33ce2221a593c06a01e8c6944afef85813d5cb407c13"
+    "SBOM.spdx.json": "c880df36f00761bf6a3759ef6fb24d6a0b4867e9c5cf125ff840065070bd5843"
   }
 }

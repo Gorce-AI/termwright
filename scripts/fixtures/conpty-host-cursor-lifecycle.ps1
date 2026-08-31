@@ -286,9 +286,10 @@ public static class TermwrightHostCursorLifecycleProbe {
       if (!ConfigureOutput(secondOutput)) return 91;
       if (!WriteAll(output, "PHYSICAL-A-READY")) return 92;
       if (!ReadResize(input, columns, rows)) return 93;
-      // Prepare both physical buffers before either GCSBI becomes pending.
-      // A subsequent synchronous output Console API from this process would
-      // otherwise be serialized behind that unresolved request.
+      // Prepare both physical buffers before GCSBI on the active buffer becomes
+      // pending. Switching buffers after that point would be serialized behind
+      // the unresolved request. The inactive buffer is already authoritative
+      // and returns its own cached cursor without publishing a host query.
       if (!SetConsoleActiveScreenBuffer(secondOutput)) return 94;
       if (!WriteAll(secondOutput, "PHYSICAL-B-READY")) return 95;
       if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 96;
@@ -302,11 +303,8 @@ public static class TermwrightHostCursorLifecycleProbe {
         secondThread.Join();
       }
       if (!first.Success || !second.Success) return 98;
-      var direct = first.Info.CursorPosition.X == 10 && first.Info.CursorPosition.Y == 3 &&
-                   second.Info.CursorPosition.X == 30 && second.Info.CursorPosition.Y == 6;
-      var reverse = first.Info.CursorPosition.X == 30 && first.Info.CursorPosition.Y == 6 &&
-                    second.Info.CursorPosition.X == 10 && second.Info.CursorPosition.Y == 3;
-      if (!direct && !reverse) return 99;
+      if (first.Info.CursorPosition.X != 10 || first.Info.CursorPosition.Y != 3 ||
+          second.Info.CursorPosition.X != 30 || second.Info.CursorPosition.Y != 6) return 99;
       if (!WriteAll(secondOutput,
           "MULTI:A=" + first.Info.CursorPosition.X + "," + first.Info.CursorPosition.Y +
           ";B=" + second.Info.CursorPosition.X + "," + second.Info.CursorPosition.Y)) return 100;
@@ -331,8 +329,9 @@ public static class TermwrightHostCursorLifecycleProbe {
       if (!ConfigureOutput(secondOutput)) return 112;
       if (!WriteAll(output, "EOF-A-READY")) return 113;
       if (!ReadResize(input, columns, rows)) return 114;
-      // See RunPhysicalBuffers: both target buffers must exist and be dirty
-      // before the two independently cancelable GCSBI calls are dispatched.
+      // See RunPhysicalBuffers: the inactive physical buffer completes from
+      // authoritative cached state, while the active alternate buffer waits on
+      // the one host query that input EOF must cancel.
       if (!SetConsoleActiveScreenBuffer(secondOutput)) return 115;
       if (!WriteAll(secondOutput, "\x1b[?1049hEOF-B-ALT-READY")) return 116;
       if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 117;
@@ -342,14 +341,14 @@ public static class TermwrightHostCursorLifecycleProbe {
         var firstThread = StartQuery(output, first, done);
         var secondThread = StartQuery(secondOutput, second, done);
         // No command follows. The parent closes only ConPTY's input pipe after
-        // it has observed both addressed requests. SendCloseEvent must cancel
-        // both synchronization states and wake this causal barrier.
+        // it has observed the active buffer's addressed request. SendCloseEvent
+        // must cancel that synchronization and wake this causal barrier.
         done.Wait();
         firstThread.Join();
         secondThread.Join();
       }
       if (!first.Success || !second.Success) return 119;
-      if (!WriteAll(secondOutput, "EOF-WAITERS:2")) return 120;
+      if (!WriteAll(secondOutput, "EOF-CALLS:2;PENDING:1")) return 120;
       if (!WriteAll(secondOutput, "\x1b[?1049l")) return 121;
       return 0;
     } finally {

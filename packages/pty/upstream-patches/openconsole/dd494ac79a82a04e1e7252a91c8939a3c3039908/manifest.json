@@ -141,10 +141,10 @@
   "binaryDigestStatus": "bootstrap-required-after-windows-build-and-conformance",
   "requiredConformance": [
     "concurrent waiters for one dirty buffer generation share one addressed request and one response wakes them all",
-    "concurrent host cursor requests for different buffers and threads remain isolated",
+    "an addressed active-buffer host cursor response leaves authoritative state in an inactive physical buffer unchanged",
     "a newer dirty generation supersedes the older request without accepting a late response",
     "dirty alternate buffer teardown while GCSBI waits cancels without use-after-free or hang",
-    "EOF with an active alternate buffer wakes waiters for every physical screen buffer",
+    "EOF cancels the pending active alternate-buffer cursor query while cached calls on inactive physical buffers remain complete",
     "matching host response updates only the exact target and generation",
     "stale and malformed twh-cpr-v1 responses are consumed without application-input leakage",
     "foreign OSC 8488 payloads are not claimed by the host RPC",
