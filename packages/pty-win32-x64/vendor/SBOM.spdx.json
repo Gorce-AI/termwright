@@ -2,8 +2,8 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
-  "name": "termwright-vendored-conpty-x64-dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527.b8be27f0127e95dc4dfaf767eb313903a2bd0427eadd8e44e3f48dbd38cf4b5e",
-  "documentNamespace": "https://github.com/Gorce-AI/termwright/sbom/conpty/x64/dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527.b8be27f0127e95dc4dfaf767eb313903a2bd0427eadd8e44e3f48dbd38cf4b5e",
+  "name": "termwright-vendored-conpty-x64-dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.eaacfbb61ac186e61e45707a92efa1f606f0e3c88c472c24abb3fde0ef68c81b",
+  "documentNamespace": "https://github.com/Gorce-AI/termwright/sbom/conpty/x64/dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.eaacfbb61ac186e61e45707a92efa1f606f0e3c88c472c24abb3fde0ef68c81b",
   "creationInfo": {
     "created": "2026-08-31T00:00:00Z",
     "creators": [
@@ -14,11 +14,11 @@
     {
       "SPDXID": "SPDXRef-Package-ConPTY",
       "name": "termwright-patched-openconsole",
-      "versionInfo": "dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527.b8be27f0127e95dc4dfaf767eb313903a2bd0427eadd8e44e3f48dbd38cf4b5e",
+      "versionInfo": "dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.eaacfbb61ac186e61e45707a92efa1f606f0e3c88c472c24abb3fde0ef68c81b",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": true,
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "644699b2c0c6916799d8446ea674018147b9069e",
+        "packageVerificationCodeValue": "4c57bd8eba2d128a781765bdb7ac256f2ce37e3a",
         "packageVerificationCodeExcludedFiles": [
           "conpty-manifest.json",
           "SBOM.spdx.json"
@@ -27,7 +27,7 @@
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "NOASSERTION",
       "copyrightText": "NOASSERTION",
-      "sourceInfo": "Built from microsoft/terminal dd494ac79a82a04e1e7252a91c8939a3c3039908; archive sha256:785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2; Termwright T3 patch sha256:a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527; source manifest sha256:b8be27f0127e95dc4dfaf767eb313903a2bd0427eadd8e44e3f48dbd38cf4b5e"
+      "sourceInfo": "Built from microsoft/terminal dd494ac79a82a04e1e7252a91c8939a3c3039908; archive sha256:785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2; Termwright T3 patch sha256:839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c; source manifest sha256:eaacfbb61ac186e61e45707a92efa1f606f0e3c88c472c24abb3fde0ef68c81b"
     },
     {
       "SPDXID": "SPDXRef-Package-Upstream",
@@ -102,11 +102,11 @@
       "checksums": [
         {
           "algorithm": "SHA1",
-          "checksumValue": "8a1d09fccf353252e7ed8b2eb5eedbd4dcf13064"
+          "checksumValue": "b521b0c30715346df261f8d98245c887f13d2d39"
         },
         {
           "algorithm": "SHA256",
-          "checksumValue": "f95d34c6f47645decb1d96c0eb492cde14a88a870d0e6c7080c508191d2878e3"
+          "checksumValue": "292a296c5fef13eb48b5a45ed9c20e5a35e6e2f4f08be43d8e8aea4b0071ca48"
         }
       ],
       "licenseConcluded": "NOASSERTION",
@@ -118,11 +118,11 @@
       "checksums": [
         {
           "algorithm": "SHA1",
-          "checksumValue": "3bed7851b738f6cbe325726a7dd4914969291cb3"
+          "checksumValue": "684607abcd4640565dc5b6a4bd9590ffa924ba4c"
         },
         {
           "algorithm": "SHA256",
-          "checksumValue": "37e167e38749fcd7244f770632875cbc3e6c72706de8a01ba15789bcb0ed85b1"
+          "checksumValue": "03c461796ecadafd12e53a0f4662346eaebba1bdbfaf899181b04755be01b8b4"
         }
       ],
       "licenseConcluded": "NOASSERTION",
@@ -134,11 +134,11 @@
       "checksums": [
         {
           "algorithm": "SHA1",
-          "checksumValue": "a3b3897f00cef494bc59c825a2a224ded9c64a58"
+          "checksumValue": "946775087bab7e091ac85702c762c459738d3d7b"
         },
         {
           "algorithm": "SHA256",
-          "checksumValue": "90d6cf1a7f68cf832b6caff82e8b091641f641ead8664fa0e684cc3b759719bd"
+          "checksumValue": "b3281f58c784abf453a5bb1e193798c49718f0ac16d9c65400b4500a17fc83d5"
         }
       ],
       "licenseConcluded": "NOASSERTION",
@@ -182,11 +182,11 @@
       "checksums": [
         {
           "algorithm": "SHA1",
-          "checksumValue": "4154883b2a464878965bdd4491c637a71e614146"
+          "checksumValue": "36c60001353262aa131dc28e4ad3bc6c1a5d1899"
         },
         {
           "algorithm": "SHA256",
-          "checksumValue": "26ed8f9fa34b66f53bcc479e416717aab1834b2bf5341da83ab1061567893d84"
+          "checksumValue": "bcdc561abefc0ed11e1226fc6b26eba906e713bce369adbfc8f3f88ac72dbf5d"
         }
       ],
       "licenseConcluded": "NOASSERTION",

@@ -35,25 +35,25 @@
     "x64": {
       "conpty.dll": {
         "artifactPath": "x64/conpty.dll",
-        "sha256": "f95d34c6f47645decb1d96c0eb492cde14a88a870d0e6c7080c508191d2878e3"
+        "sha256": "292a296c5fef13eb48b5a45ed9c20e5a35e6e2f4f08be43d8e8aea4b0071ca48"
       },
       "x64/OpenConsole.exe": {
         "artifactPath": "x64/OpenConsole.exe",
-        "sha256": "37e167e38749fcd7244f770632875cbc3e6c72706de8a01ba15789bcb0ed85b1"
+        "sha256": "03c461796ecadafd12e53a0f4662346eaebba1bdbfaf899181b04755be01b8b4"
       },
       "arm64/OpenConsole.exe": {
         "artifactPath": "arm64/OpenConsole.exe",
-        "sha256": "90d6cf1a7f68cf832b6caff82e8b091641f641ead8664fa0e684cc3b759719bd"
+        "sha256": "b3281f58c784abf453a5bb1e193798c49718f0ac16d9c65400b4500a17fc83d5"
       }
     },
     "arm64": {
       "conpty.dll": {
         "artifactPath": "arm64/conpty.dll",
-        "sha256": "5d056f028dbf66323428a9b86c936e2da319db85b1c75ea7c8c7fcaebfd0c4dd"
+        "sha256": "47b96efe37712e782936bc90710458f9c2c09e882776b2e2ac435eab2d682e7e"
       },
       "arm64/OpenConsole.exe": {
         "artifactPath": "arm64/OpenConsole.exe",
-        "sha256": "90d6cf1a7f68cf832b6caff82e8b091641f641ead8664fa0e684cc3b759719bd"
+        "sha256": "b3281f58c784abf453a5bb1e193798c49718f0ac16d9c65400b4500a17fc83d5"
       }
     }
   },
@@ -61,14 +61,14 @@
     "x64": {
       "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
       "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
-      "THIRD_PARTY_NOTICES.md": "26ed8f9fa34b66f53bcc479e416717aab1834b2bf5341da83ab1061567893d84",
-      "SBOM.spdx.json": "272d689181e0d1929cba650435701c7640a03ac6c459b2fd4e9efc9678f07daa"
+      "THIRD_PARTY_NOTICES.md": "bcdc561abefc0ed11e1226fc6b26eba906e713bce369adbfc8f3f88ac72dbf5d",
+      "SBOM.spdx.json": "75641409453fba33186a33ce2221a593c06a01e8c6944afef85813d5cb407c13"
     },
     "arm64": {
       "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
       "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
-      "THIRD_PARTY_NOTICES.md": "26ed8f9fa34b66f53bcc479e416717aab1834b2bf5341da83ab1061567893d84",
-      "SBOM.spdx.json": "2fa3f7a89d72d75da728b5a4249da6395302021821f32090904cac42c3e2ce5e"
+      "THIRD_PARTY_NOTICES.md": "bcdc561abefc0ed11e1226fc6b26eba906e713bce369adbfc8f3f88ac72dbf5d",
+      "SBOM.spdx.json": "f34ddc6e0f4e5565da7e1166f425ac49fbf52d4df96cb59ea73d349151c3d1dd"
     }
   }
 }
