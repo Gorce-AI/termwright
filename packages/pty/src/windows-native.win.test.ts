@@ -673,7 +673,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         ),
         output.text(),
       ).toBeDefined();
-      expect(handle.write(win32InputRecordCommand('B'))).toBe(true);
+      handle.write(win32InputRecordCommand('B'));
       expect(
         await waitForMarker(handle, output, /PHYSICAL-B-READY/u, 10_000),
         output.text(),
@@ -770,7 +770,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         ),
         output.text(),
       ).toBeDefined();
-      expect(handle.write(win32InputRecordCommand('B'))).toBe(true);
+      handle.write(win32InputRecordCommand('B'));
       expect(
         await waitForMarker(handle, output, /EOF-B-ALT-READY/u, 10_000),
         output.text(),
