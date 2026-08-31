@@ -1570,12 +1570,12 @@ describe('fresh React runner', () => {
     expect(await actionless.getAttribute('data-execution-id')).toBe(`run:test:${actionlessId}:1`);
     if ((await actionless.getAttribute('aria-selected')) !== 'true') {
       await actionless.click();
-      await expect.poll(() => actionless.getAttribute('aria-selected')).toBe('true');
     }
     if ((await actionless.getAttribute('aria-expanded')) !== 'true') {
       await actionless.click();
-      await expect.poll(() => actionless.getAttribute('aria-expanded')).toBe('true');
     }
+    expect(await actionless.getAttribute('aria-selected')).toBe('true');
+    expect(await actionless.getAttribute('aria-expanded')).toBe('true');
     await expect
       .poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count())
       .toBe(1);
