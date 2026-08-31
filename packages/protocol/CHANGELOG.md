@@ -1,5 +1,49 @@
 # @termwright/protocol
 
+## 0.3.0
+
+### Minor Changes
+
+- [#106](https://github.com/Gorce-AI/termwright/pull/106) [`e0b78f5`](https://github.com/Gorce-AI/termwright/commit/e0b78f525888014f8ea08d3817abbeb407c3df6e) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Preserve mixed pass/skip runs as the distinct amber `passed-with-skips`
+  verdict across the Native Host, journal, CLI, history, and Runner. A partial
+  skip exits successfully only when every observed skip and selected required
+  declaration matches the repository's exact reviewed policy; undeclared,
+  ambiguous, all-skipped, and stale-required cases remain non-certifying.
+
+- [#106](https://github.com/Gorce-AI/termwright/pull/106) [`e0b78f5`](https://github.com/Gorce-AI/termwright/commit/e0b78f525888014f8ea08d3817abbeb407c3df6e) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Expose and validate per-run semantic probe intervention metadata, including the
+  engaged injection tier, geometry class, and named degraded capabilities. The
+  effective session contract and Runner now preserve those facts so reduced
+  framework coverage cannot silently look complete.
+
+  Add the generic Go `-toolexec` path for compiler-checked, add-only package units.
+  tview and Bubbles builds reuse a content-addressed compiler identity across
+  temporary materialisation directories while invalidating it for changed owned
+  sources or injected import archives.
+  tview now uses one dormant application attachment plus public draw hooks and
+  owned tview/tcell units without copying or patching upstream modules. Bubbles
+  private-state readers use the same mechanism, while Bubble Tea retains only the
+  exact model and render-flush hooks required for causal semantic publication.
+
+  OpenTUI moves semantic geometry and hit-grid observation to runtime hooks while
+  retaining its narrow structural native-output transform. Ink includes the
+  composable React commit bridge and differential evidence explaining why exact
+  renderer instrumentation remains necessary for full fidelity.
+
+  Ratatui now sizes its asynchronous publication queue from the negotiated
+  semantic in-flight limit instead of a scheduler-sensitive hard-coded value.
+  `terminal.launch({ semanticFrameQueueCapacity })` can raise that bounded limit
+  for intentional synchronous render bursts, and an exact overflow diagnostic
+  reports the active budget and an actionable remediation.
+
+### Patch Changes
+
+- [#106](https://github.com/Gorce-AI/termwright/pull/106) [`e0b78f5`](https://github.com/Gorce-AI/termwright/commit/e0b78f525888014f8ea08d3817abbeb407c3df6e) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Preserve ConPTY terminal-query provenance: host control replies remain raw,
+  cursor synchronization uses a private request-addressed OpenConsole RPC, and
+  ordinary application replies use Win32 Input Mode instead of surfacing as key
+  presses.
+  Isolate Bubble Tea semantic recovery state per renderer so an admitted visual
+  flush cannot race recovery bookkeeping and leave the semantic revision stale.
+
 ## 0.2.0
 
 ### Minor Changes
