@@ -1,0 +1,824 @@
+diff --git a/src/host/VtInputThread.cpp b/src/host/VtInputThread.cpp
+index d89dd4c..d59c448 100644
+--- a/src/host/VtInputThread.cpp
++++ b/src/host/VtInputThread.cpp
+@@ -12,6 +12,12 @@
+ #include "../terminal/parser/InputStateMachineEngine.hpp"
+ #include "../types/inc/utils.hpp"
+ 
++#include <bcrypt.h>
++
++#include <array>
++
++#pragma comment(lib, "bcrypt.lib")
++
+ using namespace Microsoft::Console;
+ using namespace Microsoft::Console::Interactivity;
+ using namespace Microsoft::Console::VirtualTerminal;
+@@ -188,10 +194,48 @@ void VtInputThread::_InputThread()
+     return S_OK;
+ }
+ 
+-void VtInputThread::CaptureNextCursorPositionReport() const noexcept
++std::optional<std::string> VtInputThread::BeginHostCursorPositionRequest(const uintptr_t target, const uint32_t generation, std::shared_ptr<void> synchronization) const
++{
++    for (;;)
++    {
++        std::array<unsigned char, 16> random{};
++        if (!BCRYPT_SUCCESS(BCryptGenRandom(nullptr, random.data(), gsl::narrow_cast<ULONG>(random.size()), BCRYPT_USE_SYSTEM_PREFERRED_RNG)))
++        {
++            return std::nullopt;
++        }
++
++        static constexpr char hex[] = "0123456789abcdef";
++        std::string token(random.size() * 2, '\0');
++        for (size_t i = 0; i < random.size(); ++i)
++        {
++            token[i * 2] = hex[random[i] >> 4];
++            token[i * 2 + 1] = hex[random[i] & 0xf];
++        }
++
++        auto& engine = static_cast<InputStateMachineEngine&>(_pInputStateMachine->Engine());
++        if (engine.RegisterHostCursorPositionRequest(std::wstring{ token.begin(), token.end() }, target, generation, synchronization))
++        {
++            return token;
++        }
++    }
++}
++
++void VtInputThread::CancelHostCursorPositionRequest() const noexcept
++{
++    auto& engine = static_cast<InputStateMachineEngine&>(_pInputStateMachine->Engine());
++    engine.CancelHostCursorPositionRequest();
++}
++
++bool VtInputThread::WaitUntilStartupHostCursorPositionRequestCompletes() const noexcept
++{
++    auto& engine = static_cast<InputStateMachineEngine&>(_pInputStateMachine->Engine());
++    return engine.WaitUntilStartupHostCursorPositionRequestCompletes();
++}
++
++void VtInputThread::InvalidateHostCursorPositionRequests(const uintptr_t target) const noexcept
+ {
+     auto& engine = static_cast<InputStateMachineEngine&>(_pInputStateMachine->Engine());
+-    engine.CaptureNextCursorPositionReport();
++    engine.InvalidateHostCursorPositionRequests(target);
+ }
+ 
+ til::enumset<DeviceAttribute, uint64_t> VtInputThread::WaitUntilDA1(DWORD timeout) const noexcept
+diff --git a/src/host/VtInputThread.hpp b/src/host/VtInputThread.hpp
+index 09c0f89..eb2ee86 100644
+--- a/src/host/VtInputThread.hpp
++++ b/src/host/VtInputThread.hpp
+@@ -16,6 +16,9 @@ Author(s):
+ 
+ #include "../terminal/parser/StateMachine.hpp"
+ 
++#include <optional>
++#include <string>
++
+ namespace Microsoft::Console
+ {
+     namespace VirtualTerminal
+@@ -29,7 +32,10 @@ namespace Microsoft::Console
+         explicit VtInputThread(_In_ wil::unique_hfile hPipe);
+ 
+         [[nodiscard]] HRESULT Start();
+-        void CaptureNextCursorPositionReport() const noexcept;
++        std::optional<std::string> BeginHostCursorPositionRequest(uintptr_t target, uint32_t generation, std::shared_ptr<void> synchronization) const;
++        void InvalidateHostCursorPositionRequests(uintptr_t target) const noexcept;
++        void CancelHostCursorPositionRequest() const noexcept;
++        bool WaitUntilStartupHostCursorPositionRequestCompletes() const noexcept;
+         til::enumset<VirtualTerminal::DeviceAttribute, uint64_t> WaitUntilDA1(DWORD timeout) const noexcept;
+ 
+     private:
+diff --git a/src/host/VtIo.cpp b/src/host/VtIo.cpp
+index f5214d3..dfe171a 100644
+--- a/src/host/VtIo.cpp
++++ b/src/host/VtIo.cpp
+@@ -190,7 +190,11 @@ bool VtIo::IsUsingVt() const
+             // wait for the DA1 response below and effectively wait for both.
+             if (_lookingForCursorPosition)
+             {
+-                writer.WriteDSRCPR();
++                if (!writer.WriteDSRCPR())
++                {
++                    _state = State::StartupFailed;
++                    return E_UNEXPECTED;
++                }
+             }
+ 
+             // GH#4999 - Send a sequence to the connected terminal to request
+@@ -211,6 +215,11 @@ bool VtIo::IsUsingVt() const
+             auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
+             const auto suspension = gci.SuspendLock();
+             _deviceAttributes = _pVtInputThread->WaitUntilDA1(3000);
++            if (_lookingForCursorPosition && !_pVtInputThread->WaitUntilStartupHostCursorPositionRequestCompletes())
++            {
++                _state = State::StartupFailed;
++                return E_ABORT;
++            }
+         }
+     }
+ 
+@@ -299,6 +308,13 @@ void VtIo::SendCloseEvent()
+     LockConsole();
+     const auto unlock = wil::scope_exit([] { UnlockConsole(); });
+ 
++    CancelHostCursorPositionRequest();
++    auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
++    for (auto* screen = gci.ScreenBuffers; screen != nullptr; screen = screen->Next)
++    {
++        screen->CancelConptyCursorPositionSynchronization();
++    }
++
+     // If we're still in the process of starting up, and we're asked to shut down
+     // (broken pipe), `VtIo::StartIfNeeded()` will handle the cleanup for us.
+     // This can happen during the call to `WaitUntilDA1`, because we relinquish
+@@ -318,6 +334,22 @@ void VtIo::SendCloseEvent()
+     }
+ }
+ 
++void VtIo::CancelHostCursorPositionRequest() noexcept
++{
++    if (_pVtInputThread)
++    {
++        _pVtInputThread->CancelHostCursorPositionRequest();
++    }
++}
++
++void VtIo::InvalidateHostCursorPositionRequests(SCREEN_INFORMATION* const target) noexcept
++{
++    if (_pVtInputThread)
++    {
++        _pVtInputThread->InvalidateHostCursorPositionRequests(reinterpret_cast<uintptr_t>(target));
++    }
++}
++
+ // Returns true for C0 characters and C1 [single-character] CSI.
+ // A copy of isActionableFromGround() from stateMachine.cpp.
+ static constexpr bool IsControlCharacter(wchar_t wch) noexcept
+@@ -734,15 +766,22 @@ void VtIo::Writer::WriteASB(bool enabled) const
+ }
+ 
+ // DSR CPR: Cursor Position Report
+-bool VtIo::Writer::WriteDSRCPR() const
++bool VtIo::Writer::WriteDSRCPR(SCREEN_INFORMATION* const target, const uint32_t generation, std::shared_ptr<void> synchronization) const
+ {
+     if (!_io->_pVtInputThread)
+     {
+         return false;
+     }
+ 
+-    _io->_back.append("\x1b[6n");
+-    _io->_pVtInputThread->CaptureNextCursorPositionReport();
++    const auto token = _io->_pVtInputThread->BeginHostCursorPositionRequest(reinterpret_cast<uintptr_t>(target), generation, std::move(synchronization));
++    if (!token)
++    {
++        return false;
++    }
++
++    _io->_back.append("\x1b]8488;twh-cpr-v1:q:");
++    _io->_back.append(*token);
++    _io->_back.push_back('\x07');
+     return true;
+ }
+ 
+diff --git a/src/host/VtIo.hpp b/src/host/VtIo.hpp
+index 7330bda..2a31642 100644
+--- a/src/host/VtIo.hpp
++++ b/src/host/VtIo.hpp
+@@ -6,7 +6,10 @@
+ #include "VtInputThread.hpp"
+ #include "PtySignalInputThread.hpp"
+ 
++#include <memory>
++
+ class ConsoleArguments;
++class SCREEN_INFORMATION;
+ 
+ namespace Microsoft::Console::VirtualTerminal
+ {
+@@ -40,7 +43,7 @@ namespace Microsoft::Console::VirtualTerminal
+             void WriteSGR1006(bool enabled) const;
+             void WriteDECAWM(bool enabled) const;
+             void WriteASB(bool enabled) const;
+-            bool WriteDSRCPR() const;
++            bool WriteDSRCPR(SCREEN_INFORMATION* target = nullptr, uint32_t generation = 0, std::shared_ptr<void> synchronization = {}) const;
+             void WriteWindowVisibility(bool visible) const;
+             void WriteWindowTitle(std::wstring_view title) const;
+             void WriteAttributes(const TextAttribute& attributes) const;
+@@ -65,6 +68,8 @@ namespace Microsoft::Console::VirtualTerminal
+         void SetDeviceAttributes(til::enumset<DeviceAttribute, uint64_t> attributes) noexcept;
+         til::enumset<DeviceAttribute, uint64_t> GetDeviceAttributes() const noexcept;
+         void SendCloseEvent();
++        void CancelHostCursorPositionRequest() noexcept;
++        void InvalidateHostCursorPositionRequests(SCREEN_INFORMATION* target) noexcept;
+         void CreatePseudoWindow();
+ 
+     private:
+diff --git a/src/host/screenInfo.cpp b/src/host/screenInfo.cpp
+index b037275..7ee055c 100644
+--- a/src/host/screenInfo.cpp
++++ b/src/host/screenInfo.cpp
+@@ -47,6 +47,12 @@ SCREEN_INFORMATION::SCREEN_INFORMATION(
+ // - console handle table lock must be held when calling this routine
+ SCREEN_INFORMATION::~SCREEN_INFORMATION()
+ {
++    auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
++    if (gci.IsInVtIoMode())
++    {
++        gci.GetVtIo()->InvalidateHostCursorPositionRequests(this);
++        CancelConptyCursorPositionSynchronization();
++    }
+     _FreeOutputStateMachine();
+ }
+ 
+@@ -1416,7 +1422,17 @@ NT_CATCH_RETURN()
+ // This fixes some of the most glaring out of sync issues. See GH#18725.
+ bool SCREEN_INFORMATION::ConptyCursorPositionMayBeWrong() const noexcept
+ {
+-    return _conptyCursorPositionMayBeWrong.load(std::memory_order_relaxed);
++    return (_conptyCursorPositionSynchronization->generation.load(std::memory_order_relaxed) & 1) != 0;
++}
++
++uint32_t SCREEN_INFORMATION::ConptyCursorPositionGeneration() const noexcept
++{
++    return _conptyCursorPositionSynchronization->generation.load(std::memory_order_relaxed);
++}
++
++std::shared_ptr<ConptyCursorPositionSynchronization> SCREEN_INFORMATION::GetConptyCursorPositionSynchronization() const noexcept
++{
++    return _conptyCursorPositionSynchronization;
+ }
+ 
+ // This should be called whenever we do something that may desynchronize
+@@ -1429,7 +1445,17 @@ void SCREEN_INFORMATION::SetConptyCursorPositionMayBeWrong() noexcept
+ 
+     if (gci.IsInVtIoMode())
+     {
+-        _conptyCursorPositionMayBeWrong.store(true, std::memory_order_relaxed);
++        const auto& synchronization = _conptyCursorPositionSynchronization;
++        if (synchronization->canceled.load(std::memory_order_relaxed))
++        {
++            return;
++        }
++        gci.GetVtIo()->InvalidateHostCursorPositionRequests(this);
++        auto generation = synchronization->generation.load(std::memory_order_relaxed);
++        while (!synchronization->generation.compare_exchange_weak(generation, (generation | 1) + 2, std::memory_order_relaxed))
++        {
++        }
++        til::atomic_notify_all(synchronization->generation);
+     }
+ }
+ 
+@@ -1437,54 +1463,93 @@ void SCREEN_INFORMATION::SetConptyCursorPositionMayBeWrong() noexcept
+ // See ConptyCursorPositionMayBeWrong().
+ void SCREEN_INFORMATION::ResetConptyCursorPositionMayBeWrong() noexcept
+ {
+-    _conptyCursorPositionMayBeWrong.store(false, std::memory_order_relaxed);
+-    til::atomic_notify_all(_conptyCursorPositionMayBeWrong);
++    const auto& synchronization = _conptyCursorPositionSynchronization;
++    auto generation = synchronization->generation.load(std::memory_order_relaxed);
++    if ((generation & 1) != 0 && synchronization->generation.compare_exchange_strong(generation, generation + 1, std::memory_order_relaxed))
++    {
++        til::atomic_notify_all(synchronization->generation);
++    }
++}
++
++void SCREEN_INFORMATION::CancelConptyCursorPositionSynchronization() noexcept
++{
++    _conptyCursorPositionSynchronization->canceled.store(true, std::memory_order_relaxed);
++    ResetConptyCursorPositionMayBeWrong();
++    til::atomic_notify_all(_conptyCursorPositionSynchronization->generation);
++}
++
++void SCREEN_INFORMATION::ResetConptyCursorPositionGeneration(const uint32_t generation) noexcept
++{
++    const auto& synchronization = _conptyCursorPositionSynchronization;
++    auto expected = generation;
++    if ((generation & 1) != 0 && synchronization->generation.compare_exchange_strong(expected, generation + 1, std::memory_order_relaxed))
++    {
++        til::atomic_notify_all(synchronization->generation);
++    }
+ }
+ 
+ // Call this to synchronously wait until the ConPTY cursor position
+ // is known to be correct again. To do so, this emits a DSR CPR sequence
+ // and waits for a response from the terminal.
+ // See ConptyCursorPositionMayBeWrong().
+-void SCREEN_INFORMATION::WaitForConptyCursorPositionToBeSynchronized() noexcept
++void SCREEN_INFORMATION::WaitForConptyCursorPositionToBeSynchronized(SCREEN_INFORMATION* const target, std::shared_ptr<ConptyCursorPositionSynchronization> synchronization) noexcept
+ {
+-    if (!_conptyCursorPositionMayBeWrong.load(std::memory_order_relaxed))
+-    {
+-        return;
+-    }
+-
+     auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
+-
++    for (;;)
+     {
+-        gci.LockConsole();
+-        const auto exit = wil::scope_exit([&] { gci.UnlockConsole(); });
+-        auto writer = gci.GetVtWriterForBuffer(this);
+-
+-        if (!writer || !writer.WriteDSRCPR())
++        if (synchronization->canceled.load(std::memory_order_relaxed))
++        {
++            return;
++        }
++        auto requestedGeneration = synchronization->generation.load(std::memory_order_relaxed);
++        if ((requestedGeneration & 1) == 0)
+         {
+-            _conptyCursorPositionMayBeWrong.store(false, std::memory_order_relaxed);
+             return;
+         }
+ 
+-        writer.Submit();
+-    }
++        {
++            gci.LockConsole();
++            const auto exit = wil::scope_exit([&] { gci.UnlockConsole(); });
+ 
+-    // If you were to hold the lock, the ConPTY input thread couldn't
+-    // process any input and thus couldn't update the cursor position.
+-    assert(!gci.IsConsoleLocked());
++            if (synchronization->canceled.load(std::memory_order_relaxed))
++            {
++                return;
++            }
++            requestedGeneration = synchronization->generation.load(std::memory_order_relaxed);
++            if ((requestedGeneration & 1) == 0)
++            {
++                return;
++            }
++            auto writer = gci.GetVtWriterForBuffer(target);
+ 
+-    for (;;)
+-    {
+-        if (!_conptyCursorPositionMayBeWrong.load(std::memory_order::relaxed))
+-        {
+-            break;
++            if (!writer || !writer.WriteDSRCPR(target, requestedGeneration, synchronization))
++            {
++                FAIL_FAST_HR(E_UNEXPECTED);
++            }
++
++            writer.Submit();
+         }
+ 
+-        // atomic_wait() returns false when the timeout expires.
+-        // Technically we should decrement the timeout with each iteration,
+-        // but I suspect infinite spurious wake-ups are a theoretical problem.
+-        if (!til::atomic_wait(_conptyCursorPositionMayBeWrong, true, 500))
++        // Wait causally for either the matching response, a newer dirty
++        // generation (which requires a fresh request), or pipe-close
++        // cancellation. INFINITE is deliberate: elapsed time is never proof
++        // that the cursor response was applied.
++        for (;;)
+         {
+-            break;
++            if (synchronization->canceled.load(std::memory_order_relaxed))
++            {
++                return;
++            }
++            const auto currentGeneration = synchronization->generation.load(std::memory_order_relaxed);
++            if ((currentGeneration & 1) == 0)
++            {
++                return;
++            }
++            if (currentGeneration != requestedGeneration)
++            {
++                break;
++            }
++            til::atomic_wait(synchronization->generation, currentGeneration, INFINITE);
+         }
+     }
+ }
+diff --git a/src/host/screenInfo.hpp b/src/host/screenInfo.hpp
+index 7f29af8..fb447c0 100644
+--- a/src/host/screenInfo.hpp
++++ b/src/host/screenInfo.hpp
+@@ -26,8 +26,16 @@ Revision History:
+ #include "../renderer/inc/FontInfoDesired.hpp"
+ #include "../server/ObjectHeader.h"
+ 
++#include <memory>
++
+ class ConversionAreaInfo; // forward decl window. circular reference
+ 
++struct ConptyCursorPositionSynchronization
++{
++    std::atomic<uint32_t> generation{ 0 };
++    std::atomic<bool> canceled{ false };
++};
++
+ class SCREEN_INFORMATION : public ConsoleObjectHeader, public Microsoft::Console::IIoProvider
+ {
+ public:
+@@ -160,9 +168,13 @@ public:
+     Microsoft::Console::Types::Viewport GetTerminalBufferSize() const;
+     bool SendNotifyBeep() const;
+     bool ConptyCursorPositionMayBeWrong() const noexcept;
++    uint32_t ConptyCursorPositionGeneration() const noexcept;
++    std::shared_ptr<ConptyCursorPositionSynchronization> GetConptyCursorPositionSynchronization() const noexcept;
+     void SetConptyCursorPositionMayBeWrong() noexcept;
+     void ResetConptyCursorPositionMayBeWrong() noexcept;
+-    void WaitForConptyCursorPositionToBeSynchronized() noexcept;
++    void ResetConptyCursorPositionGeneration(uint32_t generation) noexcept;
++    void CancelConptyCursorPositionSynchronization() noexcept;
++    static void WaitForConptyCursorPositionToBeSynchronized(SCREEN_INFORMATION* target, std::shared_ptr<ConptyCursorPositionSynchronization> synchronization) noexcept;
+ 
+     DWORD OutputMode = ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT;
+     short WheelDelta = 0;
+@@ -219,7 +231,9 @@ private:
+     //  the viewport to move (SetBufferInfo, WriteConsole, etc)
+     til::CoordType _virtualBottom = 0;
+     std::optional<til::size> _deferredPtyResize;
+-    std::atomic<bool> _conptyCursorPositionMayBeWrong = false;
++    // A waiter retains this state after releasing the console lock, so deleting
++    // an alternate screen buffer cannot invalidate the atomic it sleeps on.
++    std::shared_ptr<ConptyCursorPositionSynchronization> _conptyCursorPositionSynchronization{ std::make_shared<ConptyCursorPositionSynchronization>() };
+ 
+ #ifdef UNIT_TESTING
+     friend class TextBufferIteratorTests;
+diff --git a/src/server/ApiDispatchers.cpp b/src/server/ApiDispatchers.cpp
+index fc7d83d..c1b3f9c 100644
+--- a/src/server/ApiDispatchers.cpp
++++ b/src/server/ApiDispatchers.cpp
+@@ -594,13 +594,22 @@ constexpr T saturate(auto val)
+     SCREEN_INFORMATION* pObj;
+     RETURN_IF_FAILED(pObjectHandle->GetScreenBuffer(GENERIC_READ, &pObj));
+ 
+-    // See ConptyCursorPositionMayBeWrong() for details.
+-    auto& activeBuffer = pObj->GetActiveBuffer();
++    // Capture a lifetime-safe synchronization object while the selected
++    // active buffer is protected by the console lock. The alternate buffer
++    // may be removed while the causal host query is in flight.
++    SCREEN_INFORMATION* activeBuffer = nullptr;
++    std::shared_ptr<ConptyCursorPositionSynchronization> synchronization;
++    {
++        LockConsole();
++        const auto unlock = wil::scope_exit([] { UnlockConsole(); });
++        activeBuffer = &pObj->GetActiveBuffer();
++        synchronization = activeBuffer->GetConptyCursorPositionSynchronization();
++    }
+     // GetConsoleScreenBufferInfoExImpl uses GetActiveBuffer internally, but
+     // under the console lock.
+-    if (activeBuffer.ConptyCursorPositionMayBeWrong())
++    if (!synchronization->canceled.load(std::memory_order_relaxed) && (synchronization->generation.load(std::memory_order_relaxed) & 1) != 0)
+     {
+-        activeBuffer.WaitForConptyCursorPositionToBeSynchronized();
++        SCREEN_INFORMATION::WaitForConptyCursorPositionToBeSynchronized(activeBuffer, synchronization);
+     }
+ 
+     m->_pApiRoutines->GetConsoleScreenBufferInfoExImpl(*pObj, ex);
+diff --git a/src/terminal/adapter/IInteractDispatch.hpp b/src/terminal/adapter/IInteractDispatch.hpp
+index b8aba0f..5834124 100644
+--- a/src/terminal/adapter/IInteractDispatch.hpp
++++ b/src/terminal/adapter/IInteractDispatch.hpp
+@@ -18,6 +18,8 @@ Author(s):
+ #include "DispatchTypes.hpp"
+ #include "../../types/inc/IInputEvent.hpp"
+ 
++#include <memory>
++
+ namespace Microsoft::Console::VirtualTerminal
+ {
+     class IInteractDispatch
+@@ -36,6 +38,7 @@ namespace Microsoft::Console::VirtualTerminal
+         virtual void WriteStringRaw(std::wstring_view string) = 0;
+         virtual void WindowManipulation(DispatchTypes::WindowManipulationType function, VTParameter parameter1, VTParameter parameter2) = 0;
+         virtual void MoveCursor(VTInt row, VTInt col) = 0;
++        virtual void MoveCursorForHostRequest(VTInt, VTInt, uintptr_t, uint32_t, const std::shared_ptr<void>&) {}
+         virtual void FocusChanged(bool focused) = 0;
+     };
+ }
+diff --git a/src/terminal/adapter/InteractDispatch.cpp b/src/terminal/adapter/InteractDispatch.cpp
+index 8c64743..76f7bd0 100644
+--- a/src/terminal/adapter/InteractDispatch.cpp
++++ b/src/terminal/adapter/InteractDispatch.cpp
+@@ -169,6 +169,34 @@ void InteractDispatch::MoveCursor(const VTInt row, const VTInt col)
+     info.GetActiveBuffer().ResetConptyCursorPositionMayBeWrong();
+ }
+ 
++void InteractDispatch::MoveCursorForHostRequest(const VTInt row, const VTInt col, const uintptr_t target, const uint32_t generation, const std::shared_ptr<void>& opaqueSynchronization)
++{
++    if (target == 0)
++    {
++        MoveCursor(row, col);
++        return;
++    }
++
++    const auto synchronization = std::static_pointer_cast<ConptyCursorPositionSynchronization>(opaqueSynchronization);
++    if (!synchronization || synchronization->canceled.load(std::memory_order_relaxed) || synchronization->generation.load(std::memory_order_relaxed) != generation)
++    {
++        return;
++    }
++
++    auto& info = *reinterpret_cast<SCREEN_INFORMATION*>(target);
++    const auto viewport = info.GetViewport();
++    til::point cursor{ col - 1 + viewport.Left(), row - 1 + viewport.Top() };
++    cursor.y = std::clamp(cursor.y, viewport.Top(), viewport.BottomInclusive());
++    cursor.x = std::clamp(cursor.x, viewport.Left(), viewport.RightInclusive());
++    const auto& api = ServiceLocator::LocateGlobals().api;
++    const auto result = api->SetConsoleCursorPositionImpl(info, cursor);
++    if (FAILED(result))
++    {
++        FAIL_FAST_HR(result);
++    }
++    info.ResetConptyCursorPositionGeneration(generation);
++}
++
+ // Routine Description:
+ // - Checks if the InputBuffer is willing to accept VT Input directly
+ // Arguments:
+diff --git a/src/terminal/adapter/InteractDispatch.hpp b/src/terminal/adapter/InteractDispatch.hpp
+index 2fe63b0..5148aec 100644
+--- a/src/terminal/adapter/InteractDispatch.hpp
++++ b/src/terminal/adapter/InteractDispatch.hpp
+@@ -33,6 +33,7 @@ namespace Microsoft::Console::VirtualTerminal
+         void WriteStringRaw(std::wstring_view string) override;
+         void WindowManipulation(DispatchTypes::WindowManipulationType function, VTParameter parameter1, VTParameter parameter2) override;
+         void MoveCursor(VTInt row, VTInt col) override;
++        void MoveCursorForHostRequest(VTInt row, VTInt col, uintptr_t target, uint32_t generation, const std::shared_ptr<void>& synchronization) override;
+         void FocusChanged(bool focused) override;
+ 
+     private:
+diff --git a/src/terminal/parser/InputStateMachineEngine.cpp b/src/terminal/parser/InputStateMachineEngine.cpp
+index 4568232..ff6bbd9 100644
+--- a/src/terminal/parser/InputStateMachineEngine.cpp
++++ b/src/terminal/parser/InputStateMachineEngine.cpp
+@@ -6,6 +6,8 @@
+ #include "stateMachine.hpp"
+ #include "InputStateMachineEngine.hpp"
+ 
++#include <limits>
++
+ #include <til/atomic.h>
+ 
+ #include "../../inc/unicode.hpp"
+@@ -96,9 +98,54 @@ InputStateMachineEngine::InputStateMachineEngine(std::unique_ptr<IInteractDispat
+     THROW_HR_IF_NULL(E_INVALIDARG, _pDispatch.get());
+ }
+ 
+-void InputStateMachineEngine::CaptureNextCursorPositionReport() noexcept
++bool InputStateMachineEngine::RegisterHostCursorPositionRequest(std::wstring token, const uintptr_t target, const uint32_t generation, std::shared_ptr<void> synchronization)
+ {
+-    _captureNextCursorPositionReport.store(true, std::memory_order_relaxed);
++    const std::scoped_lock lock{ _hostCursorPositionMutex };
++    const auto inserted = _hostCursorPositionRequests.emplace(std::move(token), HostCursorPositionRequest{ target, generation, std::move(synchronization) }).second;
++    if (inserted && target == 0)
++    {
++        _startupHostCursorPositionState.store(1, std::memory_order_relaxed);
++    }
++    return inserted;
++}
++
++void InputStateMachineEngine::InvalidateHostCursorPositionRequests(const uintptr_t target) noexcept
++{
++    const std::scoped_lock lock{ _hostCursorPositionMutex };
++    for (auto request = _hostCursorPositionRequests.begin(); request != _hostCursorPositionRequests.end();)
++    {
++        if (request->second.target == target)
++        {
++            request = _hostCursorPositionRequests.erase(request);
++        }
++        else
++        {
++            ++request;
++        }
++    }
++}
++
++void InputStateMachineEngine::CancelHostCursorPositionRequest() noexcept
++{
++    const std::scoped_lock lock{ _hostCursorPositionMutex };
++    _hostCursorPositionRequests.clear();
++    if (_startupHostCursorPositionState.exchange(3, std::memory_order_relaxed) == 1)
++    {
++        til::atomic_notify_all(_startupHostCursorPositionState);
++    }
++}
++
++bool InputStateMachineEngine::WaitUntilStartupHostCursorPositionRequestCompletes() noexcept
++{
++    for (;;)
++    {
++        const auto state = _startupHostCursorPositionState.load(std::memory_order_relaxed);
++        if (state != 1)
++        {
++            return state == 2;
++        }
++        til::atomic_wait(_startupHostCursorPositionState, state, INFINITE);
++    }
+ }
+ 
+ til::enumset<DeviceAttribute, uint64_t> InputStateMachineEngine::WaitUntilDA1(DWORD timeout) noexcept
+@@ -122,10 +169,6 @@ til::enumset<DeviceAttribute, uint64_t> InputStateMachineEngine::WaitUntilDA1(DW
+         }
+     }
+ 
+-    // VtIo first sends a DSR CPR and then a DA1 request.
+-    // If we encountered a DA1 response here, the DSR request is definitely done now.
+-    _captureNextCursorPositionReport.store(false, std::memory_order_relaxed);
+-
+     return til::enumset<DeviceAttribute, uint64_t>::from_bits(val);
+ }
+ 
+@@ -421,14 +464,9 @@ bool InputStateMachineEngine::ActionCsiDispatch(const VTID id, const VTParameter
+     }
+     // case CsiActionCodes::DSR_DeviceStatusReportResponse:
+     case CsiActionCodes::CSI_F3:
+-        // The F3 case is special - it shares a code with the DeviceStatusResponse.
+-        // If we're looking for that response, then do that, and break out.
+-        // Else, fall though to the _GetCursorKeysModifierState handler.
+-        if (_captureNextCursorPositionReport.exchange(false, std::memory_order_relaxed))
+-        {
+-            _pDispatch->MoveCursor(parameters.at(0), parameters.at(1));
+-            return true;
+-        }
++        // Host-owned cursor synchronization uses the private, request-addressed
++        // OSC handled in ActionOscDispatch. A CSI CPR is therefore always an
++        // application-owned response (or F3), and must never be stolen here.
+         // Heuristic: If the hosting terminal used the win32 input mode, chances are high
+         // that this is a CPR requested by the terminal application as opposed to a F3 key.
+         if (_encounteredWin32InputModeSequence)
+@@ -586,8 +624,88 @@ bool InputStateMachineEngine::ActionSs3Dispatch(const wchar_t wch, const VTParam
+ // - string - OSC string we've collected. NOT null terminated.
+ // Return Value:
+ // - true if we handled the dispatch.
+-bool InputStateMachineEngine::ActionOscDispatch(const size_t /*parameter*/, const std::wstring_view /*string*/) noexcept
++bool InputStateMachineEngine::ActionOscDispatch(const size_t parameter, const std::wstring_view string) noexcept
+ {
++    static constexpr size_t hostCursorOsc = 8488;
++    static constexpr std::wstring_view prefix{ L"twh-cpr-v1:r:" };
++
++    if (parameter == hostCursorOsc && string.starts_with(prefix))
++    {
++        const auto tokenBegin = prefix.size();
++        const auto rowSeparator = string.find(L':', tokenBegin);
++        const auto colSeparator = rowSeparator == std::wstring_view::npos ? rowSeparator : string.find(L':', rowSeparator + 1);
++        if (rowSeparator != std::wstring_view::npos && colSeparator != std::wstring_view::npos && string.find(L':', colSeparator + 1) == std::wstring_view::npos)
++        {
++            const auto token = string.substr(tokenBegin, rowSeparator - tokenBegin);
++            const auto parseCoordinate = [](const std::wstring_view value, VTInt& result) noexcept {
++                if (value.empty())
++                {
++                    return false;
++                }
++                uint64_t parsed = 0;
++                for (const auto ch : value)
++                {
++                    if (ch < L'0' || ch > L'9')
++                    {
++                        return false;
++                    }
++                    const auto digit = static_cast<uint64_t>(ch - L'0');
++                    const auto maximum = static_cast<uint64_t>(std::numeric_limits<VTInt>::max());
++                    if (parsed > (maximum - digit) / 10)
++                    {
++                        return false;
++                    }
++                    parsed = parsed * 10 + digit;
++                }
++                if (parsed == 0)
++                {
++                    return false;
++                }
++                result = static_cast<VTInt>(parsed);
++                return true;
++            };
++
++            VTInt row = 0;
++            VTInt col = 0;
++            if (token.size() == 32 && parseCoordinate(string.substr(rowSeparator + 1, colSeparator - rowSeparator - 1), row) && parseCoordinate(string.substr(colSeparator + 1), col))
++            {
++                std::optional<HostCursorPositionRequest> request;
++                {
++                    const std::scoped_lock lock{ _hostCursorPositionMutex };
++                    const auto found = _hostCursorPositionRequests.find(std::wstring{ token });
++                    if (found != _hostCursorPositionRequests.end())
++                    {
++                        request = found->second;
++                        for (auto candidate = _hostCursorPositionRequests.begin(); candidate != _hostCursorPositionRequests.end();)
++                        {
++                            if (candidate->second.target == request->target)
++                            {
++                                candidate = _hostCursorPositionRequests.erase(candidate);
++                            }
++                            else
++                            {
++                                ++candidate;
++                            }
++                        }
++                    }
++                }
++                if (request)
++                {
++                    _pDispatch->MoveCursorForHostRequest(row, col, request->target, request->generation, request->synchronization);
++                    if (request->target == 0)
++                    {
++                        _startupHostCursorPositionState.store(2, std::memory_order_relaxed);
++                        til::atomic_notify_all(_startupHostCursorPositionState);
++                    }
++                }
++            }
++        }
++
++        // OSC 8488 with this versioned response prefix is reserved for the
++        // host RPC. Consume stale, superseded and malformed replies without
++        // letting host-control traffic leak into the application input.
++        return true;
++    }
+     // Unlike ActionCsiDispatch, we are not checking whether the application has requested
+     // VT input.
+     // Our documentation states that VT reports generated by application requests will be
+diff --git a/src/terminal/parser/InputStateMachineEngine.hpp b/src/terminal/parser/InputStateMachineEngine.hpp
+index e0c7eec..d1e6d24 100644
+--- a/src/terminal/parser/InputStateMachineEngine.hpp
++++ b/src/terminal/parser/InputStateMachineEngine.hpp
+@@ -17,6 +17,8 @@ Author(s):
+ 
+ #include "IStateMachineEngine.hpp"
+ #include <functional>
++#include <mutex>
++#include <unordered_map>
+ #include "../../types/inc/IInputEvent.hpp"
+ #include "../adapter/IInteractDispatch.hpp"
+ 
+@@ -163,7 +165,10 @@ namespace Microsoft::Console::VirtualTerminal
+     public:
+         InputStateMachineEngine(std::unique_ptr<IInteractDispatch> pDispatch);
+ 
+-        void CaptureNextCursorPositionReport() noexcept;
++        bool RegisterHostCursorPositionRequest(std::wstring token, uintptr_t target, uint32_t generation, std::shared_ptr<void> synchronization);
++        void InvalidateHostCursorPositionRequests(uintptr_t target) noexcept;
++        void CancelHostCursorPositionRequest() noexcept;
++        bool WaitUntilStartupHostCursorPositionRequestCompletes() noexcept;
+         til::enumset<DeviceAttribute, uint64_t> WaitUntilDA1(DWORD timeout) noexcept;
+ 
+         void UnknownSequence() noexcept override;
+@@ -193,7 +198,15 @@ namespace Microsoft::Console::VirtualTerminal
+     private:
+         const std::unique_ptr<IInteractDispatch> _pDispatch;
+         std::atomic<uint64_t> _deviceAttributes{ 0 };
+-        std::atomic<bool> _captureNextCursorPositionReport{ false };
++        std::mutex _hostCursorPositionMutex;
++        struct HostCursorPositionRequest
++        {
++            uintptr_t target;
++            uint32_t generation;
++            std::shared_ptr<void> synchronization;
++        };
++        std::unordered_map<std::wstring, HostCursorPositionRequest> _hostCursorPositionRequests;
++        std::atomic<uint8_t> _startupHostCursorPositionState{ 0 };
+         bool _encounteredWin32InputModeSequence = false;
+         bool _expectingStringTerminator = false;
+         DWORD _mouseButtonState = 0;
+diff --git a/src/terminal/parser/ut_parser/InputEngineTest.cpp b/src/terminal/parser/ut_parser/InputEngineTest.cpp
+index 19aa939..f94a5df 100644
+--- a/src/terminal/parser/ut_parser/InputEngineTest.cpp
++++ b/src/terminal/parser/ut_parser/InputEngineTest.cpp
+@@ -680,25 +680,15 @@ void InputEngineTest::CursorPositioningTest()
+ 
+     auto dispatch = std::make_unique<TestInteractDispatch>(pfn, &testState);
+     auto inputEngine = std::make_unique<InputStateMachineEngine>(std::move(dispatch));
+-    inputEngine->CaptureNextCursorPositionReport();
+     auto _stateMachine = std::make_unique<StateMachine>(std::move(inputEngine));
+     testState._stateMachine = _stateMachine.get();
+ 
+     Log::Comment(NoThrowString().Format(
+-        L"Try sending a cursor position response, then send it again. "
+-        L"The first time, it should be interpreted as a cursor position. "
+-        L"The state machine engine should reset itself to normal operation "
+-        L"after that, and treat the second as an F3."));
++        L"A standard cursor position response belongs to the application. "
++        L"Host-owned cursor synchronization uses the request-addressed "
++        L"OSC 8488 protocol instead, so both reports are treated as F3."));
+ 
+     std::wstring seq = L"\x1b[1;4R";
+-    testState._expectCursorPosition = true;
+-    testState._expectedCursor = { 4, 1 };
+-
+-    Log::Comment(NoThrowString().Format(
+-        L"Processing \"%s\"", seq.c_str()));
+-    _stateMachine->ProcessString(seq);
+-
+-    testState._expectCursorPosition = false;
+ 
+     INPUT_RECORD inputRec;
+     inputRec.EventType = KEY_EVENT;
+@@ -709,6 +699,11 @@ void InputEngineTest::CursorPositioningTest()
+     inputRec.Event.KeyEvent.wVirtualScanCode = static_cast<WORD>(OneCoreSafeMapVirtualKeyW(VK_F3, MAPVK_VK_TO_VSC));
+     inputRec.Event.KeyEvent.uChar.UnicodeChar = L'\0';
+ 
++    Log::Comment(NoThrowString().Format(
++        L"Processing \"%s\"", seq.c_str()));
++    testState.vExpectedInput.push_back(inputRec);
++    _stateMachine->ProcessString(seq);
++
+     testState.vExpectedInput.push_back(inputRec);
+     Log::Comment(NoThrowString().Format(
+         L"Processing \"%s\"", seq.c_str()));

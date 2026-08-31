@@ -10,7 +10,7 @@ on:
         type: number
         default: 16
       stream:
-        description: 'Optional exact stream id to process (for example tcell-v2)'
+        description: 'Exact stream id, or openconsole-bootstrap for the pinned native bootstrap'
         type: string
         required: false
 
@@ -30,6 +30,7 @@ env:
 jobs:
   discovery:
     name: Discover every unverified published version
+    if: github.event_name != 'workflow_dispatch' || inputs.stream != 'openconsole-bootstrap'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -93,6 +94,41 @@ jobs:
           path: upstream-candidates/candidate-registry.json
           if-no-files-found: error
           retention-days: 30
+
+  openconsole-bootstrap:
+    name: Build pinned patched OpenConsole and ConPTY
+    if: github.event_name == 'workflow_dispatch' && inputs.stream == 'openconsole-bootstrap'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Reject workflow reruns
+        shell: pwsh
+        run: if ($env:GITHUB_RUN_ATTEMPT -ne '1') { throw 'Workflow reruns are forbidden' }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Locate MSBuild
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild/**/Bin/MSBuild.exe' | Select-Object -First 1
+          if (-not $msbuild) { throw 'MSBuild.exe was not found' }
+          Split-Path -Parent $msbuild | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build exact patched source
+        shell: pwsh
+        run: ./scripts/build-vendored-conpty.ps1 -OutputDirectory "$env:RUNNER_TEMP/termwright-conpty-bootstrap"
+
+      - name: Upload uncertified bootstrap binaries and provenance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: vendored-conpty-bootstrap
+          path: ${{ runner.temp }}/termwright-conpty-bootstrap
+          if-no-files-found: error
+          retention-days: 7
 
   pty-native-build-x64:
     name: Build the candidate Windows PTY addon (x64)
