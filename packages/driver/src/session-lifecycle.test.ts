@@ -67,9 +67,10 @@ class ControlledPty implements PtyProcess {
     if (this.#failWrite) throw new Error('write failed');
     this.writeCalls.push(Uint8Array.from(data));
   }
-  writeTerminalResponse(data: Uint8Array): void {
+  writeTerminalResponse(data: Uint8Array): 'application-direct' {
     if (this.#failWrite) throw new Error('write failed');
     this.terminalResponseWriteCalls.push(Uint8Array.from(data));
+    return 'application-direct';
   }
   resize(columns: number, rows: number): void {
     this.resizeCalls.push({ columns, rows });
@@ -499,6 +500,93 @@ describe('terminal session resource lifecycle', () => {
         const unexpectedTerminal = await launched?.catch(() => undefined);
         await unexpectedTerminal?.close().catch(() => undefined);
         restoreProvider();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  terminalIt(
+    'keeps required semantic negotiation open past the ordinary discovery window',
+    async () => {
+      vi.useFakeTimers();
+      let markSpawned!: () => void;
+      const spawned = new Promise<void>((resolve) => {
+        markSpawned = resolve;
+      });
+      const endpoint: { value: string | undefined; token?: string } = { value: undefined };
+      const originalListen = SemanticChannel.listen.bind(SemanticChannel);
+      let markHandshakeAdmitted!: () => void;
+      const handshakeAdmitted = new Promise<void>((resolve) => {
+        markHandshakeAdmitted = resolve;
+      });
+      vi.spyOn(SemanticChannel, 'listen').mockImplementation((options, dependencies) =>
+        originalListen(
+          {
+            ...options,
+            hooks: {
+              ...options.hooks,
+              onNegotiationStateChange: (state) => {
+                options.hooks.onNegotiationStateChange?.(state);
+                if (state.admissionOpen && state.pendingHandshakes === 1) {
+                  markHandshakeAdmitted();
+                }
+              },
+            },
+          },
+          dependencies,
+        ),
+      );
+      let socket: ReturnType<typeof connect> | undefined;
+      let launched: ReturnType<typeof launchTerminalWithBackend> | undefined;
+      try {
+        launched = launchTerminalWithBackend({
+          command: ['controlled-app'],
+          backend: backendFor(new ControlledPty(), endpoint, markSpawned),
+          requiredCapabilities: ['semantic-tree'],
+          semanticNegotiationMs: 2_000,
+          timeouts: { ready: 3_000 },
+        });
+        await spawned;
+
+        // Admit the peer just before ordinary discovery closes, then cross
+        // that boundary without consuming real wall clock. Its independent
+        // hello deadline keeps required-capability negotiation alive.
+        await vi.advanceTimersByTimeAsync(1_900);
+        socket = connect(endpoint.value!);
+        await new Promise<void>((resolve, reject) => {
+          socket!.once('connect', resolve);
+          socket!.once('error', reject);
+        });
+        await handshakeAdmitted;
+        await vi.advanceTimersByTimeAsync(200);
+        socket.write(
+          encodeFrame(
+            {
+              type: 'hello',
+              protocol: 'termwright/2',
+              token: endpoint.token,
+              adapter: { name: 'controlled-adapter', version: '1.0.0' },
+              capabilities: ['tree', 'render-revisions'],
+            },
+            DEFAULT_LIMITS.maxFrameBytes,
+          ),
+        );
+        await new Promise<void>((resolve, reject) => {
+          socket!.once('data', () => resolve());
+          socket!.once('error', reject);
+        });
+
+        const terminal = await launched;
+        expect(terminal.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+        expect(terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout')).toBe(
+          false,
+        );
+        await terminal.close();
+      } finally {
+        socket?.destroy();
+        await vi.advanceTimersByTimeAsync(3_000);
+        const terminal = await launched?.catch(() => undefined);
+        await terminal?.close().catch(() => undefined);
         vi.useRealTimers();
       }
     },

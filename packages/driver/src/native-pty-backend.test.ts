@@ -42,8 +42,14 @@ describe('the native PTY driver adapter', () => {
     );
   });
 
-  it('uses Win32 Input Mode only for terminal responses on Windows', () => {
-    const windowsSession = fakeSession();
+  it('delegates Windows response provenance while POSIX writes the response raw', () => {
+    const windowsResponse = vi.fn<
+      (
+        data: Uint8Array,
+      ) =>
+        'host-control' | 'conpty-cpr-arbitrated' | 'application-direct' | 'application-win32-input'
+    >(() => 'application-win32-input');
+    const windowsSession = fakeSession({ writeTerminalResponse: windowsResponse });
     const posixSession = fakeSession();
     const windows = createNativePtyBackend(() => windowsSession, 'win32').spawn({
       command: ['C:\\app.exe'],
@@ -62,10 +68,41 @@ describe('the native PTY driver adapter', () => {
     windows.writeTerminalResponse?.(response);
     posix.writeTerminalResponse?.(response);
 
-    expect(windowsSession.write).toHaveBeenCalledWith(
-      encodeWin32InputModeTerminalResponse(response),
-    );
+    expect(windowsResponse).toHaveBeenCalledWith(response);
     expect(posixSession.write).toHaveBeenCalledWith(response);
+  });
+
+  it('fails closed when a ConPTY implementation lacks provenance-aware response routing', () => {
+    const windows = createNativePtyBackend(() => fakeSession(), 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+    expect(() => windows.writeTerminalResponse?.(Buffer.from('\x1b[1;1R'))).toThrow(
+      /lacks terminal-response provenance routing/u,
+    );
+    expect(() => windows.write(Buffer.from('\x1b'), 'key')).toThrow(
+      /lacks application-input routing/u,
+    );
+  });
+
+  it('sends a lone Windows Escape key through Win32 Input Mode after CPR arbitration', () => {
+    const applicationInput =
+      vi.fn<(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw') => void>();
+    const session = fakeSession({ writeApplicationInput: applicationInput });
+    const windows = createNativePtyBackend(() => session, 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+
+    windows.write(Buffer.from('\x1b'), 'key');
+    windows.write(Buffer.from('\x1b'), 'raw');
+
+    expect(applicationInput).toHaveBeenNthCalledWith(1, Buffer.from('\x1b'), 'key');
+    expect(applicationInput).toHaveBeenNthCalledWith(2, Buffer.from('\x1b'), 'raw');
   });
 
   it('exposes authoritative EOF and the native platform ownership model', () => {

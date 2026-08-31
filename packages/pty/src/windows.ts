@@ -13,7 +13,13 @@
 
 import { createRequire } from 'node:module';
 import { NativeWriteDrainEpoch } from './write-drain-epoch.js';
-import { ConPtyControlPlaneNormalizer } from './windows-output-normalizer.js';
+import {
+  ConPtyControlPlaneNormalizer,
+  ConPtyTerminalResponseRouter,
+  ConPtyTerminalResponseTransport,
+  encodeConPtyApplicationInput,
+  type ConPtyTerminalResponseRoute,
+} from './windows-output-normalizer.js';
 
 /** Ordered messages the native session emits. Data always precedes the end. */
 type NativeEvent =
@@ -330,6 +336,8 @@ export interface WindowsPtyHandle {
    */
   readonly notices: readonly string[];
   write(data: Uint8Array): void;
+  writeApplicationInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): void;
+  writeTerminalResponse(data: Uint8Array): ConPtyTerminalResponseRoute;
   resize(columns: number, rows: number): boolean;
   terminateTree(): void;
   activeProcesses(): number;
@@ -364,9 +372,19 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
   let endReason: number | undefined;
   let disposed = false;
   const writeEpoch = new NativeWriteDrainEpoch();
-  const outputNormalizer = new ConPtyControlPlaneNormalizer();
+  const terminalResponseRouter = new ConPtyTerminalResponseRouter();
+  const terminalResponseTransport = new ConPtyTerminalResponseTransport();
+  const outputNormalizer = new ConPtyControlPlaneNormalizer((query) =>
+    terminalResponseRouter.noteHostQuery(query),
+  );
   const notices: string[] = [];
   const NOTICE_LIMIT = 64;
+
+  const write = (data: Uint8Array): void => {
+    if (disposed) throw new Error('ConPTY input is closed');
+    const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+    writeEpoch.admit(bytes, (admitted) => session.write(admitted));
+  };
 
   const session = new binding.ConPtySession(
     {
@@ -450,9 +468,15 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
     },
     outputEnded,
     write(data: Uint8Array): void {
-      if (disposed) throw new Error('ConPTY input is closed');
-      const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-      writeEpoch.admit(bytes, (admitted) => session.write(admitted));
+      write(data);
+    },
+    writeApplicationInput(data, kind): void {
+      write(encodeConPtyApplicationInput(data, kind));
+    },
+    writeTerminalResponse(data: Uint8Array): ConPtyTerminalResponseRoute {
+      const route = terminalResponseRouter.route(data);
+      write(terminalResponseTransport.encode(route, data));
+      return route;
     },
     resize(columns: number, rows: number): boolean {
       return disposed ? false : session.resize(columns, rows);

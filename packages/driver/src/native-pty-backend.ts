@@ -14,6 +14,10 @@ export interface NativePtySessionHandle {
   readonly outputEnded: Promise<void>;
   readonly sawRealEof: boolean;
   write(data: Uint8Array): void;
+  writeApplicationInput?(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): void;
+  writeTerminalResponse?(
+    data: Uint8Array,
+  ): 'host-control' | 'conpty-cpr-arbitrated' | 'application-direct' | 'application-win32-input';
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
   treeState(): 'alive' | 'gone' | 'unsupported';
@@ -44,19 +48,7 @@ export const NATIVE_PTY_BACKEND_NAME = 'termwright-native-pty';
  * deliberate: silently UTF-8-decoding arbitrary bytes into UTF-16
  * `UnicodeChar` fields could corrupt a reply while appearing successful.
  */
-export function encodeWin32InputModeTerminalResponse(data: Uint8Array): Uint8Array {
-  let encoded = '';
-  for (const byte of data) {
-    if (byte > 0x7f) {
-      throw new TypeError(
-        `terminal response contains non-ASCII byte 0x${byte.toString(16).padStart(2, '0')}`,
-      );
-    }
-    // CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
-    encoded += `\u001b[0;0;${byte};1;0;1_`;
-  }
-  return Buffer.from(encoded, 'ascii');
-}
+export { encodeWin32InputModeTerminalResponse } from '@termwright/pty';
 
 /** Loads and validates the native binding without creating an unowned PTY. */
 export function nativePtyAvailable(): boolean {
@@ -125,13 +117,27 @@ export function createNativePtyBackend(
           tree: platform === 'win32' ? 'conpty-console' : 'posix-process-group',
           outputDrain: 'eof',
         },
-        write(data): void {
+        write(data, kind): void {
           if (disposed) throw new Error('native PTY input is closed');
+          if (session.writeApplicationInput !== undefined) {
+            session.writeApplicationInput(data, kind ?? 'raw');
+            return;
+          }
+          if (platform === 'win32') {
+            throw new Error('native ConPTY session lacks application-input routing');
+          }
           session.write(data);
         },
-        writeTerminalResponse(data): void {
+        writeTerminalResponse(data) {
           if (disposed) throw new Error('native PTY input is closed');
-          session.write(platform === 'win32' ? encodeWin32InputModeTerminalResponse(data) : data);
+          if (session.writeTerminalResponse !== undefined) {
+            return session.writeTerminalResponse(data);
+          }
+          if (platform === 'win32') {
+            throw new Error('native ConPTY session lacks terminal-response provenance routing');
+          }
+          session.write(data);
+          return 'application-direct';
         },
         resize(columns, rows): void {
           if (!disposed) session.resize(columns, rows);

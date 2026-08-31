@@ -131,15 +131,18 @@ driver therefore observes the child's focus request rather than the host's.
 Application evidence remains available for embeddings that really do hide
 their input modes; it is not required merely because the platform is Windows.
 
-The host's Win32-input mode also applies in the opposite direction. Emulator
-answers to application queries cannot be written as raw VT bytes: OpenConsole
-would parse those bytes as keyboard input, potentially exposing the printable
-tail of a response to the application. The native driver backend therefore
-encodes each ASCII response byte as a synthesized `KEY_EVENT` using the public
-Win32 Input Mode sequence (`CSI Vk;Sc;Uc;Kd;Cs;Rc _`) with zero virtual/scan
-codes. Conhost then delivers `UnicodeChar` verbatim. User input remains on the
-ordinary input path and terminal responses remain excluded from public input
-events and action receipts.
+The host's Win32-input mode also applies in the opposite direction. Most
+application replies are encoded byte-for-byte as synthesized `KEY_EVENT`s via
+the public Win32 Input Mode sequence (`CSI Vk;Sc;Uc;Kd;Cs;Rc _`), avoiding a
+printable tail interpreted as keys. CPR is the deliberate exception. A
+swallowed Ctrl+Esc Win32 record primes OpenConsole's documented input parser;
+the first raw CPR follows it atomically. OpenConsole then consumes the report
+when its own cursor capture is pending, including after resize or unknown VT,
+and otherwise passes it byte-exact to the application. The split-safe startup
+grammar similarly identifies host DA1. User input remains on the ordinary path
+except for a physical lone Escape, which uses an explicit Win32 record after
+CPR arbitration has disabled OpenConsole's trailing-ESC heuristic. Terminal
+responses remain excluded from input events and action receipts.
 
 ## Floods: the pairing timeout was measuring our own backlog
 

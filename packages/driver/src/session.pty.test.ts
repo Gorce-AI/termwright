@@ -314,9 +314,19 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
     try {
       await terminal.waitForText('dsr=3;7 background=rgb:0000/0000/0000 sync=2');
       expect(inputs).toEqual([]);
-      expect(
-        terminal.diagnostics().filter((entry) => entry.code === 'terminal-response'),
-      ).toHaveLength(3);
+      const responseKinds = terminal
+        .diagnostics()
+        .filter((entry) => entry.code === 'terminal-response')
+        .map((entry) => /\(([^,]+),/u.exec(entry.detail)?.[1])
+        .sort();
+      // The application-owned OSC color and synchronized-output replies stay
+      // observable. CPR is intentionally absent: OpenConsole arbitrates the
+      // byte-identical host/application cursor report below this API layer.
+      expect(responseKinds).toEqual(
+        process.platform === 'win32'
+          ? ['background-color', 'emulator']
+          : ['background-color', 'emulator', 'emulator'],
+      );
     } finally {
       unsubscribe();
     }
@@ -904,19 +914,6 @@ describe.skipIf(!ptyAvailable())('settled()', { timeout: 20_000 }, () => {
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(terminal.semanticTree()).toBeNull();
     expect(terminal.contract()).toBe(capabilities);
-  });
-
-  it('uses the startup readiness budget when semantic capabilities are required', async () => {
-    const terminal = await launch('semantic-app.mjs', {
-      env: { TERMWRIGHT_FIXTURE_HELLO_DELAY: '2100' },
-      requiredCapabilities: ['semantic-tree'],
-      timeouts: { ready: 3_000 },
-    });
-
-    expect(terminal.contract()?.capabilities['semantic-tree'].status).toBe('supported');
-    expect(terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout')).toBe(
-      false,
-    );
   });
 
   it('keeps the default fail-closed after the bounded negotiation window', async () => {

@@ -277,6 +277,95 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     handle.dispose();
   });
 
+  it('lets ConPTY arbitrate runtime host and application CPR without leaking its primer', async () => {
+    const fixture = fileURLToPath(
+      new URL('../../../scripts/fixtures/conpty-observable-resize.ps1', import.meta.url),
+    );
+    const handle = spawnWindowsPty({
+      command: [
+        'powershell.exe',
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        fixture,
+      ],
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+
+    try {
+      // Complete OpenConsole's certified startup handshake causally. This is
+      // the one query whose provenance is established by the startup prefix.
+      expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
+      const startup = output.text();
+      const startupDa = startup.indexOf('\x1b[c');
+      const startupCpr = startup.lastIndexOf('\x1b[6n', startupDa);
+      if (startupCpr >= 0) {
+        expect(handle.writeTerminalResponse(Buffer.from('\x1b[1;1R', 'ascii'))).toBe(
+          'conpty-cpr-arbitrated',
+        );
+      }
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
+
+      expect(
+        await waitForMarker(handle, output, /RESIZE-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.resize(120, 40)).toBe(true);
+
+      // The fixture waits for the resize event and then calls
+      // GetConsoleScreenBufferInfo. The pinned runtime emits this standalone,
+      // host-owned DSR only then. There is no byte-level distinction between
+      // it and the application's later DSR; OpenConsole's capture state is the
+      // provenance authority.
+      expect(
+        await waitForMarker(handle, output, /RESIZE-READY[\s\S]*\x1b\[6n/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[3;17R', 'ascii'))).toBe(
+        'conpty-cpr-arbitrated',
+      );
+
+      // The runtime consumed that CPR and committed its coordinates. The same
+      // write primed CPR pass-through with a swallowed Ctrl+Esc W32IM record;
+      // the fixture proves no such record reached the application's queue,
+      // disables VT input, and emits its own DSR.
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /HOST-CPR:16,2;PRIMER-LEAK:false;APP-DSR:\x1b\[6n/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[9;17R', 'ascii'))).toBe(
+        'conpty-cpr-arbitrated',
+      );
+
+      expect(
+        await waitForMarker(handle, output, /APP-CPR:1b5b393b313752;ESC-READY/u, 10_000),
+        output.text(),
+      ).toBeDefined();
+      handle.writeApplicationInput(Buffer.from('\x1b', 'ascii'), 'key');
+
+      const [status] = await Promise.all([exited, handle.outputEnded]);
+      expect(status, output.text()).toEqual({ code: 0, signal: null });
+      expect(output.text()).toContain('RESIZED:120x40;HOST-CPR:16,2;PRIMER-LEAK:false');
+      expect(output.text()).toContain(';APP-CPR:1b5b393b313752');
+      expect(output.text()).toContain(';ESC:1b;VK:27;SCAN:1;REPEAT:1');
+      expect(handle.sawRealEof).toBe(true);
+    } finally {
+      handle.dispose();
+    }
+  });
+
   it('reports a missing or modified runtime while session creation fails closed', () => {
     const sourceAddon = windowsAddonPath();
     const sourceRoot = dirname(sourceAddon);

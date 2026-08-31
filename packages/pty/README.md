@@ -66,10 +66,17 @@ Win32-input `DECSET` sequences before bytes reach the driver. It preserves the
 optional startup cursor-position query, DA1, and every original child sequence,
 including an explicit disable followed by enable. The normalizer is split-safe
 and releases an incomplete candidate verbatim before authoritative EOF.
-The input side still honors the host's always-on Win32 Input Mode. Emulator
-query replies are therefore transported by `@termwright/driver` as synthesized
-Win32 `KEY_EVENT` records rather than raw bytes, preserving the response as
-terminal protocol instead of leaking its printable tail as application keys.
+The input side still honors the host's always-on Win32 Input Mode. Application
+replies are therefore transported as synthesized Win32 `KEY_EVENT` records,
+except for cursor-position reports: OpenConsole's public input parser consumes
+a raw CPR while synchronizing its own shadow cursor and otherwise passes that
+same raw CPR to the application. Startup host DA1/CPR ownership is identified
+by the split-safe control-plane grammar and answered raw. This preserves both
+runtime cursor recovery and application protocol without leaking printable
+tails as keys. After the parser has seen Win32 Input Mode, a lone raw `ESC`
+would remain a possible sequence prefix; the application-input seam therefore
+sends the physical Escape key as an explicit Win32 record while leaving raw,
+mouse, paste, and compound key bytes unchanged.
 Consequently terminal mode evidence describes requests made by the application,
 not modes ConPTY requires for its own control plane.
 

@@ -316,8 +316,8 @@ if (process.platform === 'win32') {
 
   // ResizePseudoConsole and the input pipe are independent channels. A public
   // WINDOW_BUFFER_SIZE_EVENT, followed by public geometry inspection in the
-  // child, is the causal acknowledgement. This tests the ConPTY contract below
-  // Node/Bun convenience APIs; no injected input or timing window is a barrier.
+  // child, is the causal acknowledgement. The terminal replies and lone key
+  // below use their dedicated transports; no timing window is a barrier.
   console.log('[pty-cert] observable-resize-win32');
   const resizeSession = pty.spawnPty({
     command: ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', process.env.TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE],
@@ -326,19 +326,77 @@ if (process.platform === 'win32') {
     rows: 24,
   });
   const resizeOutput = [];
-  resizeSession.onData((data) => resizeOutput.push(Buffer.from(data)));
   const resizing = { session: resizeSession, text: () => Buffer.concat(resizeOutput).toString('utf8') };
-  await waitForText(resizing, 'RESIZE-READY');
-  const resizeExited = new Promise((resolve) => resizeSession.onExit(resolve));
-  if (!resizeSession.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
-  const [resizeStatus] = await Promise.all([resizeExited, resizeSession.outputEnded]);
+  let resizeStatus;
+  resizeSession.onExit((status) => { resizeStatus = status; });
+  let startupCprAnswered = false;
+  let startupDaAnswered = false;
+  let runtimeCprAnswered = false;
+  let applicationCprAnswered = false;
+  let escapeSent = false;
+  let responseFailure;
+  let resizeStage = 'startup-handshake';
+  resizeSession.onData((data) => {
+    resizeOutput.push(Buffer.from(data));
+    const observed = resizing.text();
+    try {
+      const startupDa = observed.indexOf(controlEsc + '[c');
+      if (!startupDaAnswered && startupDa >= 0) {
+        const startupCpr = observed.lastIndexOf(controlEsc + '[6n', startupDa);
+        if (startupCpr >= 0 && !startupCprAnswered) {
+          resizeStage = 'startup-cpr';
+          const cprRoute = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[1;1R', 'ascii'));
+          if (cprRoute !== 'conpty-cpr-arbitrated') throw new Error('startup CPR used route ' + cprRoute);
+          startupCprAnswered = true;
+        }
+        resizeStage = 'startup-da1';
+        const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[?1;2c', 'ascii'));
+        if (route !== 'host-control') throw new Error('startup DA1 used route ' + route);
+        startupDaAnswered = true;
+      }
+      const ready = observed.indexOf('RESIZE-READY');
+      if (!runtimeCprAnswered && ready >= 0 && observed.indexOf(controlEsc + '[6n', ready) >= 0) {
+        resizeStage = 'runtime-host-cpr';
+        const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[3;17R', 'ascii'));
+        if (route !== 'conpty-cpr-arbitrated') throw new Error('runtime CPR used route ' + route);
+        runtimeCprAnswered = true;
+      }
+      if (!applicationCprAnswered && observed.includes(';APP-DSR:' + controlEsc + '[6n')) {
+        resizeStage = 'application-cpr';
+        const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[9;17R', 'ascii'));
+        if (route !== 'conpty-cpr-arbitrated') throw new Error('application CPR used route ' + route);
+        applicationCprAnswered = true;
+      }
+      if (!escapeSent && observed.includes(';APP-CPR:1b5b393b313752;ESC-READY')) {
+        resizeStage = 'physical-escape';
+        resizeSession.writeApplicationInput(Buffer.from(controlEsc, 'ascii'), 'key');
+        escapeSent = true;
+      }
+    } catch (error) {
+      responseFailure ??= error;
+      resizeSession.dispose();
+    }
+  });
+  const resizeWatchdog = startDiagnosticWatchdog(resizing, () => resizeStage);
+  try {
+    await Promise.race([waitForText(resizing, 'RESIZE-READY'), resizeWatchdog.failure]);
+    resizeStage = 'resize-acknowledgement';
+    if (!resizeSession.resize(120, 40)) throw new Error('installed ConPTY refused a valid resize');
+    await Promise.race([resizeSession.outputEnded, resizeWatchdog.failure]);
+  } finally {
+    resizeWatchdog.cancel();
+  }
   const resizeEvidence = resizing.text();
-  const resizeValid = resizeStatus.code === 0 &&
-    resizeEvidence.includes('RESIZED:120x40') && resizeSession.sawRealEof;
+  const resizeValid = responseFailure === undefined &&
+    startupDaAnswered && runtimeCprAnswered && applicationCprAnswered && escapeSent &&
+    resizeStatus?.code === 0 &&
+    resizeEvidence.includes('RESIZED:120x40;HOST-CPR:16,2;PRIMER-LEAK:false') &&
+    resizeEvidence.includes(';APP-CPR:1b5b393b313752') &&
+    resizeEvidence.includes(';ESC:1b;VK:27;SCAN:1;REPEAT:1') && resizeSession.sawRealEof;
   resizeSession.dispose();
   if (!resizeValid) {
-    throw new Error('Win32 did not publish the expected console geometry after resize: ' +
-      JSON.stringify({ status: resizeStatus, output: resizeEvidence }));
+    throw new Error('Win32 did not certify runtime/application CPR arbitration after resize: ' +
+      JSON.stringify({ status: resizeStatus, output: resizeEvidence, responseFailure: String(responseFailure ?? '') }));
   }
 
   console.log('[pty-cert] split-production-marker');
@@ -437,6 +495,25 @@ function waitForText({ session, text }, marker) {
       else reject(new Error('session ended before causal marker ' + JSON.stringify(marker)));
     }, reject);
   });
+}
+
+// This timeout is not evidence and never admits success. It only turns a
+// broken native causal seam into an attributable certification failure instead
+// of occupying a release runner forever.
+function startDiagnosticWatchdog({ session, text }, stage, timeoutMs = 30_000) {
+  let timer;
+  const failure = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error('installed ConPTY causal proof stalled: ' + JSON.stringify({
+        stage: stage(),
+        output: text(),
+      }));
+      reject(error);
+      try { session.dispose(); } catch {}
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  return { failure, cancel: () => clearTimeout(timer) };
 }
 
 // Certify the bounded input queue in the packed consumer install, on this
