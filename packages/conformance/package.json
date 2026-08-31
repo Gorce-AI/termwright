@@ -1,6 +1,6 @@
 {
   "name": "@termwright/conformance",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "generic/semantic/adversarial fixtures + adapter contract tests",
   "license": "MIT",
   "repository": {
