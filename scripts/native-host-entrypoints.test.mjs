@@ -365,12 +365,18 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'node-gyp rebuild --target="$node_version" --arch=${{ inputs.architecture }}',
     );
     expect(ptyPrebuildAction).toContain('--nodedir="$node_root"');
+    expect(ptyPrebuildAction).toContain(
+      'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
+    );
     expect(ptyPrebuildAction).toContain('node scripts/check-installed-pty.mjs "$install_dir"');
     expect(ptyPrebuildAction).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(releaseJobs.prebuilds).toContain("bun-version: '1.4.0'");
     expect(releaseJobs['certify-x64-on-arm64']).toContain('runs-on: windows-11-arm');
     expect(releaseJobs['certify-x64-on-arm64']).toContain('architecture: x64');
     expect(releaseJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
+    expect(releaseJobs['certify-x64-on-arm64']).toContain(
+      'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
+    );
     expect(releaseJobs['certify-x64-on-arm64']).toContain('certification-verdict-arm64-host.json');
     expect(releaseJobs.verify).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(releaseJobs.verify).toContain('certification-verdict-arm64-host.json');
@@ -381,6 +387,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(previewJobs.prebuilds).toContain('uses: ./.github/actions/build-pty-prebuild');
     expect(previewJobs['certify-x64-on-arm64']).toContain('runs-on: windows-11-arm');
     expect(previewJobs['certify-x64-on-arm64']).toContain('bun-windows-x64.zip');
+    expect(previewJobs['certify-x64-on-arm64']).toContain(
+      'pnpm --dir packages/protocol pack --pack-destination "$pack_dir"',
+    );
     expect(previewJobs['certify-x64-on-arm64']).toContain('certification-verdict-arm64-host.json');
     expect(previewJobs.preview).toContain('scripts/verify-windows-pty-verdict.mjs');
     expect(previewJobs.preview).toContain('certification-verdict-arm64-host.json');
