@@ -1,6 +1,6 @@
 {
   "name": "@termwright/run-history",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Transactional native Termwright run manifests and explicit history health",
   "license": "MIT",
   "repository": {
