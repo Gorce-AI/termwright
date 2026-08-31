@@ -34,6 +34,7 @@
     "test:examples": "node scripts/run-required-examples.mjs",
     "test:tview-race": "node scripts/certify-tview-screen-race.mjs",
     "test:go-toolexec": "pnpm --filter @termwright/probe-go run build && node scripts/certify-go-toolexec.mjs",
+    "test:manual-handoff": "node scripts/certify-manual-compatibility-handoff.mjs",
     "test:watch": "node packages/termwright-cli/dist/bin.js watch",
     "typecheck": "pnpm -r --filter=./packages/* --fail-if-no-match run typecheck",
     "format": "prettier --write .",

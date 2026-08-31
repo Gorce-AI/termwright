@@ -109,6 +109,8 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           compile-native-pty: 'true'
+      - name: Certify the real Git handoff contract
+        run: pnpm test:manual-handoff
       # The full catalogue includes OpenTUI's real bun:ffi process contract.
       # Pin Bun here too; relying on an incidental runner-image binary would
       # turn a supported-runtime row into an environment-dependent skip.
@@ -518,6 +520,8 @@ jobs:
       - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
+      - name: Certify the real Git handoff contract
+        run: pnpm test:manual-handoff
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: '1.4.0'

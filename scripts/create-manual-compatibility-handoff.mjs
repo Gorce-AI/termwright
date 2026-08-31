@@ -157,7 +157,7 @@ export async function createManualCompatibilityHandoff({
 
   const git = ownedGit(repository, signal);
   try {
-    return await createHandoff(
+    return await createHandoffWithGit(
       {
         destination,
         candidateRegistry,
@@ -174,7 +174,8 @@ export async function createManualCompatibilityHandoff({
   }
 }
 
-async function createHandoff(
+/** @internal Deterministic seam between Git effects and artifact assembly. */
+export async function createHandoffWithGit(
   { destination, candidateRegistry, publishPlan, verdicts, sourceRunId, sourceRunUrl, sourceSha },
   runGit,
 ) {

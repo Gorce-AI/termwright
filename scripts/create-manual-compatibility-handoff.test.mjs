@@ -2,77 +2,108 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import {
   checksumArtifactPath,
   createOwnedExecFile,
-  createManualCompatibilityHandoff,
+  createHandoffWithGit,
 } from './create-manual-compatibility-handoff.mjs';
 
 const hostIt = resourceAwareIt.resources({ hostPressure: 'exclusive' });
+const roots = [];
+const SOURCE_SHA = '1'.repeat(40);
+const OBJECT_SHA = '2'.repeat(40);
+const CHANGED = [
+  'compatibility/candidate-assessments.json',
+  'compatibility/certified-upstreams.json',
+];
+const BINARY_DELETION_PATCH = Buffer.from(
+  'diff --git a/compatibility/certified-upstreams.json b/compatibility/certified-upstreams.json\n' +
+    'GIT binary patch\n' +
+    'literal 4\nLc${NkWn<^!0O5@3\n\n' +
+    'diff --git a/compatibility/candidate-assessments.json b/compatibility/candidate-assessments.json\n' +
+    'deleted file mode 100644\n',
+);
 
-async function fixture(context) {
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'termwright-handoff-'));
-  const active = new Set();
-  const git = createOwnedExecFile('git', { signal: context.signal });
-  const track = (promise) => {
-    active.add(promise);
-    void promise.finally(() => active.delete(promise)).catch(() => undefined);
-    return promise;
-  };
-  const command = (commandName, args, cwd) => {
-    if (commandName !== 'git') throw new Error(`unexpected fixture command ${commandName}`);
-    return git.run(args, { cwd });
-  };
-  context.onTestFinished(async () => {
-    await Promise.allSettled([...active]);
-    await git.close();
-    await rm(root, { recursive: true, force: true });
-  });
-  const repository = join(root, 'repository');
+  roots.push(root);
   const inputs = join(root, 'inputs');
-  await mkdir(join(repository, 'compatibility'), { recursive: true });
   await mkdir(inputs);
-  await writeFile(join(repository, 'compatibility/certified-upstreams.json'), '{"old":true}\n');
-  await writeFile(join(repository, 'compatibility/candidate-assessments.json'), '{}\n');
   await writeFile(join(inputs, 'candidate-registry.json'), '{"candidates":[]}\n');
   await writeFile(join(inputs, 'publish-plan.json'), '{"issues":[]}\n');
   await mkdir(join(inputs, 'verdicts'));
-  await command('git', ['init', '-q'], repository);
-  await command('git', ['add', '.'], repository);
-  await command(
-    'git',
-    ['-c', 'user.email=test@example.com', '-c', 'user.name=Test', 'commit', '-qm', 'base'],
-    repository,
-  );
-  const { stdout: sourceSha } = await command('git', ['rev-parse', 'HEAD'], repository);
   return {
     root,
-    repository,
     inputs,
     handoff: join(root, 'handoff'),
-    sourceSha: sourceSha.trim(),
-    command,
-    track,
-    signal: context.signal,
+    sourceSha: SOURCE_SHA,
   };
 }
 
-async function create({ repository, inputs, handoff, sourceSha, track, signal }) {
-  return track(
-    createManualCompatibilityHandoff({
-      destination: handoff,
-      candidateRegistry: join(inputs, 'candidate-registry.json'),
-      publishPlan: join(inputs, 'publish-plan.json'),
-      verdicts: join(inputs, 'verdicts'),
+async function create(context, runGit, sourceSha = context.sourceSha) {
+  return createHandoffWithGit(
+    {
+      destination: context.handoff,
+      candidateRegistry: join(context.inputs, 'candidate-registry.json'),
+      publishPlan: join(context.inputs, 'publish-plan.json'),
+      verdicts: join(context.inputs, 'verdicts'),
       sourceRunId: '123',
       sourceRunUrl: 'https://github.com/gorce-ai/termwright/actions/runs/123',
       sourceSha,
-      repository,
-      signal,
-    }),
+    },
+    runGit,
   );
+}
+
+function scriptedGit(steps) {
+  const remaining = [...steps];
+  const calls = [];
+  const run = async (args, options = {}) => {
+    calls.push({ args, options });
+    const step = remaining.shift();
+    if (step === undefined) throw new Error(`unexpected Git command: ${args.join(' ')}`);
+    expect(args).toEqual(step.args);
+    if ('input' in step) expect(options.input).toEqual(step.input);
+    return {
+      stdout: step.stdout ?? (options.encoding === 'buffer' ? Buffer.alloc(0) : ''),
+      stderr: '',
+    };
+  };
+  return {
+    run,
+    calls,
+    expectComplete: () => expect(remaining).toEqual([]),
+  };
+}
+
+function changedGitScript({ objectSize = 4, patch = BINARY_DELETION_PATCH } = {}) {
+  const changedBytes = Buffer.from(`${CHANGED.join('\0')}\0`);
+  return scriptedGit([
+    { args: ['rev-parse', 'HEAD'], stdout: `${SOURCE_SHA}\n` },
+    { args: ['diff', '--name-only', '-z', 'HEAD'], stdout: changedBytes },
+    { args: ['ls-files', '-z', '--others', '--exclude-standard'], stdout: Buffer.alloc(0) },
+    { args: ['add', '-A', '--', ...CHANGED] },
+    { args: ['diff', '--cached', '--name-only', '-z', 'HEAD'], stdout: changedBytes },
+    {
+      args: ['ls-files', '--stage', '-z', '--', ...CHANGED],
+      stdout: Buffer.from(`100644 ${OBJECT_SHA} 0\tcompatibility/certified-upstreams.json\0`),
+    },
+    {
+      args: ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
+      input: `${OBJECT_SHA}\n`,
+      stdout: `${OBJECT_SHA} blob ${objectSize}\n`,
+    },
+    {
+      args: ['diff', '--cached', '--binary', '--full-index', 'HEAD'],
+      stdout: patch,
+    },
+  ]);
 }
 
 async function verifyChecksums(directory) {
@@ -131,86 +162,75 @@ describe('manual compatibility handoff', () => {
     }
   });
 
-  hostIt(
-    'packages an exact binary/deletion patch with verifiable tamper-evident checksums',
-    async (testContext) => {
-      const context = await changedFixture(testContext);
-      const result = await create(context);
-      expect(result.changed).toHaveLength(2);
-      expect(await readFile(join(context.handoff, 'changed-files.txt'), 'utf8')).toBe(
-        'compatibility/candidate-assessments.json\ncompatibility/certified-upstreams.json\n',
-      );
-      const patch = await readFile(join(context.handoff, 'reconciliation.patch'));
-      expect(patch.includes(Buffer.from('GIT binary patch'))).toBe(true);
-      expect(patch.includes(Buffer.from('deleted file mode'))).toBe(true);
-      await verifyChecksums(context.handoff);
-      expect(await readFile(join(context.handoff, 'SHA256SUMS'), 'utf8')).toContain(
-        'verdicts/SHA256SUMS',
-      );
-      await writeFile(join(context.handoff, 'publish-plan.json'), '{"tampered":true}\n');
-      await expect(verifyChecksums(context.handoff)).rejects.toThrow(/checksum mismatch/u);
-    },
-  );
-
-  hostIt('recreates the exact staged tree from its binary/deletion patch', async (testContext) => {
-    const context = await changedFixture(testContext);
-    await create(context);
-    const patch = await readFile(join(context.handoff, 'reconciliation.patch'));
-    const clone = join(context.root, 'clone');
-    await context.command('git', ['clone', '-q', context.repository, clone], context.root);
-    await writeFile(join(clone, 'handoff.patch'), patch);
-    await context.command('git', ['apply', '--index', '--binary', 'handoff.patch'], clone);
-    const { stdout: expectedTree } = await context.command(
-      'git',
-      ['write-tree'],
-      context.repository,
+  it('packages an exact binary/deletion patch with verifiable tamper-evident checksums', async () => {
+    const context = await changedFixture();
+    const git = changedGitScript();
+    const result = await create(context, git.run);
+    expect(result.changed).toHaveLength(2);
+    expect(await readFile(join(context.handoff, 'changed-files.txt'), 'utf8')).toBe(
+      'compatibility/candidate-assessments.json\ncompatibility/certified-upstreams.json\n',
     );
-    const { stdout: actualTree } = await context.command('git', ['write-tree'], clone);
-    expect(actualTree).toBe(expectedTree);
+    const patch = await readFile(join(context.handoff, 'reconciliation.patch'));
+    expect(patch.includes(Buffer.from('GIT binary patch'))).toBe(true);
+    expect(patch.includes(Buffer.from('deleted file mode'))).toBe(true);
+    await verifyChecksums(context.handoff);
+    expect(await readFile(join(context.handoff, 'SHA256SUMS'), 'utf8')).toContain(
+      'verdicts/SHA256SUMS',
+    );
+    await writeFile(join(context.handoff, 'publish-plan.json'), '{"tampered":true}\n');
+    await expect(verifyChecksums(context.handoff)).rejects.toThrow(/checksum mismatch/u);
+    git.expectComplete();
   });
 
-  hostIt(
-    'emits a truly empty change list and patch when reconciliation is unchanged',
-    async (testContext) => {
-      const context = await fixture(testContext);
-      const result = await create(context);
-      expect(result.changed).toHaveLength(0);
-      expect(await readFile(join(context.handoff, 'changed-files.txt'), 'utf8')).toBe('');
-      expect((await readFile(join(context.handoff, 'reconciliation.patch'))).length).toBe(0);
-      await verifyChecksums(context.handoff);
-    },
-  );
+  it('emits a truly empty change list and patch when reconciliation is unchanged', async () => {
+    const context = await fixture();
+    const git = scriptedGit([
+      { args: ['rev-parse', 'HEAD'], stdout: `${SOURCE_SHA}\n` },
+      { args: ['diff', '--name-only', '-z', 'HEAD'], stdout: Buffer.alloc(0) },
+      {
+        args: ['ls-files', '-z', '--others', '--exclude-standard'],
+        stdout: Buffer.alloc(0),
+      },
+      {
+        args: ['diff', '--cached', '--binary', '--full-index', 'HEAD'],
+        stdout: Buffer.alloc(0),
+      },
+    ]);
+    const result = await create(context, git.run);
+    expect(result.changed).toHaveLength(0);
+    expect(await readFile(join(context.handoff, 'changed-files.txt'), 'utf8')).toBe('');
+    expect((await readFile(join(context.handoff, 'reconciliation.patch'))).length).toBe(0);
+    await verifyChecksums(context.handoff);
+    git.expectComplete();
+  });
 
-  hostIt('binds the artifact to the exact repository HEAD', async (testContext) => {
-    const context = await fixture(testContext);
-    await expect(create({ ...context, sourceSha: 'a'.repeat(40) })).rejects.toThrow(
+  it('binds the artifact to the exact repository HEAD', async () => {
+    const context = await fixture();
+    const git = scriptedGit([{ args: ['rev-parse', 'HEAD'], stdout: `${SOURCE_SHA}\n` }]);
+    await expect(create(context, git.run, 'a'.repeat(40))).rejects.toThrow(
       /does not match repository HEAD/u,
     );
+    git.expectComplete();
   });
 
-  hostIt('rejects a forbidden change even when it was already staged', async (testContext) => {
-    const context = await fixture(testContext);
-    await writeFile(join(context.repository, 'README.md'), 'forbidden\n');
-    await context.command('git', ['add', 'README.md'], context.repository);
-    await expect(create(context)).rejects.toThrow(/forbidden path README\.md/u);
+  it('rejects a forbidden change even when it was already staged', async () => {
+    const context = await fixture();
+    const git = scriptedGit([
+      { args: ['rev-parse', 'HEAD'], stdout: `${SOURCE_SHA}\n` },
+      { args: ['diff', '--name-only', '-z', 'HEAD'], stdout: Buffer.from('README.md\0') },
+      { args: ['ls-files', '-z', '--others', '--exclude-standard'], stdout: Buffer.alloc(0) },
+    ]);
+    await expect(create(context, git.run)).rejects.toThrow(/forbidden path README\.md/u);
+    git.expectComplete();
   });
 
-  hostIt(
-    'rejects an already-staged regular file above the per-file safety bound',
-    async (testContext) => {
-      const context = await fixture(testContext);
-      await writeFile(
-        join(context.repository, 'compatibility/certified-upstreams.json'),
-        Buffer.alloc(2 * 1024 * 1024 + 1),
-      );
-      await context.command(
-        'git',
-        ['add', 'compatibility/certified-upstreams.json'],
-        context.repository,
-      );
-      await expect(create(context)).rejects.toThrow(/2 MiB safety bound/u);
-    },
-  );
+  it('rejects an already-staged regular file above the per-file safety bound', async () => {
+    const context = await fixture();
+    const git = changedGitScript({ objectSize: 2 * 1024 * 1024 + 1 });
+    await expect(create(context, git.run)).rejects.toThrow(/2 MiB safety bound/u);
+    // Validation rejects the oversized staged object before asking Git for a patch.
+    expect(git.calls.at(-1)?.args[0]).toBe('cat-file');
+  });
 
   it('normalizes Windows separators while rejecting unsafe literal artifact names', () => {
     expect(checksumArtifactPath('verdicts\\result.json', '\\')).toBe('verdicts/result.json');
@@ -223,13 +243,8 @@ describe('manual compatibility handoff', () => {
   });
 });
 
-async function changedFixture(testContext) {
-  const context = await fixture(testContext);
+async function changedFixture() {
+  const context = await fixture();
   await writeFile(join(context.inputs, 'verdicts/SHA256SUMS'), 'nested verdict material\n');
-  await writeFile(
-    join(context.repository, 'compatibility/certified-upstreams.json'),
-    Buffer.from([0, 1, 2, 255]),
-  );
-  await rm(join(context.repository, 'compatibility/candidate-assessments.json'));
   return context;
 }
