@@ -5,9 +5,11 @@ import { arch, platform, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 
 const run = promisify(execFile);
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 const verifier = fileURLToPath(
   new URL('../packages/conformance/scripts/verify-tview-fixture.mjs', import.meta.url),
 );

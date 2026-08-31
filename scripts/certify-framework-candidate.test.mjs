@@ -7,7 +7,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
-import { describe, expect, it } from 'vitest';
+import { describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import {
   assertCandidateSemanticSession,
   assertRustTestDiscovered,
@@ -33,6 +34,7 @@ import {
 
 const exec = promisify(execFile);
 const requireInk = createRequire(new URL('../packages/probe-ink/package.json', import.meta.url));
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 function tarEntry(name, contents) {
   const header = Buffer.alloc(512);

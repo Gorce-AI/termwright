@@ -758,6 +758,28 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(candidateUnit).toContain('in one toolchain transaction');
     expect(candidateUnit).not.toMatch(/exec\(['"]go['"]/u);
 
+    const hostPressureUnits = await Promise.all(
+      [
+        './aggregate-framework-candidate-verdicts.test.mjs',
+        './certify-framework-candidate.test.mjs',
+        './certify-upstream-patches.test.mjs',
+        './check-npm-release-readiness.test.mjs',
+        './check-prebuild.test.mjs',
+        './compare-paired-performance.test.mjs',
+        './conformance-tview-fixture.test.mjs',
+        './discover-framework-candidates.test.mjs',
+        './package-subpath-exports.test.mjs',
+        './performance-harness-fingerprint.test.mjs',
+        './test-support/immutable-build-inputs.test.mjs',
+      ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
+    );
+    for (const source of hostPressureUnits) {
+      expect(source).toMatch(
+        /const it = resourceAwareIt\.resources\(\{\s*hostPressure:\s*['"]exclusive['"]\s*\}\)/u,
+      );
+      expect(source).not.toMatch(/import\s*\{[^}]*\bit\b[^}]*\}\s*from\s*['"]vitest['"]/u);
+    }
+
     const handoffTest = await readFile(
       new URL('./create-manual-compatibility-handoff.test.mjs', import.meta.url),
       'utf8',

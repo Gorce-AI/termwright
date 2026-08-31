@@ -3,7 +3,8 @@ import { cp, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/pro
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import {
   fingerprintPerformanceHarness,
   PERFORMANCE_HARNESS_FILES,
@@ -11,6 +12,7 @@ import {
 } from './performance-harness-fingerprint.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 const temporary = [];
 
 afterEach(async () => {

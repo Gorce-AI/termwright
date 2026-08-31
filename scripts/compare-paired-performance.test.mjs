@@ -3,7 +3,8 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, vi } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 
 import {
   capturePerformanceBaseline,
@@ -36,6 +37,7 @@ const collector = new URL('./collect-quality-performance.mjs', import.meta.url);
 const referenceSha = 'a'.repeat(40);
 const candidateSha = 'b'.repeat(40);
 let sampleSequence = 0;
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));

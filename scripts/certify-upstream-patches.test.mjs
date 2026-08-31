@@ -2,7 +2,8 @@ import { appendFile, cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
 import {
   CertificationError,
   assertDeterministicRuns,
@@ -19,6 +20,7 @@ import {
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const scratch = [];
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 afterEach(async () => {
   await Promise.all(scratch.splice(0).map((path) => rm(path, { recursive: true, force: true })));

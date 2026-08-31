@@ -2,12 +2,15 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it as resourceAwareIt } from '../../packages/resource-broker/src/vitest.ts';
 import {
   verifyImmutableWorkspaceBuild,
   writeImmutableBuildManifest,
 } from '../immutable-build-manifest.mjs';
 import { requireImmutableBuildInputs } from './immutable-build-inputs.mjs';
+
+const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
 
 describe('immutable workspace build inputs', () => {
   const temporaryDirectories = [];
