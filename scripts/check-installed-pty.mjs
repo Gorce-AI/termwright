@@ -115,6 +115,11 @@ const attachHostControlResponder = (session, text) => {
   session.onData(answer);
   answer();
 };
+const closeOwnedInputAfterExit = (session) => {
+  if (process.platform !== 'win32' || session.closeInput === undefined) return;
+  session.onExit(() => session.closeInput());
+};
+closeOwnedInputAfterExit(handle);
 attachHostControlResponder(handle, () => Buffer.concat(chunks).toString('utf8'));
 const exited = new Promise((resolve) => handle.onExit(resolve));
 const [status] = await Promise.all([exited, handle.outputEnded]);
@@ -144,6 +149,7 @@ const collect = (source, executable = process.execPath) => {
   const output = [];
   session.onData((data) => output.push(Buffer.from(data)));
   const collected = { session, output, text: () => Buffer.concat(output).toString('utf8') };
+  closeOwnedInputAfterExit(session);
   attachHostControlResponder(session, collected.text);
   return collected;
 };
@@ -200,6 +206,7 @@ if (process.platform === 'win32') {
   const legacyOutput = [];
   legacySession.onData((data) => legacyOutput.push(Buffer.from(data)));
   const legacy = { session: legacySession, text: () => Buffer.concat(legacyOutput).toString('utf8') };
+  closeOwnedInputAfterExit(legacySession);
   attachHostControlResponder(legacySession, legacy.text);
   await legacy.session.outputEnded;
   const legacyBytes = legacy.text();
@@ -232,6 +239,7 @@ if (process.platform === 'win32') {
   });
   const inactiveOutput = [];
   inactiveSession.onData((data) => inactiveOutput.push(Buffer.from(data)));
+  closeOwnedInputAfterExit(inactiveSession);
   attachHostControlResponder(inactiveSession, () => Buffer.concat(inactiveOutput).toString('utf8'));
   await inactiveSession.outputEnded;
   const inactiveBytes = Buffer.concat(inactiveOutput).toString('utf8');
@@ -259,6 +267,7 @@ if (process.platform === 'win32') {
     });
     const markerOutput = [];
     markerSession.onData((data) => markerOutput.push(Buffer.from(data)));
+    closeOwnedInputAfterExit(markerSession);
     attachHostControlResponder(markerSession, () => Buffer.concat(markerOutput).toString('utf8'));
     const markerExited = new Promise((resolve) => markerSession.onExit(resolve));
     const [markerStatus] = await Promise.all([markerExited, markerSession.outputEnded]);
@@ -364,6 +373,7 @@ if (process.platform === 'win32') {
   const resizing = { session: resizeSession, text: () => Buffer.concat(resizeOutput).toString('utf8') };
   let resizeStatus;
   resizeSession.onExit((status) => { resizeStatus = status; });
+  closeOwnedInputAfterExit(resizeSession);
   let startupDaAnswered = false;
   const hostCursorAnswered = new Set();
   let runtimeHostCursorAnswered = false;
