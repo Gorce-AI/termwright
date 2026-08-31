@@ -140,6 +140,13 @@ function hostCursorResponse(payload: string, row: number, column: number): Buffe
   return Buffer.from(encodeConPtyHostCursorResponse(request, row, column), 'ascii');
 }
 
+function win32InputRecordCommand(command: 'B' | 'C' | 'T'): Buffer {
+  // This fixture consumes ReadConsoleInputW records with VT input disabled.
+  // Sending uppercase text through ConPTY's character path would synthesize
+  // an additional Shift record, so express the one record under test directly.
+  return Buffer.from(`\x1b[0;0;${command.charCodeAt(0)};1;0;1_`, 'ascii');
+}
+
 function windowsAddonPath(): string {
   const require = createRequire(import.meta.url);
   const resolved = windowsCandidatePaths(process.arch)
@@ -512,7 +519,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       const [request] = requests;
       expect(request).toBeDefined();
 
-      handle.writeApplicationInput(Buffer.from('T', 'ascii'), 'key');
+      handle.write(win32InputRecordCommand('T'));
       expect(
         await waitForMarker(handle, output, /ALT-WAIT-RETURNED:ok;STALE-READY/u, 10_000),
         output.text(),
@@ -520,7 +527,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(handle.writeTerminalResponse(hostCursorResponse(request!, 5, 13))).toBe(
         'host-control',
       );
-      handle.writeApplicationInput(Buffer.from('C', 'ascii'), 'key');
+      handle.write(win32InputRecordCommand('C'));
 
       const [status] = await Promise.all([exited, handle.outputEnded]);
       expect(status, output.text()).toEqual({ code: 0, signal: null });
@@ -598,7 +605,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 9, 41))).toBe(
         'host-control',
       );
-      handle.writeApplicationInput(Buffer.from('C', 'ascii'), 'key');
+      handle.write(win32InputRecordCommand('C'));
 
       const [status] = await Promise.all([exited, handle.outputEnded]);
       expect(status, output.text()).toEqual({ code: 0, signal: null });
@@ -661,7 +668,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       const [firstRequest] = runtimeHostCursorRequests(output.text(), 'PHYSICAL-A-READY');
       expect(firstRequest).toBeDefined();
 
-      handle.writeApplicationInput(Buffer.from('B', 'ascii'), 'key');
+      handle.write(win32InputRecordCommand('B'));
       expect(
         await waitForMarker(handle, output, /PHYSICAL-B-READY/u, 10_000),
         output.text(),
@@ -748,7 +755,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         output.text(),
       ).toBeDefined();
 
-      handle.writeApplicationInput(Buffer.from('B', 'ascii'), 'key');
+      handle.write(win32InputRecordCommand('B'));
       expect(
         await waitForMarker(handle, output, /EOF-B-ALT-READY/u, 10_000),
         output.text(),
