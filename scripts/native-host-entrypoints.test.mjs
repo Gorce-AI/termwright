@@ -68,6 +68,31 @@ function expectCommandBefore(source, prerequisite, dependent) {
 }
 
 describe('the native host is the only Termwright test entrypoint', () => {
+  it('uses a causal marker handshake without Windows named-pipe half-close', async () => {
+    const child = await readFile(
+      new URL('./fixtures/conpty-console-marker.mjs', import.meta.url),
+      'utf8',
+    );
+    const parent = await readFile(
+      new URL('./fixtures/conpty-console-marker.ps1', import.meta.url),
+      'utf8',
+    );
+    const nativeTest = await readFile(
+      new URL('../packages/pty/src/windows-native.win.test.ts', import.meta.url),
+      'utf8',
+    );
+
+    expect(child).toContain("socket.write('DONE\\n');");
+    expect(child).toContain("} else if (command === 'CLOSE') {");
+    expect(child).toContain("socket.write('CLOSED\\n', () => {");
+    expect(child).toContain('server.close();');
+    expect(child).not.toMatch(/^\s*socket\.end\(/mu);
+    expect(parent).toContain('$writer.WriteLine("CLOSE")');
+    expect(parent).toContain('$reader.ReadLine() -ne "CLOSED"');
+    expect(nativeTest).toContain('onTestFinished(() => handle.dispose());');
+    expect(nativeTest).toContain('spawnWindowsPty as spawnUnownedWindowsPty');
+  });
+
   it('parses the exact packed PTY certification payload', async () => {
     const source = await readFile(new URL('./check-installed-pty.mjs', import.meta.url), 'utf8');
     expect(() =>
