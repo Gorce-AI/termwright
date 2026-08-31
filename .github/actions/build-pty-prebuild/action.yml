@@ -31,8 +31,12 @@ runs:
           test -f "$node_root/include/node/node.h"
           pnpm exec node-gyp rebuild --nodedir="$node_root" --arch=${{ inputs.architecture }}
         fi
-    - run: pnpm --filter @termwright/pty build
+    - name: Build the protocol before the PTY package
       shell: bash
+      run: |
+        set -euo pipefail
+        pnpm --filter @termwright/protocol build
+        pnpm --filter @termwright/pty build
     - name: Place and verify the native package
       shell: bash
       run: |
