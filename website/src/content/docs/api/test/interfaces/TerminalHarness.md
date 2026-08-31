@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalHarness
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:102
+Defined in: driver/dist/session-C3dAmRMS.d.ts:102
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:102
 
 > `readonly` **events**: `SessionEvents`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:188
+Defined in: driver/dist/session-C3dAmRMS.d.ts:188
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:188
 
 > `readonly` **exit**: `Promise`\<`ExitStatus`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:209
+Defined in: driver/dist/session-C3dAmRMS.d.ts:209
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:209
 
 > `readonly` **keyboard**: `Keyboard`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:109
+Defined in: driver/dist/session-C3dAmRMS.d.ts:109
 
 One physical keyboard implementation. Convenience methods delegate here.
 
@@ -45,7 +45,7 @@ One physical keyboard implementation. Convenience methods delegate here.
 
 > `readonly` **mouse**: `Mouse`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:111
+Defined in: driver/dist/session-C3dAmRMS.d.ts:111
 
 One physical mouse implementation. Locator actions delegate here after planning.
 
@@ -55,7 +55,7 @@ One physical mouse implementation. Locator actions delegate here after planning.
 
 > `readonly` **scrollback**: `ScrollbackApi`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:186
+Defined in: driver/dist/session-C3dAmRMS.d.ts:186
 
 ***
 
@@ -63,7 +63,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:186
 
 > `readonly` **selection**: `SelectionApi`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:187
+Defined in: driver/dist/session-C3dAmRMS.d.ts:187
 
 ***
 
@@ -71,7 +71,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:187
 
 > `readonly` **sessionId**: `string`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:103
+Defined in: driver/dist/session-C3dAmRMS.d.ts:103
 
 ***
 
@@ -79,7 +79,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:103
 
 > `readonly` **shell**: `ShellApi`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:107
+Defined in: driver/dist/session-C3dAmRMS.d.ts:107
 
 Shell command boundaries and prompt state when the child emits OSC 133.
 
@@ -89,7 +89,7 @@ Shell command boundaries and prompt state when the child emits OSC 133.
 
 > `readonly` **terminalProfile**: `string`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:105
+Defined in: driver/dist/session-C3dAmRMS.d.ts:105
 
 Immutable terminal profile used to decode the very first PTY byte.
 
@@ -99,7 +99,7 @@ Immutable terminal profile used to decode the very first PTY byte.
 
 > `readonly` **terminalState**: `TerminalState`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:115
+Defined in: driver/dist/session-C3dAmRMS.d.ts:115
 
 Emulator facts captured together at the current screen revision.
 
@@ -109,7 +109,7 @@ Emulator facts captured together at the current screen revision.
 
 > `readonly` **window**: `TerminalWindow`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:113
+Defined in: driver/dist/session-C3dAmRMS.d.ts:113
 
 Terminal-window focus reports, distinct from semantic element focus.
 
@@ -119,7 +119,7 @@ Terminal-window focus reports, distinct from semantic element focus.
 
 > **appLogs**(): readonly `AppLogEvent`[]
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:200
+Defined in: driver/dist/session-C3dAmRMS.d.ts:200
 
 Bounded, oldest-first application-log history, including entries emitted
 while `launchTerminal()` was still starting. Consumers should subscribe to
@@ -135,7 +135,7 @@ readonly `AppLogEvent`[]
 
 > `optional` **bindOperationBudget**(`budget`): `void`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:117
+Defined in: driver/dist/session-C3dAmRMS.d.ts:117
 
 Binds one attempt-wide budget before any user operation starts.
 
@@ -155,7 +155,7 @@ Binds one attempt-wide budget before any user operation starts.
 
 > **cell**(`pos`): `CellSnapshot`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:140
+Defined in: driver/dist/session-C3dAmRMS.d.ts:140
 
 #### Parameters
 
@@ -179,7 +179,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:140
 
 > **checkpoint**(): `ObservationStamp`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:121
+Defined in: driver/dist/session-C3dAmRMS.d.ts:121
 
 Atomic identity of the currently committed terminal/semantic observation.
 
@@ -193,7 +193,7 @@ Atomic identity of the currently committed terminal/semantic observation.
 
 > **close**(): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:208
+Defined in: driver/dist/session-C3dAmRMS.d.ts:208
 
 Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
@@ -207,7 +207,7 @@ Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
 > **contract**(): `EffectiveSessionContract` \| `null`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:119
+Defined in: driver/dist/session-C3dAmRMS.d.ts:119
 
 Frozen negotiated contract, or null until negotiation has completed.
 
@@ -221,7 +221,7 @@ Frozen negotiated contract, or null until negotiation has completed.
 
 > **crashReport**(): `CrashReport` \| `null`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:206
+Defined in: driver/dist/session-C3dAmRMS.d.ts:206
 
 What the session knew when the program died unexpectedly, or `null` — for a
 live session, a clean exit, or one the harness asked for via `close()` or
@@ -237,7 +237,7 @@ live session, a clean exit, or one the harness asked for via `close()` or
 
 > **diagnostics**(): readonly `SessionDiagnostic`[]
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:194
+Defined in: driver/dist/session-C3dAmRMS.d.ts:194
 
 Bounded, oldest-first log of what the session decided behind the scenes:
 dropped or superseded revisions, unverified markers, adapter negotiation,
@@ -253,7 +253,7 @@ readonly `SessionDiagnostic`[]
 
 > **getByLabel**(`text`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:145
+Defined in: driver/dist/session-C3dAmRMS.d.ts:145
 
 #### Parameters
 
@@ -277,7 +277,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:145
 
 > **getByRole**(`role`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:144
+Defined in: driver/dist/session-C3dAmRMS.d.ts:144
 
 #### Parameters
 
@@ -299,7 +299,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:144
 
 > **getByScreenText**(`text`, `opts?`): [`ScreenLocator`](../screenlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:151
+Defined in: driver/dist/session-C3dAmRMS.d.ts:151
 
 Physical terminal-grid text, optionally narrowed by occurrence or style.
 
@@ -323,7 +323,7 @@ Physical terminal-grid text, optionally narrowed by occurrence or style.
 
 > **getByTestId**(`testId`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:152
+Defined in: driver/dist/session-C3dAmRMS.d.ts:152
 
 #### Parameters
 
@@ -341,7 +341,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:152
 
 > **getByText**(`text`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:149
+Defined in: driver/dist/session-C3dAmRMS.d.ts:149
 
 Semantic text only. Never falls back to the terminal grid.
 
@@ -365,7 +365,7 @@ Semantic text only. Never falls back to the terminal grid.
 
 > **locator**(`selector`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:154
+Defined in: driver/dist/session-C3dAmRMS.d.ts:154
 
 Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'.
 
@@ -387,7 +387,7 @@ Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'.
 
 > **locatorForRef**(`ref`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:161
+Defined in: driver/dist/session-C3dAmRMS.d.ts:161
 
 Rebuilds a locator from a ref returned by a resolved target.
 (`'semantic:n8@42'` for a semantic node, `'screen:r,c,w,h@7'` for a grid match).
@@ -408,7 +408,7 @@ superseded raises `stale-snapshot`.
 
 > **locatorForRef**(`ref`): [`ScreenLocator`](../screenlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:162
+Defined in: driver/dist/session-C3dAmRMS.d.ts:162
 
 ##### Parameters
 
@@ -424,7 +424,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:162
 
 > **locatorForRef**(`ref`): [`SemanticLocator`](../semanticlocator/) \| [`ScreenLocator`](../screenlocator/)
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:163
+Defined in: driver/dist/session-C3dAmRMS.d.ts:163
 
 ##### Parameters
 
@@ -442,7 +442,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:163
 
 > **paste**(`text`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:166
+Defined in: driver/dist/session-C3dAmRMS.d.ts:166
 
 #### Parameters
 
@@ -460,7 +460,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:166
 
 > **press**(`keys`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:164
+Defined in: driver/dist/session-C3dAmRMS.d.ts:164
 
 #### Parameters
 
@@ -478,7 +478,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:164
 
 > **resize**(`size`): `Promise`\<`ResizeReceipt`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:168
+Defined in: driver/dist/session-C3dAmRMS.d.ts:168
 
 #### Parameters
 
@@ -502,7 +502,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:168
 
 > **screen**(): `ScreenSnapshot`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:138
+Defined in: driver/dist/session-C3dAmRMS.d.ts:138
 
 #### Returns
 
@@ -514,7 +514,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:138
 
 > **semanticTree**(): `SemanticSnapshot` \| `null`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:139
+Defined in: driver/dist/session-C3dAmRMS.d.ts:139
 
 #### Returns
 
@@ -526,7 +526,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:139
 
 > **settled**(`opts?`): `Promise`\<`EffectiveSessionContract`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:137
+Defined in: driver/dist/session-C3dAmRMS.d.ts:137
 
 Waits for the one frozen Effective Session Contract and, for a semantic
 session, for the first paired tree. There is no provisional capability API.
@@ -547,7 +547,7 @@ session, for the first paired tree. There is no provisional capability API.
 
 > **signal**(`sig`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:172
+Defined in: driver/dist/session-C3dAmRMS.d.ts:172
 
 #### Parameters
 
@@ -565,7 +565,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:172
 
 > **title**(): `string`
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:184
+Defined in: driver/dist/session-C3dAmRMS.d.ts:184
 
 #### Returns
 
@@ -577,7 +577,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:184
 
 > **type**(`text`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:165
+Defined in: driver/dist/session-C3dAmRMS.d.ts:165
 
 #### Parameters
 
@@ -595,7 +595,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:165
 
 > **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:123
+Defined in: driver/dist/session-C3dAmRMS.d.ts:123
 
 Wait until a committed observation newer than `after` is available.
 
@@ -615,7 +615,7 @@ Wait until a committed observation newer than `after` is available.
 
 > **waitForCommittedObservation**(`opts?`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:132
+Defined in: driver/dist/session-C3dAmRMS.d.ts:132
 
 Waits until currently observable parser work, semantic frame pairing and
 provider-evidence invalidation have committed. This cannot predict a
@@ -638,7 +638,7 @@ driver, and it is not a quiet/global-idle heuristic.
 
 > **waitForExit**(`opts?`): `Promise`\<`ExitStatus`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:183
+Defined in: driver/dist/session-C3dAmRMS.d.ts:183
 
 #### Parameters
 
@@ -656,7 +656,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:183
 
 > **waitForQuiet**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:178
+Defined in: driver/dist/session-C3dAmRMS.d.ts:178
 
 Heuristic only: waits for a stated interval with no screen or semantic change.
 
@@ -676,7 +676,7 @@ Heuristic only: waits for a stated interval with no screen or semantic change.
 
 > **waitForRender**(`opts`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:174
+Defined in: driver/dist/session-C3dAmRMS.d.ts:174
 
 #### Parameters
 
@@ -694,7 +694,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:174
 
 > **waitForShellPrompt**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:182
+Defined in: driver/dist/session-C3dAmRMS.d.ts:182
 
 Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
@@ -714,7 +714,7 @@ Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
 > **waitForText**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:173
+Defined in: driver/dist/session-C3dAmRMS.d.ts:173
 
 #### Parameters
 
@@ -736,7 +736,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:173
 
 > **waitForTitle**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:185
+Defined in: driver/dist/session-C3dAmRMS.d.ts:185
 
 #### Parameters
 
@@ -758,7 +758,7 @@ Defined in: driver/dist/session-nEPV4zgY.d.ts:185
 
 > **write**(`bytes`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-nEPV4zgY.d.ts:167
+Defined in: driver/dist/session-C3dAmRMS.d.ts:167
 
 #### Parameters
 
