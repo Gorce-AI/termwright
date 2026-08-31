@@ -66,6 +66,10 @@ Win32-input `DECSET` sequences before bytes reach the driver. It preserves the
 optional startup cursor-position query, DA1, and every original child sequence,
 including an explicit disable followed by enable. The normalizer is split-safe
 and releases an incomplete candidate verbatim before authoritative EOF.
+The input side still honors the host's always-on Win32 Input Mode. Emulator
+query replies are therefore transported by `@termwright/driver` as synthesized
+Win32 `KEY_EVENT` records rather than raw bytes, preserving the response as
+terminal protocol instead of leaking its printable tail as application keys.
 Consequently terminal mode evidence describes requests made by the application,
 not modes ConPTY requires for its own control plane.
 

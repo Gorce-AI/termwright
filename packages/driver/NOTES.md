@@ -131,6 +131,16 @@ driver therefore observes the child's focus request rather than the host's.
 Application evidence remains available for embeddings that really do hide
 their input modes; it is not required merely because the platform is Windows.
 
+The host's Win32-input mode also applies in the opposite direction. Emulator
+answers to application queries cannot be written as raw VT bytes: OpenConsole
+would parse those bytes as keyboard input, potentially exposing the printable
+tail of a response to the application. The native driver backend therefore
+encodes each ASCII response byte as a synthesized `KEY_EVENT` using the public
+Win32 Input Mode sequence (`CSI Vk;Sc;Uc;Kd;Cs;Rc _`) with zero virtual/scan
+codes. Conhost then delivers `UnicodeChar` verbatim. User input remains on the
+ordinary input path and terminal responses remain excluded from public input
+events and action receipts.
+
 ## Floods: the pairing timeout was measuring our own backlog
 
 A revision's two halves reach the driver by unequal roads. The tree arrives on

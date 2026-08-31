@@ -52,28 +52,26 @@ const (
 )
 
 type termwrightProbeState struct {
-	client    *protocol.Client
-	publisher atomic.Pointer[protocol.PublicationQueue]
+	client      *protocol.Client
+	publisher   atomic.Pointer[protocol.PublicationQueue]
+	publication atomic.Pointer[termwrightPublication]
 
-	ids              map[string]string
-	nextID           int
-	rendering        atomic.Bool
-	frameMu          sync.Mutex
-	nextFrame        atomic.Uint64
-	latest           map[*cursedRenderer]*termwrightStagedFrame
-	queued           map[*cursedRenderer]*termwrightStagedFrame
-	published        map[*cursedRenderer]uint64
-	ready            chan struct{}
-	shutdown         sync.Once
-	recoveryStopOnce sync.Once
-	recoveryWorkers  sync.WaitGroup
-	recoveryStop     chan struct{}
-	recovering       map[*cursedRenderer]bool
-	closed           atomic.Bool
-	frames           atomic.Uint64
-	dropped          atomic.Uint64
-	failed           atomic.Bool
-	failure          atomic.Pointer[termwrightFailure]
+	ids               map[string]string
+	nextID            int
+	rendering         atomic.Bool
+	nextFrame         atomic.Uint64
+	renderers         sync.Map
+	ready             chan struct{}
+	shutdown          sync.Once
+	recoveryStopOnce  sync.Once
+	recoveryAdmission sync.RWMutex
+	recoveryWorkers   sync.WaitGroup
+	recoveryStop      chan struct{}
+	closed            atomic.Bool
+	frames            atomic.Uint64
+	dropped           atomic.Uint64
+	failed            atomic.Bool
+	failure           atomic.Pointer[termwrightFailure]
 }
 
 type termwrightFailure struct {
@@ -81,11 +79,28 @@ type termwrightFailure struct {
 	message string
 }
 
+type termwrightPublication struct {
+	try            func(*protocol.Snapshot) (string, error)
+	readyAfterDrop func() <-chan struct{}
+	readyAfterBusy func() <-chan struct{}
+}
+
 type termwrightStagedFrame struct {
 	sequence uint64
 	program  *Program
 	view     View
 	snapshot *protocol.Snapshot
+}
+
+// termwrightRendererState isolates admission and recovery bookkeeping per
+// renderer. The flush hook already owns cursedRenderer.mu; it must never
+// contend with an unrelated renderer or a recovery worker after terminal
+// output has been committed.
+type termwrightRendererState struct {
+	latest     atomic.Pointer[termwrightStagedFrame]
+	queued     atomic.Pointer[termwrightStagedFrame]
+	published  atomic.Uint64
+	recovering atomic.Bool
 }
 
 type termwrightRecoveryMsg struct {
@@ -153,12 +168,8 @@ func newTermwrightProbe() *termwrightProbeState {
 	p := &termwrightProbeState{
 		client:       client,
 		ids:          make(map[string]string),
-		latest:       make(map[*cursedRenderer]*termwrightStagedFrame),
-		queued:       make(map[*cursedRenderer]*termwrightStagedFrame),
-		published:    make(map[*cursedRenderer]uint64),
 		ready:        make(chan struct{}),
 		recoveryStop: make(chan struct{}),
-		recovering:   make(map[*cursedRenderer]bool),
 	}
 	go func() {
 		defer close(p.ready)
@@ -170,6 +181,11 @@ func newTermwrightProbe() *termwrightProbeState {
 			return
 		}
 		p.publisher.Store(publisher)
+		p.publication.Store(&termwrightPublication{
+			try:            publisher.TryPublish,
+			readyAfterDrop: publisher.ReadyAfterDrop,
+			readyAfterBusy: publisher.ReadyAfterBusy,
+		})
 		if p.failed.Load() {
 			p.flushSemanticFailure()
 			return
@@ -179,23 +195,35 @@ func newTermwrightProbe() *termwrightProbeState {
 	return p
 }
 
+func (p *termwrightProbeState) rendererState(renderer *cursedRenderer) *termwrightRendererState {
+	if renderer == nil {
+		return nil
+	}
+	if state, ok := p.renderers.Load(renderer); ok {
+		return state.(*termwrightRendererState)
+	}
+	state := &termwrightRendererState{}
+	actual, _ := p.renderers.LoadOrStore(renderer, state)
+	return actual.(*termwrightRendererState)
+}
+
 func (p *termwrightProbeState) publish(renderer *cursedRenderer, writer io.Writer, frame *termwrightStagedFrame) bool {
 	if p.failed.Load() {
 		return false
 	}
-	publisher := p.publisher.Load()
-	if publisher == nil {
+	publication := p.publication.Load()
+	if publication == nil {
 		return false
 	}
-	marker, err := publisher.TryPublish(frame.snapshot)
+	marker, err := publication.try(frame.snapshot)
 	if err != nil || marker == "" {
 		p.dropped.Add(1)
 		if errors.Is(err, protocol.ErrPublicationQueueFull) {
-			p.requestAuthoritativeReplay(renderer, publisher.ReadyAfterDrop)
+			p.requestAuthoritativeReplay(renderer, publication.readyAfterDrop)
 			return false
 		}
 		if errors.Is(err, protocol.ErrPublicationQueueBusy) {
-			p.requestAuthoritativeReplay(renderer, publisher.ReadyAfterBusy)
+			p.requestAuthoritativeReplay(renderer, publication.readyAfterBusy)
 			return false
 		}
 		message := "Bubble Tea rendered a frame that semantic publication did not admit"
@@ -217,17 +245,18 @@ func (p *termwrightProbeState) requestAuthoritativeReplay(renderer *cursedRender
 	if renderer == nil || readiness == nil || p.recoveryStop == nil {
 		return
 	}
-	if !p.frameMu.TryLock() {
-		p.requestSemanticFailure("adapter-guarantee-violation", "Bubble Tea semantic recovery could not be coalesced without waiting in the renderer")
+	// Add must complete while shutdown is excluded from reaching Wait. TryRLock
+	// keeps this renderer callback non-blocking; a pending shutdown owns the
+	// final unpublished-frame diagnostic instead of admitting another worker.
+	if !p.recoveryAdmission.TryRLock() {
 		return
 	}
-	if p.closed.Load() || p.recovering[renderer] {
-		p.frameMu.Unlock()
+	defer p.recoveryAdmission.RUnlock()
+	state := p.rendererState(renderer)
+	if p.closed.Load() || !state.recovering.CompareAndSwap(false, true) {
 		return
 	}
-	p.recovering[renderer] = true
 	p.recoveryWorkers.Add(1)
-	p.frameMu.Unlock()
 	ready := readiness()
 
 	go func() {
@@ -235,27 +264,24 @@ func (p *termwrightProbeState) requestAuthoritativeReplay(renderer *cursedRender
 		select {
 		case <-ready:
 		case <-p.recoveryStop:
-			p.frameMu.Lock()
-			delete(p.recovering, renderer)
-			p.frameMu.Unlock()
+			state.recovering.Store(false)
 			return
 		}
 
-		p.frameMu.Lock()
-		frame := p.latest[renderer]
-		p.frameMu.Unlock()
+		frame := state.latest.Load()
 		if !p.closed.Load() && frame != nil && frame.program != nil {
 			frame.program.Send(termwrightRecoveryMsg{renderer: renderer})
+		} else {
+			state.recovering.Store(false)
 		}
 	}()
 }
 
 func (p *termwrightProbeState) beginRecoveryRender(renderer *cursedRenderer) bool {
-	p.frameMu.Lock()
-	defer p.frameMu.Unlock()
-	delete(p.recovering, renderer)
-	frame := p.latest[renderer]
-	return !p.closed.Load() && frame != nil && frame.sequence > p.published[renderer]
+	state := p.rendererState(renderer)
+	state.recovering.Store(false)
+	frame := state.latest.Load()
+	return !p.closed.Load() && frame != nil && frame.sequence > state.published.Load()
 }
 
 // termwrightTryBeginOutputCommit makes FRAME -> MARKER atomic without ever
@@ -341,29 +367,33 @@ func termwrightShutdown(p *termwrightProbeState) {
 	}
 	last := termwrightActiveRuns == 0
 	if last {
+		p.recoveryAdmission.Lock()
 		p.closed.Store(true)
+		p.recoveryAdmission.Unlock()
 	}
 	termwrightLifecycleMu.Unlock()
 	if !last {
 		return
 	}
 	p.shutdown.Do(func() {
+		// Revoke render-path admission before stopping the queue. The wrapper
+		// owns bound queue methods and must not outlive the publisher itself.
+		p.publication.Swap(nil)
 		if p.recoveryStop != nil {
 			p.recoveryStopOnce.Do(func() { close(p.recoveryStop) })
 		}
-		p.frameMu.Lock()
-		p.frameMu.Unlock()
 		p.recoveryWorkers.Wait()
 		<-p.ready
-		p.frameMu.Lock()
 		pending := false
-		for renderer, frame := range p.latest {
-			if frame != nil && frame.sequence > p.published[renderer] {
+		p.renderers.Range(func(_, value any) bool {
+			state := value.(*termwrightRendererState)
+			frame := state.latest.Load()
+			if frame != nil && frame.sequence > state.published.Load() {
 				pending = true
-				break
+				return false
 			}
-		}
-		p.frameMu.Unlock()
+			return true
+		})
 		if pending && p.failure.Load() == nil {
 			failure := &termwrightFailure{
 				code:    "semantic-publication-refused",
@@ -417,13 +447,8 @@ func termwrightAfterRendererFlush(renderer *cursedRenderer, outputOK bool) {
 	if p == nil {
 		return
 	}
-	if !p.frameMu.TryLock() {
-		p.failOutput("Bubble Tea semantic frame state was contended during renderer commit")
-		return
-	}
-	frame := p.queued[renderer]
-	delete(p.queued, renderer)
-	p.frameMu.Unlock()
+	state := p.rendererState(renderer)
+	frame := state.queued.Swap(nil)
 	if frame == nil {
 		return
 	}
@@ -432,12 +457,7 @@ func termwrightAfterRendererFlush(renderer *cursedRenderer, outputOK bool) {
 		return
 	}
 	if p.publish(renderer, renderer.w, frame) {
-		if !p.frameMu.TryLock() {
-			p.failSemantic("adapter-guarantee-violation", "Bubble Tea semantic publication committed while frame state was contended")
-			return
-		}
-		p.published[renderer] = frame.sequence
-		p.frameMu.Unlock()
+		state.published.Store(frame.sequence)
 	}
 }
 
@@ -447,14 +467,9 @@ func (p *termwrightProbeState) queueFrame(renderer *cursedRenderer, frame *termw
 	if force {
 		renderer.lastView = nil
 	}
-	if !p.frameMu.TryLock() {
-		renderer.mu.Unlock()
-		p.failSemantic("adapter-guarantee-violation", "Bubble Tea semantic frame staging was contended")
-		return
-	}
-	p.latest[renderer] = frame
-	p.queued[renderer] = frame
-	p.frameMu.Unlock()
+	state := p.rendererState(renderer)
+	state.latest.Store(frame)
+	state.queued.Store(frame)
 	renderer.mu.Unlock()
 }
 
@@ -464,24 +479,22 @@ func (p *termwrightProbeState) replayLatestFrames() {
 		return
 	}
 	defer p.rendering.Store(false)
-	p.frameMu.Lock()
-	renderers := make([]*cursedRenderer, 0, len(p.latest))
-	for renderer := range p.latest {
-		renderers = append(renderers, renderer)
-	}
-	p.frameMu.Unlock()
+	renderers := make([]*cursedRenderer, 0)
+	p.renderers.Range(func(key, _ any) bool {
+		renderers = append(renderers, key.(*cursedRenderer))
+		return true
+	})
 	for _, renderer := range renderers {
 		// flush owns the same mutex. Re-read publication state only after any
 		// in-flight flush has completed, then reserve and queue under that one
 		// renderer boundary so the handshake can never replay a committed frame.
 		renderer.mu.Lock()
-		p.frameMu.Lock()
-		frame := p.latest[renderer]
-		shouldQueue := frame != nil && frame.sequence > p.published[renderer]
+		state := p.rendererState(renderer)
+		frame := state.latest.Load()
+		shouldQueue := frame != nil && frame.sequence > state.published.Load()
 		if shouldQueue {
-			p.queued[renderer] = frame
+			state.queued.Store(frame)
 		}
-		p.frameMu.Unlock()
 		if shouldQueue {
 			renderer.view = frame.view
 		}

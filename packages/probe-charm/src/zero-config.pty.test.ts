@@ -251,13 +251,7 @@ describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe',
       version: 'v1.3.10',
       adapterVersion: PROBE_VERSION,
     });
-    // ConPTY consumes startup terminal queries before Termwright's emulator
-    // can observe and answer them. Semantics and ordinary PTY input remain
-    // authoritative there; the terminal-response path is covered by direct VT
-    // tests and real PTYs whose query bytes are actually observable.
-    if (process.platform !== 'win32') {
-      expect(app.diagnostics().some((entry) => entry.code === 'terminal-response')).toBe(true);
-    }
+    expect(app.diagnostics().some((entry) => entry.code === 'terminal-response')).toBe(true);
 
     await app.press('x');
     await app.waitForText('changed');

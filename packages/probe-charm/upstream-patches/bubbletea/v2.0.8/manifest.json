@@ -1,7 +1,7 @@
 {
   "framework": "charm.land/bubbletea/v2",
   "frameworkVersion": "v2.0.8",
-  "patchSetVersion": 22,
+  "patchSetVersion": 23,
   "note": "Program.render is an exact T3 model-observation anchor. Dormant render/flush hooks execute only atomic guards and create no probe session, goroutine, socket, or probe allocation. Model observation, publication admission, and output commit use non-blocking CAS/try admission. Transient Busy/Full pressure is recovered causally through one coalesced private event-loop redraw that takes a fresh model snapshot and forces real output before its marker; transport and semantic-integrity failures remain fail-closed. Unknown, private, scalar, nil, and depth-limited model subtrees remain structurally visible as opaque-container nodes with custom-container-enumeration degradation. Ref-counted Program ownership drains the bounded worker FIFO only after the last concurrent run exits.",
   "patched": [
     {
@@ -27,7 +27,7 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:6de1cc50e2d2abbd2d7bb39f0ec460405181dab6030ea7a751ac0257a5741f89"
+      "sha256": "sha256:aa1b620e12449608946fb2d55db25f157c0c0a4ea148764f0845134384a50d9b"
     },
     {
       "path": "termwright_marker_other.go",
@@ -42,7 +42,7 @@
     {
       "path": "termwright_probe_test.go",
       "source": "add/termwright_probe_test.go",
-      "sha256": "sha256:55ae1b5b596c2d5976dc2bc8e089e250fb9078e918889ca43f49ed551e5b7785"
+      "sha256": "sha256:2eefde928fb836d46063396b9714c0ddfc99f7a75f12c4d2c66a22d747399c2f"
     }
   ]
 }

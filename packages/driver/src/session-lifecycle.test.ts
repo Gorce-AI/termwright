@@ -17,6 +17,7 @@ class ControlledPty implements PtyProcess {
   readonly resizeCalls: Array<{ columns: number; rows: number }> = [];
   readonly signalCalls: PtySignal[] = [];
   readonly writeCalls: Uint8Array[] = [];
+  readonly terminalResponseWriteCalls: Uint8Array[] = [];
   terminateCount = 0;
   readonly #failExitRegistration: boolean;
   readonly #failDispose: boolean;
@@ -65,6 +66,10 @@ class ControlledPty implements PtyProcess {
   write(data: Uint8Array): void {
     if (this.#failWrite) throw new Error('write failed');
     this.writeCalls.push(Uint8Array.from(data));
+  }
+  writeTerminalResponse(data: Uint8Array): void {
+    if (this.#failWrite) throw new Error('write failed');
+    this.terminalResponseWriteCalls.push(Uint8Array.from(data));
   }
   resize(columns: number, rows: number): void {
     this.resizeCalls.push({ columns, rows });
@@ -218,6 +223,33 @@ describe('terminal session resource lifecycle', () => {
       code: 'pty-backend-failed',
     });
     await expect(terminal.close()).rejects.toMatchObject({ code: 'pty-backend-failed' });
+    responseSpy.mockRestore();
+  });
+
+  terminalIt('routes emulator replies through the dedicated PTY response transport', async () => {
+    let responseListener: Parameters<VtScreen['onResponse']>[0] | undefined;
+    const originalOnResponse = VtScreen.prototype.onResponse;
+    const responseSpy = vi.spyOn(VtScreen.prototype, 'onResponse').mockImplementation(function (
+      this: VtScreen,
+      listener,
+    ) {
+      responseListener = listener;
+      return originalOnResponse.call(this, listener);
+    });
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const pty = new ControlledPty();
+    const terminal = await launchTerminalWithBackend({
+      command: ['controlled-app'],
+      backend: backendFor(pty, endpoint),
+    });
+
+    responseListener?.({ data: '\u001b[?2026;2$y', kind: 'emulator' });
+
+    expect(pty.writeCalls).toEqual([]);
+    expect(
+      pty.terminalResponseWriteCalls.map((data) => Buffer.from(data).toString('ascii')),
+    ).toEqual(['\u001b[?2026;2$y']);
+    await terminal.close();
     responseSpy.mockRestore();
   });
 

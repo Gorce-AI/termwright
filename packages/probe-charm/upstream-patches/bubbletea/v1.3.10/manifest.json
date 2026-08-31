@@ -1,7 +1,7 @@
 {
   "framework": "github.com/charmbracelet/bubbletea",
   "frameworkVersion": "v1.3.10",
-  "patchSetVersion": 22,
+  "patchSetVersion": 23,
   "note": "Three model-aware T3 capture anchors stage observations. Dormant render/flush hooks execute only atomic guards and create no probe session, goroutine, socket, or probe allocation. Model observation, publication admission, and output commit use non-blocking CAS/try admission. Transient Busy/Full pressure is recovered causally through one coalesced private event-loop redraw that takes a fresh model snapshot and forces real output before its marker; transport and semantic-integrity failures remain fail-closed. Unknown, private, scalar, nil, and depth-limited model subtrees remain structurally visible as opaque-container nodes with custom-container-enumeration degradation. Ref-counted Program ownership drains the bounded worker FIFO only after the last concurrent run exits.",
   "patched": [
     {
@@ -27,7 +27,7 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:b59b6b9e023f0162044d1a4467065c8473cdf44c19af95f557bdad53c34fba60"
+      "sha256": "sha256:f49025a78ab1da3abda062b9534f85652f735ac5e6a0100b23e6b9390a69a829"
     },
     {
       "path": "termwright_marker_other.go",
@@ -42,7 +42,7 @@
     {
       "path": "termwright_probe_test.go",
       "source": "add/termwright_probe_test.go",
-      "sha256": "sha256:b3192d43acd5835119d5bed3592aa8eddf3e9ac680d0fb694dd15da8dae934a5"
+      "sha256": "sha256:f1767602a7f4119247796ea1ea45a40f02a22695a5b5f55358fc00b24e8708d7"
     }
   ]
 }

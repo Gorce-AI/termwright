@@ -205,11 +205,14 @@ describe.skipIf(!hasGo)('the patch sets', () => {
       expect(probe).toContain('frame.program.Send(termwrightRecoveryMsg{renderer: renderer})');
       expect(probe).toContain('termwrightRenderAndObserveMode(program, model, true)');
       expect(probe).toContain('protocol.NewPublicationQueue(client, 2)');
-      expect(probe).toContain('publisher.TryPublish(frame.snapshot)');
+      expect(probe).toContain('publication.try(frame.snapshot)');
       expect(probe).not.toContain('p.client.Publish(frame.snapshot)');
       expect(probe).toContain('p.rendering.CompareAndSwap(false, true)');
       expect(probe).not.toContain('renderMu');
       expect(probe).not.toContain('publishMu');
+      expect(probe).not.toContain('frameMu');
+      expect(probe).toContain('p.recoveryAdmission.TryRLock()');
+      expect(probe).toContain('defer p.recoveryAdmission.RUnlock()');
       expect(probe).toContain('"custom-container-enumeration"');
       expect(probe).toContain('FrameworkType: "opaque-container"');
       expect(probe).toContain(
@@ -220,10 +223,10 @@ describe.skipIf(!hasGo)('the patch sets', () => {
         probe.indexOf('func (p *termwrightProbeState) replayLatestFrames()'),
       );
       expect(replay.indexOf('renderer.mu.Lock()')).toBeLessThan(
-        replay.indexOf('frame := p.latest[renderer]'),
+        replay.indexOf('frame := state.latest.Load()'),
       );
-      expect(replay.indexOf('frame := p.latest[renderer]')).toBeLessThan(
-        replay.indexOf('frame.sequence > p.published[renderer]'),
+      expect(replay.indexOf('frame := state.latest.Load()')).toBeLessThan(
+        replay.indexOf('frame.sequence > state.published.Load()'),
       );
 
       await expect(
@@ -305,11 +308,14 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     expect(probe).toContain('frame.program.Send(termwrightRecoveryMsg{renderer: renderer})');
     expect(probe).toContain('termwrightRenderAndObserveMode(p, model, true)');
     expect(probe).toContain('protocol.NewPublicationQueue(client, 2)');
-    expect(probe).toContain('publisher.TryPublish(frame.snapshot)');
+    expect(probe).toContain('publication.try(frame.snapshot)');
     expect(probe).not.toContain('p.client.Publish(frame.snapshot)');
     expect(probe).toContain('p.rendering.CompareAndSwap(false, true)');
     expect(probe).not.toContain('renderMu');
     expect(probe).not.toContain('publishMu');
+    expect(probe).not.toContain('frameMu');
+    expect(probe).toContain('p.recoveryAdmission.TryRLock()');
+    expect(probe).toContain('defer p.recoveryAdmission.RUnlock()');
     expect(probe).toContain('"custom-container-enumeration"');
     expect(probe).toContain('FrameworkType: "opaque-container"');
     expect(probe).toContain(
@@ -320,10 +326,10 @@ describe.skipIf(!hasGo)('the patch sets', () => {
       probe.indexOf('func (p *termwrightProbeState) replayLatestFrames()'),
     );
     expect(replay.indexOf('renderer.mtx.Lock()')).toBeLessThan(
-      replay.indexOf('frame := p.latest[renderer]'),
+      replay.indexOf('frame := state.latest.Load()'),
     );
-    expect(replay.indexOf('frame := p.latest[renderer]')).toBeLessThan(
-      replay.indexOf('frame.sequence > p.published[renderer]'),
+    expect(replay.indexOf('frame := state.latest.Load()')).toBeLessThan(
+      replay.indexOf('frame.sequence > state.published.Load()'),
     );
 
     await expect(

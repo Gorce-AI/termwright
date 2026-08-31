@@ -12,11 +12,11 @@
   "summary": {
     "bounded-deadline-or-managed-background-task": 41,
     "deadline-or-scheduler-regression-test": 58,
-    "deterministic-adversarial-fixture-schedule": 32,
+    "deterministic-adversarial-fixture-schedule": 31,
     "display-or-persisted-wall-time-not-correctness-order": 90,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 163,
-    "explicit-test-selection-reviewed-with-platform-registry": 74,
+    "explicit-test-selection-reviewed-with-platform-registry": 73,
     "managed-or-diagnostic-background-task": 72,
     "production-polling-review": 1,
     "production-process-isolation-review": 40,
@@ -1286,12 +1286,6 @@
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "it.skipIf(process.platform === 'win32')("
-    },
-    {
-      "path": "packages/driver/src/session.pty.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "'process.stdout.write(\"ready\\\\n\"); setInterval(() => {}, 1_000)',"
@@ -1565,12 +1559,6 @@
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "record: { ts: Date.now(), level, message, seq: logSeq, logger: 'fixture', ...extra },"
-    },
-    {
-      "path": "packages/driver/test-fixtures/terminal-query-app.mjs",
-      "kind": "timer",
-      "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "setTimeout(() => process.exit(0), 20);"
     },
     {
       "path": "packages/ink/src/backend.ts",

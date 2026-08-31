@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ExitStatus } from './api.js';
 import {
   createNativePtyBackend,
+  encodeWin32InputModeTerminalResponse,
   NATIVE_PTY_BACKEND_NAME,
   type NativePtySessionHandle,
   type NativePtySpawn,
@@ -26,6 +27,47 @@ function fakeSession(overrides: Partial<NativePtySessionHandle> = {}): NativePty
 }
 
 describe('the native PTY driver adapter', () => {
+  it('encodes each ConPTY terminal-response byte as a synthesized Win32 key event', () => {
+    const response = Buffer.from('\u001b[?2026;2$y', 'ascii');
+    expect(Buffer.from(encodeWin32InputModeTerminalResponse(response)).toString('ascii')).toBe(
+      [27, 91, 63, 50, 48, 50, 54, 59, 50, 36, 121]
+        .map((byte) => `\u001b[0;0;${byte};1;0;1_`)
+        .join(''),
+    );
+  });
+
+  it('rejects a non-ASCII terminal response instead of corrupting its UTF-16 key records', () => {
+    expect(() => encodeWin32InputModeTerminalResponse(Uint8Array.of(0xc3, 0xa9))).toThrow(
+      /non-ASCII byte 0xc3/u,
+    );
+  });
+
+  it('uses Win32 Input Mode only for terminal responses on Windows', () => {
+    const windowsSession = fakeSession();
+    const posixSession = fakeSession();
+    const windows = createNativePtyBackend(() => windowsSession, 'win32').spawn({
+      command: ['C:\\app.exe'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+    const posix = createNativePtyBackend(() => posixSession, 'linux').spawn({
+      command: ['/app'],
+      env: {},
+      columns: 80,
+      rows: 24,
+    });
+    const response = Buffer.from('\u001b[1;1R', 'ascii');
+
+    windows.writeTerminalResponse?.(response);
+    posix.writeTerminalResponse?.(response);
+
+    expect(windowsSession.write).toHaveBeenCalledWith(
+      encodeWin32InputModeTerminalResponse(response),
+    );
+    expect(posixSession.write).toHaveBeenCalledWith(response);
+  });
+
   it('exposes authoritative EOF and the native platform ownership model', () => {
     const posix = createNativePtyBackend(() => fakeSession(), 'darwin');
     const windows = createNativePtyBackend(() => fakeSession(), 'win32');

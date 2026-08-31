@@ -304,29 +304,23 @@ describe.skipIf(!ptyAvailable())('the production PTY backend', { timeout: 20_000
 });
 
 describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout: 20_000 }, () => {
-  // ConPTY consumes these terminal queries before xterm-headless can observe
-  // and answer them. The child therefore cannot prove Termwright's emulator
-  // response path on Windows; the direct VtScreen test remains platform-free.
-  it.skipIf(process.platform === 'win32')(
-    'returns emulator query responses through PTY without classifying them as user input',
-    async () => {
-      const terminal = await launch('terminal-query-app.mjs', {
-        columns: 80,
-        rows: 24,
-      });
-      const inputs: unknown[] = [];
-      const unsubscribe = terminal.events.on('input', (event) => inputs.push(event));
-      try {
-        await terminal.waitForText('dsr=3;7 background=rgb:0000/0000/0000');
-        expect(inputs).toEqual([]);
-        expect(
-          terminal.diagnostics().filter((entry) => entry.code === 'terminal-response'),
-        ).toHaveLength(2);
-      } finally {
-        unsubscribe();
-      }
-    },
-  );
+  it('returns emulator query responses through PTY without classifying them as user input', async () => {
+    const terminal = await launch('terminal-query-app.mjs', {
+      columns: 80,
+      rows: 24,
+    });
+    const inputs: unknown[] = [];
+    const unsubscribe = terminal.events.on('input', (event) => inputs.push(event));
+    try {
+      await terminal.waitForText('dsr=3;7 background=rgb:0000/0000/0000 sync=2');
+      expect(inputs).toEqual([]);
+      expect(
+        terminal.diagnostics().filter((entry) => entry.code === 'terminal-response'),
+      ).toHaveLength(3);
+    } finally {
+      unsubscribe();
+    }
+  });
 
   it('fails launch immediately when a required capability is unavailable', async () => {
     const failure = await launchTerminal({
