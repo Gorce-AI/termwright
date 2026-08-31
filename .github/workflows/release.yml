@@ -39,6 +39,9 @@ env:
   TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
   TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
   TERMWRIGHT_REQUIRE_GO: '1'
+  # Match CI's single immutable authority for pinned Go module artifacts;
+  # release certification must not fall through to framework vanity domains.
+  GOPROXY: 'https://proxy.golang.org'
   TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}
 
 jobs:

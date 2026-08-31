@@ -22,6 +22,10 @@ env:
   TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
   # Go-backed probe suites are release evidence, not optional coverage.
   TERMWRIGHT_REQUIRE_GO: '1'
+  # Certification must resolve pinned module artifacts from one immutable
+  # authority. A `,direct` fallback turns a transient proxy response into a
+  # minutes-long vanity-domain/VCS fetch with different availability rules.
+  GOPROXY: 'https://proxy.golang.org'
 
 jobs:
   # Static repository policy and deterministic core.
