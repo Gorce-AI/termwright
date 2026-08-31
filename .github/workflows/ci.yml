@@ -339,9 +339,10 @@ jobs:
         run: |
           node -e "
             const { ConPtySession, conPtyRuntimeInfo } = require('./packages/pty/build/Release/termwright_pty.node');
+            const { identity } = require('./packages/pty/conpty-assets.json');
             const runtime = conPtyRuntimeInfo();
             console.log(runtime);
-            if (runtime.provider !== 'termwright-patched-openconsole' || runtime.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' || runtime.patchSha256 !== '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492' || runtime.hostCursorRpc !== 'twh-cpr-v1' || Object.hasOwn(runtime, 'package') || Object.hasOwn(runtime, 'version') || runtime.mode !== 'ordered-vt-passthrough' || runtime.policy !== 'strict' || runtime.assetsValidated !== true || runtime.coreExports !== true || runtime.failureCode !== '' || runtime.failureWin32 !== 0 || runtime.orderedMarkerSemantics !== 'marker-authoritative-after-behavioral-certification') process.exit(1);
+            if (runtime.provider !== identity.provider || runtime.upstreamCommit !== identity.upstreamCommit || runtime.patchSha256 !== identity.patchSha256 || runtime.hostCursorRpc !== identity.hostCursorRpc || Object.hasOwn(runtime, 'package') || Object.hasOwn(runtime, 'version') || runtime.mode !== identity.mode || runtime.policy !== 'strict' || runtime.assetsValidated !== true || runtime.coreExports !== true || runtime.failureCode !== '' || runtime.failureWin32 !== 0 || runtime.orderedMarkerSemantics !== 'marker-authoritative-after-behavioral-certification') process.exit(1);
             const s = new ConPtySession({ commandLine: process.execPath + ' -e \"process.exit(0)\"', columns: 80, rows: 24 }, () => {});
             s.dispose();
           "
