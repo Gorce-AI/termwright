@@ -825,7 +825,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
           write === undefined
             ? (this.#pty!.write(data), 'application-direct')
             : write.call(this.#pty, data);
-        if (route === 'host-control') return;
+        if (route === 'host-control') {
+          this.#diagnostic(
+            'host-terminal-response',
+            `answered pseudoconsole host query (${response.kind}, ${data.byteLength} bytes)`,
+          );
+          return;
+        }
       } catch (error) {
         this.#recordPtyFailure(error instanceof Error ? error : new Error(String(error)));
         return;

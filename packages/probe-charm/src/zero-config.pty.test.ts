@@ -251,7 +251,9 @@ describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe',
       version: 'v1.3.10',
       adapterVersion: PROBE_VERSION,
     });
-    expect(app.diagnostics().some((entry) => entry.code === 'terminal-response')).toBe(true);
+    const expectedResponseCode =
+      process.platform === 'win32' ? 'host-terminal-response' : 'terminal-response';
+    expect(app.diagnostics().some((entry) => entry.code === expectedResponseCode)).toBe(true);
 
     await app.press('x');
     await app.waitForText('changed');

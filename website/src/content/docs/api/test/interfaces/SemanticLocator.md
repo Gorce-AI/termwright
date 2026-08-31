@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticLocator
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:510
+Defined in: driver/dist/session-BXtgF5fU.d.ts:510
 
 ## Extends
 
@@ -23,7 +23,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:510
 
 > `readonly` **description**: `string`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:479
+Defined in: driver/dist/session-BXtgF5fU.d.ts:479
 
 Human-readable form of the query, as it appears in error messages.
 
@@ -37,7 +37,7 @@ Human-readable form of the query, as it appears in error messages.
 
 > `readonly` **domain**: `"semantic"`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:477
+Defined in: driver/dist/session-BXtgF5fU.d.ts:477
 
 #### Inherited from
 
@@ -49,7 +49,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:477
 
 > **actionability**(`action`, `opts?`): `Promise`\<`ActionabilityExplanation`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:524
+Defined in: driver/dist/session-BXtgF5fU.d.ts:524
 
 #### Parameters
 
@@ -71,7 +71,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:524
 
 > **activate**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:531
+Defined in: driver/dist/session-BXtgF5fU.d.ts:531
 
 #### Parameters
 
@@ -89,7 +89,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:531
 
 > **and**(`other`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:483
+Defined in: driver/dist/session-BXtgF5fU.d.ts:483
 
 #### Parameters
 
@@ -111,7 +111,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:483
 
 > **cellSnapshot**(`opts?`): `Promise`\<`LocatorCellSnapshot`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:507
+Defined in: driver/dist/session-BXtgF5fU.d.ts:507
 
 Atomic cells inside this locator's qualified rectangle.
 
@@ -135,7 +135,7 @@ Atomic cells inside this locator's qualified rectangle.
 
 > **check**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:532
+Defined in: driver/dist/session-BXtgF5fU.d.ts:532
 
 #### Parameters
 
@@ -153,7 +153,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:532
 
 > **checkpoint**(): `ObservationStamp`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:488
+Defined in: driver/dist/session-BXtgF5fU.d.ts:488
 
 Current committed observation used to arm race-free custom waits.
 
@@ -171,7 +171,7 @@ Current committed observation used to arm race-free custom waits.
 
 > **click**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:493
+Defined in: driver/dist/session-BXtgF5fU.d.ts:493
 
 #### Parameters
 
@@ -193,7 +193,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:493
 
 > **count**(): `Promise`\<`number`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:486
+Defined in: driver/dist/session-BXtgF5fU.d.ts:486
 
 #### Returns
 
@@ -209,7 +209,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:486
 
 > **doubleClick**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:494
+Defined in: driver/dist/session-BXtgF5fU.d.ts:494
 
 #### Parameters
 
@@ -231,7 +231,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:494
 
 > **dragTo**(`target`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:496
+Defined in: driver/dist/session-BXtgF5fU.d.ts:496
 
 #### Parameters
 
@@ -257,7 +257,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:496
 
 > **evaluateCondition**(`condition`, `opts?`): `Promise`\<`ConditionResult`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:523
+Defined in: driver/dist/session-BXtgF5fU.d.ts:523
 
 #### Parameters
 
@@ -279,7 +279,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:523
 
 > **extendedState**(): `Promise`\<`SemanticExtendedObject` \| `null`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:540
+Defined in: driver/dist/session-BXtgF5fU.d.ts:540
 
 #### Returns
 
@@ -291,7 +291,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:540
 
 > **fill**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:529
+Defined in: driver/dist/session-BXtgF5fU.d.ts:529
 
 #### Parameters
 
@@ -313,7 +313,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:529
 
 > **filter**(`options`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:519
+Defined in: driver/dist/session-BXtgF5fU.d.ts:519
 
 #### Parameters
 
@@ -331,7 +331,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:519
 
 > **first**(): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:480
+Defined in: driver/dist/session-BXtgF5fU.d.ts:480
 
 #### Returns
 
@@ -347,7 +347,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:480
 
 > **focus**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:530
+Defined in: driver/dist/session-BXtgF5fU.d.ts:530
 
 #### Parameters
 
@@ -365,7 +365,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:530
 
 > **geometry**(): `Promise`\<`LocatorGeometry`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:499
+Defined in: driver/dist/session-BXtgF5fU.d.ts:499
 
 Atomic, evidence-qualified geometry. Never invents a rectangle.
 
@@ -383,7 +383,7 @@ Atomic, evidence-qualified geometry. Never invents a rectangle.
 
 > **getByLabel**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:513
+Defined in: driver/dist/session-BXtgF5fU.d.ts:513
 
 #### Parameters
 
@@ -407,7 +407,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:513
 
 > **getByRole**(`role`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:512
+Defined in: driver/dist/session-BXtgF5fU.d.ts:512
 
 #### Parameters
 
@@ -429,7 +429,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:512
 
 > **getByTestId**(`testId`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:517
+Defined in: driver/dist/session-BXtgF5fU.d.ts:517
 
 #### Parameters
 
@@ -447,7 +447,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:517
 
 > **getByText**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:516
+Defined in: driver/dist/session-BXtgF5fU.d.ts:516
 
 #### Parameters
 
@@ -469,7 +469,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:516
 
 > **hitTest**(`opts?`): `Promise`\<`PointerHitTest`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:503
+Defined in: driver/dist/session-BXtgF5fU.d.ts:503
 
 Whether pointer input at the chosen cell reaches this exact target.
 
@@ -503,7 +503,7 @@ Whether pointer input at the chosen cell reaches this exact target.
 
 > **hover**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:495
+Defined in: driver/dist/session-BXtgF5fU.d.ts:495
 
 #### Parameters
 
@@ -525,7 +525,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:495
 
 > **last**(): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:481
+Defined in: driver/dist/session-BXtgF5fU.d.ts:481
 
 #### Returns
 
@@ -541,7 +541,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:481
 
 > **locator**(`selector`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:518
+Defined in: driver/dist/session-BXtgF5fU.d.ts:518
 
 #### Parameters
 
@@ -559,7 +559,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:518
 
 > **nth**(`index`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:482
+Defined in: driver/dist/session-BXtgF5fU.d.ts:482
 
 #### Parameters
 
@@ -581,7 +581,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:482
 
 > **or**(`other`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:484
+Defined in: driver/dist/session-BXtgF5fU.d.ts:484
 
 #### Parameters
 
@@ -603,7 +603,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:484
 
 > **paintedRegion**(): `Promise`\<`Observation`\<`SemanticPaintedRegion`\>\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:538
+Defined in: driver/dist/session-BXtgF5fU.d.ts:538
 
 Exact cells painted by this semantic recipient, never inferred from layout.
 
@@ -617,7 +617,7 @@ Exact cells painted by this semantic recipient, never inferred from layout.
 
 > **press**(`keys`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:527
+Defined in: driver/dist/session-BXtgF5fU.d.ts:527
 
 #### Parameters
 
@@ -639,7 +639,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:527
 
 > **resolve**(`opts?`): `Promise`\<`ResolvedTarget`\<`"semantic"`\>\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:485
+Defined in: driver/dist/session-BXtgF5fU.d.ts:485
 
 #### Parameters
 
@@ -661,7 +661,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:485
 
 > **semanticScroll**(): `Promise`\<`Observation`\<`SemanticScrollState`\>\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:536
+Defined in: driver/dist/session-BXtgF5fU.d.ts:536
 
 Production application viewport state, never emulator scrollback position.
 
@@ -675,7 +675,7 @@ Production application viewport state, never emulator scrollback position.
 
 > **semanticState**(): `Promise`\<`SemanticState` \| `null`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:539
+Defined in: driver/dist/session-BXtgF5fU.d.ts:539
 
 #### Returns
 
@@ -687,7 +687,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:539
 
 > **semanticValue**(): `Promise`\<`SemanticValueObservation`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:534
+Defined in: driver/dist/session-BXtgF5fU.d.ts:534
 
 #### Returns
 
@@ -699,7 +699,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:534
 
 > **textContent**(): `Promise`\<`string`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:508
+Defined in: driver/dist/session-BXtgF5fU.d.ts:508
 
 #### Returns
 
@@ -715,7 +715,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:508
 
 > **type**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:528
+Defined in: driver/dist/session-BXtgF5fU.d.ts:528
 
 #### Parameters
 
@@ -737,7 +737,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:528
 
 > **uncheck**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:533
+Defined in: driver/dist/session-BXtgF5fU.d.ts:533
 
 #### Parameters
 
@@ -755,7 +755,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:533
 
 > **visibility**(): `Promise`\<`LocatorVisibility`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:501
+Defined in: driver/dist/session-BXtgF5fU.d.ts:501
 
 Attached/displayed/viewport facts without collapsing unknown to false.
 
@@ -773,7 +773,7 @@ Attached/displayed/viewport facts without collapsing unknown to false.
 
 > **waitFor**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:520
+Defined in: driver/dist/session-BXtgF5fU.d.ts:520
 
 #### Parameters
 
@@ -791,7 +791,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:520
 
 > **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:490
+Defined in: driver/dist/session-BXtgF5fU.d.ts:490
 
 Waits for a newer committed observation without a check/subscribe gap.
 
@@ -815,7 +815,7 @@ Waits for a newer committed observation without a check/subscribe gap.
 
 > **wheel**(`opts`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:497
+Defined in: driver/dist/session-BXtgF5fU.d.ts:497
 
 #### Parameters
 
@@ -837,7 +837,7 @@ Defined in: driver/dist/session-BK8Owve5.d.ts:497
 
 > **within**(`parent`): `SemanticLocator`
 
-Defined in: driver/dist/session-BK8Owve5.d.ts:511
+Defined in: driver/dist/session-BXtgF5fU.d.ts:511
 
 #### Parameters
 
