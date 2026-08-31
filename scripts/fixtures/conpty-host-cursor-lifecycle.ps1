@@ -35,7 +35,12 @@ public static class TermwrightHostCursorLifecycleProbe {
   private const ushort WINDOW_BUFFER_SIZE_EVENT = 0x0004;
   private static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
   private delegate bool ConsoleCtrlHandler(uint controlType);
-  private static readonly ConsoleCtrlHandler IgnoreClose = controlType => true;
+  private static readonly EventWaitHandle ShutdownComplete =
+    new EventWaitHandle(false, EventResetMode.ManualReset);
+  private static readonly ConsoleCtrlHandler WaitForShutdown = controlType => {
+    ShutdownComplete.WaitOne();
+    return true;
+  };
 
   [StructLayout(LayoutKind.Sequential)]
   public struct COORD {
@@ -205,6 +210,12 @@ public static class TermwrightHostCursorLifecycleProbe {
     internal CONSOLE_SCREEN_BUFFER_INFO Info;
   }
 
+  private sealed class BorrowedProcessWaitHandle : WaitHandle {
+    internal BorrowedProcessWaitHandle(System.Diagnostics.Process process) {
+      SafeWaitHandle = new Microsoft.Win32.SafeHandles.SafeWaitHandle(process.Handle, false);
+    }
+  }
+
   private static Thread StartQuery(IntPtr output, Query result, CountdownEvent done) {
     var thread = new Thread(() => {
       try {
@@ -236,6 +247,12 @@ public static class TermwrightHostCursorLifecycleProbe {
   private static string NewHelperEventName() {
     return "Local\\TermwrightCursor-" +
       System.Diagnostics.Process.GetCurrentProcess().Id + "-" + Guid.NewGuid().ToString("N");
+  }
+
+  private static bool SignalHelperCompletion(string eventName) {
+    using (var done = EventWaitHandle.OpenExisting(eventName + "-done")) {
+      return done.Set();
+    }
   }
 
   private static void StopHelper(System.Diagnostics.Process helper) {
@@ -331,7 +348,7 @@ public static class TermwrightHostCursorLifecycleProbe {
     using (var start = EventWaitHandle.OpenExisting(eventName)) {
       start.WaitOne();
     }
-    if (inputEof && !SetConsoleCtrlHandler(IgnoreClose, true)) return 131;
+    if (inputEof && !SetConsoleCtrlHandler(WaitForShutdown, true)) return 131;
     var secondOutput = CreateConsoleScreenBuffer(
       GENERIC_READ | GENERIC_WRITE,
       FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -369,7 +386,6 @@ public static class TermwrightHostCursorLifecycleProbe {
     } finally {
       SetConsoleActiveScreenBuffer(output);
       CloseHandle(secondOutput);
-      if (inputEof) SetConsoleCtrlHandler(IgnoreClose, false);
     }
   }
 
@@ -414,36 +430,56 @@ public static class TermwrightHostCursorLifecycleProbe {
     short rows,
     string scriptPath
   ) {
-    if (!SetConsoleCtrlHandler(IgnoreClose, true)) return 110;
+    if (!SetConsoleCtrlHandler(WaitForShutdown, true)) return 110;
     try {
       var eventName = NewHelperEventName();
       using (var start = new EventWaitHandle(false, EventResetMode.ManualReset, eventName)) {
-        using (var helper = StartHelper(scriptPath, "input-eof-helper", eventName)) {
-          if (helper == null) return 112;
-          try {
-            if (!WriteAll(output, "EOF-A-READY")) return 113;
-            if (!ReadResize(input, columns, rows)) return 114;
-            start.Set();
-            var first = new Query();
-            using (var done = new CountdownEvent(1)) {
-              var firstThread = StartQuery(output, first, done);
-              // No command follows B. The parent closes only ConPTY's input pipe
-              // after both processes have established their addressed requests.
-              done.Wait();
-              firstThread.Join();
+        using (var helperDone = new EventWaitHandle(
+            false,
+            EventResetMode.ManualReset,
+            eventName + "-done")) {
+          using (var helper = StartHelper(scriptPath, "input-eof-helper", eventName)) {
+            if (helper == null) return 112;
+            try {
+              if (!WriteAll(output, "EOF-A-READY")) return 113;
+              if (!ReadResize(input, columns, rows)) return 114;
+              start.Set();
+              var first = new Query();
+              using (var done = new CountdownEvent(1)) {
+                var firstThread = StartQuery(output, first, done);
+                // No command follows B. The parent closes only ConPTY's input pipe
+                // after both processes have established their addressed requests.
+                done.Wait();
+                firstThread.Join();
+              }
+              if (!first.Success) return 119;
+              // A CTRL_CLOSE_EVENT gives every attached process one shared,
+              // finite shutdown window. The helper signals only after its B
+              // query completed and its finally restored physical buffer A;
+              // waiting for that causal boundary avoids spending the window
+              // inside PowerShell's outer process-exit machinery.
+              using (var helperExit = new BorrowedProcessWaitHandle(helper)) {
+                var boundary = WaitHandle.WaitAny(new WaitHandle[] { helperDone, helperExit });
+                if (boundary == 1) {
+                  helper.WaitForExit();
+                  return 120;
+                }
+              }
+              if (!WriteAll(output, "EOF-A-WAITER")) return 121;
+              return 0;
+            } finally {
+              StopHelper(helper);
             }
-            if (!first.Success) return 119;
-            helper.WaitForExit();
-            if (helper.ExitCode != 0) return 120;
-            if (!WriteAll(output, "EOF-A-WAITER")) return 121;
-            return 0;
-          } finally {
-            StopHelper(helper);
           }
         }
       }
     } finally {
-      SetConsoleCtrlHandler(IgnoreClose, false);
+      // CTRL_CLOSE_EVENT handlers are allowed to return only after the main
+      // thread has published every causal completion marker and cleaned up
+      // the helper. Returning earlier gives Windows permission to terminate
+      // this process in the middle of the shutdown proof.
+      ShutdownComplete.Set();
+      SetConsoleCtrlHandler(WaitForShutdown, false);
     }
   }
 
@@ -466,7 +502,18 @@ public static class TermwrightHostCursorLifecycleProbe {
       if (scenario == "physical-buffers") return RunPhysicalBuffers(input, output, columns, rows, scriptPath);
       if (scenario == "physical-buffers-helper") return RunPhysicalBufferHelper(input, output, columns, rows, false, eventName);
       if (scenario == "input-eof") return RunInputEof(input, output, columns, rows, scriptPath);
-      if (scenario == "input-eof-helper") return RunPhysicalBufferHelper(input, output, columns, rows, true, eventName);
+      if (scenario == "input-eof-helper") {
+        try {
+          var result = RunPhysicalBufferHelper(input, output, columns, rows, true, eventName);
+          if (result != 0) return result;
+          return SignalHelperCompletion(eventName) ? 0 : 141;
+        } finally {
+          // Signal locally only after the cross-process completion event was
+          // set. The handler may now return without exposing a partial frame.
+          ShutdownComplete.Set();
+          SetConsoleCtrlHandler(WaitForShutdown, false);
+        }
+      }
       return 67;
     } finally {
       SetConsoleMode(input, originalInputMode);
