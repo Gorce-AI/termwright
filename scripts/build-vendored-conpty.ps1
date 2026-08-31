@@ -106,6 +106,28 @@ try {
         Assert-Sha256 $path $property.Value.sha256After "Upstream source $($property.Name) after patch"
     }
 
+    # The pinned upstream triplets currently select an unreleased VS toolset.
+    # The exact T3 patch binds both production architectures to the installed
+    # VS 2022 toolset. Verify the semantic content in addition to the byte
+    # hashes so a future manifest edit cannot silently desynchronise MSBuild
+    # and vcpkg.
+    foreach ($property in $manifest.build.vcpkgTriplets.PSObject.Properties) {
+        $triplet = $property.Value
+        $tripletPath = Join-Path $sourceRoot $triplet.path
+        $tripletText = [System.IO.File]::ReadAllText($tripletPath)
+        $expectedArchitecture = "set(VCPKG_TARGET_ARCHITECTURE $($triplet.targetArchitecture))"
+        $expectedToolset = "set(VCPKG_PLATFORM_TOOLSET $($manifest.build.platformToolset))"
+        if ([regex]::Matches($tripletText, [regex]::Escape($expectedArchitecture)).Count -ne 1) {
+            throw "The $($property.Name) vcpkg triplet does not declare exactly one expected target architecture."
+        }
+        if ([regex]::Matches($tripletText, [regex]::Escape($expectedToolset)).Count -ne 1) {
+            throw "The $($property.Name) vcpkg triplet does not declare exactly one expected platform toolset."
+        }
+        if ($tripletText -match 'set\(VCPKG_PLATFORM_TOOLSET\s+v145\)') {
+            throw "The $($property.Name) vcpkg triplet still requests unavailable toolset v145."
+        }
+    }
+
     # The global upstream packages.config also covers PGO, TAEF tests and the
     # Windows Terminal UI. Their packages live on Microsoft-internal feeds and
     # are not inputs to the two ConPTY targets. Materialize a verified filtered
@@ -184,6 +206,7 @@ try {
         upstreamArchiveSha256 = $manifest.upstream.archiveSha256
         patchSha256 = $manifest.patch.sha256
         buildConfiguration = $manifest.build.configuration
+        platformToolset = $manifest.build.platformToolset
         binaryDigests = $builtFiles
         status = "uncertified-bootstrap-output"
     }

@@ -822,3 +822,20 @@ index 19aa939..f94a5df 100644
      testState.vExpectedInput.push_back(inputRec);
      Log::Comment(NoThrowString().Format(
          L"Processing \"%s\"", seq.c_str()));
+
+diff --git a/dep/vcpkg-overlay-triplets/arm64-windows-static.cmake b/dep/vcpkg-overlay-triplets/arm64-windows-static.cmake
+--- a/dep/vcpkg-overlay-triplets/arm64-windows-static.cmake
++++ b/dep/vcpkg-overlay-triplets/arm64-windows-static.cmake
+@@ -6,3 +6,3 @@ set(VCPKG_LIBRARY_LINKAGE static)
+ # ...but with explicit platform toolset, so that future toolsets
+ # aren't automatically picked up (it defaults to the latest one).
+-set(VCPKG_PLATFORM_TOOLSET v145)
++set(VCPKG_PLATFORM_TOOLSET v143)
+diff --git a/dep/vcpkg-overlay-triplets/x64-windows-static.cmake b/dep/vcpkg-overlay-triplets/x64-windows-static.cmake
+--- a/dep/vcpkg-overlay-triplets/x64-windows-static.cmake
++++ b/dep/vcpkg-overlay-triplets/x64-windows-static.cmake
+@@ -6,3 +6,3 @@ set(VCPKG_LIBRARY_LINKAGE static)
+ # ...but with explicit platform toolset, so that future toolsets
+ # aren't automatically picked up (it defaults to the latest one).
+-set(VCPKG_PLATFORM_TOOLSET v145)
++set(VCPKG_PLATFORM_TOOLSET v143)

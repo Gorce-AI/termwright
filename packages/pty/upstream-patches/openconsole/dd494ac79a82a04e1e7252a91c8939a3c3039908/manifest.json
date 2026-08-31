@@ -12,7 +12,7 @@
   },
   "patch": {
     "path": "host-cursor-rpc.patch",
-    "sha256": "755362caca3eb0bda42b7435a7031516985bbe644b80172387f1902d38fc5b89",
+    "sha256": "39c334609e5644ed098ac75cdb31aeabc266ebf76fcfee949bbaf0e7a32ba5af",
     "strip": 1
   },
   "protocol": {
@@ -21,6 +21,14 @@
     "response": "ESC ] 8488 ; twh-cpr-v1:r:<same-token>:<1-based-row>:<1-based-column> BEL"
   },
   "touchedFiles": {
+    "dep/vcpkg-overlay-triplets/arm64-windows-static.cmake": {
+      "sha256Before": "b5d9e4f41c384bb0231b0361af912dfbc31c7b2f877acf27300d9c147acecd17",
+      "sha256After": "f7a28c95bf04a14e1648d9be9824fcc8f51c1897c347ac8b7322df0a7ad5a652"
+    },
+    "dep/vcpkg-overlay-triplets/x64-windows-static.cmake": {
+      "sha256Before": "1801b3f691be4981486da28655cc0287f57d95bb5be8d1938592c201f3eff488",
+      "sha256After": "e408e994a32db495a3af44d16a57e02c8c7005688b024546857ebaa5abfbda7b"
+    },
     "src/host/VtInputThread.cpp": {
       "sha256Before": "05c7915efcf84e62bd590429f4d6187fb13cf4c6c5c61cf9656b41f49c148b62",
       "sha256After": "f0c3b30f42af77332695b7d56e3fba56346e77bf9590eac0e16ff8f9a8fc6d09"
@@ -78,6 +86,16 @@
     "solution": "OpenConsole.slnx",
     "configuration": "Release",
     "platformToolset": "v143",
+    "vcpkgTriplets": {
+      "x64": {
+        "path": "dep/vcpkg-overlay-triplets/x64-windows-static.cmake",
+        "targetArchitecture": "x64"
+      },
+      "ARM64": {
+        "path": "dep/vcpkg-overlay-triplets/arm64-windows-static.cmake",
+        "targetArchitecture": "arm64"
+      }
+    },
     "targets": ["Conhost\\Host_EXE", "Conhost\\winconptydll"],
     "disabledOptionalFeatures": {
       "PGOBuildMode": "",
