@@ -128,12 +128,6 @@ function answerStartupHostCursorRequests(
   }
 }
 
-function runtimeHostCursorRequests(output: string, readyMarker: string): readonly string[] {
-  const readyAt = output.indexOf(readyMarker);
-  if (readyAt < 0) return [];
-  return [...new Set(hostCursorRequests(output.slice(readyAt)))];
-}
-
 function hostCursorResponse(payload: string, row: number, column: number): Buffer {
   const request = parseConPtyHostCursorRequest(payload);
   if (request === null) throw new Error(`invalid ConPTY host cursor request: ${payload}`);
@@ -657,19 +651,6 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       ).toBeDefined();
       expect(handle.resize(120, 40)).toBe(true);
       expect(
-        await waitForMarker(
-          handle,
-          output,
-          /PHYSICAL-A-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
-          10_000,
-        ),
-        output.text(),
-      ).toBeDefined();
-      const [firstRequest] = runtimeHostCursorRequests(output.text(), 'PHYSICAL-A-READY');
-      expect(firstRequest).toBeDefined();
-
-      handle.write(win32InputRecordCommand('B'));
-      expect(
         await waitForMarker(handle, output, /PHYSICAL-B-READY/u, 10_000),
         output.text(),
       ).toBeDefined();
@@ -678,7 +659,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         await waitForMarker(
           handle,
           output,
-          /PHYSICAL-B-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          /PHYSICAL-B-READY(?:[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07){2}/u,
           10_000,
         ),
         output.text(),
@@ -688,19 +669,20 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(rawRequests).toHaveLength(2);
       const requests = [...new Set(rawRequests)];
       expect(requests).toHaveLength(2);
-      const secondRequest = requests.find((request) => request !== firstRequest);
-      expect(secondRequest).toBeDefined();
 
-      expect(handle.writeTerminalResponse(hostCursorResponse(secondRequest!, 7, 31))).toBe(
+      // Thread.Start does not define which physical buffer publishes first.
+      // Address both tokens and assert the unordered pair of committed cursor
+      // positions below; either buffer receiving both responses still fails.
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[1]!, 7, 31))).toBe(
         'host-control',
       );
-      expect(handle.writeTerminalResponse(hostCursorResponse(firstRequest!, 4, 11))).toBe(
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 4, 11))).toBe(
         'host-control',
       );
 
       const [status] = await Promise.all([exited, handle.outputEnded]);
       expect(status, output.text()).toEqual({ code: 0, signal: null });
-      expect(output.text()).toContain('MULTI:A=10,3;B=30,6');
+      expect(output.text()).toMatch(/MULTI:A=(?:10,3;B=30,6|30,6;B=10,3)/u);
       expect(handle.sawRealEof).toBe(true);
     } finally {
       handle.dispose();
@@ -746,17 +728,6 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       ).toBeDefined();
       expect(handle.resize(120, 40)).toBe(true);
       expect(
-        await waitForMarker(
-          handle,
-          output,
-          /EOF-A-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
-          10_000,
-        ),
-        output.text(),
-      ).toBeDefined();
-
-      handle.write(win32InputRecordCommand('B'));
-      expect(
         await waitForMarker(handle, output, /EOF-B-ALT-READY/u, 10_000),
         output.text(),
       ).toBeDefined();
@@ -765,7 +736,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         await waitForMarker(
           handle,
           output,
-          /EOF-B-ALT-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          /EOF-B-ALT-READY(?:[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07){2}/u,
           10_000,
         ),
         output.text(),

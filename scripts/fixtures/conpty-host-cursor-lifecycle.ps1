@@ -286,23 +286,30 @@ public static class TermwrightHostCursorLifecycleProbe {
       if (!ConfigureOutput(secondOutput)) return 91;
       if (!WriteAll(output, "PHYSICAL-A-READY")) return 92;
       if (!ReadResize(input, columns, rows)) return 93;
+      // Prepare both physical buffers before either GCSBI becomes pending.
+      // A subsequent synchronous output Console API from this process would
+      // otherwise be serialized behind that unresolved request.
+      if (!SetConsoleActiveScreenBuffer(secondOutput)) return 94;
+      if (!WriteAll(secondOutput, "PHYSICAL-B-READY")) return 95;
+      if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 96;
       var first = new Query();
       var second = new Query();
       using (var done = new CountdownEvent(2)) {
         var firstThread = StartQuery(output, first, done);
-        if (!ReadCommand(input, 'B')) return 94;
-        if (!SetConsoleActiveScreenBuffer(secondOutput)) return 95;
-        if (!WriteAll(secondOutput, "PHYSICAL-B-READY")) return 96;
-        if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 97;
         var secondThread = StartQuery(secondOutput, second, done);
         done.Wait();
         firstThread.Join();
         secondThread.Join();
       }
       if (!first.Success || !second.Success) return 98;
-      if (first.Info.CursorPosition.X != 10 || first.Info.CursorPosition.Y != 3 ||
-          second.Info.CursorPosition.X != 30 || second.Info.CursorPosition.Y != 6) return 99;
-      if (!WriteAll(secondOutput, "MULTI:A=10,3;B=30,6")) return 100;
+      var direct = first.Info.CursorPosition.X == 10 && first.Info.CursorPosition.Y == 3 &&
+                   second.Info.CursorPosition.X == 30 && second.Info.CursorPosition.Y == 6;
+      var reverse = first.Info.CursorPosition.X == 30 && first.Info.CursorPosition.Y == 6 &&
+                    second.Info.CursorPosition.X == 10 && second.Info.CursorPosition.Y == 3;
+      if (!direct && !reverse) return 99;
+      if (!WriteAll(secondOutput,
+          "MULTI:A=" + first.Info.CursorPosition.X + "," + first.Info.CursorPosition.Y +
+          ";B=" + second.Info.CursorPosition.X + "," + second.Info.CursorPosition.Y)) return 100;
       return 0;
     } finally {
       SetConsoleActiveScreenBuffer(output);
@@ -324,14 +331,15 @@ public static class TermwrightHostCursorLifecycleProbe {
       if (!ConfigureOutput(secondOutput)) return 112;
       if (!WriteAll(output, "EOF-A-READY")) return 113;
       if (!ReadResize(input, columns, rows)) return 114;
+      // See RunPhysicalBuffers: both target buffers must exist and be dirty
+      // before the two independently cancelable GCSBI calls are dispatched.
+      if (!SetConsoleActiveScreenBuffer(secondOutput)) return 115;
+      if (!WriteAll(secondOutput, "\x1b[?1049hEOF-B-ALT-READY")) return 116;
+      if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 117;
       var first = new Query();
       var second = new Query();
       using (var done = new CountdownEvent(2)) {
         var firstThread = StartQuery(output, first, done);
-        if (!ReadCommand(input, 'B')) return 115;
-        if (!SetConsoleActiveScreenBuffer(secondOutput)) return 116;
-        if (!WriteAll(secondOutput, "\x1b[?1049hEOF-B-ALT-READY")) return 117;
-        if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 118;
         var secondThread = StartQuery(secondOutput, second, done);
         // No command follows. The parent closes only ConPTY's input pipe after
         // it has observed both addressed requests. SendCloseEvent must cancel
