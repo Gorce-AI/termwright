@@ -121,7 +121,7 @@ index f5214d3..dfe171a 100644
          }
      }
  
-@@ -299,6 +308,13 @@ void VtIo::SendCloseEvent()
+@@ -299,6 +308,14 @@ void VtIo::SendCloseEvent()
      LockConsole();
      const auto unlock = wil::scope_exit([] { UnlockConsole(); });
  
@@ -130,12 +130,13 @@ index f5214d3..dfe171a 100644
 +    for (auto* screen = gci.ScreenBuffers; screen != nullptr; screen = screen->Next)
 +    {
 +        screen->CancelConptyCursorPositionSynchronization();
++        screen->GetActiveBuffer().CancelConptyCursorPositionSynchronization();
 +    }
 +
      // If we're still in the process of starting up, and we're asked to shut down
      // (broken pipe), `VtIo::StartIfNeeded()` will handle the cleanup for us.
      // This can happen during the call to `WaitUntilDA1`, because we relinquish
-@@ -318,6 +334,22 @@ void VtIo::SendCloseEvent()
+@@ -318,6 +335,22 @@ void VtIo::SendCloseEvent()
      }
  }
  
@@ -158,7 +159,7 @@ index f5214d3..dfe171a 100644
  // Returns true for C0 characters and C1 [single-character] CSI.
  // A copy of isActionableFromGround() from stateMachine.cpp.
  static constexpr bool IsControlCharacter(wchar_t wch) noexcept
-@@ -734,15 +766,22 @@ void VtIo::Writer::WriteASB(bool enabled) const
+@@ -734,15 +767,22 @@ void VtIo::Writer::WriteASB(bool enabled) const
  }
  
  // DSR CPR: Cursor Position Report

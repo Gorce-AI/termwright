@@ -12,7 +12,7 @@
   },
   "patch": {
     "path": "host-cursor-rpc.patch",
-    "sha256": "193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492",
+    "sha256": "41da3024330ad209b0d10a491584dc6958e721d40fa7bfa0c1aef7049c47bfbe",
     "strip": 1
   },
   "protocol": {
@@ -39,7 +39,7 @@
     },
     "src/host/VtIo.cpp": {
       "sha256Before": "ab0ac453cb8c03bc798bc922283ec65415760ba82202ffcd6d5222c28946ee62",
-      "sha256After": "ae0c30337002c9f7f95a2b25566eba45cd07bd5838261df6519f26b3eb2ff400"
+      "sha256After": "a9a64cd502eeb2d37175a4269483d64d5224dd5adb8b12e455d52af967e6785e"
     },
     "src/host/VtIo.hpp": {
       "sha256Before": "acde4ec0c363930dfb7cdab0f7c6c99a77cc00d7c64093c464ab0fa91ccfa486",

@@ -33,6 +33,7 @@ type NativeEvent =
 interface NativeSession {
   readonly pid: number;
   write(data: Buffer): void;
+  closeInput(): void;
   resize(columns: number, rows: number): boolean;
   terminateTree(): void;
   activeProcesses(): number;
@@ -62,7 +63,7 @@ interface LoadedWindowsBinding {
 export interface WindowsConPtyRuntimeInfo {
   readonly provider: 'termwright-patched-openconsole';
   readonly upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908';
-  readonly patchSha256: '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492';
+  readonly patchSha256: '41da3024330ad209b0d10a491584dc6958e721d40fa7bfa0c1aef7049c47bfbe';
   readonly hostCursorRpc: 'twh-cpr-v1';
   readonly mode: 'ordered-vt-passthrough';
   readonly policy: 'strict';
@@ -78,7 +79,7 @@ function assertRuntimeInfoShape(value: WindowsConPtyRuntimeInfo): WindowsConPtyR
   if (
     value.provider !== 'termwright-patched-openconsole' ||
     value.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
-    value.patchSha256 !== '193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492' ||
+    value.patchSha256 !== '41da3024330ad209b0d10a491584dc6958e721d40fa7bfa0c1aef7049c47bfbe' ||
     value.hostCursorRpc !== 'twh-cpr-v1' ||
     Object.hasOwn(value, 'package') ||
     Object.hasOwn(value, 'version') ||
@@ -340,6 +341,11 @@ export interface WindowsPtyHandle {
    */
   readonly notices: readonly string[];
   write(data: Uint8Array): void;
+  /**
+   * Stops further terminal input and closes only that pipe side. The process,
+   * pseudoconsole and authoritative output stream stay alive.
+   */
+  closeInput(): void;
   writeApplicationInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): void;
   writeTerminalResponse(data: Uint8Array): ConPtyTerminalResponseRoute;
   resize(columns: number, rows: number): boolean;
@@ -375,6 +381,7 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
   let ended = false;
   let endReason: number | undefined;
   let disposed = false;
+  let inputClosed = false;
   const writeEpoch = new NativeWriteDrainEpoch();
   const terminalResponseRouter = new ConPtyTerminalResponseRouter();
   const terminalResponseTransport = new ConPtyTerminalResponseTransport();
@@ -385,7 +392,7 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
   const NOTICE_LIMIT = 64;
 
   const write = (data: Uint8Array): void => {
-    if (disposed) throw new Error('ConPTY input is closed');
+    if (disposed || inputClosed) throw new Error('ConPTY input is closed');
     const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
     writeEpoch.admit(bytes, (admitted) => session.write(admitted));
   };
@@ -473,6 +480,11 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
     outputEnded,
     write(data: Uint8Array): void {
       write(data);
+    },
+    closeInput(): void {
+      if (disposed || inputClosed) return;
+      inputClosed = true;
+      session.closeInput();
     },
     writeApplicationInput(data, kind): void {
       write(encodeConPtyApplicationInput(data, kind));

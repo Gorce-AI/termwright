@@ -527,6 +527,35 @@ bool Session::Write(const uint8_t* data, size_t length, std::string* error) {
   return true;
 }
 
+void Session::CloseInput() {
+  std::lock_guard<std::mutex> close_lock(input_close_mutex_);
+
+  writer_stop_.store(true);
+  {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    write_queue_.clear();
+  }
+  write_signal_.notify_all();
+
+  // The writer issues each operation while holding writer_io_mutex_. Since the
+  // stop flag was set first, this either cancels the already-issued operation
+  // or prevents another operation from being issued after cancellation.
+  {
+    std::lock_guard<std::mutex> issue(writer_io_mutex_);
+    if (host_input_write_.valid()) CancelIoEx(host_input_write_.get(), nullptr);
+  }
+  if (writer_.joinable()) writer_.join();
+  {
+    // The joined writer can no longer subtract its in-flight batch. Resetting
+    // before the join would let that final accounting underflow this size_t.
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    queued_write_bytes_ = 0;
+  }
+  // No operation can now be using the handle. Closing only this pipe end is a
+  // real terminal-input EOF; it deliberately leaves HPCON and output intact.
+  host_input_write_.Close();
+}
+
 bool Session::Resize(SHORT columns, SHORT rows) {
   std::lock_guard<std::mutex> lock(pseudoconsole_mutex_);
   if (pseudoconsole_ == nullptr) return false;
@@ -560,23 +589,7 @@ long long Session::ActiveProcesses() const {
 void Session::Dispose() {
   if (disposing_.exchange(true)) return;
 
-  writer_stop_.store(true);
-  {
-    std::lock_guard<std::mutex> lock(write_mutex_);
-    write_queue_.clear();
-  }
-  write_signal_.notify_all();
-
-  // The writer issues each operation while holding writer_io_mutex_. Since the
-  // stop flag was set first, this either cancels the already-issued operation
-  // or prevents another operation from being issued after cancellation.
-  {
-    std::lock_guard<std::mutex> issue(writer_io_mutex_);
-    if (host_input_write_.valid()) CancelIoEx(host_input_write_.get(), nullptr);
-  }
-  if (writer_.joinable()) writer_.join();
-  // No operation can now be using the handle.
-  host_input_write_.Close();
+  CloseInput();
 
   // Disposal owns the entire process tree. A successful TerminateJobObject is
   // followed by the existing lifecycle thread's causal barriers: the root
@@ -604,11 +617,6 @@ void Session::Dispose() {
   state_.store(State::kDisposed);
   CloseOwnedPseudoConsole();
   if (reader_.joinable()) reader_.join();
-
-  {
-    std::lock_guard<std::mutex> lock(write_mutex_);
-    queued_write_bytes_ = 0;
-  }
 
   host_output_read_.Close();
   root_thread_.Close();

@@ -179,6 +179,7 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
         env, "ConPtySession",
         {
             InstanceMethod("write", &ConPtySession::Write),
+            InstanceMethod("closeInput", &ConPtySession::CloseInput),
             InstanceMethod("resize", &ConPtySession::Resize),
             InstanceMethod("terminateTree", &ConPtySession::TerminateTree),
             InstanceMethod("activeProcesses", &ConPtySession::ActiveProcesses),
@@ -402,6 +403,11 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
     const SHORT columns = static_cast<SHORT>(info[0].As<Napi::Number>().Int32Value());
     const SHORT rows = static_cast<SHORT>(info[1].As<Napi::Number>().Int32Value());
     return Napi::Boolean::New(env, session_->Resize(columns, rows));
+  }
+
+  Napi::Value CloseInput(const Napi::CallbackInfo& info) {
+    session_->CloseInput();
+    return info.Env().Undefined();
   }
 
   Napi::Value TerminateTree(const Napi::CallbackInfo& info) {
