@@ -112,15 +112,24 @@ const attachHostControlResponder = (session, text) => {
       if (route !== 'host-control') throw new Error('host cursor RPC used route ' + route);
     }
   };
-  session.onData(answer);
+  const release = session.onData(answer);
   answer();
+  return release;
 };
-const closeOwnedInputAfterExit = (session) => {
+const closeOwnedInputAfterExit = (session, releaseHostControl) => {
   if (process.platform !== 'win32' || session.closeInput === undefined) return;
-  session.onExit(() => session.closeInput());
+  session.onExit(() => {
+    try {
+      releaseHostControl();
+    } finally {
+      session.closeInput();
+    }
+  });
 };
-closeOwnedInputAfterExit(handle);
-attachHostControlResponder(handle, () => Buffer.concat(chunks).toString('utf8'));
+closeOwnedInputAfterExit(
+  handle,
+  attachHostControlResponder(handle, () => Buffer.concat(chunks).toString('utf8')),
+);
 const exited = new Promise((resolve) => handle.onExit(resolve));
 const [status] = await Promise.all([exited, handle.outputEnded]);
 const text = Buffer.concat(chunks).toString('utf8');
@@ -149,8 +158,7 @@ const collect = (source, executable = process.execPath) => {
   const output = [];
   session.onData((data) => output.push(Buffer.from(data)));
   const collected = { session, output, text: () => Buffer.concat(output).toString('utf8') };
-  closeOwnedInputAfterExit(session);
-  attachHostControlResponder(session, collected.text);
+  closeOwnedInputAfterExit(session, attachHostControlResponder(session, collected.text));
   return collected;
 };
 
@@ -206,8 +214,7 @@ if (process.platform === 'win32') {
   const legacyOutput = [];
   legacySession.onData((data) => legacyOutput.push(Buffer.from(data)));
   const legacy = { session: legacySession, text: () => Buffer.concat(legacyOutput).toString('utf8') };
-  closeOwnedInputAfterExit(legacySession);
-  attachHostControlResponder(legacySession, legacy.text);
+  closeOwnedInputAfterExit(legacySession, attachHostControlResponder(legacySession, legacy.text));
   await legacy.session.outputEnded;
   const legacyBytes = legacy.text();
   let legacyCursor = legacyBytes.indexOf('A0000\x1b]8487;TW_LEGACY;A;0000\x07');
@@ -239,8 +246,10 @@ if (process.platform === 'win32') {
   });
   const inactiveOutput = [];
   inactiveSession.onData((data) => inactiveOutput.push(Buffer.from(data)));
-  closeOwnedInputAfterExit(inactiveSession);
-  attachHostControlResponder(inactiveSession, () => Buffer.concat(inactiveOutput).toString('utf8'));
+  closeOwnedInputAfterExit(
+    inactiveSession,
+    attachHostControlResponder(inactiveSession, () => Buffer.concat(inactiveOutput).toString('utf8')),
+  );
   await inactiveSession.outputEnded;
   const inactiveBytes = Buffer.concat(inactiveOutput).toString('utf8');
   const beforeBuffer = inactiveBytes.indexOf('ACTIVE-BEFORE\x1b]8487;TW_BUFFER;BEFORE\x07');
@@ -267,8 +276,10 @@ if (process.platform === 'win32') {
     });
     const markerOutput = [];
     markerSession.onData((data) => markerOutput.push(Buffer.from(data)));
-    closeOwnedInputAfterExit(markerSession);
-    attachHostControlResponder(markerSession, () => Buffer.concat(markerOutput).toString('utf8'));
+    closeOwnedInputAfterExit(
+      markerSession,
+      attachHostControlResponder(markerSession, () => Buffer.concat(markerOutput).toString('utf8')),
+    );
     const markerExited = new Promise((resolve) => markerSession.onExit(resolve));
     const [markerStatus] = await Promise.all([markerExited, markerSession.outputEnded]);
     const markerBytes = Buffer.concat(markerOutput).toString('utf8');
@@ -370,10 +381,10 @@ if (process.platform === 'win32') {
     rows: 24,
   });
   const resizeOutput = [];
+  resizeSession.onData((data) => resizeOutput.push(Buffer.from(data)));
   const resizing = { session: resizeSession, text: () => Buffer.concat(resizeOutput).toString('utf8') };
   let resizeStatus;
   resizeSession.onExit((status) => { resizeStatus = status; });
-  closeOwnedInputAfterExit(resizeSession);
   let startupDaAnswered = false;
   const hostCursorAnswered = new Set();
   let runtimeHostCursorAnswered = false;
@@ -381,8 +392,7 @@ if (process.platform === 'win32') {
   let escapeSent = false;
   let responseFailure;
   let resizeStage = 'startup-handshake';
-  resizeSession.onData((data) => {
-    resizeOutput.push(Buffer.from(data));
+  const releaseResizeResponder = resizeSession.onData(() => {
     const observed = resizing.text();
     try {
       for (const match of observed.matchAll(/\x1b\]8488;(twh-cpr-v1:q:([0-9a-f]{32}))\x07/g)) {
@@ -421,6 +431,7 @@ if (process.platform === 'win32') {
       resizeSession.dispose();
     }
   });
+  closeOwnedInputAfterExit(resizeSession, releaseResizeResponder);
   const resizeWatchdog = startDiagnosticWatchdog(resizing, () => resizeStage);
   try {
     await Promise.race([waitForText(resizing, 'RESIZE-READY'), resizeWatchdog.failure]);

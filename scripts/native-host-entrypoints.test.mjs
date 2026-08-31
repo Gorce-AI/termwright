@@ -81,14 +81,19 @@ describe('the native host is the only Termwright test entrypoint', () => {
       "const fragmentedSyntax = spawnSync(process.execPath, ['--check', '-']",
     );
     expect(source).toContain('attachHostControlResponder(handle');
-    expect(source).toContain('const closeOwnedInputAfterExit = (session) => {');
-    expect(source).toContain('session.onExit(() => session.closeInput());');
-    expect(source).toContain('closeOwnedInputAfterExit(handle);');
-    expect(source).toContain('closeOwnedInputAfterExit(session);');
-    expect(source).toContain('closeOwnedInputAfterExit(legacySession);');
-    expect(source).toContain('closeOwnedInputAfterExit(inactiveSession);');
-    expect(source).toContain('closeOwnedInputAfterExit(markerSession);');
-    expect(source).toContain('closeOwnedInputAfterExit(resizeSession);');
+    expect(source).toContain('const release = session.onData(answer);');
+    expect(source).toContain('const closeOwnedInputAfterExit = (session, releaseHostControl) => {');
+    expect(source).toContain(
+      'try {\n      releaseHostControl();\n    } finally {\n      session.closeInput();',
+    );
+    expect(source).toContain(
+      'closeOwnedInputAfterExit(session, attachHostControlResponder(session, collected.text));',
+    );
+    expect(source).toContain(
+      'resizeSession.onData((data) => resizeOutput.push(Buffer.from(data)));',
+    );
+    expect(source).toContain('const releaseResizeResponder = resizeSession.onData(() => {');
+    expect(source).toContain('closeOwnedInputAfterExit(resizeSession, releaseResizeResponder);');
     expect(source).toContain("stdio: ['ignore', 'inherit', 'inherit']");
   });
 
