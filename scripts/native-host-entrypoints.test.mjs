@@ -327,6 +327,12 @@ describe('the native host is the only Termwright test entrypoint', () => {
       expect(ciJobs[jobId]).toMatch(
         /^      - name: Certify the Go compiler injection contract\n        run: pnpm test:go-toolexec$/mu,
       );
+      expect(ciJobs[jobId]).toMatch(
+        /^      - name: Certify the real Git handoff contract\n        run: pnpm test:manual-handoff$/mu,
+      );
+      expect(ciJobs[jobId].indexOf('test:manual-handoff')).toBeLessThan(
+        ciJobs[jobId].indexOf('- run: pnpm build'),
+      );
     }
     expect(ciJobs.build).toContain('os: [ubuntu-22.04, macos-latest]');
     expect(ciJobs.build).toContain("node: ['22', '24']");
@@ -812,7 +818,8 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(handoffTest).toMatch(
       /resourceAwareIt\.resources\(\{\s*hostPressure:\s*['"]exclusive['"]\s*\}\)/u,
     );
-    expect(handoffTest).toContain('signal: context.signal');
+    expect(handoffTest).toContain('signal: controller.signal');
+    expect(handoffTest).toContain("context.signal.addEventListener('abort', abortFromTest");
     expect(handoffTest).toContain('context.onTestFinished(async () =>');
     expect(handoffTest).toContain('createOwnedExecFile(process.execPath');
     expect(handoffTest).not.toContain("new URL('./create-manual-compatibility-handoff.mjs'");
