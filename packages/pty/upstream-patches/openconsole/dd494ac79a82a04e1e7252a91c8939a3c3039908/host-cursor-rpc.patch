@@ -273,7 +273,7 @@ index b037275..7ee055c 100644
      }
  }
  
-@@ -1437,54 +1463,93 @@ void SCREEN_INFORMATION::SetConptyCursorPositionMayBeWrong() noexcept
+@@ -1437,54 +1463,98 @@ void SCREEN_INFORMATION::SetConptyCursorPositionMayBeWrong() noexcept
  // See ConptyCursorPositionMayBeWrong().
  void SCREEN_INFORMATION::ResetConptyCursorPositionMayBeWrong() noexcept
  {
@@ -354,19 +354,24 @@ index b037275..7ee055c 100644
 +            {
 +                return;
 +            }
-+            auto writer = gci.GetVtWriterForBuffer(target);
++            // Exactly one waiter publishes the request for a dirty generation.
++            // Every other waiter retains this shared state and sleeps on the
++            // same generation until that one addressed response commits it.
++            if (synchronization->requestedGeneration.exchange(requestedGeneration, std::memory_order_relaxed) != requestedGeneration)
++            {
++                auto writer = gci.GetVtWriterForBuffer(target);
  
 -    for (;;)
 -    {
 -        if (!_conptyCursorPositionMayBeWrong.load(std::memory_order::relaxed))
 -        {
 -            break;
-+            if (!writer || !writer.WriteDSRCPR(target, requestedGeneration, synchronization))
-+            {
-+                FAIL_FAST_HR(E_UNEXPECTED);
++                if (!writer || !writer.WriteDSRCPR(target, requestedGeneration, synchronization))
++                {
++                    FAIL_FAST_HR(E_UNEXPECTED);
++                }
++                writer.Submit();
 +            }
-+
-+            writer.Submit();
          }
  
 -        // atomic_wait() returns false when the timeout expires.
@@ -401,7 +406,7 @@ diff --git a/src/host/screenInfo.hpp b/src/host/screenInfo.hpp
 index 7f29af8..fb447c0 100644
 --- a/src/host/screenInfo.hpp
 +++ b/src/host/screenInfo.hpp
-@@ -26,8 +26,16 @@ Revision History:
+@@ -26,8 +26,17 @@ Revision History:
  #include "../renderer/inc/FontInfoDesired.hpp"
  #include "../server/ObjectHeader.h"
  
@@ -412,13 +417,14 @@ index 7f29af8..fb447c0 100644
 +struct ConptyCursorPositionSynchronization
 +{
 +    std::atomic<uint32_t> generation{ 0 };
++    std::atomic<uint32_t> requestedGeneration{ 0 };
 +    std::atomic<bool> canceled{ false };
 +};
 +
  class SCREEN_INFORMATION : public ConsoleObjectHeader, public Microsoft::Console::IIoProvider
  {
  public:
-@@ -160,9 +168,13 @@ public:
+@@ -160,9 +169,13 @@ public:
      Microsoft::Console::Types::Viewport GetTerminalBufferSize() const;
      bool SendNotifyBeep() const;
      bool ConptyCursorPositionMayBeWrong() const noexcept;
@@ -433,7 +439,7 @@ index 7f29af8..fb447c0 100644
  
      DWORD OutputMode = ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT;
      short WheelDelta = 0;
-@@ -219,7 +231,9 @@ private:
+@@ -219,7 +232,9 @@ private:
      //  the viewport to move (SetBufferInfo, WriteConsole, etc)
      til::CoordType _virtualBottom = 0;
      std::optional<til::size> _deferredPtyResize;

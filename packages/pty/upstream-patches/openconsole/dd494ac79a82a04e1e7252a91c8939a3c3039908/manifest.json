@@ -12,7 +12,7 @@
   },
   "patch": {
     "path": "host-cursor-rpc.patch",
-    "sha256": "41da3024330ad209b0d10a491584dc6958e721d40fa7bfa0c1aef7049c47bfbe",
+    "sha256": "a09171f65d36283338c589b1a3ab4a95816cbe63bd81b2657eaf7551d1013527",
     "strip": 1
   },
   "protocol": {
@@ -47,11 +47,11 @@
     },
     "src/host/screenInfo.cpp": {
       "sha256Before": "50c93b8fce3403fc34342bd774844e4ed8506cb3ee36e8c9213a7dba68ae86ce",
-      "sha256After": "5f4bc6d7be51081b47f241e05691492e8a8bf8158167c6a0e5b90a034591a044"
+      "sha256After": "32b766b6c52d46fe1397ae537729b14adaae8001bd35c6c96176e16e7ab28e58"
     },
     "src/host/screenInfo.hpp": {
       "sha256Before": "45fa0f839f7dad5bedcc0e4c7b282cda800689dd0e6f5fa66c997897c83134e4",
-      "sha256After": "84859c0d53c39667eb84870a89ea28048318635886613df693cfd85836320449"
+      "sha256After": "5d5c96f3c3b0385b6effc1323f5ab9ebb88b7adaa3dc266f55f0268946166a19"
     },
     "src/server/ApiDispatchers.cpp": {
       "sha256Before": "c7e4ea86b14b35c00550c293e4625d595b5264553f14fa9c7b0835d500fc9154",
@@ -128,6 +128,7 @@
   "binaryDigests": null,
   "binaryDigestStatus": "bootstrap-required-after-windows-build-and-conformance",
   "requiredConformance": [
+    "concurrent waiters for one dirty buffer generation share one addressed request and one response wakes them all",
     "concurrent host cursor requests for different buffers and threads remain isolated",
     "a newer dirty generation supersedes the older request without accepting a late response",
     "dirty alternate buffer teardown while GCSBI waits cancels without use-after-free or hang",

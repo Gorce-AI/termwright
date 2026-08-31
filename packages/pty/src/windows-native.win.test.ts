@@ -531,7 +531,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     }
   });
 
-  it('routes concurrent cursor requests for one dirty buffer by token and generation', async () => {
+  it('coalesces concurrent cursor waiters for one dirty buffer generation', async () => {
     const fixture = fileURLToPath(
       new URL('../../../scripts/fixtures/conpty-host-cursor-lifecycle.ps1', import.meta.url),
     );
@@ -573,17 +573,20 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         await waitForMarker(
           handle,
           output,
-          /SAME-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          /SAME-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
           10_000,
         ),
         output.text(),
       ).toBeDefined();
       const sameBufferOutput = output.text().slice(output.text().indexOf('SAME-READY'));
       const rawRequests = hostCursorRequests(sameBufferOutput);
-      expect(rawRequests).toHaveLength(2);
+      // Both GCSBI calls wait on the same dirty buffer generation. Exactly one
+      // addressed request owns that generation; its response commits the
+      // cursor once and wakes both lifetime-safe waiters.
+      expect(rawRequests).toHaveLength(1);
       const requests = [...new Set(rawRequests)];
-      expect(requests).toHaveLength(2);
-      expect(handle.writeTerminalResponse(hostCursorResponse(requests[1]!, 7, 31))).toBe(
+      expect(requests).toHaveLength(1);
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 7, 31))).toBe(
         'host-control',
       );
 
@@ -591,6 +594,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         await waitForMarker(handle, output, /CONCURRENT-SAME:2:30,6;STALE-READY/u, 10_000),
         output.text(),
       ).toBeDefined();
+      // Replaying the already-consumed token is stale and remains host-private.
       expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 9, 41))).toBe(
         'host-control',
       );
@@ -599,6 +603,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       const [status] = await Promise.all([exited, handle.outputEnded]);
       expect(status, output.text()).toEqual({ code: 0, signal: null });
       expect(output.text()).toContain('CONCURRENT-SAME:2:30,6;STALE-READY;STALE-LEAK:false');
+      const finalSameBufferOutput = output.text().slice(output.text().indexOf('SAME-READY'));
+      expect(hostCursorRequests(finalSameBufferOutput)).toEqual(rawRequests);
       expect(handle.sawRealEof).toBe(true);
     } finally {
       handle.dispose();
