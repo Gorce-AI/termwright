@@ -897,6 +897,20 @@
       "suite": "adapter conformance: termwright (tview)",
       "fullName": "keeps the application alive when the channel is cut",
       "required": false
+    },
+    {
+      "id": "pty-darwin-fast-exit-tail",
+      "file": "packages/pty/src/index.test.ts",
+      "suite": "the Termwright-owned POSIX PTY",
+      "fullName": "delivers every fast-exit tail before the Darwin PTY hangup",
+      "required": false
+    },
+    {
+      "id": "pty-windows-delivery-callback-edge",
+      "file": "packages/pty/src/windows-native.win.test.ts",
+      "suite": "ConPTY backend",
+      "fullName": "delivers events produced while a JavaScript delivery callback is executing",
+      "required": false
     }
   ]
 }

@@ -637,7 +637,12 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
     const startupRequests = new Set<string>();
     const answerStartup = (): void => {
-      answerStartupHostCursorRequests(handle, output.text(), 'PHYSICAL-A-READY', startupRequests);
+      answerStartupHostCursorRequests(
+        handle,
+        output.text(),
+        'PHYSICAL-HELPER-READY',
+        startupRequests,
+      );
     };
     handle.onData(answerStartup);
     answerStartup();
@@ -646,20 +651,29 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
       expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
       expect(
-        await waitForMarker(handle, output, /PHYSICAL-A-READY/u, 10_000),
+        await waitForMarker(
+          handle,
+          output,
+          /PHYSICAL-A-READY[\s\S]*PHYSICAL-HELPER-READY|PHYSICAL-HELPER-READY[\s\S]*PHYSICAL-A-READY/u,
+          10_000,
+        ),
         output.text(),
       ).toBeDefined();
+      const physicalReadyAt = Math.max(
+        output.text().indexOf('PHYSICAL-A-READY'),
+        output.text().indexOf('PHYSICAL-HELPER-READY'),
+      );
       expect(handle.resize(120, 40)).toBe(true);
       expect(
         await waitForMarker(
           handle,
           output,
-          /PHYSICAL-A-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          /(?:PHYSICAL-A-READY[\s\S]*PHYSICAL-HELPER-READY|PHYSICAL-HELPER-READY[\s\S]*PHYSICAL-A-READY)[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
           10_000,
         ),
         output.text(),
       ).toBeDefined();
-      handle.write(win32InputRecordCommand('B'));
+      expect(handle.write(win32InputRecordCommand('B'))).toBe(true);
       expect(
         await waitForMarker(handle, output, /PHYSICAL-B-READY/u, 10_000),
         output.text(),
@@ -674,7 +688,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         ),
         output.text(),
       ).toBeDefined();
-      const physicalOutput = output.text().slice(output.text().indexOf('PHYSICAL-A-READY'));
+      const physicalOutput = output.text().slice(physicalReadyAt);
       const rawRequests = hostCursorRequests(physicalOutput);
       expect(rawRequests).toHaveLength(2);
       const requests = [...new Set(rawRequests)];
@@ -692,7 +706,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
 
       const [status] = await Promise.all([exited, handle.outputEnded]);
       expect(status, output.text()).toEqual({ code: 0, signal: null });
-      expect(output.text()).toContain('MULTI:A=10,3;B=30,6');
+      expect(output.text()).toContain('MULTI:A=10,3');
+      expect(output.text()).toContain('MULTI:B=30,6');
       expect(handle.sawRealEof).toBe(true);
     } finally {
       handle.dispose();
@@ -724,7 +739,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
     const startupRequests = new Set<string>();
     const answerStartup = (): void => {
-      answerStartupHostCursorRequests(handle, output.text(), 'EOF-A-READY', startupRequests);
+      answerStartupHostCursorRequests(handle, output.text(), 'EOF-HELPER-READY', startupRequests);
     };
     handle.onData(answerStartup);
     answerStartup();
@@ -733,20 +748,29 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
       expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
       expect(
-        await waitForMarker(handle, output, /EOF-A-READY/u, 10_000),
+        await waitForMarker(
+          handle,
+          output,
+          /EOF-A-READY[\s\S]*EOF-HELPER-READY|EOF-HELPER-READY[\s\S]*EOF-A-READY/u,
+          10_000,
+        ),
         output.text(),
       ).toBeDefined();
+      const eofReadyAt = Math.max(
+        output.text().indexOf('EOF-A-READY'),
+        output.text().indexOf('EOF-HELPER-READY'),
+      );
       expect(handle.resize(120, 40)).toBe(true);
       expect(
         await waitForMarker(
           handle,
           output,
-          /EOF-A-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          /(?:EOF-A-READY[\s\S]*EOF-HELPER-READY|EOF-HELPER-READY[\s\S]*EOF-A-READY)[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
           10_000,
         ),
         output.text(),
       ).toBeDefined();
-      handle.write(win32InputRecordCommand('B'));
+      expect(handle.write(win32InputRecordCommand('B'))).toBe(true);
       expect(
         await waitForMarker(handle, output, /EOF-B-ALT-READY/u, 10_000),
         output.text(),
@@ -762,7 +786,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         output.text(),
       ).toBeDefined();
 
-      const eofOutput = output.text().slice(output.text().indexOf('EOF-A-READY'));
+      const eofOutput = output.text().slice(eofReadyAt);
       const rawRequests = hostCursorRequests(eofOutput);
       expect(rawRequests).toHaveLength(2);
       expect(new Set(rawRequests)).toHaveProperty('size', 2);
@@ -776,7 +800,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
 
       const [status] = await Promise.all([exited, handle.outputEnded]);
       expect(status, output.text()).toEqual({ code: 0, signal: null });
-      expect(output.text()).toContain('EOF-WAITERS:2');
+      expect(output.text()).toContain('EOF-A-WAITER');
+      expect(output.text()).toContain('EOF-B-WAITER');
       expect(handle.sawRealEof).toBe(true);
     } finally {
       handle.dispose();
@@ -1429,6 +1454,75 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     expect(sentinelAt - payloadStart).toBe(payloadBytes);
     expect(handle.sawRealEof).toBe(true);
     handle.dispose();
+  });
+
+  it('delivers events produced while a JavaScript delivery callback is executing', async () => {
+    const ready = 'DELIVERY-CALLBACK-READY';
+    const sentinel = 'DELIVERY-CALLBACK-SENTINEL';
+    const script = [
+      'process.stdin.resume();',
+      'process.stdin.once("data", () => {',
+      `  process.stdout.write(${JSON.stringify(sentinel)}, () => process.exit(0));`,
+      '});',
+      `process.stdout.write(${JSON.stringify(ready)});`,
+    ].join('\n');
+    const handle = spawnWindowsPty({
+      command: node(script),
+      env: environment(),
+      columns: 80,
+      rows: 24,
+    });
+    const output = collect(handle);
+    const releaseHostControlResponder = attachHostControlResponder(handle, output);
+    let enteredDeliveryBarrier = false;
+    let barrierFailure: string | undefined;
+    const releaseBarrier = handle.onData(() => {
+      if (enteredDeliveryBarrier || !output.text().includes(ready)) return;
+      enteredDeliveryBarrier = true;
+
+      // Keep this READY delivery callback executing while the native writer
+      // admits input, emits its drain edge, and the child publishes both its
+      // final data and process exit. Process.WaitForExit is the causal proof;
+      // its finite budget only turns a broken fixture into an attributable
+      // failure. With a one-slot TSFN queue those later edges could report
+      // napi_queue_full and silently close delivery before exit or EOF.
+      handle.write(Buffer.from('go\r'));
+      const waited = spawnSync(
+        'powershell.exe',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `try { $target = [Diagnostics.Process]::GetProcessById(${handle.pid}) } ` +
+            `catch [ArgumentException] { exit 0 } ` +
+            `catch { [Console]::Error.WriteLine($_.Exception.ToString()); exit 72 }; ` +
+            `if (-not $target.WaitForExit(10000)) { exit 71 }; ` +
+            `exit 0`,
+        ],
+        { encoding: 'utf8' },
+      );
+      if (waited.status !== 0) {
+        barrierFailure =
+          `delivery callback child did not reach process exit ` +
+          `(helper ${String(waited.status)}): ${waited.error?.message ?? waited.stderr}`;
+      }
+    });
+
+    try {
+      expect(
+        await waitForMarker(handle, output, new RegExp(sentinel, 'u'), 10_000),
+        output.text(),
+      ).toBeDefined();
+      expect(enteredDeliveryBarrier).toBe(true);
+      if (barrierFailure !== undefined) throw new Error(barrierFailure);
+      await handle.outputEnded;
+      expect(handle.sawRealEof).toBe(true);
+    } finally {
+      releaseBarrier();
+      releaseHostControlResponder();
+      handle.dispose();
+    }
   });
 
   it('reassembles a codepoint split across reads', async () => {

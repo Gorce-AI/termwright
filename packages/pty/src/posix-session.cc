@@ -445,6 +445,13 @@ void CloseDescriptor(int* descriptor) {
   *descriptor = -1;
 }
 
+#if defined(__APPLE__)
+void CloseAtomicDescriptor(std::atomic<int>* descriptor) {
+  const int owned = descriptor->exchange(-1);
+  if (owned >= 0) close(owned);
+}
+#endif
+
 void Wake(int descriptor) {
   if (descriptor < 0) return;
   const uint8_t byte = 1;
@@ -531,7 +538,13 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
   if (!ResolveExecutable(&command, options.environment, options.cwd, error)) return false;
 
   int exec_status[2] = {-1, -1};
+#if defined(__APPLE__)
+  int sentinel_ready[2] = {-1, -1};
+#endif
   if (!CreateCloseOnExecPipe(exec_status, error) ||
+#if defined(__APPLE__)
+      !CreateCloseOnExecPipe(sentinel_ready, error) ||
+#endif
       !CreateCloseOnExecPipe(reader_wake_, error) ||
       !CreateCloseOnExecPipe(writer_wake_, error) ||
       !CreateCloseOnExecPipe(lifecycle_wake_, error) ||
@@ -539,6 +552,10 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
       !SetNonblocking(writer_wake_[1], error)) {
     CloseDescriptor(&exec_status[0]);
     CloseDescriptor(&exec_status[1]);
+#if defined(__APPLE__)
+    CloseDescriptor(&sentinel_ready[0]);
+    CloseDescriptor(&sentinel_ready[1]);
+#endif
     CloseDescriptor(&reader_wake_[0]);
     CloseDescriptor(&reader_wake_[1]);
     CloseDescriptor(&writer_wake_[0]);
@@ -561,6 +578,10 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
     const int code = errno;
     CloseDescriptor(&exec_status[0]);
     CloseDescriptor(&exec_status[1]);
+#if defined(__APPLE__)
+    CloseDescriptor(&sentinel_ready[0]);
+    CloseDescriptor(&sentinel_ready[1]);
+#endif
     CloseDescriptor(&reader_wake_[0]);
     CloseDescriptor(&reader_wake_[1]);
     CloseDescriptor(&writer_wake_[0]);
@@ -573,6 +594,18 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
 
   if (child == 0) {
     close(exec_status[0]);
+#if defined(__APPLE__)
+    close(sentinel_ready[1]);
+    uint8_t ready = 0;
+    ssize_t ready_read;
+    do {
+      ready_read = read(sentinel_ready[0], &ready, sizeof(ready));
+    } while (ready_read == -1 && errno == EINTR);
+    close(sentinel_ready[0]);
+    if (ready_read != static_cast<ssize_t>(sizeof(ready)) || ready != 1) {
+      _exit(127);
+    }
+#endif
     close(reader_wake_[0]);
     close(reader_wake_[1]);
     close(writer_wake_[0]);
@@ -590,6 +623,61 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
     _exit(127);
   }
 
+#if defined(__APPLE__)
+  close(sentinel_ready[0]);
+  sentinel_ready[0] = -1;
+  int slave_sentinel = -1;
+  char slave_name[PATH_MAX];
+  const int slave_name_error = ptsname_r(master, slave_name, sizeof(slave_name));
+  if (slave_name_error == 0) {
+    slave_sentinel = open(slave_name, O_RDWR | O_NOCTTY | O_CLOEXEC);
+  }
+  if (slave_sentinel == -1) {
+    const int code = slave_name_error == 0 ? errno : slave_name_error;
+    CloseDescriptor(&sentinel_ready[1]);
+    kill(-child, SIGKILL);
+    close(master);
+    int ignored = 0;
+    while (waitpid(child, &ignored, 0) == -1 && errno == EINTR) {
+    }
+    CloseDescriptor(&exec_status[0]);
+    CloseDescriptor(&exec_status[1]);
+    CloseDescriptor(&reader_wake_[0]);
+    CloseDescriptor(&reader_wake_[1]);
+    CloseDescriptor(&writer_wake_[0]);
+    CloseDescriptor(&writer_wake_[1]);
+    CloseDescriptor(&lifecycle_wake_[0]);
+    CloseDescriptor(&lifecycle_wake_[1]);
+    *error = ErrnoMessage("open(PTY slave sentinel)", code);
+    return false;
+  }
+  const uint8_t ready = 1;
+  ssize_t ready_written;
+  do {
+    ready_written = write(sentinel_ready[1], &ready, sizeof(ready));
+  } while (ready_written == -1 && errno == EINTR);
+  CloseDescriptor(&sentinel_ready[1]);
+  if (ready_written != static_cast<ssize_t>(sizeof(ready))) {
+    const int code = ready_written == -1 ? errno : EIO;
+    close(slave_sentinel);
+    kill(-child, SIGKILL);
+    close(master);
+    int ignored = 0;
+    while (waitpid(child, &ignored, 0) == -1 && errno == EINTR) {
+    }
+    CloseDescriptor(&exec_status[0]);
+    CloseDescriptor(&exec_status[1]);
+    CloseDescriptor(&reader_wake_[0]);
+    CloseDescriptor(&reader_wake_[1]);
+    CloseDescriptor(&writer_wake_[0]);
+    CloseDescriptor(&writer_wake_[1]);
+    CloseDescriptor(&lifecycle_wake_[0]);
+    CloseDescriptor(&lifecycle_wake_[1]);
+    *error = ErrnoMessage("release PTY child after sentinel setup", code);
+    return false;
+  }
+#endif
+
   close(exec_status[1]);
   exec_status[1] = -1;
   int exec_error = 0;
@@ -599,6 +687,9 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
   } while (status_read == -1 && errno == EINTR);
   CloseDescriptor(&exec_status[0]);
   if (status_read > 0) {
+#if defined(__APPLE__)
+    close(slave_sentinel);
+#endif
     close(master);
     int ignored = 0;
     while (waitpid(child, &ignored, 0) == -1 && errno == EINTR) {
@@ -614,6 +705,9 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
   }
   if (status_read == -1) {
     const int code = errno;
+#if defined(__APPLE__)
+    close(slave_sentinel);
+#endif
     kill(-child, SIGKILL);
     close(master);
     int ignored = 0;
@@ -633,6 +727,9 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
   if (flags == -1 || fcntl(master, F_SETFL, flags | O_NONBLOCK) == -1 ||
       fcntl(master, F_SETFD, FD_CLOEXEC) == -1) {
     const int code = errno;
+#if defined(__APPLE__)
+    close(slave_sentinel);
+#endif
     kill(-child, SIGKILL);
     close(master);
     int ignored = 0;
@@ -655,6 +752,9 @@ bool PosixSession::Start(const PosixSpawnOptions& options, EventSink sink, void*
   }
   pid_ = child;
   master_.store(master);
+#if defined(__APPLE__)
+  slave_sentinel_.store(slave_sentinel);
+#endif
   reader_ = std::thread([this] { ReaderLoop(); });
   writer_ = std::thread([this] { WriterLoop(); });
   exit_watcher_ = std::thread([this] { WaitForRootExit(); });
@@ -879,6 +979,11 @@ void PosixSession::WaitForRootExit() {
       EmitError("drain(PTY process group)", drain_error);
     }
   }
+  // The child was held before exec until this parent-owned slave descriptor
+  // existed. Closing it only after the root exit and process-group drain makes
+  // the ensuing HUP a causal output boundary on Darwin, whose poll layer can
+  // otherwise expose HUP before the final slave bytes become readable.
+  CloseAtomicDescriptor(&slave_sentinel_);
 #endif
 
   int status = 0;
@@ -1035,6 +1140,14 @@ void PosixSession::Dispose() {
   }
   if (hangup_error != 0) EmitError("hang up process group", hangup_error);
   if (terminate_error != 0) EmitError("terminate process group", terminate_error);
+#if defined(__APPLE__)
+  // Explicit disposal is cancellation, not an authoritative source end. Drop
+  // the sentinel before joining the exiting session leader: Darwin can keep a
+  // hard-killed leader in kernel teardown while another process still owns
+  // the slave. JS already settles outputEnded through the disposal path and
+  // never turns this closure into sawRealEof evidence.
+  CloseAtomicDescriptor(&slave_sentinel_);
+#endif
   Wake(reader_wake_[1]);
   Wake(writer_wake_[1]);
   {

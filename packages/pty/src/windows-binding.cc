@@ -227,9 +227,17 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
       spawn.rows = static_cast<SHORT>(options.Get("rows").As<Napi::Number>().Int32Value());
     }
 
+    // DeliveryState::callback_scheduled is the queue bound: one edge may be
+    // executing in JS and at most one later edge can be admitted. Node-API's
+    // maxQueueSize=1 counts the executing callback on some runtimes, so a
+    // terminal response written reentrantly from a data listener can make the
+    // native writer's drain edge report napi_queue_full. Treating that as a
+    // closed channel silently discards the later exit and authoritative EOF.
+    // An unbounded TSFN queue is safe here because the logical edge remains
+    // bounded by callback_scheduled and payload bytes remain bounded below.
     channel_ = Napi::ThreadSafeFunction::New(env, info[1].As<Napi::Function>(),
                                              "termwright-windows-pty",
-                                             1, 1);
+                                             0, 1);
 
     // Armed before Start, never after. Start launches the reader, the writer
     // and the exit watcher and only then returns, so a gate flipped afterwards

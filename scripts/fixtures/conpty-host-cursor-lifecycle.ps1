@@ -1,7 +1,15 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('alt-teardown', 'same-buffer', 'physical-buffers', 'input-eof')]
-  [string]$Scenario
+  [ValidateSet(
+    'alt-teardown',
+    'same-buffer',
+    'physical-buffers',
+    'physical-buffers-helper',
+    'input-eof',
+    'input-eof-helper'
+  )]
+  [string]$Scenario,
+  [string]$EventName = ''
 )
 
 $source = @'
@@ -210,6 +218,39 @@ public static class TermwrightHostCursorLifecycleProbe {
     return thread;
   }
 
+  private static System.Diagnostics.Process StartHelper(
+    string scriptPath,
+    string scenario,
+    string eventName
+  ) {
+    var start = new System.Diagnostics.ProcessStartInfo();
+    start.FileName = "powershell.exe";
+    start.UseShellExecute = false;
+    start.Arguments =
+      "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" +
+      scriptPath.Replace("\"", "\\\"") + "\" -Scenario " + scenario +
+      " -EventName \"" + eventName.Replace("\"", "\\\"") + "\"";
+    return System.Diagnostics.Process.Start(start);
+  }
+
+  private static string NewHelperEventName() {
+    return "Local\\TermwrightCursor-" +
+      System.Diagnostics.Process.GetCurrentProcess().Id + "-" + Guid.NewGuid().ToString("N");
+  }
+
+  private static void StopHelper(System.Diagnostics.Process helper) {
+    try {
+      if (!helper.HasExited) helper.Kill();
+    } catch (InvalidOperationException) {
+      // The helper exited between HasExited and Kill.
+    }
+    try {
+      helper.WaitForExit();
+    } catch (InvalidOperationException) {
+      // Process startup failed before a native handle became available.
+    }
+  }
+
   private static int PrepareInput(IntPtr input, out uint originalMode) {
     if (!GetConsoleMode(input, out originalMode)) return 60;
     // This fixture validates KEY_EVENT and WINDOW_BUFFER_SIZE_EVENT records
@@ -273,7 +314,24 @@ public static class TermwrightHostCursorLifecycleProbe {
     return VerifyStaleReplyIsConsumed(input, output);
   }
 
-  private static int RunPhysicalBuffers(IntPtr input, IntPtr output, short columns, short rows) {
+  private static int RunPhysicalBufferHelper(
+    IntPtr input,
+    IntPtr output,
+    short columns,
+    short rows,
+    bool inputEof,
+    string eventName
+  ) {
+    if (String.IsNullOrEmpty(eventName)) return inputEof ? 130 : 100;
+    if (!WriteAll(
+        output,
+        inputEof ? "EOF-HELPER-READY" : "PHYSICAL-HELPER-READY")) {
+      return inputEof ? 140 : 110;
+    }
+    using (var start = EventWaitHandle.OpenExisting(eventName)) {
+      start.WaitOne();
+    }
+    if (inputEof && !SetConsoleCtrlHandler(IgnoreClose, true)) return 131;
     var secondOutput = CreateConsoleScreenBuffer(
       GENERIC_READ | GENERIC_WRITE,
       FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -281,82 +339,121 @@ public static class TermwrightHostCursorLifecycleProbe {
       CONSOLE_TEXTMODE_BUFFER,
       IntPtr.Zero
     );
-    if (secondOutput == INVALID_HANDLE_VALUE) return 90;
+    if (secondOutput == INVALID_HANDLE_VALUE) return inputEof ? 132 : 101;
     try {
-      if (!ConfigureOutput(secondOutput)) return 91;
-      if (!WriteAll(output, "PHYSICAL-A-READY")) return 92;
-      if (!ReadResize(input, columns, rows)) return 93;
-      var first = new Query();
+      if (!ConfigureOutput(secondOutput)) return inputEof ? 133 : 102;
+      if (!ReadCommand(input, 'B')) return inputEof ? 134 : 103;
+      if (!SetConsoleActiveScreenBuffer(secondOutput)) return inputEof ? 135 : 104;
+      if (!WriteAll(
+          secondOutput,
+          inputEof ? "\x1b[?1049hEOF-B-ALT-READY" : "PHYSICAL-B-READY")) {
+        return inputEof ? 136 : 105;
+      }
+      if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) {
+        return inputEof ? 137 : 106;
+      }
       var second = new Query();
-      using (var done = new CountdownEvent(2)) {
-        // Begin A's query while A is still active. The asynchronous Console API
-        // waiter releases the console lock, so the main thread can switch the
-        // physical buffer without resolving or invalidating A's request.
-        var firstThread = StartQuery(output, first, done);
-        if (!ReadCommand(input, 'B')) return 94;
-        if (!SetConsoleActiveScreenBuffer(secondOutput)) return 95;
-        if (!WriteAll(secondOutput, "PHYSICAL-B-READY")) return 96;
-        if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 97;
+      using (var done = new CountdownEvent(1)) {
         var secondThread = StartQuery(secondOutput, second, done);
         done.Wait();
-        firstThread.Join();
         secondThread.Join();
       }
-      if (!first.Success || !second.Success) return 98;
-      if (first.Info.CursorPosition.X != 10 || first.Info.CursorPosition.Y != 3 ||
-          second.Info.CursorPosition.X != 30 || second.Info.CursorPosition.Y != 6) return 99;
-      if (!WriteAll(secondOutput,
-          "MULTI:A=" + first.Info.CursorPosition.X + "," + first.Info.CursorPosition.Y +
-          ";B=" + second.Info.CursorPosition.X + "," + second.Info.CursorPosition.Y)) return 100;
+      if (!second.Success) return inputEof ? 138 : 107;
+      if (inputEof) {
+        if (!WriteAll(secondOutput, "EOF-B-WAITER")) return 139;
+      } else {
+        if (second.Info.CursorPosition.X != 30 || second.Info.CursorPosition.Y != 6) return 108;
+        if (!WriteAll(secondOutput, "MULTI:B=30,6")) return 109;
+      }
       return 0;
     } finally {
       SetConsoleActiveScreenBuffer(output);
       CloseHandle(secondOutput);
+      if (inputEof) SetConsoleCtrlHandler(IgnoreClose, false);
     }
   }
 
-  private static int RunInputEof(IntPtr input, IntPtr output, short columns, short rows) {
-    if (!SetConsoleCtrlHandler(IgnoreClose, true)) return 110;
-    var secondOutput = CreateConsoleScreenBuffer(
-      GENERIC_READ | GENERIC_WRITE,
-      FILE_SHARE_READ | FILE_SHARE_WRITE,
-      IntPtr.Zero,
-      CONSOLE_TEXTMODE_BUFFER,
-      IntPtr.Zero
-    );
-    if (secondOutput == INVALID_HANDLE_VALUE) return 111;
-    try {
-      if (!ConfigureOutput(secondOutput)) return 112;
-      if (!WriteAll(output, "EOF-A-READY")) return 113;
-      if (!ReadResize(input, columns, rows)) return 114;
-      var first = new Query();
-      var second = new Query();
-      using (var done = new CountdownEvent(2)) {
-        var firstThread = StartQuery(output, first, done);
-        if (!ReadCommand(input, 'B')) return 115;
-        if (!SetConsoleActiveScreenBuffer(secondOutput)) return 116;
-        if (!WriteAll(secondOutput, "\x1b[?1049hEOF-B-ALT-READY")) return 117;
-        if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 118;
-        var secondThread = StartQuery(secondOutput, second, done);
-        // No command follows. The parent closes only ConPTY's input pipe after
-        // it has observed both addressed requests. SendCloseEvent must cancel
-        // both synchronization states and wake this causal barrier.
-        done.Wait();
-        firstThread.Join();
-        secondThread.Join();
+  private static int RunPhysicalBuffers(
+    IntPtr input,
+    IntPtr output,
+    short columns,
+    short rows,
+    string scriptPath
+  ) {
+    var eventName = NewHelperEventName();
+    using (var start = new EventWaitHandle(false, EventResetMode.ManualReset, eventName)) {
+      using (var helper = StartHelper(scriptPath, "physical-buffers-helper", eventName)) {
+        if (helper == null) return 90;
+        try {
+          if (!WriteAll(output, "PHYSICAL-A-READY")) return 91;
+          if (!ReadResize(input, columns, rows)) return 92;
+          start.Set();
+          var first = new Query();
+          using (var done = new CountdownEvent(1)) {
+            var firstThread = StartQuery(output, first, done);
+            done.Wait();
+            firstThread.Join();
+          }
+          if (!first.Success) return 93;
+          helper.WaitForExit();
+          if (helper.ExitCode != 0) return 94;
+          if (first.Info.CursorPosition.X != 10 || first.Info.CursorPosition.Y != 3) return 95;
+          if (!WriteAll(output, "MULTI:A=10,3")) return 96;
+          return 0;
+        } finally {
+          StopHelper(helper);
+        }
       }
-      if (!first.Success || !second.Success) return 119;
-      if (!WriteAll(secondOutput, "EOF-WAITERS:2")) return 120;
-      if (!WriteAll(secondOutput, "\x1b[?1049l")) return 121;
-      return 0;
+    }
+  }
+
+  private static int RunInputEof(
+    IntPtr input,
+    IntPtr output,
+    short columns,
+    short rows,
+    string scriptPath
+  ) {
+    if (!SetConsoleCtrlHandler(IgnoreClose, true)) return 110;
+    try {
+      var eventName = NewHelperEventName();
+      using (var start = new EventWaitHandle(false, EventResetMode.ManualReset, eventName)) {
+        using (var helper = StartHelper(scriptPath, "input-eof-helper", eventName)) {
+          if (helper == null) return 112;
+          try {
+            if (!WriteAll(output, "EOF-A-READY")) return 113;
+            if (!ReadResize(input, columns, rows)) return 114;
+            start.Set();
+            var first = new Query();
+            using (var done = new CountdownEvent(1)) {
+              var firstThread = StartQuery(output, first, done);
+              // No command follows B. The parent closes only ConPTY's input pipe
+              // after both processes have established their addressed requests.
+              done.Wait();
+              firstThread.Join();
+            }
+            if (!first.Success) return 119;
+            helper.WaitForExit();
+            if (helper.ExitCode != 0) return 120;
+            if (!WriteAll(output, "EOF-A-WAITER")) return 121;
+            return 0;
+          } finally {
+            StopHelper(helper);
+          }
+        }
+      }
     } finally {
-      SetConsoleActiveScreenBuffer(output);
-      CloseHandle(secondOutput);
       SetConsoleCtrlHandler(IgnoreClose, false);
     }
   }
 
-  public static int Run(string scenario, short columns, short rows) {
+  public static int Run(
+    string scenario,
+    short columns,
+    short rows,
+    string scriptPath,
+    string eventName
+  ) {
     var input = GetStdHandle(STD_INPUT_HANDLE);
     var output = GetStdHandle(STD_OUTPUT_HANDLE);
     uint originalInputMode;
@@ -366,8 +463,10 @@ public static class TermwrightHostCursorLifecycleProbe {
     try {
       if (scenario == "alt-teardown") return RunAltTeardown(input, output, columns, rows);
       if (scenario == "same-buffer") return RunSameBuffer(input, output, columns, rows);
-      if (scenario == "physical-buffers") return RunPhysicalBuffers(input, output, columns, rows);
-      if (scenario == "input-eof") return RunInputEof(input, output, columns, rows);
+      if (scenario == "physical-buffers") return RunPhysicalBuffers(input, output, columns, rows, scriptPath);
+      if (scenario == "physical-buffers-helper") return RunPhysicalBufferHelper(input, output, columns, rows, false, eventName);
+      if (scenario == "input-eof") return RunInputEof(input, output, columns, rows, scriptPath);
+      if (scenario == "input-eof-helper") return RunPhysicalBufferHelper(input, output, columns, rows, true, eventName);
       return 67;
     } finally {
       SetConsoleMode(input, originalInputMode);
@@ -377,4 +476,4 @@ public static class TermwrightHostCursorLifecycleProbe {
 '@
 
 Add-Type -TypeDefinition $source
-exit [TermwrightHostCursorLifecycleProbe]::Run($Scenario, 120, 40)
+exit [TermwrightHostCursorLifecycleProbe]::Run($Scenario, 120, 40, $PSCommandPath, $EventName)

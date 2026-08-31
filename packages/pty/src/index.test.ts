@@ -15,6 +15,11 @@ const nativePressureIt = resourceAwareIt.resources({
   traceWriters: 0,
   nativeHost: 'exclusive',
 });
+const darwinFastExitIt = resourceAwareIt.resources({
+  terminals: 4,
+  traceWriters: 0,
+  nativeHost: 'exclusive',
+});
 
 const environment = (): Record<string, string> =>
   Object.fromEntries(
@@ -85,11 +90,42 @@ describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', 
 
   it('resolves a bare executable from PATH without invoking a shell', async () => {
     const session = collect(['node', '-e', "process.stdout.write('BARE_EXECUTABLE')"]);
-    await Promise.all([session.exit, session.handle.outputEnded]);
+    const [status] = await Promise.all([session.exit, session.handle.outputEnded]);
+    expect(status).toEqual({ code: 0, signal: null });
     expect(session.text()).toContain('BARE_EXECUTABLE');
     expect(session.handle.sawRealEof).toBe(true);
     session.handle.dispose();
   });
+
+  darwinFastExitIt.runIf(process.platform === 'darwin')(
+    'delivers every fast-exit tail before the Darwin PTY hangup',
+    async () => {
+      // Four sessions are the normal local/CI terminal ceiling. Multiple
+      // independent waves exercise the kernel boundary itself; none is a
+      // retry, and every process must contribute its own exact tail.
+      for (let wave = 0; wave < 32; wave += 1) {
+        const sessions = Array.from({ length: 4 }, (_, lane) =>
+          collect(node(`process.stdout.write(${JSON.stringify(`FAST_EXIT:${wave}:${lane}`)})`)),
+        );
+        try {
+          const statuses = await Promise.all(
+            sessions.map(async (session) => {
+              const [status] = await Promise.all([session.exit, session.handle.outputEnded]);
+              return status;
+            }),
+          );
+          for (const [lane, session] of sessions.entries()) {
+            expect(statuses[lane]).toEqual({ code: 0, signal: null });
+            expect(session.text()).toBe(`FAST_EXIT:${wave}:${lane}`);
+            expect(session.handle.sawRealEof).toBe(true);
+            expect(session.handle.endReason).toBe(0);
+          }
+        } finally {
+          for (const session of sessions) session.handle.dispose();
+        }
+      }
+    },
+  );
 
   it('fails before forking when a bare executable is absent from PATH', () => {
     expect(() =>

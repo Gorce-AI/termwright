@@ -61,6 +61,12 @@ class PosixSession {
 
   pid_t pid_ = -1;
   std::atomic<int> master_{-1};
+#if defined(__APPLE__)
+  // Darwin can report POLLHUP before the final slave output becomes readable.
+  // Keep one parent-owned slave reference until the process tree is causally
+  // drained so HUP cannot race ahead of those bytes.
+  std::atomic<int> slave_sentinel_{-1};
+#endif
   int reader_wake_[2] = {-1, -1};
   int writer_wake_[2] = {-1, -1};
   int lifecycle_wake_[2] = {-1, -1};
