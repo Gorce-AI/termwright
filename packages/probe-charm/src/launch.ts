@@ -18,6 +18,7 @@ import {
   assertNoEffectiveVendorMode,
   cacheRoot,
   copyDir,
+  digestGoToolExecSource,
   digestPatchSet,
   ensureUpstreamModule,
   isComplete,
@@ -31,6 +32,7 @@ import {
   writeWorkspace,
   type CopyKeyInput,
   type GoToolExecUnit,
+  type PreparedGoToolExec,
 } from '@termwright/probe-go';
 import { detectCharmFlavour, type CharmFlavour, type CharmMajor } from './detect.js';
 
@@ -104,6 +106,32 @@ interface PreparedCopy {
   readonly dir: string;
   readonly built: boolean;
 }
+
+/** Compiler-independent description of the Bubbles capability contract. */
+export interface BubblesCapabilityPlan {
+  readonly moduleDir: string;
+  readonly module: string;
+  readonly version: string;
+  readonly outputDir: string;
+  readonly env: NodeJS.ProcessEnv;
+  readonly units: readonly GoToolExecUnit[];
+}
+
+/** @internal Effect boundary for testing production compiler orchestration without subprocesses. */
+export interface BubblesCapabilityCompilerDependencies {
+  readonly prepareToolExec: (plan: BubblesCapabilityPlan) => Promise<PreparedGoToolExec>;
+  readonly runGo: (
+    args: readonly string[],
+    options: { readonly cwd: string; readonly env: NodeJS.ProcessEnv },
+  ) => Promise<void>;
+}
+
+const DEFAULT_BUBBLES_COMPILER_DEPENDENCIES: BubblesCapabilityCompilerDependencies = {
+  prepareToolExec: prepareGoToolExec,
+  runGo: async (args, options) => {
+    await run('go', [...args], options);
+  },
+};
 
 /**
  * Prepares a normal Bubble Tea application for an instrumented `go build`.
@@ -180,11 +208,12 @@ export async function prepareBubblesCapability(options: {
   readonly companions: Readonly<Record<string, string>>;
   readonly outputDir: string;
   readonly env: NodeJS.ProcessEnv;
+  readonly compilerDependencies?: BubblesCapabilityCompilerDependencies;
 }) {
   const module = BUBBLES_MODULES[options.major];
   const version = options.companions[module];
   if (version === undefined) return { module: null, toolExec: null } as const;
-  const toolExec = await prepareBubblesToolExec({
+  const plan = await planBubblesCapability({
     moduleDir: options.moduleDir,
     module,
     version,
@@ -192,10 +221,24 @@ export async function prepareBubblesCapability(options: {
     outputDir: options.outputDir,
     env: options.env,
   });
+  let toolExec: PreparedGoToolExec;
+  try {
+    toolExec = await compileBubblesCapability(
+      plan,
+      options.compilerDependencies ?? DEFAULT_BUBBLES_COMPILER_DEPENDENCIES,
+    );
+  } catch (error) {
+    throw new CharmPrepareError(
+      'unsupported-capability',
+      module,
+      version,
+      `${module} ${version} does not compile the owned Bubbles accessor contract: ${message(error)}`,
+    );
+  }
   return { module, toolExec } as const;
 }
 
-async function prepareBubblesToolExec(options: {
+async function planBubblesCapability(options: {
   readonly moduleDir: string;
   readonly module: string;
   readonly version: string;
@@ -221,33 +264,32 @@ async function prepareBubblesToolExec(options: {
   const units: GoToolExecUnit[] = await Promise.all(
     manifest.added.map(async (added) => {
       const packageDir = dirname(added.path).replaceAll('\\', '/');
+      const source = await readFile(join(options.patchSetDir, added.source), 'utf8');
+      if (digestGoToolExecSource(source) !== added.sha256) {
+        throw new Error(
+          `the owned Bubbles accessor ${added.source} does not match ${added.sha256}`,
+        );
+      }
       return {
         packagePath: packageDir === '.' ? options.module : `${options.module}/${packageDir}`,
         targetFile: 'zz_termwright_probe.go',
-        source: await readFile(join(options.patchSetDir, added.source), 'utf8'),
+        source,
         sourceDigest: added.sha256,
       };
     }),
   );
-  const prepared = await prepareGoToolExec({
-    moduleDir: options.moduleDir,
-    outputDir: options.outputDir,
-    units,
-    env: options.env,
-  });
-  try {
-    await run('go', ['build', ...prepared.goArgs, ...units.map((unit) => unit.packagePath)], {
-      cwd: options.moduleDir,
-      env: prepared.env,
-    });
-  } catch (error) {
-    throw new CharmPrepareError(
-      'unsupported-capability',
-      options.module,
-      options.version,
-      `${options.module} ${options.version} does not compile the owned Bubbles accessor contract: ${message(error)}`,
-    );
-  }
+  return { ...options, units } satisfies BubblesCapabilityPlan;
+}
+
+async function compileBubblesCapability(
+  plan: BubblesCapabilityPlan,
+  dependencies: BubblesCapabilityCompilerDependencies,
+): Promise<PreparedGoToolExec> {
+  const prepared = await dependencies.prepareToolExec(plan);
+  await dependencies.runGo(
+    ['build', ...prepared.goArgs, ...plan.units.map((unit) => unit.packagePath)],
+    { cwd: plan.moduleDir, env: prepared.env },
+  );
   return prepared;
 }
 
