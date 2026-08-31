@@ -142,10 +142,13 @@ architectures for the x64 package, license, manifest, and SPDX record.
 ## Updating the Windows ConPTY runtime
 
 The Windows runtime is an explicit supply-chain pin, not an install-time
-download. Update `packages/pty/conpty-assets.json`, regenerate both package
-bundles with `scripts/prepare-conpty-assets.mjs`, and review every changed hash,
-license, and SBOM field. The package checker rejects extra, missing,
-wrong-architecture, or digest-mismatched files.
+download. Update the pinned Microsoft Terminal source commit and exact T3 patch
+manifest under `packages/pty/upstream-patches/openconsole/`, then build
+`conpty.dll` and `OpenConsole.exe` together from that same patched source tree
+for x64 and ARM64. Review the source archive digest, patch digest, every
+before/after source hash, every final binary hash, license, and SBOM field. The
+package checker rejects extra, missing, wrong-architecture, provenance-mismatched,
+or digest-mismatched files.
 
 Do not merge a runtime update until the exact bundle passes the Windows x64,
 native ARM64, and x64-on-ARM64 jobs for Node 22 and 24, including Node and Bun
@@ -154,6 +157,15 @@ pressure, and real EOF. These are behavioral certification gates for the
 marker-authoritative contract; a valid Microsoft signature or matching file
 hash alone is not sufficient. Missing or invalid assets must remain a startup
 error—never restore the inbox conhost as a fallback.
+
+Certification must also prove the private request-addressed host cursor
+contract: `OSC 8488` uses a fresh 128-bit token, only the matching live response
+can complete a host query, host replies never reach the application, and
+ordinary DSR/CPR remains application-owned through Win32 Input Mode. Startup
+DA1 remains a separate host-control exchange. Do not accept a primer, timeout,
+retry, quiet window, or pending-capture state as positive evidence. A bootstrap
+artifact remains uncertified until its exact binaries and provenance are sealed
+into the checked-in packages and the complete Windows matrix passes.
 
 ## Trusted publishing setup
 

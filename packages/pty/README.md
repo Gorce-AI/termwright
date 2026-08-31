@@ -29,14 +29,18 @@ Ubuntu 22.04 glibc/libstdc++ ABI floor. A missing or unloadable matching
 addon fails closed with the attempted package paths in its diagnostic; there is
 no fallback terminal implementation.
 
-Windows packages include the pinned official Microsoft
-`Microsoft.Windows.Console.ConPTY` runtime. The addon loads `vendor/conpty.dll`
-by absolute path and uses one immutable function table for every operation on a
-pseudoconsole. It validates the DLL and architecture-specific
-`OpenConsole.exe` files before starting application code and never silently
-falls back to the inbox conhost. The x64 package includes both x64 and ARM64
-hosts because an x64 Node process can run under emulation on Windows ARM64 while
-the pseudoconsole host should remain native.
+Windows packages include `conpty.dll` and `OpenConsole.exe` built together from
+the pinned Microsoft Terminal source commit
+`dd494ac79a82a04e1e7252a91c8939a3c3039908` with Termwright's exact-fenced T3
+host-cursor patch. The resulting runtime is accepted for a release only after
+its binary digests and behavioral conformance are certified. The addon loads
+`vendor/conpty.dll` by absolute path and
+uses one immutable function table for every operation on a pseudoconsole. It
+validates the DLL and architecture-specific host files before starting
+application code and never silently falls back to the inbox conhost. The x64
+package includes both x64 and ARM64 hosts because an x64 Node process can run
+under emulation on Windows ARM64 while the pseudoconsole host should remain
+native.
 Bundle discovery is exposed through `conPtyRuntimeInfo()` even when validation
 fails, so diagnostics retain the exact failure code and Win32 status. Creating
 a session still fails closed until every asset and core export is validated.
@@ -47,13 +51,14 @@ on strict side-by-side selection plus the packaged behavioral verdict, which
 would fail on the legacy reordering path, rather than on a claimed host-PID
 attestation the public ConPTY API cannot provide.
 
-The runtime pin and SHA-256 inventory live in `conpty-assets.json`. Updating the
-pin requires regenerating the checked-in assets with
-`scripts/prepare-conpty-assets.mjs`, running the Windows causal-frame and
-lifecycle suites on x64, ARM64, and x64-on-ARM64, and reviewing the packaged
-license and SPDX record. Asset presence alone is not certification: the native
-binding reports its provider and only a behaviorally certified passthrough
-runtime may support authoritative semantic frame pairing.
+The source archive, exact patch, before/after source hashes, and final binary
+SHA-256 inventory are supply-chain inputs to the checked-in bundle. A runtime
+update builds `conpty.dll` and `OpenConsole.exe` from the same patched tree for
+each architecture, runs the Windows causal-frame and lifecycle suites on x64,
+ARM64, and x64-on-ARM64, and reviews the packaged license and SPDX record. Asset
+presence alone is not certification: the native binding reports its provider
+and only a behaviorally certified passthrough runtime may support authoritative
+semantic frame pairing.
 
 ConHost screen-buffer inspection is intentionally not part of the Windows
 contract. A native proof showed that the legacy inbox conhost could update
@@ -63,20 +68,21 @@ passthrough ConPTY removes that renderer path: client VT bytes share one ordered
 stream, so a marker written after a framework flush is a causal boundary. The
 Windows output boundary also removes ConPTY's structurally injected focus and
 Win32-input `DECSET` sequences before bytes reach the driver. It preserves the
-optional startup cursor-position query, DA1, and every original child sequence,
-including an explicit disable followed by enable. The normalizer is split-safe
-and releases an incomplete candidate verbatim before authoritative EOF.
+private host-cursor request, DA1, and every original child sequence, including
+an explicit disable followed by enable. The normalizer is split-safe and
+releases an incomplete candidate verbatim before authoritative EOF.
 The input side still honors the host's always-on Win32 Input Mode. Application
-replies are therefore transported as synthesized Win32 `KEY_EVENT` records,
-except for cursor-position reports: OpenConsole's public input parser consumes
-a raw CPR while synchronizing its own shadow cursor and otherwise passes that
-same raw CPR to the application. Startup host DA1/CPR ownership is identified
-by the split-safe control-plane grammar and answered raw. This preserves both
-runtime cursor recovery and application protocol without leaking printable
-tails as keys. After the parser has seen Win32 Input Mode, a lone raw `ESC`
-would remain a possible sequence prefix; the application-input seam therefore
-sends the physical Escape key as an explicit Win32 record while leaving raw,
-mouse, paste, and compound key bytes unchanged.
+replies, including every ordinary DSR cursor-position report, are therefore
+transported as synthesized Win32 `KEY_EVENT` records. OpenConsole's own cursor
+recovery instead uses private `OSC 8488` requests and responses carrying a
+random 128-bit request token. Only a response for the matching live token can
+complete the host query, and that host-control response is written raw and
+consumed without reaching the application. Startup DA1 remains a separately
+identified raw host-control reply. No primer, timeout, retry, quiet window, or
+capture-state guess proves cursor synchronization. After the parser has seen
+Win32 Input Mode, a lone raw `ESC` would remain a possible sequence prefix; the
+application-input seam therefore sends the physical Escape key as an explicit
+Win32 record while leaving raw, mouse, paste, and compound key bytes unchanged.
 Consequently terminal mode evidence describes requests made by the application,
 not modes ConPTY requires for its own control plane.
 
