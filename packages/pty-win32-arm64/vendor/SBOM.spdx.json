@@ -2,8 +2,8 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
-  "name": "termwright-vendored-conpty-arm64-dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.34e9e2e5ccdd2253265b1f6112c7232e463481b6d9a6a2e2dd7ec1e969fde7c0",
-  "documentNamespace": "https://github.com/Gorce-AI/termwright/sbom/conpty/arm64/dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.34e9e2e5ccdd2253265b1f6112c7232e463481b6d9a6a2e2dd7ec1e969fde7c0",
+  "name": "termwright-vendored-conpty-arm64-dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
+  "documentNamespace": "https://github.com/Gorce-AI/termwright/sbom/conpty/arm64/dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
   "creationInfo": {
     "created": "2026-08-31T00:00:00Z",
     "creators": [
@@ -14,7 +14,7 @@
     {
       "SPDXID": "SPDXRef-Package-ConPTY",
       "name": "termwright-patched-openconsole",
-      "versionInfo": "dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.34e9e2e5ccdd2253265b1f6112c7232e463481b6d9a6a2e2dd7ec1e969fde7c0",
+      "versionInfo": "dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": true,
       "packageVerificationCode": {
@@ -27,7 +27,7 @@
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "NOASSERTION",
       "copyrightText": "NOASSERTION",
-      "sourceInfo": "Built from microsoft/terminal dd494ac79a82a04e1e7252a91c8939a3c3039908; archive sha256:785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2; Termwright T3 patch sha256:839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c; source manifest sha256:34e9e2e5ccdd2253265b1f6112c7232e463481b6d9a6a2e2dd7ec1e969fde7c0"
+      "sourceInfo": "Built from microsoft/terminal dd494ac79a82a04e1e7252a91c8939a3c3039908; archive sha256:785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2; Termwright T3 patch sha256:839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c; source manifest sha256:afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677"
     },
     {
       "SPDXID": "SPDXRef-Package-Upstream",

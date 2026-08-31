@@ -13,7 +13,7 @@
   "sourceManifest": {
     "repositoryPath": "packages/pty/upstream-patches/openconsole/dd494ac79a82a04e1e7252a91c8939a3c3039908/manifest.json",
     "artifactPath": "source-manifest.json",
-    "sha256": "34e9e2e5ccdd2253265b1f6112c7232e463481b6d9a6a2e2dd7ec1e969fde7c0"
+    "sha256": "afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677"
   },
   "artifact": {
     "requiredStatus": "uncertified-bootstrap-output"
@@ -62,13 +62,13 @@
       "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
       "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
       "THIRD_PARTY_NOTICES.md": "bcdc561abefc0ed11e1226fc6b26eba906e713bce369adbfc8f3f88ac72dbf5d",
-      "SBOM.spdx.json": "c880df36f00761bf6a3759ef6fb24d6a0b4867e9c5cf125ff840065070bd5843"
+      "SBOM.spdx.json": "99f068a58b39ed9ab128f22223ce21ee68338110af07a637fd8680cb675bb57e"
     },
     "arm64": {
       "LICENSE.microsoft-terminal.txt": "ad0cf28f3381ca9bb0bf101d127402d44c17bfa0991e1a00bff7ae6679e9dada",
       "NOTICE.microsoft-terminal.md": "eda68713a323ce866f46dd7309505450e9489780f9599c10718be42d8a2e3419",
       "THIRD_PARTY_NOTICES.md": "bcdc561abefc0ed11e1226fc6b26eba906e713bce369adbfc8f3f88ac72dbf5d",
-      "SBOM.spdx.json": "89155407b2e07fd1ecc4d127d13ef24540666340eb198dc584237d856542ce0a"
+      "SBOM.spdx.json": "b11bfe019d352e1ac5225d1aa3b07248b5c0c5e7eaf2757cfbb0615c2eb82752"
     }
   }
 }

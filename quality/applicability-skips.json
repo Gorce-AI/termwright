@@ -208,7 +208,7 @@
     {
       "id": "conpty-non-windows-host-cursor-concurrent-physical-buffers",
       "file": "packages/pty/src/windows-native.win.test.ts",
-      "fullName": "keeps an active cursor request isolated from an inactive physical screen buffer",
+      "fullName": "keeps concurrent cursor requests isolated across physical screen buffers",
       "platforms": [
         "aix",
         "android",
@@ -226,7 +226,7 @@
     {
       "id": "conpty-non-windows-host-cursor-input-eof",
       "file": "packages/pty/src/windows-native.win.test.ts",
-      "fullName": "cancels the active alternate-buffer cursor wait after real input EOF",
+      "fullName": "wakes cursor waiters on physical and active alternate buffers after real input EOF",
       "platforms": [
         "aix",
         "android",

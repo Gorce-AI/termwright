@@ -286,17 +286,17 @@ public static class TermwrightHostCursorLifecycleProbe {
       if (!ConfigureOutput(secondOutput)) return 91;
       if (!WriteAll(output, "PHYSICAL-A-READY")) return 92;
       if (!ReadResize(input, columns, rows)) return 93;
-      // Prepare both physical buffers before GCSBI on the active buffer becomes
-      // pending. Switching buffers after that point would be serialized behind
-      // the unresolved request. The inactive buffer is already authoritative
-      // and returns its own cached cursor without publishing a host query.
-      if (!SetConsoleActiveScreenBuffer(secondOutput)) return 94;
-      if (!WriteAll(secondOutput, "PHYSICAL-B-READY")) return 95;
-      if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 96;
       var first = new Query();
       var second = new Query();
       using (var done = new CountdownEvent(2)) {
+        // Begin A's query while A is still active. The asynchronous Console API
+        // waiter releases the console lock, so the main thread can switch the
+        // physical buffer without resolving or invalidating A's request.
         var firstThread = StartQuery(output, first, done);
+        if (!ReadCommand(input, 'B')) return 94;
+        if (!SetConsoleActiveScreenBuffer(secondOutput)) return 95;
+        if (!WriteAll(secondOutput, "PHYSICAL-B-READY")) return 96;
+        if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 97;
         var secondThread = StartQuery(secondOutput, second, done);
         done.Wait();
         firstThread.Join();
@@ -329,26 +329,24 @@ public static class TermwrightHostCursorLifecycleProbe {
       if (!ConfigureOutput(secondOutput)) return 112;
       if (!WriteAll(output, "EOF-A-READY")) return 113;
       if (!ReadResize(input, columns, rows)) return 114;
-      // See RunPhysicalBuffers: the inactive physical buffer completes from
-      // authoritative cached state, while the active alternate buffer waits on
-      // the one host query that input EOF must cancel.
-      if (!SetConsoleActiveScreenBuffer(secondOutput)) return 115;
-      if (!WriteAll(secondOutput, "\x1b[?1049hEOF-B-ALT-READY")) return 116;
-      if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 117;
       var first = new Query();
       var second = new Query();
       using (var done = new CountdownEvent(2)) {
         var firstThread = StartQuery(output, first, done);
+        if (!ReadCommand(input, 'B')) return 115;
+        if (!SetConsoleActiveScreenBuffer(secondOutput)) return 116;
+        if (!WriteAll(secondOutput, "\x1b[?1049hEOF-B-ALT-READY")) return 117;
+        if (!ReadResize(input, (short)(columns + 1), (short)(rows + 1))) return 118;
         var secondThread = StartQuery(secondOutput, second, done);
         // No command follows. The parent closes only ConPTY's input pipe after
-        // it has observed the active buffer's addressed request. SendCloseEvent
-        // must cancel that synchronization and wake this causal barrier.
+        // it has observed both addressed requests. SendCloseEvent must cancel
+        // both synchronization states and wake this causal barrier.
         done.Wait();
         firstThread.Join();
         secondThread.Join();
       }
       if (!first.Success || !second.Success) return 119;
-      if (!WriteAll(secondOutput, "EOF-CALLS:2;PENDING:1")) return 120;
+      if (!WriteAll(secondOutput, "EOF-WAITERS:2")) return 120;
       if (!WriteAll(secondOutput, "\x1b[?1049l")) return 121;
       return 0;
     } finally {

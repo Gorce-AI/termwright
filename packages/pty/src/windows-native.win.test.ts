@@ -612,7 +612,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     }
   });
 
-  it('keeps an active cursor request isolated from an inactive physical screen buffer', async () => {
+  it('keeps concurrent cursor requests isolated across physical screen buffers', async () => {
     const fixture = fileURLToPath(
       new URL('../../../scripts/fixtures/conpty-host-cursor-lifecycle.ps1', import.meta.url),
     );
@@ -651,6 +651,16 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       ).toBeDefined();
       expect(handle.resize(120, 40)).toBe(true);
       expect(
+        await waitForMarker(
+          handle,
+          output,
+          /PHYSICAL-A-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      handle.write(win32InputRecordCommand('B'));
+      expect(
         await waitForMarker(handle, output, /PHYSICAL-B-READY/u, 10_000),
         output.text(),
       ).toBeDefined();
@@ -666,13 +676,17 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       ).toBeDefined();
       const physicalOutput = output.text().slice(output.text().indexOf('PHYSICAL-A-READY'));
       const rawRequests = hostCursorRequests(physicalOutput);
-      // Only the active physical buffer is causally dirty. The inactive buffer
-      // has authoritative cached state and must neither publish a query nor be
-      // mutated by the active buffer's addressed response.
-      expect(rawRequests).toHaveLength(1);
+      expect(rawRequests).toHaveLength(2);
       const requests = [...new Set(rawRequests)];
-      expect(requests).toHaveLength(1);
-      expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 7, 31))).toBe(
+      expect(requests).toHaveLength(2);
+
+      // The fixture publishes A before switching to B, so the tokens have a
+      // deterministic target. Resolve them in reverse order to prove that the
+      // response address, not arrival order or current activity, selects state.
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[1]!, 7, 31))).toBe(
+        'host-control',
+      );
+      expect(handle.writeTerminalResponse(hostCursorResponse(requests[0]!, 4, 11))).toBe(
         'host-control',
       );
 
@@ -685,7 +699,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     }
   });
 
-  it('cancels the active alternate-buffer cursor wait after real input EOF', async () => {
+  it('wakes cursor waiters on physical and active alternate buffers after real input EOF', async () => {
     const fixture = fileURLToPath(
       new URL('../../../scripts/fixtures/conpty-host-cursor-lifecycle.ps1', import.meta.url),
     );
@@ -724,6 +738,16 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       ).toBeDefined();
       expect(handle.resize(120, 40)).toBe(true);
       expect(
+        await waitForMarker(
+          handle,
+          output,
+          /EOF-A-READY[\s\S]*\x1b\]8488;twh-cpr-v1:q:[0-9a-f]{32}\x07/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      handle.write(win32InputRecordCommand('B'));
+      expect(
         await waitForMarker(handle, output, /EOF-B-ALT-READY/u, 10_000),
         output.text(),
       ).toBeDefined();
@@ -740,10 +764,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
 
       const eofOutput = output.text().slice(output.text().indexOf('EOF-A-READY'));
       const rawRequests = hostCursorRequests(eofOutput);
-      // The inactive physical buffer has already completed from authoritative
-      // cached state. EOF cancels the one outstanding active-alt-buffer query.
-      expect(rawRequests).toHaveLength(1);
-      expect(new Set(rawRequests)).toHaveProperty('size', 1);
+      expect(rawRequests).toHaveLength(2);
+      expect(new Set(rawRequests)).toHaveProperty('size', 2);
 
       // No cursor response is sent. This closes only the parent-owned input
       // writer; the still-live fixture must publish its completion through the
@@ -754,7 +776,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
 
       const [status] = await Promise.all([exited, handle.outputEnded]);
       expect(status, output.text()).toEqual({ code: 0, signal: null });
-      expect(output.text()).toContain('EOF-CALLS:2;PENDING:1');
+      expect(output.text()).toContain('EOF-WAITERS:2');
       expect(handle.sawRealEof).toBe(true);
     } finally {
       handle.dispose();
