@@ -33,6 +33,7 @@ export {
   ProcessLifecycleError,
   type ProcessLifecycleErrorCode,
 } from './internal/process-supervisor.js';
+export { VtScreen } from './vt.js';
 
 export { encodeKeys, encodePaste, encodeText, type KeyEncodingModes } from './keys.js';
 export {
