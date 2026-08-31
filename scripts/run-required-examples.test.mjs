@@ -141,4 +141,12 @@ describe('required public examples', () => {
     const ciExamples = workflow.slice(start, end).match(/examples\/[a-z0-9-]+/gu) ?? [];
     expect(ciExamples).toEqual(requiredExamples);
   });
+
+  it('declares the semantic contract required by the OpenTUI example', async () => {
+    const config = await readFile(
+      new URL('../examples/opentui-form/termwright.config.ts', import.meta.url),
+      'utf8',
+    );
+    expect(config).toContain("requiredCapabilities: ['semantic-tree', 'paired-revisions']");
+  });
 });
