@@ -447,6 +447,10 @@ diff --git a/src/server/ApiDispatchers.cpp b/src/server/ApiDispatchers.cpp
 index fc7d83d..c1b3f9c 100644
 --- a/src/server/ApiDispatchers.cpp
 +++ b/src/server/ApiDispatchers.cpp
+@@ -9,2 +9,3 @@
+ #include "../host/getset.h"
++#include "../host/handle.h"
+ #include "../host/stream.h"
 @@ -594,13 +594,22 @@ constexpr T saturate(auto val)
      SCREEN_INFORMATION* pObj;
      RETURN_IF_FAILED(pObjectHandle->GetScreenBuffer(GENERIC_READ, &pObj));

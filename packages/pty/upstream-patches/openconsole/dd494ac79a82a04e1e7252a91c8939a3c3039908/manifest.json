@@ -12,7 +12,7 @@
   },
   "patch": {
     "path": "host-cursor-rpc.patch",
-    "sha256": "39c334609e5644ed098ac75cdb31aeabc266ebf76fcfee949bbaf0e7a32ba5af",
+    "sha256": "193ae3506222cd8c7f06c5ec19ba81cf8277c7ad555fbf9ffe1d581301bde492",
     "strip": 1
   },
   "protocol": {
@@ -55,7 +55,7 @@
     },
     "src/server/ApiDispatchers.cpp": {
       "sha256Before": "c7e4ea86b14b35c00550c293e4625d595b5264553f14fa9c7b0835d500fc9154",
-      "sha256After": "8de4d8efaf8f47acc8de2be2a7026488695f9fd6e41a35e18c1f0aa830b54706"
+      "sha256After": "ce39c0da3d7068a44cd096f881216bc4f59862e8220e822ac6b73c46012f5c3b"
     },
     "src/terminal/parser/InputStateMachineEngine.cpp": {
       "sha256Before": "08bb07a77eeead47dec9fbae36e315389446021255f5b0378a4f1fd014ffc621",
