@@ -316,9 +316,16 @@ describe('autonomous workflow security', () => {
   it('makes release prepare and publish explicit, SHA-bound dispatch modes with no push trigger', async () => {
     const workflow = await readWorkflow('release.yml');
     const coordinatorWorkflow = await readWorkflow('autonomous-coordinator.yml');
+    const cratesPublish = jobBlock(workflow, 'crates');
+    const cratesPublishStep = stepBlock(
+      cratesPublish,
+      'Package, seal and publish in dependency order',
+    );
+    const pypiPublish = jobBlock(workflow, 'pypi');
     const npmPublish = jobBlock(workflow, 'npm');
     const finalize = jobBlock(workflow, 'finalize');
     const detect = jobBlock(workflow, 'detect');
+    const verify = jobBlock(workflow, 'verify');
     expect(workflow).toContain(
       'TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}',
     );
@@ -414,9 +421,51 @@ describe('autonomous workflow security', () => {
       'verify-published-artifact.mjs npm-tag "$package" latest "$VERSION"',
     );
     expect(workflow).toContain('find npm pypi crates');
+    expect(verify).toContain('name: release-base-artifacts-${{ needs.detect.outputs.commit }}');
+    expect(verify).not.toContain('cargo package');
+    const baseSeal = stepBlock(verify, 'Seal base release artifacts');
+    expect(baseSeal).toContain('find npm pypi -type f');
+    expect(baseSeal).not.toContain('crates');
+    expect(cratesPublish).toContain(
+      'name: release-base-artifacts-${{ needs.detect.outputs.commit }}',
+    );
+    expect(cratesPublishStep.indexOf('cargo package --locked --no-verify')).toBeLessThan(
+      cratesPublishStep.indexOf('cp "$crate_target/package/$name-$VERSION.crate"'),
+    );
+    expect(
+      cratesPublishStep.indexOf('cp "$crate_target/package/$name-$VERSION.crate"'),
+    ).toBeLessThan(cratesPublishStep.indexOf('cargo publish --dry-run --locked --no-verify'));
+    expect(cratesPublishStep.indexOf('cargo publish --dry-run --locked --no-verify')).toBeLessThan(
+      cratesPublishStep.indexOf('cmp "$archive" "${reproduced_archives[0]}"'),
+    );
+    expect(cratesPublishStep.indexOf('cmp "$archive" "${reproduced_archives[0]}"')).toBeLessThan(
+      cratesPublishStep.indexOf(
+        'sha256sum "crates/$name-$VERSION.crate" >> crates/PRESEAL-SHA256SUMS',
+      ),
+    );
+    expect(
+      cratesPublishStep.indexOf(
+        'sha256sum "crates/$name-$VERSION.crate" >> crates/PRESEAL-SHA256SUMS',
+      ),
+    ).toBeLessThan(cratesPublishStep.indexOf('verify-published-artifact.mjs crate "$archive"'));
+    expect(
+      cratesPublishStep.indexOf('verify-published-artifact.mjs crate "$archive"'),
+    ).toBeLessThan(cratesPublishStep.indexOf('cargo publish --locked --manifest-path'));
+    expect(cratesPublishStep.indexOf('cargo publish --locked --manifest-path')).toBeLessThan(
+      cratesPublishStep.lastIndexOf('verify-published-artifact.mjs crate "$archive"'),
+    );
+    expect(cratesPublishStep.indexOf('sha256sum --check crates/PRESEAL-SHA256SUMS')).toBeLessThan(
+      cratesPublishStep.indexOf('find npm pypi crates'),
+    );
+    expect(cratesPublish).toContain('name: release-artifacts-${{ needs.detect.outputs.commit }}');
+    expect(pypiPublish).toContain('name: release-artifacts-${{ needs.detect.outputs.commit }}');
+    expect(pypiPublish).not.toContain('release-base-artifacts-');
+    expect(npmPublish).toContain('name: release-artifacts-${{ needs.detect.outputs.commit }}');
+    expect(npmPublish).not.toContain('release-base-artifacts-');
+    expect(workflow.match(/toolchain: '1\.98\.0'/gu)).toHaveLength(2);
+    expect(workflow).not.toMatch(/toolchain:\s*stable/gu);
     expect(workflow).toContain('token: ${{ steps.writer-token.outputs.token }}');
     expect(workflow.match(/persist-credentials: false/gu)?.length).toBeGreaterThanOrEqual(8);
-    const verify = jobBlock(workflow, 'verify');
     const install = '      - run: pnpm install --frozen-lockfile\n';
     expect(verify.match(/- run: pnpm install --frozen-lockfile/gu)).toHaveLength(1);
     expect(verify.indexOf(install)).toBeLessThan(
