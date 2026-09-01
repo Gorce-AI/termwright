@@ -453,7 +453,10 @@ if (process.platform === 'win32') {
         }
         applicationModeAnswered = true;
       }
-      if (!escapeSent && observed.includes(';APP-CPR:1b5b393b313752;ESC-READY')) {
+      if (
+        !escapeSent &&
+        observed.includes(';APP-MODE-REPLY:1b5b3f323032363b322479;ESC-READY')
+      ) {
         resizeStage = 'physical-escape';
         resizeSession.writeApplicationInput(Buffer.from(controlEsc, 'ascii'), 'key');
         escapeSent = true;

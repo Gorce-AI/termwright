@@ -402,7 +402,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     handle.dispose();
   });
 
-  it('routes addressed host cursor RPC separately from application CPR without leaking host replies', async () => {
+  it('routes addressed host cursor RPC separately from atomic application replies', async () => {
     const fixture = fileURLToPath(
       new URL('../../../scripts/fixtures/conpty-observable-resize.ps1', import.meta.url),
     );
@@ -473,7 +473,25 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       );
 
       expect(
-        await waitForMarker(handle, output, /APP-CPR:1b5b393b313752;ESC-READY/u, 10_000),
+        await waitForMarker(
+          handle,
+          output,
+          /APP-CPR:1b5b393b313752;APP-MODE-QUERY:\x1b\[\?2026\$p/u,
+          10_000,
+        ),
+        output.text(),
+      ).toBeDefined();
+      expect(handle.writeTerminalResponse(Buffer.from('\x1b[?2026;2$y', 'ascii'))).toBe(
+        'application-envelope',
+      );
+
+      expect(
+        await waitForMarker(
+          handle,
+          output,
+          /APP-MODE-REPLY:1b5b3f323032363b322479;ESC-READY/u,
+          10_000,
+        ),
         output.text(),
       ).toBeDefined();
       handle.writeApplicationInput(Buffer.from('\x1b', 'ascii'), 'key');
@@ -482,6 +500,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(status, output.text()).toEqual({ code: 0, signal: null });
       expect(output.text()).toContain('RESIZED:120x40;HOST-CPR:16,2;HOST-REPLY-LEAK:false');
       expect(output.text()).toContain(';APP-CPR:1b5b393b313752');
+      expect(output.text()).toContain(';APP-MODE-REPLY:1b5b3f323032363b322479');
       expect(output.text()).toContain(';ESC:1b;VK:27;SCAN:1;REPEAT:1');
       expect(handle.sawRealEof).toBe(true);
     } finally {

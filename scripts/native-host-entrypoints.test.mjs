@@ -125,6 +125,10 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'closeOwnedInputAfterExit(session, attachHostControlResponder(session, collected.text));',
     );
     expect(source).toContain(
+      "observed.includes(';APP-MODE-REPLY:1b5b3f323032363b322479;ESC-READY')",
+    );
+    expect(source).not.toContain("observed.includes(';APP-CPR:1b5b393b313752;ESC-READY')");
+    expect(source).toContain(
       'resizeSession.onData((data) => resizeOutput.push(Buffer.from(data)));',
     );
     expect(source).toContain('const releaseResizeResponder = resizeSession.onData(() => {');
