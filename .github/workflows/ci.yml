@@ -136,6 +136,9 @@ jobs:
       # fresh checkout has no dist/ and must build before this check. Running
       # it earlier accidentally depended on stale local artifacts.
       - run: pnpm check:pty
+      - name: Certify Darwin fast-exit tails outside unit callback deadlines
+        if: runner.os == 'macOS'
+        run: pnpm test:darwin-fast-exit
       - name: Verify packed driver on the native PTY backend
         shell: bash
         run: |
@@ -145,14 +148,17 @@ jobs:
           mkdir -p "$pack_dir" "$install_dir"
           platform=$(node -p 'process.platform')
           architecture=$(node -p 'process.arch')
+          native_package_path="packages/pty-$platform-$architecture/termwright_pty.node"
+          trap 'rm -f "$native_package_path"' EXIT
           cp packages/pty/build/Release/termwright_pty.node \
-             "packages/pty-$platform-$architecture/termwright_pty.node"
+             "$native_package_path"
           node scripts/check-prebuild.mjs "$platform" "$architecture"
           pnpm --dir packages/protocol pack --pack-destination "$pack_dir"
           pnpm --dir packages/vt pack --pack-destination "$pack_dir"
           pnpm --dir "packages/pty-$platform-$architecture" pack --pack-destination "$pack_dir"
           pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           pnpm --dir packages/driver pack --pack-destination "$pack_dir"
+          rm -f "$native_package_path"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
       - run: pnpm -r --filter './packages/*' run typecheck

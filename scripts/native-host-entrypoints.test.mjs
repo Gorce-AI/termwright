@@ -305,6 +305,19 @@ describe('the native host is the only Termwright test entrypoint', () => {
       ),
     );
     expect(ciJobs.build).toMatch(
+      /^      - name: Certify Darwin fast-exit tails outside unit callback deadlines\n        if: runner\.os == 'macOS'\n        run: pnpm test:darwin-fast-exit$/mu,
+    );
+    expect(manifest.scripts['test:darwin-fast-exit']).toBe(
+      'node scripts/certify-darwin-fast-exit.mjs',
+    );
+    const darwinFastExitCertification = await readFile(
+      new URL('./certify-darwin-fast-exit.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(darwinFastExitCertification).toContain('const WAVES = 32;');
+    expect(darwinFastExitCertification).toContain('const WAVE_WATCHDOG_MS = 5_000;');
+    expect(darwinFastExitCertification).not.toMatch(/retry|sleep/u);
+    expect(ciJobs.build).toMatch(
       /^      - name: Certify the injected tview screen lifecycle under the race detector\n        if: runner\.os != 'Windows'\n        run: pnpm test:tview-race$/mu,
     );
     expect(manifest.scripts['test:tview-race']).toBe('node scripts/certify-tview-screen-race.mjs');
