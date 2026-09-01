@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -61,24 +61,24 @@ async function recordSample(dir: string): Promise<void> {
 describe('openTrace', () => {
   it('classifies complete, incomplete, corrupt, and unsupported artifacts', async () => {
     const root = await workspace();
-    const completeDir = join(root, 'complete.twtrace');
-    await recordSample(completeDir);
-    const complete = await inspectTrace(completeDir);
+    const baseDir = join(root, 'base.twtrace');
+    await recordSample(baseDir);
+    const complete = await inspectTrace(baseDir);
     expect(complete.status).toBe('complete');
     if (complete.status === 'complete') await complete.reader.close();
 
     const incompleteDir = join(root, 'incomplete.twtrace');
-    await recordSample(incompleteDir);
+    await cp(baseDir, incompleteDir, { recursive: true });
     await unlink(join(incompleteDir, TRACE_FILES.commit));
     expect((await inspectTrace(incompleteDir)).status).toBe('incomplete');
 
     const corruptDir = join(root, 'corrupt.twtrace');
-    await recordSample(corruptDir);
+    await cp(baseDir, corruptDir, { recursive: true });
     await writeFile(join(corruptDir, TRACE_FILES.events), 'tampered\n');
     expect((await inspectTrace(corruptDir)).status).toBe('corrupt');
 
     const futureDir = join(root, 'future-status.twtrace');
-    await recordSample(futureDir);
+    await cp(baseDir, futureDir, { recursive: true });
     const meta = JSON.parse(await readFile(join(futureDir, TRACE_FILES.meta), 'utf8')) as Record<
       string,
       unknown
