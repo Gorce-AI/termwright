@@ -902,7 +902,7 @@
       "id": "pty-darwin-fast-exit-tail",
       "file": "packages/pty/src/index.test.ts",
       "suite": "the Termwright-owned POSIX PTY",
-      "fullName": "delivers every fast-exit tail before the Darwin PTY hangup",
+      "fullName": "delivers one complete fast-exit wave before the Darwin PTY hangup",
       "required": false
     },
     {
