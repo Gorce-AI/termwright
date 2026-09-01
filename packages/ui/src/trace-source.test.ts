@@ -5,7 +5,7 @@ import {
   buildCrashedFixtureTrace,
   buildFixtureTrace,
   FIXTURE_TREES,
-} from './__fixtures__/build-trace.js';
+} from './test/fixtures/build-trace.js';
 import { UiHub } from './hub.js';
 import {
   publishTraceTimeline,
@@ -23,7 +23,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await reader.close();
+  if (reader !== undefined) await reader.close();
 });
 
 const prefix = (state: { castPrefixB64: string }): string =>
@@ -147,7 +147,7 @@ describe('a crashed recording', () => {
   });
 
   afterAll(async () => {
-    await crashed.close();
+    if (crashed !== undefined) await crashed.close();
   });
 
   it('surfaces the crash section, validated', () => {

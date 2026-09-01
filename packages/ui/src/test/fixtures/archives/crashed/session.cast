@@ -1,0 +1,4 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1788261216,"command":"node agent.js"}
+[0,"o","starting\r\n"]
+[1.2,"o","panic: runtime error: index out of range\r\n"]
+[0.2,"x",""]

@@ -1,0 +1,5 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1788261215,"command":"node agent.js"}
+[0,"o","Permission required\r\n"]
+[1,"m","approve"]
+[0,"o","running: ls -la\r\n"]
+[1,"x","0"]

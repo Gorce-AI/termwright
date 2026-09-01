@@ -1,0 +1,52 @@
+{
+  "v": 1,
+  "sessionId": "trace-session",
+  "command": [
+    "node",
+    "agent.js"
+  ],
+  "columns": 80,
+  "rows": 24,
+  "startedAt": "2026-09-01T11:13:36.115Z",
+  "platform": "darwin",
+  "semanticTree": true,
+  "exit": {
+    "code": null,
+    "signal": "SIGSEGV"
+  },
+  "durationMs": 1400,
+  "crash": {
+    "t": 1400,
+    "castOffset": 1400,
+    "exit": {
+      "code": null,
+      "signal": "SIGSEGV"
+    },
+    "screenTail": [
+      "starting",
+      "panic: runtime error: index out of range"
+    ],
+    "lastSemanticRevision": 1,
+    "recentInputs": [
+      {
+        "timeMs": 1100,
+        "kind": "key",
+        "bytes": 1,
+        "preview": "\\r"
+      },
+      {
+        "timeMs": 1150,
+        "kind": "paste",
+        "bytes": 64
+      }
+    ],
+    "diagnosticsTail": [
+      {
+        "code": "protocol-violation",
+        "detail": "frame too large",
+        "revision": 1,
+        "timeMs": 1300
+      }
+    ]
+  }
+}

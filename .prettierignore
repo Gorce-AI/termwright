@@ -25,6 +25,7 @@ clients/python/uv.lock
 # Generated, content-addressed, or byte-certified evidence.
 **/upstream-patches/**
 **/__snapshots__/**
+packages/ui/src/test/fixtures/archives/**
 packages/pty-win32-*/vendor/**
 packages/probe-tview/assets/*.go.txt
 clients/test-vectors/**
