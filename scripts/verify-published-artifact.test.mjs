@@ -1,6 +1,12 @@
+import { createHash } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  collectPypiDistributions,
   fetchPypiMetadata,
+  selectPypiDistributionNames,
   verifyCrateMetadata,
   verifyNpmMetadata,
   verifyNpmTagMetadata,
@@ -93,6 +99,67 @@ describe('immutable registry retry verification', () => {
         '1.0.0',
       ),
     ).toThrow(/different immutable/u);
+  });
+
+  it('compares PyPI distributions while validating publisher-generated attestations', async () => {
+    const distributions = ['termwright-1.0.0-py3-none-any.whl', 'termwright-1.0.0.tar.gz'];
+    expect(
+      selectPypiDistributionNames([
+        `${distributions[1]}.publish.attestation`,
+        distributions[0],
+        `${distributions[0]}.publish.attestation`,
+        distributions[1],
+      ]),
+    ).toEqual(distributions);
+    expect(() => selectPypiDistributionNames([...distributions, 'unknown.json'])).toThrow(
+      /unexpected local PyPI release artifact/u,
+    );
+    expect(() =>
+      selectPypiDistributionNames([...distributions, 'other.whl.publish.attestation']),
+    ).toThrow(/orphan PyPI publish attestation/u);
+
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-pypi-verifier-'));
+    try {
+      const contents = new Map([
+        [distributions[0], 'wheel'],
+        [distributions[1], 'sdist'],
+      ]);
+      for (const [name, content] of contents) await writeFile(join(directory, name), content);
+
+      const preflight = await collectPypiDistributions(directory);
+      const expected = new Map(
+        [...contents].map(([name, content]) => [
+          name,
+          createHash('sha256').update(content).digest('hex'),
+        ]),
+      );
+      expect(preflight).toEqual(expected);
+
+      for (const name of distributions)
+        await writeFile(join(directory, `${name}.publish.attestation`), 'attestation');
+      const postPublish = await collectPypiDistributions(directory);
+      expect(postPublish).toEqual(expected);
+      expect(
+        verifyPypiMetadata(
+          {
+            info: { version: '1.0.0' },
+            urls: [...postPublish].map(([filename, sha256]) => ({
+              filename,
+              digests: { sha256 },
+            })),
+          },
+          postPublish,
+          '1.0.0',
+        ),
+      ).toBe('exact');
+
+      await writeFile(join(directory, 'unexpected.json'), '{}');
+      await expect(collectPypiDistributions(directory)).rejects.toThrow(
+        /unexpected local PyPI release artifact/u,
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('accepts only the exact crates.io checksum', () => {
