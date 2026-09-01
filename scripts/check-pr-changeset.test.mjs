@@ -13,6 +13,7 @@ describe('pull-request changeset policy', () => {
     'packages/ui/src/app/browser-client.spec.ts',
     'packages/ui/src/app/fresh-app.e2e.ts',
     'packages/driver/tests/session.ts',
+    'packages/probe-charm/src/testing/fixture-bubbles/go.sum',
     'packages/test/vitest.config.ts',
     'packages/test/coverage.config.mjs',
     'packages/test/src/output.snap',
