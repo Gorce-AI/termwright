@@ -199,6 +199,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(goCiJobs.clients.indexOf('go list -mod=readonly -deps -test ./...')).toBeLessThan(
       goCiJobs.clients.indexOf("echo 'GOPROXY=off'"),
     );
+    expect(goCiJobs.clients.indexOf("echo 'GOPROXY=off'")).toBeLessThan(
+      goCiJobs.clients.indexOf('go test -race -count=1 ./...'),
+    );
     expect(goCiJobs.clients).toContain("echo 'GOPROXY=off'");
     expect(goCiJobs.clients).toContain('} >> "$GITHUB_ENV"');
     expect(goCiJobs['release-hygiene']).toContain(
