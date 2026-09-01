@@ -1,5 +1,16 @@
 # @termwright/pty
 
+## 0.3.1
+
+### Patch Changes
+
+- [#122](https://github.com/Gorce-AI/termwright/pull/122) [`a268cf4`](https://github.com/Gorce-AI/termwright/commit/a268cf42aa880353e3f307112dbbbfebc492212c) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Transfer ownership of the Go client's evidence-provider lease exactly once when concurrent socket and publication shutdown paths close the same session. Preserve complete race-detector diagnostics from the full tview PTY certification instead of relying on terminal-screen text that the detector does not write.
+
+  Deliver each Windows application terminal reply through the private `twh-app-reply-v1` envelope. Patched OpenConsole buffers the complete OSC, validates its length and encoding, then commits the decoded reply in one input-buffer operation regardless of the child's VT-input mode. This prevents both per-byte mode-report corruption and raw CPR consumption as an F3 key.
+
+- Updated dependencies [[`a268cf4`](https://github.com/Gorce-AI/termwright/commit/a268cf42aa880353e3f307112dbbbfebc492212c)]:
+  - @termwright/protocol@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes
