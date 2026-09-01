@@ -2,8 +2,8 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
-  "name": "termwright-vendored-conpty-arm64-dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
-  "documentNamespace": "https://github.com/Gorce-AI/termwright/sbom/conpty/arm64/dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
+  "name": "termwright-vendored-conpty-arm64-dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.twh-app-reply-v1.eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c.f10df8882380b4d85e53154bb35460eb2d1dd21a28fee478ecd5bc8f56549406",
+  "documentNamespace": "https://github.com/Gorce-AI/termwright/sbom/conpty/arm64/dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.twh-app-reply-v1.eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c.f10df8882380b4d85e53154bb35460eb2d1dd21a28fee478ecd5bc8f56549406",
   "creationInfo": {
     "created": "2026-08-31T00:00:00Z",
     "creators": [
@@ -14,11 +14,11 @@
     {
       "SPDXID": "SPDXRef-Package-ConPTY",
       "name": "termwright-patched-openconsole",
-      "versionInfo": "dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c.afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677",
+      "versionInfo": "dd494ac79a82a04e1e7252a91c8939a3c3039908+twh-cpr-v1.twh-app-reply-v1.eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c.f10df8882380b4d85e53154bb35460eb2d1dd21a28fee478ecd5bc8f56549406",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": true,
       "packageVerificationCode": {
-        "packageVerificationCodeValue": "f7a04b9d55685222b35ec59c12ec5b6c5fc98107",
+        "packageVerificationCodeValue": "97889f04a2ea88773cb2b12c7579db858a0e81b1",
         "packageVerificationCodeExcludedFiles": [
           "conpty-manifest.json",
           "SBOM.spdx.json"
@@ -27,7 +27,7 @@
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "NOASSERTION",
       "copyrightText": "NOASSERTION",
-      "sourceInfo": "Built from microsoft/terminal dd494ac79a82a04e1e7252a91c8939a3c3039908; archive sha256:785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2; Termwright T3 patch sha256:839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c; source manifest sha256:afd65ddaed3a990e022b1bc0d85286f6c0e852285734585b1ed928808f0d6677"
+      "sourceInfo": "Built from microsoft/terminal dd494ac79a82a04e1e7252a91c8939a3c3039908; archive sha256:785acda6faebec50548d7d201d031e7a466c1ba3b35d2792dda7f751e6a701e2; Termwright T3 patch sha256:eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c; source manifest sha256:f10df8882380b4d85e53154bb35460eb2d1dd21a28fee478ecd5bc8f56549406"
     },
     {
       "SPDXID": "SPDXRef-Package-Upstream",
@@ -97,11 +97,11 @@
       "checksums": [
         {
           "algorithm": "SHA1",
-          "checksumValue": "727739e03303be51ee093b7f5e7b9bbf8ac545d2"
+          "checksumValue": "b9013d7a7f3636d0cc37725c44bfeda8027897a4"
         },
         {
           "algorithm": "SHA256",
-          "checksumValue": "47b96efe37712e782936bc90710458f9c2c09e882776b2e2ac435eab2d682e7e"
+          "checksumValue": "debf08d567c30dcb22183b8289a6b987fcd819c7ee7f5fa859cac810979171c8"
         }
       ],
       "licenseConcluded": "NOASSERTION",
@@ -113,11 +113,11 @@
       "checksums": [
         {
           "algorithm": "SHA1",
-          "checksumValue": "946775087bab7e091ac85702c762c459738d3d7b"
+          "checksumValue": "4f0ede991d968e560a596d4868a747d65be80604"
         },
         {
           "algorithm": "SHA256",
-          "checksumValue": "b3281f58c784abf453a5bb1e193798c49718f0ac16d9c65400b4500a17fc83d5"
+          "checksumValue": "87ac8d5a4b808eeec59ffc8274df17ba74c5512c50fb53bff6b4daa80dc250b8"
         }
       ],
       "licenseConcluded": "NOASSERTION",
@@ -161,11 +161,11 @@
       "checksums": [
         {
           "algorithm": "SHA1",
-          "checksumValue": "36c60001353262aa131dc28e4ad3bc6c1a5d1899"
+          "checksumValue": "9a4168f428c800c68b8c30f2e7a150ed820965d4"
         },
         {
           "algorithm": "SHA256",
-          "checksumValue": "bcdc561abefc0ed11e1226fc6b26eba906e713bce369adbfc8f3f88ac72dbf5d"
+          "checksumValue": "b7c1340b4431ec6643c085f8e58baf6f45eed758c9c17d1936fcdbf68b673c12"
         }
       ],
       "licenseConcluded": "NOASSERTION",

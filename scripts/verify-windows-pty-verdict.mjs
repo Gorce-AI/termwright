@@ -23,7 +23,7 @@ export async function verifyWindowsPtyVerdict(
   const manifestPath = join(packageDirectory, 'vendor', 'conpty-manifest.json');
 
   if (
-    verdict.schemaVersion !== 5 ||
+    verdict.schemaVersion !== 6 ||
     verdict.platform !== 'win32' ||
     !['x64', 'arm64'].includes(verdict.architecture) ||
     verdict.addonSha256 !== (await digest(join(packageDirectory, 'termwright_pty.node'))) ||
@@ -53,6 +53,7 @@ export async function verifyWindowsPtyVerdict(
     verdict.causal?.markerOsc !== 8487 ||
     verdict.causal?.inactiveBuffer !== true ||
     verdict.causal?.applicationModes !== true ||
+    verdict.causal?.applicationRepliesAtomic !== true ||
     verdict.causal?.resize !== true ||
     verdict.causal?.markerSplit !== true ||
     verdict.causal?.markerModeNode !== true ||

@@ -407,6 +407,7 @@ if (process.platform === 'win32') {
   const hostCursorAnswered = new Set();
   let runtimeHostCursorAnswered = false;
   let applicationCprAnswered = false;
+  let applicationModeAnswered = false;
   let escapeSent = false;
   let responseFailure;
   let resizeStage = 'startup-handshake';
@@ -439,6 +440,19 @@ if (process.platform === 'win32') {
         if (route !== 'application-envelope') throw new Error('application CPR used route ' + route);
         applicationCprAnswered = true;
       }
+      if (
+        !applicationModeAnswered &&
+        observed.includes(';APP-MODE-QUERY:' + controlEsc + '[?2026$p')
+      ) {
+        resizeStage = 'application-mode-report';
+        const route = resizeSession.writeTerminalResponse(
+          Buffer.from(controlEsc + '[?2026;2$y', 'ascii'),
+        );
+        if (route !== 'application-envelope') {
+          throw new Error('application mode report used route ' + route);
+        }
+        applicationModeAnswered = true;
+      }
       if (!escapeSent && observed.includes(';APP-CPR:1b5b393b313752;ESC-READY')) {
         resizeStage = 'physical-escape';
         resizeSession.writeApplicationInput(Buffer.from(controlEsc, 'ascii'), 'key');
@@ -461,10 +475,12 @@ if (process.platform === 'win32') {
   }
   const resizeEvidence = resizing.text();
   const resizeValid = responseFailure === undefined &&
-    startupDaAnswered && runtimeHostCursorAnswered && applicationCprAnswered && escapeSent &&
+    startupDaAnswered && runtimeHostCursorAnswered && applicationCprAnswered &&
+    applicationModeAnswered && escapeSent &&
     resizeStatus?.code === 0 &&
     resizeEvidence.includes('RESIZED:120x40;HOST-CPR:16,2;HOST-REPLY-LEAK:false') &&
     resizeEvidence.includes(';APP-CPR:1b5b393b313752') &&
+    resizeEvidence.includes(';APP-MODE-REPLY:1b5b3f323032363b322479') &&
     resizeEvidence.includes(';ESC:1b;VK:27;SCAN:1;REPEAT:1') && resizeSession.sawRealEof;
   resizeSession.dispose();
   if (!resizeValid) {
@@ -882,7 +898,7 @@ if (verdictPath !== undefined) {
     verdictPath,
     `${JSON.stringify(
       {
-        schemaVersion: 5,
+        schemaVersion: 6,
         platform,
         architecture: arch,
         addonSha256: sha256(addonPath),
@@ -896,6 +912,7 @@ if (verdictPath !== undefined) {
           alternateScreen: true,
           inactiveBuffer: true,
           applicationModes: true,
+          applicationRepliesAtomic: true,
           resize: true,
           markerSplit: true,
           markerModeNode: true,

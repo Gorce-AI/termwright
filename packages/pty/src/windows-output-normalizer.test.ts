@@ -200,7 +200,12 @@ describe('ConPTY terminal-response routing', () => {
     expect(new ConPtyTerminalResponseTransport().encode('application-envelope', response)).toEqual(
       envelope,
     );
-    expect(new ConPtyTerminalResponseTransport().encode('host-control', response)).toEqual(response);
+    expect(new ConPtyTerminalResponseTransport().encode('host-control', response)).toEqual(
+      response,
+    );
+    expect(encodeConPtyApplicationTerminalResponse(Buffer.from('\x1b[9;17R', 'ascii'))).toEqual(
+      Buffer.from('\x1b]8488;twh-app-reply-v1:7:1b5b393b313752\x07', 'ascii'),
+    );
   });
 
   it('fails closed for empty, oversized, or non-ASCII application replies', () => {
