@@ -139,6 +139,13 @@ export const CI_JOBS = Object.freeze(
 // merge, so neither a skipped dependency nor a forged partial result is enough.
 export const REQUIRED_BRANCH_CHECKS = Object.freeze(['certification gate']);
 
+export const RELEASE_ORCHESTRATION_TAIL_FILES = Object.freeze([
+  '.github/workflows/release.yml',
+  'scripts/autonomous-release-coordinator.mjs',
+  'scripts/autonomous-release-coordinator.test.mjs',
+  'scripts/autonomous-workflows.test.mjs',
+]);
+
 const compatibilityFiles = [
   /^compatibility\/(?:candidate-assessments|certified-upstreams|framework-semantic-completeness|registry)\.json$/u,
   /^\.changeset\/framework-compatibility-auto\.md$/u,
@@ -534,19 +541,30 @@ export function validateBranchProtection(protection, restrictionsEndpointStatus)
       'pull-request review bypass allowances are incompatible with autonomous release safety',
     );
   const restrictions = protection.restrictions;
+  const explicitEmptyRestrictions =
+    typeof restrictions === 'object' &&
+    restrictions !== null &&
+    Array.isArray(restrictions.users) &&
+    restrictions.users.length === 0 &&
+    Array.isArray(restrictions.teams) &&
+    restrictions.teams.length === 0 &&
+    Array.isArray(restrictions.apps) &&
+    restrictions.apps.length === 0;
+  const restrictionsProjection =
+    restrictions === undefined
+      ? 'missing'
+      : restrictions === null
+        ? 'null'
+        : explicitEmptyRestrictions
+          ? 'empty'
+          : 'populated-or-invalid';
   const restrictionsDisabled =
-    restrictions === null ||
-    (typeof restrictions === 'object' &&
-      restrictions !== null &&
-      Array.isArray(restrictions.users) &&
-      restrictions.users.length === 0 &&
-      Array.isArray(restrictions.teams) &&
-      restrictions.teams.length === 0 &&
-      Array.isArray(restrictions.apps) &&
-      restrictions.apps.length === 0);
+    restrictionsProjection === 'missing' ||
+    restrictionsProjection === 'null' ||
+    restrictionsProjection === 'empty';
   if (!restrictionsDisabled || restrictionsEndpointStatus !== 404)
     throw new Error(
-      'default-branch push restrictions can silently block the coordinator merge token',
+      `default-branch push restrictions can silently block the coordinator merge token (projection: ${restrictionsProjection}; endpoint status: ${Number.isInteger(restrictionsEndpointStatus) ? String(restrictionsEndpointStatus) : 'missing-or-invalid'})`,
     );
   if (
     protection.allow_force_pushes?.enabled !== false ||
@@ -572,6 +590,18 @@ export function validateIssueOwner(owner) {
 export function requireReproducedVersionTree(expectedTree, prTree) {
   if (!SHA.test(expectedTree ?? '') || !SHA.test(prTree ?? '') || expectedTree !== prTree)
     throw new Error('Version PR tree differs from the trusted, reproduced version transformation');
+}
+
+export function validateReleaseOrchestrationTail(files) {
+  if (!Array.isArray(files)) throw new Error('release orchestration tail must be a file list');
+  if (new Set(files).size !== files.length)
+    throw new Error('release orchestration tail contains duplicate paths');
+  const unexpected = files.filter((file) => !RELEASE_ORCHESTRATION_TAIL_FILES.includes(file));
+  if (unexpected.length > 0) {
+    throw new Error(
+      `release payload is followed by non-orchestration changes: ${JSON.stringify(unexpected)}`,
+    );
+  }
 }
 
 export function compatibilitySourceRunId(body) {
@@ -913,6 +943,8 @@ async function main(argv) {
     });
     if (pr.merged_at === null || pr.merge_commit_sha !== event.inputs.expected_sha)
       throw new Error('Version PR is not merged as the expected default-branch SHA');
+  } else if (command === 'validate-release-tail') {
+    validateReleaseOrchestrationTail(argv.slice(1));
   } else if (command === 'coordinate-ci') {
     await coordinateCi(JSON.parse(await readFile(resolve(argv[1]), 'utf8')));
   } else if (command === 'dispatch-pending-changesets') {
