@@ -208,12 +208,30 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'packages/probe-charm/src/testing/fixture-bubbles',
     ]);
     expect(goPreflight.UPSTREAM_BUILD_MODULES).toEqual([
+      'github.com/charmbracelet/bubbletea@v1.3.9',
       'github.com/charmbracelet/bubbletea@v1.3.10',
       'charm.land/bubbletea/v2@v2.0.8',
       'charm.land/bubbletea/v2@v2.0.9',
       'github.com/charmbracelet/bubbles@v1.0.0',
       'charm.land/bubbles/v2@v2.1.1',
+      'charm.land/lipgloss/v2@v2.0.6',
     ]);
+    expect(goPreflight.BUBBLES_PACKAGE_PROBES).toEqual({
+      'packages/probe-charm/src/testing/fixture-v1-bubbles': [
+        'github.com/charmbracelet/bubbles/filepicker',
+        'github.com/charmbracelet/bubbles/list',
+        'github.com/charmbracelet/bubbles/progress',
+        'github.com/charmbracelet/bubbles/spinner',
+        'github.com/charmbracelet/bubbles/table',
+      ],
+      'packages/probe-charm/src/testing/fixture-bubbles': [
+        'charm.land/bubbles/v2/filepicker',
+        'charm.land/bubbles/v2/list',
+        'charm.land/bubbles/v2/progress',
+        'charm.land/bubbles/v2/spinner',
+        'charm.land/bubbles/v2/table',
+      ],
+    });
     expect(release).toMatch(/^env:\n {2}TERMWRIGHT_RETRIES: '0'$/mu);
     expect(release).toContain('git worktree add --detach "$orchestration"');
     expect(release).toContain('git hash-object "$materializer"');

@@ -27,12 +27,31 @@ export const GO_TEST_MODULES = Object.freeze([
 // selected by an application fixture. Materialise it explicitly before tests
 // switch the proxy off.
 export const UPSTREAM_BUILD_MODULES = Object.freeze([
+  'github.com/charmbracelet/bubbletea@v1.3.9',
   'github.com/charmbracelet/bubbletea@v1.3.10',
   'charm.land/bubbletea/v2@v2.0.8',
   'charm.land/bubbletea/v2@v2.0.9',
   'github.com/charmbracelet/bubbles@v1.0.0',
   'charm.land/bubbles/v2@v2.1.1',
+  'charm.land/lipgloss/v2@v2.0.6',
 ]);
+
+export const BUBBLES_PACKAGE_PROBES = Object.freeze({
+  'packages/probe-charm/src/testing/fixture-v1-bubbles': [
+    'github.com/charmbracelet/bubbles/filepicker',
+    'github.com/charmbracelet/bubbles/list',
+    'github.com/charmbracelet/bubbles/progress',
+    'github.com/charmbracelet/bubbles/spinner',
+    'github.com/charmbracelet/bubbles/table',
+  ],
+  'packages/probe-charm/src/testing/fixture-bubbles': [
+    'charm.land/bubbles/v2/filepicker',
+    'charm.land/bubbles/v2/list',
+    'charm.land/bubbles/v2/progress',
+    'charm.land/bubbles/v2/spinner',
+    'charm.land/bubbles/v2/table',
+  ],
+});
 
 async function digest(path) {
   return createHash('sha256')
@@ -47,6 +66,25 @@ async function makeWritable(directory) {
     const info = await stat(path);
     if (info.isDirectory()) await makeWritable(path);
     else await chmod(path, 0o644);
+  }
+}
+
+async function materializeModuleGraph(cwd, environment) {
+  const { stdout } = await run('go', ['mod', 'graph'], { cwd, env: environment });
+  const modules = [
+    ...new Set(
+      stdout
+        .split(/\s+/u)
+        .filter(
+          (entry) =>
+            entry.includes('@') && !entry.startsWith('go@') && !entry.startsWith('toolchain@'),
+        ),
+    ),
+  ].sort();
+  if (modules.length > 0) {
+    // An explicit version query materialises both the archive and go.mod even
+    // for versions which lose MVS selection but remain observable graph edges.
+    await run('go', ['mod', 'download', ...modules], { cwd, env: environment });
   }
 }
 
@@ -69,10 +107,19 @@ async function downloadGraph(moduleDirectory, environment) {
       cwd,
       env: hermeticEnvironment,
     });
-    // Go's lazy module loading can omit historical go.mod files from `download
-    // all`. Resolve the exact package graph now, while network access is an
-    // explicit setup concern, instead of inside a parallel test worker.
+    // `download all` follows versions selected by MVS. The launcher also asks
+    // Go to inspect dependency packages from a generated workspace, which can
+    // require historical go.mod files from losing graph edges. Reading the
+    // complete graph materialises those edges before the network boundary.
+    await materializeModuleGraph(cwd, hermeticEnvironment);
     await run('go', ['list', '-deps', './...'], { cwd, env: hermeticEnvironment });
+    const probePackages = BUBBLES_PACKAGE_PROBES[moduleDirectory];
+    if (probePackages !== undefined) {
+      await run('go', ['list', '-f={{.ImportPath}}\t{{.Dir}}', ...probePackages], {
+        cwd,
+        env: hermeticEnvironment,
+      });
+    }
     await run('go', ['mod', 'verify'], { cwd, env: hermeticEnvironment });
     for (const [file, expected] of before) {
       const actual = await digest(join(cwd, file));
@@ -118,6 +165,7 @@ async function downloadExtraModules(environment) {
         cwd: mainModule,
         env: { ...hermeticEnvironment, GOFLAGS: '' },
       });
+      await materializeModuleGraph(mainModule, hermeticEnvironment);
       await run('go', ['list', '-mod=readonly', '-deps', './...'], {
         cwd: mainModule,
         env: hermeticEnvironment,
