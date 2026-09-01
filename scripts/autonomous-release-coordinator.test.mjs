@@ -572,6 +572,12 @@ describe('trusted autonomous coordinator', () => {
         [{ ...run, id: 11, conclusion: 'success', created_at: '2026-08-21T11:00:00Z' }, run],
         { repository, defaultBranch },
       ),
+    ).not.toThrow();
+    expect(() =>
+      assertReleaseStateQuiescent(
+        [{ ...run, id: 11, conclusion: 'success', created_at: '2026-08-21T09:00:00Z' }, run],
+        { repository, defaultBranch },
+      ),
     ).toThrow(/run 10/u);
   });
 
