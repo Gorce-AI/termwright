@@ -266,7 +266,7 @@ describe('autonomous workflow security', () => {
       '`/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`',
     );
     expect(coordinator).toMatch(
-      /branches\/\$\{encodeURIComponent\(branch\)\}\/protection`[^]*process\.env\.BRANCH_POLICY_TOKEN/u,
+      /branchProtectionPath[^]*githubReadStatus\(`\$\{branchProtectionPath\}\/restrictions`, branchPolicyToken\)/u,
     );
     expect(coordinator).not.toMatch(
       /validateBranchProtection\([\s\S]*?\);\n  assertReleaseStateQuiescent\(/u,

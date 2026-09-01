@@ -593,7 +593,24 @@ describe('trusted autonomous coordinator', () => {
       allow_force_pushes: { enabled: false },
       allow_deletions: { enabled: false },
     };
-    expect(() => validateBranchProtection(protection)).not.toThrow();
+    expect(() => validateBranchProtection(protection, 404)).not.toThrow();
+    expect(() => validateBranchProtection(protection)).toThrow(/push restrictions/u);
+    expect(() =>
+      validateBranchProtection({
+        ...protection,
+        restrictions: { users: [], teams: [], apps: [], url: 'https://api.github.test/' },
+      }),
+    ).toThrow(/push restrictions/u);
+    expect(() =>
+      validateBranchProtection(
+        {
+          ...protection,
+          restrictions: { users: [], teams: [], apps: [], url: 'https://api.github.test/' },
+        },
+        404,
+      ),
+    ).not.toThrow();
+    expect(() => validateBranchProtection(protection, 200)).toThrow(/push restrictions/u);
     expect(() =>
       validateBranchProtection({
         ...protection,
@@ -686,21 +703,33 @@ describe('trusted autonomous coordinator', () => {
     expect(() => validateBranchProtection({ ...protection, restrictions: {} })).toThrow(
       /push restrictions/u,
     );
+    for (const kind of ['users', 'teams', 'apps']) {
+      expect(() =>
+        validateBranchProtection({
+          ...protection,
+          restrictions: {
+            users: kind === 'users' ? [{}] : [],
+            teams: kind === 'teams' ? [{}] : [],
+            apps: kind === 'apps' ? [{}] : [],
+          },
+        }),
+      ).toThrow(/push restrictions/u);
+    }
     expect(() => validateBranchProtection({ ...protection, restrictions: undefined })).toThrow(
       /push restrictions/u,
     );
     expect(() =>
-      validateBranchProtection({ ...protection, allow_force_pushes: { enabled: true } }),
+      validateBranchProtection({ ...protection, allow_force_pushes: { enabled: true } }, 404),
     ).toThrow(/force pushes/u);
     expect(() =>
-      validateBranchProtection({ ...protection, allow_deletions: { enabled: true } }),
+      validateBranchProtection({ ...protection, allow_deletions: { enabled: true } }, 404),
     ).toThrow(/deletion/u);
     expect(() =>
-      validateBranchProtection({ ...protection, allow_force_pushes: undefined }),
+      validateBranchProtection({ ...protection, allow_force_pushes: undefined }, 404),
     ).toThrow(/force pushes/u);
-    expect(() => validateBranchProtection({ ...protection, allow_deletions: undefined })).toThrow(
-      /deletion/u,
-    );
+    expect(() =>
+      validateBranchProtection({ ...protection, allow_deletions: undefined }, 404),
+    ).toThrow(/deletion/u);
   });
 
   it('refuses a stale autonomous PR immediately before merge', () => {

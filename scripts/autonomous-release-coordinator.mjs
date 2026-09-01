@@ -495,7 +495,7 @@ export function assertReleaseStateQuiescent(runs, { repository, defaultBranch })
   );
 }
 
-export function validateBranchProtection(protection) {
+export function validateBranchProtection(protection, restrictionsEndpointStatus) {
   if (protection?.required_status_checks?.strict !== true)
     throw new Error('default branch must require status checks against the current branch');
   if (protection?.enforce_admins?.enabled !== true)
@@ -534,7 +534,18 @@ export function validateBranchProtection(protection) {
     throw new Error(
       'pull-request review bypass allowances are incompatible with autonomous release safety',
     );
-  if (protection.restrictions !== null)
+  const restrictions = protection.restrictions;
+  const restrictionsDisabled =
+    restrictions === null ||
+    (typeof restrictions === 'object' &&
+      restrictions !== null &&
+      Array.isArray(restrictions.users) &&
+      restrictions.users.length === 0 &&
+      Array.isArray(restrictions.teams) &&
+      restrictions.teams.length === 0 &&
+      Array.isArray(restrictions.apps) &&
+      restrictions.apps.length === 0);
+  if (!restrictionsDisabled || restrictionsEndpointStatus !== 404)
     throw new Error(
       'default-branch push restrictions can silently block the coordinator merge token',
     );
@@ -590,6 +601,22 @@ async function githubApi(path, options = {}, token = process.env.GITHUB_TOKEN) {
     );
   if (response.status === 204) return null;
   return response.json();
+}
+
+async function githubReadStatus(path, token = process.env.GITHUB_TOKEN) {
+  if (typeof token !== 'string' || token.length === 0)
+    throw new Error('the required GitHub API token is missing');
+  const response = await fetch(`https://api.github.com${path}`, {
+    headers: {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${token}`,
+      'x-github-api-version': '2022-11-28',
+    },
+  });
+  if (response.status === 200 || response.status === 404) return response.status;
+  throw new Error(
+    `GitHub API GET ${path} failed with ${response.status}: ${(await response.text()).slice(0, 1000)}`,
+  );
 }
 
 async function paged(path, field) {
@@ -753,12 +780,11 @@ async function coordinateCi(event) {
   // Branch policy is read with a separate, current-repository GitHub App token
   // that has Administration:read and no write permissions. GITHUB_TOKEN remains
   // the only credential used for PR, issue, workflow and merge mutations.
+  const branchProtectionPath = `/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`;
+  const branchPolicyToken = process.env.BRANCH_POLICY_TOKEN;
   validateBranchProtection(
-    await githubApi(
-      `/repos/${repository}/branches/${encodeURIComponent(branch)}/protection`,
-      {},
-      process.env.BRANCH_POLICY_TOKEN,
-    ),
+    await githubApi(branchProtectionPath, {}, branchPolicyToken),
+    await githubReadStatus(`${branchProtectionPath}/restrictions`, branchPolicyToken),
   );
   let releaseAllowed = false;
   if (kind === 'compatibility') {
