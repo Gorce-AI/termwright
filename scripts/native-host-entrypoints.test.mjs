@@ -194,6 +194,14 @@ describe('the native host is the only Termwright test entrypoint', () => {
       workflowJobBlocks(ci).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]),
     );
     expect(goCiJobs.clients).toContain('Materialise the checksum-pinned Go client graph');
+    expect(goCiJobs.clients).toContain('go list -mod=readonly -deps -test ./...');
+    expect(goCiJobs.clients).not.toMatch(/^\s+go mod download all$/mu);
+    expect(goCiJobs.clients.indexOf('go list -mod=readonly -deps -test ./...')).toBeLessThan(
+      goCiJobs.clients.indexOf("echo 'GOPROXY=off'"),
+    );
+    expect(goCiJobs.clients.indexOf("echo 'GOPROXY=off'")).toBeLessThan(
+      goCiJobs.clients.indexOf('go test -race -count=1 ./...'),
+    );
     expect(goCiJobs.clients).toContain("echo 'GOPROXY=off'");
     expect(goCiJobs.clients).toContain('} >> "$GITHUB_ENV"');
     expect(goCiJobs['release-hygiene']).toContain(

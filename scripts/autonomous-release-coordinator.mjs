@@ -155,6 +155,8 @@ export const RELEASE_NON_PAYLOAD_TAIL_FILES = Object.freeze([
   // authorization decision, even when its filename looks like a test.
   '.prettierignore',
   '.github/workflows/ci.yml',
+  'scripts/check-pr-changeset.mjs',
+  'scripts/check-pr-changeset.test.mjs',
   'scripts/native-host-entrypoints.test.mjs',
   'packages/probe-charm/src/launch.test.ts',
   'packages/probe-charm/src/testing/fixture-bubbles/go.sum',
