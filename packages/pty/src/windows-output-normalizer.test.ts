@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ConPtyControlPlaneNormalizer,
   ConPtyTerminalResponseRouter,
+  ConPtyTerminalResponseTransport,
   encodeConPtyApplicationInput,
+  encodeConPtyApplicationTerminalResponse,
   type ConPtyHostQuery,
 } from './windows-output-normalizer.js';
 
@@ -153,13 +155,13 @@ describe('ConPTY control-plane output normalization', () => {
 });
 
 describe('ConPTY terminal-response routing', () => {
-  it('keeps addressed host replies distinct while routing application replies directly', () => {
+  it('keeps addressed host replies raw while routing application replies through the envelope', () => {
     const router = new ConPtyTerminalResponseRouter();
     router.noteHostQuery('primary-device-attributes');
 
     expect(router.route(Buffer.from('\x1b[?1;2c'))).toBe('host-control');
-    expect(router.route(Buffer.from('\x1b[3;7R'))).toBe('application-direct');
-    expect(router.route(Buffer.from('\x1b[?2026;2$y'))).toBe('application-direct');
+    expect(router.route(Buffer.from('\x1b[3;7R'))).toBe('application-envelope');
+    expect(router.route(Buffer.from('\x1b[?2026;2$y'))).toBe('application-envelope');
     expect(
       router.route(
         Buffer.from('\x1b]8488;twh-cpr-v1:r:0123456789abcdef0123456789abcdef:3:7\x07', 'ascii'),
@@ -184,8 +186,27 @@ describe('ConPTY terminal-response routing', () => {
       expect(router.route(Buffer.from(response, 'ascii'))).toBe('host-control');
     }
     expect(router.route(Buffer.from('\x1b]8488;application-owned\x07', 'ascii'))).toBe(
-      'application-direct',
+      'application-envelope',
     );
+  });
+
+  it('encodes one byte-exact bounded application reply envelope', () => {
+    const response = Buffer.from('\x1b[?2026;2$y', 'ascii');
+    const envelope = Buffer.from(
+      '\x1b]8488;twh-app-reply-v1:11:1b5b3f323032363b322479\x07',
+      'ascii',
+    );
+    expect(encodeConPtyApplicationTerminalResponse(response)).toEqual(envelope);
+    expect(new ConPtyTerminalResponseTransport().encode('application-envelope', response)).toEqual(
+      envelope,
+    );
+    expect(new ConPtyTerminalResponseTransport().encode('host-control', response)).toEqual(response);
+  });
+
+  it('fails closed for empty, oversized, or non-ASCII application replies', () => {
+    expect(() => encodeConPtyApplicationTerminalResponse(Buffer.alloc(0))).toThrow(RangeError);
+    expect(() => encodeConPtyApplicationTerminalResponse(Buffer.alloc(4_097))).toThrow(RangeError);
+    expect(() => encodeConPtyApplicationTerminalResponse(Buffer.of(0x80))).toThrow(TypeError);
   });
 
   it('encodes a physical lone Escape without changing raw or compound input', () => {

@@ -200,8 +200,9 @@ public static class TermwrightResizeProbe {
         if (hostReplyLeaked) return 47;
 
         // Remove resize/focus records before the byte-oriented application
-        // query. VT input is deliberately disabled: a complete raw application
-        // CPR must still pass through without host capture or byte splitting.
+        // query. VT input is deliberately disabled: the private application
+        // envelope must still commit the complete CPR without host capture or
+        // byte splitting.
         if (!FlushConsoleInputBuffer(input)) return 48;
         var byteInputMode = originalMode &
           ~ENABLE_LINE_INPUT &

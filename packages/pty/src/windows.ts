@@ -16,6 +16,7 @@ import { NativeWriteDrainEpoch } from './write-drain-epoch.js';
 import {
   ConPtyControlPlaneNormalizer,
   ConPtyTerminalResponseRouter,
+  ConPtyTerminalResponseTransport,
   encodeConPtyApplicationInput,
   type ConPtyTerminalResponseRoute,
 } from './windows-output-normalizer.js';
@@ -383,6 +384,7 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
   let inputClosed = false;
   const writeEpoch = new NativeWriteDrainEpoch();
   const terminalResponseRouter = new ConPtyTerminalResponseRouter();
+  const terminalResponseTransport = new ConPtyTerminalResponseTransport();
   const outputNormalizer = new ConPtyControlPlaneNormalizer((query) =>
     terminalResponseRouter.noteHostQuery(query),
   );
@@ -489,7 +491,7 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
     },
     writeTerminalResponse(data: Uint8Array): ConPtyTerminalResponseRoute {
       const route = terminalResponseRouter.route(data);
-      write(data);
+      write(terminalResponseTransport.encode(route, data));
       return route;
     },
     resize(columns: number, rows: number): boolean {

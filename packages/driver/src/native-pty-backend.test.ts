@@ -27,8 +27,10 @@ function fakeSession(overrides: Partial<NativePtySessionHandle> = {}): NativePty
 
 describe('the native PTY driver adapter', () => {
   it('delegates Windows response provenance while POSIX writes the response raw', () => {
-    const windowsResponse = vi.fn<(data: Uint8Array) => 'host-control' | 'application-direct'>(
-      () => 'application-direct',
+    const windowsResponse = vi.fn<
+      (data: Uint8Array) => 'host-control' | 'application-envelope' | 'application-direct'
+    >(
+      () => 'application-envelope',
     );
     const windowsSession = fakeSession({ writeTerminalResponse: windowsResponse });
     const posixSession = fakeSession();

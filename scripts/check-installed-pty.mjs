@@ -435,7 +435,7 @@ if (process.platform === 'win32') {
       if (!applicationCprAnswered && observed.includes(';APP-DSR:' + controlEsc + '[6n')) {
         resizeStage = 'application-cpr';
         const route = resizeSession.writeTerminalResponse(Buffer.from(controlEsc + '[9;17R', 'ascii'));
-        if (route !== 'application-direct') throw new Error('application CPR used route ' + route);
+        if (route !== 'application-envelope') throw new Error('application CPR used route ' + route);
         applicationCprAnswered = true;
       }
       if (!escapeSent && observed.includes(';APP-CPR:1b5b393b313752;ESC-READY')) {

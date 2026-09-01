@@ -25,6 +25,9 @@ const RIS = bytes(ESC, 0x63);
 const HOST_CURSOR_REQUEST_PREFIX = Buffer.from('\x1b]8488;twh-cpr-v1:q:', 'ascii');
 const HOST_CURSOR_REQUEST_TOKEN_BYTES = 32;
 const HOST_CURSOR_REPLY_NAMESPACE = Buffer.from('\x1b]8488;twh-cpr-v1:r:', 'ascii');
+const APPLICATION_REPLY_PREFIX = Buffer.from('\x1b]8488;twh-app-reply-v1:', 'ascii');
+const OSC_TERMINATOR = Buffer.from('\x07', 'ascii');
+const MAX_APPLICATION_REPLY_BYTES = 4_096;
 
 interface Rewrite {
   readonly input: Buffer;
@@ -33,7 +36,36 @@ interface Rewrite {
 }
 
 export type ConPtyHostQuery = 'primary-device-attributes';
-export type ConPtyTerminalResponseRoute = 'host-control' | 'application-direct';
+export type ConPtyTerminalResponseRoute = 'host-control' | 'application-envelope';
+
+export function encodeConPtyApplicationTerminalResponse(data: Uint8Array): Buffer {
+  if (data.byteLength === 0 || data.byteLength > MAX_APPLICATION_REPLY_BYTES) {
+    throw new RangeError(
+      `terminal response must contain between 1 and ${MAX_APPLICATION_REPLY_BYTES} bytes`,
+    );
+  }
+  for (const byte of data) {
+    if (byte > 0x7f) {
+      throw new TypeError(
+        `terminal response contains non-ASCII byte 0x${byte.toString(16).padStart(2, '0')}`,
+      );
+    }
+  }
+  const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  return Buffer.concat([
+    APPLICATION_REPLY_PREFIX,
+    Buffer.from(`${bytes.byteLength}:${bytes.toString('hex')}`, 'ascii'),
+    OSC_TERMINATOR,
+  ]);
+}
+
+export class ConPtyTerminalResponseTransport {
+  encode(route: ConPtyTerminalResponseRoute, data: Uint8Array): Buffer {
+    return route === 'application-envelope'
+      ? encodeConPtyApplicationTerminalResponse(data)
+      : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  }
+}
 
 export function encodeConPtyApplicationInput(
   data: Uint8Array,
@@ -82,13 +114,13 @@ export class ConPtyTerminalResponseRouter {
     if (bytes.subarray(0, HOST_CURSOR_REPLY_NAMESPACE.length).equals(HOST_CURSOR_REPLY_NAMESPACE)) {
       return 'host-control';
     }
-    // A terminal reply is one control-plane transaction. Passing its complete
-    // VT sequence through OpenConsole lets the input state machine buffer it
-    // to its final byte and commit it with one InputBuffer::WriteString call.
-    // Encoding each byte as a separate Win32 KEY_EVENT loses that boundary:
-    // under pressure a VT reader can resolve the leading ESC before the tail
-    // arrives and expose the rest of the reply as application text.
-    if (query === undefined) return 'application-direct';
+    // A terminal reply is one control-plane transaction. The private envelope
+    // makes OpenConsole buffer the complete payload through the OSC terminator,
+    // then commit it with one InputBuffer::WriteString call. Sending raw CSI
+    // is not sufficient: with VT input disabled OpenConsole can interpret a
+    // CPR as F3. Encoding each byte as a separate KEY_EVENT is also invalid:
+    // it exposes a printable tail when a VT reader resolves ESC too early.
+    if (query === undefined) return 'application-envelope';
     if (!isHostResponse(bytes)) {
       throw new Error(`terminal answered ${query} ConPTY host query with an unexpected response`);
     }

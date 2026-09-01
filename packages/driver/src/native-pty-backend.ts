@@ -15,7 +15,9 @@ export interface NativePtySessionHandle {
   readonly sawRealEof: boolean;
   write(data: Uint8Array): void;
   writeApplicationInput?(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): void;
-  writeTerminalResponse?(data: Uint8Array): 'host-control' | 'application-direct';
+  writeTerminalResponse?(
+    data: Uint8Array,
+  ): 'host-control' | 'application-envelope' | 'application-direct';
   closeInput?(): void;
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;

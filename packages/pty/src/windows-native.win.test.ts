@@ -456,8 +456,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
 
       // The runtime consumed only its matching token and committed the cursor.
       // The fixture proves no host reply reached the application queue,
-      // emits an ordinary application DSR. Its complete raw reply must remain
-      // one control-plane string even while this fixture has VT input disabled.
+      // emits an ordinary application DSR. Its reply travels through the
+      // private atomic envelope even while this fixture has VT input disabled.
       expect(
         await waitForMarker(
           handle,
@@ -468,7 +468,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         output.text(),
       ).toBeDefined();
       expect(handle.writeTerminalResponse(Buffer.from('\x1b[9;17R', 'ascii'))).toBe(
-        'application-direct',
+        'application-envelope',
       );
 
       expect(
