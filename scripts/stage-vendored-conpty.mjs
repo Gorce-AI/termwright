@@ -77,6 +77,6 @@ if (isDirectExecution(import.meta.url)) {
   }
   const manifest = await stageVendoredConpty({ architecture, destination });
   console.log(
-    `staged ${manifest.provider} ${manifest.upstreamCommit}+${manifest.hostCursorRpc} for ${architecture}`,
+    `staged ${manifest.provider} ${manifest.upstreamCommit}+${manifest.hostCursorRpc}+${manifest.applicationReplyRpc} for ${architecture}`,
   );
 }

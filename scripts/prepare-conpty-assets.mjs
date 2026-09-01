@@ -65,6 +65,7 @@ async function exactFile(root, relativePath, description) {
 function sourceVersion(lock) {
   return (
     `${lock.identity.upstreamCommit}+${lock.identity.hostCursorRpc}.` +
+    `${lock.identity.applicationReplyRpc}.` +
     `${lock.identity.patchSha256}.${lock.sourceManifest.sha256}`
   );
 }
@@ -79,6 +80,7 @@ function assertSchema(lock) {
     lock.identity?.provider !== 'termwright-patched-openconsole' ||
     lock.identity?.mode !== 'ordered-vt-passthrough' ||
     lock.identity?.hostCursorRpc !== 'twh-cpr-v1' ||
+    lock.identity?.applicationReplyRpc !== 'twh-app-reply-v1' ||
     typeof lock.identity?.upstreamCommit !== 'string' ||
     typeof lock.identity?.upstreamArchiveSha256 !== 'string' ||
     typeof lock.identity?.patchSha256 !== 'string' ||
@@ -102,7 +104,8 @@ function assertSourceContract(lock, sourceManifest, provenance) {
   if (
     sourceManifest.schemaVersion !== 1 ||
     sourceManifest.tier !== 'T3' ||
-    sourceManifest.capability !== 'request-addressed-host-cursor-rpc' ||
+    sourceManifest.capability !==
+      'request-addressed-host-cursor-and-atomic-application-reply-rpc' ||
     sourceManifest.upstream?.repository !== 'https://github.com/microsoft/terminal' ||
     sourceManifest.upstream?.commit !== identity.upstreamCommit ||
     sourceManifest.upstream?.archiveSha256 !== identity.upstreamArchiveSha256 ||
@@ -110,6 +113,8 @@ function assertSourceContract(lock, sourceManifest, provenance) {
     sourceManifest.protocol?.osc !== 8488 ||
     !sourceManifest.protocol?.request?.includes('twh-cpr-v1:q:') ||
     !sourceManifest.protocol?.response?.includes('twh-cpr-v1:r:') ||
+    !sourceManifest.protocol?.applicationResponse?.includes('twh-app-reply-v1:') ||
+    sourceManifest.protocol?.applicationResponseMaximumBytes !== 4096 ||
     sourceManifest.build?.configuration !== identity.buildConfiguration ||
     sourceManifest.build?.platformToolset !== identity.platformToolset
   ) {
@@ -391,6 +396,7 @@ export async function prepareConptyAssets({
     upstreamArchiveSha256: lock.identity.upstreamArchiveSha256,
     patchSha256: lock.identity.patchSha256,
     hostCursorRpc: lock.identity.hostCursorRpc,
+    applicationReplyRpc: lock.identity.applicationReplyRpc,
     sourceManifestSha256: lock.sourceManifest.sha256,
     build: {
       configuration: sourceManifest.build.configuration,
@@ -445,5 +451,7 @@ if (isDirectExecution(import.meta.url)) {
     );
   }
   const manifest = await prepareConptyAssets({ architecture, destination, artifactDirectory });
-  console.log(`sealed ${manifest.upstreamCommit}+${manifest.hostCursorRpc} for ${architecture}`);
+  console.log(
+    `sealed ${manifest.upstreamCommit}+${manifest.hostCursorRpc}+${manifest.applicationReplyRpc} for ${architecture}`,
+  );
 }

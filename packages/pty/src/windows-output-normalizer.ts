@@ -87,11 +87,11 @@ function isHostResponse(response: Buffer): boolean {
 /**
  * Preserves the ownership of startup queries emitted by ConPTY itself.
  *
- * Host-control replies and application replies both travel as complete raw
- * VT transactions. The route keeps their ownership explicit: OpenConsole
- * consumes host control, while its buffered input parser commits an ordinary
- * terminal reply to the child in one operation. The queue is populated by the
- * same split-safe startup rewrite that exposes each query to the emulator.
+ * Host-control replies travel raw to OpenConsole. Application replies use the
+ * private atomic envelope so OpenConsole can commit the decoded bytes to the
+ * child in one input-buffer operation. The route keeps that ownership
+ * explicit and is populated by the same split-safe startup rewrite that
+ * exposes each host query to the emulator.
  */
 export class ConPtyTerminalResponseRouter {
   readonly #hostQueries: ConPtyHostQuery[] = [];

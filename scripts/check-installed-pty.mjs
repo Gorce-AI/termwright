@@ -67,8 +67,9 @@ if (process.platform === 'win32') {
     : runtime.selectedHostArchitecture === 'x64' || runtime.selectedHostArchitecture === 'arm64';
   if (runtime.provider !== 'termwright-patched-openconsole' ||
       runtime.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
-      runtime.patchSha256 !== '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c' ||
-      runtime.hostCursorRpc !== 'twh-cpr-v1' || runtime.mode !== 'ordered-vt-passthrough' ||
+      runtime.patchSha256 !== 'eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c' ||
+      runtime.hostCursorRpc !== 'twh-cpr-v1' || runtime.applicationReplyRpc !== 'twh-app-reply-v1' ||
+      runtime.mode !== 'ordered-vt-passthrough' ||
       runtime.policy !== 'strict' || runtime.assetsValidated !== true ||
       runtime.coreExports !== true || runtime.failureCode !== '' || runtime.failureWin32 !== 0 ||
       runtime.orderedMarkerSemantics !== 'marker-authoritative-after-behavioral-certification' ||

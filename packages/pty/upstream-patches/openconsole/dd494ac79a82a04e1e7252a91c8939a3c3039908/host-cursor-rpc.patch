@@ -1107,7 +1107,7 @@ index 19aa939..f94a5df 100644
      testState.vExpectedInput.push_back(inputRec);
      Log::Comment(NoThrowString().Format(
          L"Processing \"%s\"", seq.c_str()));
-@@ -716,6 +712,55 @@ void InputEngineTest::CursorPositioningTest()
+@@ -716,6 +712,65 @@ void InputEngineTest::CursorPositioningTest()
      VerifyExpectedInputDrained();
  }
 -
@@ -1149,6 +1149,7 @@ index 19aa939..f94a5df 100644
 +             L"\x1b]8488;twh-app-reply-v1:1:zz\x07",
 +             L"\x1b]8488;twh-app-reply-v1:1:80\x07",
 +             L"\x1b]8488;twh-app-reply-v1:4097:00\x07",
++             L"\x1b]8488;twh-app-reply-v1:999999999999999999999999:00\x07",
 +         })
 +    {
 +        size_t writes = 0;
@@ -1156,9 +1157,18 @@ index 19aa939..f94a5df 100644
 +        auto dispatch = std::make_unique<TestInteractDispatch>(callback, nullptr);
 +        auto inputEngine = std::make_unique<InputStateMachineEngine>(std::move(dispatch));
 +        auto stateMachine = std::make_unique<StateMachine>(std::move(inputEngine));
-+        stateMachine->ProcessString(malformed);
++        stateMachine->ProcessString(malformed.substr(0, malformed.size() - 1));
++        VERIFY_ARE_EQUAL(0u, writes);
++        stateMachine->ProcessString(malformed.substr(malformed.size() - 1));
 +        VERIFY_ARE_EQUAL(0u, writes);
 +    }
++
++    size_t writes = 0;
++    const auto callback = [&](const std::span<const INPUT_RECORD>&) { ++writes; };
++    auto dispatch = std::make_unique<TestInteractDispatch>(callback, nullptr);
++    auto inputEngine = std::make_unique<InputStateMachineEngine>(std::move(dispatch));
++    VERIFY_IS_FALSE(inputEngine->ActionOscDispatch(8488, L"application-owned"));
++    VERIFY_ARE_EQUAL(0u, writes);
 +}
 +
  void InputEngineTest::CSICursorBackTabTest()

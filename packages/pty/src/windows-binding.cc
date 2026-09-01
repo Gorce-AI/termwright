@@ -133,6 +133,7 @@ Napi::Object RuntimeInfo(Napi::Env env) {
   value.Set("upstreamCommit", Napi::String::New(env, info.upstream_commit));
   value.Set("patchSha256", Napi::String::New(env, info.patch_sha256));
   value.Set("hostCursorRpc", Napi::String::New(env, info.host_cursor_rpc));
+  value.Set("applicationReplyRpc", Napi::String::New(env, info.application_reply_rpc));
   value.Set("mode", Napi::String::New(env, info.mode));
   value.Set("policy", Napi::String::New(env, info.policy));
   value.Set("selectedHostArchitecture",

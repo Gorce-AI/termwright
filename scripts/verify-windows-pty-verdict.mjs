@@ -31,8 +31,9 @@ export async function verifyWindowsPtyVerdict(
     verdict.runtime?.provider !== 'termwright-patched-openconsole' ||
     verdict.runtime?.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
     verdict.runtime?.patchSha256 !==
-      '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c' ||
+      'eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c' ||
     verdict.runtime?.hostCursorRpc !== 'twh-cpr-v1' ||
+    verdict.runtime?.applicationReplyRpc !== 'twh-app-reply-v1' ||
     Object.hasOwn(verdict.runtime ?? {}, 'package') ||
     Object.hasOwn(verdict.runtime ?? {}, 'version') ||
     verdict.runtime?.assetsValidated !== true ||
@@ -84,6 +85,7 @@ export async function verifyWindowsPtyVerdict(
     manifest.upstreamCommit !== verdict.runtime.upstreamCommit ||
     manifest.patchSha256 !== verdict.runtime.patchSha256 ||
     manifest.hostCursorRpc !== verdict.runtime.hostCursorRpc ||
+    manifest.applicationReplyRpc !== verdict.runtime.applicationReplyRpc ||
     Object.hasOwn(manifest, 'package') ||
     Object.hasOwn(manifest, 'version')
   ) {

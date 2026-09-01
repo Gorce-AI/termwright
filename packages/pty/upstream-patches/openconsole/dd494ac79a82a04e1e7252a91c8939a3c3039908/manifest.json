@@ -12,7 +12,7 @@
   },
   "patch": {
     "path": "host-cursor-rpc.patch",
-    "sha256": "c4906ac5d68719630bdc3d263ce7c8e4f8619a7b091291d4a42bb7813936772b",
+    "sha256": "eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c",
     "strip": 1
   },
   "protocol": {
@@ -81,7 +81,7 @@
     },
     "src/terminal/parser/ut_parser/InputEngineTest.cpp": {
       "sha256Before": "1d3dae214fdf4e45f66a8de1f6922a4e0c62f6f15f7625df9b26f301c9837e38",
-      "sha256After": "56d63cb8ead354d5dd04f6a84e6323ac56b7c19de870e324a7b8e48580347af7"
+      "sha256After": "3a8e08fd243c4de73cc6d7c51bb1047689cb7c474e5e2f7771b1854a0be9946b"
     },
     "src/terminal/adapter/IInteractDispatch.hpp": {
       "sha256Before": "8f73352685b907dadf5a413fc020729bdfdeeb53d045261f14eab295b0932171",

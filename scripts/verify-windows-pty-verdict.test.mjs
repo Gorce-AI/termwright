@@ -16,8 +16,9 @@ async function fixture() {
       architecture: 'x64',
       provider: 'termwright-patched-openconsole',
       upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
-      patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c',
+      patchSha256: 'eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c',
       hostCursorRpc: 'twh-cpr-v1',
+      applicationReplyRpc: 'twh-app-reply-v1',
       mode: 'ordered-vt-passthrough',
     })}\n`,
   );
@@ -33,8 +34,9 @@ async function fixture() {
     runtime: {
       provider: 'termwright-patched-openconsole',
       upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908',
-      patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c',
+      patchSha256: 'eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c',
       hostCursorRpc: 'twh-cpr-v1',
+      applicationReplyRpc: 'twh-app-reply-v1',
       mode: 'ordered-vt-passthrough',
       policy: 'strict',
       failureCode: '',
@@ -138,7 +140,7 @@ describe('Windows PTY causal verdict', () => {
     await expect(verifyWindowsPtyVerdict(root)).rejects.toThrow(/does not bind/u);
   });
 
-  it.each(['provider', 'upstreamCommit', 'patchSha256', 'hostCursorRpc'])(
+  it.each(['provider', 'upstreamCommit', 'patchSha256', 'hostCursorRpc', 'applicationReplyRpc'])(
     'rejects a verdict with a different %s runtime identity',
     async (field) => {
       const { root, verdict } = await fixture();
@@ -158,7 +160,15 @@ describe('Windows PTY causal verdict', () => {
     },
   );
 
-  it.each(['provider', 'upstreamCommit', 'patchSha256', 'hostCursorRpc', 'package', 'version'])(
+  it.each([
+    'provider',
+    'upstreamCommit',
+    'patchSha256',
+    'hostCursorRpc',
+    'applicationReplyRpc',
+    'package',
+    'version',
+  ])(
     'rejects a vendored manifest with a different %s identity',
     async (field) => {
       const { root } = await fixture();
