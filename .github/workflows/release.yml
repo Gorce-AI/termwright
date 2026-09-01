@@ -483,36 +483,44 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: release-pty-*
-          path: packages
+          path: ${{ runner.temp }}/release-pty
           merge-multiple: false
       - name: Place downloaded PTY binaries in their packages
         shell: bash
         run: |
           set -euo pipefail
+          artifact_root="$RUNNER_TEMP/release-pty"
           for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-arm64 win32-x64; do
             if [[ "$target" == win32-* ]]; then
-              node scripts/verify-windows-pty-verdict.mjs "packages/release-pty-$target"
+              node scripts/verify-windows-pty-verdict.mjs "$artifact_root/release-pty-$target"
             fi
-            cp "packages/release-pty-$target/termwright_pty.node" \
+            cp "$artifact_root/release-pty-$target/termwright_pty.node" \
                "packages/pty-$target/termwright_pty.node"
             if [[ "$target" == win32-* ]]; then
               rm -rf "packages/pty-$target/vendor"
-              cp -R "packages/release-pty-$target/vendor" "packages/pty-$target/vendor"
+              cp -R "$artifact_root/release-pty-$target/vendor" "packages/pty-$target/vendor"
             fi
           done
           node scripts/check-prebuild.mjs --all
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: release-pty-win32-x64-arm64-host-verdict
-          path: packages/release-pty-win32-x64
       - name: Verify the exact x64 release bundle on native ARM64 Windows
-        run: node scripts/verify-windows-pty-verdict.mjs packages/release-pty-win32-x64 certification-verdict-arm64-host.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_root="$RUNNER_TEMP/release-pty"
+          cp "$artifact_root/release-pty-win32-x64-arm64-host-verdict/certification-verdict-arm64-host.json" \
+             "$artifact_root/release-pty-win32-x64/certification-verdict-arm64-host.json"
+          node scripts/verify-windows-pty-verdict.mjs \
+            "$artifact_root/release-pty-win32-x64" certification-verdict-arm64-host.json
 
       - run: pnpm build
       - run: pnpm check:packed-private-boundaries
       - run: pnpm check:pty
       - run: pnpm -r --filter './packages/*' run typecheck
       - name: Run the certified Termwright host
+        env:
+          # Release authorization was already established by the detect job.
+          # Unit tests must exercise the default-denied coordinator contract.
+          TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ''
         shell: bash
         run: |
           set -euo pipefail
