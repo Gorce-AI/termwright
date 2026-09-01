@@ -76,6 +76,29 @@ export async function fetchPypiMetadata(version, { fetchImpl = fetch, nonce = ra
   });
 }
 
+export function selectPypiDistributionNames(names) {
+  const ordered = [...names].sort();
+  const distributions = ordered.filter((name) => name.endsWith('.whl') || name.endsWith('.tar.gz'));
+  const distributionSet = new Set(distributions);
+  for (const name of ordered) {
+    if (distributionSet.has(name)) continue;
+    if (name.endsWith('.publish.attestation')) {
+      const distribution = name.slice(0, -'.publish.attestation'.length);
+      if (distributionSet.has(distribution)) continue;
+      throw new Error(`orphan PyPI publish attestation: ${name}`);
+    }
+    throw new Error(`unexpected local PyPI release artifact: ${name}`);
+  }
+  return distributions;
+}
+
+export async function collectPypiDistributions(directory) {
+  const expected = new Map();
+  for (const name of selectPypiDistributionNames(await readdir(directory)))
+    expected.set(name, hex('sha256', await readFile(resolve(directory, name))));
+  return expected;
+}
+
 async function verifyNpm(archive) {
   const bytes = await readFile(archive);
   const manifest = JSON.parse(
@@ -101,9 +124,7 @@ async function verifyNpmTag(name, tag, version) {
 }
 
 async function verifyPypi(directory, version) {
-  const expected = new Map();
-  for (const name of (await readdir(directory)).sort())
-    expected.set(name, hex('sha256', await readFile(resolve(directory, name))));
+  const expected = await collectPypiDistributions(directory);
   if (expected.size === 0) throw new Error('no local PyPI artifacts to verify');
   // PyPI caches a version-JSON 404 for up to 15 minutes. A publication preflight
   // must therefore never share an edge-cache key with a later confirmation.
