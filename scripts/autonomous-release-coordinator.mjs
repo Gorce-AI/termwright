@@ -141,6 +141,7 @@ export const REQUIRED_BRANCH_CHECKS = Object.freeze(['certification gate']);
 
 export const RELEASE_ORCHESTRATION_TAIL_FILES = Object.freeze([
   '.github/workflows/release.yml',
+  'scripts/prepare-go-test-dependencies.mjs',
   'scripts/autonomous-release-coordinator.mjs',
   'scripts/autonomous-release-coordinator.test.mjs',
   'scripts/autonomous-workflows.test.mjs',
@@ -153,6 +154,10 @@ export const RELEASE_NON_PAYLOAD_TAIL_FILES = Object.freeze([
   // intentionally not a glob: every later path must receive a new release
   // authorization decision, even when its filename looks like a test.
   '.prettierignore',
+  '.github/workflows/ci.yml',
+  'scripts/native-host-entrypoints.test.mjs',
+  'packages/probe-charm/src/launch.test.ts',
+  'packages/probe-charm/src/testing/fixture-bubbles/go.sum',
   'packages/trace/src/reader.test.ts',
   'packages/ui/src/app/docs-screenshots.e2e.ts',
   'packages/ui/src/app/fresh-app.e2e.ts',
