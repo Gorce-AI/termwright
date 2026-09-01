@@ -1,5 +1,13 @@
 # @termwright/probe-tview
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [[`a268cf4`](https://github.com/Gorce-AI/termwright/commit/a268cf42aa880353e3f307112dbbbfebc492212c)]:
+  - @termwright/protocol@0.3.1
+  - @termwright/probe-go@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes
