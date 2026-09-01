@@ -148,7 +148,7 @@ one it used:
 ```ts
 const terminal = await launchTerminal({
   command: ['node', 'app.js'],
-  terminalProfile: 'iterm2-ambiguous-wide', // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
+  terminalProfile: 'cjk-wide', // 'default' | 'cjk-wide'
 });
 console.log(terminal.terminalProfile);
 ```

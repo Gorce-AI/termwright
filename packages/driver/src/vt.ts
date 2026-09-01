@@ -9,7 +9,7 @@
  *    imported through the default export (named ESM imports fail at runtime);
  * 2. `Terminal.write` is asynchronous — every write is awaited on its callback
  *    so revisions never race the parser;
- * 3. Unicode 11 width tables require explicit activation of the addon;
+ * 3. the Unicode 15 extended-grapheme provider requires explicit activation;
  * 4. `Terminal.modes` reports mouse *tracking* but not mouse *encoding*, and
  *    reports neither cursor visibility nor cursor shape, so a private
  *    `CSI ? h/l` handler tracks 1005/1006/1015/25 and `DECSCUSR` alongside it.

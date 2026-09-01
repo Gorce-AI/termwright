@@ -853,8 +853,8 @@ describe.skipIf(!ptyAvailable())('terminal profiles', { timeout: 20_000 }, () =>
       const terminal = await printBoxChar();
       expect(terminal.terminalProfile).toBe('default');
 
-      const chosen = await printBoxChar('iterm2-ambiguous-wide');
-      expect(chosen.terminalProfile).toBe('iterm2-ambiguous-wide');
+      const chosen = await printBoxChar('cjk-wide');
+      expect(chosen.terminalProfile).toBe('cjk-wide');
     },
   );
 
@@ -867,7 +867,7 @@ describe.skipIf(!ptyAvailable())('terminal profiles', { timeout: 20_000 }, () =>
       expect(narrow.screen().cell(0, 0).width).toBe(1);
       expect(narrow.screen().cell(0, 1).char).toBe('x');
 
-      const wide = await printBoxChar('iterm2-ambiguous-wide');
+      const wide = await printBoxChar('cjk-wide');
       expect(wide.screen().cell(0, 0).width).toBe(2);
       expect(wide.screen().cell(0, 2).char).toBe('x');
     },
@@ -1235,6 +1235,34 @@ describe.skipIf(!ptyAvailable())('locatorForRef', { timeout: 20_000 }, () => {
 });
 
 describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_000 }, () => {
+  for (const [name, prefix, column] of [
+    ['ZWJ family', '👨‍👩‍👧', 4],
+    ['Devanagari grapheme', 'किं', 3],
+  ] as const) {
+    it(`keeps semantic bounds and pointer targeting aligned after a ${name}`, async () => {
+      const terminal = await launch('semantic-app.mjs', {
+        semanticNegotiationMs: 5_000,
+        env: {
+          TERMWRIGHT_FIXTURE_UNICODE_GEOMETRY: name === 'ZWJ family' ? 'emoji' : 'devanagari',
+        },
+      });
+      await terminal.waitForText(prefix);
+
+      const target = terminal.getByTestId('approve');
+      const semantic = await target.resolve();
+      const visual = await terminal.getByScreenText('[Approve]').resolve();
+      expect(semantic.rect).toEqual({ row: 1, column, width: 9, height: 1 });
+      expect(visual.rect).toEqual(semantic.rect);
+
+      const receipt = await target.click();
+      expect(receipt.plan.operations).toEqual([
+        expect.objectContaining({ device: 'mouse', kind: 'down', row: 1, column: column + 4 }),
+        expect.objectContaining({ device: 'mouse', kind: 'up', row: 1, column: column + 4 }),
+      ]);
+      await terminal.waitForText('CLICKED approve modifiers=0');
+    });
+  }
+
   // The pinned passthrough ConPTY exposes the same DECSET contract as POSIX.
   it('sends an SGR mouse report the child can decode', async () => {
     const terminal = await launch('mouse-app.mjs');

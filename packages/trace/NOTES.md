@@ -79,8 +79,8 @@ Terminal construction goes through `createTerminal` in `@termwright/vt`, never
 `new Terminal(...)` here, and the profile travels with the recording as
 `meta.terminalProfile`.
 
-This is load-bearing. The two used to be built separately, and the replay lacked
-the Unicode 11 addon the driver activated: a session counted `🚀` as two columns
+This is load-bearing. The two used to be built separately, and replay lacked
+the Unicode provider the driver activated: a session counted `🚀` as two columns
 and its own replay counted it as one. Nothing threw — the reconstructed frame
 just sat a column away from the screen the test asserted against. Activation was
 the second half of the trap, since registering a Unicode provider without

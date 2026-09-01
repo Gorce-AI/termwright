@@ -13,9 +13,9 @@
     "bounded-deadline-or-managed-background-task": 41,
     "deadline-or-scheduler-regression-test": 58,
     "deterministic-adversarial-fixture-schedule": 31,
-    "display-or-persisted-wall-time-not-correctness-order": 90,
+    "display-or-persisted-wall-time-not-correctness-order": 91,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 163,
+    "explicit-external-or-ui-source-polling": 172,
     "explicit-test-selection-reviewed-with-platform-registry": 73,
     "managed-or-diagnostic-background-task": 73,
     "production-polling-review": 1,
@@ -3278,6 +3278,60 @@
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('3');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('3');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('cjk-wide');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "'setInterval(() => undefined, 1_000);',"
@@ -3305,6 +3359,12 @@
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const startedAt = Date.now() - 5_000;"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const startedAt = Date.now();"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",

@@ -265,8 +265,8 @@ change only what it is about. `files` are written over it.
 Defined in: driver/dist/session-DezbEYlx.d.ts:66
 
 Terminal profile: which width tables and which of the switches terminals
-disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
-`'iterm2-ambiguous-wide'`) or a profile object from `@termwright/vt`.
+disagree on this session uses. A built-in id (`'default'` or
+`'cjk-wide'`) or a profile object from `@termwright/vt`.
 
 It is recorded with the session so a replay, a screenshot and the runner
 pane can count characters exactly as the live session did.

@@ -1,44 +1,21 @@
 /**
  * Terminal profiles.
  *
- * Terminals disagree about a handful of things that decide whether a bordered
- * box lines up: how wide an ambiguous character is, whether VS16 makes an emoji
- * two columns, which Unicode version's width tables apply, and whether wrapped
- * lines reflow on resize. A profile is a named set of those switches.
+ * Termwright always uses one modern extended-grapheme model. Profiles contain
+ * only genuine terminal-policy differences: ambiguous width and resize reflow.
  *
- * It is deliberately NOT an emulation of a particular terminal. Three profiles
- * exist because they cover the three answers real terminals give; naming one
- * after kitty means "this is how kitty answers", not "this is kitty".
+ * It is deliberately NOT an emulation of a particular terminal. The profiles
+ * are not Unicode-version selectors and do not emulate branded terminals.
  */
-
-/**
- * Base width tables a profile builds on.
- *
- * Only Unicode 11 today. Grapheme clustering (Unicode 15) was the intended
- * second option, but `@xterm/addon-unicode-graphemes` — 0.4.0 and 0.5.0-beta
- * alike — never finishes loading inside a vitest worker, in either pool and
- * even through `createRequire`, while plain Node imports it in 20 ms. Every
- * package here tests with vitest, so shipping a profile that needs it would
- * hang the suites of everyone who imports this package. See NOTES.md.
- */
-export type UnicodeVersion = '11';
 
 /** Identifiers of the built-in profiles. */
-export type TerminalProfileId = 'default' | 'kitty' | 'iterm2-ambiguous-wide';
+export type TerminalProfileId = 'default' | 'cjk-wide';
 
 /** A named set of the switches terminals differ on. */
 export interface TerminalProfile {
   readonly id: string;
-  /**
-   * `'11'` uses Unicode 11 width tables (what most terminals ship);
-   * `'15-graphemes'` adds Unicode 15 tables and grapheme clustering, so a
-   * ZWJ sequence occupies one cluster instead of several.
-   */
-  readonly unicodeVersion: UnicodeVersion;
-  /** Count East Asian Ambiguous characters as two columns. */
-  readonly ambiguousWide: boolean;
-  /** Let VS16 promote the preceding character to an emoji-width cluster. */
-  readonly variationSelectors: boolean;
+  /** Policy for East Asian Ambiguous characters. */
+  readonly ambiguousWidth: 'narrow' | 'wide';
   /**
    * Reflow the cursor's line when the terminal is resized.
    *
@@ -51,37 +28,18 @@ export interface TerminalProfile {
 }
 
 /**
- * The conservative default: Unicode 11 widths, narrow ambiguous characters, no
- * VS16 promotion. Matches what the majority of terminals do today and what the
- * driver did before profiles existed.
+ * Modern extended graphemes with narrow East Asian Ambiguous characters.
  */
 export const DEFAULT_PROFILE: TerminalProfile = Object.freeze({
   id: 'default',
-  unicodeVersion: '11',
-  ambiguousWide: false,
-  variationSelectors: false,
+  ambiguousWidth: 'narrow',
   reflowCursorLineOnResize: true,
 });
 
-/**
- * Emoji presentation, the way kitty answers: a VS16 sequence occupies two
- * columns. Grapheme clustering is intended to join it here once the upstream
- * addon can be loaded (see {@link UnicodeVersion}).
- */
-export const KITTY_PROFILE: TerminalProfile = Object.freeze({
-  id: 'kitty',
-  unicodeVersion: '11',
-  ambiguousWide: false,
-  variationSelectors: true,
-  reflowCursorLineOnResize: true,
-});
-
-/** Wide ambiguous characters, the way iTerm2 answers when configured for CJK. */
-export const ITERM2_AMBIGUOUS_WIDE_PROFILE: TerminalProfile = Object.freeze({
-  id: 'iterm2-ambiguous-wide',
-  unicodeVersion: '11',
-  ambiguousWide: true,
-  variationSelectors: true,
+/** Modern extended graphemes with wide East Asian Ambiguous characters. */
+export const CJK_WIDE_PROFILE: TerminalProfile = Object.freeze({
+  id: 'cjk-wide',
+  ambiguousWidth: 'wide',
   reflowCursorLineOnResize: true,
 });
 
@@ -89,8 +47,7 @@ export const ITERM2_AMBIGUOUS_WIDE_PROFILE: TerminalProfile = Object.freeze({
 export const TERMINAL_PROFILES: Readonly<Record<TerminalProfileId, TerminalProfile>> =
   Object.freeze({
     default: DEFAULT_PROFILE,
-    kitty: KITTY_PROFILE,
-    'iterm2-ambiguous-wide': ITERM2_AMBIGUOUS_WIDE_PROFILE,
+    'cjk-wide': CJK_WIDE_PROFILE,
   });
 
 /** Anything a caller may pass where a profile is expected. */

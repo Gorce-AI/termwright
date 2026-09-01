@@ -5,7 +5,7 @@
  * renderer, the runner's terminal pane — must build its emulator here, because
  * a terminal is only comparable to another terminal when both count characters
  * the same way. Constructing one by hand elsewhere is how a replay ends up
- * measuring Unicode 6 while the session that recorded it measured Unicode 11.
+ * measuring fallback widths while the session used extended graphemes.
  *
  * It also absorbs one upstream trap: `@xterm/headless` and its addons are
  * CJS-only despite shipping `.mjs` builds, so they must be imported through
@@ -14,7 +14,6 @@
  */
 import xh from '@xterm/headless';
 import serializeAddon from '@xterm/addon-serialize';
-import unicode11Addon from '@xterm/addon-unicode11';
 import type {
   IBuffer,
   IBufferCell,
@@ -23,8 +22,9 @@ import type {
   IUnicodeVersionProvider,
   Terminal,
 } from '@xterm/headless';
+import { Unicode15GraphemeProvider } from './graphemes/provider.js';
 import { resolveProfile, type TerminalProfile, type TerminalProfileLike } from './profiles.js';
-import { captureAddonProvider, createProfileProvider, type UnicodeAddonLike } from './unicode.js';
+import { createProfileProvider } from './unicode.js';
 
 /** Options for {@link createTerminal}. */
 export interface CreateTerminalOptions {
@@ -63,8 +63,7 @@ export function createTerminal(options: CreateTerminalOptions): ProfiledTerminal
   const base = loadBaseProvider(profile);
   terminal.unicode.register(
     createProfileProvider(base, profile.id, {
-      ambiguousWide: profile.ambiguousWide,
-      variationSelectors: profile.variationSelectors,
+      ambiguousWide: profile.ambiguousWidth === 'wide',
     }),
   );
   // Registering is not enough: a provider only applies once it is made active.
@@ -83,10 +82,8 @@ export function createTerminal(options: CreateTerminalOptions): ProfiledTerminal
  * asked for.
  */
 function loadBaseProvider(profile: TerminalProfile): IUnicodeVersionProvider {
-  return captureAddonProvider(
-    new unicode11Addon.Unicode11Addon() as unknown as UnicodeAddonLike,
-    profile.unicodeVersion,
-  );
+  void profile;
+  return new Unicode15GraphemeProvider();
 }
 
 /**

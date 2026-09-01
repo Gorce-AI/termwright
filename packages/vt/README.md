@@ -24,7 +24,7 @@ const { terminal, profile } = createTerminal({
   columns: 100,
   rows: 30,
   scrollback: 2_000,
-  profile: 'iterm2-ambiguous-wide', // an id, a profile object, or nothing
+  profile: 'cjk-wide', // an id, a profile object, or nothing
 });
 
 const serialize = loadSerializeAddon(terminal);
@@ -42,11 +42,10 @@ bundle. A browser consumer imports the other half instead — profiles, width
 tables and the provider that applies them, with no headless in the runtime path:
 
 ```ts
-import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { applyProfile, resolveProfileId, DEFAULT_PROFILE } from '@termwright/vt/unicode';
 
 const profile = resolveProfileId(recording.terminalProfile) ?? DEFAULT_PROFILE;
-applyProfile(term.unicode, new Unicode11Addon(), profile);
+applyProfile(term.unicode, profile);
 ```
 
 `applyProfile` registers the profile's provider AND activates it. Registering
@@ -60,35 +59,17 @@ lines up. A profile is a named set of answers to exactly those questions:
 
 | Switch                     | What it decides                                                                       |
 | -------------------------- | ------------------------------------------------------------------------------------- |
-| `unicodeVersion`           | which width tables apply                                                              |
-| `ambiguousWide`            | whether East Asian Ambiguous characters take one column or two                        |
-| `variationSelectors`       | whether `❤️` (VS16) is one column or two                                              |
+| `ambiguousWidth`           | whether East Asian Ambiguous characters take one column or two                        |
 | `reflowCursorLineOnResize` | whether the cursor's line reflows when the terminal resizes (wrapped lines always do) |
 
-Three profiles ship, because they cover the three answers real terminals give:
+Every profile uses Termwright's Unicode 15 extended-grapheme model. Two policy
+profiles ship:
 
-- **`default`** — Unicode 11, narrow ambiguous, no VS16 promotion. What most
-  terminals do, and what the driver did before profiles existed.
-- **`kitty`** — VS16 promotes to an emoji-width cluster.
-- **`iterm2-ambiguous-wide`** — ambiguous characters take two columns, the way
-  iTerm2 answers when configured for CJK.
+- **`default`** — East Asian Ambiguous characters are narrow.
+- **`cjk-wide`** — East Asian Ambiguous characters are wide.
 
-Naming one after kitty means _this is how kitty answers_, not _this is kitty_.
 A profile is a set of switches that reproduces how terminals differ; it is not
 an emulation of any particular one, and it is not trying to become one.
-
-## Known limitation: grapheme clustering
-
-`unicodeVersion` accepts only `'11'` today. The intended second value was
-`'15-graphemes'`, backed by `@xterm/addon-unicode-graphemes`, which would make a
-ZWJ sequence like 👩‍👩‍👧 occupy one cluster instead of three.
-
-That addon cannot be loaded here: importing it inside a vitest worker never
-finishes — 0.4.0 and 0.5.0-beta alike, in both the `threads` and `forks` pools,
-and even through `createRequire` — while plain Node imports it in 20 ms. Every
-package in this repository tests with vitest, so a profile that needed it would
-hang the test suite of everyone who imported this package. Shipping three
-profiles that work beats shipping four when the fourth freezes the room.
 
 `reflowCursorLineOnResize` is named for exactly what it reaches. xterm.js always
 reflows _wrapped_ lines; the only choice it offers is the cursor's line, and the
@@ -96,10 +77,8 @@ field says so rather than promising reflow control it does not have.
 
 ## Why the factory, and not just a shared config
 
-The bug that prompted this package: the driver loaded the Unicode 11 addon and
-the replay did not, so a session measured a character at Unicode 11 widths and
-its own replay measured the same bytes at Unicode 6 — silently, and only visibly
-when a box drifted by one column. A shared _config_ would not have fixed that;
+The driver and replay once activated different Unicode providers, so the same
+bytes produced different geometry. A shared _config_ would not have fixed that;
 only a shared _factory_ makes it impossible to forget.
 
 The factory also absorbs one upstream trap: `@xterm/headless` and its addons are

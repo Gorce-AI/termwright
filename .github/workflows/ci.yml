@@ -141,6 +141,10 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - run: pnpm build
+      - name: Certify Unicode provider loading and worker independence
+        run: pnpm certify:unicode-load
+      - name: Certify the differential Unicode geometry corpus
+        run: pnpm certify:unicode-corpus
       # The workspace package exports dist/index.js. Test resolution only after
       # the same build a packed consumer receives; checking before this point
       # tests an impossible half-built workspace rather than native loading.
@@ -579,6 +583,10 @@ jobs:
           path: packages/pty-win32-x64
 
       - run: pnpm build
+      - name: Certify Unicode provider loading and worker independence
+        run: pnpm certify:unicode-load
+      - name: Certify the differential Unicode geometry corpus
+        run: pnpm certify:unicode-corpus
 
       # A selection step, not a smoke test. The exact backend name proves the
       # job below is exercising the native package it intends to certify.

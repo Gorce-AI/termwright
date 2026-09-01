@@ -261,8 +261,8 @@ command markers. Test authors should normally use `terminal.openShell()`.
 Defined in: [driver/src/api.ts:111](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L111)
 
 Terminal profile: which width tables and which of the switches terminals
-disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
-`'iterm2-ambiguous-wide'`) or a profile object from `@termwright/vt`.
+disagree on this session uses. The built-in ids are `'default'` and
+`'cjk-wide'`.
 
 It is recorded with the session so a replay, a screenshot and the runner
 pane can count characters exactly as the live session did.

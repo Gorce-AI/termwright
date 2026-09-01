@@ -82,7 +82,7 @@ import {defineTermwrightConfig} from 'termwright/test';
 export default defineTermwrightConfig({
   profiles: {
     compact: {columns: 80, rows: 24, terminalProfile: 'default'},
-    wide: {columns: 140, rows: 40, terminalProfile: 'kitty'},
+    wide: {columns: 140, rows: 40, terminalProfile: 'cjk-wide'},
   },
 });
 ```

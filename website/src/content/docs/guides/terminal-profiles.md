@@ -16,7 +16,7 @@ const appPath = fileURLToPath(new URL('../app.js', import.meta.url));
 
 const terminal = await launchTerminal({
   command: [process.execPath, appPath],
-  terminalProfile: 'iterm2-ambiguous-wide',
+  terminalProfile: 'cjk-wide',
 });
 
 terminal.terminalProfile; // what this session actually used
@@ -26,24 +26,21 @@ terminal.terminalProfile; // what this session actually used
 
 | Switch                     | What it decides                                                       |
 | -------------------------- | --------------------------------------------------------------------- |
-| `unicodeVersion`           | which width tables apply                                              |
-| `ambiguousWide`            | whether East Asian Ambiguous characters take one column or two        |
-| `variationSelectors`       | whether `❤️` (VS16) is one column or two                              |
+| `ambiguousWidth`           | whether East Asian Ambiguous characters take one column or two        |
 | `reflowCursorLineOnResize` | whether the cursor's line reflows on resize (wrapped lines always do) |
 
-Three profiles cover the currently supported behaviors:
+All profiles use Unicode 15 extended grapheme clusters. Two policies cover the
+supported ambiguous-width behaviors:
 
-| Profile                 | Answers                                                                               |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| `default`               | Unicode 11, narrow ambiguous, no VS16 promotion — what most terminals do              |
-| `kitty`                 | VS16 promotes to an emoji-width cluster                                               |
-| `iterm2-ambiguous-wide` | ambiguous characters take two columns, the way iTerm2 answers when configured for CJK |
+| Profile    | Answers                                          |
+| ---------- | ------------------------------------------------ |
+| `default`  | East Asian Ambiguous characters take one column  |
+| `cjk-wide` | East Asian Ambiguous characters take two columns |
 
 ## Choose a profile
 
-A profile reproduces four width and resize choices. It does not emulate the
-named terminal as a whole. Selecting `kitty` does not turn the run into a kitty
-integration test.
+A profile reproduces width and resize policy. It does not emulate a named
+terminal as a whole.
 
 That distinction matters when a test fails on a user's machine but not in CI:
 the profile tells you which _answers_ your assertions assumed, which is a real
@@ -57,28 +54,5 @@ the same profile. Termwright records the selected profile in
 
 ## Profile differences in Runner
 
-The browser pane is a real xterm.js, but it is not the headless build, and it
-cannot reproduce every profile. When an archive or a live session announces a
-profile the pane cannot match, the UI says so rather than rendering something
-subtly wrong in silence:
-
-```
-profile "iterm2-ambiguous-wide" — this view measures with Unicode 11 widths
-```
-
-Treat that notice as it reads: the semantics, the timeline and the tree are all
-still exact; only the column arithmetic in that one pane may differ from what
-the session saw.
-
-## Grapheme clustering limit
-
-`unicodeVersion` accepts only `'11'` today. The intended second value was
-`'15-graphemes'`, which would make a ZWJ sequence like 👩‍👩‍👧 occupy one cluster
-instead of three.
-
-Unicode 15 grapheme-cluster mode is not currently available in the Vitest
-runtime. ZWJ emoji sequences can therefore differ from a terminal or layout
-engine that treats the full sequence as one cluster.
-
-This is also why Yoga (Ink's layout engine) and the width tables can disagree
-about a ZWJ cluster: see [Limitations](../../reference/limitations/).
+The browser pane and headless driver load the same Termwright-owned provider, so
+replay geometry uses the same profile and grapheme model as the live session.
