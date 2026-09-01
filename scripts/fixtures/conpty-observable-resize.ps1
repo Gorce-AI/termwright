@@ -133,7 +133,7 @@ public static class TermwrightResizeProbe {
     return false;
   }
 
-  private static byte[] ReadCursorPositionReport(IntPtr input) {
+  private static byte[] ReadTerminalResponse(IntPtr input, byte terminator) {
     var result = new System.Collections.Generic.List<byte>();
     var next = new byte[1];
     while (result.Count < 64) {
@@ -142,9 +142,9 @@ public static class TermwrightResizeProbe {
         throw new InvalidOperationException("input-read");
       }
       result.Add(next[0]);
-      if (next[0] == (byte)'R') return result.ToArray();
+      if (next[0] == terminator) return result.ToArray();
     }
-    throw new InvalidOperationException("oversized-cpr");
+    throw new InvalidOperationException("oversized-terminal-response");
   }
 
   private static bool InputRecordLayoutIsExact() {
@@ -200,8 +200,9 @@ public static class TermwrightResizeProbe {
         if (hostReplyLeaked) return 47;
 
         // Remove resize/focus records before the byte-oriented application
-        // query. VT input is deliberately disabled: ordinary application CPR
-        // must still arrive through Win32 Input Mode without host capture.
+        // query. VT input is deliberately disabled: the private application
+        // envelope must still commit the complete CPR without host capture or
+        // byte splitting.
         if (!FlushConsoleInputBuffer(input)) return 48;
         var byteInputMode = originalMode &
           ~ENABLE_LINE_INPUT &
@@ -212,11 +213,25 @@ public static class TermwrightResizeProbe {
         var dsr = new byte[] { 0x1b, 0x5b, 0x36, 0x6e };
         var prefix = System.Text.Encoding.ASCII.GetBytes(";APP-DSR:");
         if (!WriteAll(output, prefix) || !WriteAll(output, dsr)) return 50;
-        var response = ReadCursorPositionReport(input);
+        var response = ReadTerminalResponse(input, (byte)'R');
         Console.Out.Write(";APP-CPR:" + BitConverter.ToString(response).Replace("-", "").ToLowerInvariant());
         Console.Out.Flush();
         var expected = new byte[] { 0x1b, 0x5b, 0x39, 0x3b, 0x31, 0x37, 0x52 };
         if (!System.Linq.Enumerable.SequenceEqual(response, expected)) return 51;
+
+        // Repeat the same transaction with VT input enabled and a mode report
+        // whose printable tail previously leaked as Bubble Tea keystrokes when
+        // Termwright emitted one synthetic record per byte.
+        if (!SetConsoleMode(input, byteInputMode | ENABLE_VIRTUAL_TERMINAL_INPUT)) return 55;
+        var modeQuery = System.Text.Encoding.ASCII.GetBytes("\x1b[?2026$p");
+        var modePrefix = System.Text.Encoding.ASCII.GetBytes(";APP-MODE-QUERY:");
+        if (!WriteAll(output, modePrefix) || !WriteAll(output, modeQuery)) return 56;
+        var modeResponse = ReadTerminalResponse(input, (byte)'y');
+        Console.Out.Write(";APP-MODE-REPLY:" + BitConverter.ToString(modeResponse).Replace("-", "").ToLowerInvariant());
+        Console.Out.Flush();
+        var expectedMode = System.Text.Encoding.ASCII.GetBytes("\x1b[?2026;2$y");
+        if (!System.Linq.Enumerable.SequenceEqual(modeResponse, expectedMode)) return 57;
+        if (!SetConsoleMode(input, byteInputMode)) return 58;
 
         // Once ConPTY has observed W32IM, a raw trailing ESC is deliberately
         // retained as a possible split control sequence. Termwright's key

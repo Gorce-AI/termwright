@@ -154,7 +154,7 @@
     {
       "id": "conpty-non-windows-host-cursor-rpc",
       "file": "packages/pty/src/windows-native.win.test.ts",
-      "fullName": "routes addressed host cursor RPC separately from application CPR without leaking host replies",
+      "fullName": "routes addressed host cursor RPC separately from atomic application replies",
       "platforms": [
         "aix",
         "android",

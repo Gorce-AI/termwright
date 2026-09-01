@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "framework": "microsoft/terminal OpenConsole",
   "tier": "T3",
-  "capability": "request-addressed-host-cursor-rpc",
+  "capability": "request-addressed-host-cursor-and-atomic-application-reply-rpc",
   "upstream": {
     "repository": "https://github.com/microsoft/terminal",
     "commit": "dd494ac79a82a04e1e7252a91c8939a3c3039908",
@@ -12,13 +12,15 @@
   },
   "patch": {
     "path": "host-cursor-rpc.patch",
-    "sha256": "839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c",
+    "sha256": "eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c",
     "strip": 1
   },
   "protocol": {
     "osc": 8488,
     "request": "ESC ] 8488 ; twh-cpr-v1:q:<32-lowercase-hex-token> BEL",
-    "response": "ESC ] 8488 ; twh-cpr-v1:r:<same-token>:<1-based-row>:<1-based-column> BEL"
+    "response": "ESC ] 8488 ; twh-cpr-v1:r:<same-token>:<1-based-row>:<1-based-column> BEL",
+    "applicationResponse": "ESC ] 8488 ; twh-app-reply-v1:<decimal-byte-count>:<lowercase-hex-payload> BEL",
+    "applicationResponseMaximumBytes": 4096
   },
   "touchedFiles": {
     "dep/vcpkg-overlay-triplets/arm64-windows-static.cmake": {
@@ -71,7 +73,7 @@
     },
     "src/terminal/parser/InputStateMachineEngine.cpp": {
       "sha256Before": "08bb07a77eeead47dec9fbae36e315389446021255f5b0378a4f1fd014ffc621",
-      "sha256After": "ba7969d7e435640f26bfd6af9237ecbfc84e3eaeaf4a4c9bbf6f4b428fc0ae4f"
+      "sha256After": "76e05243fadf789c10dbb0ba1c396f39752401e38e1be63510cca57f83376c7e"
     },
     "src/terminal/parser/InputStateMachineEngine.hpp": {
       "sha256Before": "e53ab3bb93432070dbeafa1ef29d6518d0aef7d007d837124fa535f08e640524",
@@ -79,7 +81,7 @@
     },
     "src/terminal/parser/ut_parser/InputEngineTest.cpp": {
       "sha256Before": "1d3dae214fdf4e45f66a8de1f6922a4e0c62f6f15f7625df9b26f301c9837e38",
-      "sha256After": "607446c07373cdd08e5a2bedd1774ddce34f966a3ed99f96b14fce090ae9c1d1"
+      "sha256After": "3a8e08fd243c4de73cc6d7c51bb1047689cb7c474e5e2f7771b1854a0be9946b"
     },
     "src/terminal/adapter/IInteractDispatch.hpp": {
       "sha256Before": "8f73352685b907dadf5a413fc020729bdfdeeb53d045261f14eab295b0932171",
@@ -148,7 +150,9 @@
     "matching host response updates only the exact target and generation",
     "stale and malformed twh-cpr-v1 responses are consumed without application-input leakage",
     "foreign OSC 8488 payloads are not claimed by the host RPC",
-    "application DSR remains byte-exact through Win32 input mode",
+    "application DSR and mode reports are committed as one byte-exact input-buffer transaction with virtual-terminal input both enabled and disabled",
+    "application reply envelopes remain incomplete until their OSC terminator even when split at every byte boundary",
+    "malformed, oversized, and non-ASCII twh-app-reply-v1 envelopes are consumed fail closed",
     "request generation and output failures fail closed rather than publishing stale cursor state"
   ]
 }

@@ -20,7 +20,7 @@ import { NativeWriteDrainEpoch } from './write-drain-epoch.js';
 
 export {
   encodeConPtyApplicationInput,
-  encodeWin32InputModeTerminalResponse,
+  encodeConPtyApplicationTerminalResponse,
 } from './windows-output-normalizer.js';
 
 type NativeEvent =
@@ -159,7 +159,7 @@ export interface PtyHandle {
   writeApplicationInput?(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): void;
   writeTerminalResponse?(
     data: Uint8Array,
-  ): 'host-control' | 'application-direct' | 'application-win32-input';
+  ): 'host-control' | 'application-envelope' | 'application-direct';
   /** Closes the parent-owned terminal input while preserving output drain. */
   closeInput?(): void;
   resize(columns: number, rows: number): boolean;

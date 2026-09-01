@@ -25,6 +25,9 @@ const RIS = bytes(ESC, 0x63);
 const HOST_CURSOR_REQUEST_PREFIX = Buffer.from('\x1b]8488;twh-cpr-v1:q:', 'ascii');
 const HOST_CURSOR_REQUEST_TOKEN_BYTES = 32;
 const HOST_CURSOR_REPLY_NAMESPACE = Buffer.from('\x1b]8488;twh-cpr-v1:r:', 'ascii');
+const APPLICATION_REPLY_PREFIX = Buffer.from('\x1b]8488;twh-app-reply-v1:', 'ascii');
+const OSC_TERMINATOR = Buffer.from('\x07', 'ascii');
+const MAX_APPLICATION_REPLY_BYTES = 4_096;
 
 interface Rewrite {
   readonly input: Buffer;
@@ -33,19 +36,35 @@ interface Rewrite {
 }
 
 export type ConPtyHostQuery = 'primary-device-attributes';
-export type ConPtyTerminalResponseRoute = 'host-control' | 'application-win32-input';
+export type ConPtyTerminalResponseRoute = 'host-control' | 'application-envelope';
 
-export function encodeWin32InputModeTerminalResponse(data: Uint8Array): Buffer {
-  let encoded = '';
+export function encodeConPtyApplicationTerminalResponse(data: Uint8Array): Buffer {
+  if (data.byteLength === 0 || data.byteLength > MAX_APPLICATION_REPLY_BYTES) {
+    throw new RangeError(
+      `terminal response must contain between 1 and ${MAX_APPLICATION_REPLY_BYTES} bytes`,
+    );
+  }
   for (const byte of data) {
     if (byte > 0x7f) {
       throw new TypeError(
         `terminal response contains non-ASCII byte 0x${byte.toString(16).padStart(2, '0')}`,
       );
     }
-    encoded += `\u001b[0;0;${byte};1;0;1_`;
   }
-  return Buffer.from(encoded, 'ascii');
+  const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  return Buffer.concat([
+    APPLICATION_REPLY_PREFIX,
+    Buffer.from(`${bytes.byteLength}:${bytes.toString('hex')}`, 'ascii'),
+    OSC_TERMINATOR,
+  ]);
+}
+
+export class ConPtyTerminalResponseTransport {
+  encode(route: ConPtyTerminalResponseRoute, data: Uint8Array): Buffer {
+    return route === 'application-envelope'
+      ? encodeConPtyApplicationTerminalResponse(data)
+      : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  }
 }
 
 export function encodeConPtyApplicationInput(
@@ -60,15 +79,6 @@ export function encodeConPtyApplicationInput(
     : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 }
 
-export class ConPtyTerminalResponseTransport {
-  encode(route: ConPtyTerminalResponseRoute, data: Uint8Array): Buffer {
-    if (route === 'application-win32-input') {
-      return encodeWin32InputModeTerminalResponse(data);
-    }
-    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-  }
-}
-
 function isHostResponse(response: Buffer): boolean {
   const text = response.toString('ascii');
   return /^\x1b\[\?[\d;]*c$/u.test(text);
@@ -77,10 +87,11 @@ function isHostResponse(response: Buffer): boolean {
 /**
  * Preserves the ownership of startup queries emitted by ConPTY itself.
  *
- * Host-control replies must be written as raw VT so OpenConsole consumes
- * them. Application replies must use Win32 Input Mode so they reach the
- * child as terminal protocol bytes. The queue is populated by the same
- * split-safe startup rewrite that exposes each query to the emulator.
+ * Host-control replies travel raw to OpenConsole. Application replies use the
+ * private atomic envelope so OpenConsole can commit the decoded bytes to the
+ * child in one input-buffer operation. The route keeps that ownership
+ * explicit and is populated by the same split-safe startup rewrite that
+ * exposes each host query to the emulator.
  */
 export class ConPtyTerminalResponseRouter {
   readonly #hostQueries: ConPtyHostQuery[] = [];
@@ -103,7 +114,13 @@ export class ConPtyTerminalResponseRouter {
     if (bytes.subarray(0, HOST_CURSOR_REPLY_NAMESPACE.length).equals(HOST_CURSOR_REPLY_NAMESPACE)) {
       return 'host-control';
     }
-    if (query === undefined) return 'application-win32-input';
+    // A terminal reply is one control-plane transaction. The private envelope
+    // makes OpenConsole buffer the complete payload through the OSC terminator,
+    // then commit it with one InputBuffer::WriteString call. Sending raw CSI
+    // is not sufficient: with VT input disabled OpenConsole can interpret a
+    // CPR as F3. Encoding each byte as a separate KEY_EVENT is also invalid:
+    // it exposes a printable tail when a VT reader resolves ESC too early.
+    if (query === undefined) return 'application-envelope';
     if (!isHostResponse(bytes)) {
       throw new Error(`terminal answered ${query} ConPTY host query with an unexpected response`);
     }

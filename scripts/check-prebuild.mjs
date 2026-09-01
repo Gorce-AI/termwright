@@ -150,6 +150,7 @@ export function assertSourceBuiltConptyLock(lock) {
     lock.schemaVersion !== 2 ||
     lock.identity?.provider !== 'termwright-patched-openconsole' ||
     lock.identity?.hostCursorRpc !== 'twh-cpr-v1' ||
+    lock.identity?.applicationReplyRpc !== 'twh-app-reply-v1' ||
     lock.identity?.mode !== 'ordered-vt-passthrough' ||
     typeof lock.identity?.upstreamCommit !== 'string' ||
     typeof lock.identity?.upstreamArchiveSha256 !== 'string' ||
@@ -185,7 +186,8 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
   if (
     sourceManifest.schemaVersion !== 1 ||
     sourceManifest.tier !== 'T3' ||
-    sourceManifest.capability !== 'request-addressed-host-cursor-rpc' ||
+    sourceManifest.capability !==
+      'request-addressed-host-cursor-and-atomic-application-reply-rpc' ||
     sourceManifest.upstream?.commit !== CONPTY_LOCK.identity.upstreamCommit ||
     sourceManifest.upstream?.archiveSha256 !== CONPTY_LOCK.identity.upstreamArchiveSha256 ||
     sourceManifest.patch?.sha256 !== CONPTY_LOCK.identity.patchSha256 ||
@@ -193,6 +195,8 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
     sourceManifest.protocol?.osc !== 8488 ||
     !sourceManifest.protocol?.request?.includes('twh-cpr-v1:q:') ||
     !sourceManifest.protocol?.response?.includes('twh-cpr-v1:r:') ||
+    !sourceManifest.protocol?.applicationResponse?.includes('twh-app-reply-v1:') ||
+    sourceManifest.protocol?.applicationResponseMaximumBytes !== 4096 ||
     sourceManifest.build?.configuration !== CONPTY_LOCK.identity.buildConfiguration ||
     sourceManifest.build?.platformToolset !== CONPTY_LOCK.identity.platformToolset
   ) {
@@ -232,6 +236,7 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
     manifest.upstreamArchiveSha256 !== CONPTY_LOCK.identity.upstreamArchiveSha256 ||
     manifest.patchSha256 !== CONPTY_LOCK.identity.patchSha256 ||
     manifest.hostCursorRpc !== CONPTY_LOCK.identity.hostCursorRpc ||
+    manifest.applicationReplyRpc !== CONPTY_LOCK.identity.applicationReplyRpc ||
     manifest.sourceManifestSha256 !== CONPTY_LOCK.sourceManifest.sha256 ||
     manifest.build?.configuration !== CONPTY_LOCK.identity.buildConfiguration ||
     manifest.build?.platformToolset !== CONPTY_LOCK.identity.platformToolset ||
@@ -275,6 +280,7 @@ export async function verifyWindowsConptyBundle(packageDirectory, architecture) 
     described?.name !== CONPTY_LOCK.identity.provider ||
     described.versionInfo !==
       `${CONPTY_LOCK.identity.upstreamCommit}+${CONPTY_LOCK.identity.hostCursorRpc}.` +
+        `${CONPTY_LOCK.identity.applicationReplyRpc}.` +
         `${CONPTY_LOCK.identity.patchSha256}.${CONPTY_LOCK.sourceManifest.sha256}` ||
     described.filesAnalyzed !== true ||
     described.licenseConcluded !== 'NOASSERTION' ||

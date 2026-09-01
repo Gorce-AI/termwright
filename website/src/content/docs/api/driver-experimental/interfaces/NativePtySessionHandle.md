@@ -229,7 +229,7 @@ Defined in: [native-pty-backend.ts:17](https://github.com/Gorce-AI/termwright/bl
 
 ### writeTerminalResponse()?
 
-> `optional` **writeTerminalResponse**(`data`): `"host-control"` \| `"application-direct"` \| `"application-win32-input"`
+> `optional` **writeTerminalResponse**(`data`): `"host-control"` \| `"application-envelope"` \| `"application-direct"`
 
 Defined in: [native-pty-backend.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L18)
 
@@ -241,4 +241,4 @@ Defined in: [native-pty-backend.ts:18](https://github.com/Gorce-AI/termwright/bl
 
 #### Returns
 
-`"host-control"` \| `"application-direct"` \| `"application-win32-input"`
+`"host-control"` \| `"application-envelope"` \| `"application-direct"`

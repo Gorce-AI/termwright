@@ -63,8 +63,9 @@ interface LoadedWindowsBinding {
 export interface WindowsConPtyRuntimeInfo {
   readonly provider: 'termwright-patched-openconsole';
   readonly upstreamCommit: 'dd494ac79a82a04e1e7252a91c8939a3c3039908';
-  readonly patchSha256: '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c';
+  readonly patchSha256: 'eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c';
   readonly hostCursorRpc: 'twh-cpr-v1';
+  readonly applicationReplyRpc: 'twh-app-reply-v1';
   readonly mode: 'ordered-vt-passthrough';
   readonly policy: 'strict';
   readonly selectedHostArchitecture: '' | 'x64' | 'arm64';
@@ -79,8 +80,9 @@ function assertRuntimeInfoShape(value: WindowsConPtyRuntimeInfo): WindowsConPtyR
   if (
     value.provider !== 'termwright-patched-openconsole' ||
     value.upstreamCommit !== 'dd494ac79a82a04e1e7252a91c8939a3c3039908' ||
-    value.patchSha256 !== '839ff6fb8c2d3490ee8ccd1f20310baa315475fa187b4967e5e940fa98610d1c' ||
+    value.patchSha256 !== 'eae93025548fe697fa08242587e28abaeb06cc5ca7646fff0d9bef280c77770c' ||
     value.hostCursorRpc !== 'twh-cpr-v1' ||
+    value.applicationReplyRpc !== 'twh-app-reply-v1' ||
     Object.hasOwn(value, 'package') ||
     Object.hasOwn(value, 'version') ||
     value.mode !== 'ordered-vt-passthrough' ||

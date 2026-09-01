@@ -198,7 +198,8 @@ the emitted VT stream had no shared acknowledgement.
 
 Termwright pins Microsoft Terminal source commit
 `dd494ac79a82a04e1e7252a91c8939a3c3039908` and applies one exact-fenced T3
-patch for request-addressed host cursor synchronization. `conpty.dll` and
+patch for request-addressed host cursor synchronization and atomic application
+terminal replies. `conpty.dll` and
 `OpenConsole.exe` are built together from that same patched tree; mixing a DLL
 and host from different builds is outside the candidate contract. This
 runtime's ConPTY path passes client VT into one ordered output stream without
@@ -232,9 +233,12 @@ The T3 patch replaces the host-owned query with private `OSC 8488` messages:
 random 128-bit value. The emulator reads its active cursor at the exact parser
 position of the request. OpenConsole accepts only the matching live token;
 superseded host replies are consumed without entering the application's input
-queue. Ordinary standard DSR/CPR is always application-owned and reaches the
-child through synthesized Win32 Input Mode records. Startup DA1 remains a
-separate raw host-control exchange.
+queue. Ordinary standard replies are always application-owned. Termwright
+encodes them as `OSC 8488;twh-app-reply-v1:<length>:<hex>BEL`; OpenConsole
+buffers the complete envelope, validates it fail-closed, and decodes it into a
+single `InputBuffer::WriteString` transaction. This preserves the whole reply
+with VT input enabled and prevents a raw CPR from being parsed as F3 when VT
+input is disabled. Startup DA1 remains a separate raw host-control exchange.
 
 The only positive completion is a matching response for the live request.
 Supersession and session close cancel the waiter fail-closed without publishing

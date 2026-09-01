@@ -29,7 +29,7 @@ async function fixture() {
   const sourceManifest = {
     schemaVersion: 1,
     tier: 'T3',
-    capability: 'request-addressed-host-cursor-rpc',
+    capability: 'request-addressed-host-cursor-and-atomic-application-reply-rpc',
     upstream: {
       repository: 'https://github.com/microsoft/terminal',
       commit,
@@ -41,6 +41,8 @@ async function fixture() {
       osc: 8488,
       request: 'ESC ] 8488 ; twh-cpr-v1:q:<token> BEL',
       response: 'ESC ] 8488 ; twh-cpr-v1:r:<token>:<row>:<column> BEL',
+      applicationResponse: 'ESC ] 8488 ; twh-app-reply-v1:<length>:<hex> BEL',
+      applicationResponseMaximumBytes: 4096,
     },
     build: { configuration: 'Release', platformToolset: 'v143' },
   };
@@ -81,6 +83,7 @@ async function fixture() {
       upstreamArchiveSha256: archiveSha256,
       patchSha256,
       hostCursorRpc: 'twh-cpr-v1',
+      applicationReplyRpc: 'twh-app-reply-v1',
       mode: 'ordered-vt-passthrough',
       buildConfiguration: 'Release',
       platformToolset: 'v143',
@@ -174,6 +177,7 @@ describe('the source-built ConPTY asset sealer', () => {
         upstreamCommit: lock.identity.upstreamCommit,
         patchSha256: lock.identity.patchSha256,
         hostCursorRpc: 'twh-cpr-v1',
+        applicationReplyRpc: 'twh-app-reply-v1',
         assets: Object.fromEntries(
           Object.entries(lock.assets.x64).map(([path, asset]) => [path, asset.sha256]),
         ),

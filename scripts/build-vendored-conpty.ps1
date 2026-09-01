@@ -84,11 +84,11 @@ try {
         # authoritative byte fence.
         & git.exe apply --check --ignore-space-change "-p$($manifest.patch.strip)" $patchFile
         if ($LASTEXITCODE -ne 0) {
-            throw "The request-addressed host cursor patch does not apply exactly."
+            throw "The request-addressed host cursor and atomic application reply patch does not apply exactly."
         }
         & git.exe apply --ignore-space-change "-p$($manifest.patch.strip)" $patchFile
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to apply the request-addressed host cursor patch."
+            throw "Failed to apply the request-addressed host cursor and atomic application reply patch."
         }
     } finally {
         Pop-Location
