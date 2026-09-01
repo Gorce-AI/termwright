@@ -134,10 +134,11 @@ therefore observes the child's focus request rather than the host's.
 Application evidence remains available for embeddings that really do hide
 their input modes; it is not required merely because the platform is Windows.
 
-The host's Win32-input mode also applies in the opposite direction. Application
-replies are encoded byte-for-byte as synthesized `KEY_EVENT`s via the public
-Win32 Input Mode sequence (`CSI Vk;Sc;Uc;Kd;Cs;Rc _`), avoiding a printable tail
-interpreted as keys. Ordinary DSR/CPR is always application-owned. The patched
+Application replies stay complete raw VT transactions through OpenConsole's
+input state machine and its single `InputBuffer::WriteString` commit. Encoding
+one `KEY_EVENT` per byte is not equivalent: a VT reader can resolve the leading
+`ESC` before later records arrive and expose the printable tail as keys.
+Ordinary DSR/CPR is always application-owned. The patched
 host uses a separate private `OSC 8488` RPC with a random 128-bit token for its
 cursor shadow: the emulator reads the cursor at the request's exact parser
 position, and only the matching live response is routed raw and consumed by

@@ -18,10 +18,7 @@ import {
 } from './windows.js';
 import { NativeWriteDrainEpoch } from './write-drain-epoch.js';
 
-export {
-  encodeConPtyApplicationInput,
-  encodeWin32InputModeTerminalResponse,
-} from './windows-output-normalizer.js';
+export { encodeConPtyApplicationInput } from './windows-output-normalizer.js';
 
 type NativeEvent =
   | { readonly type: 'data'; readonly data: Buffer }
@@ -157,9 +154,7 @@ export interface PtyHandle {
   readonly endReason: number | undefined;
   write(data: Uint8Array): void;
   writeApplicationInput?(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): void;
-  writeTerminalResponse?(
-    data: Uint8Array,
-  ): 'host-control' | 'application-direct' | 'application-win32-input';
+  writeTerminalResponse?(data: Uint8Array): 'host-control' | 'application-direct';
   /** Closes the parent-owned terminal input while preserving output drain. */
   closeInput?(): void;
   resize(columns: number, rows: number): boolean;

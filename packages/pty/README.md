@@ -71,10 +71,12 @@ Win32-input `DECSET` sequences before bytes reach the driver. It preserves the
 private host-cursor request, DA1, and every original child sequence, including
 an explicit disable followed by enable. The normalizer is split-safe and
 releases an incomplete candidate verbatim before authoritative EOF.
-The input side still honors the host's always-on Win32 Input Mode. Application
-replies, including every ordinary DSR cursor-position report, are therefore
-transported as synthesized Win32 `KEY_EVENT` records. OpenConsole's own cursor
-recovery instead uses private `OSC 8488` requests and responses carrying a
+The input side keeps each emulator-generated application reply as one complete
+raw VT transaction. OpenConsole buffers a control sequence through its final
+byte and commits it with one `InputBuffer::WriteString`; translating the bytes
+to separate Win32 `KEY_EVENT` records would let an application resolve a lone
+`ESC` before the reply tail arrived. OpenConsole's own cursor recovery instead
+uses private `OSC 8488` requests and responses carrying a
 random 128-bit request token. Only a response for the matching live token can
 complete the host query, and that host-control response is written raw and
 consumed without reaching the application. Startup DA1 remains a separately

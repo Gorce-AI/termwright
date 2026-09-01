@@ -232,9 +232,10 @@ The T3 patch replaces the host-owned query with private `OSC 8488` messages:
 random 128-bit value. The emulator reads its active cursor at the exact parser
 position of the request. OpenConsole accepts only the matching live token;
 superseded host replies are consumed without entering the application's input
-queue. Ordinary standard DSR/CPR is always application-owned and reaches the
-child through synthesized Win32 Input Mode records. Startup DA1 remains a
-separate raw host-control exchange.
+queue. Ordinary standard replies are always application-owned and travel as
+one complete raw VT transaction through OpenConsole's buffered input parser and
+single `InputBuffer::WriteString` commit. Startup DA1 remains a separate raw
+host-control exchange.
 
 The only positive completion is a matching response for the live request.
 Supersession and session close cancel the waiter fail-closed without publishing

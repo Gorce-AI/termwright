@@ -337,6 +337,8 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     sessions.push(app);
     await app.waitForText('status: ready');
     await app.settled();
+    expect(await app.getByRole('textbox', { name: 'Name' }).textContent()).toBe('');
+    expect(app.screen().text()).not.toContain('[?2026;2$y');
 
     let rawOffset = Buffer.concat(output.map((part) => Buffer.from(part))).length;
     const commit = async (input: () => Promise<void>, expected: string) => {

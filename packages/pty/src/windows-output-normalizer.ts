@@ -33,20 +33,7 @@ interface Rewrite {
 }
 
 export type ConPtyHostQuery = 'primary-device-attributes';
-export type ConPtyTerminalResponseRoute = 'host-control' | 'application-win32-input';
-
-export function encodeWin32InputModeTerminalResponse(data: Uint8Array): Buffer {
-  let encoded = '';
-  for (const byte of data) {
-    if (byte > 0x7f) {
-      throw new TypeError(
-        `terminal response contains non-ASCII byte 0x${byte.toString(16).padStart(2, '0')}`,
-      );
-    }
-    encoded += `\u001b[0;0;${byte};1;0;1_`;
-  }
-  return Buffer.from(encoded, 'ascii');
-}
+export type ConPtyTerminalResponseRoute = 'host-control' | 'application-direct';
 
 export function encodeConPtyApplicationInput(
   data: Uint8Array,
@@ -60,15 +47,6 @@ export function encodeConPtyApplicationInput(
     : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 }
 
-export class ConPtyTerminalResponseTransport {
-  encode(route: ConPtyTerminalResponseRoute, data: Uint8Array): Buffer {
-    if (route === 'application-win32-input') {
-      return encodeWin32InputModeTerminalResponse(data);
-    }
-    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-  }
-}
-
 function isHostResponse(response: Buffer): boolean {
   const text = response.toString('ascii');
   return /^\x1b\[\?[\d;]*c$/u.test(text);
@@ -77,10 +55,11 @@ function isHostResponse(response: Buffer): boolean {
 /**
  * Preserves the ownership of startup queries emitted by ConPTY itself.
  *
- * Host-control replies must be written as raw VT so OpenConsole consumes
- * them. Application replies must use Win32 Input Mode so they reach the
- * child as terminal protocol bytes. The queue is populated by the same
- * split-safe startup rewrite that exposes each query to the emulator.
+ * Host-control replies and application replies both travel as complete raw
+ * VT transactions. The route keeps their ownership explicit: OpenConsole
+ * consumes host control, while its buffered input parser commits an ordinary
+ * terminal reply to the child in one operation. The queue is populated by the
+ * same split-safe startup rewrite that exposes each query to the emulator.
  */
 export class ConPtyTerminalResponseRouter {
   readonly #hostQueries: ConPtyHostQuery[] = [];
@@ -103,7 +82,13 @@ export class ConPtyTerminalResponseRouter {
     if (bytes.subarray(0, HOST_CURSOR_REPLY_NAMESPACE.length).equals(HOST_CURSOR_REPLY_NAMESPACE)) {
       return 'host-control';
     }
-    if (query === undefined) return 'application-win32-input';
+    // A terminal reply is one control-plane transaction. Passing its complete
+    // VT sequence through OpenConsole lets the input state machine buffer it
+    // to its final byte and commit it with one InputBuffer::WriteString call.
+    // Encoding each byte as a separate Win32 KEY_EVENT loses that boundary:
+    // under pressure a VT reader can resolve the leading ESC before the tail
+    // arrives and expose the rest of the reply as application text.
+    if (query === undefined) return 'application-direct';
     if (!isHostResponse(bytes)) {
       throw new Error(`terminal answered ${query} ConPTY host query with an unexpected response`);
     }

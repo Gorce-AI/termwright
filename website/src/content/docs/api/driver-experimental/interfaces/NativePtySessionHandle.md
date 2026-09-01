@@ -43,7 +43,7 @@ Defined in: [native-pty-backend.ts:15](https://github.com/Gorce-AI/termwright/bl
 
 > `optional` **closeInput**(): `void`
 
-Defined in: [native-pty-backend.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L21)
+Defined in: [native-pty-backend.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L19)
 
 #### Returns
 
@@ -55,7 +55,7 @@ Defined in: [native-pty-backend.ts:21](https://github.com/Gorce-AI/termwright/bl
 
 > **dispose**(): `void`
 
-Defined in: [native-pty-backend.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L29)
+Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L27)
 
 #### Returns
 
@@ -67,7 +67,7 @@ Defined in: [native-pty-backend.ts:29](https://github.com/Gorce-AI/termwright/bl
 
 > **onData**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L25)
+Defined in: [native-pty-backend.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L23)
 
 #### Parameters
 
@@ -85,7 +85,7 @@ Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/bl
 
 > **onDrain**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L28)
+Defined in: [native-pty-backend.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L26)
 
 #### Parameters
 
@@ -103,7 +103,7 @@ Defined in: [native-pty-backend.ts:28](https://github.com/Gorce-AI/termwright/bl
 
 > **onError**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L27)
+Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L25)
 
 #### Parameters
 
@@ -121,7 +121,7 @@ Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/bl
 
 > **onExit**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L26)
+Defined in: [native-pty-backend.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L24)
 
 #### Parameters
 
@@ -139,7 +139,7 @@ Defined in: [native-pty-backend.ts:26](https://github.com/Gorce-AI/termwright/bl
 
 > **resize**(`columns`, `rows`): `boolean`
 
-Defined in: [native-pty-backend.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L22)
+Defined in: [native-pty-backend.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L20)
 
 #### Parameters
 
@@ -161,7 +161,7 @@ Defined in: [native-pty-backend.ts:22](https://github.com/Gorce-AI/termwright/bl
 
 > **signal**(`signal`): `boolean`
 
-Defined in: [native-pty-backend.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L23)
+Defined in: [native-pty-backend.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L21)
 
 #### Parameters
 
@@ -179,7 +179,7 @@ Defined in: [native-pty-backend.ts:23](https://github.com/Gorce-AI/termwright/bl
 
 > **treeState**(): `"alive"` \| `"gone"` \| `"unsupported"`
 
-Defined in: [native-pty-backend.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L24)
+Defined in: [native-pty-backend.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L22)
 
 #### Returns
 
@@ -229,7 +229,7 @@ Defined in: [native-pty-backend.ts:17](https://github.com/Gorce-AI/termwright/bl
 
 ### writeTerminalResponse()?
 
-> `optional` **writeTerminalResponse**(`data`): `"host-control"` \| `"application-direct"` \| `"application-win32-input"`
+> `optional` **writeTerminalResponse**(`data`): `"host-control"` \| `"application-direct"`
 
 Defined in: [native-pty-backend.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L18)
 
@@ -241,4 +241,4 @@ Defined in: [native-pty-backend.ts:18](https://github.com/Gorce-AI/termwright/bl
 
 #### Returns
 
-`"host-control"` \| `"application-direct"` \| `"application-win32-input"`
+`"host-control"` \| `"application-direct"`

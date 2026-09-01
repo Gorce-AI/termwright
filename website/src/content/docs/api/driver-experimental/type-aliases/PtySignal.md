@@ -13,6 +13,6 @@ editUrl: false
 
 > **PtySignal** = `"INT"` \| `"TERM"` \| `"KILL"` \| `"HUP"`
 
-Defined in: [pty.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L81)
+Defined in: [pty.ts:80](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L80)
 
 Signals the driver is allowed to deliver.

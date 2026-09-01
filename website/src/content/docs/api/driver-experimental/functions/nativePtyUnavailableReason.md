@@ -13,7 +13,7 @@ editUrl: false
 
 > **nativePtyUnavailableReason**(): `string` \| `undefined`
 
-Defined in: [native-pty-backend.ts:60](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L60)
+Defined in: [native-pty-backend.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L46)
 
 Exact loader diagnostic from the native package, when availability is false.
 
