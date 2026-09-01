@@ -1,0 +1,33 @@
+{
+  "v": 1,
+  "sessionId": "trace-session",
+  "command": [
+    "node",
+    "agent.js"
+  ],
+  "columns": 80,
+  "rows": 24,
+  "startedAt": "2026-09-01T11:13:35.670Z",
+  "platform": "darwin",
+  "semanticTree": true,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "durationMs": 2000,
+  "logs": {
+    "count": 2,
+    "dropped": 0,
+    "sources": [
+      {
+        "label": "server.log"
+      },
+      {
+        "label": "db.pool"
+      }
+    ],
+    "levels": {
+      "warn": 1
+    }
+  }
+}

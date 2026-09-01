@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser } from 'playwright';
-import { buildFixtureTrace } from '../__fixtures__/build-trace.js';
+import { buildFixtureTrace } from '../test/fixtures/build-trace.js';
 import { startUiServer, type UiServer } from '../server.js';
 
 const APP_DIR = fileURLToPath(new URL('../../dist/app', import.meta.url));

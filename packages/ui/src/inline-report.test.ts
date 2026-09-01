@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const project = { name: 'demo', root: '/repo', branch: 'main', version: '0.1.0' };
-import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/build-trace.js';
+import { buildCrashedFixtureTrace, buildFixtureTrace } from './test/fixtures/build-trace.js';
 import { INLINE_PAYLOAD_KEY, InlineDataSource, type InlinePayload } from './data-source.js';
 import { buildInlinePayload, renderInlineHtml, writeInlineReport } from './inline-report.js';
 

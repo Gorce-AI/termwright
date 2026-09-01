@@ -9,7 +9,7 @@ import {
   buildCrashedFixtureTrace,
   buildFixtureTrace,
   FIXTURE_TREES,
-} from '../__fixtures__/build-trace.js';
+} from '../test/fixtures/build-trace.js';
 import { frameworkContract } from '../__fixtures__/fake-session.js';
 import { writeNativeRunFixture } from '../__fixtures__/native-run.js';
 import { writeInlineReport } from '../inline-report.js';

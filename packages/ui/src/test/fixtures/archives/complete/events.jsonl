@@ -1,0 +1,3 @@
+{"api":"locator.click","selector":"button","ref":"semantic:b1@1","ok":true,"t":100,"kind":"action","castOffset":100}
+{"t":1000,"kind":"step-start","stepId":"s1","title":"approve","castOffset":1000}
+{"t":1500,"kind":"step-end","stepId":"s1","title":"approve","status":"passed","castOffset":1500}

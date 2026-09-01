@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeNativeRunFixture } from './__fixtures__/native-run.js';
-import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/build-trace.js';
+import { buildCrashedFixtureTrace, buildFixtureTrace } from './test/fixtures/build-trace.js';
 import { FakeHarness, node, snapshot } from './__fixtures__/fake-session.js';
 import {
   encodeMessage,
