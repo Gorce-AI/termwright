@@ -425,6 +425,28 @@ describe('autonomous workflow security', () => {
     expect(verify.indexOf('      - name: Verify release metadata')).toBeLessThan(
       verify.indexOf('      - run: pnpm build'),
     );
+    const testHost = stepBlock(verify, 'Run the certified Termwright host');
+    expect(testHost).toContain("TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ''");
+    expect(testHost.indexOf("TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ''")).toBeLessThan(
+      testHost.indexOf('pnpm test -- --resource-profile ci'),
+    );
+    expect(workflow.match(/TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ''/gu)).toHaveLength(1);
+    expect(
+      stepBlock(jobBlock(workflow, 'prepare'), 'Require autonomous release authorization'),
+    ).not.toContain("TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ''");
+    expect(
+      stepBlock(jobBlock(workflow, 'detect'), 'Require autonomous release authorization'),
+    ).not.toContain("TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ''");
+
+    expect(verify.match(/uses: actions\/download-artifact@/gu)).toHaveLength(1);
+    expect(verify).toContain('pattern: release-pty-*');
+    expect(verify).toContain('path: ${{ runner.temp }}/release-pty');
+    expect(verify).toContain('artifact_root="$RUNNER_TEMP/release-pty"');
+    expect(verify).toContain('$artifact_root/release-pty-$target/termwright_pty.node');
+    expect(verify).toContain(
+      '$artifact_root/release-pty-win32-x64-arm64-host-verdict/certification-verdict-arm64-host.json',
+    );
+    expect(verify).not.toMatch(/packages\/release-pty-/u);
   });
 
   it('keeps the one-time npm bootstrap path artifact-only and fail-closed', async () => {
