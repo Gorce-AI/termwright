@@ -215,6 +215,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           COMMIT: ${{ inputs.expected_sha }}
           WORKFLOW_COMMIT: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_REF_PROTECTED: ${{ github.ref_protected }}
           TARGET: ${{ inputs.target }}
           VERSION_PR: ${{ inputs.version_pr }}
         shell: bash
@@ -223,6 +225,8 @@ jobs:
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$WORKFLOW_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$VERSION_PR" =~ ^[1-9][0-9]*$ ]]
+          test "$WORKFLOW_REF" = "refs/heads/$TARGET"
+          test "$WORKFLOW_REF_PROTECTED" = true
           test "$(git rev-parse HEAD)" = "$WORKFLOW_COMMIT"
           default_branch=$(gh api "/repos/$REPOSITORY" --jq '.default_branch')
           test "$TARGET" = "$default_branch"

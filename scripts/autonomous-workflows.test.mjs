@@ -347,6 +347,10 @@ describe('autonomous workflow security', () => {
     expect(prepare).toContain('permission-pull-requests: write');
     expect(detect).toContain('ref: ${{ github.sha }}');
     expect(detect).toContain('WORKFLOW_COMMIT: ${{ github.sha }}');
+    expect(detect).toContain('WORKFLOW_REF: ${{ github.ref }}');
+    expect(detect).toContain('WORKFLOW_REF_PROTECTED: ${{ github.ref_protected }}');
+    expect(detect).toContain('test "$WORKFLOW_REF" = "refs/heads/$TARGET"');
+    expect(detect).toContain('test "$WORKFLOW_REF_PROTECTED" = true');
     expect(detect).toContain('test "$current" = "$WORKFLOW_COMMIT"');
     expect(detect).toContain('git merge-base --is-ancestor "$COMMIT" "$WORKFLOW_COMMIT"');
     expect(detect).toContain('git diff --name-only --no-renames -z "$COMMIT" "$WORKFLOW_COMMIT"');
@@ -354,6 +358,15 @@ describe('autonomous workflow security', () => {
     expect(detect).toContain('git checkout --detach "$COMMIT"');
     expect(detect.indexOf('test "$current" = "$WORKFLOW_COMMIT"')).toBeLessThan(
       detect.indexOf('validate-release-tail "${tail_paths[@]}"'),
+    );
+    expect(detect.indexOf('test "$WORKFLOW_REF" = "refs/heads/$TARGET"')).toBeLessThan(
+      detect.indexOf('validate-release-tail "${tail_paths[@]}"'),
+    );
+    expect(detect.indexOf('test "$WORKFLOW_REF_PROTECTED" = true')).toBeLessThan(
+      detect.indexOf('validate-release-tail "${tail_paths[@]}"'),
+    );
+    expect(detect.indexOf('test "$WORKFLOW_REF_PROTECTED" = true')).toBeLessThan(
+      detect.indexOf('git checkout --detach "$COMMIT"'),
     );
     expect(detect.indexOf('validate-release-tail "${tail_paths[@]}"')).toBeLessThan(
       detect.indexOf('git checkout --detach "$COMMIT"'),
