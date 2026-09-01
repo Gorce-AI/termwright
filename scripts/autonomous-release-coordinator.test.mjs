@@ -721,9 +721,24 @@ describe('trusted autonomous coordinator', () => {
         }),
       ).toThrow(/push restrictions/u);
     }
-    expect(() => validateBranchProtection({ ...protection, restrictions: undefined })).toThrow(
-      /push restrictions/u,
+    const missingProjection = { ...protection };
+    delete missingProjection.restrictions;
+    expect(() => validateBranchProtection(missingProjection, 404)).not.toThrow();
+    expect(() => validateBranchProtection(missingProjection)).toThrow(
+      /projection: missing; endpoint status: missing-or-invalid/u,
     );
+    expect(() => validateBranchProtection(missingProjection, 200)).toThrow(
+      /projection: missing; endpoint status: 200/u,
+    );
+    expect(() =>
+      validateBranchProtection(
+        {
+          ...protection,
+          restrictions: { users: [{}], teams: [], apps: [] },
+        },
+        404,
+      ),
+    ).toThrow(/projection: populated-or-invalid; endpoint status: 404/u);
     expect(() =>
       validateBranchProtection({ ...protection, allow_force_pushes: { enabled: true } }, 404),
     ).toThrow(/force pushes/u);

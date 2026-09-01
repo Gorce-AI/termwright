@@ -534,19 +534,30 @@ export function validateBranchProtection(protection, restrictionsEndpointStatus)
       'pull-request review bypass allowances are incompatible with autonomous release safety',
     );
   const restrictions = protection.restrictions;
+  const explicitEmptyRestrictions =
+    typeof restrictions === 'object' &&
+    restrictions !== null &&
+    Array.isArray(restrictions.users) &&
+    restrictions.users.length === 0 &&
+    Array.isArray(restrictions.teams) &&
+    restrictions.teams.length === 0 &&
+    Array.isArray(restrictions.apps) &&
+    restrictions.apps.length === 0;
+  const restrictionsProjection =
+    restrictions === undefined
+      ? 'missing'
+      : restrictions === null
+        ? 'null'
+        : explicitEmptyRestrictions
+          ? 'empty'
+          : 'populated-or-invalid';
   const restrictionsDisabled =
-    restrictions === null ||
-    (typeof restrictions === 'object' &&
-      restrictions !== null &&
-      Array.isArray(restrictions.users) &&
-      restrictions.users.length === 0 &&
-      Array.isArray(restrictions.teams) &&
-      restrictions.teams.length === 0 &&
-      Array.isArray(restrictions.apps) &&
-      restrictions.apps.length === 0);
+    restrictionsProjection === 'missing' ||
+    restrictionsProjection === 'null' ||
+    restrictionsProjection === 'empty';
   if (!restrictionsDisabled || restrictionsEndpointStatus !== 404)
     throw new Error(
-      'default-branch push restrictions can silently block the coordinator merge token',
+      `default-branch push restrictions can silently block the coordinator merge token (projection: ${restrictionsProjection}; endpoint status: ${Number.isInteger(restrictionsEndpointStatus) ? String(restrictionsEndpointStatus) : 'missing-or-invalid'})`,
     );
   if (
     protection.allow_force_pushes?.enabled !== false ||
