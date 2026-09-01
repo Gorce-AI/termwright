@@ -14,7 +14,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
@@ -157,6 +157,9 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     const app = join(dir, 'app');
     await cp(FIXTURE_V1, app, { recursive: true });
     const moduleCache = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-modcache-')));
+    const sharedModuleCache = (
+      await run('go', ['env', 'GOMODCACHE'], { env: { ...process.env, GOWORK: 'off' } })
+    ).stdout.trim();
     const env = {
       ...process.env,
       // Go otherwise makes unpacked module directories read-only; keeping this
@@ -164,9 +167,13 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
       GOFLAGS: '-modcacherw',
       GOMODCACHE: moduleCache,
       GONOSUMDB: '*',
+      GOSUMDB: 'off',
       GONOPROXY: '',
       GOPRIVATE: '',
-      GOPROXY: 'https://proxy.golang.org',
+      // Populate the deliberately isolated cache from the already verified
+      // shared download cache. This test certifies cache independence, not the
+      // availability of a public network service.
+      GOPROXY: pathToFileURL(join(sharedModuleCache, 'cache', 'download')).href,
       GOTOOLCHAIN: 'local',
       TERMWRIGHT_CACHE_DIR: join(dir, 'prefetch-cache'),
     };

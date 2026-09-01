@@ -772,6 +772,7 @@ describe('trusted autonomous coordinator', () => {
   it('allows reviewed orchestration and non-payload tests after a merged Version PR', () => {
     expect(RELEASE_ORCHESTRATION_TAIL_FILES).toEqual([
       '.github/workflows/release.yml',
+      'scripts/prepare-go-test-dependencies.mjs',
       'scripts/autonomous-release-coordinator.mjs',
       'scripts/autonomous-release-coordinator.test.mjs',
       'scripts/autonomous-workflows.test.mjs',
@@ -784,6 +785,10 @@ describe('trusted autonomous coordinator', () => {
     ).not.toThrow();
     expect(RELEASE_NON_PAYLOAD_TAIL_FILES).toEqual([
       '.prettierignore',
+      '.github/workflows/ci.yml',
+      'scripts/native-host-entrypoints.test.mjs',
+      'packages/probe-charm/src/launch.test.ts',
+      'packages/probe-charm/src/testing/fixture-bubbles/go.sum',
       'packages/trace/src/reader.test.ts',
       'packages/ui/src/app/docs-screenshots.e2e.ts',
       'packages/ui/src/app/fresh-app.e2e.ts',

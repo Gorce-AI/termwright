@@ -162,16 +162,82 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(release).toContain("TERMWRIGHT_REQUIRE_GO: '1'");
     expect(ci).toContain("GOPROXY: 'https://proxy.golang.org'");
     expect(release).toContain("GOPROXY: 'https://proxy.golang.org'");
-    for (const [workflow, jobId] of [
-      [ci, 'build'],
-      [ci, 'windows-driver-native'],
-      [release, 'verify'],
+    for (const [workflow, jobId, testAnchor] of [
+      [ci, 'build', '--project=go-integration'],
+      [ci, 'windows-driver-native', '--project=go-integration'],
+      [ci, 'conformance-posix', 'Run the conformance matrix'],
+      [ci, 'conformance-windows', 'Run the conformance matrix'],
+      [ci, 'examples', 'Run every public example without skips'],
+      [release, 'verify', '--project=go-integration'],
     ]) {
       const job = workflowJobBlocks(workflow).find((block) => block.startsWith(`  ${jobId}:\n`));
       expect(job, `${jobId} must install the required Go toolchain`).toContain('actions/setup-go@');
       expect(job, `${jobId} must pin the Go toolchain`).toContain("go-version: '1.25'");
+      expect(job, `${jobId} must materialise Go dependencies before tests`).toContain(
+        'prepare-go-test-dependencies.mjs',
+      );
+      expect(job, `${jobId} must take every later Go command offline`).toContain(
+        "echo 'GOPROXY=off'",
+      );
+      expect(job, `${jobId} must disable later checksum-network access`).toContain(
+        "echo 'GOSUMDB=off'",
+      );
+      expect(job, `${jobId} must prohibit toolchain downloads during tests`).toContain(
+        "echo 'GOTOOLCHAIN=local'",
+      );
+      expect(job, `${jobId} must update the environment atomically`).toContain(
+        '} >> "$GITHUB_ENV"',
+      );
+      expect(job.indexOf('prepare-go-test-dependencies.mjs')).toBeLessThan(job.indexOf(testAnchor));
     }
+    const goCiJobs = Object.fromEntries(
+      workflowJobBlocks(ci).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]),
+    );
+    expect(goCiJobs.clients).toContain('Materialise the checksum-pinned Go client graph');
+    expect(goCiJobs.clients).toContain("echo 'GOPROXY=off'");
+    expect(goCiJobs.clients).toContain('} >> "$GITHUB_ENV"');
+    expect(goCiJobs['release-hygiene']).toContain(
+      'Materialise actionlint before the hygiene lane goes offline',
+    );
+    expect(goCiJobs['release-hygiene']).toContain("echo 'GOPROXY=off'");
+    expect(goCiJobs['release-hygiene']).toContain('} >> "$GITHUB_ENV"');
+    const goPreflight = await import('./prepare-go-test-dependencies.mjs');
+    expect(goPreflight.GO_TEST_MODULES).toEqual([
+      'clients/go',
+      'packages/probe-charm/src/testing/fixture-v1-bubbles',
+      'packages/probe-charm/src/testing/fixture-bubbles',
+    ]);
+    expect(goPreflight.UPSTREAM_BUILD_MODULES).toEqual([
+      'github.com/charmbracelet/bubbletea@v1.3.9',
+      'github.com/charmbracelet/bubbletea@v1.3.10',
+      'charm.land/bubbletea/v2@v2.0.8',
+      'charm.land/bubbletea/v2@v2.0.9',
+      'github.com/charmbracelet/bubbles@v1.0.0',
+      'charm.land/bubbles/v2@v2.1.1',
+      'charm.land/lipgloss/v2@v2.0.6',
+    ]);
+    expect(goPreflight.BUBBLES_PACKAGE_PROBES).toEqual({
+      'packages/probe-charm/src/testing/fixture-v1-bubbles': [
+        'github.com/charmbracelet/bubbles/filepicker',
+        'github.com/charmbracelet/bubbles/list',
+        'github.com/charmbracelet/bubbles/progress',
+        'github.com/charmbracelet/bubbles/spinner',
+        'github.com/charmbracelet/bubbles/table',
+      ],
+      'packages/probe-charm/src/testing/fixture-bubbles': [
+        'charm.land/bubbles/v2/filepicker',
+        'charm.land/bubbles/v2/list',
+        'charm.land/bubbles/v2/progress',
+        'charm.land/bubbles/v2/spinner',
+        'charm.land/bubbles/v2/table',
+      ],
+    });
     expect(release).toMatch(/^env:\n {2}TERMWRIGHT_RETRIES: '0'$/mu);
+    expect(release).toContain('git worktree add --detach "$orchestration"');
+    expect(release).toContain('git hash-object "$materializer"');
+    expect(release).toContain('git worktree remove "$orchestration"');
+    expect(release).toContain('cp "$orchestration/packages/probe-charm/src/launch.test.ts"');
+    expect(release).toContain('Restore the immutable release test tree before packing');
     expect(ci.match(/pnpm --dir packages\/protocol pack/gu)).toHaveLength(
       ci.match(/pnpm --dir packages\/pty pack/gu)?.length ?? 0,
     );
