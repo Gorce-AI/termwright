@@ -1171,8 +1171,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go mod download all
-          go list -mod=readonly -deps ./... >/dev/null
+          # Materialise only packages the client actually builds or tests.
+          # `go mod download all` also fetches archives from losing/unused
+          # module-graph edges, keeping this lane dependent on irrelevant
+          # proxy transfers after the required graph is already complete.
+          go list -mod=readonly -deps -test ./... >/dev/null
           go mod verify
           {
             echo 'GOPROXY=off'
