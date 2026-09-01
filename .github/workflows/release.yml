@@ -203,12 +203,12 @@ jobs:
         with:
           # Execute only the protected default-branch workflow revision which
           # GitHub bound to this dispatch. The package payload is checked out
-          # by exact Version PR SHA after the orchestration tail is authorized.
+          # by exact Version PR SHA after the protected release tail is authorized.
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Authorize the protected orchestration tail and exact Version PR payload
+      - name: Authorize the protected release tail and exact Version PR payload
         id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

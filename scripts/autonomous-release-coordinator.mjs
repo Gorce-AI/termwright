@@ -148,6 +148,32 @@ export const RELEASE_ORCHESTRATION_TAIL_FILES = Object.freeze([
   'scripts/verify-published-artifact.test.mjs',
 ]);
 
+export const RELEASE_NON_PAYLOAD_TAIL_FILES = Object.freeze([
+  // Exact, reviewed test-only tail after the 0.3.1 Version PR. This is
+  // intentionally not a glob: every later path must receive a new release
+  // authorization decision, even when its filename looks like a test.
+  '.prettierignore',
+  'packages/trace/src/reader.test.ts',
+  'packages/ui/src/app/docs-screenshots.e2e.ts',
+  'packages/ui/src/app/fresh-app.e2e.ts',
+  'packages/ui/src/app/url-navigation.e2e.ts',
+  'packages/ui/src/inline-report.test.ts',
+  'packages/ui/src/server.test.ts',
+  'packages/ui/src/test/fixtures/archives/complete/COMMITTED',
+  'packages/ui/src/test/fixtures/archives/complete/events.jsonl',
+  'packages/ui/src/test/fixtures/archives/complete/logs.jsonl',
+  'packages/ui/src/test/fixtures/archives/complete/meta.json',
+  'packages/ui/src/test/fixtures/archives/complete/semantics.jsonl',
+  'packages/ui/src/test/fixtures/archives/complete/session.cast',
+  'packages/ui/src/test/fixtures/archives/crashed/COMMITTED',
+  'packages/ui/src/test/fixtures/archives/crashed/events.jsonl',
+  'packages/ui/src/test/fixtures/archives/crashed/meta.json',
+  'packages/ui/src/test/fixtures/archives/crashed/semantics.jsonl',
+  'packages/ui/src/test/fixtures/archives/crashed/session.cast',
+  'packages/ui/src/test/fixtures/build-trace.ts',
+  'packages/ui/src/trace-source.test.ts',
+]);
+
 const compatibilityFiles = [
   /^compatibility\/(?:candidate-assessments|certified-upstreams|framework-semantic-completeness|registry)\.json$/u,
   /^\.changeset\/framework-compatibility-auto\.md$/u,
@@ -598,12 +624,24 @@ export function validateReleaseOrchestrationTail(files) {
   if (!Array.isArray(files)) throw new Error('release orchestration tail must be a file list');
   if (new Set(files).size !== files.length)
     throw new Error('release orchestration tail contains duplicate paths');
-  const unexpected = files.filter((file) => !RELEASE_ORCHESTRATION_TAIL_FILES.includes(file));
+  const unexpected = files.filter((file) => !isAuthorizedReleaseTailPath(file));
   if (unexpected.length > 0) {
     throw new Error(
-      `release payload is followed by non-orchestration changes: ${JSON.stringify(unexpected)}`,
+      `release payload is followed by publishable or unauthorized changes: ${JSON.stringify(unexpected)}`,
     );
   }
+}
+
+function isAuthorizedReleaseTailPath(file) {
+  if (!isCanonicalRepositoryPath(file)) return false;
+  if (RELEASE_ORCHESTRATION_TAIL_FILES.includes(file)) return true;
+  return RELEASE_NON_PAYLOAD_TAIL_FILES.includes(file);
+}
+
+function isCanonicalRepositoryPath(file) {
+  if (typeof file !== 'string' || file === '' || file.startsWith('/') || file.includes('\\'))
+    return false;
+  return file.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 }
 
 export function compatibilitySourceRunId(body) {

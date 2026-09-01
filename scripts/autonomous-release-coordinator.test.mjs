@@ -4,6 +4,7 @@ import {
   CI_JOB_CONTRACT,
   CI_JOBS,
   RELEASE_ORCHESTRATION_TAIL_FILES,
+  RELEASE_NON_PAYLOAD_TAIL_FILES,
   REQUIRED_BRANCH_CHECKS,
   autonomousReleaseDecision,
   assertReleaseStateQuiescent,
@@ -768,7 +769,7 @@ describe('trusted autonomous coordinator', () => {
     );
   });
 
-  it('allows only the reviewed orchestration tail after a merged Version PR', () => {
+  it('allows reviewed orchestration and non-payload tests after a merged Version PR', () => {
     expect(RELEASE_ORCHESTRATION_TAIL_FILES).toEqual([
       '.github/workflows/release.yml',
       'scripts/autonomous-release-coordinator.mjs',
@@ -781,17 +782,50 @@ describe('trusted autonomous coordinator', () => {
     expect(() =>
       validateReleaseOrchestrationTail([...RELEASE_ORCHESTRATION_TAIL_FILES]),
     ).not.toThrow();
+    expect(RELEASE_NON_PAYLOAD_TAIL_FILES).toEqual([
+      '.prettierignore',
+      'packages/trace/src/reader.test.ts',
+      'packages/ui/src/app/docs-screenshots.e2e.ts',
+      'packages/ui/src/app/fresh-app.e2e.ts',
+      'packages/ui/src/app/url-navigation.e2e.ts',
+      'packages/ui/src/inline-report.test.ts',
+      'packages/ui/src/server.test.ts',
+      'packages/ui/src/test/fixtures/archives/complete/COMMITTED',
+      'packages/ui/src/test/fixtures/archives/complete/events.jsonl',
+      'packages/ui/src/test/fixtures/archives/complete/logs.jsonl',
+      'packages/ui/src/test/fixtures/archives/complete/meta.json',
+      'packages/ui/src/test/fixtures/archives/complete/semantics.jsonl',
+      'packages/ui/src/test/fixtures/archives/complete/session.cast',
+      'packages/ui/src/test/fixtures/archives/crashed/COMMITTED',
+      'packages/ui/src/test/fixtures/archives/crashed/events.jsonl',
+      'packages/ui/src/test/fixtures/archives/crashed/meta.json',
+      'packages/ui/src/test/fixtures/archives/crashed/semantics.jsonl',
+      'packages/ui/src/test/fixtures/archives/crashed/session.cast',
+      'packages/ui/src/test/fixtures/build-trace.ts',
+      'packages/ui/src/trace-source.test.ts',
+    ]);
+    expect(() =>
+      validateReleaseOrchestrationTail([...RELEASE_NON_PAYLOAD_TAIL_FILES]),
+    ).not.toThrow();
     for (const forbidden of [
       'package.json',
       'pnpm-lock.yaml',
       '.changeset/recovery.md',
       'packages/protocol/package.json',
       'clients/python/pyproject.toml',
+      'packages/ui/src/__fixtures__/build-trace.ts',
+      'packages/ui/src/index.ts',
+      'packages/driver/src/session.test.ts',
+      'packages/ui/src/test/fixtures/archives/complete/future-member.jsonl',
+      'packages/ui/README.md',
       'scripts/build-pty.mjs',
       '.github/actions/build-pty-prebuild/action.yml',
+      '/packages/trace/src/reader.test.ts',
+      'packages/trace/src/test/../writer.ts',
+      'packages\\trace\\src\\reader.test.ts',
     ]) {
       expect(() => validateReleaseOrchestrationTail([forbidden])).toThrow(
-        /non-orchestration changes/u,
+        /publishable or unauthorized changes/u,
       );
     }
     expect(() =>
