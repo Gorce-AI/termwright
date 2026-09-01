@@ -320,8 +320,19 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(tviewRaceCertification).toMatch(
       /terminal\.getByRole\(['"]button['"]\s*,\s*\{\s*name:\s*['"]Save['"]\s*\}\)\.count\(\)/u,
     );
-    expect(tviewRaceCertification).toMatch(
-      /!terminal\.screen\(\)\.text\(\)\.includes\(['"]DATA RACE['"]\)/u,
+    expect(tviewRaceCertification).toContain('`log_path=${raceLogPrefix}`');
+    expect(tviewRaceCertification).toContain("'halt_on_error=1'");
+    expect(tviewRaceCertification).toContain("'exitcode=66'");
+    expect(tviewRaceCertification).toContain(
+      'const raceReports = await readRaceReports(raceLogPrefix);',
+    );
+    expect(
+      tviewRaceCertification.indexOf('const raceReports = await readRaceReports'),
+    ).toBeGreaterThan(tviewRaceCertification.indexOf('const exit = await terminal.waitForExit()'));
+    expect(tviewRaceCertification).toContain('exit.code === 0 && raceReports.length === 0');
+    expect(tviewRaceCertification).toContain('...raceReports');
+    expect(tviewRaceCertification).toContain(
+      "raceReports.length === 0 ? terminal.screen().text() : ''",
     );
     for (const jobId of ['build', 'windows-driver-native']) {
       expect(ciJobs[jobId]).toMatch(
