@@ -354,6 +354,7 @@ describe('autonomous workflow security', () => {
     expect(prepare).toContain('permission-pull-requests: write');
     expect(detect).toContain('ref: ${{ github.sha }}');
     expect(detect).toContain('WORKFLOW_COMMIT: ${{ github.sha }}');
+    expect(detect).toContain('echo "workflow_commit=$WORKFLOW_COMMIT"');
     expect(detect).toContain('WORKFLOW_REF: ${{ github.ref }}');
     expect(detect).toContain('WORKFLOW_REF_PROTECTED: ${{ github.ref_protected }}');
     expect(detect).toContain('test "$WORKFLOW_REF" = "refs/heads/$TARGET"');
@@ -383,6 +384,19 @@ describe('autonomous workflow security', () => {
     );
     expect(detect.indexOf('validate-version-pr')).toBeLessThan(detect.indexOf('find .changeset'));
     expect(detect).not.toContain('refs/heads/release-pr/');
+    const pypi = jobBlock(workflow, 'pypi');
+    const verifier = stepBlock(pypi, 'Materialize the authorized PyPI registry verifier');
+    expect(verifier).toContain('WORKFLOW_COMMIT: ${{ needs.detect.outputs.workflow_commit }}');
+    expect(verifier).toContain('git fetch --no-tags --depth=1 origin "$WORKFLOW_COMMIT"');
+    expect(verifier).toContain(
+      'expected_blob=$(git rev-parse "$WORKFLOW_COMMIT:scripts/verify-published-artifact.mjs")',
+    );
+    expect(verifier).toContain(
+      'test "$(git hash-object "$RUNNER_TEMP/verify-published-artifact.mjs")" = "$expected_blob"',
+    );
+    expect(pypi.indexOf('Materialize the authorized PyPI registry verifier')).toBeLessThan(
+      pypi.indexOf('Check whether the version exists'),
+    );
     const versionSteps = [
       stepBlock(prepare, 'Apply pending changesets'),
       stepBlock(jobBlock(workflow, 'verify'), 'Independently reproduce the merged Version PR tree'),

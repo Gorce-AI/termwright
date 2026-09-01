@@ -187,6 +187,7 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       dist_tag: ${{ steps.release.outputs.dist_tag }}
       latest: ${{ steps.release.outputs.latest }}
+      workflow_commit: ${{ steps.release.outputs.workflow_commit }}
     steps:
       - name: Reject workflow reruns
         shell: bash
@@ -272,6 +273,7 @@ jobs:
             echo "version=$version"
             echo "dist_tag=$dist_tag"
             echo "latest=$latest"
+            echo "workflow_commit=$WORKFLOW_COMMIT"
           } >> "$GITHUB_OUTPUT"
 
   prebuilds:
@@ -772,6 +774,19 @@ jobs:
         with:
           name: release-artifacts-${{ needs.detect.outputs.commit }}
           path: release
+
+      - name: Materialize the authorized PyPI registry verifier
+        env:
+          WORKFLOW_COMMIT: ${{ needs.detect.outputs.workflow_commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$WORKFLOW_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git fetch --no-tags --depth=1 origin "$WORKFLOW_COMMIT"
+          expected_blob=$(git rev-parse "$WORKFLOW_COMMIT:scripts/verify-published-artifact.mjs")
+          git show "$WORKFLOW_COMMIT:scripts/verify-published-artifact.mjs" > "$RUNNER_TEMP/verify-published-artifact.mjs"
+          test "$(git hash-object "$RUNNER_TEMP/verify-published-artifact.mjs")" = "$expected_blob"
+          mv "$RUNNER_TEMP/verify-published-artifact.mjs" scripts/verify-published-artifact.mjs
 
       - name: Verify release artifacts
         working-directory: release

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  fetchPypiMetadata,
   verifyCrateMetadata,
   verifyNpmMetadata,
   verifyNpmTagMetadata,
@@ -7,6 +8,29 @@ import {
 } from './verify-published-artifact.mjs';
 
 describe('immutable registry retry verification', () => {
+  it('isolates every PyPI metadata read from cached pre-publication responses', async () => {
+    const fetchImpl = vi.fn(async () => ({ status: 404 }));
+
+    await expect(fetchPypiMetadata('1.0.0', { fetchImpl })).resolves.toBeNull();
+    await expect(fetchPypiMetadata('1.0.0', { fetchImpl })).resolves.toBeNull();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [firstUrl, firstOptions] = fetchImpl.mock.calls[0];
+    const [secondUrl, secondOptions] = fetchImpl.mock.calls[1];
+    expect(new URL(firstUrl).origin + new URL(firstUrl).pathname).toBe(
+      'https://pypi.org/pypi/termwright/1.0.0/json',
+    );
+    expect(new URL(firstUrl).searchParams.get('termwright_verify')).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(new URL(secondUrl).searchParams.get('termwright_verify')).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(firstUrl).not.toBe(secondUrl);
+    for (const options of [firstOptions, secondOptions]) {
+      expect(options.headers).toMatchObject({
+        'cache-control': 'no-cache, no-store, max-age=0',
+        pragma: 'no-cache',
+      });
+    }
+  });
+
   it('accepts only the exact npm integrity', () => {
     const expected = { name: '@termwright/driver', version: '1.0.0', integrity: 'sha512-exact' };
     expect(() =>

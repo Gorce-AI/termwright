@@ -144,6 +144,8 @@ export const RELEASE_ORCHESTRATION_TAIL_FILES = Object.freeze([
   'scripts/autonomous-release-coordinator.mjs',
   'scripts/autonomous-release-coordinator.test.mjs',
   'scripts/autonomous-workflows.test.mjs',
+  'scripts/verify-published-artifact.mjs',
+  'scripts/verify-published-artifact.test.mjs',
 ]);
 
 const compatibilityFiles = [
