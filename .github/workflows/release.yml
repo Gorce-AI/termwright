@@ -447,9 +447,11 @@ jobs:
           cp "$orchestration/packages/probe-charm/src/testing/fixture-bubbles/go.sum" \
             packages/probe-charm/src/testing/fixture-bubbles/go.sum
           git worktree remove "$orchestration"
-          echo 'GOPROXY=off' >> "$GITHUB_ENV"
-          echo 'GOSUMDB=off' >> "$GITHUB_ENV"
-          echo 'GOTOOLCHAIN=local' >> "$GITHUB_ENV"
+          {
+            echo 'GOPROXY=off'
+            echo 'GOSUMDB=off'
+            echo 'GOTOOLCHAIN=local'
+          } >> "$GITHUB_ENV"
 
       - name: Independently reproduce the merged Version PR tree
         env:

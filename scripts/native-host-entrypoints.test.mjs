@@ -177,13 +177,16 @@ describe('the native host is the only Termwright test entrypoint', () => {
         'prepare-go-test-dependencies.mjs',
       );
       expect(job, `${jobId} must take every later Go command offline`).toContain(
-        'echo \'GOPROXY=off\' >> "$GITHUB_ENV"',
+        "echo 'GOPROXY=off'",
       );
       expect(job, `${jobId} must disable later checksum-network access`).toContain(
-        'echo \'GOSUMDB=off\' >> "$GITHUB_ENV"',
+        "echo 'GOSUMDB=off'",
       );
       expect(job, `${jobId} must prohibit toolchain downloads during tests`).toContain(
-        'echo \'GOTOOLCHAIN=local\' >> "$GITHUB_ENV"',
+        "echo 'GOTOOLCHAIN=local'",
+      );
+      expect(job, `${jobId} must update the environment atomically`).toContain(
+        '} >> "$GITHUB_ENV"',
       );
       expect(job.indexOf('prepare-go-test-dependencies.mjs')).toBeLessThan(job.indexOf(testAnchor));
     }
@@ -191,11 +194,13 @@ describe('the native host is the only Termwright test entrypoint', () => {
       workflowJobBlocks(ci).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]),
     );
     expect(goCiJobs.clients).toContain('Materialise the checksum-pinned Go client graph');
-    expect(goCiJobs.clients).toContain('echo \'GOPROXY=off\' >> "$GITHUB_ENV"');
+    expect(goCiJobs.clients).toContain("echo 'GOPROXY=off'");
+    expect(goCiJobs.clients).toContain('} >> "$GITHUB_ENV"');
     expect(goCiJobs['release-hygiene']).toContain(
       'Materialise actionlint before the hygiene lane goes offline',
     );
-    expect(goCiJobs['release-hygiene']).toContain('echo \'GOPROXY=off\' >> "$GITHUB_ENV"');
+    expect(goCiJobs['release-hygiene']).toContain("echo 'GOPROXY=off'");
+    expect(goCiJobs['release-hygiene']).toContain('} >> "$GITHUB_ENV"');
     const goPreflight = await import('./prepare-go-test-dependencies.mjs');
     expect(goPreflight.GO_TEST_MODULES).toEqual([
       'clients/go',
