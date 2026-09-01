@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { createElement, Fragment, type ComponentType, type ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { captureInkLayout, type InkFrameCapture, type InkFrameContext } from './frame-capture.js';
 import {
   INK_FRAME_CONTEXT,
@@ -66,223 +66,408 @@ const require = createRequire(import.meta.url);
 const upstreamBuild = dirname(require.resolve('ink'));
 
 describe('Ink exact-source versus React runtime observer', () => {
-  it('proves committed-root parity and records the remaining non-root contracts', async () => {
-    const materialized = await materializeInstrumentedInk();
-    const globals = globalThis as Record<PropertyKey, unknown> & {
-      __REACT_DEVTOOLS_GLOBAL_HOOK__?: unknown;
-    };
-    const priorHook = Object.getOwnPropertyDescriptor(globals, '__REACT_DEVTOOLS_GLOBAL_HOOK__');
-    const priorCapture = globals[INK_RENDER_CAPTURE];
-    const priorContext = globals[INK_FRAME_CONTEXT];
-    delete globals.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+  const globals = globalThis as Record<PropertyKey, unknown> & {
+    __REACT_DEVTOOLS_GLOBAL_HOOK__?: unknown;
+  };
+  let materialized: Awaited<ReturnType<typeof materializeInstrumentedInk>> | undefined;
+  let ink: DifferentialInkModule;
+  let bridge: ReturnType<typeof activateInkRendererObservation>;
+  let release: (() => void) | undefined;
+  let priorHook: PropertyDescriptor | undefined;
+  let priorCapture: unknown;
+  let priorContext: unknown;
+  let globalsCaptured = false;
+  let hooksInstalled = false;
+  let state: DifferentialState;
 
-    const exact: ExactCapture[] = [];
-    const contexts: Array<{
-      readonly root: InkDomElement;
-      readonly value: InkFrameContext;
-    }> = [];
-    const sequence: string[] = [];
-    globals[INK_RENDER_CAPTURE] = (
-      root: InkDomElement,
-      rendered: InkRenderedOutput,
-      screenReader: boolean,
-    ): void => {
-      const facts = hostFacts(root);
-      exact.push({
-        root,
-        rendered,
-        screenReader,
-        facts,
-        ...(screenReader ? {} : { frame: captureInkLayout(root, rendered) }),
-      });
-      sequence.push(`exact:${digestFacts(facts)}`);
-    };
-    globals[INK_FRAME_CONTEXT] = (root: InkDomElement, value: InkFrameContext): void => {
-      contexts.push({ root, value });
-      sequence.push(`context:${digestFacts(hostFacts(root))}`);
-    };
-
-    const ink = (await import(
-      `${materialized.indexUrl}?suite=${materialized.id}`
-    )) as DifferentialInkModule;
-    // Import the exact reconciler instance already referenced by index.js.
-    // Adding a query here would create a second renderer that never commits.
-    const reconciler = (
-      (await import(materialized.reconcilerUrl)) as {
-        readonly default: InkReconcilerInstrumentation;
-      }
-    ).default;
-    const bridge = activateInkRendererObservation(reconciler);
-    const commits: Extract<InkCommitEvent, { type: 'commit' }>[] = [];
-    const commitFacts = new Map<Extract<InkCommitEvent, { type: 'commit' }>, readonly HostFact[]>();
-    const unmounts: Extract<InkCommitEvent, { type: 'unmount' }>[] = [];
-    const release = bridge.subscribe((event) => {
-      if (event.type === 'commit') {
-        commits.push(event);
-        const facts = hostFacts(event.root);
-        commitFacts.set(event, facts);
-        sequence.push(`commit:${digestFacts(facts)}`);
-      } else if (event.type === 'unmount') {
-        unmounts.push(event);
-        sequence.push('unmount');
-      }
-    });
-
-    const instances: DifferentialInkInstance[] = [];
+  beforeAll(async () => {
     try {
-      const stdout = tty(24, 8);
-      const renders: Array<{
-        readonly old: ExactCapture;
-        readonly context: InkFrameContext;
-      }> = [];
-      const component = (label: string, checked: boolean): ReactNode =>
-        createElement(
-          Fragment,
-          null,
-          createElement(
-            ink.Box,
-            {
-              borderStyle: 'single',
-              width: 12,
-              overflow: 'hidden',
-              'aria-role': 'checkbox',
-              'aria-label': `${label} control`,
-              'aria-state': { checked, disabled: !checked },
-            },
-            createElement(ink.Text, { wrap: 'wrap' }, `${label} wide 界界界`),
-          ),
-          createElement(ink.Box, { display: 'none' }, createElement(ink.Text, null, 'hidden')),
+      materialized = await materializeInstrumentedInk();
+      priorHook = Object.getOwnPropertyDescriptor(globals, '__REACT_DEVTOOLS_GLOBAL_HOOK__');
+      priorCapture = globals[INK_RENDER_CAPTURE];
+      priorContext = globals[INK_FRAME_CONTEXT];
+      globalsCaptured = true;
+      hooksInstalled = true;
+      delete globals.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+      globals[INK_RENDER_CAPTURE] = captureExactFrame;
+      globals[INK_FRAME_CONTEXT] = captureFrameContext;
+      ink = (await import(
+        `${materialized.indexUrl}?suite=${materialized.id}`
+      )) as DifferentialInkModule;
+      // Import the exact reconciler instance already referenced by index.js.
+      // Adding a query here would create a second renderer that never commits.
+      const reconciler = (
+        (await import(materialized.reconcilerUrl)) as {
+          readonly default: InkReconcilerInstrumentation;
+        }
+      ).default;
+      bridge = activateInkRendererObservation(reconciler);
+    } catch (cause) {
+      try {
+        await cleanupSuite();
+      } catch (cleanupCause) {
+        throw new AggregateError(
+          [cause, cleanupCause],
+          'Ink differential setup and rollback both failed',
         );
-      const instance = ink.render(component('first', false), {
-        stdout,
-        stderr: tty(24, 8),
-        patchConsole: false,
-        interactive: true,
-        onRender() {
-          const old = exact.at(-1);
-          const context = contexts.at(-1);
-          if (old === undefined || context === undefined) {
-            throw new Error('differential observer missed a causal predecessor of onRender');
-          }
-          expect(context.root).toBe(old.root);
-          renders.push({ old, context: context.value });
-          sequence.push(`render:${digestFacts(hostFacts(old.root))}`);
-        },
-      });
-      instances.push(instance);
-      await instance.waitUntilRenderFlush();
-
-      expect(renders).toHaveLength(1);
-      const first = pair(renders[0]!, commits, commitFacts);
-      assertHostParity(first);
-      expect(first.old.rendered.outputHeight).toBe(rootHeight(first.runtimeRoot));
-      expect(hostFacts(first.runtimeRoot)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            nodeName: 'ink-box',
-            role: 'checkbox',
-            state: { checked: false, disabled: true },
-          }),
-          expect.objectContaining({
-            nodeName: 'ink-text',
-            text: 'first wide 界界界',
-          }),
-          expect.objectContaining({ nodeName: 'ink-box', display: 'none' }),
-        ]),
-      );
-
-      instance.rerender(component('second', true));
-      await instance.waitUntilRenderFlush();
-      expect(renders).toHaveLength(2);
-      const second = pair(renders[1]!, commits, commitFacts);
-      assertHostParity(second);
-      expect(hostFacts(second.runtimeRoot)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            nodeName: 'ink-box',
-            role: 'checkbox',
-            state: { checked: true, disabled: false },
-          }),
-          expect.objectContaining({
-            nodeName: 'ink-text',
-            text: 'second wide 界界界',
-          }),
-        ]),
-      );
-      // Stable host identity survives rerender on both paths.
-      expect(second.runtimeRoot).toBe(first.runtimeRoot);
-
-      instance.rerender(createElement(ink.Text, null, 'replacement-root'));
-      await instance.waitUntilRenderFlush();
-      const replacement = pair(renders.at(-1)!, commits, commitFacts);
-      assertHostParity(replacement);
-      expect(replacement.runtimeRoot).toBe(first.runtimeRoot);
-      expect(replacement.runtimeFacts.some((fact) => fact.text === 'replacement-root')).toBe(true);
-      expect(replacement.runtimeFacts.some((fact) => fact.role === 'checkbox')).toBe(false);
-
-      const beforeRapid = renders.length;
-      instance.rerender(component('superseded', false));
-      instance.rerender(component('authoritative', true));
-      await instance.waitUntilRenderFlush();
-      expect(renders.length).toBeGreaterThan(beforeRapid);
-      const authoritative = pair(renders.at(-1)!, commits, commitFacts);
-      assertHostParity(authoritative);
-      expect(
-        hostFacts(authoritative.runtimeRoot).some((fact) => fact.text?.includes('superseded')),
-      ).toBe(false);
-      expect(
-        hostFacts(authoritative.runtimeRoot).some((fact) => fact.text?.includes('authoritative')),
-      ).toBe(true);
-
-      // Resize is causally triggered by Ink's public stdout resize event. Both
-      // exact capture and public onRender see post-layout Yoga dimensions, but
-      // React does not commit because the host tree itself did not reconcile.
-      const commitsBeforeResize = commits.length;
-      stdout.columns = 16;
-      stdout.emit('resize');
-      await instance.waitUntilRenderFlush();
-      const resized = pair(renders.at(-1)!, commits, commitFacts);
-      expect(commits).toHaveLength(commitsBeforeResize);
-      expect(resized.runtimeFacts).not.toEqual(resized.old.facts);
-      expect(rootWidth(resized.runtimeRoot)).toBe(16);
-      expect(resized.old.facts[0]?.geometry?.[2]).toBe(16);
-      expect(resized.runtimeFacts[0]?.geometry?.[2]).toBe(24);
-      expect(resized.context.rows).toBe(8);
-
-      await assertStaticRetention(ink, bridge, exact, commits, commitFacts, contexts, instances);
-      await assertClippingWrappingAndRelativeVisibility(ink, exact, commits, contexts, instances);
-      await assertModeFacts(ink, exact, commits, contexts, instances);
-      await assertTerminalBehavior(ink, exact, commits, contexts);
-      await assertResolvedInteractiveDefault(ink, exact, contexts);
-      await assertInputAndFocus(ink, commits, instances);
-      await assertMultipleRoots(ink, bridge, exact, commits, instances);
-
-      const rootsBeforeUnmount = bridge.roots();
-      const unmountCount = unmounts.length;
-      await disposeInstance(instance, instances);
-      expect(unmounts.length).toBeGreaterThan(unmountCount);
-      // Current public React callback reports Fiber unmounts, but does not
-      // identify which FiberRoot should be evicted without consulting Fiber.
-      // This assertion deliberately records the remaining lifecycle gap.
-      expect(bridge.roots()).toEqual(rootsBeforeUnmount);
-
-      assertMeasuredCausalOrdering(sequence);
-    } finally {
-      for (const instance of instances) {
-        instance.unmount();
-        await instance.waitUntilExit();
       }
-      release();
-      if (priorCapture === undefined) delete globals[INK_RENDER_CAPTURE];
-      else globals[INK_RENDER_CAPTURE] = priorCapture;
-      if (priorContext === undefined) delete globals[INK_FRAME_CONTEXT];
-      else globals[INK_FRAME_CONTEXT] = priorContext;
-      if (priorHook === undefined) delete globals.__REACT_DEVTOOLS_GLOBAL_HOOK__;
-      else Object.defineProperty(globals, '__REACT_DEVTOOLS_GLOBAL_HOOK__', priorHook);
-      await rm(materialized.directory, { recursive: true, force: true });
+      throw cause;
     }
   });
+
+  beforeEach(() => {
+    state = createDifferentialState();
+    release = bridge.subscribe((event) => {
+      if (event.type === 'commit') {
+        state.commits.push(event);
+        state.roots.add(event.root);
+        const facts = hostFacts(event.root);
+        state.commitFacts.set(event, facts);
+        state.sequence.push(`commit:${digestFacts(facts)}`);
+        for (const gate of state.pendingCommitGates) {
+          if (gate.fiberRoot !== event.fiberRoot) continue;
+          gate.cancel();
+          gate.resolve(event);
+        }
+      } else if (event.type === 'unmount') {
+        state.unmounts.push(event);
+        state.sequence.push('unmount');
+      }
+    });
+  });
+
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const gate of [...state.pendingCommitGates]) gate.cancel();
+    for (const instance of [...state.instances]) {
+      try {
+        await disposeInstance(instance, state.instances);
+      } catch (cause) {
+        failures.push(cause);
+      }
+    }
+    release?.();
+    release = undefined;
+    if (failures.length > 0) throw new AggregateError(failures, 'Ink differential cleanup failed');
+  });
+
+  afterAll(async () => {
+    await cleanupSuite();
+  });
+
+  function captureExactFrame(
+    root: InkDomElement,
+    rendered: InkRenderedOutput,
+    screenReader: boolean,
+  ): void {
+    const facts = hostFacts(root);
+    state.exact.push({
+      root,
+      rendered,
+      screenReader,
+      facts,
+      ...(screenReader ? {} : { frame: captureInkLayout(root, rendered) }),
+    });
+    state.roots.add(root);
+    state.sequence.push(`exact:${digestFacts(facts)}`);
+  }
+
+  function captureFrameContext(root: InkDomElement, value: InkFrameContext): void {
+    state.contexts.push({ root, value });
+    state.roots.add(root);
+    state.sequence.push(`context:${digestFacts(hostFacts(root))}`);
+  }
+
+  async function cleanupSuite(): Promise<void> {
+    const failures: unknown[] = [];
+    release?.();
+    release = undefined;
+    if (hooksInstalled && globalsCaptured) {
+      try {
+        if (priorCapture === undefined) delete globals[INK_RENDER_CAPTURE];
+        else globals[INK_RENDER_CAPTURE] = priorCapture;
+      } catch (cause) {
+        failures.push(cause);
+      }
+      try {
+        if (priorContext === undefined) delete globals[INK_FRAME_CONTEXT];
+        else globals[INK_FRAME_CONTEXT] = priorContext;
+      } catch (cause) {
+        failures.push(cause);
+      }
+      try {
+        if (priorHook === undefined) delete globals.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+        else Object.defineProperty(globals, '__REACT_DEVTOOLS_GLOBAL_HOOK__', priorHook);
+      } catch (cause) {
+        failures.push(cause);
+      }
+      hooksInstalled = false;
+    }
+    const directory = materialized?.directory;
+    materialized = undefined;
+    if (directory !== undefined) {
+      try {
+        await rm(directory, { recursive: true, force: true });
+      } catch (cause) {
+        failures.push(cause);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Ink differential suite cleanup failed');
+  }
+
+  it('matches committed roots across throttled rerenders, rapid updates, and resize', async () => {
+    const { exact, contexts, sequence, commits, commitFacts, unmounts, instances } = state;
+    const stdout = tty(24, 8);
+    const renders: Array<{
+      readonly old: ExactCapture;
+      readonly context: InkFrameContext;
+    }> = [];
+    const component = (label: string, checked: boolean): ReactNode =>
+      createElement(
+        Fragment,
+        null,
+        createElement(
+          ink.Box,
+          {
+            borderStyle: 'single',
+            width: 12,
+            overflow: 'hidden',
+            'aria-role': 'checkbox',
+            'aria-label': `${label} control`,
+            'aria-state': { checked, disabled: !checked },
+          },
+          createElement(ink.Text, { wrap: 'wrap' }, `${label} wide 界界界`),
+        ),
+        createElement(ink.Box, { display: 'none' }, createElement(ink.Text, null, 'hidden')),
+      );
+    const instance = ink.render(component('first', false), {
+      stdout,
+      stderr: tty(24, 8),
+      patchConsole: false,
+      interactive: true,
+      onRender() {
+        const old = exact.at(-1);
+        const context = contexts.at(-1);
+        if (old === undefined || context === undefined) {
+          throw new Error('differential observer missed a causal predecessor of onRender');
+        }
+        expect(context.root).toBe(old.root);
+        renders.push({ old, context: context.value });
+        sequence.push(`render:${digestFacts(hostFacts(old.root))}`);
+      },
+    });
+    instances.push(instance);
+    await instance.waitUntilRenderFlush();
+
+    expect(renders).toHaveLength(1);
+    const first = pair(renders[0]!, commits, commitFacts);
+    assertHostParity(first);
+    expect(first.old.rendered.outputHeight).toBe(rootHeight(first.runtimeRoot));
+    expect(hostFacts(first.runtimeRoot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeName: 'ink-box',
+          role: 'checkbox',
+          state: { checked: false, disabled: true },
+        }),
+        expect.objectContaining({
+          nodeName: 'ink-text',
+          text: 'first wide 界界界',
+        }),
+        expect.objectContaining({ nodeName: 'ink-box', display: 'none' }),
+      ]),
+    );
+
+    instance.rerender(component('second', true));
+    await instance.waitUntilRenderFlush();
+    expect(renders).toHaveLength(2);
+    const second = pair(renders[1]!, commits, commitFacts);
+    assertHostParity(second);
+    expect(hostFacts(second.runtimeRoot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeName: 'ink-box',
+          role: 'checkbox',
+          state: { checked: true, disabled: false },
+        }),
+        expect.objectContaining({
+          nodeName: 'ink-text',
+          text: 'second wide 界界界',
+        }),
+      ]),
+    );
+    // Stable host identity survives rerender on both paths.
+    expect(second.runtimeRoot).toBe(first.runtimeRoot);
+
+    instance.rerender(createElement(ink.Text, null, 'replacement-root'));
+    await instance.waitUntilRenderFlush();
+    const replacement = pair(renders.at(-1)!, commits, commitFacts);
+    assertHostParity(replacement);
+    expect(replacement.runtimeRoot).toBe(first.runtimeRoot);
+    expect(replacement.runtimeFacts.some((fact) => fact.text === 'replacement-root')).toBe(true);
+    expect(replacement.runtimeFacts.some((fact) => fact.role === 'checkbox')).toBe(false);
+
+    const beforeRapid = renders.length;
+    instance.rerender(component('superseded', false));
+    instance.rerender(component('authoritative', true));
+    await instance.waitUntilRenderFlush();
+    expect(renders.length).toBeGreaterThan(beforeRapid);
+    const authoritative = pair(renders.at(-1)!, commits, commitFacts);
+    assertHostParity(authoritative);
+    expect(
+      hostFacts(authoritative.runtimeRoot).some((fact) => fact.text?.includes('superseded')),
+    ).toBe(false);
+    expect(
+      hostFacts(authoritative.runtimeRoot).some((fact) => fact.text?.includes('authoritative')),
+    ).toBe(true);
+
+    // Resize is causally triggered by Ink's public stdout resize event. Both
+    // exact capture and public onRender see post-layout Yoga dimensions, but
+    // React does not commit because the host tree itself did not reconcile.
+    const commitsBeforeResize = commits.length;
+    stdout.columns = 16;
+    stdout.emit('resize');
+    await instance.waitUntilRenderFlush();
+    const resized = pair(renders.at(-1)!, commits, commitFacts);
+    expect(commits).toHaveLength(commitsBeforeResize);
+    expect(resized.runtimeFacts).not.toEqual(resized.old.facts);
+    expect(rootWidth(resized.runtimeRoot)).toBe(16);
+    expect(resized.old.facts[0]?.geometry?.[2]).toBe(16);
+    expect(resized.runtimeFacts[0]?.geometry?.[2]).toBe(24);
+    expect(resized.context.rows).toBe(8);
+
+    const rootsBeforeUnmount = ownedBridgeRoots(bridge, state.roots);
+    const unmountCount = unmounts.length;
+    await disposeInstance(instance, instances);
+    expect(unmounts.length).toBeGreaterThan(unmountCount);
+    // Current public React callback reports Fiber unmounts, but does not
+    // identify which FiberRoot should be evicted without consulting Fiber.
+    // This assertion deliberately records the remaining lifecycle gap.
+    expect(ownedBridgeRoots(bridge, state.roots)).toEqual(rootsBeforeUnmount);
+
+    assertMeasuredCausalOrdering(sequence);
+  });
+
+  it('retains Static output while recording the runtime observer gap', async () => {
+    await assertStaticRetention(
+      ink,
+      bridge,
+      state.exact,
+      state.commits,
+      state.commitFacts,
+      state.contexts,
+      state.instances,
+    );
+  });
+
+  it('matches clipping, wrapping, and relative visibility', async () => {
+    await assertClippingWrappingAndRelativeVisibility(
+      ink,
+      state.exact,
+      state.commits,
+      state.contexts,
+      state.instances,
+    );
+  });
+
+  it('records interactive, alternate-screen, debug, and screen-reader mode facts', async () => {
+    await assertModeFacts(ink, state.exact, state.commits, state.contexts, state.instances);
+  });
+
+  it('keeps terminal behavior separate from semantic host-tree truth', async () => {
+    await assertTerminalBehavior(ink, state.exact, state.commits, state.contexts, state.instances);
+  });
+
+  it('observes Ink interactive defaults without reproducing private policy', async () => {
+    await assertResolvedInteractiveDefault(ink, state.exact, state.contexts, state.instances);
+  });
+
+  it('observes input and focus through causal component commits', async () => {
+    await assertInputAndFocus(ink, state);
+  });
+
+  it('isolates multiple committed Ink roots', async () => {
+    await assertMultipleRoots(
+      ink,
+      bridge,
+      state.exact,
+      state.commits,
+      state.instances,
+      state.roots,
+    );
+  });
 });
+
+interface DifferentialState {
+  readonly exact: ExactCapture[];
+  readonly contexts: Array<{ readonly root: InkDomElement; readonly value: InkFrameContext }>;
+  readonly sequence: string[];
+  readonly commits: Extract<InkCommitEvent, { type: 'commit' }>[];
+  readonly commitFacts: Map<Extract<InkCommitEvent, { type: 'commit' }>, readonly HostFact[]>;
+  readonly unmounts: Extract<InkCommitEvent, { type: 'unmount' }>[];
+  readonly instances: DifferentialInkInstance[];
+  readonly roots: Set<InkDomElement>;
+  readonly pendingCommitGates: Set<PendingCommitGate>;
+}
+
+type InkCommit = Extract<InkCommitEvent, { type: 'commit' }>;
+
+interface PendingCommitGate {
+  readonly fiberRoot: InkCommit['fiberRoot'];
+  readonly resolve: (event: Extract<InkCommitEvent, { type: 'commit' }>) => void;
+  cancel(): void;
+}
+
+function createDifferentialState(): DifferentialState {
+  return {
+    exact: [],
+    contexts: [],
+    sequence: [],
+    commits: [],
+    commitFacts: new Map(),
+    unmounts: [],
+    instances: [],
+    roots: new Set(),
+    pendingCommitGates: new Set(),
+  };
+}
+
+function armNextCommit(
+  state: DifferentialState,
+  fiberRoot: InkCommit['fiberRoot'],
+): {
+  readonly committed: Promise<Extract<InkCommitEvent, { type: 'commit' }>>;
+  cancel(): void;
+} {
+  let gate: PendingCommitGate;
+  const committed = new Promise<Extract<InkCommitEvent, { type: 'commit' }>>((resolve) => {
+    let active = true;
+    gate = {
+      fiberRoot,
+      resolve,
+      cancel() {
+        if (!active) return;
+        active = false;
+        state.pendingCommitGates.delete(gate);
+      },
+    };
+    state.pendingCommitGates.add(gate);
+  });
+  return {
+    committed,
+    cancel() {
+      gate.cancel();
+    },
+  };
+}
+
+function ownedBridgeRoots(
+  bridge: ReturnType<typeof activateInkRendererObservation>,
+  roots: ReadonlySet<InkDomElement>,
+): readonly InkDomElement[] {
+  return bridge.roots().filter((root) => roots.has(root));
+}
 
 async function assertStaticRetention(
   ink: DifferentialInkModule,
@@ -450,19 +635,13 @@ async function assertClippingWrappingAndRelativeVisibility(
 
 async function assertInputAndFocus(
   ink: DifferentialInkModule,
-  commits: Extract<InkCommitEvent, { type: 'commit' }>[],
-  instances: DifferentialInkInstance[],
+  state: DifferentialState,
 ): Promise<void> {
+  const { commits, instances } = state;
   const stdin = ttyInput();
   const stdout = tty(30, 8);
   const inputs: string[] = [];
   let focusSecond: (() => void) | undefined;
-  let resolveRender: (() => void) | undefined;
-  let resolveInput: (() => void) | undefined;
-  const nextRender = (): Promise<void> =>
-    new Promise((resolve) => {
-      resolveRender = resolve;
-    });
   const Focusable = ({
     id,
     autoFocus = false,
@@ -475,58 +654,50 @@ async function assertInputAndFocus(
     ink.useInput((input) => {
       if (isFocused) {
         inputs.push(`${id}:${input}`);
-        resolveInput?.();
-        resolveInput = undefined;
       }
     });
     return createElement(ink.Text, null, `${id}:${isFocused ? 'focused' : 'idle'}`);
   };
-  const initialRender = nextRender();
-  const instance = ink.render(
-    createElement(
-      Fragment,
-      null,
-      createElement(Focusable, { id: 'first', autoFocus: true }),
-      createElement(Focusable, { id: 'second' }),
-    ),
-    {
-      stdin,
-      stdout,
-      patchConsole: false,
-      interactive: true,
-      onRender() {
-        resolveRender?.();
-        resolveRender = undefined;
-      },
-    },
+  const tree = createElement(
+    Fragment,
+    null,
+    createElement(Focusable, { id: 'first', autoFocus: true }),
+    createElement(Focusable, { id: 'second' }),
   );
+  const instance = ink.render(tree, {
+    stdin,
+    stdout,
+    patchConsole: false,
+    interactive: true,
+  });
   instances.push(instance);
-  await Promise.all([initialRender, instance.waitUntilRenderFlush()]);
+  await instance.waitUntilRenderFlush();
   const initialCommit = commits.at(-1);
   expect(
     initialCommit === undefined ? [] : hostFacts(initialCommit.root).map((fact) => fact.text),
   ).toEqual(expect.arrayContaining(['first:focused', 'second:idle']));
 
-  const firstInput = new Promise<void>((resolve) => {
-    resolveInput = resolve;
-  });
   stdin.write('x');
-  await firstInput;
+  await instance.waitUntilRenderFlush();
   expect(inputs).toEqual(['first:x']);
 
   if (focusSecond === undefined) throw new Error('focus manager did not expose the second target');
-  const focusRender = nextRender();
-  focusSecond();
-  await Promise.all([focusRender, instance.waitUntilRenderFlush()]);
-  const focusedSecond = commits.at(-1);
-  expect(
-    focusedSecond === undefined ? [] : hostFacts(focusedSecond.root).map((fact) => fact.text),
-  ).toEqual(expect.arrayContaining(['first:idle', 'second:focused']));
-  const secondInput = new Promise<void>((resolve) => {
-    resolveInput = resolve;
-  });
+  const commitsBeforeFocus = commits.length;
+  const nextCommit = armNextCommit(state, initialCommit!.fiberRoot);
+  let focusedSecond: Extract<InkCommitEvent, { type: 'commit' }>;
+  try {
+    focusSecond();
+    focusedSecond = await nextCommit.committed;
+  } finally {
+    nextCommit.cancel();
+  }
+  await instance.waitUntilRenderFlush();
+  expect(commits.length).toBeGreaterThan(commitsBeforeFocus);
+  expect(hostFacts(focusedSecond.root).map((fact) => fact.text)).toEqual(
+    expect.arrayContaining(['first:idle', 'second:focused']),
+  );
   stdin.write('y');
-  await secondInput;
+  await instance.waitUntilRenderFlush();
   expect(inputs).toEqual(['first:x', 'second:y']);
 
   // Focus/input behavior is observable through component output and commits,
@@ -615,6 +786,7 @@ async function assertTerminalBehavior(
     readonly root: InkDomElement;
     readonly value: InkFrameContext;
   }>,
+  instances: DifferentialInkInstance[],
 ): Promise<void> {
   const run = async (options: {
     readonly interactive: boolean;
@@ -631,11 +803,11 @@ async function assertTerminalBehavior(
         root = exact.at(-1)?.root;
       },
     });
+    instances.push(instance);
     await instance.waitUntilRenderFlush();
     instance.rerender(createElement(ink.Text, null, 'SECOND'));
     await instance.waitUntilRenderFlush();
-    instance.unmount();
-    await instance.waitUntilRenderFlush();
+    await disposeInstance(instance, instances);
     if (root === undefined) throw new Error('terminal behavior differential missed the exact root');
     expect(commits.findLast((entry) => entry.root === root)?.root).toBe(root);
     const context = contexts.findLast((entry) => entry.root === root)?.value;
@@ -685,6 +857,7 @@ async function assertResolvedInteractiveDefault(
     readonly root: InkDomElement;
     readonly value: InkFrameContext;
   }>,
+  instances: DifferentialInkInstance[],
 ): Promise<void> {
   const resolve = async (
     isTTY: boolean,
@@ -702,14 +875,14 @@ async function assertResolvedInteractiveDefault(
         root = exact.at(-1)?.root;
       },
     });
+    instances.push(instance);
     await instance.waitUntilRenderFlush();
     if (root === undefined)
       throw new Error('interactive-default differential missed the exact root');
     const context = contexts.findLast((entry) => entry.root === root)?.value;
     if (context === undefined)
       throw new Error('interactive-default differential missed frame context');
-    instance.unmount();
-    await instance.waitUntilRenderFlush();
+    await disposeInstance(instance, instances);
     return { context, bytes: output.bytes() };
   };
 
@@ -732,6 +905,7 @@ async function assertMultipleRoots(
   exact: ExactCapture[],
   commits: Extract<InkCommitEvent, { type: 'commit' }>[],
   instances: DifferentialInkInstance[],
+  roots: ReadonlySet<InkDomElement>,
 ): Promise<void> {
   const seen = new Set<InkDomElement>();
   const renderOne = (label: string): DifferentialInkInstance =>
@@ -754,6 +928,7 @@ async function assertMultipleRoots(
     'root-two',
   ]);
   for (const root of seen) expect(bridge.roots()).toContain(root);
+  expect(new Set(ownedBridgeRoots(bridge, roots))).toEqual(seen);
   for (const root of seen) {
     expect(commits.findLast((candidate) => candidate.root === root)?.fiberRoot.containerInfo).toBe(
       root,
@@ -766,8 +941,9 @@ async function disposeInstance(
   instance: DifferentialInkInstance,
   instances: DifferentialInkInstance[],
 ): Promise<void> {
+  const exited = instance.waitUntilExit();
   instance.unmount();
-  await instance.waitUntilRenderFlush();
+  await exited;
   const index = instances.indexOf(instance);
   if (index >= 0) instances.splice(index, 1);
 }
