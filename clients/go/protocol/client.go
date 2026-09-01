@@ -210,8 +210,15 @@ func (c *Client) Start(timeout time.Duration) error {
 			c.Close()
 			return freezeErr
 		}
-		c.providerLease = lease
 		hello.Providers = lease.Registrations()
+		c.mu.Lock()
+		if c.closed {
+			c.mu.Unlock()
+			lease.Close()
+			return errors.New("termwright: session closed while evidence providers were initialized")
+		}
+		c.providerLease = lease
+		c.mu.Unlock()
 	}
 	if err := c.send(hello, limits); err != nil {
 		c.options.Debug.Line("diag", "hello could not be sent, staying dormant: "+errorLabel(err))
@@ -239,18 +246,19 @@ func (c *Client) Start(timeout time.Duration) error {
 func (c *Client) Close() error {
 	c.mu.Lock()
 	conn := c.conn
+	providerLease := c.providerLease
 	wasOpen := !c.closed
 	summary := fmt.Sprintf("close r%d snapshots=%d logs_dropped=%d performance_dropped=%d",
 		c.revision, c.snapsSent, c.logsDropped, c.performance.droppedEvents)
 	c.conn = nil
+	c.providerLease = nil
 	c.closed = true
 	c.mu.Unlock()
 	if wasOpen {
 		c.options.Debug.Line("sem", summary)
 	}
-	if c.providerLease != nil {
-		c.providerLease.Close()
-		c.providerLease = nil
+	if providerLease != nil {
+		providerLease.Close()
 	}
 	c.once.Do(func() {
 		select {

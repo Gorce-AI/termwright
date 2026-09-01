@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
-import { chmod, cp, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { launchTerminal } from '../packages/driver/dist/index.js';
@@ -44,6 +44,13 @@ async function waitForPairedSemanticRevision(session, minimum) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function readRaceReports(prefix) {
+  const names = (await readdir(dirname(prefix)))
+    .filter((name) => name.startsWith(`${basename(prefix)}.`))
+    .sort();
+  return Promise.all(names.map((name) => readFile(join(dirname(prefix), name), 'utf8')));
 }
 
 try {
@@ -121,8 +128,20 @@ try {
     env: prepared.env,
   });
 
+  const raceLogPrefix = join(temporaryRoot, 'race-report');
   terminal = await launchTerminal({
     command: [binary],
+    env: {
+      GORACE: [
+        process.env.GORACE,
+        `log_path=${raceLogPrefix}`,
+        `strip_path_prefix=${temporaryRoot}/`,
+        'halt_on_error=1',
+        'exitcode=66',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    },
     columns: 80,
     rows: 24,
   });
@@ -139,10 +158,16 @@ try {
   );
   await terminal.press('q');
   const exit = await terminal.waitForExit();
-  assert(exit.code === 0, `race fixture exited with code ${String(exit.code)}`);
+  const raceReports = await readRaceReports(raceLogPrefix);
   assert(
-    !terminal.screen().text().includes('DATA RACE'),
-    'Go race detector reported a data race in the full tview fixture',
+    exit.code === 0 && raceReports.length === 0,
+    [
+      `race fixture exited with code ${String(exit.code)}`,
+      ...raceReports,
+      raceReports.length === 0 ? terminal.screen().text() : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
   );
 } catch (error) {
   certificationFailure = error;

@@ -44,6 +44,37 @@ type fakeDriver struct {
 	subscribe string
 }
 
+type blockingEvidenceLease struct {
+	mu          sync.Mutex
+	closeCalls  int
+	firstClose  chan struct{}
+	secondClose chan struct{}
+	release     chan struct{}
+}
+
+func (l *blockingEvidenceLease) Registrations() []EvidenceProviderRegistration { return nil }
+func (l *blockingEvidenceLease) Collect(string, int64, int, int) []ProviderRevisionEvidence {
+	return nil
+}
+func (l *blockingEvidenceLease) Close() {
+	l.mu.Lock()
+	l.closeCalls++
+	call := l.closeCalls
+	l.mu.Unlock()
+	if call == 1 {
+		close(l.firstClose)
+	} else if call == 2 {
+		close(l.secondClose)
+	}
+	<-l.release
+}
+
+func (l *blockingEvidenceLease) calls() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.closeCalls
+}
+
 func startFakeDriver(t *testing.T) *fakeDriver {
 	return startFakeDriverWithLogs(t, nil)
 }
@@ -176,6 +207,48 @@ func sampleSnapshot() *Snapshot {
 		{ID: "ok", ParentID: "root", Role: RoleButton, Name: "Approve", Geometry: testGeometry(Rect{Row: 1, Column: 2, Width: 9, Height: 1})},
 	}
 	return snapshot
+}
+
+func TestClientConcurrentCloseTransfersEvidenceLeaseOwnershipOnce(t *testing.T) {
+	lease := &blockingEvidenceLease{
+		firstClose:  make(chan struct{}),
+		secondClose: make(chan struct{}),
+		release:     make(chan struct{}),
+	}
+	client := New("unused", testToken, Options{})
+	client.providerLease = lease
+
+	firstDone := make(chan struct{})
+	go func() {
+		_ = client.Close()
+		close(firstDone)
+	}()
+	<-lease.firstClose
+
+	secondDone := make(chan struct{})
+	go func() {
+		_ = client.Close()
+		close(secondDone)
+	}()
+
+	select {
+	case <-secondDone:
+	case <-lease.secondClose:
+		close(lease.release)
+		<-firstDone
+		<-secondDone
+		t.Fatal("concurrent Client.Close called the evidence lease twice")
+	case <-time.After(time.Second):
+		close(lease.release)
+		<-firstDone
+		t.Fatal("concurrent Client.Close did not complete after lease ownership transferred")
+	}
+
+	close(lease.release)
+	<-firstDone
+	if calls := lease.calls(); calls != 1 {
+		t.Fatalf("evidence lease close calls = %d, want 1", calls)
+	}
 }
 
 func testGeometry(rect Rect) NodeGeometryObservations {
