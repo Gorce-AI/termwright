@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
@@ -51,14 +51,29 @@ export function verifyCrateMetadata(metadata, expected) {
   }
 }
 
-async function registryJson(url) {
-  const response = await fetch(url, {
-    headers: { 'user-agent': 'termwright-release (github.com/Gorce-AI/termwright)' },
+async function registryJson(url, { fetchImpl = fetch, headers = {} } = {}) {
+  const response = await fetchImpl(url, {
+    headers: {
+      'user-agent': 'termwright-release (github.com/Gorce-AI/termwright)',
+      ...headers,
+    },
   });
   if (response.status === 404) return null;
   if (!response.ok)
     throw new Error(`registry metadata request failed with HTTP ${response.status}: ${url}`);
   return response.json();
+}
+
+export async function fetchPypiMetadata(version, { fetchImpl = fetch, nonce = randomUUID() } = {}) {
+  const url = new URL(`https://pypi.org/pypi/termwright/${encodeURIComponent(version)}/json`);
+  url.searchParams.set('termwright_verify', nonce);
+  return registryJson(url.href, {
+    fetchImpl,
+    headers: {
+      'cache-control': 'no-cache, no-store, max-age=0',
+      pragma: 'no-cache',
+    },
+  });
 }
 
 async function verifyNpm(archive) {
@@ -90,9 +105,9 @@ async function verifyPypi(directory, version) {
   for (const name of (await readdir(directory)).sort())
     expected.set(name, hex('sha256', await readFile(resolve(directory, name))));
   if (expected.size === 0) throw new Error('no local PyPI artifacts to verify');
-  const metadata = await registryJson(
-    `https://pypi.org/pypi/termwright/${encodeURIComponent(version)}/json`,
-  );
+  // PyPI caches a version-JSON 404 for up to 15 minutes. A publication preflight
+  // must therefore never share an edge-cache key with a later confirmation.
+  const metadata = await fetchPypiMetadata(version);
   if (metadata === null) return 'missing';
   return verifyPypiMetadata(metadata, expected, version);
 }
