@@ -318,6 +318,7 @@ describe('autonomous workflow security', () => {
     const coordinatorWorkflow = await readWorkflow('autonomous-coordinator.yml');
     const npmPublish = jobBlock(workflow, 'npm');
     const finalize = jobBlock(workflow, 'finalize');
+    const detect = jobBlock(workflow, 'detect');
     expect(workflow).toContain(
       'TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED: ${{ vars.TERMWRIGHT_AUTONOMOUS_RELEASE_ENABLED }}',
     );
@@ -344,6 +345,24 @@ describe('autonomous workflow security', () => {
     expect(prepare).not.toMatch(/^ {6}(?:actions|contents|pull-requests): write$/mu);
     expect(prepare).toContain('permission-contents: write');
     expect(prepare).toContain('permission-pull-requests: write');
+    expect(detect).toContain('ref: ${{ github.sha }}');
+    expect(detect).toContain('WORKFLOW_COMMIT: ${{ github.sha }}');
+    expect(detect).toContain('test "$current" = "$WORKFLOW_COMMIT"');
+    expect(detect).toContain('git merge-base --is-ancestor "$COMMIT" "$WORKFLOW_COMMIT"');
+    expect(detect).toContain('git diff --name-only --no-renames -z "$COMMIT" "$WORKFLOW_COMMIT"');
+    expect(detect).toContain('validate-release-tail "${tail_paths[@]}"');
+    expect(detect).toContain('git checkout --detach "$COMMIT"');
+    expect(detect.indexOf('test "$current" = "$WORKFLOW_COMMIT"')).toBeLessThan(
+      detect.indexOf('validate-release-tail "${tail_paths[@]}"'),
+    );
+    expect(detect.indexOf('validate-release-tail "${tail_paths[@]}"')).toBeLessThan(
+      detect.indexOf('git checkout --detach "$COMMIT"'),
+    );
+    expect(detect.indexOf('git checkout --detach "$COMMIT"')).toBeLessThan(
+      detect.indexOf('validate-version-pr'),
+    );
+    expect(detect.indexOf('validate-version-pr')).toBeLessThan(detect.indexOf('find .changeset'));
+    expect(detect).not.toContain('refs/heads/release-pr/');
     const versionSteps = [
       stepBlock(prepare, 'Apply pending changesets'),
       stepBlock(jobBlock(workflow, 'verify'), 'Independently reproduce the merged Version PR tree'),
@@ -384,6 +403,15 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('find npm pypi crates');
     expect(workflow).toContain('token: ${{ steps.writer-token.outputs.token }}');
     expect(workflow.match(/persist-credentials: false/gu)?.length).toBeGreaterThanOrEqual(8);
+    const verify = jobBlock(workflow, 'verify');
+    const install = '      - run: pnpm install --frozen-lockfile\n';
+    expect(verify.match(/- run: pnpm install --frozen-lockfile/gu)).toHaveLength(1);
+    expect(verify.indexOf(install)).toBeLessThan(
+      verify.indexOf('      - name: Verify release metadata'),
+    );
+    expect(verify.indexOf('      - name: Verify release metadata')).toBeLessThan(
+      verify.indexOf('      - run: pnpm build'),
+    );
   });
 
   it('keeps the one-time npm bootstrap path artifact-only and fail-closed', async () => {
