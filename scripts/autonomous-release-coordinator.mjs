@@ -486,12 +486,11 @@ export function assertReleaseStateQuiescent(runs, { repository, defaultBranch })
         Date.parse(right.created_at ?? 0) - Date.parse(left.created_at ?? 0) ||
         Number(right.id ?? 0) - Number(left.id ?? 0),
     );
-  const unresolved = trusted.find(
-    (run) => run.status !== 'completed' || run.conclusion !== 'success',
-  );
-  if (unresolved === undefined) return;
+  const latest = trusted[0];
+  if (latest === undefined || (latest.status === 'completed' && latest.conclusion === 'success'))
+    return;
   throw new Error(
-    `trusted Release run ${String(unresolved.id)} is ${String(unresolved.status)}/${String(unresolved.conclusion)}; refusing to advance the release state machine`,
+    `trusted Release run ${String(latest.id)} is ${String(latest.status)}/${String(latest.conclusion)}; refusing to advance the release state machine`,
   );
 }
 
