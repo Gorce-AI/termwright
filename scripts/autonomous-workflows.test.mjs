@@ -864,6 +864,17 @@ describe('autonomous workflow security', () => {
     expect(examples).toContain('node scripts/check-installed-opentui.mjs "$install_dir"');
   });
 
+  it('runs Textual from a wheel and tarballs rather than editable sources', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const examples = jobBlock(workflow, 'examples');
+    expect(examples).toContain('python -m pip wheel --no-deps');
+    expect(examples).toContain('python -m venv "$venv_dir"');
+    expect(examples).toContain('"$venv_dir/bin/python" -m pip install');
+    expect(examples).toContain(
+      'node scripts/check-installed-textual.mjs "$install_dir" "$venv_dir/bin/python"',
+    );
+  });
+
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
     const website = jobBlock(workflow, 'website');

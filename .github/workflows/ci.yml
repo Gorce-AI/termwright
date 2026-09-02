@@ -1575,6 +1575,22 @@ jobs:
             vitest@latest @opentui/core@0.5.3
           node scripts/check-installed-opentui.mjs "$install_dir"
 
+      - name: Certify Textual from wheels and tarballs in a fresh consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-textual-packs"
+          install_dir="$RUNNER_TEMP/termwright-textual-install"
+          wheel_dir="$RUNNER_TEMP/termwright-textual-wheels"
+          venv_dir="$RUNNER_TEMP/termwright-textual-venv"
+          mkdir -p "$pack_dir" "$install_dir" "$wheel_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          python -m pip wheel --no-deps --wheel-dir "$wheel_dir" ./clients/python
+          python -m venv "$venv_dir"
+          "$venv_dir/bin/python" -m pip install "$wheel_dir"/termwright-*.whl 'textual>=8.2.8'
+          node scripts/check-installed-textual.mjs "$install_dir" "$venv_dir/bin/python"
+
       - name: Upload failure reports
         if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

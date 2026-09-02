@@ -34,6 +34,16 @@ qualified geometry, pointer eligibility and Unicode text. Local evidence on
 snapshot, two deltas and a 22,626-byte trace. The Linux CI examples lane now
 runs the same tarball-only canary; that remote execution remains pending.
 
+The Textual canary builds the Python client as a wheel, installs it and Textual
+into a new virtualenv, and separately installs Termwright's npm tarballs. It
+rejects an import outside that virtualenv or from `clients/python`, then drives
+a real unmodified Textual application through the injected probe. The oracle
+covers Unicode, semantic focus, pointer click, typing, semantic activation,
+qualified geometry and pointer eligibility. Local evidence on 2026-09-02
+(macOS arm64, Node 24.1.0, Python 3.9.6, Textual 8.2.8) passed with one full
+snapshot, five deltas and a 50,336-byte trace. The Linux CI examples lane builds
+and installs the wheel without editable mode; remote execution remains pending.
+
 The existing Linux/macOS build matrix and Windows native-driver matrix now run
 the canary on Node 22 and Node 24 after their native addon is available. Those
 remote rows remain pending until the changed workflow executes. The trusted
@@ -55,5 +65,5 @@ retries. A local macOS arm64 Node 24.1.0 2-second/8-second execution passed with
 39,009-byte replay screenshot. The actual multi-minute and cross-platform rows
 are external certification pending.
 
-Textual, Go and Rust still need equivalent framework-specific clean-room
-consumers; existing workspace examples do not count as substitutes.
+Go and Rust still need equivalent framework-specific clean-room consumers;
+existing workspace examples do not count as substitutes.
