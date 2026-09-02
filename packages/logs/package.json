@@ -1,6 +1,6 @@
 {
   "name": "@termwright/logs",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "application log capture for terminal tests: the termwright:log diagnostics channel, ingress redaction, and pino/winston/consola/OpenTelemetry bridges",
   "license": "MIT",
   "repository": {

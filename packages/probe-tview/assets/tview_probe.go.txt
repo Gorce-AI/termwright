@@ -45,7 +45,7 @@ import (
 // from the hand-written adapter so a session can be told apart in diagnostics.
 const (
 	probeName    = "termwright-probe-tview"
-	probeVersion = "0.4.0"
+	probeVersion = "0.4.1"
 )
 
 // termwrightProbeState is nil for an uninstrumented run, which is every run
