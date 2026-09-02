@@ -700,7 +700,7 @@ mod tests {
         let mut snapshot = snapshot_from_with_relation_limit(&calls, 1, 80, 24, 16);
         validated(&mut snapshot);
 
-        assert_eq!(snapshot.v, 2);
+        assert_eq!(snapshot.v, 3);
         assert!(matches!(
             snapshot.hit_grid,
             Observation::Unsupported { ref capability, .. } if capability == "pointer-hit-grid"
