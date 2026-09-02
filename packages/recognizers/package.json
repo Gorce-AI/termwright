@@ -1,6 +1,6 @@
 {
   "name": "@termwright/recognizers",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Probe IR to semantic tree: the rules that turn observed facts into roles, names and states",
   "license": "MIT",
   "repository": {

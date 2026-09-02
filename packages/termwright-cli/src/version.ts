@@ -10,4 +10,4 @@
 export const CLI_NAME = 'termwright';
 
 /** Keep in sync with `package.json`. */
-export const CLI_VERSION = '0.3.2';
+export const CLI_VERSION = '0.4.0';
