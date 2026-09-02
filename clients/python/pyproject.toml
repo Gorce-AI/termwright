@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "termwright"
-version = "0.3.1"
+version = "0.3.2"
 description = "Semantic side-channel client, automatic Textual probe, and annotation SDK for Termwright"
 readme = "README.md"
 requires-python = ">=3.9"

@@ -1,5 +1,24 @@
 # termwright
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/desktop-host@0.3.2
+  - @termwright/driver@0.3.2
+  - @termwright/gherkin@0.3.2
+  - @termwright/ink@0.3.2
+  - @termwright/mcp@0.3.2
+  - @termwright/protocol@0.3.2
+  - @termwright/resource-broker@0.3.2
+  - @termwright/run-history@0.3.2
+  - @termwright/run-journal-transport@0.3.2
+  - @termwright/screenshot@0.3.2
+  - @termwright/test@0.3.2
+  - @termwright/trace@0.3.2
+  - @termwright/ui@0.3.2
+
 ## 0.3.1
 
 ### Patch Changes
