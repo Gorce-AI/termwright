@@ -448,8 +448,10 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     const app = await launchTerminal({ command: [binary], columns: 80, rows: 12 });
     sessions.push(app);
     await app.waitForText('Sign in');
+    await app.settled();
 
     const password = app.getByRole('textbox', { name: 'Password' });
+    expect(await app.getByRole('textbox', { name: 'Name' }).textContent()).toBe('');
     expect((await password.semanticState())?.focused).not.toBe(true);
     await app.press('Tab');
     // Input delivery is ordered, but the application processes it on its own
