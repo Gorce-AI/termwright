@@ -16,7 +16,6 @@ import {
   readRunManifest,
   type RunManifestWriter,
 } from '@termwright/run-history';
-import type { TermwrightRunnerContext } from '@termwright/test/runner';
 import type { UserConsoleLog } from 'vitest';
 import type { TestCase, TestModule, TestRunResult } from 'vitest/node';
 import {
@@ -32,7 +31,7 @@ import {
   type TermwrightTestHostOptions,
   type TermwrightVitestEngine,
 } from './test-host.js';
-import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
+import { CERTIFIED_VITEST_VERSION, type TermwrightRunnerContext } from './test-host-engine.js';
 
 describe('workflow attempt certification', () => {
   it('accepts only the first GitHub attempt when certification requires it', () => {
@@ -333,6 +332,7 @@ describe('TermwrightTestHost', () => {
       metadata: {},
     });
     expect(Object.keys(engine.contexts.at(-1)?.tasks ?? {})).toEqual(['native-unit']);
+    expect(engine.contexts.at(-1)?.tasks['native-unit']?.strictResourceReservation).toBeUndefined();
     await host.close();
   });
 
@@ -357,6 +357,7 @@ describe('TermwrightTestHost', () => {
       memoryWeight: 1,
       ioWeight: 1,
     });
+    expect(engine.contexts.at(-1)?.tasks['native-pressure']?.strictResourceReservation).toBe(true);
     await host.close();
   });
 

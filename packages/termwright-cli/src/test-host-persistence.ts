@@ -19,7 +19,7 @@ import {
   type RunId,
   type TerminalRunState,
 } from '@termwright/protocol';
-import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
+import { CERTIFIED_VITEST_VERSION } from './test-host-engine.js';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
 
 const executeFile = promisify(execFile);

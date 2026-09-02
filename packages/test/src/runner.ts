@@ -70,8 +70,6 @@ interface NativeRunnerTask {
 
 interface NativeAttemptTask extends NativeRunnerTask {
   readonly result?: { readonly state?: string; readonly pending?: boolean };
-  onFinished?: Array<() => unknown>;
-  onFailed?: Array<() => unknown>;
 }
 
 /** Runtime-only second hook argument used by the certified Vitest implementation. */
@@ -92,6 +90,7 @@ export interface TermwrightHostTaskIdentity {
   readonly fullName: string;
   /** Atomic broker vector acquired before attempt.started is emitted. */
   readonly resourceReservation?: ResourceVector;
+  readonly strictResourceReservation?: boolean;
 }
 const taskIdentities = new WeakMap<object, TermwrightHostTaskIdentity>();
 const taskBrokers = new WeakMap<object, ResourceBrokerClient>();
@@ -183,7 +182,9 @@ export function certifiedTryOrdinal(value: unknown): CertifiedNativeTryOrdinal {
  * before resolving fixtures. Its public declaration omits the second argument,
  * so this override keeps it optional for TypeScript and rejects its absence at
  * runtime. The ALS value intentionally remains installed past
- * `onAfterTryTask`: Vitest runs afterEach and fixture cleanup afterwards.
+ * `onAfterTryTask`: Vitest runs afterEach, ordinary fixture cleanup and test
+ * completion hooks afterwards. `onAfterRetryTask` is the first public hook
+ * after those phases and owns the authoritative attempt commit.
  */
 export class TermwrightTestRunner extends VitestTestRunner {
   readonly #hostContext: TermwrightRunnerContext;
@@ -305,6 +306,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
           : {
               reservedLease: reservationAdmission,
               resourceReservation: identity.resourceReservation,
+              strictResourceReservation: identity.strictResourceReservation === true,
             }),
       },
     );
@@ -336,7 +338,6 @@ export class TermwrightTestRunner extends VitestTestRunner {
         context,
         journal,
         attemptEvents,
-        this.config.sequence.hooks,
         this.#hostContext.journal.acknowledgementTimeoutMs,
       );
       super.onBeforeTryTask(test);
@@ -380,6 +381,24 @@ export class TermwrightTestRunner extends VitestTestRunner {
     }
   }
 
+  async onAfterRetryTask(
+    test: Parameters<VitestTestRunner['onAfterTryTask']>[0],
+    ordinal: unknown,
+  ): Promise<void> {
+    const native = certifiedTryOrdinal(ordinal);
+    const context = currentAttemptContext();
+    if (context.retry !== native.retry || context.repeat !== native.repeats) {
+      throw new Error(
+        `Vitest retry boundary ${native.repeats}/${native.retry} does not match attempt ${context.repeat}/${context.retry}`,
+      );
+    }
+    const finalizer = openAttempts.get(test as object)?.get(context.attemptId);
+    if (finalizer === undefined) {
+      throw new Error(`attempt ${context.attemptId} has no registered retry finalizer`);
+    }
+    await finalizer.complete();
+  }
+
   override async onAfterRunTask(
     test: Parameters<VitestTestRunner['onAfterRunTask']>[0],
   ): Promise<void> {
@@ -389,8 +408,8 @@ export class TermwrightTestRunner extends VitestTestRunner {
     // in the report to point at, because a later retry may have passed.
     const open = openAttempts.get(test as object);
     if (open !== undefined) {
-      for (const close of [...open.values()]) {
-        await close().catch((error: unknown) => {
+      for (const finalizer of [...open.values()]) {
+        await finalizer.failClosed().catch((error: unknown) => {
           process.stderr.write(
             `termwright: an attempt for ${(test as NativeRunnerTask).id} could not be closed at task end: ` +
               `${error instanceof Error ? error.message : String(error)}\n`,
@@ -448,6 +467,7 @@ export function validateHostContext(value: unknown): TermwrightRunnerContext {
         'file',
         'fullName',
         'resourceReservation',
+        'strictResourceReservation',
       ])
     )
       return invalidHostContext();
@@ -469,6 +489,11 @@ export function validateHostContext(value: unknown): TermwrightRunnerContext {
       ...(identity['resourceReservation'] === undefined
         ? {}
         : { resourceReservation: validateResourceVector(identity['resourceReservation']) }),
+      ...(identity['strictResourceReservation'] === true
+        ? { strictResourceReservation: true }
+        : identity['strictResourceReservation'] === undefined
+          ? {}
+          : invalidHostContext()),
     });
   }
   const budgetReserves = validateBudgetReserves(record['budgetReserves']);
@@ -707,11 +732,20 @@ function attemptIdentity(context: AttemptContext) {
  * awaits exactly once per test, after retries, so it is where an attempt that
  * escaped its own finalizer is still closed.
  */
-const openAttempts = new WeakMap<object, Map<string, () => Promise<void>>>();
+interface OpenAttemptFinalizer {
+  readonly complete: () => Promise<void>;
+  readonly failClosed: () => Promise<void>;
+}
 
-function rememberOpenAttempt(test: object, attemptId: string, close: () => Promise<void>): void {
-  const open = openAttempts.get(test) ?? new Map<string, () => Promise<void>>();
-  open.set(attemptId, close);
+const openAttempts = new WeakMap<object, Map<string, OpenAttemptFinalizer>>();
+
+function rememberOpenAttempt(
+  test: object,
+  attemptId: string,
+  finalizer: OpenAttemptFinalizer,
+): void {
+  const open = openAttempts.get(test) ?? new Map<string, OpenAttemptFinalizer>();
+  open.set(attemptId, finalizer);
   openAttempts.set(test, open);
 }
 
@@ -724,7 +758,6 @@ function installAttemptFinalizer(
   context: AttemptContext,
   journal: WorkerJournal,
   attemptEvents: AttemptEventRecorder,
-  sequence: string,
   acknowledgementTimeoutMs: number,
 ): void {
   let finalized = false;
@@ -733,10 +766,11 @@ function installAttemptFinalizer(
       throw new Error(`attempt ${context.attemptId} terminal event was requested more than once`);
     finalized = true;
     forgetOpenAttempt(test, context.attemptId);
-    // This is the authoritative lifecycle commit after all user and fixture
-    // cleanup, not optional diagnostics. It consumes the final cleanup reserve;
-    // using the earlier diagnostics boundary made ordinary teardown capable of
-    // expiring the event before it was even legally allowed to be emitted.
+    // This is the authoritative lifecycle commit after afterEach, ordinary
+    // fixture cleanup and onTestFinished/onTestFailed, not optional diagnostics.
+    // Vitest's public hook still runs inside an enclosing aroundEach; that
+    // limitation is certified and documented rather than hidden by task-array
+    // mutation. The commit consumes the final cleanup reserve.
     context.budget.mark('cleanup');
     let resourceFailure: Error | undefined;
     try {
@@ -816,27 +850,17 @@ function installAttemptFinalizer(
       await emit('failed').catch(() => undefined);
       throw error;
     }
-    if (state !== 'failed') {
-      await emit(state);
-      return;
-    }
-    const afterFailures = async (): Promise<void> => emit('failed');
-    const hooks = (test.onFailed ??= []);
-    // Vitest reverses stack hooks. Install at the opposite end so this runs
-    // after every user onTestFailed callback, including callbacks that throw.
-    if (sequence === 'stack') hooks.unshift(afterFailures);
-    else hooks.push(afterFailures);
+    await emit(state);
   };
-  const hooks = (test.onFinished ??= []);
-  // onFinished is hard-coded to stack order by the engine. Inserting first
-  // makes the authoritative finalizer execute last, after user callbacks.
-  hooks.unshift(afterCleanup);
-  rememberOpenAttempt(test, context.attemptId, async () => {
-    if (finalized) return;
-    process.stderr.write(
-      `termwright: attempt ${context.attemptId} (${context.nativeTaskId}) never reached its finalizer\n`,
-    );
-    await emit('failed');
+  rememberOpenAttempt(test, context.attemptId, {
+    complete: afterCleanup,
+    failClosed: async () => {
+      if (finalized) return;
+      process.stderr.write(
+        `termwright: attempt ${context.attemptId} (${context.nativeTaskId}) never reached its finalizer\n`,
+      );
+      await emit('failed');
+    },
   });
 }
 

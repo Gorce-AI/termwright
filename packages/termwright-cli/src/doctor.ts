@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createNativePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
-import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
+import { CERTIFIED_VITEST_VERSION } from './test-host-engine.js';
 import {
   TERMWRIGHT_RESOURCE_PROFILES,
   resolveTermwrightResourceProfile,

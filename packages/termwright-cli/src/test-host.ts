@@ -27,8 +27,6 @@ import {
   type SpecId,
   type TerminalRunState,
 } from '@termwright/protocol';
-import type { TermwrightHostTaskIdentity } from '@termwright/test/runner';
-import { assertCertifiedVitestRuntime } from '@termwright/test/vitest-engine';
 import type { UserConsoleLog } from 'vitest';
 import type { TestCase, TestRunResult } from 'vitest/node';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
@@ -37,6 +35,8 @@ import {
   classifyVitestResult,
   createCertifiedVitestEngine,
   hostRelativeFilters,
+  assertCertifiedVitestRuntime,
+  type TermwrightHostTaskIdentity,
   type TermwrightVitestEngine,
 } from './test-host-engine.js';
 import {
@@ -81,6 +81,8 @@ export interface NativeTestCase {
   readonly metadata: unknown;
   /** Atomic pre-Attempt reservation declared through test.resources(). */
   readonly resourceReservation?: ResourceVector;
+  /** Whether concrete subleases must stay within an explicit declaration. */
+  readonly strictResourceReservation?: boolean;
 }
 
 export interface NativeTestCatalog {
@@ -551,7 +553,10 @@ export class TermwrightTestHost {
             fullName: test.fullName,
             ...(test.resourceReservation === undefined
               ? {}
-              : { resourceReservation: test.resourceReservation }),
+              : {
+                  resourceReservation: test.resourceReservation,
+                  ...(test.strictResourceReservation ? { strictResourceReservation: true } : {}),
+                }),
           };
           modules.add(test.file);
         }
@@ -929,6 +934,7 @@ export class TermwrightTestHost {
         this.#resourceProfile.capacities,
         this.#resourceProfile.perAttempt ?? {},
       );
+      const strictResourceReservation = hasExplicitResourceMetadata(metadata);
       return Object.freeze({
         runnerTaskId: identity.runnerTaskId,
         nativeTaskId: testCase.id,
@@ -942,6 +948,7 @@ export class TermwrightTestHost {
           : { location: Object.freeze({ ...testCase.location }) }),
         metadata,
         ...(resourceReservation === undefined ? {} : { resourceReservation }),
+        ...(strictResourceReservation ? { strictResourceReservation: true } : {}),
       });
     });
     if (new Set(catalog.map((test) => test.nativeTaskId)).size !== catalog.length) {
@@ -1736,6 +1743,17 @@ function resourceReservationFromMetadata(
     ...(nativeHostPressure === 0 ? {} : { nativeHostPressure }),
     ...(traceWriters === 0 ? {} : { traceWriter: traceWriters }),
   });
+}
+
+function hasExplicitResourceMetadata(metadata: unknown): boolean {
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) return false;
+  const termwright = (metadata as Record<string, unknown>)['termwright'];
+  return (
+    typeof termwright === 'object' &&
+    termwright !== null &&
+    !Array.isArray(termwright) &&
+    (termwright as Record<string, unknown>)['resources'] !== undefined
+  );
 }
 
 function resourceLoadVector(

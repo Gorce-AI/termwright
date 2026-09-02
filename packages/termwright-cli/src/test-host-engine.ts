@@ -2,13 +2,8 @@
 
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
-import type { TermwrightRunnerContext } from '@termwright/test/runner';
-import {
-  CERTIFIED_VITEST_VERSION,
-  TERMWRIGHT_RUNNER_CONTEXT_KEY,
-  assertCertifiedVitestRuntime,
-} from '@termwright/test/vitest-engine';
+import { dirname, isAbsolute, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { UserConsoleLog } from 'vitest';
 import {
   createVitest,
@@ -18,9 +13,81 @@ import {
   type TestRunResult,
   type Vitest,
 } from 'vitest/node';
-import { RunIdFactory, type TerminalRunState } from '@termwright/protocol';
+import {
+  RunIdFactory,
+  type InvocationId,
+  type ProjectId,
+  type RunId,
+  type RunnerTaskId,
+  type ShardId,
+  type SpecId,
+  type TerminalRunState,
+} from '@termwright/protocol';
+import type { ResourceVector } from '@termwright/resource-broker';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
 import { uiVitestViteOverrides } from './ui-vitest-config.js';
+
+interface AttemptBudgetReserves {
+  readonly diagnosticsMs: number;
+  readonly traceFlushMs: number;
+  readonly teardownMs: number;
+}
+
+/** Private host/worker contract. It is deliberately absent from package exports. */
+export interface TermwrightHostTaskIdentity {
+  readonly runnerTaskId: RunnerTaskId;
+  readonly projectId: ProjectId;
+  readonly specId: SpecId;
+  readonly shardId?: ShardId;
+  readonly file: string;
+  readonly fullName: string;
+  readonly resourceReservation?: ResourceVector;
+  readonly strictResourceReservation?: boolean;
+}
+
+export interface TermwrightRunnerContext {
+  readonly invocationId: InvocationId;
+  readonly runId: RunId;
+  readonly tasks: Readonly<Record<string, TermwrightHostTaskIdentity>>;
+  readonly budgetReserves?: AttemptBudgetReserves;
+  readonly broker: {
+    readonly endpoint: string;
+    readonly token: string;
+    readonly workerEpoch: number;
+    readonly workerIdPrefix: string;
+    readonly handshakeTimeoutMs: number;
+    readonly admissionDeadline: number;
+    readonly resourceProfile: ResourceVector;
+  };
+  readonly journal: {
+    readonly endpoint: string;
+    readonly token: string;
+    readonly handshakeTimeoutMs: number;
+    readonly acknowledgementTimeoutMs: number;
+    readonly binding: 'host-assigned-worker';
+  };
+}
+
+export const CERTIFIED_VITEST_VERSION = '4.1.11' as const;
+const TERMWRIGHT_RUNNER_CONTEXT_KEY = 'termwright.runner.context.v3' as const;
+
+export function assertCertifiedVitestRuntime(version = installedVitestVersion()): void {
+  if (version !== CERTIFIED_VITEST_VERSION) {
+    throw new Error(
+      `unsupported Vitest runtime ${version}; Termwright is exact-certified for ${CERTIFIED_VITEST_VERSION}`,
+    );
+  }
+}
+
+function installedVitestVersion(): string {
+  const manifest = createRequire(import.meta.url)('vitest/package.json') as {
+    readonly version?: unknown;
+  };
+  if (typeof manifest.version !== 'string' || manifest.version === '') {
+    throw new Error('the installed Vitest package has no valid version');
+  }
+  return manifest.version;
+}
 
 export interface EngineCollection {
   readonly result: TestRunResult;
@@ -86,7 +153,8 @@ export async function createCertifiedVitestEngine(options: CertifiedVitestEngine
   const parsed = parseCLI(['vitest', 'run', ...(options.vitestArgs ?? [])], {
     allowUnknownOptions: true,
   });
-  const runner = createRequire(import.meta.url).resolve('@termwright/test/runner');
+  const testEntry = fileURLToPath(import.meta.resolve('@termwright/test'));
+  const runner = resolve(dirname(testEntry), 'runner.js');
   const bootstrapIds = new RunIdFactory();
   const bootstrapContext: TermwrightRunnerContext = {
     invocationId: bootstrapIds.create('invocation'),
