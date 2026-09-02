@@ -1474,6 +1474,7 @@ function aggregateTraceResources(attempts: ReadonlyMap<AttemptId, ObservedAttemp
   readonly semanticFullCount: number;
   readonly semanticDeltaCount: number;
   readonly traceBytes: number;
+  readonly tempDiskPeakBytes: number;
   readonly finalArtifactBytes: number;
 } {
   let sessionCount = 0;
@@ -1494,6 +1495,7 @@ function aggregateTraceResources(attempts: ReadonlyMap<AttemptId, ObservedAttemp
     semanticFullCount: sum('semanticFullCount'),
     semanticDeltaCount: sum('semanticDeltaCount'),
     traceBytes: sum('traceBytes'),
+    tempDiskPeakBytes: sum('tempDiskPeakBytes'),
     finalArtifactBytes: sum('finalArtifactBytes'),
   });
 }
@@ -1775,6 +1777,7 @@ interface TraceResourceEvidence {
   readonly semanticFullCount: number;
   readonly semanticDeltaCount: number;
   readonly traceBytes: number;
+  readonly tempDiskPeakBytes: number;
   readonly finalArtifactBytes: number;
 }
 
@@ -1881,6 +1884,7 @@ function traceResourcePayload(payload: unknown): TraceResourceEvidence {
     'semanticFullCount',
     'semanticDeltaCount',
     'traceBytes',
+    'tempDiskPeakBytes',
     'finalArtifactBytes',
   ] as const;
   if (

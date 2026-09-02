@@ -137,6 +137,8 @@ export interface TraceResourceUsage {
   readonly semanticDeltaCount: number;
   /** Canonical trace-member bytes generated before optional disposal. */
   readonly traceBytes: number;
+  /** Exact high-water bytes held in this writer's private staging directory. */
+  readonly tempDiskPeakBytes: number;
   /** Durable archive bytes; zero when a private retain-on-failure spool was deleted. */
   readonly finalArtifactBytes: number;
 }
@@ -694,7 +696,12 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       finalizePromise = spool
         .commit({ [TRACE_FILES.meta]: `${JSON.stringify(meta, null, 2)}\n` })
         .then((committed) => {
-          const resources = resourceUsage(committed.bytes, committed.bytes, committed.fileBytes);
+          const resources = resourceUsage(
+            committed.bytes,
+            committed.tempDiskPeakBytes,
+            committed.bytes,
+            committed.fileBytes,
+          );
           const archive = {
             dir: committed.dir,
             meta,
@@ -715,12 +722,13 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       sealed = true;
       detach();
       const usage = await spool.abort();
-      return resourceUsage(usage.bytes, 0, usage.fileBytes);
+      return resourceUsage(usage.bytes, usage.tempDiskPeakBytes, 0, usage.fileBytes);
     },
   };
 
   function resourceUsage(
     traceBytes: number,
+    tempDiskPeakBytes: number,
     finalArtifactBytes: number,
     fileBytes: Readonly<Record<string, number>>,
   ): TraceResourceUsage {
@@ -730,6 +738,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       semanticFullCount,
       semanticDeltaCount,
       traceBytes,
+      tempDiskPeakBytes,
       finalArtifactBytes,
     });
   }

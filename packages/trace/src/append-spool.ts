@@ -20,6 +20,8 @@ export interface AppendSpoolOptions {
 export interface AppendSpoolUsage {
   /** Bytes in canonical trace members, excluding the private incomplete marker. */
   readonly bytes: number;
+  /** Exact high-water bytes held by this writer's private staging trace. */
+  readonly tempDiskPeakBytes: number;
   readonly fileBytes: Readonly<Record<string, number>>;
 }
 
@@ -48,6 +50,8 @@ export class AppendSpool {
   #draining: Promise<void> | null = null;
   #failure: unknown;
   #staging: string | undefined;
+  #incompleteBytes = 0;
+  #tempDiskPeakBytes = 0;
   #sealed = false;
 
   constructor(options: AppendSpoolOptions) {
@@ -101,12 +105,14 @@ export class AppendSpool {
     await unlink(join(staging, TRACE_INCOMPLETE_FILE)).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     });
+    this.#incompleteBytes = 0;
     const checksums = Object.fromEntries(
       [...this.#hashes.entries()].map(([name, hash]) => [name, hash.copy().digest('hex')]),
     );
     const commitBody = `${JSON.stringify({ v: 4, checksums })}\n`;
     await durableWrite(join(staging, TRACE_FILES.commit), commitBody, true);
     this.#writtenBytes.set(TRACE_FILES.commit, Buffer.byteLength(commitBody, 'utf8'));
+    this.#recordDiskHighWater();
     await fsyncDirectory(staging);
     await rename(staging, this.#target);
     this.#staging = undefined;
@@ -162,6 +168,7 @@ export class AppendSpool {
             name,
             (this.#writtenBytes.get(name) ?? 0) + Buffer.byteLength(body, 'utf8'),
           );
+          this.#recordDiskHighWater();
         }
       } catch (error) {
         this.#failure = error;
@@ -179,10 +186,10 @@ export class AppendSpool {
     const parent = dirname(this.#target);
     await mkdir(parent, { recursive: true });
     this.#staging = await mkdtemp(join(parent, `.${basename(this.#target)}.staging-`));
-    await durableWrite(
-      join(this.#staging, TRACE_INCOMPLETE_FILE),
-      `${JSON.stringify({ v: 4, target: this.#target })}\n`,
-    );
+    const incompleteBody = `${JSON.stringify({ v: 4, target: this.#target })}\n`;
+    await durableWrite(join(this.#staging, TRACE_INCOMPLETE_FILE), incompleteBody);
+    this.#incompleteBytes = Buffer.byteLength(incompleteBody, 'utf8');
+    this.#recordDiskHighWater();
     for (const [name, body] of Object.entries(initial)) {
       const handle = await open(join(this.#staging, name), 'wx');
       this.#handles.set(name, handle);
@@ -193,6 +200,7 @@ export class AppendSpool {
         hash.update(body);
         await handle.write(body, null, 'utf8');
         this.#writtenBytes.set(name, Buffer.byteLength(body, 'utf8'));
+        this.#recordDiskHighWater();
       }
     }
   }
@@ -205,14 +213,23 @@ export class AppendSpool {
     await durableWrite(join(staging, name), body, true);
     this.#hashes.set(name, createHash('sha256').update(body));
     this.#writtenBytes.set(name, Buffer.byteLength(body, 'utf8'));
+    this.#recordDiskHighWater();
   }
 
   #usage(): AppendSpoolUsage {
     const fileBytes = Object.freeze(Object.fromEntries(this.#writtenBytes));
     return Object.freeze({
       bytes: Object.values(fileBytes).reduce((total, value) => total + value, 0),
+      tempDiskPeakBytes: this.#tempDiskPeakBytes,
       fileBytes,
     });
+  }
+
+  #recordDiskHighWater(): void {
+    const bytes =
+      this.#incompleteBytes +
+      [...this.#writtenBytes.values()].reduce((total, value) => total + value, 0);
+    this.#tempDiskPeakBytes = Math.max(this.#tempDiskPeakBytes, bytes);
   }
 
   #requireStaging(): string {

@@ -80,6 +80,7 @@ class FakeEngine implements TermwrightVitestEngine {
         readonly semanticFullCount: number;
         readonly semanticDeltaCount: number;
         readonly traceBytes: number;
+        readonly tempDiskPeakBytes: number;
         readonly finalArtifactBytes: number;
       }
     | undefined;
@@ -942,6 +943,7 @@ describe('TermwrightTestHost', () => {
       semanticFullCount: 1,
       semanticDeltaCount: 7,
       traceBytes: 8_192,
+      tempDiskPeakBytes: 8_256,
       finalArtifactBytes: 0,
     };
     const options = hostOptions({ durable: true });

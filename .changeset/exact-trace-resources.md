@@ -6,4 +6,4 @@
 '@termwright/ui': minor
 ---
 
-Publish exact streaming trace resource counters through authoritative run events and require run manifest v7 to reconstruct their aggregates independently.
+Publish exact streaming trace resource counters, including each writer's private staging-disk high-water, through authoritative run events and require run manifest v7 to reconstruct their aggregates independently.

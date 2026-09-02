@@ -58,11 +58,14 @@ try {
   const rssSteadySlope = Math.max(...rss.slice(4)) - Math.min(...rss.slice(4));
   const heapSlope = Math.max(...heap) - Math.min(...heap);
   const finalizePeak = Math.max(beforeFinalize, afterFinalize) - beforeFinalize;
+  const peakSampledRss = Math.max(...rss, beforeFinalize, afterFinalize);
+  const tempDiskOverFinal = Math.max(0, archive.resources.tempDiskPeakBytes - traceBytes);
   const result = {
     status:
       rssSteadySlope <= 24 * 1024 * 1024 &&
       heapSlope <= 8 * 1024 * 1024 &&
-      finalizePeak <= 16 * 1024 * 1024
+      finalizePeak <= 16 * 1024 * 1024 &&
+      tempDiskOverFinal <= 4 * 1024
         ? 'PASS'
         : 'FAIL',
     events: sequence,
@@ -70,9 +73,12 @@ try {
     traceBytes,
     rssByPhase: rss,
     heapUsedByPhase: heap,
+    peakSampledRssBytes: peakSampledRss,
     rssSteadySlopeBytes: rssSteadySlope,
     heapSlopeBytes: heapSlope,
     finalizeGrowthBytes: finalizePeak,
+    tempDiskPeakBytes: archive.resources.tempDiskPeakBytes,
+    tempDiskOverFinalBytes: tempDiskOverFinal,
     durationMs: archive.durationMs,
   };
   console.log(JSON.stringify(result, null, 2));

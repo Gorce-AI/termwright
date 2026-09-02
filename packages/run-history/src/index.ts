@@ -969,6 +969,7 @@ interface TraceResourceEvidence {
   readonly semanticFullCount: number;
   readonly semanticDeltaCount: number;
   readonly traceBytes: number;
+  readonly tempDiskPeakBytes: number;
   readonly finalArtifactBytes: number;
 }
 
@@ -980,6 +981,7 @@ function traceResourceEvidence(payload: unknown): TraceResourceEvidence {
     'semanticFullCount',
     'semanticDeltaCount',
     'traceBytes',
+    'tempDiskPeakBytes',
     'finalArtifactBytes',
   ] as const;
   if (
@@ -1010,6 +1012,7 @@ function aggregateTraceEvidence(
     semanticFullCount: sum('semanticFullCount'),
     semanticDeltaCount: sum('semanticDeltaCount'),
     traceBytes: sum('traceBytes'),
+    tempDiskPeakBytes: sum('tempDiskPeakBytes'),
     finalArtifactBytes: sum('finalArtifactBytes'),
   });
 }

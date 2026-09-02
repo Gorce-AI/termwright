@@ -328,6 +328,7 @@ describe('createTraceWriter', () => {
       semanticFullCount: 1,
       semanticDeltaCount: 0,
       traceBytes: persistedBytes,
+      tempDiskPeakBytes: persistedBytes,
       finalArtifactBytes: persistedBytes,
     });
 
@@ -643,8 +644,10 @@ describe('createTraceWriter', () => {
     expect(resources).toMatchObject({
       terminalOutputBytes: 6,
       traceBytes: expect.any(Number),
+      tempDiskPeakBytes: expect.any(Number),
       finalArtifactBytes: 0,
     });
     expect(resources.traceBytes).toBeGreaterThan(0);
+    expect(resources.tempDiskPeakBytes).toBeGreaterThanOrEqual(resources.traceBytes);
   });
 });

@@ -117,14 +117,16 @@ Decision record: [incremental-semantic-protocol.md](incremental-semantic-protoco
    Canary tests cover input, paste, semantics, split and ANSI-interleaved output,
    OSC, Unicode, logs, crashes, diagnostics, and screenshot source removal.
 9. **Performance evidence:** 20,000 events / 81.92 MB output produced an
-   82,909,700-byte trace with a 1,753,088-byte steady-phase RSS range and only
-   49,152 bytes RSS growth at finalization.
+   82,909,700-byte trace and exact 82,909,700-byte writer staging high-water,
+   with a 1,294,336-byte steady-phase RSS range, a 212,746,240-byte sampled
+   process peak, and only 49,152 bytes RSS growth at finalization.
 10. **OS/runtime evidence:** local macOS arm64 Node 24 evidence passes; nightly
     Linux/macOS Node 22/24 and release-matrix executions remain external.
 11. **Remaining limitations:** portable ZIP reading is still capped but
-    materializing; direct trace-only RSS and host-wide temporary-disk peak are
-    not yet authoritative telemetry; raster-level secret scanning awaits the
-    external clean-room matrix.
+    materializing; trace-only RSS and concurrent host-wide temporary-disk peak
+    are not yet authoritative telemetry even though each writer now reports its
+    exact staging high-water; raster-level secret scanning awaits the external
+    clean-room matrix.
 
 Decision records: [trace-v4-streaming.md](trace-v4-streaming.md) and
 [artifact-security-2.md](artifact-security-2.md).
@@ -222,9 +224,10 @@ and Go tag are deliberately versioned together by the SHA-bound Version PR and
 
 The current local release-candidate evidence is:
 
-- the complete Native Host run passed 3,472 tests with 73 exact declared
-  platform/capability skips, no failures, and retries disabled;
-- the added semantic/grapheme boundary suites passed another 51 focused tests;
+- the complete Native Host run passed 3,543 tests across 320 files with 53 exact
+  declared platform/capability skips, no failures, and retries disabled; this
+  includes the 51 added semantic/grapheme boundary tests and the enabled
+  Textual conformance suite;
 - deterministic-core coverage passed at 89.45% statements, 85.53% branches,
   92.16% functions, and 91.02% lines;
 - all seven public example families passed 22/22 with the CI-equivalent Textual
