@@ -42,6 +42,12 @@ samples per subject in balanced R,C,C,R order, verifies an identical harness,
 and retains raw provenance. Wall time is intentionally not tightened from these
 local results.
 
+The nightly reliability workflow now runs the 20,000-event/81.92 MB trace
+streaming certification independently on Linux and macOS under Node 22 and 24,
+with GC exposed and its JSON evidence retained. This is a deterministic
+resource workload, not an elapsed-time sleep. Those rows remain external
+certification pending until the workflow executes.
+
 External work remains: execute the paired gate on its pinned macOS runner,
 collect the Node 22/24 and OS certification matrix, and add direct counters for
 trace RSS, process-tree RSS, and temp/artifact bytes before those rows can

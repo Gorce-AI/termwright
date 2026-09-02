@@ -823,6 +823,16 @@ describe('autonomous workflow security', () => {
     expect(reliability.match(/node scripts\/resolve-reliability-cycles\.mjs/gu)).toHaveLength(2);
   });
 
+  it('certifies bounded trace streaming on the Node 22/24 POSIX matrix', async () => {
+    const reliability = await readWorkflow('reliability.yml');
+    const trace = jobBlock(reliability, 'trace-streaming');
+    expect(trace).toContain('os: [ubuntu-latest, macos-latest]');
+    expect(trace).toContain("node: ['22', '24']");
+    expect(trace).toContain('node --expose-gc scripts/certify-trace-streaming.mjs');
+    expect(trace).toContain('if-no-files-found: error');
+    expect(trace).toContain('trace-streaming-${{ matrix.os }}-node-${{ matrix.node }}');
+  });
+
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
     const website = jobBlock(workflow, 'website');
