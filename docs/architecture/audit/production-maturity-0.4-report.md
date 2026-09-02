@@ -4,6 +4,9 @@ Status: **IMPLEMENTED — EXTERNAL CERTIFICATION PENDING**
 
 Baseline: `protocol/v0.3.1`, resolved at campaign start to
 `4b82096b7951e7ae6494eb37fb06b4e4ab32a6ba` on `main`.
+The release-candidate branch subsequently integrated `origin/main` at
+`7eff69b0f25cf996689757114a0cf092779080f3`, including the coordinated 0.3.2
+release, before its final package-readiness checks.
 
 This report is the release-candidate summary. Detailed measurements, corpora,
 protocol schemas, and rejection evidence remain in the linked decision records.
@@ -216,6 +219,26 @@ Every user-visible package change has a pending changeset. The npm fixed group,
 Python wheel, Rust crates, generated protocol constants, compatibility registry,
 and Go tag are deliberately versioned together by the SHA-bound Version PR and
 `sync-protocol-version.mjs`; campaign commits do not hand-edit release versions.
+
+The current local release-candidate evidence is:
+
+- the complete Native Host run passed 3,472 tests with 73 exact declared
+  platform/capability skips, no failures, and retries disabled;
+- the added semantic/grapheme boundary suites passed another 51 focused tests;
+- deterministic-core coverage passed at 89.45% statements, 85.53% branches,
+  92.16% functions, and 91.02% lines;
+- all seven public example families passed 22/22 with the CI-equivalent Textual
+  environment and no skips;
+- compatibility passed 20/20; native PTY EOF, Darwin fast-exit, package
+  boundaries, generated docs, API docs, the 319-page website, 20,270 internal
+  links, and generated protocol vectors passed;
+- npm registry readiness passed for all 33 public workspace packages after the
+  branch integrated the published 0.3.2 release;
+- an isolated Version PR dry-run from that merged HEAD consumed every pending
+  changeset and produced 0.4.0 for all 33 public npm packages, the Python wheel,
+  and all three Rust crates. Protocol lockstep passed at 0.4.0; Go correctly
+  requires the coordinated `clients/go/v0.4.0` tag because it has no versioned
+  manifest.
 
 Before a release may become `PASS`, the trusted release workflow must consume
 those changesets into 0.4.0, execute the full no-retry matrix, install only the

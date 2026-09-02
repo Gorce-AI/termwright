@@ -39,7 +39,7 @@ reliable dirty-node knowledge.
 
 ## Evidence
 
-- Native Host suite: 3,424 passed, 82 declared platform/capability skips, zero
+- Native Host suite: 3,472 passed, 73 declared platform/capability skips, zero
   failures, retries disabled.
 - Protocol/driver focused suite: 432 passed.
 - Go: `go test -race -count=1 ./...` passed.
