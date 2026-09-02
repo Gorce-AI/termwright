@@ -883,6 +883,19 @@ describe('autonomous workflow security', () => {
     expect(examples).toContain('node scripts/check-installed-go.mjs "$install_dir" "$client_dir"');
   });
 
+  it('runs Ratatui from crate packages and npm tarballs', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const examples = jobBlock(workflow, 'examples');
+    expect(examples).toContain(
+      'cargo package --locked --no-verify --manifest-path clients/rust/Cargo.toml',
+    );
+    expect(examples).toContain(
+      'cargo package --locked --no-verify --manifest-path clients/rust-probe/Cargo.toml',
+    );
+    expect(examples).toContain('tar -xzf "$protocol_crate"');
+    expect(examples).toContain('node scripts/check-installed-ratatui.mjs');
+  });
+
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
     const website = jobBlock(workflow, 'website');

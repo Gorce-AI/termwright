@@ -55,6 +55,18 @@ and a 14,602-byte trace. The Linux CI examples lane repeats this from `git
 archive`; remote execution remains pending. Default module-proxy resolution is
 not claimed until the matching 0.4 Go tag exists.
 
+The Rust canary builds `.crate` packages for `termwright-protocol` and
+`termwright-probe-ratatui`, extracts them outside the repository, and builds a
+standalone launcher against those package contents. That launcher instruments
+a fresh Ratatui 0.30.2 application which imports no Termwright crate. Both the
+launcher and application explicitly patch the not-yet-published protocol to
+the extracted `.crate`; Cargo config discovery is rooted at the application,
+not inferred from `--manifest-path`. Local evidence on 2026-09-02 (macOS
+arm64, Node 24.1.0, rustc 1.98.0) passed Unicode, list-item selection before and
+after ArrowDown, and clean exit with one full snapshot, one delta and a
+16,149-byte trace. The Linux CI examples lane repeats the crate-only build;
+remote execution remains pending.
+
 The existing Linux/macOS build matrix and Windows native-driver matrix now run
 the canary on Node 22 and Node 24 after their native addon is available. Those
 remote rows remain pending until the changed workflow executes. The trusted
@@ -76,5 +88,6 @@ retries. A local macOS arm64 Node 24.1.0 2-second/8-second execution passed with
 39,009-byte replay screenshot. The actual multi-minute and cross-platform rows
 are external certification pending.
 
-Rust still needs an equivalent framework-specific clean-room consumer;
-existing workspace examples do not count as substitutes.
+All currently certified framework families now have clean-room consumers.
+Their cross-platform workflow executions and default registry resolution after
+the 0.4 tags are still required release evidence.

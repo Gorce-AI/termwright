@@ -1604,6 +1604,28 @@ jobs:
           npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
           node scripts/check-installed-go.mjs "$install_dir" "$client_dir"
 
+      - name: Certify Ratatui from crate and npm packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-ratatui-packs"
+          install_dir="$RUNNER_TEMP/termwright-ratatui-install"
+          crate_dir="$RUNNER_TEMP/termwright-ratatui-crates"
+          mkdir -p "$pack_dir" "$install_dir" "$crate_dir/protocol" "$crate_dir/probe"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          cargo package --locked --no-verify --manifest-path clients/rust/Cargo.toml \
+            --target-dir "$crate_dir/package-protocol"
+          cargo package --locked --no-verify --manifest-path clients/rust-probe/Cargo.toml \
+            --target-dir "$crate_dir/package-probe"
+          protocol_crate=$(find "$crate_dir/package-protocol/package" -name '*.crate' -print -quit)
+          probe_crate=$(find "$crate_dir/package-probe/package" -name '*.crate' -print -quit)
+          test -n "$protocol_crate" && test -n "$probe_crate"
+          tar -xzf "$protocol_crate" -C "$crate_dir/protocol" --strip-components=1
+          tar -xzf "$probe_crate" -C "$crate_dir/probe" --strip-components=1
+          node scripts/check-installed-ratatui.mjs \
+            "$install_dir" "$crate_dir/protocol" "$crate_dir/probe"
+
       - name: Upload failure reports
         if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
