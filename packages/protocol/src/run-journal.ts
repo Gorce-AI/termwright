@@ -368,7 +368,6 @@ export class RunEventJournal {
       eventClass: 'diagnostic',
       type: 'journal.diagnostic-gap',
       identity: this.#gapIdentity,
-      causedBy: [gap.lastEventId],
       payload: Object.freeze({
         dropped: gap.count,
         firstEventId: gap.firstEventId,

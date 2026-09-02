@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RunEventJournal } from './run-journal.js';
 import {
   RunEventProducer,
+  RunEventStreamValidator,
   createRunEvent,
   createRunId,
   type RunEvent,
@@ -100,7 +101,7 @@ describe('RunEventJournal invariants', () => {
     expect(journal.append(state, { stateKey: 'run:status' })).toMatchObject({ ok: true });
   });
 
-  it('bounds diagnostics and emits an explicit causal gap before retained diagnostics', async () => {
+  it('bounds diagnostics and emits a replayable explicit gap before retained diagnostics', async () => {
     const journal = new RunEventJournal({
       invocationId,
       runId,
@@ -127,6 +128,8 @@ describe('RunEventJournal invariants', () => {
       firstEventId: event(0, 'diagnostic').eventId,
     });
     expect(batch.slice(1).map((item) => item.seq)).toEqual([1, 2]);
+    const replayValidator = new RunEventStreamValidator();
+    expect(batch.map((item) => replayValidator.accept(item).ok)).toEqual([true, true, true]);
   });
 
   it('bounds owned bytes and releases them only after a successful flush', async () => {
@@ -202,7 +205,7 @@ describe('RunEventJournal invariants', () => {
     expect(journal.append(event(0, 'authoritative'))).toMatchObject({ ok: true });
     expect(journal.append({ ...event(1, 'authoritative'), seq: 0 })).toMatchObject({
       ok: false,
-      code: 'event-collision',
+      code: 'sequence-regression',
     });
     const newEpoch = { ...event(2, 'authoritative'), epoch: 2 };
     expect(journal.append(newEpoch)).toMatchObject({ ok: true });

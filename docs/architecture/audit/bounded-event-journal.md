@@ -59,11 +59,23 @@ and reject event-stream size/hash tampering. The persisted-reader facade may
 materialize events when a UI explicitly opens a completed run; that read-time
 cost is not retained in the running test host.
 
-One remaining protocol-level limitation is explicit: `RunEventStreamValidator`
-retains collision/causal-DAG identity sets for the duration of a run. Therefore
-the queue, transport, spool, and host projections are bounded, but a proof that
-_all_ journal validation memory is independent of total event count still
-requires a bounded causal-reference contract or an on-disk identity index.
+Run-event protocol v3 removes the final duration-proportional validator state.
+`causedBy` may reference only an already observed event inside the newest 65,536
+event IDs; forward references and expired causes fail closed. This makes cycles
+impossible by construction. Producer ordering keeps one record per producer
+with a 4,096-producer ceiling and the stream admits at most 1,000,000 events,
+matching the persisted artifact ceiling. Event-ID collision detection uses a
+fixed 128-Mibit, seven-probe filter. At the event ceiling its modeled
+false-positive probability is below one per billion lookups; a probabilistic
+collision can reject valid input, but can never admit a known collision. Each
+producer keeps only the newest 4,096 exact IDs to fail early on a broken UUID
+source; the canonical merged-stream validator remains authoritative for older
+IDs.
+
+These bounds make journal validation memory a function of configured queues,
+producer capacity, causal horizon, and fixed filters rather than run duration.
+The completed-run reader remains intentionally materializing but is protected
+by the separate 512 MiB / 1,000,000-event artifact cap.
 
 External evidence still required: Node 22/24 and Linux/macOS/Windows constrained
 host runs with measured peak backlog and RPC reduction.
