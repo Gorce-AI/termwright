@@ -13,7 +13,7 @@ editUrl: false
 
 > **ResourceAwareTestApi**\<`T`\> = `T` & `object`
 
-Defined in: resource-broker/dist/vitest.d.ts:17
+Defined in: resource-broker/dist/vitest.d.ts:19
 
 Vitest's Test API with declaration-time atomic resource ownership.
 

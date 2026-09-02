@@ -25,6 +25,16 @@ Exclusively reserves host-wide process/toolchain pressure without requiring a te
 
 ***
 
+### load?
+
+> `readonly` `optional` **load?**: `"exclusive"` \| `"light"` \| `"normal"` \| `"heavy"`
+
+Defined in: resource-broker/dist/vitest.d.ts:16
+
+Coarse host CPU/memory/I/O admission cost; defaults to `normal`.
+
+***
+
 ### nativeHost?
 
 > `readonly` `optional` **nativeHost?**: `"shared"` \| `"exclusive"`
