@@ -143,6 +143,10 @@ export async function runOpenTuiMarkerBenchmark(
           'count',
           'The marker-route benchmark deliberately has no semantic driver.',
         ),
+        deltas: unavailable(
+          'count',
+          'The marker-route benchmark deliberately has no semantic driver.',
+        ),
         droppedEvents: unavailable(
           'count',
           'No semantic producer queue is active in this route-isolation benchmark.',

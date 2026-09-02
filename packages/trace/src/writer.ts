@@ -3,31 +3,30 @@
  * `.twtrace` archive directory.
  */
 
-import { createHash } from 'node:crypto';
-import { open } from 'node:fs/promises';
-import { mkdir, mkdtemp, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
 import {
-  DEFAULT_ARTIFACT_VALUE_POLICY,
+  diffSemanticSnapshots,
   projectActionReceiptForArtifact,
   projectSemanticSnapshotForArtifact,
-  type ArtifactValuePolicy,
+  resolveArtifactSecurityPolicy,
+  type ArtifactSecurityPolicy,
   type EffectiveSessionContract,
   type SemanticSnapshot,
 } from '@termwright/protocol';
 import type { SessionEventRecord, SessionEvents } from '@termwright/driver';
+import { basename } from 'node:path';
 import { formatCastEvent, formatCastHeader, type CastEventCode, type CastHeader } from './cast.js';
 import { TraceError } from './errors.js';
-import { buildCastTimeline, type HiddenWindow } from './timeline.js';
+import { AppendSpool } from './append-spool.js';
+import { TerminalSanitizer } from './terminal-sanitizer.js';
 import {
   TRACE_FILES,
-  TRACE_INCOMPLETE_FILE,
   TRACE_VERSION,
   type ActionEvent,
   type AssertEvent,
-  type SemanticRecord,
+  type StoredSemanticRecord,
+  type StoredTraceEvent,
+  type StoredTraceLogEntry,
   type StepStatus,
-  type TraceEvent,
   type TraceCrash,
   type TraceLogEntry,
   type TraceLogSource,
@@ -47,6 +46,7 @@ import {
 export interface TraceSource {
   readonly sessionId: string;
   readonly events: SessionEvents;
+  readonly artifactSecurity?: ArtifactSecurityPolicy;
   /** Called on every `semantic-revision` to capture the tree, when available. */
   semanticTree?(): SemanticSnapshot | null;
   readonly terminalProfile?: string;
@@ -78,33 +78,33 @@ export interface TraceWriterOptions {
   /**
    * Record PTY input as asciicast `i` events too. Off by default: inputs are
    * represented in `events.jsonl`, and players ignore them. Exact bytes are
-   * only available when `artifactValuePolicy` is explicitly `raw`.
+   * only available when `artifactSecurity.mode` is explicitly `raw`.
    */
   readonly recordInput?: boolean;
-  /** Semantic value policy. Defaults to `redacted`; `raw` is explicit opt-in. */
-  readonly artifactValuePolicy?: ArtifactValuePolicy;
+  /** One policy for every trace persistence channel. Defaults to redacted. */
+  readonly artifactSecurity?: ArtifactSecurityPolicy;
   /**
    * Byte ceiling for buffered output. On overflow the writer stops recording
    * output and sets `meta.truncated`. Default 32 MiB.
    */
   readonly maxOutputBytes?: number;
   /**
-   * Application log entries to retain. On overflow the **oldest** are evicted
-   * and counted in `meta.logs.dropped`: when a program floods its log, the end
-   * is the part worth keeping. Default 10 000.
+   * Application log entries admitted to the append-only stream. Later entries
+   * are refused and counted in `meta.logs.dropped`. Default 10 000.
    */
   readonly maxLogEntries?: number;
+  /** Idle gaps are projected lazily by readers; configure the policy up front. */
+  readonly idleTimeLimit?: number;
+  /** Maximum records waiting for the sequential append loop. Default 8 192. */
+  readonly maxPendingRecords?: number;
+  /** Maximum UTF-8 bytes waiting for the append loop. Default 8 MiB. */
+  readonly maxPendingBytes?: number;
   /** Injectable monotonic clock (milliseconds). Default `performance.now`. */
   readonly now?: () => number;
 }
 
 /** Options for {@link TraceWriter.finalize}. */
 export interface FinalizeOptions {
-  /**
-   * Trim idle gaps longer than this many **seconds**, asciinema-style. Omitted
-   * or `<= 0` keeps the recording untrimmed.
-   */
-  readonly idleTimeLimit?: number;
   /** Recorded process exit, when the caller knows it and no `exit` event fired. */
   readonly exit?: TraceExit;
 }
@@ -124,6 +124,23 @@ export interface TraceArchive {
   readonly meta: TraceMeta;
   /** Cast duration in milliseconds after hide/trim transforms. */
   readonly durationMs: number;
+  readonly resources: TraceResourceUsage;
+}
+
+/** Exact counters owned by one streaming trace writer. */
+export interface TraceResourceUsage {
+  /** Raw PTY output bytes observed, including hidden or artifact-truncated output. */
+  readonly terminalOutputBytes: number;
+  /** Exact UTF-8 bytes written to the semantic trace member. */
+  readonly semanticBytes: number;
+  readonly semanticFullCount: number;
+  readonly semanticDeltaCount: number;
+  /** Canonical trace-member bytes generated before optional disposal. */
+  readonly traceBytes: number;
+  /** Exact high-water bytes held in this writer's private staging directory. */
+  readonly tempDiskPeakBytes: number;
+  /** Durable archive bytes; zero when a private retain-on-failure spool was deleted. */
+  readonly finalArtifactBytes: number;
 }
 
 /** Records a live session into a `.twtrace` archive. */
@@ -158,39 +175,20 @@ export interface TraceWriter {
   recordAssert(assertion: Omit<AssertEvent, 't' | 'kind' | 'castOffset'>): void;
   /** Detaches from the session and writes the archive. Callable once. */
   finalize(options?: FinalizeOptions): Promise<TraceArchive>;
-  /** Detaches from the session without writing anything. */
-  dispose(): void;
-}
-
-/**
- * An event as the writer holds it, before the timeline exists.
- *
- * `castOffset` is required on disk but unknowable until `finalize()` applies
- * the hide and trim transforms, so the buffered form omits it and
- * `writeArchive` is the one place that can complete an event. Distributive, so
- * each member of the union keeps its own shape.
- */
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-
-type PendingTraceEvent = DistributiveOmit<TraceEvent, 'castOffset'>;
-
-interface PendingCastEvent {
-  wall: number;
-  seq: number;
-  code: CastEventCode;
-  data: string;
+  /** Detaches and securely removes the private staging trace. */
+  dispose(): Promise<TraceResourceUsage>;
 }
 
 const DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_LOG_ENTRIES = 10_000;
-const COALESCE_LIMIT_BYTES = 64 * 1024;
+const DEFAULT_MAX_PENDING_RECORDS = 8_192;
+const DEFAULT_MAX_PENDING_BYTES = 8 * 1024 * 1024;
 
 /**
  * Attaches a recorder to a live session.
  *
- * Recording starts immediately; nothing is written to disk until
- * {@link TraceWriter.finalize}, which is when hide windows and idle trimming
- * are applied and every artefact gets its `castOffset`.
+ * Recording starts immediately into a private staging directory. Finalization
+ * only drains the bounded append queue and publishes the commit marker.
  *
  * @example
  * ```ts
@@ -198,7 +196,7 @@ const COALESCE_LIMIT_BYTES = 64 * 1024;
  * const step = writer.addStep('log in');
  * await harness.getByRole('button', { name: 'Submit' }).click();
  * step.end('passed');
- * await writer.finalize({ idleTimeLimit: 2 });
+ * await writer.finalize();
  * ```
  */
 export function createTraceWriter(session: TraceSource, options: TraceWriterOptions): TraceWriter {
@@ -208,16 +206,19 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
   const now = options.now ?? (() => performance.now());
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   const maxLogEntries = options.maxLogEntries ?? DEFAULT_MAX_LOG_ENTRIES;
-  const artifactValuePolicy = options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+  const idleLimitMs =
+    options.idleTimeLimit !== undefined && options.idleTimeLimit > 0
+      ? options.idleTimeLimit * 1000
+      : Number.POSITIVE_INFINITY;
+  const artifactSecurity = resolveArtifactSecurityPolicy(
+    options.artifactSecurity ?? session.artifactSecurity,
+  );
+  const sanitizer = new TerminalSanitizer(artifactSecurity);
+  registerSemanticSecrets(session.semanticTree?.() ?? null);
   const startClock = now();
   const wallStartedAt = Date.now();
   const startedAt = new Date(wallStartedAt).toISOString();
 
-  const castEvents: PendingCastEvent[] = [];
-  const traceEvents: PendingTraceEvent[] = [];
-  const semantics: { t: number; revision: number; snapshot: SemanticSnapshot }[] = [];
-  const hiddenWindows: HiddenWindow[] = [];
-  const logs: TraceLogEntry[] = [];
   const logSources = new Map<string, TraceLogSource>();
   const logLevels = new Map<NonNullable<TraceLogEntry['level']>, number>();
   const openSteps: string[] = [];
@@ -225,22 +226,42 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
   const decoder = new TextDecoder('utf-8');
   const unsubscribers: (() => void)[] = [];
 
-  let seq = 0;
   let stepCounter = 0;
-  let outputBytes = 0;
+  let terminalOutputBytes = 0;
+  let retainedOutputBytes = 0;
   let truncated = false;
   let hideStart: number | null = null;
   let sealed = false;
-  let preparedArchive: WriteArchiveInput | undefined;
   let finalizePromise: Promise<TraceArchive> | undefined;
   let finalizedArchive: TraceArchive | undefined;
   let disposed = false;
   let exit: TraceExit | undefined;
   let crash: TraceCrash | undefined;
+  let logCount = 0;
   let droppedLogs = 0;
   let columns = options.columns ?? 100;
   let rows = options.rows ?? 30;
   let lastResize: { columns: number; rows: number } | null = null;
+  let lastSemantic: SemanticSnapshot | undefined;
+  let lastCastWall = 0;
+  let lastCastHidden = 0;
+  let hiddenTotal = 0;
+  let durationMs = 0;
+  let semanticFullCount = 0;
+  let semanticDeltaCount = 0;
+
+  const spool = new AppendSpool({
+    target: options.dir,
+    maxPendingRecords: options.maxPendingRecords ?? DEFAULT_MAX_PENDING_RECORDS,
+    maxPendingBytes: options.maxPendingBytes ?? DEFAULT_MAX_PENDING_BYTES,
+    initial: {
+      [TRACE_FILES.cast]: `${formatCastHeader(buildHeader())}\n`,
+      [TRACE_FILES.events]: '',
+      [TRACE_FILES.semantics]: '',
+      [TRACE_FILES.logs]: '',
+      [TRACE_FILES.timeline]: '',
+    },
+  });
 
   /** Driver timestamps use an unknown epoch; anchor on the first one we see. */
   let driverBase: { driver: number; local: number } | null = null;
@@ -256,23 +277,46 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     return Math.max(0, driverBase.local + (timeMs - driverBase.driver));
   }
 
+  function hiddenAt(wall: number): number {
+    return hiddenTotal + (hideStart === null ? 0 : Math.max(0, wall - hideStart));
+  }
+
+  function presentationAt(wall: number): number {
+    const clamped = Math.max(lastCastWall, wall);
+    const visibleDelta = Math.max(0, clamped - lastCastWall - (hiddenAt(clamped) - lastCastHidden));
+    return durationMs + Math.min(visibleDelta, idleLimitMs);
+  }
+
   function pushCast(wall: number, code: CastEventCode, data: string): void {
-    castEvents.push({ wall, seq: seq++, code, data });
+    const clamped = Math.max(lastCastWall, wall);
+    const hidden = hiddenAt(clamped);
+    const visibleDelta = Math.max(0, clamped - lastCastWall - (hidden - lastCastHidden));
+    durationMs += Math.min(visibleDelta, idleLimitMs);
+    spool.enqueue(
+      TRACE_FILES.cast,
+      `${formatCastEvent(Math.min(visibleDelta, idleLimitMs) / 1000, code, data)}\n`,
+    );
+    spool.enqueue(TRACE_FILES.timeline, `${JSON.stringify({ kind: 'cast-anchor', t: clamped })}\n`);
+    lastCastWall = clamped;
+    lastCastHidden = hidden;
   }
 
   function pushOutput(wall: number, text: string): void {
     if (text === '') return;
-    const previous = castEvents[castEvents.length - 1];
-    if (
-      previous !== undefined &&
-      previous.code === 'o' &&
-      previous.wall === wall &&
-      previous.data.length + text.length <= COALESCE_LIMIT_BYTES
-    ) {
-      previous.data += text;
-      return;
-    }
     pushCast(wall, 'o', text);
+  }
+
+  function pushEvent(event: StoredTraceEvent): void {
+    spool.enqueue(TRACE_FILES.events, `${JSON.stringify(sanitizeJson(event, sanitizer))}\n`);
+  }
+
+  function registerSemanticSecrets(snapshot: SemanticSnapshot | null): void {
+    if (snapshot === null || artifactSecurity.mode !== 'redacted') return;
+    for (const node of snapshot.nodes) {
+      if (node.value?.status === 'known' && node.value.sensitivity === 'sensitive') {
+        sanitizer.register(node.value.value);
+      }
+    }
   }
 
   function inHiddenWindow(wall: number): boolean {
@@ -286,10 +330,11 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         const wall = driverTime(timeMs);
         // Decode unconditionally so the streaming decoder keeps its state even
         // across hidden windows; discard the text when hidden.
-        const text = decoder.decode(data, { stream: true });
+        const text = sanitizer.push(decoder.decode(data, { stream: true }));
+        terminalOutputBytes += data.byteLength;
         if (truncated || inHiddenWindow(wall)) return;
-        outputBytes += data.byteLength;
-        if (outputBytes > maxOutputBytes) {
+        retainedOutputBytes += data.byteLength;
+        if (retainedOutputBytes > maxOutputBytes) {
           truncated = true;
           return;
         }
@@ -299,8 +344,12 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       case 'input': {
         const { data, timeMs, kind } = recorded.payload;
         const wall = driverTime(timeMs);
-        traceEvents.push(
-          artifactValuePolicy === 'raw'
+        if (artifactSecurity.mode === 'redacted' && kind !== 'mouse') {
+          const candidate = new TextDecoder('utf-8', { fatal: false }).decode(data);
+          if (candidate !== '') sanitizer.register(candidate);
+        }
+        pushEvent(
+          artifactSecurity.mode === 'raw'
             ? {
                 t: wall,
                 kind: 'input',
@@ -318,7 +367,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         );
         if (
           options.recordInput === true &&
-          artifactValuePolicy === 'raw' &&
+          artifactSecurity.mode === 'raw' &&
           !inHiddenWindow(wall)
         ) {
           pushCast(wall, 'i', new TextDecoder('utf-8').decode(data));
@@ -331,7 +380,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         columns = event.columns;
         rows = event.rows;
         lastResize = { columns: event.columns, rows: event.rows };
-        traceEvents.push({
+        pushEvent({
           t: wall,
           kind: 'resize',
           columns: event.columns,
@@ -348,11 +397,37 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
             `semantic event revision ${revision} carried snapshot revision ${snapshot.revision}`,
           );
         }
-        semantics.push({
-          t: driverTime(timeMs),
+        registerSemanticSecrets(snapshot);
+        const t = driverTime(timeMs);
+        const projected = sanitizeJson(
+          projectSemanticSnapshotForArtifact(snapshot, artifactSecurity.mode),
+          sanitizer,
+        );
+        const full: StoredSemanticRecord = {
+          kind: 'keyframe',
+          t,
           revision,
-          snapshot: projectSemanticSnapshotForArtifact(snapshot, artifactValuePolicy),
-        });
+          snapshot: projected,
+        };
+        let record: StoredSemanticRecord = full;
+        if (lastSemantic !== undefined) {
+          const delta = diffSemanticSnapshots(lastSemantic, projected);
+          const candidate: StoredSemanticRecord = {
+            kind: 'delta',
+            t,
+            revision,
+            baseRevision: lastSemantic.revision,
+            delta,
+          };
+          // A delta larger than its independent keyframe buys no storage or
+          // replay work. This content-based trigger replaces arbitrary N-frame
+          // keyframe intervals.
+          if (JSON.stringify(candidate).length < JSON.stringify(full).length) record = candidate;
+        }
+        if (record.kind === 'keyframe') semanticFullCount += 1;
+        else semanticDeltaCount += 1;
+        spool.enqueue(TRACE_FILES.semantics, `${JSON.stringify(record)}\n`);
+        lastSemantic = projected;
         break;
       }
       case 'exit': {
@@ -371,16 +446,14 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         const lastSemanticRevision = report.lastSemanticTree?.revision ?? null;
         crash = {
           t: wall,
-          // Rewritten with the real value in writeArchive; the wall clock is the
-          // only timeline that exists before the hide/trim transforms run.
-          castOffset: wall,
+          castOffset: round(presentationAt(wall)),
           exit: { code: report.exit.code, signal: report.exit.signal },
-          screenTail: [...report.screenTail],
+          screenTail: report.screenTail.map((line) => sanitizer.sanitizeComplete(line)),
           lastSemanticRevision,
-          recentInputs: [...report.recentInputs],
-          diagnosticsTail: [...report.diagnosticsTail],
+          recentInputs: sanitizeJson(report.recentInputs, sanitizer),
+          diagnosticsTail: sanitizeJson(report.diagnosticsTail, sanitizer),
         };
-        traceEvents.push({
+        pushEvent({
           t: wall,
           kind: 'crash',
           exit: crash.exit,
@@ -394,7 +467,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         // Emitted after the action finished, so `t` is its completion — see
         // ActionEvent's TSDoc for what that means for the timeline.
         const stepId = openSteps[openSteps.length - 1];
-        traceEvents.push({
+        pushEvent({
           t: driverTime(event.timeMs),
           kind: 'action',
           api: event.api,
@@ -405,7 +478,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
           ...(event.observation === undefined ? {} : { observation: event.observation }),
           ...(event.receipt === undefined
             ? {}
-            : { receipt: projectActionReceiptForArtifact(event.receipt, artifactValuePolicy) }),
+            : { receipt: projectActionReceiptForArtifact(event.receipt, artifactSecurity.mode) }),
           ...(event.actionability === undefined ? {} : { actionability: event.actionability }),
           ...(stepId === undefined ? {} : { stepId }),
         });
@@ -416,17 +489,15 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         const wall = driverTime(event.timeMs);
         const record = event.record;
         const label = event.label ?? record?.logger;
-        const entry: TraceLogEntry = {
+        const entry: StoredTraceLogEntry = {
           t: wall,
-          // Replaced with the real offset in writeArchive.
-          castOffset: wall,
           source: event.source,
           ...(label === undefined ? {} : { label }),
           ...(event.path === undefined ? {} : { path: event.path }),
           ...(record?.logger === undefined ? {} : { logger: record.logger }),
           ...(record?.level === undefined ? {} : { level: record.level }),
-          message: record?.message ?? event.line ?? '',
-          ...(record?.attrs === undefined ? {} : { attrs: record.attrs }),
+          message: sanitizer.sanitizeComplete(record?.message ?? event.line ?? ''),
+          ...(record?.attrs === undefined ? {} : { attrs: sanitizeJson(record.attrs, sanitizer) }),
           ...(record?.seq === undefined ? {} : { seq: record.seq }),
           ...(record?.revision === undefined ? {} : { revision: record.revision }),
           ...(record?.ts === undefined ? {} : { ts: record.ts }),
@@ -445,10 +516,14 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         if (entry.level !== undefined) {
           logLevels.set(entry.level, (logLevels.get(entry.level) ?? 0) + 1);
         }
-        logs.push(entry);
-        if (logs.length > maxLogEntries) {
-          logs.shift();
+        if (logCount >= maxLogEntries) {
           droppedLogs += 1;
+        } else {
+          spool.enqueue(
+            TRACE_FILES.logs,
+            `${JSON.stringify(entry satisfies StoredTraceLogEntry)}\n`,
+          );
+          logCount += 1;
         }
         break;
       }
@@ -482,7 +557,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     const index = openSteps.lastIndexOf(stepId);
     if (index >= 0) openSteps.splice(index, 1);
     const title = stepTitles.get(stepId) ?? stepId;
-    traceEvents.push({
+    pushEvent({
       t: localTime(),
       kind: 'step-end',
       stepId,
@@ -505,7 +580,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       stepTitles.set(stepId, title);
       openSteps.push(stepId);
       const wall = localTime();
-      traceEvents.push({
+      pushEvent({
         t: wall,
         kind: 'step-start',
         stepId,
@@ -539,7 +614,12 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     show(): void {
       assertLive();
       if (hideStart === null) return;
-      hiddenWindows.push({ start: hideStart, end: localTime() });
+      const end = localTime();
+      spool.enqueue(
+        TRACE_FILES.timeline,
+        `${JSON.stringify({ kind: 'hidden-window', start: hideStart, end })}\n`,
+      );
+      hiddenTotal += Math.max(0, end - hideStart);
       hideStart = null;
     },
 
@@ -550,7 +630,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     recordAction(action): void {
       assertLive();
       const stepId = action.stepId ?? openSteps[openSteps.length - 1];
-      traceEvents.push({
+      pushEvent({
         ...action,
         t: localTime(),
         kind: 'action',
@@ -561,7 +641,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     recordAssert(assertion): void {
       assertLive();
       const stepId = assertion.stepId ?? openSteps[openSteps.length - 1];
-      traceEvents.push({
+      pushEvent({
         ...assertion,
         t: localTime(),
         kind: 'assert',
@@ -572,53 +652,62 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     async finalize(finalizeOptions: FinalizeOptions = {}): Promise<TraceArchive> {
       if (finalizedArchive !== undefined) return finalizedArchive;
       if (finalizePromise !== undefined) return finalizePromise;
-      if (preparedArchive === undefined) {
-        sealed = true;
-        const endWall = localTime();
-        if (hideStart !== null) {
-          hiddenWindows.push({ start: hideStart, end: endWall });
-          hideStart = null;
-        }
-        for (const stepId of [...openSteps].reverse()) {
-          closeStep(stepId, 'skipped');
-        }
-        detach();
-        decoder.decode();
-        const recordedExit = exit ?? finalizeOptions.exit;
-        const contract = session.contract?.() ?? null;
-
-        preparedArchive = {
-          dir: options.dir,
-          castEvents,
-          traceEvents,
-          semantics,
-          hiddenWindows,
-          idleTimeLimit: finalizeOptions.idleTimeLimit,
-          header: buildHeader(),
-          crash,
-          logs,
-          logSummary: buildLogSummary(),
-          meta: {
-            v: TRACE_VERSION,
-            sessionId: session.sessionId,
-            ...(options.runIdentity === undefined ? {} : { runIdentity: options.runIdentity }),
-            command: options.command ?? [],
-            columns: options.columns ?? 100,
-            rows: options.rows ?? 30,
-            startedAt,
-            platform: options.platform ?? process.platform,
-            semanticTree: resolveSemanticFlag(),
-            ...(contract === null ? {} : { contract }),
-            ...(resolveTerminalProfile() === undefined
-              ? {}
-              : { terminalProfile: resolveTerminalProfile() as string }),
-            ...(recordedExit === undefined ? {} : { exit: recordedExit }),
-            ...(truncated ? { truncated: true } : {}),
-          },
-        };
+      sealed = true;
+      const endWall = localTime();
+      if (hideStart !== null) {
+        const start = hideStart;
+        spool.enqueue(
+          TRACE_FILES.timeline,
+          `${JSON.stringify({ kind: 'hidden-window', start, end: endWall })}\n`,
+        );
+        hiddenTotal += Math.max(0, endWall - start);
+        hideStart = null;
       }
-      finalizePromise = writeArchive(preparedArchive)
-        .then((archive) => {
+      for (const stepId of [...openSteps].reverse()) closeStep(stepId, 'skipped');
+      detach();
+      const tail = sanitizer.push(decoder.decode()) + sanitizer.finish();
+      if (!truncated && tail !== '') pushOutput(endWall, tail);
+      const recordedExit = exit ?? finalizeOptions.exit;
+      const contract = session.contract?.() ?? null;
+      const logSummary = buildLogSummary();
+      const meta: TraceMeta = {
+        v: TRACE_VERSION,
+        sessionId: session.sessionId,
+        ...(options.runIdentity === undefined ? {} : { runIdentity: options.runIdentity }),
+        command: sanitizeJson(options.command ?? [], sanitizer),
+        columns: options.columns ?? 100,
+        rows: options.rows ?? 30,
+        startedAt,
+        platform: options.platform ?? process.platform,
+        semanticTree: resolveSemanticFlag(),
+        ...(contract === null ? {} : { contract }),
+        ...(resolveTerminalProfile() === undefined
+          ? {}
+          : { terminalProfile: resolveTerminalProfile() as string }),
+        ...(recordedExit === undefined ? {} : { exit: recordedExit }),
+        ...(truncated ? { truncated: true } : {}),
+        ...(options.idleTimeLimit !== undefined && options.idleTimeLimit > 0
+          ? { idleTimeLimit: options.idleTimeLimit }
+          : {}),
+        durationMs: round(durationMs),
+        ...(crash === undefined ? {} : { crash }),
+        ...(logSummary === undefined ? {} : { logs: logSummary }),
+      };
+      finalizePromise = spool
+        .commit({ [TRACE_FILES.meta]: `${JSON.stringify(meta, null, 2)}\n` })
+        .then((committed) => {
+          const resources = resourceUsage(
+            committed.bytes,
+            committed.tempDiskPeakBytes,
+            committed.bytes,
+            committed.fileBytes,
+          );
+          const archive = {
+            dir: committed.dir,
+            meta,
+            durationMs: meta.durationMs ?? 0,
+            resources,
+          };
           finalizedArchive = archive;
           return archive;
         })
@@ -629,10 +718,30 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       return finalizePromise;
     },
 
-    dispose(): void {
+    async dispose(): Promise<TraceResourceUsage> {
+      sealed = true;
       detach();
+      const usage = await spool.abort();
+      return resourceUsage(usage.bytes, usage.tempDiskPeakBytes, 0, usage.fileBytes);
     },
   };
+
+  function resourceUsage(
+    traceBytes: number,
+    tempDiskPeakBytes: number,
+    finalArtifactBytes: number,
+    fileBytes: Readonly<Record<string, number>>,
+  ): TraceResourceUsage {
+    return Object.freeze({
+      terminalOutputBytes,
+      semanticBytes: fileBytes[TRACE_FILES.semantics] ?? 0,
+      semanticFullCount,
+      semanticDeltaCount,
+      traceBytes,
+      tempDiskPeakBytes,
+      finalArtifactBytes,
+    });
+  }
 
   function assertLive(): void {
     if (sealed) {
@@ -644,14 +753,14 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     if (options.semanticTree !== undefined) return options.semanticTree;
     const contract = session.contract?.() ?? null;
     if (contract !== null) return contract.capabilities['semantic-tree'].status === 'supported';
-    return semantics.length > 0;
+    return lastSemantic !== undefined;
   }
 
   /** Counted once, at the end: a flood that ends the session still adds up. */
   function buildLogSummary(): TraceLogSummary | undefined {
-    if (logs.length === 0 && droppedLogs === 0) return undefined;
+    if (logCount === 0 && droppedLogs === 0) return undefined;
     return {
-      count: logs.length,
+      count: logCount,
       dropped: droppedLogs,
       sources: [...logSources.values()],
       levels: Object.fromEntries(logLevels),
@@ -671,32 +780,20 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       version: 3,
       term: { cols: initialColumns, rows: initialRows },
       timestamp: Math.floor(wallStartedAt / 1000),
-      ...(options.command === undefined ? {} : { command: options.command.join(' ') }),
-      ...(options.title === undefined ? {} : { title: options.title }),
-      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.idleTimeLimit !== undefined && options.idleTimeLimit > 0
+        ? { idle_time_limit: options.idleTimeLimit }
+        : {}),
+      ...(options.command === undefined
+        ? {}
+        : { command: sanitizer.sanitizeComplete(options.command.join(' ')) }),
+      ...(options.title === undefined ? {} : { title: sanitizer.sanitizeComplete(options.title) }),
+      ...(options.env === undefined ? {} : { env: sanitizeJson(options.env, sanitizer) }),
     };
   }
 
   return writer;
 }
 
-interface WriteArchiveInput {
-  readonly dir: string;
-  readonly castEvents: readonly PendingCastEvent[];
-  readonly traceEvents: readonly PendingTraceEvent[];
-  readonly semantics: readonly { t: number; revision: number; snapshot: SemanticSnapshot }[];
-  readonly hiddenWindows: readonly HiddenWindow[];
-  readonly idleTimeLimit: number | undefined;
-  readonly header: CastHeader;
-  /** Its `castOffset` is still the wall-clock time; the timeline fixes it up. */
-  readonly crash: TraceCrash | undefined;
-  /** Same: `castOffset` is rewritten once the timeline exists. */
-  readonly logs: readonly TraceLogEntry[];
-  readonly logSummary: TraceLogSummary | undefined;
-  readonly meta: Omit<TraceMeta, 'idleTimeLimit' | 'durationMs' | 'crash' | 'logs'>;
-}
-
-/** Applies the timeline transforms and writes the four archive files. */
 /**
  * The prefix a half-written trace directory carries.
  *
@@ -710,168 +807,15 @@ export function traceStagingPrefix(target: string): string {
   return `.${basename(target)}.staging-`;
 }
 
-async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
-  const ordered = [...input.castEvents].sort((a, b) => a.wall - b.wall || a.seq - b.seq);
-  const idleLimitMs =
-    input.idleTimeLimit !== undefined && input.idleTimeLimit > 0
-      ? input.idleTimeLimit * 1000
-      : undefined;
-
-  const timeline = buildCastTimeline(
-    ordered.map((event) => event.wall),
-    {
-      hidden: input.hiddenWindows,
-      ...(idleLimitMs === undefined ? {} : { idleTimeLimitMs: idleLimitMs }),
-    },
-  );
-  const castTimes = timeline.castTimes();
-
-  const header: CastHeader = {
-    ...input.header,
-    ...(input.idleTimeLimit !== undefined && input.idleTimeLimit > 0
-      ? { idle_time_limit: input.idleTimeLimit }
-      : {}),
-  };
-
-  const castLines: string[] = [formatCastHeader(header)];
-  let previousCast = 0;
-  for (const [index, event] of ordered.entries()) {
-    const castTime = castTimes[index] ?? previousCast;
-    castLines.push(formatCastEvent((castTime - previousCast) / 1000, event.code, event.data));
-    previousCast = castTime;
-  }
-
-  const eventLines = input.traceEvents.map((event) =>
-    JSON.stringify({ ...event, castOffset: round(timeline.mapWall(event.t)) }),
-  );
-
-  const semanticLines = input.semantics.map((record) => {
-    const line: SemanticRecord = {
-      t: record.t,
-      revision: record.revision,
-      castOffset: round(timeline.mapWall(record.t)),
-      snapshot: record.snapshot,
-    };
-    return JSON.stringify(line);
-  });
-
-  const logLines = input.logs.map((entry) =>
-    JSON.stringify({ ...entry, castOffset: round(timeline.mapWall(entry.t)) }),
-  );
-
-  const meta: TraceMeta = {
-    ...input.meta,
-    ...(input.idleTimeLimit !== undefined && input.idleTimeLimit > 0
-      ? { idleTimeLimit: input.idleTimeLimit }
-      : {}),
-    durationMs: round(timeline.durationMs),
-    ...(input.crash === undefined
-      ? {}
-      : { crash: { ...input.crash, castOffset: round(timeline.mapWall(input.crash.t)) } }),
-    ...(input.logSummary === undefined ? {} : { logs: input.logSummary }),
-  };
-
-  const target = resolve(input.dir);
-  const parent = dirname(target);
-  await mkdir(parent, { recursive: true });
-  // Keep the target's basename in front of the marker. A bare `.staging-`
-  // prefix is how run-history names its own incomplete runs, and it treats
-  // every directory with that prefix as one of them — so a trace staged beside
-  // them was read as a half-written run. The Windows path limit that motivated
-  // shortening this is handled where the length actually comes from: the trace
-  // name's slug is bounded (see the test package's traceDir).
-  const staging = await mkdtemp(join(parent, traceStagingPrefix(target)));
-  const files: Record<string, string> = {
-    [TRACE_FILES.meta]: `${JSON.stringify(meta, null, 2)}\n`,
-    [TRACE_FILES.cast]: `${castLines.join('\n')}\n`,
-    [TRACE_FILES.events]: joinLines(eventLines),
-    [TRACE_FILES.semantics]: joinLines(semanticLines),
-    ...(logLines.length === 0 ? {} : { [TRACE_FILES.logs]: joinLines(logLines) }),
-  };
-  await writeDurable(join(staging, TRACE_INCOMPLETE_FILE), `${JSON.stringify({ v: 1, target })}\n`);
-  for (const [name, body] of Object.entries(files)) await writeDurable(join(staging, name), body);
-  const checksums = Object.fromEntries(
-    Object.entries(files).map(([name, body]) => [name, sha256(body)]),
-  );
-  await unlink(join(staging, TRACE_INCOMPLETE_FILE));
-  await writeDurable(join(staging, TRACE_FILES.commit), `${JSON.stringify({ v: 1, checksums })}\n`);
-  await fsyncDirectory(staging);
-  await clearEmptyTarget(target);
-  await rename(staging, target);
-  await fsyncDirectory(parent);
-
-  return { dir: target, meta, durationMs: meta.durationMs ?? 0 };
-}
-
-/**
- * Makes room for the staged directory when the caller pre-created its target.
- *
- * POSIX renames a directory onto an existing empty one; Windows refuses as
- * soon as the target exists at all. Passing a directory you already made is an
- * ordinary thing to do — every caller who prepares an output path does it — so
- * without this the writer simply could not deliver a trace there on Windows.
- *
- * Only an empty directory is removed, which is a placeholder rather than
- * content, and that is exactly what POSIX would have replaced. A target
- * holding anything fails here with a reason instead of failing at the rename
- * with an errno, and nothing is ever overwritten.
- */
-async function clearEmptyTarget(target: string): Promise<void> {
-  try {
-    await rmdir(target);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return;
-    if (code === 'ENOTEMPTY' || code === 'EEXIST' || code === 'EPERM' || code === 'EACCES') {
-      throw new TraceError(
-        'protocol-violation',
-        `trace target ${target} already holds content; refusing to replace it`,
-        { suggestion: 'write the trace to a new directory, or remove the existing one first' },
-      );
-    }
-    throw error;
-  }
-}
-
-async function writeDurable(path: string, body: string): Promise<void> {
-  await writeFile(path, body, 'utf8');
-  // Open for writing to flush. Windows implements fsync as FlushFileBuffers,
-  // which requires a handle with write access and fails with EPERM on a
-  // read-only one; POSIX does not care. The file was just written, so this is
-  // the same durability guarantee on both, not a platform concession.
-  const handle = await open(path, 'r+');
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
-async function fsyncDirectory(path: string): Promise<void> {
-  let handle;
-  try {
-    handle = await open(path, 'r');
-    await handle.sync();
-  } catch (error) {
-    // Windows does not expose directory fsync through Node — opening the
-    // handle fails with EPERM. Its same-volume MoveFileEx-backed rename is
-    // still atomic, so the durability this call provides elsewhere is not
-    // lost; failing here would report a platform limitation as a trace write
-    // error. This mirrors the same decision in @termwright/run-history.
-    if (process.platform !== 'win32') throw error;
-  } finally {
-    await handle?.close();
-  }
-}
-
-function sha256(body: string): string {
-  return createHash('sha256').update(body).digest('hex');
-}
-
-function joinLines(lines: readonly string[]): string {
-  return lines.length === 0 ? '' : `${lines.join('\n')}\n`;
-}
-
 function round(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function sanitizeJson<T>(value: T, sanitizer: TerminalSanitizer): T {
+  if (typeof value === 'string') return sanitizer.sanitizeComplete(value) as T;
+  if (Array.isArray(value)) return value.map((item) => sanitizeJson(item, sanitizer)) as T;
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, sanitizeJson(item, sanitizer)]),
+  ) as T;
 }

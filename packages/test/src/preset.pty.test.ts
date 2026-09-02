@@ -284,7 +284,7 @@ describe.skipIf(!available)('trace collection', () => {
       v: number;
       semanticTree: boolean;
     };
-    expect(meta.v).toBe(1);
+    expect(meta.v).toBe(4);
     expect(meta.semanticTree).toBe(true);
     expect(existsSync(join(archive, 'session.cast'))).toBe(true);
     expect(existsSync(join(archive, 'events.jsonl'))).toBe(true);

@@ -37,6 +37,7 @@ export default defineConfig({
             specId: createRunId('spec'),
             file: fixture,
             fullName: 'broker denied fixture',
+            resourceDecision: 'fixture',
           },
         },
         broker: {

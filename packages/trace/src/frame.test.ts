@@ -137,7 +137,7 @@ describe('frameAt', () => {
 
 describe('terminal profile', () => {
   it('measures emoji the way the live session does', async () => {
-    // The bug this replaces: the driver activated Unicode 11 and the replay did
+    // The bug this replaces: the driver activated its Unicode provider and replay did
     // not, so a rocket was two columns live and one on replay.
     const frame = await frameFromAnsi('🚀a', { columns: 6, rows: 1 });
     expect(frame.cell(0, 0)).toMatchObject({ char: '🚀', width: 2 });
@@ -150,7 +150,7 @@ describe('terminal profile', () => {
     const wide = await frameFromAnsi('±a', {
       columns: 6,
       rows: 1,
-      profile: 'iterm2-ambiguous-wide',
+      profile: 'cjk-wide',
     });
     expect(narrow.cell(0, 1)).toMatchObject({ char: 'a' });
     expect(wide.cell(0, 1).width).toBe(0);
@@ -182,14 +182,14 @@ describe('terminal profile', () => {
       columns: 8,
       rows: 1,
       now: session.now,
-      terminalProfile: 'iterm2-ambiguous-wide',
+      terminalProfile: 'cjk-wide',
     });
     session.output('±a');
     await writer.finalize();
 
     const trace = await openTrace(dir);
     try {
-      expect(trace.meta.terminalProfile).toBe('iterm2-ambiguous-wide');
+      expect(trace.meta.terminalProfile).toBe('cjk-wide');
       const frame = await frameAt(trace, 0);
       // Ambiguous-wide: the sign takes two columns, so 'a' lands in column 2.
       expect(frame.cell(0, 2)).toMatchObject({ char: 'a' });

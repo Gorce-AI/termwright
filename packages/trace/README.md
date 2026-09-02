@@ -11,8 +11,9 @@ An archive is a directory (zippable for transport):
 | `meta.json`       | session id, command, viewport, platform, terminal profile, exit, crash, log summary |
 | `session.cast`    | asciicast **v3**; `test.step()` titles become markers                               |
 | `events.jsonl`    | inputs, resizes, steps, driver actions, assertions, crash                           |
-| `semantics.jsonl` | one semantic tree per revision, with its cast offset                                |
-| `logs.jsonl`      | application log entries; absent when the session logged nothing                     |
+| `semantics.jsonl` | content-sized semantic keyframes and revision deltas                                |
+| `logs.jsonl`      | application log entries                                                             |
+| `timeline.jsonl`  | raw-time anchors and hidden-window transforms                                       |
 | `COMMITTED`       | versioned SHA-256 manifest written last before atomic publication                   |
 
 The layout is normative in [`/CONTRACTS.md`](../../CONTRACTS.md) §Trace. Nothing
@@ -36,6 +37,7 @@ const writer = createTraceWriter(harness, {
   command: ['node', 'app.js'],
   columns: 100,
   rows: 30,
+  idleTimeLimit: 2,
 });
 
 writer.hide(); // keep setup noise out of the recording
@@ -46,7 +48,7 @@ const step = writer.addStep('submit the form'); // → cast marker "submit the f
 await harness.getByRole('button', { name: 'Submit' }).click();
 step.end('failed', 'button stayed disabled');
 
-await writer.finalize({ idleTimeLimit: 2 }); // trim gaps longer than 2s
+await writer.finalize();
 ```
 
 The writer attaches to anything exposing `sessionId` and `events` — a
@@ -55,24 +57,22 @@ crashes arrive on their own through those events; nothing above reports them by
 hand. `recordAction` exists only for work the driver cannot see, and calling it
 for a harness action would record that action twice.
 
-Nothing is published until `finalize()`, because that is the first moment the
-timeline is known. Finalization writes and fsyncs a sibling staging directory,
-then atomically renames it into place. A crash or ENOSPC leaves an explicitly
+Records append immediately to a private sibling staging directory through a
+bounded queue. Finalization drains and fsyncs it, writes `COMMITTED`, then
+atomically renames it into place. A crash or ENOSPC leaves an explicitly
 incomplete staging artifact; readers require and verify `COMMITTED`.
 
 ## The two timelines
 
-Every artefact carries two times, and mixing them up is the easiest mistake to
-make here:
+The disk format carries one canonical time and the reader exposes a derived one:
 
 - **`t`** — wall-clock milliseconds since recording started.
-- **`castOffset`** — position on the _recording_: `t` after `hide()` windows
-  were cut out and idle gaps compressed.
+- **`castOffset`** — reader-derived position on the _recording_: `t` after
+  `hide()` windows were cut out and idle gaps compressed.
 
-They are equal only in a recording that was neither hidden nor trimmed, so
-`castOffset` is required on every line and readers never fall back to `t`. A
-line missing it is rejected as corrupt rather than placed at a plausible wrong
-moment.
+Persisting the derived value on every line made the old writer retain the whole
+run until finalization. Trace v4 stores raw `t` plus `timeline.jsonl`; readers
+derive `castOffset` lazily and reject the obsolete on-disk field.
 
 Everything a player or UI seeks to is a `castOffset`.
 
@@ -154,15 +154,14 @@ the text and neither does this package: colouring a report by substring match is
 wrong often enough to be worse than no colour.
 
 `meta.logs` summarises the file — count, per-level counts, sources — and reports
-how many entries were evicted. The writer keeps the most recent `maxLogEntries`
-(10 000 by default), because when a program floods its log the end is the part
-worth keeping.
+how many entries were refused after the append-only `maxLogEntries` ceiling
+(10 000 by default).
 
-Redaction happens at the source, in `@termwright/logs`. **Lines tailed from a
-log file are not redacted**: they arrive as raw text, so treat them the way you
-treat a crash's screen tail.
+Every log line and structured attribute passes the same artifact sanitizer
+before the append spool. Source-side redaction remains useful defense in depth,
+but is no longer the persistence boundary.
 
-Semantic values and input/action payloads use `artifactValuePolicy`:
+Semantic values and input/action payloads use `artifactSecurity.mode`:
 `redacted` (the secure default), `none`, or explicit `raw`. Sensitive semantic
 values are stored as typed `withheld` observations. Executable keyboard values
 never enter an `ActionReceipt`; receipts contain recorded projections only.
@@ -179,12 +178,9 @@ if (trace.meta.crash !== undefined) {
 }
 ```
 
-**`meta.crash.screenTail` is not redacted.** It is what the terminal showed,
-verbatim — whatever the program or the tty's echo displayed is in there, secrets
-included. Treat an archive carrying a crash like a screenshot when you store it,
-upload it as a CI artifact or forward it. Input previews are omitted unless the
-session explicitly selected raw artifact values. This does not protect text the
-application echoed to the terminal.
+Crash tails, diagnostics and input previews pass the same policy as the live
+streams. `redacted` matches registered secrets across output chunks and ANSI
+style controls; `raw` is the only mode that stores them verbatim.
 
 ## The report
 

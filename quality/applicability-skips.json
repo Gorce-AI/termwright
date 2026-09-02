@@ -46,7 +46,7 @@
     {
       "id": "opentui-zero-config-geometry",
       "file": "packages/probe-opentui/src/zero-config.test.ts",
-      "fullName": "publishes qualified v2 geometry and the native exact hit grid",
+      "fullName": "publishes qualified v3 geometry and the native exact hit grid",
       "required": false
     },
     {
@@ -542,13 +542,13 @@
     {
       "id": "textual-example-qualified-geometry",
       "file": "examples/textual-notes/tests/app.e2e.test.ts",
-      "fullName": "publishes qualified v2 geometry and exact pointer ownership",
+      "fullName": "publishes qualified v3 geometry and exact pointer ownership",
       "required": false
     },
     {
       "id": "textual-example-covered-target",
       "file": "examples/textual-notes/tests/app.e2e.test.ts",
-      "fullName": "refuses a covered v2 pointer target instead of firing through the modal",
+      "fullName": "refuses a covered v3 pointer target instead of firing through the modal",
       "required": false
     },
     {

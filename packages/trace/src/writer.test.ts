@@ -72,6 +72,116 @@ describe('trace staging names', () => {
 });
 
 describe('createTraceWriter', () => {
+  it('keeps a configured canary out of every temporary and final trace stream', async () => {
+    const root = await workspace();
+    const dir = join(root, 'redacted-canary.twtrace');
+    const secret = 'TERMWRIGHT_CANARY_SECRET_7f912a';
+    const session = new FakeSession('redacted-canary');
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      artifactSecurity: { mode: 'redacted', secrets: [secret] },
+    });
+
+    session.input(secret, 'paste');
+    session.output(secret.slice(0, 8));
+    session.output(`\u001b[31m${secret.slice(8)}\u001b[0m`);
+    session.output(`\u001b]0;${secret}\u0007`);
+    session.logRecord({ level: 'error', message: secret, attrs: { token: secret } });
+    session.semantic(
+      snapshot(
+        1,
+        [
+          node({
+            id: 'password',
+            role: 'textbox',
+            name: secret,
+            value: {
+              status: 'known',
+              value: secret,
+              sensitivity: 'sensitive',
+              evidence: {
+                source: 'application',
+                method: 'native',
+                strength: 'authoritative',
+                providerId: 'app',
+              },
+            },
+          }),
+        ],
+        'redacted-canary',
+      ),
+    );
+    session.crash({
+      exit: { code: 1, signal: null },
+      screenTail: [secret],
+      diagnosticsTail: [{ code: 'endpoint-error', detail: secret, timeMs: 1 }],
+    });
+    await writer.finalize();
+
+    for (const member of Object.values(TRACE_FILES)) {
+      const body = await readFile(join(dir, member), 'utf8');
+      expect(body, member).not.toContain(secret);
+    }
+  });
+
+  it('fails closed when one record exceeds the bounded append backlog', async () => {
+    const root = await workspace();
+    const dir = join(root, 'capacity.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      maxPendingRecords: 4,
+      maxPendingBytes: 64,
+    });
+
+    session.output('x'.repeat(256));
+    await expect(writer.finalize()).rejects.toMatchObject({ code: 'capacity' });
+    expect(await stat(join(dir, TRACE_FILES.commit)).catch(() => null)).toBeNull();
+  });
+
+  it('stores a semantic keyframe followed by a content-sized delta', async () => {
+    const root = await workspace();
+    const dir = join(root, 'semantic-delta.twtrace');
+    const session = new FakeSession('semantic-delta');
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.semantic(
+      snapshot(
+        1,
+        [
+          node({ id: 'a', role: 'button', name: 'Before' }),
+          node({ id: 'b', role: 'text', name: 'Stable' }),
+        ],
+        'semantic-delta',
+      ),
+    );
+    session.semantic(
+      snapshot(
+        2,
+        [
+          node({ id: 'a', role: 'button', name: 'After' }),
+          node({ id: 'b', role: 'text', name: 'Stable' }),
+        ],
+        'semantic-delta',
+      ),
+    );
+    await writer.finalize();
+
+    const lines = (await readFile(join(dir, TRACE_FILES.semantics), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { kind: string; snapshot?: unknown });
+    expect(lines.map((line) => line.kind)).toEqual(['keyframe', 'delta']);
+    expect(lines[1]).not.toHaveProperty('snapshot');
+
+    const trace = await openTrace(dir);
+    const reconstructed = [];
+    for await (const record of trace.semantics()) reconstructed.push(record.snapshot);
+    expect(reconstructed.at(-1)?.nodes.find((item) => item.id === 'a')?.name).toBe('After');
+    await trace.close();
+  });
+
   it('replays output, semantic state and exit emitted before the writer attaches', async () => {
     const root = await workspace();
     const dir = join(root, 'startup-replay.twtrace');
@@ -207,6 +317,20 @@ describe('createTraceWriter', () => {
     expect(archive.meta.semanticTree).toBe(true);
     expect(archive.meta.platform).toBe('linux');
     expect(archive.meta.runIdentity).toEqual(runIdentity);
+    const persistedBytes = (
+      await Promise.all(
+        Object.values(TRACE_FILES).map(async (name) => (await stat(join(dir, name))).size),
+      )
+    ).reduce((total, bytes) => total + bytes, 0);
+    expect(archive.resources).toEqual({
+      terminalOutputBytes: 11,
+      semanticBytes: (await stat(join(dir, TRACE_FILES.semantics))).size,
+      semanticFullCount: 1,
+      semanticDeltaCount: 0,
+      traceBytes: persistedBytes,
+      tempDiskPeakBytes: persistedBytes,
+      finalArtifactBytes: persistedBytes,
+    });
 
     const trace = await openTrace(dir);
     try {
@@ -263,7 +387,7 @@ describe('createTraceWriter', () => {
     const start = traceEvents.find(
       (event) => event.kind === 'step-start' && event.title === 'inner',
     );
-    expect(start?.castOffset).toBe(200);
+    expect(start).not.toHaveProperty('castOffset');
     expect(start).toMatchObject({ parentStepId: 's1' });
   });
 
@@ -348,12 +472,12 @@ describe('createTraceWriter', () => {
     const root = await workspace();
     const dir = join(root, 'idle.twtrace');
     const session = new FakeSession();
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, { dir, now: session.now, idleTimeLimit: 2 });
 
     session.output('a');
     session.tick(30_000);
     session.output('b');
-    await writer.finalize({ idleTimeLimit: 2 });
+    await writer.finalize();
 
     const { header, events } = await readCast(dir);
     expect(header.idle_time_limit).toBe(2);
@@ -369,14 +493,14 @@ describe('createTraceWriter', () => {
     const root = await workspace();
     const dir = join(root, 'semantic-offset.twtrace');
     const session = new FakeSession();
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, { dir, now: session.now, idleTimeLimit: 1 });
 
     session.output('a');
     session.tick(10_000);
     session.semantic(snapshot(1, [node({ id: 'n1', role: 'text', name: 'idle' })]));
     session.tick(10_000);
     session.output('b');
-    await writer.finalize({ idleTimeLimit: 1 });
+    await writer.finalize();
 
     const trace = await openTrace(dir);
     try {
@@ -413,7 +537,7 @@ describe('createTraceWriter', () => {
     const writer = createTraceWriter(session, {
       dir,
       now: session.now,
-      artifactValuePolicy: 'raw',
+      artifactSecurity: { mode: 'raw' },
     });
 
     session.input('\u0003', 'raw');
@@ -474,6 +598,9 @@ describe('createTraceWriter', () => {
     const archive = await writer.finalize();
 
     expect(archive.meta.truncated).toBe(true);
+    expect(archive.resources.terminalOutputBytes).toBe(
+      Buffer.byteLength('0123456789this chunk pushes past the limitdropped too'),
+    );
     const { events } = await readCast(dir);
     expect(events.map((event) => event.data)).toEqual(['0123456789']);
   });
@@ -503,19 +630,24 @@ describe('createTraceWriter', () => {
     expect(await stat(join(dir, TRACE_FILES.commit))).not.toBeNull();
   });
 
-  it('stops observing the session after dispose', async () => {
+  it('removes its private trace after dispose', async () => {
     const root = await workspace();
     const dir = join(root, 'disposed.twtrace');
     const session = new FakeSession();
     const writer = createTraceWriter(session, { dir, now: session.now });
 
     session.output('before');
-    writer.dispose();
+    const resources = await writer.dispose();
     session.tick(10);
     session.output('after');
-    await writer.finalize();
-
-    const { events } = await readCast(dir);
-    expect(events.map((event) => event.data)).toEqual(['before']);
+    expect(await stat(dir).catch(() => null)).toBeNull();
+    expect(resources).toMatchObject({
+      terminalOutputBytes: 6,
+      traceBytes: expect.any(Number),
+      tempDiskPeakBytes: expect.any(Number),
+      finalArtifactBytes: 0,
+    });
+    expect(resources.traceBytes).toBeGreaterThan(0);
+    expect(resources.tempDiskPeakBytes).toBeGreaterThanOrEqual(resources.traceBytes);
   });
 });

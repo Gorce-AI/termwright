@@ -89,10 +89,10 @@ fn start_fake_driver_with_limits(
                                 &mut stream,
                                 &json!({
                                     "type": "hello-ack",
-                                    "protocol": "termwright/2",
+                                    "protocol": "termwright/3",
                                     "sessionId": SESSION,
                                     "limits": limits,
-                                    "subscribe": "snapshots",
+                                    "subscribe": "semantic",
                                     "marker": { "enabled": true },
                                 }),
                             );
@@ -192,7 +192,7 @@ fn handshake_and_publish() {
         .expect("marker");
 
     let snapshot_frame = next_frame(&frames);
-    assert_eq!(snapshot_frame["type"], "snapshot");
+    assert_eq!(snapshot_frame["type"], "semantic-full");
     assert_eq!(snapshot_frame["snapshot"]["sessionId"], SESSION);
     assert_eq!(snapshot_frame["snapshot"]["revision"], 1);
 
@@ -223,7 +223,7 @@ fn revisions_increase_by_one_per_publish() {
         let verified =
             verify_marker_payload(payload_of(&marker), TOKEN, SESSION).expect("marker verifies");
         assert_eq!(verified.revision, expected);
-        assert_eq!(next_frame(&frames)["type"], "snapshot");
+        assert_eq!(next_frame(&frames)["type"], "semantic-full");
         assert_eq!(next_frame(&frames)["revision"], expected);
     }
     assert_eq!(client.revision(), 3);
@@ -276,10 +276,10 @@ fn start_stalled_driver(path: &str) -> std::sync::mpsc::Sender<()> {
         }
         let ack = serde_json::json!({
             "type": "hello-ack",
-            "protocol": "termwright/2",
+            "protocol": "termwright/3",
             "sessionId": SESSION,
             "limits": DEFAULT_LIMITS,
-            "subscribe": "snapshots",
+            "subscribe": "semantic",
             "marker": { "enabled": true },
         });
         let frame = encode_frame(&ack, DEFAULT_LIMITS.max_frame_bytes).expect("encoding");
@@ -387,7 +387,7 @@ fn a_locally_oversized_frame_keeps_the_revision_and_recovers_with_a_full_tree() 
         .publish(&mut sample_snapshot())
         .expect("first snapshot")
         .expect("first marker");
-    assert_eq!(next_frame(&frames)["type"], "snapshot");
+    assert_eq!(next_frame(&frames)["type"], "semantic-full");
     assert_eq!(next_frame(&frames)["type"], "revision-commit");
     assert_eq!(client.revision(), 1);
 
@@ -412,7 +412,7 @@ fn a_locally_oversized_frame_keeps_the_revision_and_recovers_with_a_full_tree() 
         .expect("recovery snapshot")
         .expect("recovery marker");
     let recovery = next_frame(&frames);
-    assert_eq!(recovery["type"], "snapshot");
+    assert_eq!(recovery["type"], "semantic-full");
     assert_eq!(recovery["snapshot"]["revision"], 2);
     assert_eq!(next_frame(&frames)["revision"], 2);
     assert_eq!(client.revision(), 2);

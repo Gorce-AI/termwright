@@ -39,12 +39,12 @@ import {
 import { CLI_NAME, CLI_VERSION } from './version.js';
 import { formatDoctor, runDoctor, type DoctorReport } from './doctor.js';
 import {
-  TERMWRIGHT_RESOURCE_PROFILES,
   TermwrightTestHost,
   describeFailure,
   type RunCompletion,
   type TermwrightTestHostOptions,
 } from './test-host.js';
+import { resolveTermwrightResourceProfile } from './resource-profiles.js';
 
 export type { CliIo };
 
@@ -217,7 +217,7 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
     runsDir: join(deps.cwd, '.termwright', 'runs'),
     vitestArgs: args.rest,
     workerEnv: testWorkerEnv(deps.processContext.env),
-    resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[args.resourceProfile],
+    resourceProfile: resolveTermwrightResourceProfile(args.resourceProfile, deps.cwd),
   });
   const completions: RunCompletion[] = [];
   try {
@@ -309,7 +309,7 @@ async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): P
     runsDir: join(deps.cwd, '.termwright', 'runs'),
     vitestArgs: args.rest,
     workerEnv: testWorkerEnv(deps.processContext.env),
-    resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[args.resourceProfile],
+    resourceProfile: resolveTermwrightResourceProfile(args.resourceProfile, deps.cwd),
   });
   let worst: RunCompletion['state'] = 'passed';
   let skipPolicyMatched = true;

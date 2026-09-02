@@ -58,6 +58,43 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  trace-streaming:
+    name: bounded trace streaming
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['22', '24']
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @termwright/trace build
+      - name: Measure bounded steady-state and finalization RSS
+        shell: bash
+        run: node --expose-gc scripts/certify-trace-streaming.mjs > trace-streaming.json
+      - name: Upload trace resource evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: trace-streaming-${{ matrix.os }}-node-${{ matrix.node }}
+          path: trace-streaming.json
+          if-no-files-found: error
+          retention-days: 30
+
   nightly-soak-posix:
     name: nightly terminal lifecycle soak
     runs-on: ${{ matrix.os }}
@@ -100,6 +137,30 @@ jobs:
           cycles=$(node scripts/resolve-reliability-cycles.mjs "$REQUESTED_CYCLES")
           pnpm test -- --runs "$cycles" --resource-profile ci --json -- \
             --config quality/soak/vitest.config.ts --run quality/soak/terminal-cycle.test.ts
+
+      - name: Certify a packed long-running Ink trace
+        shell: bash
+        env:
+          TERMWRIGHT_LONG_RUN_SHORT_MS: '30000'
+          TERMWRIGHT_LONG_RUN_MS: '180000'
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-long-run-packs"
+          install_dir="$RUNNER_TEMP/termwright-long-run-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz \
+            vitest@latest ink@7.1.1 react@19.2.8
+          node scripts/check-installed-long-run.mjs "$install_dir" > long-run.json
+
+      - name: Upload long-run resource evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: long-run-${{ matrix.os }}-node-${{ matrix.node }}
+          path: long-run.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload Termwright failure evidence
         if: ${{ failure() || cancelled() }}
@@ -149,6 +210,28 @@ jobs:
           cycles=$(node scripts/resolve-reliability-cycles.mjs "$REQUESTED_CYCLES")
           pnpm test -- --runs "$cycles" --resource-profile windows-ci --json -- \
             --config quality/soak/vitest.config.ts --run quality/soak/terminal-cycle.test.ts
+      - name: Certify a packed long-running Ink trace
+        shell: bash
+        env:
+          TERMWRIGHT_LONG_RUN_SHORT_MS: '30000'
+          TERMWRIGHT_LONG_RUN_MS: '180000'
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-long-run-packs"
+          install_dir="$RUNNER_TEMP/termwright-long-run-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz \
+            vitest@latest ink@7.1.1 react@19.2.8
+          node scripts/check-installed-long-run.mjs "$install_dir" > long-run.json
+      - name: Upload long-run resource evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: long-run-windows-latest-node-${{ matrix.node }}
+          path: long-run.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload Termwright failure evidence
         if: ${{ failure() || cancelled() }}
         uses: ./.github/actions/upload-termwright-runs

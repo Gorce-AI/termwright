@@ -251,15 +251,13 @@ export const probeInfoSchema = z.strictObject({
   probeVersion: z.string().min(1).max(128),
   identityKind: z.enum(['stable', 'frame-local']),
   capabilities: z.array(z.enum(PROBE_CAPABILITIES)).max(PROBE_CAPABILITIES.length),
-  instrumentation: z
-    .strictObject({
-      highestTier: z.enum(PROBE_INJECTION_TIERS),
-      semanticClass: z.enum(PROBE_SEMANTIC_CLASSES),
-      degradedCapabilities: z
-        .array(z.enum(PROBE_DEGRADED_CAPABILITIES))
-        .max(PROBE_DEGRADED_CAPABILITIES.length),
-    })
-    .optional(),
+  instrumentation: z.strictObject({
+    highestTier: z.enum(PROBE_INJECTION_TIERS),
+    semanticClass: z.enum(PROBE_SEMANTIC_CLASSES),
+    degradedCapabilities: z
+      .array(z.enum(PROBE_DEGRADED_CAPABILITIES))
+      .max(PROBE_DEGRADED_CAPABILITIES.length),
+  }),
 });
 
 /**
@@ -282,13 +280,13 @@ export function validateProbeInfo(
     return { ok: false, detail: `${where}: ${issue.message}` };
   }
   const info = parsed.data as ProbeInfo;
-  const degraded = info.instrumentation?.degradedCapabilities;
-  if (degraded !== undefined && new Set(degraded).size !== degraded.length) {
+  const degraded = info.instrumentation.degradedCapabilities;
+  if (new Set(degraded).size !== degraded.length) {
     return { ok: false, detail: 'instrumentation.degradedCapabilities: duplicate capability' };
   }
   if (
-    info.instrumentation?.semanticClass === 'B' &&
-    (!degraded?.includes('intended-geometry') || !degraded.includes('clipped-geometry'))
+    info.instrumentation.semanticClass === 'B' &&
+    (!degraded.includes('intended-geometry') || !degraded.includes('clipped-geometry'))
   ) {
     return {
       ok: false,
@@ -309,14 +307,10 @@ export function validateProbeInfo(
     info: Object.freeze({
       ...info,
       capabilities: Object.freeze([...info.capabilities]),
-      ...(info.instrumentation === undefined
-        ? {}
-        : {
-            instrumentation: Object.freeze({
-              ...info.instrumentation,
-              degradedCapabilities: Object.freeze([...info.instrumentation.degradedCapabilities]),
-            }),
-          }),
+      instrumentation: Object.freeze({
+        ...info.instrumentation,
+        degradedCapabilities: Object.freeze([...info.instrumentation.degradedCapabilities]),
+      }),
     }),
   };
 }

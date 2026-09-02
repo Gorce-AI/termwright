@@ -14,7 +14,7 @@
  * const step = writer.addStep('submit the form');
  * await harness.getByRole('button', { name: 'Submit' }).click();
  * step.end('failed', 'button stayed disabled');
- * await writer.finalize({ idleTimeLimit: 2 });
+ * await writer.finalize();
  *
  * const trace = await openTrace('out/login.twtrace');
  * const state = await trace.stateAt(1_200);
@@ -84,6 +84,7 @@ export {
   type FinalizeOptions,
   type StepHandle,
   type TraceArchive,
+  type TraceResourceUsage,
   type TraceSource,
   type TraceWriter,
   type TraceWriterOptions,

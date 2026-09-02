@@ -10,14 +10,14 @@
     "platformSkips": "additionally governed by quality/platform-deviations.json"
   },
   "summary": {
-    "bounded-deadline-or-managed-background-task": 41,
+    "bounded-deadline-or-managed-background-task": 43,
     "deadline-or-scheduler-regression-test": 58,
     "deterministic-adversarial-fixture-schedule": 31,
-    "display-or-persisted-wall-time-not-correctness-order": 90,
+    "display-or-persisted-wall-time-not-correctness-order": 91,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 163,
+    "explicit-external-or-ui-source-polling": 177,
     "explicit-test-selection-reviewed-with-platform-registry": 73,
-    "managed-or-diagnostic-background-task": 73,
+    "managed-or-diagnostic-background-task": 74,
     "production-polling-review": 1,
     "production-process-isolation-review": 40,
     "test-observer-or-intentional-background-task": 15,
@@ -1082,6 +1082,18 @@
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => harness.snapshots.length).toBe(1);"
+    },
+    {
+      "path": "packages/driver/src/semantic.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => harness.snapshots.length).toBe(2);"
+    },
+    {
+      "path": "packages/driver/src/semantic.test.ts",
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "client.send({ type: 'log', record: { ts: Date.now(), level: 'warn', message: 'x', seq: 1 } });"
@@ -2000,6 +2012,24 @@
     },
     {
       "path": "packages/probe-runtime/src/index.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => channel?.requiresFullSnapshot).toBe(true);"
+    },
+    {
+      "path": "packages/probe-runtime/src/index.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => messages.length).toBe(5);"
+    },
+    {
+      "path": "packages/probe-runtime/src/index.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => messages.length).toBe(7);"
+    },
+    {
+      "path": "packages/probe-runtime/src/index.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 5));"
@@ -2218,6 +2248,12 @@
       "path": "packages/run-journal-transport/src/index.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "queueMicrotask(() => void startDrain().catch(() => undefined));"
+    },
+    {
+      "path": "packages/run-journal-transport/src/index.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void drain.then("
     },
     {
@@ -2303,6 +2339,12 @@
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void this.#drive(active, request).then(settle);"
+    },
+    {
+      "path": "packages/termwright-cli/src/test-host.ts",
+      "kind": "timer",
+      "classification": "bounded-deadline-or-managed-background-task",
+      "excerpt": "this.#timer = setInterval(() => this.#sample(), 50);"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
@@ -2603,6 +2645,12 @@
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void reservationAdmission.catch(() => undefined);"
+    },
+    {
+      "path": "packages/test/src/runner.ts",
+      "kind": "timer",
+      "classification": "bounded-deadline-or-managed-background-task",
+      "excerpt": "this.#timer = setInterval(() => this.#sample(), 50);"
     },
     {
       "path": "packages/trace/src/writer.test.ts",
@@ -3278,6 +3326,60 @@
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('3');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('3');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('cjk-wide');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "'setInterval(() => undefined, 1_000);',"
@@ -3305,6 +3407,12 @@
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const startedAt = Date.now() - 5_000;"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const startedAt = Date.now();"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",

@@ -59,7 +59,7 @@ describe('actions from the driver', () => {
       contractId: 't1:0',
       sessionId: 't1',
       epoch: 0,
-      protocol: 'termwright/2',
+      protocol: 'termwright/3',
       framework: null,
       providers: [{ id: 'terminal', kind: 'terminal', version: '1' }],
       capabilities: Object.fromEntries(
@@ -160,7 +160,6 @@ describe('actions from the driver', () => {
       ref: 'semantic:n8@42',
       ok: true,
       t: 50,
-      castOffset: 50,
       observation: {
         sessionId: 't1',
         contractId: 't1:0',

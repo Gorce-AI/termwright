@@ -52,8 +52,8 @@ those contracts.
 
 ## ADR-2 — `@xterm/headless` as the VT emulator
 
-**Decision.** The grid is modelled by `@xterm/headless` 6.0 with the Unicode 11
-addon explicitly activated, plus the serialize addon.
+**Decision.** The grid is modelled by `@xterm/headless` 6.0 with Termwright's
+Unicode 15 extended-grapheme provider explicitly activated, plus serialization.
 
 **Why.** Terminal emulation is a deep pit of edge cases — wide characters,
 combining marks, scroll regions, alternate buffers, mode handling. xterm.js is
@@ -62,15 +62,15 @@ the [runner UI](../../tools/runner-ui/) renders with, so what a test asserts and
 what a human sees cannot diverge.
 
 **Known costs, all handled in code.** Every write is wrapped in a promise on its
-callback, because the buffer is asynchronous. Unicode 11 must be activated
+callback, because the buffer is asynchronous. The provider must be activated
 explicitly or width calculations silently differ. The headless package is
 CJS-only and needs an interop shim in an ESM build. And `terminal.modes` does not
 report mouse-encoding modes, so the driver tracks the private `CSI ?h` / `?l`
 sequences itself.
 
-**Not solved by this choice.** Yoga (Ink's layout engine) and the Unicode 11
-addon disagree on some ZWJ cluster widths. That is a genuine ambiguity in the
-ecosystem, not a bug we can fix on one side.
+**Independent evidence.** Ghostty and libvterm run as conformance references.
+They do not become production switches; differences are recorded in the
+bidirectional Unicode gap ledger.
 
 ## ADR-3 — An out-of-band semantic channel, with an in-band commit marker
 

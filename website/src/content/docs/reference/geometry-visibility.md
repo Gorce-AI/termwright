@@ -126,7 +126,7 @@ Public availability is computed by traversing the same graph used by certificati
 - **Bubble Tea / Bubbles — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
 <!-- geometry-matrices:end -->
 
-Every semantic snapshot uses the evidence-qualified v2 schema. A producer
+Every semantic snapshot uses the evidence-qualified v3 schema. A producer
 announces `intended-geometry` or `clipped-geometry` only for the corresponding
 authoritative framework fact. A producer that can publish a complete pointer
 map announces `pointer-hit-grid`; other producers publish an `unsupported`

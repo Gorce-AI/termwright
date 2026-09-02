@@ -823,6 +823,79 @@ describe('autonomous workflow security', () => {
     expect(reliability.match(/node scripts\/resolve-reliability-cycles\.mjs/gu)).toHaveLength(2);
   });
 
+  it('certifies bounded trace streaming on the Node 22/24 POSIX matrix', async () => {
+    const reliability = await readWorkflow('reliability.yml');
+    const trace = jobBlock(reliability, 'trace-streaming');
+    expect(trace).toContain('os: [ubuntu-latest, macos-latest]');
+    expect(trace).toContain("node: ['22', '24']");
+    expect(trace).toContain('node --expose-gc scripts/certify-trace-streaming.mjs');
+    expect(trace).toContain('if-no-files-found: error');
+    expect(trace).toContain('trace-streaming-${{ matrix.os }}-node-${{ matrix.node }}');
+  });
+
+  it('runs the packed multi-minute Ink resource oracle on every nightly host row', async () => {
+    const reliability = await readWorkflow('reliability.yml');
+    const oracle = await readFile(
+      new URL('./check-installed-long-run.mjs', import.meta.url),
+      'utf8',
+    );
+    for (const job of ['nightly-soak-posix', 'nightly-soak-windows']) {
+      const block = jobBlock(reliability, job);
+      expect(block, job).toContain("TERMWRIGHT_LONG_RUN_SHORT_MS: '30000'");
+      expect(block, job).toContain("TERMWRIGHT_LONG_RUN_MS: '180000'");
+      expect(block, job).toContain('pnpm pack:clean-room');
+      expect(block, job).toContain('vitest@latest ink@7.1.1 react@19.2.8');
+      expect(block, job).toContain('node scripts/check-installed-long-run.mjs');
+      expect(block, job).toContain('if-no-files-found: error');
+    }
+    expect(oracle).toContain("getByRole('button', {name: 'Activate'})");
+    expect(oracle).toContain("getByScreenText('[Activate]')");
+    expect(oracle).toContain("['mouse:down', 'mouse:up']");
+    expect(oracle).toContain("cli, 'screenshot'");
+    expect(oracle).toContain('👨‍👩‍👧 ');
+    expect(oracle).toContain('👍🏽 🇵🇱 किं 각 世');
+  });
+
+  it('runs OpenTUI from tarballs rather than workspace links', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const examples = jobBlock(workflow, 'examples');
+    expect(examples).toContain('pnpm pack:clean-room -- "$pack_dir" @termwright/probe-opentui');
+    expect(examples).toContain('vitest@latest @opentui/core@0.5.3');
+    expect(examples).toContain('node scripts/check-installed-opentui.mjs "$install_dir"');
+  });
+
+  it('runs Textual from a wheel and tarballs rather than editable sources', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const examples = jobBlock(workflow, 'examples');
+    expect(examples).toContain('python -m pip wheel --no-deps');
+    expect(examples).toContain('python -m venv "$venv_dir"');
+    expect(examples).toContain('"$venv_dir/bin/python" -m pip install');
+    expect(examples).toContain(
+      'node scripts/check-installed-textual.mjs "$install_dir" "$venv_dir/bin/python"',
+    );
+  });
+
+  it('runs Bubble Tea from archived Go sources and npm tarballs', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const examples = jobBlock(workflow, 'examples');
+    expect(examples).toContain('git archive --format=tar HEAD:clients/go');
+    expect(examples).toContain('pnpm pack:clean-room -- "$pack_dir" @termwright/probe-charm');
+    expect(examples).toContain('node scripts/check-installed-go.mjs "$install_dir" "$client_dir"');
+  });
+
+  it('runs Ratatui from crate packages and npm tarballs', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const examples = jobBlock(workflow, 'examples');
+    expect(examples).toContain(
+      'cargo package --locked --no-verify --manifest-path clients/rust/Cargo.toml',
+    );
+    expect(examples).toContain(
+      'cargo package --locked --no-verify --manifest-path clients/rust-probe/Cargo.toml',
+    );
+    expect(examples).toContain('tar -xzf "$protocol_crate"');
+    expect(examples).toContain('node scripts/check-installed-ratatui.mjs');
+  });
+
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
     const website = jobBlock(workflow, 'website');

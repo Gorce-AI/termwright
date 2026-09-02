@@ -1,5 +1,12 @@
 # Contract changes
 
+- 2026-09-02: terminal geometry is based on one Termwright-owned Unicode 15
+  extended-grapheme provider. The Unicode-version selector and branded `kitty`
+  profile are removed; the only built-in policies are `default` and
+  `cjk-wide`. The experimental upstream grapheme addon remains research-only.
+  Node 22/24, Vitest threads/forks, Vite Module Runner on/off and Native Host
+  load the same provider. No compatibility alias preserves the old profile ids.
+
 - 2026-08-27: `pairingTimeoutMs` is a diagnostic watchdog, not publication
   authority. Its diagnostic is now `revision-pairing-watchdog`; the unmatched
   authoritative half stays retained and may still pair when its counterpart
@@ -342,7 +349,7 @@
   deliberately — one tested implementation instead of five.
 - 2026-08-16 (#19/#23, driver 787c60a/94a0c37): new package @termwright/vt —
   single createTerminal(profile) factory; TerminalProfile with three REAL
-  profiles (default, kitty, iterm2-ambiguous-wide), all on Unicode 11
+  profiles (default, kitty, cjk-wide), all on Unicode 11
   (unicode-graphemes addon hangs vitest workers — measured, documented,
   return path in vt/NOTES). Profiles are documented as differentiating
   switches, not emulator emulation. LaunchOptions.terminalProfile +

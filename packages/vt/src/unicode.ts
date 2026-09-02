@@ -2,12 +2,11 @@
  * One Unicode provider that carries a whole terminal profile.
  *
  * xterm.js lets exactly one provider be active at a time, so the profile's
- * switches cannot each be an addon: they are folded into a single provider that
- * decorates a base version (Unicode 11, or 15 with grapheme clustering) and
- * overrides the two widths terminals actually disagree about — East Asian
- * Ambiguous characters, and emoji presentation via VS16.
+ * switches are folded into one provider that decorates Termwright's canonical
+ * Unicode 15 extended-grapheme model.
  */
 import type { IUnicodeVersionProvider } from '@xterm/headless';
+import { Unicode15GraphemeProvider } from './graphemes/provider.js';
 
 /**
  * Bit layout of the value `charProperties` returns, as used by xterm 6:
@@ -29,9 +28,6 @@ function unpackShouldJoin(value: number): boolean {
 function unpackCharKind(value: number): number {
   return value >>> 3;
 }
-
-/** Variation Selector-16: asks for the emoji presentation of the preceding character. */
-const VS16 = 0xfe_0f;
 
 /**
  * East Asian Ambiguous ranges, curated.
@@ -255,49 +251,6 @@ export interface UnicodeHandlingLike {
   activeVersion: string;
 }
 
-/** An xterm addon, as far as capturing its provider is concerned. */
-export interface UnicodeAddonLike {
-  activate(terminal: never): void;
-}
-
-/**
- * Reads the provider out of a Unicode addon without registering it anywhere.
- *
- * The addons do not export their providers and xterm has no getter for a
- * registered one, but `activate(terminal)` only ever calls
- * `terminal.unicode.register(...)`. Handing it a stub that records the call
- * yields the provider through public API — no private fields, and no versions
- * registered on a real terminal that nobody asked for.
- *
- * @param version - which provider to pick when an addon registers several
- * (the grapheme addon registers both `15` and `15-graphemes`); the last one
- * registered is used when it does not match.
- */
-export function captureAddonProvider(
-  addon: UnicodeAddonLike,
-  version?: string,
-): IUnicodeVersionProvider {
-  const captured: IUnicodeVersionProvider[] = [];
-  const sink = {
-    unicode: {
-      register(provider: IUnicodeVersionProvider): void {
-        captured.push(provider);
-      },
-      versions: [] as string[],
-      activeVersion: '',
-    },
-  };
-  addon.activate(sink as never);
-  const provider =
-    (version === undefined
-      ? undefined
-      : captured.find((candidate) => candidate.version === version)) ?? captured.at(-1);
-  if (provider === undefined) {
-    throw new Error('@termwright/vt: the xterm addon registered no Unicode provider');
-  }
-  return provider;
-}
-
 /**
  * Applies a profile to any xterm terminal, browser or headless.
  *
@@ -307,19 +260,14 @@ export function captureAddonProvider(
  */
 export function applyProfile(
   unicode: UnicodeHandlingLike,
-  baseAddon: UnicodeAddonLike,
   profile: {
     id: string;
-    unicodeVersion: string;
-    ambiguousWide: boolean;
-    variationSelectors: boolean;
+    ambiguousWidth: 'narrow' | 'wide';
   },
 ): void {
-  const base = captureAddonProvider(baseAddon, profile.unicodeVersion);
   unicode.register(
-    createProfileProvider(base, profile.id, {
-      ambiguousWide: profile.ambiguousWide,
-      variationSelectors: profile.variationSelectors,
+    createProfileProvider(new Unicode15GraphemeProvider(), profile.id, {
+      ambiguousWide: profile.ambiguousWidth === 'wide',
     }),
   );
   unicode.activeVersion = profile.id;
@@ -329,8 +277,6 @@ export function applyProfile(
 export interface UnicodeOverrides {
   /** Count East Asian Ambiguous characters as two columns. */
   readonly ambiguousWide: boolean;
-  /** Let VS16 promote the preceding character to an emoji-width cluster. */
-  readonly variationSelectors: boolean;
 }
 
 /**
@@ -345,8 +291,7 @@ export function createProfileProvider(
   version: string,
   overrides: UnicodeOverrides,
 ): IUnicodeVersionProvider {
-  const active =
-    canOverrideWidths(base) && (overrides.ambiguousWide || overrides.variationSelectors);
+  const active = canOverrideWidths(base) && overrides.ambiguousWide;
   if (!active) {
     // Nothing to add, or the encoding is not what we verified: pass the base
     // through under the profile's name rather than guess.
@@ -371,12 +316,6 @@ export function createProfileProvider(
       const shouldJoin = unpackShouldJoin(value);
       let width = unpackWidth(value);
 
-      // VS16 joins the previous cell; the width it reports becomes the width of
-      // the whole cluster, which is how a terminal renders ❤️ two columns wide
-      // while ❤ stays one.
-      if (overrides.variationSelectors && codepoint === VS16 && preceding !== 0) {
-        return packProperties(charKind, 2, true);
-      }
       if (overrides.ambiguousWide && width === 1 && isAmbiguousWidth(codepoint)) {
         width = 2;
       }

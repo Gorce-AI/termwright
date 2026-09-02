@@ -7,7 +7,7 @@ import {
   type TestRunResult,
   type Vitest,
 } from 'vitest/node';
-import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
+import { CERTIFIED_VITEST_VERSION } from './test-host-engine.js';
 import {
   ExactVitestEngine,
   classifyVitestResult,

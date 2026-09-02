@@ -7,6 +7,8 @@ import {
   beginRunManifest,
   type NativeRunAttempt,
   type RunManifest,
+  type RunManifestSummary,
+  type RunResourceTelemetry,
   type RunManifestTransaction,
   type RunManifestWriter,
   type RunStartProvenance,
@@ -19,7 +21,7 @@ import {
   type RunId,
   type TerminalRunState,
 } from '@termwright/protocol';
-import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
+import { CERTIFIED_VITEST_VERSION } from './test-host-engine.js';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
 
 const executeFile = promisify(execFile);
@@ -180,17 +182,22 @@ export class HostRunBudget {
 
 /** Canonical event store plus best-effort projection for a single run. */
 export class RunEventPersistence {
+  static readonly MAX_PROJECTED_EVENTS = 4_096;
   readonly #journal: RunEventJournal;
-  readonly #recorded: RunEvent[] = [];
-  readonly #persisted: RunEvent[] = [];
+  /** Bounded live/debug projection; canonical evidence is the streamed history file. */
+  readonly #recorded = new BoundedProjection<RunEvent>(RunEventPersistence.MAX_PROJECTED_EVENTS);
   readonly #sink: (events: readonly RunEvent[]) => void | Promise<void>;
+  readonly #projectionSink: ((events: readonly RunEvent[]) => void | Promise<void>) | undefined;
   readonly #observer: ((event: RunEvent) => void) | undefined;
+  readonly #attemptActivity = new Map<string, { count: number; lastType: string }>();
+  #sinkCalls = 0;
 
   constructor(options: {
     readonly invocationId: InvocationId;
     readonly runId: RunId;
     readonly gapProducer: RunEventProducer;
     readonly sink: (events: readonly RunEvent[]) => void | Promise<void>;
+    readonly projectionSink?: (events: readonly RunEvent[]) => void | Promise<void>;
     readonly observer?: (event: RunEvent) => void;
   }) {
     this.#journal = new RunEventJournal({
@@ -199,20 +206,45 @@ export class RunEventPersistence {
       gapProducer: options.gapProducer,
     });
     this.#sink = options.sink;
+    this.#projectionSink = options.projectionSink;
     this.#observer = options.observer;
   }
 
   get recorded(): readonly RunEvent[] {
-    return this.#recorded;
+    return this.#recorded.snapshot();
   }
-  get persisted(): readonly RunEvent[] {
-    return this.#persisted;
+  attemptActivity(attemptId: string): Readonly<{ count: number; lastType: string }> | undefined {
+    return this.#attemptActivity.get(attemptId);
+  }
+
+  metrics(): Readonly<{
+    acceptedEvents: number;
+    acceptedBytes: number;
+    sinkCalls: number;
+    peakBacklogEvents: number;
+    peakBacklogBytes: number;
+  }> {
+    return Object.freeze({
+      acceptedEvents: this.#journal.acceptedEvents,
+      acceptedBytes: this.#journal.acceptedBytes,
+      sinkCalls: this.#sinkCalls,
+      peakBacklogEvents: this.#journal.peakPending,
+      peakBacklogBytes: this.#journal.peakPendingBytes,
+    });
   }
 
   append(event: RunEvent): ReturnType<RunEventJournal['append']> {
     const result = this.#journal.append(event);
     if (!result.ok) return result;
     this.#recorded.push(event);
+    const attemptId = event.identity.attemptId;
+    if (attemptId !== undefined) {
+      const previous = this.#attemptActivity.get(attemptId);
+      this.#attemptActivity.set(attemptId, {
+        count: (previous?.count ?? 0) + 1,
+        lastType: event.type,
+      });
+    }
     try {
       this.#observer?.(event);
     } catch {
@@ -225,8 +257,39 @@ export class RunEventPersistence {
     const barrier = this.#journal.barrier();
     await this.#journal.flushThrough(barrier, async (events) => {
       await this.#sink(events);
-      this.#persisted.push(...events);
+      this.#sinkCalls += 1;
+      try {
+        await this.#projectionSink?.(events);
+      } catch {
+        /* External live projections cannot invalidate canonical persistence. */
+      }
     });
+  }
+}
+
+class BoundedProjection<T> {
+  readonly #values: (T | undefined)[];
+  #start = 0;
+  #size = 0;
+
+  constructor(readonly capacity: number) {
+    this.#values = new Array<T | undefined>(capacity);
+  }
+
+  push(value: T): void {
+    const index = (this.#start + this.#size) % this.capacity;
+    this.#values[index] = value;
+    if (this.#size < this.capacity) this.#size += 1;
+    else this.#start = (this.#start + 1) % this.capacity;
+  }
+
+  snapshot(): readonly T[] {
+    return Object.freeze(
+      Array.from(
+        { length: this.#size },
+        (_, index) => this.#values[(this.#start + index) % this.capacity]!,
+      ),
+    );
   }
 }
 
@@ -276,7 +339,11 @@ export class RunHistoryPersistence {
         profile: options.resourceProfile.name,
         scheduler: Object.freeze({ ...options.resourceProfile.scheduler }),
         capacities: Object.freeze({ ...options.resourceProfile.capacities }),
+        perAttempt: Object.freeze({ ...(options.resourceProfile.perAttempt ?? {}) }),
         perTerminal: Object.freeze({ ...options.resourceProfile.perTerminal }),
+        ...(options.resourceProfile.hostCapacity === undefined
+          ? {}
+          : { hostCapacity: options.resourceProfile.hostCapacity }),
       }),
       timeouts: Object.freeze({
         totalRunMs: options.totalRunMs,
@@ -298,11 +365,15 @@ export class RunHistoryPersistence {
     readonly status: TerminalRunState;
     readonly specs: readonly PersistedSpec[];
     readonly attempts: readonly PersistedAttempt[];
-    readonly events: readonly RunEvent[];
+    readonly telemetry: RunResourceTelemetry;
     readonly durationMs: number;
     readonly finishedAt?: number;
   }): Promise<void> {
     return this.#transaction.prepare(createRunManifest(this.start, input));
+  }
+
+  appendEvents(events: readonly RunEvent[]): Promise<void> {
+    return this.#transaction.appendEvents(events);
   }
 
   async commitPrepared(): Promise<void> {
@@ -316,11 +387,11 @@ export function createRunManifest(
     readonly status: TerminalRunState;
     readonly specs: readonly PersistedSpec[];
     readonly attempts: readonly PersistedAttempt[];
-    readonly events: readonly RunEvent[];
+    readonly telemetry: RunResourceTelemetry;
     readonly durationMs: number;
     readonly finishedAt?: number;
   },
-): RunManifest {
+): RunManifestSummary {
   return Object.freeze({
     ...start,
     v: RUN_MANIFEST_VERSION,
@@ -329,7 +400,7 @@ export function createRunManifest(
     status: input.status,
     specs: Object.freeze(input.specs.map((spec) => Object.freeze({ ...spec }))),
     attempts: Object.freeze(input.attempts.map((attempt) => Object.freeze({ ...attempt }))),
-    events: Object.freeze([...input.events]),
+    telemetry: Object.freeze({ ...input.telemetry }),
   });
 }
 

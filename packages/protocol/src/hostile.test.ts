@@ -110,7 +110,7 @@ function wireSnapshot(
   rootIds: readonly string[],
 ): Record<string, unknown> {
   return {
-    v: 2,
+    v: 3,
     sessionId: 's',
     revision: 1,
     columns: 80,
@@ -162,7 +162,7 @@ describe('hostile snapshots', () => {
 
   it('rejects an oversized string field without retaining it', () => {
     const snapshot = {
-      v: 2,
+      v: 3,
       sessionId: 's',
       revision: 1,
       columns: 80,
@@ -208,9 +208,9 @@ describe('hostile snapshots', () => {
   it('rejects an oversized message envelope through the parser', () => {
     const result = parseAdapterMessage(
       {
-        type: 'snapshot',
+        type: 'semantic-full',
         snapshot: {
-          v: 2,
+          v: 3,
           sessionId: 's',
           revision: 1,
           columns: 80,

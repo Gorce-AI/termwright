@@ -8,11 +8,14 @@ export const RESOURCE_CLASSES = Object.freeze([
   'semanticEndpoint',
   'nativeHostPressure',
   'traceWriter',
+  'cpuWeight',
+  'memoryWeight',
+  'ioWeight',
 ] as const);
 
 export type ResourceClass = (typeof RESOURCE_CLASSES)[number];
 export type ResourceVector = Readonly<Partial<Record<ResourceClass, number>>>;
-export type ResourceCapacities = Readonly<Record<ResourceClass, number>>;
+export type ResourceCapacities = Readonly<Partial<Record<ResourceClass, number>>>;
 
 export interface WorkerIdentity {
   readonly runId: RunId;
@@ -38,13 +41,14 @@ export interface ResourceLeaseSnapshot extends AttemptIdentity {
 
 export interface ResourceBrokerSnapshot {
   readonly runId: RunId;
-  readonly capacities: ResourceCapacities;
-  readonly used: ResourceCapacities;
+  readonly capacities: Readonly<Record<ResourceClass, number>>;
+  readonly used: Readonly<Record<ResourceClass, number>>;
   readonly active: readonly ResourceLeaseSnapshot[];
   readonly queue: readonly (AttemptIdentity & {
     readonly position: number;
     readonly resources: ResourceVector;
     readonly deadline: number;
+    readonly limitedBy: readonly (ResourceClass | 'fifo')[];
   })[];
 }
 
@@ -137,6 +141,9 @@ const ZERO = (): Record<ResourceClass, number> => ({
   semanticEndpoint: 0,
   nativeHostPressure: 0,
   traceWriter: 0,
+  cpuWeight: 0,
+  memoryWeight: 0,
+  ioWeight: 0,
 });
 
 const DEFAULT_TIMERS: TimerApi = {
@@ -152,7 +159,7 @@ const DEFAULT_TIMERS: TimerApi = {
  */
 export class ResourceBroker {
   readonly #runId: RunId;
-  readonly #capacities: ResourceCapacities;
+  readonly #capacities: Readonly<Record<ResourceClass, number>>;
   readonly #maxQueued: number;
   readonly #now: () => number;
   readonly #randomUUID: () => string;
@@ -279,6 +286,10 @@ export class ResourceBroker {
             position: index + 1,
             resources: Object.freeze({ ...pending.resources }),
             deadline: pending.deadline,
+            limitedBy: Object.freeze([
+              ...(index === 0 ? [] : (['fifo'] as const)),
+              ...this.#limitedBy(pending.resources),
+            ]),
           }),
         ),
       ),
@@ -501,6 +512,12 @@ export class ResourceBroker {
     );
   }
 
+  #limitedBy(additional: Record<ResourceClass, number>): ResourceClass[] {
+    return RESOURCE_CLASSES.filter(
+      (resource) => this.#used[resource] + additional[resource] > this.#capacities[resource],
+    );
+  }
+
   #assertIdentity(identity: WorkerIdentity): void {
     this.#assertRun(identity.runId);
     assertWorker(identity.workerId, identity.workerEpoch);
@@ -522,13 +539,13 @@ export class ResourceBroker {
 function normalizeCapacities(capacities: ResourceCapacities): Record<ResourceClass, number> {
   const normalized = ZERO();
   for (const resource of RESOURCE_CLASSES)
-    normalized[resource] = positiveInteger(capacities[resource], resource, true);
+    normalized[resource] = positiveInteger(capacities[resource] ?? 0, resource, true);
   return normalized;
 }
 
 function normalizeVector(
   vector: ResourceVector,
-  capacities: ResourceCapacities,
+  capacities: Readonly<Record<ResourceClass, number>>,
 ): Record<ResourceClass, number> {
   const normalized = ZERO();
   let total = 0;

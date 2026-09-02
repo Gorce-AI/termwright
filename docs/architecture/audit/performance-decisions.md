@@ -42,11 +42,14 @@ than allocation. Equivalence is pinned by 12 tests over the same corpus,
 including after scrolling and including trailing blank rows, which a substring
 search can depend on.
 
-## Ring buffer for bounded logs — DEFERRED on measurement
+## Ring buffer for bounded logs — IMPLEMENTED for the bounded-state invariant
 
-The bounded log and diagnostic buffers use `Array.shift()` once the cap is
-reached. A ring buffer is faster, and the absolute cost is too small to justify
-the indirection.
+The original measurement showed that replacing `Array.shift()` was not needed
+for latency alone. The production-maturity campaign changed the deciding
+constraint: capped diagnostic state must have mechanically bounded retention
+and O(1) eviction independent of engine array behavior. Session diagnostics,
+application logs, and crash-input history therefore share one tested bounded
+ring implementation.
 
 | Capacity | 200 000 pushes with `shift()` | With a ring buffer | Ratio |
 | -------: | ----------------------------: | -----------------: | ----: |
@@ -54,10 +57,19 @@ the indirection.
 |    1 000 |                       14.1 ms |             4.5 ms | 3.12× |
 |   10 000 |                       12.8 ms |             5.0 ms | 2.53× |
 
-That is 0.07 µs against 0.02 µs per line. A test producing ten thousand log
-lines — far more than a typical one — would save under a millisecond. V8
-already special-cases `shift()` for arrays of this size, so the theoretical
-O(n) cost does not materialise at these bounds.
+That is 0.07 µs against 0.02 µs per line, so this remains a resource-invariant
+change rather than a claimed user-visible speedup. Tests pin oldest-first
+ordering, overwrite behavior, clearing, and zero-capacity retention.
 
-Revisit if a bound grows by orders of magnitude, or if a profile shows these
-buffers in a hot path for some other reason.
+## Semantic transport ratchets — IMPLEMENTED
+
+The paired reference/candidate gate now admits semantic encoded bytes per frame
+and full-snapshot count as first-class observations. Both are stable work-count
+metrics rather than shared-runner wall time. A candidate may use at most 10%
+plus 128 bytes/frame more encoded semantic data than its exact paired reference,
+and it may not increase the number of full publications at all.
+
+Delta count is retained as evidence but is deliberately not a lower-is-better
+ratchet: for a fixed 1,000-frame workload, replacing a full publication with a
+delta increases that count while improving the architecture. Validation time
+keeps the existing wider timing tolerance because it is measurably noisier.

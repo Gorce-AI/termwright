@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ResizeReceipt
 
-Defined in: [driver/src/api.ts:715](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L715)
+Defined in: [driver/src/api.ts:717](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L717)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **after**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: [driver/src/api.ts:718](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L718)
+Defined in: [driver/src/api.ts:720](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L720)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:718](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **before**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: [driver/src/api.ts:717](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L717)
+Defined in: [driver/src/api.ts:719](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L719)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:717](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **pairedRender**: [`Observation`](../../type-aliases/observation/)\<`number`\>
 
-Defined in: [driver/src/api.ts:720](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L720)
+Defined in: [driver/src/api.ts:722](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L722)
 
 Revision that proves the child repainted at the new PTY size.
 
@@ -62,7 +62,7 @@ Revision that proves the child repainted at the new PTY size.
 
 > `readonly` **requested**: `object`
 
-Defined in: [driver/src/api.ts:716](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L716)
+Defined in: [driver/src/api.ts:718](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L718)
 
 #### columns
 

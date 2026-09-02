@@ -401,7 +401,7 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
   }
 
   return {
-    v: 2,
+    v: 3,
     sessionId: context.sessionId,
     revision: context.revision,
     columns: context.columns,

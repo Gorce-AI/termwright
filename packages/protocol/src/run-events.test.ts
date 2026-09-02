@@ -87,11 +87,11 @@ describe('formal run identity', () => {
   });
 });
 
-describe('RunEvent v2 envelope', () => {
+describe('RunEvent v3 envelope', () => {
   it('constructs one deeply immutable, browser-safe envelope', () => {
     const created = event(0);
     expect(created).toMatchObject({
-      v: 2,
+      v: 3,
       producerId,
       epoch: 0,
       seq: 0,
@@ -103,6 +103,31 @@ describe('RunEvent v2 envelope', () => {
     expect(Object.isFrozen(created)).toBe(true);
     expect(Object.isFrozen(created.identity)).toBe(true);
     expect(Object.isFrozen(created.payload)).toBe(true);
+  });
+
+  it('bounds producer-side event-id collision tracking and fails closed', () => {
+    const repeated = new RunEventProducer({
+      producerId,
+      epoch: 0,
+      randomUUID: () => UUIDS[8]!,
+      monotonicNow: () => 1,
+    });
+    expect(
+      repeated.emit({
+        eventClass: 'authoritative',
+        type: 'run.configuration',
+        identity,
+        payload: {},
+      }).eventId,
+    ).toBe(`event:${UUIDS[8]}`);
+    expect(() =>
+      repeated.emit({
+        eventClass: 'authoritative',
+        type: 'run.configuration',
+        identity,
+        payload: {},
+      }),
+    ).toThrow(/collided with retained evidence eight times/u);
   });
 
   it.each(RUN_EVENT_CLASSES)('accepts the %s event class', (eventClass) => {
@@ -297,7 +322,7 @@ describe('merged RunEvent stream validation', () => {
     expect(duplicateSeq.accept(first).ok).toBe(true);
     expect(duplicateSeq.accept({ ...event(1), seq: 0 })).toMatchObject({
       ok: false,
-      code: 'event-collision',
+      code: 'sequence-regression',
     });
 
     const sequence = new RunEventStreamValidator();
@@ -319,14 +344,48 @@ describe('merged RunEvent stream validation', () => {
     });
   });
 
-  it('detects a causal cycle even when its first edge referenced a future event', () => {
+  it('accepts only prior causes inside the bounded causal horizon', () => {
     const stream = new RunEventStreamValidator();
     const first = event(0);
     const second = event(1);
-    expect(stream.accept({ ...first, causedBy: [second.eventId] }).ok).toBe(true);
-    expect(stream.accept({ ...second, causedBy: [first.eventId] })).toMatchObject({
+    expect(stream.accept({ ...first, causedBy: [second.eventId] })).toMatchObject({
       ok: false,
-      code: 'causal-cycle',
+      code: 'causal-reference-unavailable',
+    });
+    expect(stream.accept(first).ok).toBe(true);
+    expect(stream.accept({ ...second, causedBy: [first.eventId] }).ok).toBe(true);
+
+    const bounded = new RunEventStreamValidator(DEFAULT_RUN_EVENT_LIMITS, {
+      maxEvents: 2,
+      maxProducers: 1,
+      maxRecentEventIds: 1,
+      eventIdFilterBits: 1_024,
+      eventIdFilterHashes: 3,
+    });
+    const third = event(2);
+    expect(bounded.accept(first).ok).toBe(true);
+    expect(bounded.accept(second).ok).toBe(true);
+    expect(bounded.accept({ ...third, causedBy: [first.eventId] })).toMatchObject({
+      ok: false,
+      code: 'stream-capacity',
+    });
+    const causalHorizon = new RunEventStreamValidator(DEFAULT_RUN_EVENT_LIMITS, {
+      maxEvents: 3,
+      maxProducers: 1,
+      maxRecentEventIds: 1,
+      eventIdFilterBits: 1_024,
+      eventIdFilterHashes: 3,
+    });
+    expect(causalHorizon.accept(first).ok).toBe(true);
+    expect(causalHorizon.accept(second).ok).toBe(true);
+    expect(causalHorizon.accept({ ...third, causedBy: [first.eventId] })).toMatchObject({
+      ok: false,
+      code: 'causal-reference-unavailable',
+    });
+    const otherProducer = createRunId('producer', () => UUIDS[8]!);
+    expect(causalHorizon.accept({ ...third, producerId: otherProducer, seq: 0 })).toMatchObject({
+      ok: false,
+      code: 'stream-capacity',
     });
   });
 });

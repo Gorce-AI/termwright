@@ -147,7 +147,7 @@ try {
   });
   await terminal.waitForText('readme.md');
   await waitForPairedSemanticRevision(terminal, 1);
-  assert(terminal.semanticTree()?.v === 2, 'race fixture did not publish SemanticTreeV2');
+  assert(terminal.semanticTree()?.v === 3, 'race fixture did not publish SemanticTreeV3');
   assert(
     (await terminal.getByRole('list', { name: 'Files' }).count()) === 1,
     'race fixture did not publish the Files list',

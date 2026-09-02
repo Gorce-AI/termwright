@@ -12,7 +12,7 @@ export async function rewriteCommittedMember(
   await writeFile(join(dir, name), body, 'utf8');
   const path = join(dir, TRACE_FILES.commit);
   const commit = JSON.parse(await readFile(path, 'utf8')) as {
-    v: 1;
+    v: 4;
     checksums: Record<string, string>;
   };
   commit.checksums[name] = createHash('sha256').update(body).digest('hex');

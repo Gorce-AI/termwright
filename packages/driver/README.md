@@ -148,7 +148,7 @@ one it used:
 ```ts
 const terminal = await launchTerminal({
   command: ['node', 'app.js'],
-  terminalProfile: 'iterm2-ambiguous-wide', // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
+  terminalProfile: 'cjk-wide', // 'default' | 'cjk-wide'
 });
 console.log(terminal.terminalProfile);
 ```
@@ -197,7 +197,7 @@ wrapped and no listener is registered.
 
 ## Semantic snapshots
 
-The semantic channel uses `termwright/2` and complete evidence-qualified
+The semantic channel uses `termwright/3` and complete evidence-qualified
 snapshots. Each semantic revision is validated independently, retained, and
 paired with its authenticated render marker.
 

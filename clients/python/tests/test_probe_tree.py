@@ -298,7 +298,7 @@ async def test_publishes_qualified_geometry_and_exact_hit_grid():
     async with app.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
         snapshot = build_snapshot(app, app.screen, Identities(), session_id="s", revision=1).to_wire()
-    assert snapshot["v"] == 2
+    assert snapshot["v"] == 3
     assert snapshot["coordinateSpace"]["value"] == "viewport-cells"
     assert snapshot["hitGrid"]["status"] == "known"
     approve = by_test_id(snapshot)["approve"]

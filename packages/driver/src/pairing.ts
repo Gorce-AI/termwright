@@ -14,12 +14,13 @@
  * changes pairing state: operation/session deadlines own failure, and a late
  * authoritative half must still be able to complete its revision.
  */
-import type { SemanticSnapshot } from '@termwright/protocol';
+import type { SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type { DiagnosticCode } from './api.js';
 
 /** A published, fully paired revision. */
 export interface PairedRevision {
   readonly snapshot: SemanticSnapshot;
+  readonly changedNodes: ReadonlyMap<string, SemanticNode | undefined> | null;
   /** Screen revision the render marker committed, or `null` when unpaired mode is active. */
   readonly screenRevision: number | null;
 }
@@ -51,6 +52,7 @@ export interface PairingOptions {
 
 interface PendingSnapshot {
   readonly snapshot: SemanticSnapshot;
+  readonly changedNodes: ReadonlyMap<string, SemanticNode | undefined> | null;
   readonly watchdog: DeferredWatchdog;
 }
 
@@ -189,7 +191,10 @@ export class RevisionPairing {
   }
 
   /** Accepts a validated tree. */
-  offerSnapshot(snapshot: SemanticSnapshot): void {
+  offerSnapshot(
+    snapshot: SemanticSnapshot,
+    changedNodes: ReadonlyMap<string, SemanticNode | undefined> | null = null,
+  ): void {
     if (this.#disposed) return;
     if (snapshot.revision <= this.revision) {
       this.#options.onDiagnostic(
@@ -200,18 +205,19 @@ export class RevisionPairing {
       return;
     }
     if (!this.#markerEnabled) {
-      this.#publish({ snapshot, screenRevision: null });
+      this.#publish({ snapshot, changedNodes, screenRevision: null });
       return;
     }
     const marker = this.#markers.get(snapshot.revision);
     if (marker !== undefined) {
       marker.watchdog.cancel();
       this.#markers.delete(snapshot.revision);
-      this.#publish({ snapshot, screenRevision: marker.screenRevision });
+      this.#publish({ snapshot, changedNodes, screenRevision: marker.screenRevision });
       return;
     }
     this.#retain(this.#snapshots, snapshot.revision, 'tree', {
       snapshot,
+      changedNodes,
       watchdog: this.#watch(snapshot.revision, 'tree'),
     });
   }
@@ -239,7 +245,11 @@ export class RevisionPairing {
     if (pending !== undefined) {
       pending.watchdog.cancel();
       this.#snapshots.delete(revision);
-      this.#publish({ snapshot: pending.snapshot, screenRevision });
+      this.#publish({
+        snapshot: pending.snapshot,
+        changedNodes: pending.changedNodes,
+        screenRevision,
+      });
       return;
     }
     this.#retain(this.#markers, revision, 'marker', {

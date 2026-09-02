@@ -17,7 +17,7 @@
     {
       "name": "dialog-with-two-buttons",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -213,7 +213,7 @@
     {
       "name": "offscreen-implies-hidden",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -405,7 +405,7 @@
     {
       "name": "node-with-provenance",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -606,7 +606,7 @@
     {
       "name": "minimal-empty-tree",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s",
         "revision": 1,
         "columns": 1,
@@ -627,7 +627,7 @@
     {
       "name": "hidden-node-outside-viewport",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -818,7 +818,7 @@
     {
       "name": "relations-and-text-ranges",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -1032,7 +1032,7 @@
     {
       "name": "extended-domain-state",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -1240,7 +1240,7 @@
     {
       "name": "public-semantic-value",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -1447,7 +1447,7 @@
     {
       "name": "withheld-sensitive-semantic-value",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -1648,7 +1648,7 @@
     {
       "name": "authoritative-physical-input-recipes",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -1866,7 +1866,7 @@
     {
       "name": "application-action-strategy-provider",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -2094,7 +2094,7 @@
     {
       "name": "application-focus-provider",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -2325,7 +2325,7 @@
     {
       "name": "application-scroll-provider",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -2560,7 +2560,7 @@
     {
       "name": "application-painted-region-provider",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -2813,7 +2813,7 @@
     {
       "name": "application-terminal-input-mode-provider",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -3029,7 +3029,7 @@
     {
       "name": "two-roots",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -3275,7 +3275,7 @@
     {
       "name": "absent-requires-provenance",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -3462,7 +3462,7 @@
     {
       "name": "absent-requires-authoritative-provenance",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -3655,7 +3655,7 @@
     {
       "name": "permanent-unknown-reason-rejected",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -3842,7 +3842,7 @@
     {
       "name": "extended-must-be-an-object",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -4045,7 +4045,7 @@
     {
       "name": "extended-container-over-ceiling",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -4312,7 +4312,7 @@
     {
       "name": "duplicate-node-id",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -4510,7 +4510,7 @@
     {
       "name": "unknown-parent",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -4708,7 +4708,7 @@
     {
       "name": "self-parent",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -4906,7 +4906,7 @@
     {
       "name": "parent-cycle",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -4989,7 +4989,7 @@
     {
       "name": "generic-without-framework-type",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -5187,7 +5187,7 @@
     {
       "name": "generic-with-empty-framework-type",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -5386,7 +5386,7 @@
     {
       "name": "unknown-role",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -5584,7 +5584,7 @@
     {
       "name": "offscreen-without-hidden",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -5782,7 +5782,7 @@
     {
       "name": "unknown-provenance",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -5981,7 +5981,7 @@
     {
       "name": "unknown-provenance-per-field",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -6182,7 +6182,7 @@
     {
       "name": "legacy-raw-semantic-value",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -6381,7 +6381,7 @@
     {
       "name": "root-with-parent",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -6580,7 +6580,7 @@
     {
       "name": "parentless-node-not-in-rootids",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -6777,7 +6777,7 @@
     {
       "name": "rootid-references-unknown-node",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -6975,7 +6975,7 @@
     {
       "name": "duplicate-rootid",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -7174,7 +7174,7 @@
     {
       "name": "revision-zero",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 0,
         "columns": 80,
@@ -7372,7 +7372,7 @@
     {
       "name": "revision-not-integer",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1.5,
         "columns": 80,
@@ -7763,12 +7763,12 @@
         }
       },
       "code": "schema",
-      "detail": "v: Invalid input: expected 2"
+      "detail": "v: Invalid input: expected 3"
     },
     {
       "name": "empty-session-id",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "",
         "revision": 1,
         "columns": 80,
@@ -7966,7 +7966,7 @@
     {
       "name": "zero-columns",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 0,
@@ -8164,7 +8164,7 @@
     {
       "name": "obsolete-bounds-rejected",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -8368,7 +8368,7 @@
     {
       "name": "cursor-outside-viewport",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -8566,7 +8566,7 @@
     {
       "name": "unknown-node-field",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -8765,7 +8765,7 @@
     {
       "name": "unknown-state-field",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -8963,7 +8963,7 @@
     {
       "name": "unknown-action",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -9160,7 +9160,7 @@
     {
       "name": "recipe-without-matching-intent",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -9369,7 +9369,7 @@
     {
       "name": "focus-recipe-cannot-require-focus",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -9579,7 +9579,7 @@
     {
       "name": "setvalue-recipe-requires-exactly-one-action-value",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -9788,7 +9788,7 @@
     {
       "name": "duplicate-recipe-action",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -10008,7 +10008,7 @@
     {
       "name": "recipe-step-is-strict",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -10219,7 +10219,7 @@
     {
       "name": "provider-action-recipe-unknown-recipient",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -10449,7 +10449,7 @@
     {
       "name": "provider-focus-unknown-recipient",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -10666,7 +10666,7 @@
     {
       "name": "provider-focus-none-is-strict",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -10883,7 +10883,7 @@
     {
       "name": "provider-scroll-unknown-recipient",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -11105,7 +11105,7 @@
     {
       "name": "provider-scroll-outside-extent",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -11327,7 +11327,7 @@
     {
       "name": "provider-painted-region-unknown-recipient",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -11558,7 +11558,7 @@
     {
       "name": "provider-input-mode-invalid-tracking",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -11776,7 +11776,7 @@
     {
       "name": "provider-input-mode-is-strict",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -11995,7 +11995,7 @@
     {
       "name": "painted-region-span-outside-bounds",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -12217,7 +12217,7 @@
     {
       "name": "painted-region-span-outside-viewport",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -12439,7 +12439,7 @@
     {
       "name": "empty-node-id",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -12637,7 +12637,7 @@
     {
       "name": "labelledby-unknown-target",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -12838,7 +12838,7 @@
     {
       "name": "text-range-reversed",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,
@@ -13054,7 +13054,7 @@
     {
       "name": "nodes-not-an-array",
       "snapshot": {
-        "v": 2,
+        "v": 3,
         "sessionId": "s-0001",
         "revision": 1,
         "columns": 80,

@@ -37,7 +37,7 @@ must not change terminal output.
 
 Send one `hello` with:
 
-- protocol `termwright/2`;
+- protocol `termwright/3`;
 - a non-empty adapter name and version;
 - the capabilities the probe can actually provide;
 - `intended-geometry` only for authoritative layout rectangles;

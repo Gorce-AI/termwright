@@ -1545,7 +1545,7 @@ describe('record mode', () => {
       contractId: 'rec:0',
       sessionId: 'rec',
       epoch: 0,
-      protocol: 'termwright/2',
+      protocol: 'termwright/3',
       framework: null,
       providers: [
         {

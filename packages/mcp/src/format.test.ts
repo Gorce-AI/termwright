@@ -16,7 +16,7 @@ const geometry = (rect: { row: number; column: number; width: number; height: nu
 
 /** The snapshot behind the example in CONTRACTS.md §MCP. */
 const permissionDialog: SemanticSnapshot = {
-  v: 2,
+  v: 3,
   sessionId: 's1',
   revision: 42,
   columns: 100,

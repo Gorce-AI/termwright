@@ -20,6 +20,8 @@ export type ProviderEvidenceResult =
   | {
       readonly ok: true;
       readonly snapshot: SemanticSnapshot;
+      /** Nodes whose final value was enriched by application-provider evidence. */
+      readonly composedNodeIds: ReadonlySet<string>;
       readonly inputModes?: {
         readonly value: ProviderTerminalInputModes;
         readonly evidence: EvidenceProvenance;
@@ -695,6 +697,10 @@ export function composeProviderEvidence(
       },
     };
   }
+  const composedNodeIds = new Set<string>();
+  for (const [index, node] of nodes.entries()) {
+    if (node !== snapshot.nodes[index]) composedNodeIds.add(node!.id);
+  }
   return {
     ok: true,
     snapshot: Object.freeze({
@@ -702,6 +708,7 @@ export function composeProviderEvidence(
       nodes: Object.freeze(nodes as typeof snapshot.nodes),
       hitGrid,
     }),
+    composedNodeIds,
     ...(providerInputModes === undefined ? {} : { inputModes: Object.freeze(providerInputModes) }),
   };
 }

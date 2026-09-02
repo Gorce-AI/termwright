@@ -37,6 +37,7 @@ describe('attempt resource diagnostics', () => {
         attemptId,
         reservedLease: Promise.resolve(reservedLease),
         resourceReservation: { ptySession: 1 },
+        strictResourceReservation: true,
       },
     );
 

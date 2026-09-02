@@ -244,7 +244,7 @@ const unknownGeometry = () => ({
 });
 
 const qualifiedSnapshot = {
-  v: 2,
+  v: 3,
   sessionId: 'observation-vector',
   revision: 7,
   columns: 12,
@@ -621,7 +621,7 @@ write('marker.json', {
 // --------------------------------------------------------------------------
 
 const baseSnapshot = {
-  v: 2,
+  v: 3,
   sessionId: 's-0001',
   revision: 1,
   columns: 80,
@@ -693,7 +693,7 @@ const snapshotAccept = [
   {
     name: 'minimal-empty-tree',
     snapshot: {
-      v: 2,
+      v: 3,
       sessionId: 's',
       revision: 1,
       columns: 1,
@@ -1212,13 +1212,13 @@ const helloAckMessage = {
   protocol: PROTOCOL_ID,
   sessionId: 's-0001',
   limits: { ...DEFAULT_LIMITS },
-  subscribe: 'snapshots',
+  subscribe: 'semantic',
   marker: { enabled: true },
 };
 const adapterAccept = [
   { name: 'hello', message: helloMessage },
   { name: 'revision-commit', message: { type: 'revision-commit', revision: 3 } },
-  { name: 'snapshot', message: { type: 'snapshot', snapshot: baseSnapshot } },
+  { name: 'snapshot', message: { type: 'semantic-full', snapshot: baseSnapshot } },
   { name: 'error', message: { type: 'error', code: 'internal', message: 'boom' } },
   ...LOG_LEVELS.map((level) => ({
     name: `log-${level}`,
@@ -1274,7 +1274,7 @@ const adapterReject = [
   { name: 'hello-extra-field', message: { ...helloMessage, extra: 1 } },
   { name: 'revision-commit-zero', message: { type: 'revision-commit', revision: 0 } },
   { name: 'revision-commit-float', message: { type: 'revision-commit', revision: 2.5 } },
-  { name: 'snapshot-invalid-body', message: { type: 'snapshot', snapshot: { ...baseSnapshot, revision: 0 } } },
+  { name: 'snapshot-invalid-body', message: { type: 'semantic-full', snapshot: { ...baseSnapshot, revision: 0 } } },
   { name: 'error-unknown-code', message: { type: 'error', code: 'meltdown', message: 'x' } },
   { name: 'log-unknown-level', message: { type: 'log', record: logRecord({ level: 'verbose' }) } },
   { name: 'log-missing-seq', message: { type: 'log', record: logRecord({ seq: undefined }) } },
@@ -1323,6 +1323,15 @@ const adapterReject = [
 const driverAccept = [
   { name: 'hello-ack', message: helloAckMessage },
   {
+    name: 'semantic-resync-request',
+    message: {
+      type: 'semantic-resync-request',
+      sessionId: 's-0001',
+      expectedBaseRevision: 3,
+      reason: 'base-mismatch',
+    },
+  },
+  {
     // Driver traffic is read tolerantly throughout: `limits` is the object
     // that grows most often, but the rule is the same everywhere — a receiver
     // that rejected a field it had never heard of would drop the channel every
@@ -1344,11 +1353,11 @@ const driverAccept = [
     name: 'hello-ack-unknown-nested-field',
     message: { ...helloAckMessage, marker: { enabled: true, style: 'dcs' } },
   },
-  { name: 'hello-ack-subscribe-revisions', message: { ...helloAckMessage, subscribe: 'revisions' } },
   { name: 'error', message: { type: 'error', code: 'bad-token', message: 'nope' } },
 ];
 
 const driverReject = [
+  { name: 'hello-ack-subscribe-revisions', message: { ...helloAckMessage, subscribe: 'revisions' } },
   {
     name: 'hello-ack-missing-limit-key',
     message: {
@@ -1363,7 +1372,7 @@ const driverReject = [
   { name: 'hello-ack-bad-subscribe', message: { ...helloAckMessage, subscribe: 'everything' } },
   { name: 'hello-ack-missing-limits', message: { ...helloAckMessage, limits: undefined } },
   { name: 'obsolete-get-tree', message: { type: 'get-tree', requestId: 0 } },
-  { name: 'unknown-type', message: { type: 'snapshot', snapshot: baseSnapshot } },
+  { name: 'unknown-type', message: { type: 'semantic-full', snapshot: baseSnapshot } },
 ];
 
 function annotate(entries, parse, expectOk) {

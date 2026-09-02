@@ -1,4 +1,4 @@
-import { Unicode11Addon } from '@xterm/addon-unicode11';
+import { applyProfile, resolveProfileId } from '@termwright/vt/unicode';
 import { Terminal } from '@xterm/xterm';
 import { Radio, ScanLine } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
@@ -32,6 +32,10 @@ interface OverlayMetrics {
 }
 
 export function TerminalStage(props: TerminalStageProps) {
+  const profile = resolveProfileId(props.profile);
+  if (profile === undefined) {
+    throw new Error(`unknown terminal profile ${JSON.stringify(props.profile)}`);
+  }
   const machineRef = useRef<HTMLElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -82,9 +86,11 @@ export function TerminalStage(props: TerminalStageProps) {
         brightYellow: '#ffda8a',
       },
     });
-    const unicode = new Unicode11Addon();
-    terminal.loadAddon(unicode);
-    terminal.unicode.activeVersion = '11';
+    applyProfile(terminal.unicode, profile);
+    appliedRef.current.identity = '';
+    appliedRef.current.live = 0;
+    appliedRef.current.replayCursor = 0;
+    appliedRef.current.replayTime = 0;
     terminal.open(surface);
     terminalRef.current = terminal;
     const input = terminal.onData((data) => inputRef.current?.(data));
@@ -134,16 +140,16 @@ export function TerminalStage(props: TerminalStageProps) {
     return () => {
       observer.disconnect();
       input.dispose();
-      unicode.dispose();
       terminal.dispose();
       terminalRef.current = null;
       fitRef.current = () => undefined;
     };
-  }, []);
+  }, [profile.id]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
-    if (terminal === null) return;
+    const host = hostRef.current;
+    if (terminal === null || host === null) return;
     terminal.options.cursorBlink = props.writable;
     const targetColumns = Math.max(props.columns, 1);
     const targetRows = Math.max(props.rows, 1);
@@ -163,7 +169,8 @@ export function TerminalStage(props: TerminalStageProps) {
       applied.generation += 1;
       const generation = applied.generation;
       terminal.write('', () => {
-        if (generation !== appliedRef.current.generation) return;
+        if (generation !== appliedRef.current.generation || terminalRef.current !== terminal)
+          return;
         terminal.reset();
         terminal.clear();
         terminal.resize(targetColumns, targetRows);
@@ -185,7 +192,8 @@ export function TerminalStage(props: TerminalStageProps) {
         applied.generation += 1;
         const generation = applied.generation;
         terminal.write('', () => {
-          if (generation !== appliedRef.current.generation) return;
+          if (generation !== appliedRef.current.generation || terminalRef.current !== terminal)
+            return;
           terminal.reset();
           terminal.clear();
           terminal.resize(targetColumns, targetRows);
@@ -202,12 +210,17 @@ export function TerminalStage(props: TerminalStageProps) {
       applied.replayCursor = cursor;
       applied.replayTime = props.replayTimeMs;
     }
-    terminal.write('', () => requestAnimationFrame(() => fitRef.current()));
+    terminal.write('', () => {
+      if (terminalRef.current !== terminal) return;
+      host.dataset['terminalCursorX'] = String(terminal.buffer.active.cursorX);
+      requestAnimationFrame(() => fitRef.current());
+    });
   }, [
     props.columns,
     props.identity,
     props.liveChunks,
     props.mode,
+    profile.id,
     props.replayFrames,
     props.replayTimeMs,
     props.rows,
@@ -249,6 +262,7 @@ export function TerminalStage(props: TerminalStageProps) {
         data-terminal-columns={props.columns}
         data-terminal-rows={props.rows}
         data-terminal-identity={props.identity}
+        data-terminal-profile={profile.id}
         tabIndex={props.writable ? 0 : -1}
         onFocus={(event) => {
           if (event.target === event.currentTarget) terminalRef.current?.focus();

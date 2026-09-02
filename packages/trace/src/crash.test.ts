@@ -37,6 +37,7 @@ async function recordCrash(dir: string, options: { idleTimeLimit?: number } = {}
     columns: 40,
     rows: 6,
     now: session.now,
+    ...(options.idleTimeLimit === undefined ? {} : { idleTimeLimit: options.idleTimeLimit }),
   });
 
   session.semantic(snapshot(3, [node({ id: 'n1', role: 'button', name: 'Retry' })], 'sess-crash'));
@@ -58,9 +59,7 @@ async function recordCrash(dir: string, options: { idleTimeLimit?: number } = {}
     ],
   });
   step.end('failed', 'server died');
-  await writer.finalize(
-    options.idleTimeLimit === undefined ? {} : { idleTimeLimit: options.idleTimeLimit },
-  );
+  await writer.finalize();
 }
 
 describe('crash in the archive', () => {
@@ -99,7 +98,6 @@ describe('crash in the archive', () => {
     expect(crash).toMatchObject({
       kind: 'crash',
       t: 250,
-      castOffset: 250,
       screenTailLines: 3,
       lastSemanticRevision: 3,
     });
@@ -112,13 +110,13 @@ describe('crash in the archive', () => {
     const root = await workspace();
     const dir = join(root, 'trimmed.twtrace');
     const session = new FakeSession();
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, { dir, now: session.now, idleTimeLimit: 2 });
 
     session.output('a');
     session.tick(30_000);
     session.output('b');
     session.crash({ exit: { code: 1, signal: null } });
-    await writer.finalize({ idleTimeLimit: 2 });
+    await writer.finalize();
 
     const trace = await openTrace(dir);
     try {

@@ -485,7 +485,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     }),
   ]);
   const snapshotV2 = z.strictObject({
-    v: z.literal(2),
+    v: z.literal(3),
     sessionId: text.refine((s) => s.length > 0, 'sessionId must not be empty'),
     revision: positiveInt(),
     columns: positiveInt(),

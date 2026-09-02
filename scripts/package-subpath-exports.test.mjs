@@ -70,3 +70,53 @@ describe('published protocol subpath exports', () => {
     });
   }, 30_000);
 });
+
+describe('private test-engine subpaths', () => {
+  it('stay unreachable from a packed clean consumer', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-private-runner-'));
+    scratch.push(directory);
+    const archiveDirectory = join(directory, 'archives');
+    const packageDirectory = join(directory, 'node_modules', '@termwright', 'test');
+    await mkdir(archiveDirectory, { recursive: true });
+    await mkdir(packageDirectory, { recursive: true });
+
+    await exec(
+      pnpm.command,
+      [...pnpm.args, '--dir', 'packages/test', 'pack', '--pack-destination', archiveDirectory],
+      { cwd: root },
+    );
+    const archive = (await readdir(archiveDirectory)).find((name) => name.endsWith('.tgz'));
+    expect(archive).toBeDefined();
+    await exec(
+      'tar',
+      [
+        '-xzf',
+        `archives/${archive}`,
+        '--strip-components=1',
+        '-C',
+        'node_modules/@termwright/test',
+      ],
+      { cwd: directory },
+    );
+
+    const consumer = join(directory, 'consumer.mjs');
+    await writeFile(
+      consumer,
+      [
+        "for (const specifier of ['@termwright/test/runner', '@termwright/test/vitest-engine']) {",
+        '  try {',
+        '    await import(specifier);',
+        '    throw new Error(`private engine subpath resolved: ${specifier}`);',
+        '  } catch (error) {',
+        "    if (error?.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED') throw error;",
+        '  }',
+        '}',
+      ].join('\n'),
+      'utf8',
+    );
+
+    await expect(exec(process.execPath, [consumer], { cwd: directory })).resolves.toMatchObject({
+      stderr: '',
+    });
+  }, 30_000);
+});

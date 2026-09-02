@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SessionEventSubscriptionOptions
 
-Defined in: [driver/src/api.ts:815](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L815)
+Defined in: [driver/src/api.ts:817](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L817)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **fromSequence**: `number`
 
-Defined in: [driver/src/api.ts:817](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L817)
+Defined in: [driver/src/api.ts:819](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L819)
 
 Inclusive source sequence. Use `1` to observe the complete startup.
 
@@ -46,7 +46,7 @@ Inclusive source sequence. Use `1` to observe the complete startup.
 
 > `readonly` `optional` **onError?**: (`error`, `record`) => `void`
 
-Defined in: [driver/src/api.ts:829](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L829)
+Defined in: [driver/src/api.ts:831](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L831)
 
 Reports a delivery this subscriber rejected, for sinks that must not lose
 a record.
@@ -77,7 +77,7 @@ this and fail its own operation.
 
 > `readonly` `optional` **onGap?**: (`gap`) => `void`
 
-Defined in: [driver/src/api.ts:818](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L818)
+Defined in: [driver/src/api.ts:820](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L820)
 
 #### Parameters
 

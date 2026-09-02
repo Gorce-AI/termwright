@@ -5,6 +5,7 @@ import {
   type NativeRunStatus,
   type NativeRunAttempt,
   type RunStartProvenance,
+  type RunResourceTelemetry,
 } from '@termwright/run-history';
 
 export interface NativeRunFixtureTest {
@@ -14,6 +15,32 @@ export interface NativeRunFixtureTest {
   readonly durationMs?: number | null;
   readonly retries?: readonly ('failed' | 'passed' | 'skipped' | 'incomplete')[];
 }
+
+export const fixtureRunTelemetry = (completedAttempts = 0): RunResourceTelemetry => ({
+  coordinatorCpuUserMicros: 1,
+  coordinatorCpuSystemMicros: 1,
+  coordinatorRssStartBytes: 1,
+  coordinatorRssEndBytes: 1,
+  coordinatorPeakSampledRssBytes: 1,
+  workerPeakRssBytes: completedAttempts === 0 ? 'unavailable' : 100,
+  workerCpuUserMicros: completedAttempts === 0 ? 'unavailable' : completedAttempts,
+  workerCpuSystemMicros: completedAttempts === 0 ? 'unavailable' : completedAttempts * 2,
+  ownedProcessPeakRssBytes: 'unavailable',
+  ownedProcessCountPeak: 'unavailable',
+  ptySlotsPeak: 0,
+  terminalOutputBytes: 0,
+  semanticBytes: 0,
+  semanticFullCount: 0,
+  semanticDeltaCount: 0,
+  journalAcceptedEvents: 0,
+  journalAcceptedBytes: 0,
+  journalSinkCalls: 0,
+  journalPeakBacklogEvents: 0,
+  journalPeakBacklogBytes: 0,
+  traceBytes: 0,
+  tempDiskPeakBytes: 'unavailable',
+  finalArtifactBytes: 0,
+});
 
 /** Creates only the current native-host schema; never a reporter/legacy manifest. */
 export async function writeNativeRunFixture(
@@ -43,6 +70,7 @@ export async function writeNativeRunFixture(
       profile: 'default',
       scheduler: { pool: 'forks', maxWorkers: 1, fileParallelism: true },
       capacities: { ptySession: 1 },
+      perAttempt: {},
       perTerminal: { ptySession: 1 },
     },
     timeouts: { totalRunMs: 60_000, finalizationReserveMs: 5_000 },
@@ -129,7 +157,16 @@ export async function writeNativeRunFixture(
           eventClass: 'authoritative',
           type: 'attempt.finished',
           identity,
-          payload: { ...payload, state: attempt.status },
+          payload: {
+            ...payload,
+            state: attempt.status,
+            worker: {
+              capability: 'worker-process',
+              cpuUserMicros: 1,
+              cpuSystemMicros: 2,
+              peakSampledRssBytes: 100,
+            },
+          },
         }),
       );
     }
@@ -183,9 +220,9 @@ export async function writeNativeRunFixture(
       payload: { state: status },
     }),
   );
-  await (
-    await beginRunManifest(runsDir, start)
-  ).commit({
+  const transaction = await beginRunManifest(runsDir, start);
+  await transaction.appendEvents(events);
+  await transaction.commit({
     ...start,
     v: RUN_MANIFEST_VERSION,
     finishedAt: startedAt + duration,
@@ -193,7 +230,9 @@ export async function writeNativeRunFixture(
     status,
     specs,
     attempts,
-    events,
+    telemetry: fixtureRunTelemetry(
+      attempts.filter((attempt) => attempt.status !== 'incomplete').length,
+    ),
   });
   return start.runId;
 }

@@ -103,6 +103,7 @@ export function renderSvg(frame: ScreenFrame, options: ScreenshotOptions = {}): 
   const defs = new Map<string, Glyph>();
   const images = new Map<string, { glyph: Glyph; width: number; height: number }>();
   const fallback = new Set<string>();
+  const maskedCells = resolveMaskedCells(frame, options.maskRects ?? []);
 
   const cursor = resolveCursor(frame, options, theme, {
     padding,
@@ -151,6 +152,19 @@ export function renderSvg(frame: ScreenFrame, options: ScreenshotOptions = {}): 
 
       const onCursor = cursor !== null && cursor.row === row && cursor.column === column;
       const fill = onCursor && cursor.solid ? theme.background : style.fg;
+
+      if (maskedCells.has(row * frame.columns + column)) {
+        flushText();
+        decorations.push({
+          x,
+          y: rowY,
+          width: cellWidth * span,
+          height: lineHeight,
+          fill: style.fg,
+          opacity: style.opacity,
+        });
+        continue;
+      }
 
       if (style.underline) {
         decorations.push({
@@ -265,6 +279,25 @@ export function renderSvg(frame: ScreenFrame, options: ScreenshotOptions = {}): 
     fallbackCharacters: [...fallback].sort(),
     fontsUsed: fonts?.used ?? [],
   };
+}
+
+function resolveMaskedCells(
+  frame: ScreenFrame,
+  rectangles: readonly { row: number; column: number; width: number; height: number }[],
+): ReadonlySet<number> {
+  const cells = new Set<number>();
+  for (const rectangle of rectangles) {
+    const fromRow = Math.max(0, rectangle.row);
+    const toRow = Math.min(frame.rows, rectangle.row + rectangle.height);
+    const fromColumn = Math.max(0, rectangle.column);
+    const toColumn = Math.min(frame.columns, rectangle.column + rectangle.width);
+    for (let row = fromRow; row < toRow; row += 1) {
+      for (let column = fromColumn; column < toColumn; column += 1) {
+        cells.add(row * frame.columns + column);
+      }
+    }
+  }
+  return cells;
 }
 
 interface CursorRender {

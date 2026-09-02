@@ -396,11 +396,12 @@ has to delete an assertion that explains itself.
   `RUNNING <command>` at command start so the suite can wait for the command to
   be observably running first; a user hits the same race and needs the same
   answer.
-- **A ZWJ cluster's width is disputed.** Yoga (Ink) and `@xterm/addon-unicode11`
-  disagree on `👩‍👩‍👧`, which shifts every row below it inside a bordered box.
-  The semantic fixture keeps the sequence in a plain row where the disagreement
-  is observable but harmless; putting it in the modal broke the dialog's own
-  bounds and, with them, hit-testing.
+- **ZWJ width must be settled before semantic geometry is useful.** The old
+  Unicode 11 provider counted `👩‍👩‍👧` as six columns while Ink/Yoga counted two.
+  Termwright's Unicode 15 EGC provider now counts two, and the real-PTY driver
+  suite deliberately places both that sequence and a Devanagari grapheme before
+  a semantic button. It requires screen bounds, semantic bounds and the emitted
+  mouse coordinates to agree; a string-only assertion would not catch this.
 
 ## Not covered yet
 

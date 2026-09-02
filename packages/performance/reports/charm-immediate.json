@@ -1,6 +1,6 @@
 {
   "kind": "termwright-performance-report",
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "generatedAt": "2026-08-25T15:20:53.033Z",
   "environment": {
     "runtime": "node v24.1.0; go compiler go1.25.0",
@@ -36,6 +36,12 @@
           "unit": "count",
           "value": 4120,
           "note": "Adapter debug counters across instrumented runs."
+        },
+        "deltas": {
+          "status": "measured",
+          "unit": "count",
+          "value": 0,
+          "note": "The measured Go producer was full-snapshot-only during this retained evidence run."
         },
         "droppedEvents": {
           "status": "measured",

@@ -148,11 +148,11 @@ async def test_instrumented_output_is_the_same_render_plus_markers(endpoint):
                 asyncio.to_thread(run_on_pty, env, release)
             )
             while not any(
-                message.get("type") == "snapshot" for message in driver.received
+                message.get("type") == "semantic-full" for message in driver.received
             ):
                 driver.frame_arrived.clear()
                 if any(
-                    message.get("type") == "snapshot"
+                    message.get("type") == "semantic-full"
                     for message in driver.received
                 ):
                     break
@@ -169,5 +169,5 @@ async def test_instrumented_output_is_the_same_render_plus_markers(endpoint):
         "instrumentation changed the render, not just the commits"
     )
 
-    published = [m for m in driver.received if m.get("type") == "snapshot"]
+    published = [m for m in driver.received if m.get("type") == "semantic-full"]
     assert published, "markers were written but no tree was published"

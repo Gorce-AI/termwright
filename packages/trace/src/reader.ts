@@ -8,7 +8,9 @@ import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import {
   CONDITION_KINDS,
+  DEFAULT_LIMITS,
   EVIDENCE_PROVIDER_CAPABILITIES,
+  applySemanticDelta,
   parseRunId,
   SESSION_CAPABILITIES,
   type ContractProvider,
@@ -17,10 +19,14 @@ import {
 } from '@termwright/protocol';
 import { parseCastHeader, streamCastEvents, type CastEvent, type CastHeader } from './cast.js';
 import { TraceError } from './errors.js';
+import { buildCastTimeline, type CastTimeline, type HiddenWindow } from './timeline.js';
 import {
   TRACE_FILES,
   TRACE_VERSION,
   type SemanticRecord,
+  type StoredSemanticRecord,
+  type StoredTraceEvent,
+  type StoredTraceLogEntry,
   type StepSummary,
   type TraceEvent,
   type TraceLogEntry,
@@ -158,7 +164,7 @@ async function verifyCommit(files: ArchiveFiles, path: string): Promise<void> {
   const record = parsed as Record<string, unknown>;
   const checksums = record['checksums'];
   if (
-    record['v'] !== 1 ||
+    record['v'] !== TRACE_VERSION ||
     typeof checksums !== 'object' ||
     checksums === null ||
     Array.isArray(checksums)
@@ -174,9 +180,9 @@ async function verifyCommit(files: ArchiveFiles, path: string): Promise<void> {
     ) {
       throw new TraceError('protocol-violation', `${path}: COMMITTED contains an invalid member`);
     }
-    const actual = createHash('sha256')
-      .update(await files.read(name))
-      .digest('hex');
+    const hash = createHash('sha256');
+    for await (const bytes of files.bytes(name)) hash.update(bytes);
+    const actual = hash.digest('hex');
     if (actual !== expected) {
       throw new TraceError('protocol-violation', `${path}: checksum mismatch for ${name}`);
     }
@@ -186,6 +192,7 @@ async function verifyCommit(files: ArchiveFiles, path: string): Promise<void> {
     TRACE_FILES.cast,
     TRACE_FILES.events,
     TRACE_FILES.semantics,
+    TRACE_FILES.timeline,
   ]) {
     if (!(required in (checksums as Record<string, unknown>))) {
       throw new TraceError('protocol-violation', `${path}: COMMITTED omits ${required}`);
@@ -256,7 +263,7 @@ function parseContract(value: unknown, sessionId: string, path: string): Effecti
   };
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail('is not an object');
   const contract = value as Record<string, unknown>;
-  if (contract['protocol'] !== 'termwright/2' || contract['sessionId'] !== sessionId)
+  if (contract['protocol'] !== 'termwright/3' || contract['sessionId'] !== sessionId)
     fail('does not identify this v2 session');
   const nonEmpty = (candidate: unknown, field: string): string => {
     if (typeof candidate !== 'string' || candidate.length === 0 || candidate.length > 2_048)
@@ -426,7 +433,7 @@ function parseContract(value: unknown, sessionId: string, path: string): Effecti
     contractId: nonEmpty(contract['contractId'], 'contractId'),
     sessionId,
     epoch: integer(contract['epoch'], 'epoch'),
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     framework,
     providers: Object.freeze(providers),
     capabilities: Object.freeze(capabilities),
@@ -450,6 +457,7 @@ class ArchiveReader implements TraceReader {
   readonly #files: ArchiveFiles;
   #steps: readonly StepSummary[] | null = null;
   #semanticIndex: readonly SemanticIndexEntry[] | null = null;
+  #timelinePromise: Promise<CastTimeline> | null = null;
 
   constructor(files: ArchiveFiles, meta: TraceMeta) {
     this.#files = files;
@@ -471,25 +479,100 @@ class ArchiveReader implements TraceReader {
     throw new TraceError('protocol-violation', `${this.path}: session.cast is empty`);
   }
 
-  castEvents(): AsyncIterable<CastEvent> {
-    return streamCastEvents(this.#files.lines(TRACE_FILES.cast));
+  async *castEvents(): AsyncIterable<CastEvent> {
+    yield* streamCastEvents(this.#files.lines(TRACE_FILES.cast));
   }
 
-  events(): AsyncIterable<TraceEvent> {
-    return validateEvents(
-      parseJsonLines<TraceEvent>(this.#files.lines(TRACE_FILES.events), TRACE_FILES.events),
-    );
+  async *events(): AsyncIterable<TraceEvent> {
+    const timeline = await this.#timeline();
+    for await (const event of validateEvents(
+      parseJsonLines<StoredTraceEvent>(this.#files.lines(TRACE_FILES.events), TRACE_FILES.events),
+    )) {
+      yield { ...event, castOffset: round(timeline.mapWall(event.t)) } as TraceEvent;
+    }
   }
 
-  semantics(): AsyncIterable<SemanticRecord> {
-    return parseJsonLines<SemanticRecord>(
+  async *semantics(): AsyncIterable<SemanticRecord> {
+    const timeline = await this.#timeline();
+    let committed: SemanticRecord['snapshot'] | undefined;
+    for await (const record of parseJsonLines<StoredSemanticRecord>(
       this.#files.lines(TRACE_FILES.semantics),
       TRACE_FILES.semantics,
-    );
+    )) {
+      if (record.kind === 'keyframe') {
+        committed = record.snapshot;
+      } else {
+        if (committed === undefined || committed.revision !== record.baseRevision) {
+          throw new TraceError(
+            'protocol-violation',
+            `${TRACE_FILES.semantics}: delta ${record.revision} has no matching base`,
+          );
+        }
+        const applied = applySemanticDelta(committed, record.delta, DEFAULT_LIMITS);
+        if (!applied.ok) {
+          throw new TraceError(
+            'protocol-violation',
+            `${TRACE_FILES.semantics}: invalid delta ${record.revision}: ${applied.detail}`,
+          );
+        }
+        committed = applied.snapshot;
+      }
+      if (committed.revision !== record.revision) {
+        throw new TraceError('protocol-violation', `${TRACE_FILES.semantics}: revision mismatch`);
+      }
+      yield {
+        t: record.t,
+        revision: record.revision,
+        castOffset: round(timeline.mapWall(record.t)),
+        snapshot: committed,
+      };
+    }
   }
 
-  logs(): AsyncIterable<TraceLogEntry> {
-    return parseJsonLines<TraceLogEntry>(this.#files.lines(TRACE_FILES.logs), TRACE_FILES.logs);
+  async *logs(): AsyncIterable<TraceLogEntry> {
+    const timeline = await this.#timeline();
+    for await (const entry of parseJsonLines<StoredTraceLogEntry>(
+      this.#files.lines(TRACE_FILES.logs),
+      TRACE_FILES.logs,
+    )) {
+      yield { ...entry, castOffset: round(timeline.mapWall(entry.t)) };
+    }
+  }
+
+  #timeline(): Promise<CastTimeline> {
+    this.#timelinePromise ??= this.#buildTimeline();
+    return this.#timelinePromise;
+  }
+
+  async #buildTimeline(): Promise<CastTimeline> {
+    const walls: number[] = [];
+    const hidden: HiddenWindow[] = [];
+    for await (const record of parseJsonLines<{
+      kind: string;
+      t?: number;
+      start?: number;
+      end?: number;
+    }>(this.#files.lines(TRACE_FILES.timeline), TRACE_FILES.timeline)) {
+      if (record.kind === 'cast-anchor' && Number.isFinite(record.t)) {
+        walls.push(record.t as number);
+        continue;
+      }
+      if (
+        record.kind !== 'hidden-window' ||
+        !Number.isFinite(record.start) ||
+        !Number.isFinite(record.end) ||
+        (record.end as number) < (record.start as number)
+      ) {
+        throw new TraceError('protocol-violation', `${TRACE_FILES.timeline}: invalid window`);
+      }
+      hidden.push({ start: record.start as number, end: record.end as number });
+    }
+    return buildCastTimeline(walls, {
+      hidden,
+      ...(this.meta.idleTimeLimit === undefined
+        ? {}
+        : { idleTimeLimitMs: this.meta.idleTimeLimit * 1000 }),
+    });
   }
 
   /**
@@ -652,29 +735,21 @@ function parseSize(data: string): { columns: number; rows: number } | null {
 }
 
 /**
- * Rejects event lines that cannot be placed on the recording.
- *
- * `castOffset` is required by §Trace. Falling back to `t` would put an event
- * at the wrong moment in any recording that was hidden or idle-trimmed, and
- * do it silently — a corrupt line is better news than a plausible lie.
+ * Validates raw monotonic event records before presentation time is derived.
  */
-async function* validateEvents(events: AsyncIterable<TraceEvent>): AsyncGenerator<TraceEvent> {
+async function* validateEvents(
+  events: AsyncIterable<StoredTraceEvent>,
+): AsyncGenerator<StoredTraceEvent> {
   let lineNumber = 0;
   for await (const event of events) {
     lineNumber += 1;
     if (typeof event !== 'object' || event === null || Array.isArray(event)) {
       throw invalidEvent(lineNumber, 'is not an object');
     }
-    if (typeof event.castOffset !== 'number' || !Number.isFinite(event.castOffset)) {
-      throw new TraceError(
-        'protocol-violation',
-        `${TRACE_FILES.events}:${lineNumber} has no castOffset`,
-        {
-          suggestion:
-            'The archive predates the required castOffset field, or was written by something other than @termwright/trace. Re-record it.',
-        },
-      );
-    }
+    if (typeof event.t !== 'number' || !Number.isFinite(event.t) || event.t < 0)
+      throw invalidEvent(lineNumber, 'has invalid monotonic time');
+    if (Object.prototype.hasOwnProperty.call(event, 'castOffset'))
+      throw invalidEvent(lineNumber, 'contains obsolete castOffset');
     if (event.kind === 'action' && event.receipt !== undefined) {
       validateActionReceipt(event.receipt, lineNumber);
     }
@@ -697,6 +772,10 @@ async function* validateEvents(events: AsyncIterable<TraceEvent>): AsyncGenerato
     }
     yield event;
   }
+}
+
+function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 function validateActionability(value: unknown, line: number, eventOk: boolean): void {

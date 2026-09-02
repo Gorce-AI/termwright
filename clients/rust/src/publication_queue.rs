@@ -11,7 +11,7 @@ use crate::evidence::Lease as EvidenceProviderLease;
 use crate::framing::encode_frame;
 use crate::limits::Limits;
 use crate::marker::encode_marker;
-use crate::messages::{RevisionCommit, SnapshotMessage};
+use crate::messages::{RevisionCommit, SemanticFullMessage};
 use crate::tree::Snapshot;
 use crate::validate::validate_snapshot;
 
@@ -31,7 +31,6 @@ pub struct PublicationQueue {
     token: String,
     session_id: String,
     limits: Limits,
-    subscribe: String,
     marker_enabled: bool,
     revision: i64,
     evidence_lease: Option<EvidenceProviderLease>,
@@ -61,7 +60,7 @@ impl PublicationQueue {
         if capacity == 0 || !client.connected() {
             return Err(Error::PublicationWorkerFailed);
         }
-        let (token, session_id, limits, subscribe, marker_enabled, revision) = client
+        let (token, session_id, limits, marker_enabled, revision) = client
             .publication_config()
             .ok_or(Error::PublicationWorkerFailed)?;
         let evidence_lease = client.take_evidence_lease();
@@ -114,7 +113,6 @@ impl PublicationQueue {
             token,
             session_id,
             limits,
-            subscribe,
             marker_enabled,
             revision,
             evidence_lease,
@@ -138,7 +136,7 @@ impl PublicationQueue {
             return Err(Error::PublicationWorkerFailed);
         }
         let revision = self.revision + 1;
-        snapshot.v = 2;
+        snapshot.v = 3;
         snapshot.session_id = self.session_id.clone();
         snapshot.revision = revision;
         if let Some(lease) = self.evidence_lease.as_ref() {
@@ -158,14 +156,10 @@ impl PublicationQueue {
         } else {
             None
         };
-        let tree_frame = if self.subscribe != "revisions" {
-            Some(encode_frame(
-                &SnapshotMessage::new(snapshot),
-                self.limits.max_frame_bytes,
-            )?)
-        } else {
-            None
-        };
+        let tree_frame = Some(encode_frame(
+            &SemanticFullMessage::new(snapshot),
+            self.limits.max_frame_bytes,
+        )?);
         let commit_frame =
             encode_frame(&RevisionCommit::new(revision), self.limits.max_frame_bytes)?;
         let publication = Publication {
@@ -309,9 +303,9 @@ mod tests {
         assert_eq!(
             names,
             [
-                Some("snapshot"),
+                Some("semantic-full"),
                 Some("revision-commit"),
-                Some("snapshot"),
+                Some("semantic-full"),
                 Some("revision-commit")
             ]
         );
@@ -352,7 +346,7 @@ mod tests {
         );
         let frames = decoder.push(&bytes).expect("ordered frames decode");
         assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].value["type"], "snapshot");
+        assert_eq!(frames[0].value["type"], "semantic-full");
         assert_eq!(frames[1].value["type"], "revision-commit");
     }
 }

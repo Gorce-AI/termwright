@@ -207,10 +207,8 @@ describe('the terminal profile', () => {
     });
 
   it('comes from meta.terminalProfile, where the writer records it', async () => {
-    const overviewWithProfile = await readTraceOverview(
-      withMeta({ terminalProfile: 'iterm2-ambiguous-wide' }),
-    );
-    expect(overviewWithProfile.terminalProfile).toBe('iterm2-ambiguous-wide');
+    const overviewWithProfile = await readTraceOverview(withMeta({ terminalProfile: 'cjk-wide' }));
+    expect(overviewWithProfile.terminalProfile).toBe('cjk-wide');
   });
 
   it('is null rather than guessed when the recording predates profiles', async () => {

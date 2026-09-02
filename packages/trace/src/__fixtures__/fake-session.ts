@@ -204,7 +204,7 @@ export function snapshot(
   sessionId = 't1',
 ): SemanticSnapshot {
   return {
-    v: 2,
+    v: 3,
     sessionId,
     revision,
     columns: 80,

@@ -125,6 +125,7 @@ export function createAttemptContext(
     readonly resourceProfile: ResourceVector;
     readonly reservedLease?: Promise<RemoteResourceLease>;
     readonly resourceReservation?: ResourceVector;
+    readonly strictResourceReservation?: boolean;
   },
 ): AttemptContext {
   if (!Number.isInteger(repeat) || repeat < 0)
@@ -141,6 +142,7 @@ export function createAttemptContext(
     resourceProfile,
     options.reservedLease,
     options.resourceReservation,
+    options.strictResourceReservation === true,
   );
   return Object.freeze({
     ...identity,
@@ -161,12 +163,26 @@ function createAttemptResources(
   resourceProfile: ResourceVector,
   reservedLease: Promise<RemoteResourceLease> | undefined,
   declaredReservation: ResourceVector | undefined,
+  strictReservation: boolean,
 ): AttemptResources {
   const reservation = normalizeVector(declaredReservation ?? {});
   const allocated = normalizeVector({});
   const attachments: Array<{ resource: ResourceClass; pid?: number; sessionId?: string }> = [];
   let localLeaseSequence = 0;
   let reservationRelease: Promise<void> | null = null;
+  const acquireDynamic = async (requested: ResourceVector): Promise<RemoteResourceLease> => {
+    budget.assertAvailable('operation');
+    const startedAt = performance.now();
+    try {
+      return await broker.acquire({
+        attemptId,
+        resources: requested,
+        deadline: performance.timeOrigin + performance.now() + budget.totalMs,
+      });
+    } finally {
+      budget.creditAdmissionWait(performance.now() - startedAt);
+    }
+  };
 
   return Object.freeze({
     profile: resourceProfile,
@@ -178,21 +194,12 @@ function createAttemptResources(
         // attempt's budget, and give the queueing time back once capacity is
         // held. The attempt did no work while it waited, and charging it for
         // the queue makes the verdict depend on the run's parallelism.
-        budget.assertAvailable('operation');
-        const startedAt = performance.now();
-        try {
-          return await broker.acquire({
-            attemptId,
-            resources: requested,
-            deadline: performance.timeOrigin + performance.now() + budget.totalMs,
-          });
-        } finally {
-          budget.creditAdmissionWait(performance.now() - startedAt);
-        }
+        return acquireDynamic(requested);
       }
       const normalized = normalizeVector(requested);
       for (const resource of RESOURCE_CLASSES) {
         if (allocated[resource] + normalized[resource] > reservation[resource]) {
+          if (!strictReservation) return acquireDynamic(requested);
           const required = allocated[resource] + normalized[resource];
           const guidance =
             resource === 'traceWriter'

@@ -25,7 +25,8 @@ describe('semantic pipeline performance report', () => {
     expect(report.scenarios.map((scenario) => scenario.renderingMode)).toEqual(['retained']);
 
     for (const scenario of report.scenarios) {
-      expect(measured(scenario.metrics.fullSnapshots)).toBe(5);
+      expect(measured(scenario.metrics.fullSnapshots)).toBe(1);
+      expect(measured(scenario.metrics.deltas)).toBe(4);
       expect(measured(scenario.metrics.semanticNodesPerFrame)).toBe(24);
       expect(measured(scenario.metrics.bytesPerFrame)).toBeLessThan(DEFAULT_LIMITS.maxFrameBytes);
       expect(measured(scenario.metrics.probeEventsPerFrame)).toBeGreaterThanOrEqual(24);
@@ -55,7 +56,7 @@ describe('semantic pipeline performance report', () => {
 
   it('rejects the previous report schema instead of retaining compatibility', () => {
     const report = runPerformanceBenchmark({ iterations: 1, warmupIterations: 1, nodeCount: 4 });
-    expect(() => validatePerformanceReport({ ...report, schemaVersion: 2 })).toThrow(
+    expect(() => validatePerformanceReport({ ...report, schemaVersion: 3 })).toThrow(
       /unsupported performance report kind or version/u,
     );
   });

@@ -91,7 +91,7 @@ func TestPublicationQueueIsBoundedAndDoesNotConsumeDroppedRevision(t *testing.T)
 		name, _ := value["type"].(string)
 		return name
 	}
-	if len(frames) < 4 || typeOf(frames[0]) != "snapshot" || typeOf(frames[1]) != "revision-commit" || typeOf(frames[2]) != "snapshot" || typeOf(frames[3]) != "revision-commit" {
+	if len(frames) < 4 || typeOf(frames[0]) != "semantic-full" || typeOf(frames[1]) != "revision-commit" || typeOf(frames[2]) != "semantic-full" || typeOf(frames[3]) != "revision-commit" {
 		t.Fatalf("publication order changed: %#v", frames)
 	}
 }

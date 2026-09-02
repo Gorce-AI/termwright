@@ -7,8 +7,8 @@ The semantic protocol connects an in-process framework probe to the Termwright
 driver. `@termwright/protocol` is the normative implementation. Other language
 clients must produce the same wire shapes and validation outcomes.
 
-Termwright has one current protocol id: `termwright/2`. A snapshot always has
-`v: 2`, evidence-qualified geometry, a coordinate-space observation, and a
+Termwright has one current protocol id: `termwright/3`. A snapshot always has
+`v: 3`, evidence-qualified geometry, a coordinate-space observation, and a
 pointer hit-grid observation. Missing evidence is represented explicitly; it
 is never projected into a guessed boolean or rectangle.
 
@@ -30,7 +30,7 @@ marker, and does not change the application's terminal output.
 
 The probe sends one bounded `hello` containing:
 
-- protocol id `termwright/2`;
+- protocol id `termwright/3`;
 - the token;
 - a non-empty adapter name and version;
 - capabilities for optional traffic and authoritative observations such as
@@ -38,7 +38,7 @@ The probe sends one bounded `hello` containing:
 - probe metadata when the sender is a framework probe.
 
 The driver replies with `hello-ack`, the same protocol id, a session id, active
-limits, the snapshot subscription, marker configuration, and an optional log
+limits, the `semantic` subscription, marker configuration, and an optional log
 budget. A malformed, rejected, or late handshake does not turn a generic
 terminal session into a semantic session.
 
@@ -54,21 +54,23 @@ accessors, proxies, symbol keys, exotic prototypes, reserved keys, sparse
 arrays, aliases, cycles, non-finite numbers, and unpaired surrogates. The
 validated result shares no mutable references with the input.
 
-## Full snapshot stream
+## Incremental semantic stream
 
-Each committed semantic revision uses a complete snapshot. The producer sends:
+The initial revision and every resynchronization use a complete tree. A producer
+with reliable change knowledge may then send a domain-specific delta. Each
+publication is ordered as:
 
-1. `snapshot { snapshot }`;
+1. `semantic-full { snapshot }` or `semantic-delta { delta }`;
 2. `revision-commit { revision }`;
 3. the authenticated terminal marker after the rendered terminal bytes have
    been flushed.
 
-The driver may subscribe to `revisions` when it does not need trees. Otherwise
-the producer sends a full snapshot for every semantic revision.
-
-The full snapshot is the recovery boundary by construction. A receiver can
-validate and retain each revision independently without composing it with
-earlier application state.
+Every delta carries `revision` and `baseRevision`. A receiver stages the update,
+validates the complete tree and its evidence invariants, then publishes it
+atomically. A missing or mismatched base leaves committed state untouched and
+causes `semantic-resync-request`; the producer's next publication is
+`semantic-full`. An absent patch field means unchanged. `clear` explicitly
+removes an optional field.
 
 ## Render marker
 
@@ -104,7 +106,7 @@ are discarded with a diagnostic.
 
 A `SemanticSnapshot` contains:
 
-- `v: 2`, `sessionId`, and a positive `revision`;
+- `v: 3`, `sessionId`, and a positive `revision`;
 - terminal `columns` and `rows`;
 - `rootIds` and a complete `nodes` array;
 - an optional cursor;
@@ -140,7 +142,7 @@ observation states and the exact pointer-ownership contract.
 
 `validateSnapshot` checks untrusted data before it is retained. It enforces:
 
-- the literal snapshot version `2`;
+- the literal snapshot version `3`;
 - unique node ids and root ids;
 - existing parents and acyclic parent chains;
 - every parentless node appearing in `rootIds`;
@@ -182,11 +184,12 @@ their exact types in both directions.
 
 `clients/test-vectors/` contains fixtures generated from the TypeScript
 reference implementation: frame bytes, hostile frames and error codes, marker
-sequences, observation cases, and valid and invalid v2 snapshots. The generator
+sequences, observation cases, and valid and invalid v3 snapshots. The generator
 re-validates each expectation before writing it.
 
 ## Versioning
 
-`PROTOCOL_ID` is `termwright/2` and `PROTOCOL_VERSION` is `2`. Additive changes
-must remain readable by existing v2 clients. A change that invalidates a valid
-v2 producer frame requires a future protocol major.
+`PROTOCOL_ID` is `termwright/3` and `PROTOCOL_VERSION` is `3`. Before 1.0,
+wire-breaking changes replace the previous protocol and all built-in clients
+together; Termwright does not carry readers or negotiation paths for its old
+wire formats.

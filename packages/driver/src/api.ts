@@ -102,8 +102,8 @@ export interface LaunchOptions {
   readonly logs?: readonly AppLogSource[];
   /**
    * Terminal profile: which width tables and which of the switches terminals
-   * disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
-   * `'iterm2-ambiguous-wide'`) or a profile object from `@termwright/vt`.
+   * disagree on this session uses. The built-in ids are `'default'` and
+   * `'cjk-wide'`.
    *
    * It is recorded with the session so a replay, a screenshot and the runner
    * pane can count characters exactly as the live session did.
@@ -130,8 +130,8 @@ export interface LaunchOptions {
   readonly timeouts?: TimeoutClasses;
   readonly operationBudget?: OperationBudget;
   readonly recording?: RecordingOptions;
-  /** Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in. */
-  readonly artifactValuePolicy?: import('@termwright/protocol').ArtifactValuePolicy;
+  /** One policy for every artifact boundary. Defaults to secure `redacted`. */
+  readonly artifactSecurity?: import('@termwright/protocol').ArtifactSecurityPolicy;
   /**
    * Termwright-managed modes instrument an interactive shell with exact
    * command markers. Test authors should normally use `terminal.openShell()`.
@@ -152,6 +152,8 @@ export declare function launchTerminal(options: LaunchOptions): Promise<Terminal
 
 export interface TerminalHarness {
   readonly sessionId: string;
+  /** Resolved policy inherited by traces, reports and other artifact sinks. */
+  readonly artifactSecurity: import('@termwright/protocol').ResolvedArtifactSecurityPolicy;
   /** Immutable terminal profile used to decode the very first PTY byte. */
   readonly terminalProfile: string;
   /** Shell command boundaries and prompt state when the child emits OSC 133. */

@@ -31,7 +31,7 @@ def test_snapshot_vectors_match_the_reference_validator():
         )
 
 
-def test_valid_protocol_v2_snapshot_is_accepted():
+def test_valid_protocol_v3_snapshot_is_accepted():
     value = snapshot(
         nodes=[
             node(id="root", role="dialog", name="Permission", rect=Rect(0, 0, 20, 4)),

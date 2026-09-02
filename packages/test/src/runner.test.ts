@@ -88,6 +88,7 @@ describe('exact Vitest certification', () => {
           specId: createRunId('spec'),
           file: '/workspace/example.test.ts',
           fullName: 'example test',
+          resourceDecision: 'history=miss; conservative reservation={}',
           resourceReservation: { ptySession: 2, externalProcess: 2, semanticEndpoint: 2 },
         },
       },
@@ -269,6 +270,9 @@ describe('native AttemptContext', () => {
       const lifecycle = events.filter((event) => event.type.startsWith('attempt.'));
       expect(lifecycle.map((event) => event.type)).toEqual(['attempt.started', 'attempt.finished']);
       expect(lifecycle[0]?.identity).toEqual(lifecycle[1]?.identity);
+      expect(
+        (lifecycle[0]?.payload as { admission?: { decision?: string } }).admission?.decision,
+      ).toContain('history=');
     }
     expect(
       journalEvents
@@ -294,6 +298,15 @@ describe('native AttemptContext', () => {
         .filter((event) => event.type === 'attempt.finished')
         .map((event) => (event.payload as { state: string }).state),
     ).toEqual(expect.arrayContaining(['passed', 'failed', 'skipped']));
+    for (const event of journalEvents.filter(
+      (candidate) => candidate.type === 'attempt.finished',
+    )) {
+      const worker = (event.payload as { worker?: Record<string, unknown> }).worker;
+      expect(worker).toMatchObject({ capability: 'worker-process' });
+      expect(worker?.['peakSampledRssBytes']).toEqual(expect.any(Number));
+      expect(worker?.['cpuUserMicros']).toEqual(expect.any(Number));
+      expect(worker?.['cpuSystemMicros']).toEqual(expect.any(Number));
+    }
     expect(hostileTerminalObservedAfterUserFailure).toBe(true);
     expect(soleFinishedFailureObservedBeforeTerminal).toBe(true);
 

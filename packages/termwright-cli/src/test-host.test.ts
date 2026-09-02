@@ -13,16 +13,17 @@ import { connectRunJournalWorker } from '@termwright/run-journal-transport';
 import { connectResourceBrokerWorker } from '@termwright/resource-broker/transport';
 import {
   NODE_RUN_MANIFEST_WRITER,
+  parseManifest,
   readRunManifest,
   type RunManifestWriter,
 } from '@termwright/run-history';
-import type { TermwrightRunnerContext } from '@termwright/test/runner';
 import type { UserConsoleLog } from 'vitest';
 import type { TestCase, TestModule, TestRunResult } from 'vitest/node';
 import {
   TermwrightTestHost,
   HostRunBudget,
   TERMWRIGHT_RESOURCE_PROFILES,
+  resolveTermwrightResourceProfile,
   TermwrightHostStartupCleanupError,
   TermwrightHostTimeoutError,
   assessSkipPolicy,
@@ -32,7 +33,8 @@ import {
   type TermwrightTestHostOptions,
   type TermwrightVitestEngine,
 } from './test-host.js';
-import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
+import { ResourceCostHistory } from './resource-history.js';
+import { CERTIFIED_VITEST_VERSION, type TermwrightRunnerContext } from './test-host-engine.js';
 
 describe('workflow attempt certification', () => {
   it('accepts only the first GitHub attempt when certification requires it', () => {
@@ -71,6 +73,17 @@ class FakeEngine implements TermwrightVitestEngine {
   sourceListener: ((file: string) => void) | undefined;
   consoleListener: ((log: UserConsoleLog) => void) | undefined;
   consoleContent: string | undefined;
+  traceResources:
+    | {
+        readonly terminalOutputBytes: number;
+        readonly semanticBytes: number;
+        readonly semanticFullCount: number;
+        readonly semanticDeltaCount: number;
+        readonly traceBytes: number;
+        readonly tempDiskPeakBytes: number;
+        readonly finalArtifactBytes: number;
+      }
+    | undefined;
 
   setRunnerContext(context: TermwrightRunnerContext): void {
     this.contexts.push(context);
@@ -151,6 +164,36 @@ class FakeEngine implements TermwrightVitestEngine {
             deadline: performance.timeOrigin + performance.now() + 5_000,
           });
         }
+        if (!this.omitAttemptLifecycle && this.traceResources !== undefined) {
+          const sessionId = ids.create('session');
+          await client.append(
+            producer.emit({
+              eventClass: 'authoritative',
+              type: 'session.started',
+              identity: { ...eventIdentity, sessionId },
+              payload: { driverSessionId: 'fake-session', terminalProfile: 'modern-unicode' },
+            }),
+            performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
+          );
+          await client.append(
+            producer.emit({
+              eventClass: 'authoritative',
+              type: 'session.finished',
+              identity: { ...eventIdentity, sessionId },
+              payload: { cleanup: 'verified' },
+            }),
+            performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
+          );
+          await client.append(
+            producer.emit({
+              eventClass: 'authoritative',
+              type: 'trace.resource',
+              identity: { ...eventIdentity, sessionId },
+              payload: this.traceResources,
+            }),
+            performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
+          );
+        }
         const state =
           this.tests.find((test) => test.id === nativeTaskId)?.result()?.state === 'failed'
             ? 'failed'
@@ -161,7 +204,18 @@ class FakeEngine implements TermwrightVitestEngine {
               eventClass: 'authoritative',
               type: 'attempt.finished',
               identity: eventIdentity,
-              payload: { nativeTaskId, repeat: 0, retry: 0, state },
+              payload: {
+                nativeTaskId,
+                repeat: 0,
+                retry: 0,
+                state,
+                worker: {
+                  capability: 'worker-process',
+                  cpuUserMicros: 100,
+                  cpuSystemMicros: 20,
+                  peakSampledRssBytes: 64 * 1024 * 1024,
+                },
+              },
             }),
             performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
           );
@@ -293,10 +347,14 @@ describe('TermwrightTestHost', () => {
           capacities: {
             ptySession: 4,
             externalProcess: 4,
+            cpuWeight: 2,
+            memoryWeight: 2,
+            ioWeight: 2,
             semanticEndpoint: 4,
             nativeHostPressure: 4,
             traceWriter: 4,
           },
+          perAttempt: { cpuWeight: 1, memoryWeight: 1, ioWeight: 1 },
           perTerminal: { semanticEndpoint: 1, nativeHostPressure: 1 },
         },
         timeouts: { totalRunMs: 600_000, finalizationReserveMs: 30_000 },
@@ -329,6 +387,7 @@ describe('TermwrightTestHost', () => {
       metadata: {},
     });
     expect(Object.keys(engine.contexts.at(-1)?.tasks ?? {})).toEqual(['native-unit']);
+    expect(engine.contexts.at(-1)?.tasks['native-unit']?.strictResourceReservation).toBeUndefined();
     await host.close();
   });
 
@@ -349,7 +408,11 @@ describe('TermwrightTestHost', () => {
       externalProcess: 1,
       semanticEndpoint: 1,
       nativeHostPressure: 4,
+      cpuWeight: 1,
+      memoryWeight: 1,
+      ioWeight: 1,
     });
+    expect(engine.contexts.at(-1)?.tasks['native-pressure']?.strictResourceReservation).toBe(true);
     await host.close();
   });
 
@@ -367,7 +430,70 @@ describe('TermwrightTestHost', () => {
     await host.requestRun().completed;
     expect(engine.contexts.at(-1)?.tasks['host-pressure']?.resourceReservation).toEqual({
       nativeHostPressure: 4,
+      cpuWeight: 1,
+      memoryWeight: 1,
+      ioWeight: 1,
     });
+    await host.close();
+  });
+
+  it('maps a heavy load hint onto the host CPU, memory and I/O vector', async () => {
+    const engine = new FakeEngine();
+    const heavy = testCase('heavy', 'heavy', 'passed', 0, true, [], {
+      termwright: {
+        provider: { id: '@termwright/test', version: 1 },
+        resources: { load: 'heavy' },
+      },
+    });
+    engine.tests = [heavy];
+    engine.runResult = result([heavy]);
+    const host = hostFromEngine(engine, hostOptions());
+    await host.requestRun().completed;
+    expect(engine.contexts.at(-1)?.tasks['heavy']?.resourceReservation).toEqual({
+      cpuWeight: 2,
+      memoryWeight: 2,
+      ioWeight: 2,
+    });
+    await host.close();
+  });
+
+  it('raises memory admission from bounded p95 history and records the decision', async () => {
+    const engine = new FakeEngine();
+    const learned = testCase('learned', 'learned pressure');
+    engine.tests = [learned];
+    engine.runResult = result([learned]);
+    const history = ResourceCostHistory.memory({ now: () => 1 });
+    history.observe(
+      ResourceCostHistory.identity({
+        project: 'default',
+        file: '/workspace/example.test.ts',
+        fullName: 'learned pressure',
+        line: 1,
+        column: 1,
+      }),
+      { durationMs: 500, workerPeakRssBytes: 1_100 * 1024 * 1024 },
+    );
+    const profile = resolveTermwrightResourceProfile('local', process.cwd(), {
+      availableCpu: 4,
+      memoryLimitBytes: 2 * 1024 * 1024 * 1024,
+      memoryReserveBytes: 0,
+      memoryBudgetBytes: 2 * 1024 * 1024 * 1024,
+      tempDiskAvailableBytes: 20 * 1024 * 1024 * 1024,
+      tempDiskBudgetBytes: 18 * 1024 * 1024 * 1024,
+      sources: { cpu: 'host', memory: 'host', tempDisk: 'filesystem' },
+    });
+    const host = hostFromEngine(
+      engine,
+      { ...hostOptions(), resourceProfile: profile },
+      { resourceHistory: history },
+    );
+    const completion = await host.requestRun().completed;
+    expect(engine.contexts.at(-1)?.tasks['learned']?.resourceReservation).toMatchObject({
+      memoryWeight: 3,
+    });
+    expect(completion.catalog?.tests[0]?.resourceDecision).toContain(
+      'history=samples:1,duration-p50:500',
+    );
     await host.close();
   });
 
@@ -396,6 +522,9 @@ describe('TermwrightTestHost', () => {
       externalProcess: 1,
       semanticEndpoint: 1,
       nativeHostPressure: 4,
+      cpuWeight: 1,
+      memoryWeight: 1,
+      ioWeight: 1,
     });
     await host.close();
   });
@@ -611,6 +740,7 @@ describe('TermwrightTestHost', () => {
       file: test.module.moduleId,
       fullName: test.fullName,
       metadata: {},
+      resourceDecision: 'fixture',
     }));
     expect(
       assessSkipPolicy(
@@ -656,6 +786,7 @@ describe('TermwrightTestHost', () => {
       file,
       fullName: test.fullName,
       metadata: {},
+      resourceDecision: 'fixture',
     }));
     const skipped = selected.map((test) => ({
       runnerTaskId: test.runnerTaskId,
@@ -806,6 +937,15 @@ describe('TermwrightTestHost', () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-history', 'persist me')];
     engine.runResult = result(engine.tests);
+    engine.traceResources = {
+      terminalOutputBytes: 4_096,
+      semanticBytes: 512,
+      semanticFullCount: 1,
+      semanticDeltaCount: 7,
+      traceBytes: 8_192,
+      tempDiskPeakBytes: 8_256,
+      finalArtifactBytes: 0,
+    };
     const options = hostOptions({ durable: true });
     const host = hostFromEngine(engine, options);
     const completion = await host.requestRun().completed;
@@ -821,6 +961,40 @@ describe('TermwrightTestHost', () => {
       git: null,
     });
     expect(record.manifest.durationMs).toBeGreaterThanOrEqual(0);
+    expect(record.manifest.telemetry).toMatchObject({
+      workerPeakRssBytes: 64 * 1024 * 1024,
+      workerCpuUserMicros: 100,
+      workerCpuSystemMicros: 20,
+      ownedProcessPeakRssBytes: 'unavailable',
+      ownedProcessCountPeak: 'unavailable',
+      ptySlotsPeak: 0,
+      terminalOutputBytes: 4_096,
+      semanticBytes: 512,
+      semanticFullCount: 1,
+      semanticDeltaCount: 7,
+      traceBytes: 8_192,
+      tempDiskPeakBytes: 'unavailable',
+      finalArtifactBytes: 0,
+    });
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...record.manifest,
+          telemetry: { ...record.manifest.telemetry, traceBytes: 8_193 },
+        }),
+      ).state,
+    ).toBe('corrupt');
+    expect(record.manifest.telemetry.coordinatorRssStartBytes).toBeGreaterThan(0);
+    expect(record.manifest.telemetry.coordinatorRssEndBytes).toBeGreaterThan(0);
+    expect(record.manifest.telemetry.coordinatorPeakSampledRssBytes).toBeGreaterThanOrEqual(
+      Math.max(
+        record.manifest.telemetry.coordinatorRssStartBytes,
+        record.manifest.telemetry.coordinatorRssEndBytes,
+      ),
+    );
+    expect(record.manifest.telemetry.journalAcceptedEvents).toBe(record.manifest.events.length);
+    expect(record.manifest.telemetry.journalAcceptedBytes).toBeGreaterThan(0);
+    expect(record.manifest.telemetry.journalPeakBacklogEvents).toBeGreaterThan(0);
     expect(record.manifest.attempts[0]?.attemptId).toMatch(/^attempt:/u);
     expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeGreaterThanOrEqual(0);
     expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeLessThanOrEqual(
@@ -839,7 +1013,7 @@ describe('TermwrightTestHost', () => {
     await host.close();
   });
 
-  it('classifies collection faults as infrastructure and journal faults as incomplete', async () => {
+  it('classifies collection faults as infrastructure and isolates live projection faults', async () => {
     const collectionEngine = new FakeEngine();
     collectionEngine.collectionErrors = [new Error('worker channel closed')];
     const collectionHost = hostFromEngine(collectionEngine, hostOptions());
@@ -867,17 +1041,17 @@ describe('TermwrightTestHost', () => {
         throw new Error('ENOSPC');
       },
     });
-    const incomplete = await sinkHost.requestRun().completed;
-    expect(incomplete.state).toBe('incomplete');
-    expect(String(incomplete.error)).toContain('ENOSPC');
-    const sinkRecord = await readRunManifest(sinkOptions.runsDir, incomplete.runId);
+    const projected = await sinkHost.requestRun().completed;
+    expect(projected.state).toBe('passed');
+    expect(projected.error).toBeUndefined();
+    const sinkRecord = await readRunManifest(sinkOptions.runsDir, projected.runId);
     expect(sinkRecord.state).toBe('complete');
     if (sinkRecord.state !== 'complete')
       throw new Error('expected canonical history despite projection failure');
-    expect(sinkRecord.manifest.status).toBe('incomplete');
+    expect(sinkRecord.manifest.status).toBe('passed');
     expect(
       sinkRecord.manifest.events.some((event) => event.type === 'run.persistence-failed'),
-    ).toBe(true);
+    ).toBe(false);
     await sinkHost.close();
   });
 
@@ -1295,6 +1469,8 @@ const EPHEMERAL_RUN_MANIFEST_WRITER: RunManifestWriter = Object.freeze({
     return false;
   },
   async writeExclusive() {},
+  async append() {},
+  async syncFile() {},
   async syncDirectory() {},
   async rename() {},
 });
@@ -1302,11 +1478,15 @@ const EPHEMERAL_RUN_MANIFEST_WRITER: RunManifestWriter = Object.freeze({
 function hostFromEngine(
   engine: TermwrightVitestEngine,
   options: TermwrightTestHostOptions = hostOptions(),
+  dependencies: Parameters<typeof TermwrightTestHost.fromEngine>[2] = {},
 ): TermwrightTestHost {
   // Repository discovery belongs to the production open() boundary. Running
   // it here would launch real git processes for every injected-engine unit
   // case without exercising additional host behavior.
-  const host = TermwrightTestHost.fromEngine(engine, options, { gitProvenance: null });
+  const host = TermwrightTestHost.fromEngine(engine, options, {
+    gitProvenance: null,
+    ...dependencies,
+  });
   onTestFinished(() => host.close());
   return host;
 }

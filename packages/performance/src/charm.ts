@@ -338,6 +338,10 @@ export async function runCharmPerformanceBenchmark(
           observed.reduce((total, entry) => total + entry.fullSnapshots, 0),
           'Adapter debug counters across instrumented runs.',
         ),
+        deltas: unavailable(
+          'count',
+          'The current Go Bubble Tea producer publishes authoritative full snapshots.',
+        ),
         droppedEvents: measured(
           'count',
           observed.reduce((total, entry) => total + entry.droppedEvents, 0),

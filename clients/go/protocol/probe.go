@@ -80,8 +80,8 @@ var probeCapabilitySet = map[ProbeCapability]struct{}{
 	ProbeCapPaintOrder:     {},
 }
 
-// ProbeInfo is the optional self-description carried by a probe in hello.
-// Hand-written adapters leave it nil.
+// ProbeInfo is the self-description carried by a probe in hello.
+// Hand-written adapters omit ProbeInfo entirely.
 type ProbeInfo struct {
 	Framework        string                `json:"framework"`
 	FrameworkVersion string                `json:"frameworkVersion,omitempty"`
@@ -131,7 +131,9 @@ func checkedProbeInfo(info *ProbeInfo) (*ProbeInfo, error) {
 		}
 	}
 	var instrumentation *ProbeInstrumentation
-	if info.Instrumentation != nil {
+	if info.Instrumentation == nil {
+		return nil, fmt.Errorf("instrumentation is required for every probe")
+	} else {
 		declared := *info.Instrumentation
 		if declared.HighestTier != ProbeTierT0 && declared.HighestTier != ProbeTierT1 &&
 			declared.HighestTier != ProbeTierT2 && declared.HighestTier != ProbeTierT3 {
@@ -176,8 +178,8 @@ func checkProbeInfo(value any) *ParseError {
 	}
 	if problem := requireKeys(
 		object,
-		[]string{"framework", "probeVersion", "identityKind", "capabilities"},
-		[]string{"frameworkVersion", "instrumentation"},
+		[]string{"framework", "probeVersion", "identityKind", "capabilities", "instrumentation"},
+		[]string{"frameworkVersion"},
 	); problem != nil {
 		return malformed("probe: %s", problem.Detail)
 	}
@@ -241,6 +243,8 @@ func checkProbeInfo(value any) *ParseError {
 			HighestTier: ProbeInjectionTier(tier), SemanticClass: ProbeSemanticClass(semanticClass),
 			DegradedCapabilities: degraded,
 		}
+	} else {
+		return malformed("probe.instrumentation: required")
 	}
 
 	_, err := checkedProbeInfo(&ProbeInfo{

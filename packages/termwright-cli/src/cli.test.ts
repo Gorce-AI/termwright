@@ -100,7 +100,7 @@ function doctorReport(ok: boolean): DoctorReport {
       profiles: TERMWRIGHT_RESOURCE_PROFILES,
       semantics: 'explicit-session-contract',
       flakyPolicy: 'fail',
-      artifactValuePolicy: 'redacted',
+      artifactSecurity: { mode: 'redacted' },
       hostTimeouts: { startupMs: 30_000, runMs: 600_000, finalizationReserveMs: 30_000 },
     },
   };

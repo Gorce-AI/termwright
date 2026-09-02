@@ -33,7 +33,7 @@ from .messages import (
     parse_driver_message,
     protocol_error,
     revision_commit,
-    snapshot_message,
+    semantic_full_message,
 )
 from .tree import SemanticSnapshot
 from .validate import validate_snapshot
@@ -186,7 +186,7 @@ class SemanticClient:
         self._log_bucket: Optional[_TokenBucket] = None
         #: Records dropped locally for being over budget or over a limit.
         self.logs_dropped = 0
-        self.subscribe = "snapshots"
+        self.subscribe = "semantic"
         self.closed = False
 
     # -- lifecycle ---------------------------------------------------------
@@ -390,10 +390,9 @@ class SemanticClient:
         marker escapes.
         """
         messages = []
-        sent_snapshot = self.subscribe != "revisions"
-        if self.subscribe != "revisions":
-            self._log("io", f"r{wire['revision']} snapshot nodes={len(wire.get('nodes', ()))}")
-            messages.append(snapshot_message(wire))
+        sent_snapshot = True
+        self._log("io", f"r{wire['revision']} semantic-full nodes={len(wire.get('nodes', ()))}")
+        messages.append(semantic_full_message(wire))
         messages.append(revision_commit(wire["revision"]))
         return (
             tuple(encode_frame(message, self._limits.maxFrameBytes) for message in messages),

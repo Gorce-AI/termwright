@@ -282,7 +282,7 @@ const CONTAINER_ROLES: ReadonlySet<string> = new Set([
 
 const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
   observation.messages
-    .filter((entry) => entry.message.type === 'snapshot')
+    .filter((entry) => entry.message.type === 'semantic-full')
     .map((entry) => (entry.message as { snapshot: SemanticSnapshot }).snapshot);
 
 /**
@@ -492,7 +492,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         for (const snapshot of snapshots) {
           expect(validateSnapshot(snapshot, DEFAULT_LIMITS)).toMatchObject({ ok: true });
           expect(snapshot.sessionId).toBe(probe.sessionId);
-          expect(snapshot.v).toBe(2);
+          expect(snapshot.v).toBe(3);
           const ids = new Set(snapshot.nodes.map((node) => node.id));
           for (const node of snapshot.nodes) {
             if (node.parentId === undefined) expect(snapshot.rootIds).toContain(node.id);
@@ -547,7 +547,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
             (marker) =>
               observation.messages.some(
                 (entry) =>
-                  entry.message.type === 'snapshot' &&
+                  entry.message.type === 'semantic-full' &&
                   (entry.message as { snapshot: SemanticSnapshot }).snapshot.revision ===
                     marker.revision,
               ) &&
@@ -569,7 +569,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         for (const marker of markers) {
           const snapshot = observation.messages.find(
             (entry) =>
-              entry.message.type === 'snapshot' &&
+              entry.message.type === 'semantic-full' &&
               (entry.message as { snapshot: SemanticSnapshot }).snapshot.revision ===
                 marker.revision,
           );

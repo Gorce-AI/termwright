@@ -90,14 +90,14 @@ Dependency rules (from origin spec §5, unchanged): `protocol` depends on nothin
 framework-specific; `driver` never depends on Ink; `mcp` consumes only the public
 driver; adapters depend on protocol + their framework, never on the driver.
 
-## 4. Semantic protocol v2
+## 4. Semantic protocol v3
 
 ### 4.1 Transport and lifecycle
 
 - Driver creates a private endpoint before spawn: unix socket in a 0700 tmpdir
   (macOS/Linux) or named pipe with unguessable name (Windows). Never TCP.
 - Env injected into the child: `TERMWRIGHT_ENDPOINT`, `TERMWRIGHT_TOKEN`
-  (256-bit random), `TERMWRIGHT_PROTOCOL=2`.
+  (256-bit random), `TERMWRIGHT_PROTOCOL=3`.
 - **Dormant rule**: without these env vars an adapter opens nothing, allocates
   nothing, emits nothing; output is byte-for-byte identical to an uninstrumented
   run. Conformance enforces this.
@@ -112,12 +112,12 @@ driver; adapters depend on protocol + their framework, never on the driver.
 
 ### 4.2 Message model (CDP-like)
 
-The adapter sends immutable full snapshots, lifecycle diagnostics, structured
-logs, and revision commits on one bounded channel. A render marker in the PTY
-stream pairs each semantic revision with the exact terminal frame that committed
-it. Protocol v2 deliberately has no legacy delta/request-response mode: missing,
-duplicate, stale, or out-of-order evidence fails closed rather than being
-heuristically rehydrated.
+The adapter sends immutable full keyframes or revision-based domain deltas,
+lifecycle diagnostics, structured logs, and revision commits on one bounded
+channel. A render marker in the PTY stream pairs each semantic revision with
+the exact terminal frame that committed it. A missing or mismatched delta base
+requests a full resynchronization; malformed, duplicate, stale, or out-of-order
+evidence fails closed rather than being heuristically rehydrated.
 
 ### 4.3 Frame↔tree pairing (render marker)
 

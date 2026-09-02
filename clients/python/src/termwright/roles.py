@@ -50,6 +50,7 @@ ADAPTER_CAPABILITIES = (
     "render-revisions",
     "logs",
     "pointer-hit-grid",
+    "incremental-tree",
 )
 
 EVIDENCE_PROVIDER_CAPABILITIES = (

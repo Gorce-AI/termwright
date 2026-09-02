@@ -136,7 +136,7 @@ function browserMonotonicNow(): number {
 
 export const RUN_EVENT_CLASSES = Object.freeze(['authoritative', 'state', 'diagnostic'] as const);
 export type RunEventClass = (typeof RUN_EVENT_CLASSES)[number];
-export const RUN_EVENT_VERSION = 2 as const;
+export const RUN_EVENT_VERSION = 3 as const;
 
 export type RunEventJson =
   | null
@@ -161,7 +161,7 @@ export interface RunEventIdentity {
   readonly actionId?: ActionId;
 }
 
-/** Version 2 is the only accepted event shape; there is no legacy envelope. */
+/** Version 3 is the only accepted event shape; there is no legacy envelope. */
 export interface RunEvent<
   Type extends string = string,
   Payload extends RunEventJson = RunEventJson,
@@ -210,7 +210,9 @@ export type RunEventViolationCode =
   | 'epoch-regression'
   | 'sequence-regression'
   | 'monotonic-time-regression'
-  | 'causal-cycle';
+  | 'causal-cycle'
+  | 'causal-reference-unavailable'
+  | 'stream-capacity';
 
 export type RunEventValidationResult =
   | { readonly ok: true; readonly value: RunEvent }
@@ -248,7 +250,8 @@ export interface ProduceRunEventInput<Type extends string, Payload extends RunEv
 export class RunEventProducer {
   readonly #producerId: RunEventProducerId;
   readonly #epoch: number;
-  readonly #ids: RunIdFactory;
+  readonly #randomUUID: () => string;
+  readonly #recentEventIds = new RecentEventIds(4_096);
   readonly #monotonicNow: () => number;
   readonly #wallNow: (() => number) | undefined;
   #seq = 0;
@@ -266,7 +269,7 @@ export class RunEventProducer {
     parseRunId('producer', options.producerId);
     this.#producerId = options.producerId;
     this.#epoch = options.epoch;
-    this.#ids = new RunIdFactory(options.randomUUID);
+    this.#randomUUID = options.randomUUID ?? browserRandomUuid;
     this.#monotonicNow = options.monotonicNow ?? browserMonotonicNow;
     this.#wallNow = options.wallNow;
   }
@@ -282,7 +285,7 @@ export class RunEventProducer {
       throw new Error('producer monotonic clock moved backwards');
     const event = createRunEvent(
       {
-        eventId: this.#ids.create('event'),
+        eventId: this.#createEventId(),
         producerId: this.#producerId,
         epoch: this.#epoch,
         seq: this.#seq,
@@ -299,6 +302,17 @@ export class RunEventProducer {
     this.#seq += 1;
     this.#lastTime = now;
     return event;
+  }
+
+  #createEventId(): RunEventId {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const eventId = createRunId('event', this.#randomUUID);
+      if (!this.#recentEventIds.has(eventId)) {
+        this.#recentEventIds.add(eventId);
+        return eventId;
+      }
+    }
+    throw new Error('secure event id source collided with retained evidence eight times');
   }
 }
 
@@ -392,68 +406,180 @@ export function validateRunEvent(
   return { ok: true, value: event as unknown as RunEvent };
 }
 
-/** Stateful collision, ordering and causal-DAG validator for merged streams. */
+export interface RunEventStreamLimits {
+  readonly maxEvents: number;
+  readonly maxProducers: number;
+  readonly maxRecentEventIds: number;
+  readonly eventIdFilterBits: number;
+  readonly eventIdFilterHashes: number;
+}
+
+export const DEFAULT_RUN_EVENT_STREAM_LIMITS: RunEventStreamLimits = Object.freeze({
+  maxEvents: 1_000_000,
+  maxProducers: 4_096,
+  maxRecentEventIds: 65_536,
+  eventIdFilterBits: 128 * 1024 * 1024,
+  eventIdFilterHashes: 7,
+});
+
+/** Stateful, bounded collision, ordering and causal-DAG validator for merged streams. */
 export class RunEventStreamValidator {
   readonly #limits: RunEventLimits;
-  readonly #eventIds = new Set<string>();
-  readonly #sequenceKeys = new Set<string>();
-  readonly #producerEpoch = new Map<string, number>();
-  readonly #last = new Map<string, { readonly seq: number; readonly monotonicTime: number }>();
-  readonly #causes = new Map<string, readonly string[]>();
+  readonly #streamLimits: RunEventStreamLimits;
+  readonly #eventIds: FixedEventIdFilter;
+  readonly #recentEventIds: RecentEventIds;
+  readonly #producerState = new Map<
+    string,
+    { readonly epoch: number; readonly seq: number; readonly monotonicTime: number }
+  >();
+  #acceptedEvents = 0;
 
-  constructor(limits: RunEventLimits = DEFAULT_RUN_EVENT_LIMITS) {
+  constructor(
+    limits: RunEventLimits = DEFAULT_RUN_EVENT_LIMITS,
+    streamLimits: RunEventStreamLimits = DEFAULT_RUN_EVENT_STREAM_LIMITS,
+  ) {
     const failure = validateLimits(limits);
     if (failure !== null) throw new TypeError(failure.detail);
+    validateStreamLimits(streamLimits);
     this.#limits = limits;
+    this.#streamLimits = streamLimits;
+    this.#eventIds = new FixedEventIdFilter(
+      streamLimits.eventIdFilterBits,
+      streamLimits.eventIdFilterHashes,
+    );
+    this.#recentEventIds = new RecentEventIds(streamLimits.maxRecentEventIds);
   }
 
   accept(value: unknown): RunEventValidationResult {
     const parsed = validateRunEvent(value, this.#limits);
     if (!parsed.ok) return parsed;
     const event = parsed.value;
-    if (this.#eventIds.has(event.eventId))
-      return fail('event-collision', `event id ${event.eventId} was already observed`);
-    const sequenceKey = `${event.producerId}/${event.epoch}/${event.seq}`;
-    if (this.#sequenceKeys.has(sequenceKey))
-      return fail('event-collision', 'producer epoch/sequence was already observed');
-    const newestEpoch = this.#producerEpoch.get(event.producerId);
-    if (newestEpoch !== undefined && event.epoch < newestEpoch)
+    if (this.#acceptedEvents >= this.#streamLimits.maxEvents)
+      return fail('stream-capacity', 'run event capacity is exhausted');
+    if (this.#eventIds.maybeHas(event.eventId))
+      return fail('event-collision', `event id ${event.eventId} collides with retained evidence`);
+    const previous = this.#producerState.get(event.producerId);
+    if (previous === undefined && this.#producerState.size >= this.#streamLimits.maxProducers) {
+      return fail('stream-capacity', 'run event producer capacity is exhausted');
+    }
+    if (previous !== undefined && event.epoch < previous.epoch)
       return fail('epoch-regression', 'producer epoch moved backwards');
-    const incarnation = `${event.producerId}/${event.epoch}`;
-    const previous = this.#last.get(incarnation);
-    if (previous !== undefined && event.seq <= previous.seq)
+    if (previous !== undefined && event.epoch === previous.epoch && event.seq <= previous.seq)
       return fail('sequence-regression', 'producer sequence did not increase');
-    if (previous !== undefined && event.monotonicTime < previous.monotonicTime)
+    if (
+      previous !== undefined &&
+      event.epoch === previous.epoch &&
+      event.monotonicTime < previous.monotonicTime
+    )
       return fail('monotonic-time-regression', 'producer monotonic time moved backwards');
 
     const causes = event.causedBy ?? [];
-    this.#causes.set(event.eventId, causes);
-    if (this.#hasCycle(event.eventId)) {
-      this.#causes.delete(event.eventId);
-      return fail('causal-cycle', 'causedBy introduces a cycle');
+    for (const cause of causes) {
+      if (!this.#recentEventIds.has(cause)) {
+        return fail(
+          'causal-reference-unavailable',
+          `cause ${cause} was not observed within the bounded causal horizon`,
+        );
+      }
     }
     this.#eventIds.add(event.eventId);
-    this.#sequenceKeys.add(sequenceKey);
-    this.#producerEpoch.set(event.producerId, Math.max(newestEpoch ?? event.epoch, event.epoch));
-    this.#last.set(incarnation, { seq: event.seq, monotonicTime: event.monotonicTime });
+    this.#recentEventIds.add(event.eventId);
+    this.#producerState.set(event.producerId, {
+      epoch: event.epoch,
+      seq: event.seq,
+      monotonicTime: event.monotonicTime,
+    });
+    this.#acceptedEvents += 1;
     return parsed;
   }
+}
 
-  #hasCycle(start: string): boolean {
-    const visiting = new Set<string>();
-    const visited = new Set<string>();
-    const visit = (idValue: string): boolean => {
-      if (visiting.has(idValue)) return true;
-      if (visited.has(idValue)) return false;
-      visiting.add(idValue);
-      for (const cause of this.#causes.get(idValue) ?? []) {
-        if (visit(cause)) return true;
-      }
-      visiting.delete(idValue);
-      visited.add(idValue);
-      return false;
-    };
-    return visit(start);
+class FixedEventIdFilter {
+  readonly #words: Uint32Array;
+  readonly #bits: number;
+  readonly #hashes: number;
+
+  constructor(bits: number, hashes: number) {
+    this.#bits = bits;
+    this.#hashes = hashes;
+    this.#words = new Uint32Array(bits / 32);
+  }
+
+  maybeHas(value: string): boolean {
+    for (const index of this.#indexes(value)) {
+      if ((this.#words[index >>> 5]! & (1 << (index & 31))) === 0) return false;
+    }
+    return true;
+  }
+
+  add(value: string): void {
+    for (const index of this.#indexes(value)) this.#words[index >>> 5]! |= 1 << (index & 31);
+  }
+
+  #indexes(value: string): readonly number[] {
+    const first = hashText(value, 0x811c9dc5);
+    const step = hashText(value, 0x9e3779b9) | 1;
+    return Array.from(
+      { length: this.#hashes },
+      (_, index) => ((first + Math.imul(index, step)) >>> 0) % this.#bits,
+    );
+  }
+}
+
+class RecentEventIds {
+  readonly #values = new Set<string>();
+  readonly #ring: string[];
+  #start = 0;
+  #size = 0;
+
+  constructor(capacity: number) {
+    this.#ring = new Array<string>(capacity);
+  }
+
+  has(value: string): boolean {
+    return this.#values.has(value);
+  }
+
+  add(value: string): void {
+    const index = (this.#start + this.#size) % this.#ring.length;
+    if (this.#size === this.#ring.length) {
+      this.#values.delete(this.#ring[index]!);
+      this.#start = (this.#start + 1) % this.#ring.length;
+    } else {
+      this.#size += 1;
+    }
+    this.#ring[index] = value;
+    this.#values.add(value);
+  }
+}
+
+function hashText(value: string, seed: number): number {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash;
+}
+
+function validateStreamLimits(value: RunEventStreamLimits): void {
+  if (
+    !Number.isSafeInteger(value.maxProducers) ||
+    value.maxProducers < 1 ||
+    !Number.isSafeInteger(value.maxEvents) ||
+    value.maxEvents < 1 ||
+    !Number.isSafeInteger(value.maxRecentEventIds) ||
+    value.maxRecentEventIds < 1 ||
+    !Number.isSafeInteger(value.eventIdFilterBits) ||
+    value.eventIdFilterBits < 32 ||
+    value.eventIdFilterBits % 32 !== 0 ||
+    !Number.isSafeInteger(value.eventIdFilterHashes) ||
+    value.eventIdFilterHashes < 1 ||
+    value.eventIdFilterHashes > 16
+  ) {
+    throw new TypeError(
+      'run event stream limits must be positive, filter bits divisible by 32, and filter hashes at most 16',
+    );
   }
 }
 

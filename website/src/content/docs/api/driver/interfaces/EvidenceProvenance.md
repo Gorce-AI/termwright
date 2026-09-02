@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: EvidenceProvenance
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:692
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:727
 
 Where a fact originated, how it was obtained, and what consumers may infer.
 
@@ -21,7 +21,7 @@ Where a fact originated, how it was obtained, and what consumers may infer.
 
 > `readonly` **method**: `"heuristic"` \| `"native"` \| `"instrumented"` \| `"declared"` \| `"correlated"` \| `"measured"` \| `"derived"`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:694
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:729
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:694
 
 > `readonly` **providerId**: `string`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:697
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:732
 
 Stable identity of the producer, never a display label.
 
@@ -39,7 +39,7 @@ Stable identity of the producer, never a display label.
 
 > `readonly` **source**: `"application"` \| `"recognizer"` \| `"framework"` \| `"terminal"` \| `"driver"`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:693
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:728
 
 ***
 
@@ -47,4 +47,4 @@ Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:693
 
 > `readonly` **strength**: `"diagnostic"` \| `"authoritative"`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:695
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:730

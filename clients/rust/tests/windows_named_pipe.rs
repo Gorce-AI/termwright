@@ -41,10 +41,10 @@ fn named_pipe_handshake_and_snapshot_use_the_real_windows_transport() {
                 if frame.value["type"] == "hello" {
                     let ack = json!({
                         "type": "hello-ack",
-                        "protocol": "termwright/2",
+                        "protocol": "termwright/3",
                         "sessionId": "s-windows-rust",
                         "limits": DEFAULT_LIMITS,
-                        "subscribe": "snapshots",
+                        "subscribe": "semantic",
                         "marker": { "enabled": true }
                     });
                     stream
@@ -54,7 +54,7 @@ fn named_pipe_handshake_and_snapshot_use_the_real_windows_transport() {
                         )
                         .expect("write hello-ack");
                 }
-                let is_snapshot = frame.value["type"] == "snapshot";
+                let is_snapshot = frame.value["type"] == "semantic-full";
                 sent.send(frame.value).expect("forward frame");
                 if is_snapshot {
                     return;
@@ -80,7 +80,7 @@ fn named_pipe_handshake_and_snapshot_use_the_real_windows_transport() {
         .take(2)
         .collect();
     assert_eq!(frames[0]["type"], "hello");
-    assert_eq!(frames[1]["type"], "snapshot");
+    assert_eq!(frames[1]["type"], "semantic-full");
     assert_eq!(frames[1]["snapshot"]["sessionId"], "s-windows-rust");
     client.close();
     server.join().expect("server thread");

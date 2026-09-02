@@ -50,7 +50,7 @@ describe('createTerminal', () => {
     }
   });
 
-  it('defaults to the conservative profile', () => {
+  it('defaults to the modern grapheme profile', () => {
     const { profile } = createTerminal({ columns: 10, rows: 2 });
     expect(profile).toBe(DEFAULT_PROFILE);
   });
@@ -61,31 +61,23 @@ describe('createTerminal', () => {
     }
   });
 
-  it('keeps ambiguous characters narrow by default and wide under the iTerm2 profile', async () => {
+  it('keeps ambiguous characters narrow by default and wide under the CJK profile', async () => {
     // A box-drawing character is the case that decides whether a bordered
     // layout lines up, and it is exactly where terminals disagree.
     expect(await columnsUsed('│', 'default')).toBe(1);
-    expect(await columnsUsed('│', 'iterm2-ambiguous-wide')).toBe(2);
+    expect(await columnsUsed('│', 'cjk-wide')).toBe(2);
     // Unambiguous characters are untouched by the switch.
-    expect(await columnsUsed('a', 'iterm2-ambiguous-wide')).toBe(1);
-    expect(await columnsUsed('世', 'iterm2-ambiguous-wide')).toBe(2);
+    expect(await columnsUsed('a', 'cjk-wide')).toBe(1);
+    expect(await columnsUsed('世', 'cjk-wide')).toBe(2);
   });
 
-  it('promotes an emoji presentation sequence only where the profile says so', async () => {
-    // ❤ is one column everywhere. ❤️ (the same character plus VS16) is the
-    // emoji, and terminals disagree: that disagreement is the switch.
+  it('uses modern emoji presentation and extended grapheme geometry', async () => {
     expect(await columnsUsed('❤', 'default')).toBe(1);
-    expect(await columnsUsed('❤️', 'default')).toBe(1);
-    expect(await columnsUsed('❤️', 'kitty')).toBe(2);
-  });
-
-  it('keeps the three profiles behaviourally distinct', async () => {
-    // A profile nobody can tell apart from another is not a profile.
-    const probe = '│❤️';
-    const measured = await Promise.all(
-      (['default', 'kitty', 'iterm2-ambiguous-wide'] as const).map((id) => columnsUsed(probe, id)),
-    );
-    expect(new Set(measured).size).toBe(3);
+    expect(await columnsUsed('❤️', 'default')).toBe(2);
+    expect(await columnsUsed('👨‍👩‍👧‍👦', 'default')).toBe(2);
+    expect(await columnsUsed('👩🏽‍💻', 'default')).toBe(2);
+    expect(await columnsUsed('🇵🇱', 'default')).toBe(2);
+    expect(await columnsUsed('A\u200b', 'default')).toBe(1);
   });
 
   it('honours the scrollback it was asked for', async () => {
@@ -108,8 +100,8 @@ describe('createTerminal', () => {
 describe('resolveProfile', () => {
   it('accepts an id, a custom profile, or nothing', () => {
     expect(resolveProfile(undefined)).toBe(DEFAULT_PROFILE);
-    expect(resolveProfile('kitty')).toBe(TERMINAL_PROFILES.kitty);
-    const custom = { ...DEFAULT_PROFILE, id: 'mine', ambiguousWide: true };
+    expect(resolveProfile('cjk-wide')).toBe(TERMINAL_PROFILES['cjk-wide']);
+    const custom = { ...DEFAULT_PROFILE, id: 'mine', ambiguousWidth: 'wide' as const };
     expect(resolveProfile(custom)).toBe(custom);
   });
 
@@ -122,7 +114,7 @@ describe('resolveProfileId', () => {
   it('answers with a profile or with nothing, and never throws', () => {
     // For callers holding a string read from a recording: they report an
     // unknown profile in their own vocabulary instead of catching ours.
-    expect(resolveProfileId('kitty')).toBe(TERMINAL_PROFILES.kitty);
+    expect(resolveProfileId('cjk-wide')).toBe(TERMINAL_PROFILES['cjk-wide']);
     expect(resolveProfileId('konsole')).toBeUndefined();
     expect(resolveProfileId('')).toBeUndefined();
     expect(resolveProfileId('__proto__')).toBeUndefined();
@@ -148,8 +140,6 @@ describe('the portable half', () => {
     // What a browser consumer does: its own addon, its own terminal, our
     // profile — no @xterm/headless anywhere in the path.
     const { applyProfile } = await import('./unicode.js');
-    const unicode11 = (await import('@xterm/addon-unicode11')).default;
-
     const registered: { version: string; wcwidth(cp: number): number }[] = [];
     let active = '';
     const unicode = {
@@ -164,28 +154,13 @@ describe('the portable half', () => {
       },
     };
 
-    applyProfile(
-      unicode as never,
-      new unicode11.Unicode11Addon() as never,
-      TERMINAL_PROFILES['iterm2-ambiguous-wide'],
-    );
+    applyProfile(unicode as never, TERMINAL_PROFILES['cjk-wide']);
 
     // Registering alone changes nothing: the provider must also be activated.
-    expect(active).toBe('iterm2-ambiguous-wide');
+    expect(active).toBe('cjk-wide');
     expect(registered).toHaveLength(1);
     // And it is the profile's provider, not the addon's own.
     expect(registered[0]?.wcwidth(0x2502)).toBe(2);
     expect(registered[0]?.wcwidth(0x0061)).toBe(1);
-  });
-
-  it('reads a provider out of an addon without registering it anywhere', async () => {
-    const { captureAddonProvider } = await import('./unicode.js');
-    const unicode11 = (await import('@xterm/addon-unicode11')).default;
-
-    const base = captureAddonProvider(new unicode11.Unicode11Addon() as never, '11');
-    expect(base.version).toBe('11');
-    expect(base.wcwidth(0x4e00)).toBe(2);
-    // Untouched by the profile: the box character is still narrow here.
-    expect(base.wcwidth(0x2502)).toBe(1);
   });
 });

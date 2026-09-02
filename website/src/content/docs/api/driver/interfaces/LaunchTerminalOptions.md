@@ -21,17 +21,17 @@ Stable application-facing options accepted by [launchTerminal](../../functions/l
 
 ## Properties
 
-### artifactValuePolicy?
+### artifactSecurity?
 
-> `readonly` `optional` **artifactValuePolicy?**: `"raw"` \| `"none"` \| `"redacted"`
+> `readonly` `optional` **artifactSecurity?**: `ArtifactSecurityPolicy`
 
 Defined in: [driver/src/api.ts:134](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L134)
 
-Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in.
+One policy for every artifact boundary. Defaults to secure `redacted`.
 
 #### Inherited from
 
-[`LaunchOptions`](../launchoptions/).[`artifactValuePolicy`](../launchoptions/#artifactvaluepolicy)
+[`LaunchOptions`](../launchoptions/).[`artifactSecurity`](../launchoptions/#artifactsecurity)
 
 ***
 
@@ -261,8 +261,8 @@ command markers. Test authors should normally use `terminal.openShell()`.
 Defined in: [driver/src/api.ts:111](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L111)
 
 Terminal profile: which width tables and which of the switches terminals
-disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
-`'iterm2-ambiguous-wide'`) or a profile object from `@termwright/vt`.
+disagree on this session uses. The built-in ids are `'default'` and
+`'cjk-wide'`.
 
 It is recorded with the session so a replay, a screenshot and the runner
 pane can count characters exactly as the live session did.

@@ -16,6 +16,10 @@ const hostPressureTask = suite.tasks.find(
 );
 const hostPressureMeta =
   hostPressureTask !== undefined && 'meta' in hostPressureTask ? hostPressureTask.meta : undefined;
+const heavySentinel = 'resource-aware heavy load sentinel';
+resourceIt.resources({ load: 'heavy' })(heavySentinel, () => {});
+const heavyTask = suite.tasks.find((task) => task.type === 'test' && task.name === heavySentinel);
+const heavyMeta = heavyTask !== undefined && 'meta' in heavyTask ? heavyTask.meta : undefined;
 
 describe('resource-aware Vitest declaration', () => {
   vitestIt('marks the task owned by the active Vitest collector', () => {
@@ -49,5 +53,12 @@ describe('resource-aware Vitest declaration', () => {
         hostPressure: 'exclusive',
       }),
     ).toThrow(/cannot combine nativeHost and hostPressure/u);
+  });
+
+  vitestIt('publishes a closed coarse load hint at collection time', () => {
+    expect(heavyMeta).toMatchObject({ termwright: { resources: { load: 'heavy' } } });
+    expect(() => resourceIt.resources({ load: 'huge' as 'heavy' })).toThrow(
+      /load must be light, normal, heavy or exclusive/u,
+    );
   });
 });

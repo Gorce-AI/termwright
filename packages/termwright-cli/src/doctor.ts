@@ -2,8 +2,11 @@ import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createNativePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
-import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
-import { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
+import { CERTIFIED_VITEST_VERSION } from './test-host-engine.js';
+import {
+  TERMWRIGHT_RESOURCE_PROFILES,
+  resolveTermwrightResourceProfile,
+} from './resource-profiles.js';
 import { DEFAULT_TERMWRIGHT_HOST_TIMEOUTS } from './test-host.js';
 
 export interface DoctorCheck {
@@ -22,13 +25,14 @@ export interface DoctorReport {
     readonly profiles: typeof TERMWRIGHT_RESOURCE_PROFILES;
     readonly semantics: 'explicit-session-contract';
     readonly flakyPolicy: 'fail';
-    readonly artifactValuePolicy: 'redacted';
+    readonly artifactSecurity: { readonly mode: 'redacted' };
     readonly hostTimeouts: typeof DEFAULT_TERMWRIGHT_HOST_TIMEOUTS;
   };
 }
 
 export async function runDoctor(cwd: string): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
+  const effectiveProfile = resolveTermwrightResourceProfile('local', cwd);
   const nodeMajor = Number(process.versions.node.split('.')[0]);
   const nodeCertified = nodeMajor === 22 || nodeMajor === 24;
   checks.push({
@@ -66,6 +70,11 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
   });
 
   checks.push(await checkWritable(cwd));
+  checks.push({
+    name: 'Host capacity',
+    status: effectiveProfile.hostCapacity?.tempDiskBudgetBytes === 'unavailable' ? 'warn' : 'pass',
+    detail: effectiveProfile.scheduler.decisions?.join('; ') ?? 'static policy',
+  });
   if (process.platform === 'linux' && libcFamily() === 'musl') {
     checks.push({
       name: 'Linux libc',
@@ -86,11 +95,11 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
     effectiveConfig: Object.freeze({
       mode: 'termwright-native-only',
       engine: Object.freeze({ name: 'vitest', version: CERTIFIED_VITEST_VERSION }),
-      defaultProfile: TERMWRIGHT_RESOURCE_PROFILES.local,
+      defaultProfile: effectiveProfile,
       profiles: TERMWRIGHT_RESOURCE_PROFILES,
       semantics: 'explicit-session-contract',
       flakyPolicy: 'fail',
-      artifactValuePolicy: 'redacted',
+      artifactSecurity: Object.freeze({ mode: 'redacted' }),
       hostTimeouts: DEFAULT_TERMWRIGHT_HOST_TIMEOUTS,
     }),
   });
@@ -167,7 +176,7 @@ export function formatDoctor(report: DoctorReport): string {
       `${report.effectiveConfig.defaultProfile.scheduler.pool}, ` +
       `${report.effectiveConfig.defaultProfile.scheduler.maxWorkers} workers, ` +
       `${report.effectiveConfig.defaultProfile.capacities.ptySession} PTYs, ` +
-      `flaky=${report.effectiveConfig.flakyPolicy}, artifacts=${report.effectiveConfig.artifactValuePolicy}`,
+      `flaky=${report.effectiveConfig.flakyPolicy}, artifacts=${report.effectiveConfig.artifactSecurity.mode}`,
     '',
     report.ok ? 'Ready to run Termwright.' : 'Termwright needs attention before tests can run.',
   ].join('\n');

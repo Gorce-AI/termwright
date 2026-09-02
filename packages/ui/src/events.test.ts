@@ -33,7 +33,7 @@ describe('server messages', () => {
       contractId: 's1:0',
       sessionId: 's1',
       epoch: 0,
-      protocol: 'termwright/2',
+      protocol: 'termwright/3',
       framework: null,
       providers: [
         { id: 'terminal', kind: 'terminal', version: '1' },
@@ -124,7 +124,7 @@ describe('server messages', () => {
         sessionId: 's1',
         revision: 7,
         snapshot: {
-          v: 2,
+          v: 3,
           sessionId: 's1',
           revision: 7,
           columns: 80,
@@ -208,7 +208,7 @@ describe('server messages', () => {
       contractId: 's1:0',
       sessionId: 's1',
       epoch: 0,
-      protocol: 'termwright/2' as const,
+      protocol: 'termwright/3' as const,
       providers: [{ id: 'termwright-vt', kind: 'terminal' as const, version: '1' }],
       capabilities: capabilityAvailability,
       terminal: { profile: 'default', platform: 'linux', mouseModesObservable: true },

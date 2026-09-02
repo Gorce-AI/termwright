@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -13,10 +13,36 @@ import {
   runDirectoryName,
   type RunManifest,
   type RunManifestWriter,
+  type RunResourceTelemetry,
   type RunStartProvenance,
 } from './index.js';
 
 const directories: string[] = [];
+const fixtureTelemetry = (): RunResourceTelemetry => ({
+  coordinatorCpuUserMicros: 1,
+  coordinatorCpuSystemMicros: 1,
+  coordinatorRssStartBytes: 1,
+  coordinatorRssEndBytes: 1,
+  coordinatorPeakSampledRssBytes: 1,
+  workerPeakRssBytes: 64 * 1024 * 1024,
+  workerCpuUserMicros: 100,
+  workerCpuSystemMicros: 20,
+  ownedProcessPeakRssBytes: 'unavailable',
+  ownedProcessCountPeak: 'unavailable',
+  ptySlotsPeak: 0,
+  terminalOutputBytes: 0,
+  semanticBytes: 0,
+  semanticFullCount: 0,
+  semanticDeltaCount: 0,
+  journalAcceptedEvents: 3,
+  journalAcceptedBytes: 1,
+  journalSinkCalls: 1,
+  journalPeakBacklogEvents: 3,
+  journalPeakBacklogBytes: 1,
+  traceBytes: 0,
+  tempDiskPeakBytes: 'unavailable',
+  finalArtifactBytes: 0,
+});
 afterEach(async () =>
   Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))),
 );
@@ -26,15 +52,28 @@ describe('native run history transaction', () => {
     const runs = await runsDirectory();
     const start = provenance();
     const transaction = await beginRunManifest(runs, start, { writer: nodeWriter() });
-    await transaction.prepare(manifest(start));
+    const value = manifest(start);
+    await transaction.appendEvents(value.events);
+    await transaction.prepare(value);
     expect(await readRunHistory(runs)).toMatchObject([{ state: 'incomplete', runId: start.runId }]);
     const path = await transaction.commitPrepared();
     expect(path).toBe(join(runs, runDirectoryName(start.runId), 'manifest.json'));
-    expect(await readRunManifest(runs, start.runId)).toMatchObject({
+    const record = await readRunManifest(runs, start.runId);
+    expect(record).toMatchObject({
       state: 'complete',
       runId: start.runId,
-      manifest: { invocationId: start.invocationId },
+      manifest: {
+        invocationId: start.invocationId,
+        eventStream: { file: 'events.ndjson', count: value.events.length },
+      },
     });
+    const persisted = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    expect(persisted).not.toHaveProperty('events');
+    expect(
+      Buffer.byteLength(
+        await readFile(join(runs, runDirectoryName(start.runId), 'events.ndjson'), 'utf8'),
+      ),
+    ).toBe((persisted['eventStream'] as { bytes: number }).bytes);
     await expect(transaction.commitPrepared()).rejects.toThrow(/not prepared/u);
   });
 
@@ -55,12 +94,21 @@ describe('native run history transaction', () => {
 
     const mismatched = provenance();
     const mismatchTransaction = await beginRunManifest(runs, mismatched, { writer: nodeWriter() });
-    await mismatchTransaction.commit(manifest(mismatched));
+    const mismatchedManifest = manifest(mismatched);
+    await mismatchTransaction.appendEvents(mismatchedManifest.events);
+    await mismatchTransaction.commit(mismatchedManifest);
     await writeFile(
       join(runs, runDirectoryName(mismatched.runId), 'COMMITTED'),
       marker('0'.repeat(64)),
       'utf8',
     );
+
+    const tampered = provenance();
+    const tamperedManifest = manifest(tampered);
+    const tamperedTransaction = await beginRunManifest(runs, tampered, { writer: nodeWriter() });
+    await tamperedTransaction.appendEvents(tamperedManifest.events);
+    await tamperedTransaction.commit(tamperedManifest);
+    await appendFile(join(runs, runDirectoryName(tampered.runId), 'events.ndjson'), '{}\n', 'utf8');
 
     const unsupported = provenance();
     const unsupportedDirectory = join(runs, runDirectoryName(unsupported.runId));
@@ -86,6 +134,7 @@ describe('native run history transaction', () => {
           'directory' in record && record.directory === runDirectoryName(mismatched.runId),
       )?.state,
     ).toBe('corrupt');
+    expect(records.find((record) => record.runId === tampered.runId)?.state).toBe('corrupt');
     expect(records.find((record) => record.runId === unsupported.runId)).toMatchObject({
       state: 'unsupported-version',
       version: 99,
@@ -108,7 +157,13 @@ describe('native run history transaction', () => {
       beginRunManifest(runs, first, { writer: nodeWriter() }),
       beginRunManifest(runs, second, { writer: nodeWriter() }),
     ]);
-    await Promise.all([one.commit(manifest(first)), two.commit(manifest(second))]);
+    const firstManifest = manifest(first);
+    const secondManifest = manifest(second);
+    await Promise.all([
+      one.appendEvents(firstManifest.events),
+      two.appendEvents(secondManifest.events),
+    ]);
+    await Promise.all([one.commit(firstManifest), two.commit(secondManifest)]);
     expect(
       (await readRunHistory(runs)).filter((record) => record.state === 'complete'),
     ).toHaveLength(2);
@@ -154,9 +209,54 @@ describe('native run history transaction', () => {
     );
     expect(
       parseManifest(
-        JSON.stringify({ ...passed, status: 'incomplete', events: [...passed.events, correction] }),
+        JSON.stringify({
+          ...passed,
+          status: 'incomplete',
+          eventStream: { ...passed.eventStream, count: passed.events.length + 1 },
+          events: [...passed.events, correction],
+        }),
       ).state,
     ).toBe('complete');
+  });
+
+  it('requires explicit unavailable resource metrics instead of fabricated zeroes', () => {
+    const start = provenance();
+    const valid = manifest(start);
+    expect(valid.telemetry.workerPeakRssBytes).toBe(64 * 1024 * 1024);
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...valid,
+          telemetry: { ...valid.telemetry, coordinatorRssEndBytes: -1 },
+        }),
+      ).state,
+    ).toBe('corrupt');
+    const missing = { ...valid.telemetry } as Record<string, unknown>;
+    delete missing['ownedProcessPeakRssBytes'];
+    expect(parseManifest(JSON.stringify({ ...valid, telemetry: missing })).state).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...valid,
+          telemetry: {
+            ...valid.telemetry,
+            workerCpuUserMicros: (valid.telemetry.workerCpuUserMicros as number) + 1,
+          },
+        }),
+      ).state,
+    ).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...valid,
+          events: valid.events.map((event) =>
+            event.type === 'attempt.finished'
+              ? { ...event, payload: { ...(event.payload as object), worker: undefined } }
+              : event,
+          ),
+        }),
+      ).state,
+    ).toBe('corrupt');
   });
 
   it('requires current monotonic run and attempt timing evidence', () => {
@@ -328,6 +428,7 @@ describe('native run history transaction', () => {
     const yellow = {
       ...forgedGreen,
       status: 'passed-with-skips' as const,
+      eventStream: { ...forgedGreen.eventStream, count: forgedGreen.events.length },
       events: forgedGreen.events.map((event) =>
         event.type === 'run.state' ? { ...event, payload: { state: 'passed-with-skips' } } : event,
       ),
@@ -354,6 +455,7 @@ function provenance(): RunStartProvenance {
       profile: 'test',
       scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },
       capacities: { ptySession: 2 },
+      perAttempt: {},
       perTerminal: { ptySession: 1 },
     },
     timeouts: { totalRunMs: 60_000, finalizationReserveMs: 5_000 },
@@ -418,6 +520,13 @@ function manifest(start: RunStartProvenance): RunManifest {
         durationMs: 4,
       },
     ],
+    telemetry: fixtureTelemetry(),
+    eventStream: {
+      file: 'events.ndjson',
+      count: 4,
+      bytes: 0,
+      sha256: '0'.repeat(64),
+    },
     events: [
       producer.emit({
         eventClass: 'authoritative',
@@ -429,7 +538,18 @@ function manifest(start: RunStartProvenance): RunManifest {
         eventClass: 'authoritative',
         type: 'attempt.finished',
         identity,
-        payload: { nativeTaskId: 'native_0', repeat: 0, retry: 0, state: 'passed' },
+        payload: {
+          nativeTaskId: 'native_0',
+          repeat: 0,
+          retry: 0,
+          state: 'passed',
+          worker: {
+            capability: 'worker-process',
+            cpuUserMicros: 100,
+            cpuSystemMicros: 20,
+            peakSampledRssBytes: 64 * 1024 * 1024,
+          },
+        },
       }),
       producer.emit({
         eventClass: 'authoritative',
@@ -464,6 +584,10 @@ function nodeWriter(): RunManifestWriter {
     async writeExclusive(path, body) {
       await writeFile(path, body, { encoding: 'utf8', flag: 'wx' });
     },
+    async append(path, body) {
+      await appendFile(path, body, 'utf8');
+    },
+    async syncFile() {},
     async syncDirectory() {},
     async rename(source, destination) {
       await rename(source, destination);
@@ -472,5 +596,5 @@ function nodeWriter(): RunManifestWriter {
 }
 
 function marker(digest: string): string {
-  return `termwright-run-history-v1 sha256:${digest}\n`;
+  return `termwright-run-history-v2 sha256:${digest}\n`;
 }

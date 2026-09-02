@@ -246,7 +246,7 @@ export interface CursorInfo {
 }
 
 export interface SemanticSnapshot {
-  readonly v: 2;
+  readonly v: 3;
   readonly sessionId: string;
   /** Positive, strictly increasing within a semantic session. */
   readonly revision: number;
@@ -258,10 +258,53 @@ export interface SemanticSnapshot {
   /** Coordinate system used by every physical observation in this snapshot. */
   readonly coordinateSpace: Observation<CoordinateSpace>;
   /**
-   * Required by v2. `known` means a complete map, not a sample or paint-order
+   * Required by v3. `known` means a complete map, not a sample or paint-order
    * approximation. Cells absent from a known map have no semantic recipient.
    */
   readonly hitGrid: Observation<PointerHitGrid>;
   /** Present only when application evidence providers were negotiated in hello. */
   readonly providerEvidence?: readonly ProviderRevisionEvidence[];
+}
+
+/** Node fields that a delta may replace or explicitly remove. Node ids never mutate. */
+export type SemanticNodePatchField = Exclude<keyof SemanticNode, 'id'>;
+
+/**
+ * A domain-specific node update. A key absent from both collections is
+ * unchanged; a key in `clear` ceases to exist. Values in `set` replace the
+ * complete field, including its provenance/evidence payload.
+ */
+export interface SemanticNodeUpdate {
+  readonly id: string;
+  readonly set?: Readonly<Partial<Omit<SemanticNode, 'id'>>>;
+  readonly clear?: readonly SemanticNodePatchField[];
+}
+
+export type SemanticSnapshotClearField = 'cursor' | 'providerEvidence';
+
+/** Snapshot-scoped facts changed by a semantic delta. */
+export interface SemanticSnapshotUpdate {
+  readonly columns?: number;
+  readonly rows?: number;
+  readonly cursor?: CursorInfo;
+  readonly rootIds?: readonly string[];
+  readonly coordinateSpace?: Observation<CoordinateSpace>;
+  readonly hitGrid?: Observation<PointerHitGrid>;
+  readonly providerEvidence?: readonly ProviderRevisionEvidence[];
+  readonly clear?: readonly SemanticSnapshotClearField[];
+}
+
+/**
+ * Revision-based semantic patch. Applying it is all-or-nothing and valid only
+ * when `baseRevision` equals the consumer's currently committed revision.
+ */
+export interface SemanticDelta {
+  readonly v: 3;
+  readonly sessionId: string;
+  readonly revision: number;
+  readonly baseRevision: number;
+  readonly addNodes?: readonly SemanticNode[];
+  readonly updateNodes?: readonly SemanticNodeUpdate[];
+  readonly removeNodeIds?: readonly string[];
+  readonly snapshot?: SemanticSnapshotUpdate;
 }

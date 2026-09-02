@@ -91,7 +91,7 @@ A directory (zipped for transport) containing:
   a missing marker, or a checksum mismatch is never a readable complete trace.
   `packTrace()` accepts only such a committed directory.
 
-- `meta.json` — `{ v: 1, sessionId, command, columns, rows, startedAt,
+- `meta.json` — `{ v: 4, sessionId, command, columns, rows, startedAt,
   platform, terminalProfile?, semanticTree: boolean, exit?: {code, signal},
   crash?: {t, castOffset, exit, screenTail, lastSemanticRevision,
   recentInputs, diagnosticsTail} }`. `crash` mirrors the driver's
@@ -104,11 +104,10 @@ A directory (zipped for transport) containing:
   label = step title. Recording includes all PTY output; `Hide()/Show()`
   windows excluded at write time.
 - `events.jsonl` — one JSON object per line:
-  `{ t: <ms>, castOffset: <ms>, kind: 'input'|'resize'|'step-start'|'step-end'|
+  `{ t: <ms>, kind: 'input'|'resize'|'step-start'|'step-end'|
      'action'|'assert'|'crash', ... }` where `action` carries
-  `{ api, selector?, ref?, ok, error? }`. `castOffset` is REQUIRED and
-  positions the event on the (idle-trimmed, hide-window-adjusted) recording
-  timeline. There is no reader fallback — one writer generation exists.
+  `{ api, selector?, ref?, ok, error? }`. `t` is canonical monotonic time;
+  `castOffset` is not persisted and is derived by readers.
 
 `terminalProfile` is `TerminalHarness.terminalProfile`; absent in a legacy
 archive means
@@ -122,17 +121,19 @@ describes the session, and `meta.json` is ours to extend.
 `SessionEventMap` `timeMs` semantics (binding for the driver): milliseconds
 since session start, monotonic, never resets for the lifetime of a session
 (reconnects included).
-- `semantics.jsonl` — `{ t: <ms>, revision, castOffset: <ms>, snapshot }`,
-  snapshot = `SemanticSnapshot` verbatim.
-- `logs.jsonl` — OPTIONAL, absent when the session logged nothing. One entry
-  per line: `{ t: <ms>, castOffset: <ms>, source: 'file'|'adapter', label?,
+- `semantics.jsonl` — append-only `{ kind: 'keyframe', t, revision, snapshot }`
+  or `{ kind: 'delta', t, revision, baseRevision, delta }`. Replay validates
+  and applies every delta atomically.
+- `timeline.jsonl` — raw cast anchors and hidden-window transformations used
+  to derive presentation time lazily.
+- `logs.jsonl` — one entry per line: `{ t: <ms>, source: 'file'|'adapter', label?,
   level?, message, attrs?, seq?, revision?, ts? }`. The driver's `app-log`
   carries either `line` (followed file) or `record` (adapter); both are stored
   as `message`, with `source` preserving the provenance. A file line has NO
   `level` — consumers must not infer one from its text. `meta.logs`
   summarises: `{ count, dropped, sources, levels }`, where `sources` is
-  `{label?, path?}[]` and `dropped` counts entries evicted by the writer's
-  ceiling (oldest first) and is computed at finalize, never flushed on a
+  `{label?, path?}[]` and `dropped` counts entries refused after the writer's
+  append-only ceiling and is computed at finalize, never flushed on a
   following event. A file entry repeats its `path`: a label may be shared
   between sources, so a label alone cannot attribute a line to its file. Redaction happens at the
   source (`@termwright/logs`); file lines are RAW and carry the same handling
@@ -142,6 +143,10 @@ Writer/reader live in `@termwright/trace`; UI and HTML report consume only via
 those readers. Readers classify artifacts as `complete`, `incomplete`,
 `corrupt`, or `unsupported-version`; they never silently treat partial output
 as an older valid trace.
+
+The writer appends through a bounded record/byte queue. Saturation is a
+capacity failure. SHA-256 advances from the same bytes as each append, so
+finalization neither rereads nor materializes complete streams.
 
 ## §UI events — runner ↔ browser
 

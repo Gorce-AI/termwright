@@ -469,6 +469,7 @@ const snapshot = defineTool({
         ? renderScreenshot(screen, {
             scale: args.screenshotScale,
             theme: args.screenshotTheme,
+            semantic,
           })
         : undefined;
     const trailer = [

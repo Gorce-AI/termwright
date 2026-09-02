@@ -1,6 +1,7 @@
 /** First-class Termwright process host backed by the exact-certified Vitest engine. */
 
 import { inspect } from 'node:util';
+import { dirname } from 'node:path';
 import { ResourceBroker, type ResourceVector } from '@termwright/resource-broker';
 import {
   startResourceBrokerServer,
@@ -9,6 +10,7 @@ import {
 import { startRunJournalServer, type RunJournalServer } from '@termwright/run-journal-transport';
 import {
   type NativeRunAttempt,
+  type RunResourceTelemetry,
   type RunManifestWriter,
   type RunStartProvenance,
 } from '@termwright/run-history';
@@ -24,19 +26,21 @@ import {
   type RunId,
   type RunState,
   type RunnerTaskId,
+  type SessionId,
   type SpecId,
   type TerminalRunState,
 } from '@termwright/protocol';
-import type { TermwrightHostTaskIdentity } from '@termwright/test/runner';
-import { assertCertifiedVitestRuntime } from '@termwright/test/vitest-engine';
 import type { UserConsoleLog } from 'vitest';
 import type { TestCase, TestRunResult } from 'vitest/node';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
+import { ResourceCostHistory, type ResourceCostEstimate } from './resource-history.js';
 import { preflightTestHost, type TermwrightHostPreflightOptions } from './preflight.js';
 import {
   classifyVitestResult,
   createCertifiedVitestEngine,
   hostRelativeFilters,
+  assertCertifiedVitestRuntime,
+  type TermwrightHostTaskIdentity,
   type TermwrightVitestEngine,
 } from './test-host-engine.js';
 import {
@@ -58,8 +62,13 @@ export {
 export type { TermwrightHostDeadlineRuntime } from './test-host-persistence.js';
 export type { TermwrightVitestEngine } from './test-host-engine.js';
 
-export { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
+export {
+  TERMWRIGHT_RESOURCE_PROFILES,
+  detectTermwrightHostCapacity,
+  resolveTermwrightResourceProfile,
+} from './resource-profiles.js';
 export type {
+  TermwrightHostCapacity,
   TermwrightResourceProfile,
   TermwrightResourceProfileName,
 } from './resource-profiles.js';
@@ -76,6 +85,10 @@ export interface NativeTestCase {
   readonly metadata: unknown;
   /** Atomic pre-Attempt reservation declared through test.resources(). */
   readonly resourceReservation?: ResourceVector;
+  /** Whether concrete subleases must stay within an explicit declaration. */
+  readonly strictResourceReservation?: boolean;
+  /** Persisted admission rationale; contains no raw historical identity. */
+  readonly resourceDecision: string;
 }
 
 export interface NativeTestCatalog {
@@ -135,6 +148,7 @@ export interface RunCompletion {
   readonly runId: RunId;
   readonly state: TerminalRunState;
   readonly catalog: NativeTestCatalog | undefined;
+  /** Bounded recent evidence projection in canonical order; history owns the complete stream. */
   readonly events: readonly RunEvent[];
   readonly failures: readonly NativeTestFailure[];
   readonly skips: readonly NativeTestSkip[];
@@ -169,6 +183,7 @@ export interface TermwrightTestHostOptions {
   /** Explicit variables installed in Vitest workers without mutating host process state. */
   readonly workerEnv?: Readonly<Record<string, string>>;
   readonly filters?: readonly string[];
+  /** Best-effort live batch projection; canonical run-history persistence is independent. */
   readonly journalSink?: (events: readonly RunEvent[]) => void | Promise<void>;
   /** Best-effort live projection. Canonical persistence never depends on it. */
   readonly eventObserver?: (event: RunEvent) => void;
@@ -194,6 +209,7 @@ interface ActiveRun {
   readonly attempts: Map<AttemptId, ObservedAttempt>;
   readonly controlFailures: Error[];
   readonly budget: HostRunBudget;
+  readonly telemetry: RunTelemetrySampler;
   selected?: readonly NativeTestCase[];
   readonly completed: Promise<RunCompletion>;
 }
@@ -214,6 +230,7 @@ export class TermwrightTestHost {
   readonly #sink: (events: readonly RunEvent[]) => void | Promise<void>;
   readonly #eventObserver: ((event: RunEvent) => void) | undefined;
   readonly #resourceProfile: TermwrightResourceProfile;
+  readonly #resourceHistory: Promise<ResourceCostHistory>;
   readonly #cwd: string;
   readonly #runsDir: string;
   readonly #runManifestWriter: RunManifestWriter | undefined;
@@ -239,12 +256,14 @@ export class TermwrightTestHost {
     options: TermwrightTestHostOptions,
     ids = new RunIdFactory(),
     gitProvenance: RunStartProvenance['git'] | undefined = undefined,
+    resourceHistory: ResourceCostHistory = ResourceCostHistory.memory(),
   ) {
     this.#engine = engine;
     this.#filters = Object.freeze([...(options.filters ?? [])]);
     this.#sink = options.journalSink ?? (() => undefined);
     this.#eventObserver = options.eventObserver;
     this.#resourceProfile = options.resourceProfile;
+    this.#resourceHistory = Promise.resolve(resourceHistory);
     this.#cwd = options.cwd;
     this.#runsDir = options.runsDir;
     this.#runManifestWriter = options.runManifestWriter;
@@ -289,21 +308,36 @@ export class TermwrightTestHost {
       void creation.then(({ engine }) => engine.close()).catch(() => undefined);
       throw error;
     }
-    return new TermwrightTestHost(created.engine, {
-      ...options,
-      skipDeclarations,
-      filters: hostRelativeFilters([...(options.filters ?? []), ...created.filters], options.cwd),
-    });
+    return new TermwrightTestHost(
+      created.engine,
+      {
+        ...options,
+        skipDeclarations,
+        filters: hostRelativeFilters([...(options.filters ?? []), ...created.filters], options.cwd),
+      },
+      new RunIdFactory(),
+      undefined,
+      await ResourceCostHistory.load(dirname(options.runsDir)),
+    );
   }
 
   /** Test seam; production callers use {@link open}. */
   static fromEngine(
     engine: TermwrightVitestEngine,
     options: TermwrightTestHostOptions,
-    dependencies: { readonly gitProvenance?: RunStartProvenance['git'] } = {},
+    dependencies: {
+      readonly gitProvenance?: RunStartProvenance['git'];
+      readonly resourceHistory?: ResourceCostHistory;
+    } = {},
   ): TermwrightTestHost {
     assertCertifiedVitestRuntime(engine.version);
-    return new TermwrightTestHost(engine, options, new RunIdFactory(), dependencies.gitProvenance);
+    return new TermwrightTestHost(
+      engine,
+      options,
+      new RunIdFactory(),
+      dependencies.gitProvenance,
+      dependencies.resourceHistory,
+    );
   }
 
   requestRun(request: RunRequest = {}): RunHandle {
@@ -311,13 +345,6 @@ export class TermwrightTestHost {
     if (this.#active !== undefined) throw new Error(`run ${this.#active.runId} is still active`);
 
     const runId = this.#ids.create('run');
-    const persistence = new RunEventPersistence({
-      invocationId: this.invocationId,
-      runId,
-      gapProducer: this.#gapProducer,
-      sink: this.#sink,
-      ...(this.#eventObserver === undefined ? {} : { observer: this.#eventObserver }),
-    });
     let settle!: (completion: RunCompletion) => void;
     const completed = new Promise<RunCompletion>((resolve) => {
       settle = resolve;
@@ -327,15 +354,25 @@ export class TermwrightTestHost {
       request.timeoutMs ?? this.#timeouts.runMs,
       this.#timeouts.finalizationReserveMs,
     );
+    const history = this.#beginHistory(runId, startedAt, budget);
+    const persistence = new RunEventPersistence({
+      invocationId: this.invocationId,
+      runId,
+      gapProducer: this.#gapProducer,
+      sink: async (events) => (await history).appendEvents(events),
+      projectionSink: this.#sink,
+      ...(this.#eventObserver === undefined ? {} : { observer: this.#eventObserver }),
+    });
     const active: ActiveRun = {
       runId,
       state: 'requested',
       cancellationRequested: false,
       persistence,
-      history: this.#beginHistory(runId, startedAt, budget),
+      history,
       attempts: new Map(),
       controlFailures: [],
       budget,
+      telemetry: new RunTelemetrySampler(),
       completed,
     };
     this.#active = active;
@@ -427,6 +464,7 @@ export class TermwrightTestHost {
     let resourceFailure: Error | undefined;
     let resourceCancellation: Promise<void> | undefined;
     let history: RunHistoryPersistence | undefined;
+    let ptySlotsPeak = 0;
     try {
       history = await active.budget.execution('run history startup', () => active.history);
       const broker = new ResourceBroker({
@@ -448,6 +486,8 @@ export class TermwrightTestHost {
                 `run journal rejected worker event: ${appended.code}: ${appended.detail}`,
               );
             }
+            const usage = broker.snapshot().used;
+            ptySlotsPeak = Math.max(ptySlotsPeak, usage.ptySession);
             if (event.type === 'attempt.finished' && event.identity.attemptId !== undefined) {
               const snapshot = broker.snapshot();
               const attemptId = event.identity.attemptId;
@@ -516,7 +556,11 @@ export class TermwrightTestHost {
           `no test matched the host filters [${this.#filters.join(', ')}] under root ${this.#cwd}`,
         );
       }
-      const catalog = this.#catalog(active.runId, collection.tests);
+      const resourceHistory = await active.budget.execution(
+        'resource history load',
+        () => this.#resourceHistory,
+      );
+      const catalog = this.#catalog(active.runId, collection.tests, resourceHistory);
       active.catalog = catalog;
       const selected = this.#select(catalog, request.runnerTaskIds);
       active.selected = selected;
@@ -544,9 +588,13 @@ export class TermwrightTestHost {
             specId: test.specId,
             file: test.file,
             fullName: test.fullName,
+            resourceDecision: test.resourceDecision,
             ...(test.resourceReservation === undefined
               ? {}
-              : { resourceReservation: test.resourceReservation }),
+              : {
+                  resourceReservation: test.resourceReservation,
+                  ...(test.strictResourceReservation ? { strictResourceReservation: true } : {}),
+                }),
           };
           modules.add(test.file);
         }
@@ -714,11 +762,10 @@ export class TermwrightTestHost {
         // only the terminal event is missing". Those have different causes and
         // the barrier is where a reader finds out which one happened.
         const lastSeen = (attemptId: string): string => {
-          const events = active.persistence.recorded.filter(
-            (event) => event.identity.attemptId === attemptId,
-          );
-          const last = events.at(-1);
-          return last === undefined ? 'no events' : `${events.length} events, last ${last.type}`;
+          const activity = active.persistence.attemptActivity(attemptId);
+          return activity === undefined
+            ? 'no events'
+            : `${activity.count} events, last ${activity.lastType}`;
         };
         const lifecycleFailure = new Error(
           `authoritative attempt journal incomplete: ${unfinished.length} attempts unfinished` +
@@ -854,9 +901,18 @@ export class TermwrightTestHost {
         // projection-failure events. The rename is the only certification
         // commit; a staging directory is always read as incomplete.
         await active.budget.finalization('run history prepare', () =>
-          history.prepare(this.#manifestInput(active, attempts, terminal)),
+          history.prepare(this.#manifestInput(active, attempts, terminal, ptySlotsPeak)),
         );
         await active.budget.finalization('run history commit', () => history.commitPrepared());
+        await active.budget
+          .finalization('resource history update', () =>
+            this.#updateResourceHistory(active, attempts),
+          )
+          .catch((error: unknown) => {
+            process.stderr.write(
+              `termwright: resource history update failed: ${describeFailure(error)}\n`,
+            );
+          });
       } catch (error) {
         failure =
           failure === undefined
@@ -878,6 +934,7 @@ export class TermwrightTestHost {
     }
 
     if (this.#active === active) this.#active = undefined;
+    active.telemetry.stop();
 
     return Object.freeze({
       invocationId: this.invocationId,
@@ -892,7 +949,11 @@ export class TermwrightTestHost {
     });
   }
 
-  #catalog(runId: RunId, tests: readonly TestCase[]): NativeTestCatalog {
+  #catalog(
+    runId: RunId,
+    tests: readonly TestCase[],
+    resourceHistory: ResourceCostHistory,
+  ): NativeTestCatalog {
     // The native host owns the complete Vitest graph. Terminal-aware metadata
     // enriches a case; it must never act as a filter that silently drops pure
     // unit tests from certification.
@@ -919,10 +980,24 @@ export class TermwrightTestHost {
         this.#tasks.set(testCase.id, identity);
       }
       const metadata = testCase.meta();
-      const resourceReservation = resourceReservationFromMetadata(
+      const costIdentity = ResourceCostHistory.identity({
+        project,
+        file: testCase.module.moduleId,
+        fullName: testCase.fullName,
+        ...(testCase.location === undefined ? {} : testCase.location),
+      });
+      const estimate = resourceHistory.estimate(costIdentity);
+      const declaredReservation = resourceReservationFromMetadata(
         metadata,
-        this.#resourceProfile.capacities.nativeHostPressure,
+        this.#resourceProfile.capacities,
+        this.#resourceProfile.perAttempt ?? {},
       );
+      const resourceReservation = applyHistoricalMemoryCost(
+        declaredReservation,
+        estimate,
+        this.#resourceProfile,
+      );
+      const strictResourceReservation = hasExplicitResourceMetadata(metadata);
       return Object.freeze({
         runnerTaskId: identity.runnerTaskId,
         nativeTaskId: testCase.id,
@@ -935,13 +1010,43 @@ export class TermwrightTestHost {
           ? {}
           : { location: Object.freeze({ ...testCase.location }) }),
         metadata,
+        resourceDecision: resourceDecision(estimate, resourceReservation),
         ...(resourceReservation === undefined ? {} : { resourceReservation }),
+        ...(strictResourceReservation ? { strictResourceReservation: true } : {}),
       });
     });
     if (new Set(catalog.map((test) => test.nativeTaskId)).size !== catalog.length) {
       throw new Error('Vitest collection returned duplicate native test ids');
     }
     return Object.freeze({ runId, tests: Object.freeze(catalog) });
+  }
+
+  async #updateResourceHistory(
+    active: ActiveRun,
+    attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
+  ): Promise<void> {
+    const history = await this.#resourceHistory;
+    const byTask = new Map(
+      (active.selected ?? []).map((test) => [test.runnerTaskId, test] as const),
+    );
+    for (const attempt of attempts.values()) {
+      if (attempt.finished === undefined) continue;
+      const test = byTask.get(attempt.task);
+      if (test === undefined) continue;
+      history.observe(
+        ResourceCostHistory.identity({
+          project: test.project,
+          file: test.file,
+          fullName: test.fullName,
+          ...(test.location === undefined ? {} : test.location),
+        }),
+        {
+          durationMs: Math.max(0, attempt.finished.monotonicTime - attempt.startedAt),
+          workerPeakRssBytes: attempt.finished.worker.peakSampledRssBytes,
+        },
+      );
+    }
+    await history.save();
   }
 
   #select(
@@ -1081,7 +1186,16 @@ export class TermwrightTestHost {
           name: this.#resourceProfile.name,
           scheduler: { ...this.#resourceProfile.scheduler },
           capacities: { ...this.#resourceProfile.capacities },
+          perAttempt: { ...(this.#resourceProfile.perAttempt ?? {}) },
           perTerminal: { ...this.#resourceProfile.perTerminal },
+          ...(this.#resourceProfile.hostCapacity === undefined
+            ? {}
+            : {
+                hostCapacity: {
+                  ...this.#resourceProfile.hostCapacity,
+                  sources: { ...this.#resourceProfile.hostCapacity.sources },
+                },
+              }),
         },
         timeouts: {
           totalRunMs: active.budget.totalMs,
@@ -1228,6 +1342,7 @@ export class TermwrightTestHost {
     active: ActiveRun,
     attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
     status: TerminalRunState,
+    ptySlotsPeak: number,
   ): Parameters<RunHistoryPersistence['prepare']>[0] {
     const specs = (active.selected ?? []).map((test) =>
       Object.freeze({
@@ -1265,10 +1380,124 @@ export class TermwrightTestHost {
       status,
       specs,
       attempts: completedAttempts,
-      events: active.persistence.recorded,
+      telemetry: active.telemetry.finish(active.persistence.metrics(), ptySlotsPeak, attempts),
       durationMs: active.budget.elapsedMs(),
     };
   }
+}
+
+interface JournalTelemetrySnapshot {
+  readonly acceptedEvents: number;
+  readonly acceptedBytes: number;
+  readonly sinkCalls: number;
+  readonly peakBacklogEvents: number;
+  readonly peakBacklogBytes: number;
+}
+
+class RunTelemetrySampler {
+  readonly #cpuStart = process.cpuUsage();
+  readonly #rssStart = process.memoryUsage().rss;
+  readonly #timer: ReturnType<typeof setInterval>;
+  #peakRss = this.#rssStart;
+  #result: RunResourceTelemetry | undefined;
+
+  constructor() {
+    this.#timer = setInterval(() => this.#sample(), 50);
+    this.#timer.unref?.();
+  }
+
+  stop(): void {
+    clearInterval(this.#timer);
+  }
+
+  finish(
+    journal: JournalTelemetrySnapshot,
+    ptySlotsPeak: number,
+    attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
+  ): RunResourceTelemetry {
+    if (this.#result !== undefined) return this.#result;
+    this.stop();
+    const rssEnd = this.#sample();
+    const cpu = process.cpuUsage(this.#cpuStart);
+    const worker = [...attempts.values()]
+      .map((attempt) => attempt.finished?.worker)
+      .filter((value): value is AttemptWorkerResources => value !== undefined);
+    const trace = aggregateTraceResources(attempts);
+    this.#result = Object.freeze({
+      coordinatorCpuUserMicros: cpu.user,
+      coordinatorCpuSystemMicros: cpu.system,
+      coordinatorRssStartBytes: this.#rssStart,
+      coordinatorRssEndBytes: rssEnd,
+      coordinatorPeakSampledRssBytes: this.#peakRss,
+      workerPeakRssBytes:
+        worker.length === 0
+          ? 'unavailable'
+          : Math.max(...worker.map((value) => value.peakSampledRssBytes)),
+      workerCpuUserMicros:
+        worker.length === 0
+          ? 'unavailable'
+          : worker.reduce((total, value) => total + value.cpuUserMicros, 0),
+      workerCpuSystemMicros:
+        worker.length === 0
+          ? 'unavailable'
+          : worker.reduce((total, value) => total + value.cpuSystemMicros, 0),
+      ownedProcessPeakRssBytes: 'unavailable',
+      ownedProcessCountPeak: 'unavailable',
+      ptySlotsPeak,
+      terminalOutputBytes: trace.complete ? trace.terminalOutputBytes : 'unavailable',
+      semanticBytes: trace.complete ? trace.semanticBytes : 'unavailable',
+      semanticFullCount: trace.complete ? trace.semanticFullCount : 'unavailable',
+      semanticDeltaCount: trace.complete ? trace.semanticDeltaCount : 'unavailable',
+      journalAcceptedEvents: journal.acceptedEvents,
+      journalAcceptedBytes: journal.acceptedBytes,
+      journalSinkCalls: journal.sinkCalls,
+      journalPeakBacklogEvents: journal.peakBacklogEvents,
+      journalPeakBacklogBytes: journal.peakBacklogBytes,
+      traceBytes: trace.complete ? trace.traceBytes : 'unavailable',
+      tempDiskPeakBytes: 'unavailable',
+      finalArtifactBytes: trace.complete ? trace.finalArtifactBytes : 'unavailable',
+    });
+    return this.#result;
+  }
+
+  #sample(): number {
+    const rss = process.memoryUsage().rss;
+    this.#peakRss = Math.max(this.#peakRss, rss);
+    return rss;
+  }
+}
+
+function aggregateTraceResources(attempts: ReadonlyMap<AttemptId, ObservedAttempt>): {
+  readonly complete: boolean;
+  readonly terminalOutputBytes: number;
+  readonly semanticBytes: number;
+  readonly semanticFullCount: number;
+  readonly semanticDeltaCount: number;
+  readonly traceBytes: number;
+  readonly tempDiskPeakBytes: number;
+  readonly finalArtifactBytes: number;
+} {
+  let sessionCount = 0;
+  const records: TraceResourceEvidence[] = [];
+  for (const attempt of attempts.values()) {
+    sessionCount += attempt.sessions.size;
+    records.push(...attempt.traceResources.values());
+  }
+  const sum = (name: keyof TraceResourceEvidence): number => {
+    const total = records.reduce((value, record) => value + record[name], 0);
+    if (!Number.isSafeInteger(total)) throw new Error(`aggregate trace counter ${name} overflowed`);
+    return total;
+  };
+  return Object.freeze({
+    complete: records.length === sessionCount,
+    terminalOutputBytes: sum('terminalOutputBytes'),
+    semanticBytes: sum('semanticBytes'),
+    semanticFullCount: sum('semanticFullCount'),
+    semanticDeltaCount: sum('semanticDeltaCount'),
+    traceBytes: sum('traceBytes'),
+    tempDiskPeakBytes: sum('tempDiskPeakBytes'),
+    finalArtifactBytes: sum('finalArtifactBytes'),
+  });
 }
 
 export function assessSkipPolicy(
@@ -1525,11 +1754,31 @@ interface ObservedAttempt {
   readonly retry: number;
   readonly startedAfterRunMs: number;
   readonly startedAt: number;
+  readonly sessions: Set<SessionId>;
+  readonly traceResources: Map<SessionId, TraceResourceEvidence>;
   finished?: {
     readonly state: NativeRunAttempt['status'];
     readonly monotonicTime: number;
     readonly observedAfterRunMs: number;
+    readonly worker: AttemptWorkerResources;
   };
+}
+
+interface AttemptWorkerResources {
+  readonly capability: 'worker-process';
+  readonly cpuUserMicros: number;
+  readonly cpuSystemMicros: number;
+  readonly peakSampledRssBytes: number;
+}
+
+interface TraceResourceEvidence {
+  readonly terminalOutputBytes: number;
+  readonly semanticBytes: number;
+  readonly semanticFullCount: number;
+  readonly semanticDeltaCount: number;
+  readonly traceBytes: number;
+  readonly tempDiskPeakBytes: number;
+  readonly finalArtifactBytes: number;
 }
 
 function observeAttemptEvent(
@@ -1538,7 +1787,13 @@ function observeAttemptEvent(
   attempts: Map<AttemptId, ObservedAttempt>,
   observedAfterRunMs: number,
 ): void {
-  if (event.type !== 'attempt.started' && event.type !== 'attempt.finished') return;
+  if (
+    event.type !== 'attempt.started' &&
+    event.type !== 'attempt.finished' &&
+    event.type !== 'session.started' &&
+    event.type !== 'trace.resource'
+  )
+    return;
   const attemptId = event.identity.attemptId;
   const { runnerTaskId: task, executionId, projectId, specId } = event.identity;
   if (
@@ -1566,6 +1821,8 @@ function observeAttemptEvent(
       retry: payload.retry,
       startedAfterRunMs: observedAfterRunMs,
       startedAt: event.monotonicTime,
+      sessions: new Set(),
+      traceResources: new Map(),
     });
     return;
   }
@@ -1581,6 +1838,26 @@ function observeAttemptEvent(
   ) {
     throw new Error(`attempt ${attemptId} changed hierarchical identity during execution`);
   }
+  if (event.type === 'session.started') {
+    const sessionId = event.identity.sessionId;
+    if (sessionId === undefined || current.sessions.has(sessionId)) {
+      throw new Error('session.started lacks a unique session identity');
+    }
+    current.sessions.add(sessionId);
+    return;
+  }
+  if (event.type === 'trace.resource') {
+    const sessionId = event.identity.sessionId;
+    if (
+      sessionId === undefined ||
+      !current.sessions.has(sessionId) ||
+      current.traceResources.has(sessionId)
+    ) {
+      throw new Error('trace.resource lacks one matching traced session');
+    }
+    current.traceResources.set(sessionId, traceResourcePayload(event.payload));
+    return;
+  }
   const payload = attemptPayload(event.payload, true);
   if (
     payload.nativeTaskId !== current.nativeTaskId ||
@@ -1593,7 +1870,32 @@ function observeAttemptEvent(
     state: payload.state,
     monotonicTime: event.monotonicTime,
     observedAfterRunMs,
+    worker: payload.worker,
   };
+}
+
+function traceResourcePayload(payload: unknown): TraceResourceEvidence {
+  if (typeof payload !== 'object' || payload === null)
+    throw new Error('trace.resource payload is not an object');
+  const record = payload as Record<string, unknown>;
+  const names = [
+    'terminalOutputBytes',
+    'semanticBytes',
+    'semanticFullCount',
+    'semanticDeltaCount',
+    'traceBytes',
+    'tempDiskPeakBytes',
+    'finalArtifactBytes',
+  ] as const;
+  if (
+    Object.keys(record).length !== names.length ||
+    names.some((name) => !nonNegativeInteger(record[name]))
+  ) {
+    throw new Error('trace.resource payload has invalid exact counters');
+  }
+  return Object.freeze(
+    Object.fromEntries(names.map((name) => [name, record[name]])),
+  ) as unknown as TraceResourceEvidence;
 }
 
 function attemptPayload(
@@ -1608,6 +1910,7 @@ function attemptPayload(
   readonly repeat: number;
   readonly retry: number;
   readonly state: NativeRunAttempt['status'];
+  readonly worker: AttemptWorkerResources;
 };
 function attemptPayload(payload: unknown, terminal: boolean) {
   if (typeof payload !== 'object' || payload === null)
@@ -1625,12 +1928,25 @@ function attemptPayload(payload: unknown, terminal: boolean) {
   if (terminal && state !== 'passed' && state !== 'failed' && state !== 'skipped') {
     throw new Error('attempt.finished payload has invalid state');
   }
+  const worker = record['worker'];
+  if (
+    terminal &&
+    (typeof worker !== 'object' ||
+      worker === null ||
+      (worker as Record<string, unknown>)['capability'] !== 'worker-process' ||
+      !nonNegativeInteger((worker as Record<string, unknown>)['cpuUserMicros']) ||
+      !nonNegativeInteger((worker as Record<string, unknown>)['cpuSystemMicros']) ||
+      !nonNegativeInteger((worker as Record<string, unknown>)['peakSampledRssBytes']))
+  ) {
+    throw new Error('attempt.finished payload has invalid worker resource telemetry');
+  }
   return terminal
     ? {
         nativeTaskId: record['nativeTaskId'],
         repeat: record['repeat'],
         retry: record['retry'],
         state,
+        worker: Object.freeze({ ...(worker as AttemptWorkerResources) }),
       }
     : { nativeTaskId: record['nativeTaskId'], repeat: record['repeat'], retry: record['retry'] };
 }
@@ -1642,15 +1958,16 @@ function nonNegativeInteger(value: unknown): value is number {
 /** Converts the closed public hint into the broker's complete atomic vector. */
 function resourceReservationFromMetadata(
   metadata: unknown,
-  exclusiveNativeHostPressure: number,
-): ResourceVector | undefined {
+  capacities: Readonly<Record<string, number | undefined>>,
+  perAttempt: ResourceVector,
+): ResourceVector {
   if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))
-    return undefined;
+    return perAttempt;
   const termwright = (metadata as Record<string, unknown>)['termwright'];
   if (typeof termwright !== 'object' || termwright === null || Array.isArray(termwright))
-    return undefined;
+    return perAttempt;
   const resources = (termwright as Record<string, unknown>)['resources'];
-  if (resources === undefined) return undefined;
+  if (resources === undefined) return perAttempt;
   if (typeof resources !== 'object' || resources === null || Array.isArray(resources)) {
     throw new TypeError('collected termwright.resources metadata is not an object');
   }
@@ -1660,7 +1977,8 @@ function resourceReservationFromMetadata(
       key !== 'terminals' &&
       key !== 'traceWriters' &&
       key !== 'nativeHost' &&
-      key !== 'hostPressure'
+      key !== 'hostPressure' &&
+      key !== 'load'
     ) {
       throw new TypeError(`collected termwright.resources contains unknown key ${key}`);
     }
@@ -1689,14 +2007,26 @@ function resourceReservationFromMetadata(
       'collected termwright.resources cannot combine nativeHost and hostPressure',
     );
   }
+  const load = record['load'];
+  if (
+    load !== undefined &&
+    load !== 'light' &&
+    load !== 'normal' &&
+    load !== 'heavy' &&
+    load !== 'exclusive'
+  ) {
+    throw new TypeError(
+      'collected termwright.resources.load must be light, normal, heavy or exclusive',
+    );
+  }
+  const weighted = resourceLoadVector(load ?? 'normal', capacities);
   const nativeHostPressure =
     nativeHost === 'exclusive' || hostPressure === 'exclusive'
-      ? exclusiveNativeHostPressure
+      ? (capacities['nativeHostPressure'] ?? 0)
       : terminals;
-  if (terminals === 0 && traceWriters === 0 && nativeHostPressure === 0) {
-    throw new TypeError('collected termwright.resources must reserve at least one resource');
-  }
   return Object.freeze({
+    ...perAttempt,
+    ...weighted,
     ...(terminals === 0
       ? {}
       : {
@@ -1707,6 +2037,64 @@ function resourceReservationFromMetadata(
     ...(nativeHostPressure === 0 ? {} : { nativeHostPressure }),
     ...(traceWriters === 0 ? {} : { traceWriter: traceWriters }),
   });
+}
+
+function hasExplicitResourceMetadata(metadata: unknown): boolean {
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) return false;
+  const termwright = (metadata as Record<string, unknown>)['termwright'];
+  return (
+    typeof termwright === 'object' &&
+    termwright !== null &&
+    !Array.isArray(termwright) &&
+    (termwright as Record<string, unknown>)['resources'] !== undefined
+  );
+}
+
+function resourceLoadVector(
+  load: 'light' | 'normal' | 'heavy' | 'exclusive',
+  capacities: Readonly<Record<string, number | undefined>>,
+): ResourceVector {
+  const factor = load === 'heavy' ? 2 : 1;
+  const value = (resource: 'cpuWeight' | 'memoryWeight' | 'ioWeight'): number => {
+    const capacity = capacities[resource] ?? 0;
+    if (load === 'exclusive') return capacity;
+    return Math.min(capacity, factor);
+  };
+  return Object.freeze({
+    cpuWeight: value('cpuWeight'),
+    memoryWeight: value('memoryWeight'),
+    ioWeight: value('ioWeight'),
+  });
+}
+
+function applyHistoricalMemoryCost(
+  declared: ResourceVector,
+  estimate: ResourceCostEstimate | undefined,
+  profile: TermwrightResourceProfile,
+): ResourceVector {
+  const capacity = profile.capacities.memoryWeight ?? 0;
+  const budget = profile.hostCapacity?.memoryBudgetBytes;
+  if (estimate === undefined || budget === undefined || capacity === 0) return declared;
+  const bytesPerWeight = budget / capacity;
+  const historicalWeight = Math.max(1, Math.ceil(estimate.workerPeakRssP95Bytes / bytesPerWeight));
+  return Object.freeze({
+    ...declared,
+    memoryWeight: Math.min(capacity, Math.max(declared.memoryWeight ?? 0, historicalWeight)),
+  });
+}
+
+function resourceDecision(
+  estimate: ResourceCostEstimate | undefined,
+  reservation: ResourceVector,
+): string {
+  if (estimate === undefined) {
+    return `history=miss; conservative reservation=${JSON.stringify(reservation)}`;
+  }
+  return (
+    `history=samples:${estimate.samples},duration-p50:${estimate.durationP50Ms},` +
+    `duration-p95:${estimate.durationP95Ms},rss-p95:${estimate.workerPeakRssP95Bytes}; ` +
+    `reservation=${JSON.stringify(reservation)}`
+  );
 }
 
 function boundedResourceAmount(value: unknown, label: string): number {

@@ -203,7 +203,7 @@ function hello(overrides: Record<string, unknown> = {}): Record<string, unknown>
   ];
   return {
     type: 'hello',
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     token: TOKEN,
     adapter: { name: 'test-adapter', version: '1.2.3' },
     capabilities: requested,
@@ -227,7 +227,7 @@ function snapshot(overrides: Record<string, unknown> = {}): Record<string, unkno
     ...node,
   }));
   return {
-    v: 2,
+    v: 3,
     sessionId: SESSION_ID,
     revision: 1,
     columns: 80,
@@ -310,7 +310,7 @@ describe('the probe lifecycle', () => {
     client.send(hello({ probe: probeInfo({ capabilities: [] }) }));
     await client.next();
     client.send({ type: 'frame-begin', revision: 3 });
-    client.send({ type: 'snapshot', snapshot: snapshot() });
+    client.send({ type: 'semantic-full', snapshot: snapshot() });
 
     await expect.poll(() => harness.snapshots.length).toBe(1);
     expect(harness.frameBegins).toEqual([]);
@@ -461,25 +461,25 @@ describe('SemanticChannel', () => {
     expect(existsSync(directory)).toBe(false);
   });
 
-  it('negotiates termwright/2 and accepts its evidence-qualified snapshot shape', async () => {
+  it('negotiates termwright/3 and accepts its evidence-qualified snapshot shape', async () => {
     const harness = await createChannel();
     const client = await connectClient(harness.channel);
     client.send(
       hello({
-        protocol: 'termwright/2',
+        protocol: 'termwright/3',
         capabilities: ['tree', 'states', 'render-revisions'],
       }),
     );
     expect(await client.next()).toMatchObject({
       type: 'hello-ack',
-      protocol: 'termwright/2',
-      subscribe: 'snapshots',
+      protocol: 'termwright/3',
+      subscribe: 'semantic',
     });
-    expect(harness.attachments[0]?.protocol).toBe('termwright/2');
+    expect(harness.attachments[0]?.protocol).toBe('termwright/3');
     client.send({
-      type: 'snapshot',
+      type: 'semantic-full',
       snapshot: snapshot({
-        v: 2,
+        v: 3,
         nodes: [
           {
             id: 'n1',
@@ -537,7 +537,7 @@ describe('SemanticChannel', () => {
       }),
     });
     await expect.poll(() => harness.snapshots.length).toBe(1);
-    expect(harness.snapshots[0]?.v).toBe(2);
+    expect(harness.snapshots[0]?.v).toBe(3);
   });
 
   it('completes the handshake and accepts snapshots', async () => {
@@ -548,14 +548,61 @@ describe('SemanticChannel', () => {
     const ack = await client.next();
     expect(ack['type']).toBe('hello-ack');
     expect(ack['sessionId']).toBe(SESSION_ID);
-    expect(ack['subscribe']).toBe('snapshots');
+    expect(ack['subscribe']).toBe('semantic');
     expect(ack['marker']).toEqual({ enabled: true });
     expect(harness.attachments[0]?.adapter).toEqual({ name: 'test-adapter', version: '1.2.3' });
 
-    client.send({ type: 'snapshot', snapshot: snapshot() });
+    client.send({ type: 'semantic-full', snapshot: snapshot() });
     await expect.poll(() => harness.snapshots.length).toBe(1);
     expect(harness.snapshots[0]?.revision).toBe(1);
     expect(Object.isFrozen(harness.snapshots[0])).toBe(true);
+  });
+
+  it('applies valid deltas atomically and requests a full resync on a missing or wrong base', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+    client.send(
+      hello({ capabilities: ['tree', 'states', 'render-revisions', 'incremental-tree'] }),
+    );
+    await client.next();
+
+    const update = (revision: number, baseRevision: number, name: string) => ({
+      type: 'semantic-delta',
+      delta: {
+        v: 3,
+        sessionId: SESSION_ID,
+        revision,
+        baseRevision,
+        updateNodes: [{ id: 'n1', set: { name } }],
+      },
+    });
+
+    client.send(update(2, 1, 'no base'));
+    expect(await client.next()).toMatchObject({
+      type: 'semantic-resync-request',
+      sessionId: SESSION_ID,
+      expectedBaseRevision: null,
+      reason: 'missing-base',
+    });
+    expect(harness.snapshots).toHaveLength(0);
+
+    client.send({ type: 'semantic-full', snapshot: snapshot() });
+    await expect.poll(() => harness.snapshots.length).toBe(1);
+
+    client.send(update(3, 2, 'wrong base'));
+    expect(await client.next()).toMatchObject({
+      type: 'semantic-resync-request',
+      sessionId: SESSION_ID,
+      expectedBaseRevision: 1,
+      reason: 'base-mismatch',
+    });
+    expect(harness.snapshots).toHaveLength(1);
+    expect(harness.snapshots[0]?.nodes[0]?.name).toBe('app');
+
+    client.send(update(2, 1, 'updated'));
+    await expect.poll(() => harness.snapshots.length).toBe(2);
+    expect(harness.snapshots[1]?.revision).toBe(2);
+    expect(harness.snapshots[1]?.nodes[0]?.name).toBe('updated');
   });
 
   it.each([
@@ -597,7 +644,7 @@ describe('SemanticChannel', () => {
     client.send(hello({ capabilities }));
     await client.next();
 
-    client.send({ type: 'snapshot', snapshot: snapshot({ nodes: [node] }) });
+    client.send({ type: 'semantic-full', snapshot: snapshot({ nodes: [node] }) });
     const error = await client.next();
     expect(error['code']).toBe('malformed');
     await client.closed;
@@ -642,7 +689,7 @@ describe('SemanticChannel', () => {
     const harness = await createChannel();
     const client = await connectClient(harness.channel);
 
-    client.send({ type: 'snapshot', snapshot: snapshot() });
+    client.send({ type: 'semantic-full', snapshot: snapshot() });
     const error = await client.next();
     expect(error['code']).toBe('malformed');
     await client.closed;
@@ -781,7 +828,7 @@ describe('SemanticChannel', () => {
     await client.next();
 
     client.send({
-      type: 'snapshot',
+      type: 'semantic-full',
       snapshot: snapshot({
         nodes: [
           { id: 'n1', role: 'dialog', name: 'Permission' },
@@ -800,7 +847,7 @@ describe('SemanticChannel', () => {
     await client.next();
 
     client.send({
-      type: 'snapshot',
+      type: 'semantic-full',
       snapshot: snapshot({ nodes: [{ id: 'n1', role: 'wormhole', name: 'x' }] }),
     });
     const error = await client.next();
@@ -815,7 +862,7 @@ describe('SemanticChannel', () => {
     client.send(hello());
     await client.next();
 
-    client.send({ type: 'snapshot', snapshot: snapshot({ sessionId: 'someone-else' }) });
+    client.send({ type: 'semantic-full', snapshot: snapshot({ sessionId: 'someone-else' }) });
     const error = await client.next();
     expect(error['code']).toBe('malformed');
     expect(harness.snapshots).toHaveLength(0);

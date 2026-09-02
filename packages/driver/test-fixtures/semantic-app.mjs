@@ -58,6 +58,15 @@ let loaderVisible = process.env['TERMWRIGHT_FIXTURE_LOADER'] === '1';
 const staleProviderEvidence = process.env['TERMWRIGHT_FIXTURE_STALE_PROVIDER'] === '1';
 const providerActionRecipes = process.env['TERMWRIGHT_FIXTURE_PROVIDER_ACTION_RECIPES'] === '1';
 const providerFocusState = process.env['TERMWRIGHT_FIXTURE_PROVIDER_FOCUS_STATE'] === '1';
+const unicodeGeometry = process.env['TERMWRIGHT_FIXTURE_UNICODE_GEOMETRY'];
+
+const approvePrefix =
+  unicodeGeometry === 'emoji' ? '  👨‍👩‍👧' : unicodeGeometry === 'devanagari' ? '  किं' : '  ';
+// These are terminal cells, deliberately not JS string/code-point lengths.
+// The fixture lets the E2E compare the adapter's semantic geometry with the
+// independently parsed PTY frame for modern extended grapheme clusters.
+const approveColumn = unicodeGeometry === 'emoji' ? 4 : unicodeGeometry === 'devanagari' ? 3 : 2;
+const rejectColumn = approveColumn + 12;
 
 let sessionId = null;
 let revision = 0;
@@ -93,7 +102,7 @@ function render() {
   const approve = focused === 'approve' ? '[Approve]' : ' Approve ';
   const reject = focused === 'reject' ? '[Reject]' : ' Reject ';
   // The status line lives inside the frame so it survives the next repaint.
-  return `\x1b[2J\x1b[HPermission required\r\n  ${approve}   ${reject}\r\nname: [${typed}]\r\nlast: ${lastEvent}\r\n`;
+  return `\x1b[2J\x1b[HPermission required\r\n${approvePrefix}${approve}   ${reject}\r\nname: [${typed}]\r\nlast: ${lastEvent}\r\n`;
 }
 
 let outputQueue = Promise.resolve();
@@ -159,7 +168,7 @@ function releaseScreenFirstFocusFrame() {
   enqueueOutput(async () => {
     await writeSocketAndFlush(
       pending.socket,
-      encodeFrame({ type: 'snapshot', snapshot: pending.snapshot }, 1024 * 1024),
+      encodeFrame({ type: 'semantic-full', snapshot: pending.snapshot }, 1024 * 1024),
     );
     await writeSocketAndFlush(
       pending.socket,
@@ -222,7 +231,7 @@ function tree() {
         role: 'button',
         name: 'Approve',
         testId: 'approve',
-        bounds: { row: 1, column: 2, width: 9, height: 1 },
+        bounds: { row: 1, column: approveColumn, width: 9, height: 1 },
         state: {
           ...(!providerFocusState ? { focused: focused === 'approve' } : {}),
           ...(conditionStates ? { checked: true, selected: true, expanded: false } : {}),
@@ -293,7 +302,7 @@ function tree() {
         role: 'button',
         name: 'Reject',
         testId: 'reject',
-        bounds: { row: 1, column: 14, width: 8, height: 1 },
+        bounds: { row: 1, column: rejectColumn, width: 8, height: 1 },
         state: !providerFocusState ? { focused: focused === 'reject' } : undefined,
         actions: ['focus', 'activate'],
         ...(!providerActionRecipes
@@ -441,7 +450,7 @@ function qualifiedSnapshot(snapshot) {
         );
   return {
     ...snapshot,
-    v: 2,
+    v: 3,
     nodes,
     coordinateSpace: withoutBounds
       ? { status: 'unsupported', capability: 'coordinate-space', reason: 'framework-unobservable' }
@@ -622,7 +631,7 @@ function publish() {
     // production adapters are required to do. Serializing this task also
     // prevents frame N+1 from entering between frame N and marker N.
     await writeAndFlush(frame);
-    publicationSocket.write(encodeFrame({ type: 'snapshot', snapshot }, 1024 * 1024));
+    publicationSocket.write(encodeFrame({ type: 'semantic-full', snapshot }, 1024 * 1024));
     publicationSocket.write(
       encodeFrame({ type: 'revision-commit', revision: publishedRevision }, 1024 * 1024),
     );
@@ -750,7 +759,7 @@ process.stdin.on('data', (chunk) => {
     };
     pendingFocusMarkerWritten = false;
     socket?.write(encodeFrame({ type: 'frame-begin', revision: pendingRevision }, 1024 * 1024));
-    socket?.write(encodeFrame({ type: 'snapshot', snapshot: pendingSnapshot }, 1024 * 1024));
+    socket?.write(encodeFrame({ type: 'semantic-full', snapshot: pendingSnapshot }, 1024 * 1024));
     // The test releases marker and commit as two acknowledged phases only after
     // an action starts. That forces marker observation while FRAME_END remains
     // withheld; runner speed cannot decide which branch the test covers.
@@ -828,7 +837,7 @@ process.stdin.on('data', (chunk) => {
   if (click !== null) {
     const buttonCode = Number(click[1]);
     const column = Number(click[2]) - 1;
-    focused = column >= 13 ? 'reject' : 'approve';
+    focused = column >= rejectColumn - 1 ? 'reject' : 'approve';
     lastEvent = `${(buttonCode & 32) !== 0 ? 'HOVER' : 'CLICKED'} ${focused} modifiers=${buttonCode & 28}`;
     publish();
   }
@@ -844,7 +853,7 @@ if (endpoint === undefined || token === undefined) {
         encodeFrame(
           {
             type: 'hello',
-            protocol: 'termwright/2',
+            protocol: 'termwright/3',
             token,
             adapter: { name: 'fixture', version: '0.1.0' },
             capabilities: [
@@ -926,6 +935,18 @@ if (endpoint === undefined || token === undefined) {
                       ...(probeMode === 'stable' || pendingFocusFrame ? ['stable-identity'] : []),
                       ...(pendingFocusFrame ? ['frame-begin'] : []),
                     ],
+                    instrumentation:
+                      probeMode === 'frame-local'
+                        ? {
+                            highestTier: 'T2',
+                            semanticClass: 'B',
+                            degradedCapabilities: ['intended-geometry', 'clipped-geometry'],
+                          }
+                        : {
+                            highestTier: 'T3',
+                            semanticClass: 'A',
+                            degradedCapabilities: [],
+                          },
                   },
                 }),
           },

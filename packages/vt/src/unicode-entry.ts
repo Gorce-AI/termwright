@@ -8,32 +8,27 @@
  *
  * @example
  * ```ts
- * import { Unicode11Addon } from '@xterm/addon-unicode11';
  * import { applyProfile, resolveProfileId } from '@termwright/vt/unicode';
  *
  * const profile = resolveProfileId(recording.terminalProfile) ?? DEFAULT_PROFILE;
- * applyProfile(term.unicode, new Unicode11Addon(), profile);
+ * applyProfile(term.unicode, profile);
  * ```
  */
 export {
   applyProfile,
-  captureAddonProvider,
   createProfileProvider,
   isAmbiguousWidth,
-  type UnicodeAddonLike,
   type UnicodeHandlingLike,
   type UnicodeOverrides,
 } from './unicode.js';
 
 export {
   DEFAULT_PROFILE,
-  ITERM2_AMBIGUOUS_WIDE_PROFILE,
-  KITTY_PROFILE,
+  CJK_WIDE_PROFILE,
   TERMINAL_PROFILES,
   resolveProfile,
   resolveProfileId,
   type TerminalProfile,
   type TerminalProfileId,
   type TerminalProfileLike,
-  type UnicodeVersion,
 } from './profiles.js';

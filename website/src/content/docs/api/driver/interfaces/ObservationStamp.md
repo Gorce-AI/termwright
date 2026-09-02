@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ObservationStamp
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:88
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:88
 
 Atomic identity of the screen/tree pair used for an observation.
 
@@ -21,7 +21,7 @@ Atomic identity of the screen/tree pair used for an observation.
 
 > `readonly` **contractId**: `string`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:90
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:90
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:90
 
 > `readonly` **epoch**: `number`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:91
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:91
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:91
 
 > `readonly` **pairedScreenRevision**: `number` \| `null`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:97
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:97
 
 Screen revision paired to semanticRevision, or null when no pair exists.
 
@@ -47,7 +47,7 @@ Screen revision paired to semanticRevision, or null when no pair exists.
 
 > `readonly` **screenRevision**: `number`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:94
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:94
 
 ***
 
@@ -55,7 +55,7 @@ Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:94
 
 > `readonly` **semanticRevision**: `number` \| `null`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:95
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:95
 
 ***
 
@@ -63,7 +63,7 @@ Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:95
 
 > `readonly` **sequence**: `number`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:93
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:93
 
 Monotonic publication order across both screen and semantic revisions.
 
@@ -73,4 +73,4 @@ Monotonic publication order across both screen and semantic revisions.
 
 > `readonly` **sessionId**: `string`
 
-Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:89
+Defined in: protocol/dist/contract-DRS0RIwS.d.ts:89

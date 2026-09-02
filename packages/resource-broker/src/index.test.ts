@@ -109,6 +109,10 @@ describe('ResourceBroker', () => {
       'attempt-2',
       'attempt-3',
     ]);
+    expect(resources.snapshot().queue.map((entry) => entry.limitedBy)).toEqual([
+      ['ptySession', 'semanticEndpoint'],
+      ['fifo', 'ptySession'],
+    ]);
     await first.release();
     const second = await secondPromise;
     expect(resources.snapshot().queue.map((entry) => entry.attemptId)).toEqual(['attempt-3']);
@@ -122,6 +126,9 @@ describe('ResourceBroker', () => {
       semanticEndpoint: 0,
       nativeHostPressure: 0,
       traceWriter: 0,
+      cpuWeight: 0,
+      memoryWeight: 0,
+      ioWeight: 0,
     });
   });
 

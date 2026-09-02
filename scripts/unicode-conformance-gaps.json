@@ -1,0 +1,162 @@
+{
+  "termwright-graphemes": [],
+  "xterm-unicode11": [
+    {
+      "case": "emoji-vs16",
+      "classification": "backend-bug",
+      "note": "Unicode 11 provider has no modern emoji-presentation clustering."
+    },
+    {
+      "case": "emoji-skin-tone",
+      "classification": "backend-bug",
+      "note": "Modifier is measured independently instead of joining the emoji."
+    },
+    {
+      "case": "emoji-zwj-family",
+      "classification": "backend-bug",
+      "note": "Family members are measured independently across ZWJ."
+    },
+    {
+      "case": "emoji-zwj-profession",
+      "classification": "backend-bug",
+      "note": "Profession sequence is not treated as one grapheme."
+    },
+    {
+      "case": "emoji-zwj-gender",
+      "classification": "backend-bug",
+      "note": "Gender sequence is not treated as one grapheme."
+    },
+    {
+      "case": "regional-indicator-flag",
+      "classification": "backend-bug",
+      "note": "The flag reaches the same cursor column but does not expose canonical wide-cell continuation topology."
+    },
+    {
+      "case": "keycap",
+      "classification": "backend-bug",
+      "note": "Keycap presentation width is reported as one cell."
+    },
+    {
+      "case": "devanagari-marks",
+      "classification": "backend-bug",
+      "note": "Combining Indic marks advance an extra cell."
+    }
+  ],
+  "xterm-graphemes-fixed-trie-model": [
+    {
+      "case": "zero-width-space",
+      "classification": "backend-bug",
+      "note": "The upstream provider gives U+200B an advancing cell despite its zero-width geometry."
+    },
+    {
+      "case": "leading-zero-width-space",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "The upstream provider advances an orphan U+200B; the canonical provider retains a zero-width placeholder."
+    }
+  ],
+  "ghostty-default": [
+    {
+      "case": "emoji-vs16",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty default mode does not enable DEC grapheme clustering."
+    },
+    {
+      "case": "emoji-skin-tone",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty default mode measures code points before DEC 2027 is enabled."
+    },
+    {
+      "case": "emoji-zwj-family",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty default mode measures code points before DEC 2027 is enabled."
+    },
+    {
+      "case": "emoji-zwj-profession",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty default mode measures code points before DEC 2027 is enabled."
+    },
+    {
+      "case": "emoji-zwj-gender",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty default mode measures code points before DEC 2027 is enabled."
+    },
+    {
+      "case": "regional-indicator-flag",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty default mode measures regional indicators independently."
+    },
+    {
+      "case": "keycap",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty default mode does not apply grapheme-presentation width."
+    },
+    {
+      "case": "devanagari-marks",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty default mode advances an Indic mark before DEC 2027 is enabled."
+    },
+    {
+      "case": "leading-zero-width-space",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty ignores an orphan zero-width character while xterm retains a zero-width placeholder."
+    }
+  ],
+  "ghostty-grapheme-mode": [
+    {
+      "case": "leading-zero-width-space",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "Ghostty grapheme mode ignores an orphan zero-width character while xterm retains a zero-width placeholder."
+    }
+  ],
+  "wterm-ghostty": [
+    {
+      "case": "devanagari-conjunct",
+      "classification": "backend-bug",
+      "note": "The wrapper's pinned Ghostty 1.3.1 WASM exposes non-canonical Indic continuation topology."
+    },
+    {
+      "case": "devanagari-marks",
+      "classification": "backend-bug",
+      "note": "The wrapper's pinned Ghostty 1.3.1 WASM advances an Indic mark."
+    },
+    {
+      "case": "leading-zero-width-space",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "The wrapper ignores an orphan zero-width character while xterm retains a zero-width placeholder."
+    }
+  ],
+  "wterm-ghostty-grapheme-mode": [
+    {
+      "case": "devanagari-conjunct",
+      "classification": "backend-bug",
+      "note": "The wrapper's pinned Ghostty 1.3.1 WASM exposes non-canonical Indic continuation topology in grapheme mode."
+    },
+    {
+      "case": "devanagari-marks",
+      "classification": "backend-bug",
+      "note": "The wrapper's pinned Ghostty 1.3.1 WASM still advances an Indic mark in grapheme mode."
+    },
+    {
+      "case": "leading-zero-width-space",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "The wrapper ignores an orphan zero-width character while xterm retains a zero-width placeholder."
+    }
+  ],
+  "vterm-reference": [
+    {
+      "case": "tag-sequence-england",
+      "classification": "backend-bug",
+      "note": "libvterm exposes tag characters as advancing cells."
+    },
+    {
+      "case": "zero-width-space",
+      "classification": "backend-bug",
+      "note": "libvterm exposes U+200B as an advancing cell."
+    },
+    {
+      "case": "leading-zero-width-space",
+      "classification": "intentional-terminal-profile-difference",
+      "note": "libvterm gives an orphan U+200B a one-column placeholder; the canonical provider retains a zero-width placeholder."
+    }
+  ]
+}

@@ -46,7 +46,7 @@ import type {
   ActionIntent,
   ExecutableActionPlan,
   ActionReceipt,
-  ArtifactValuePolicy,
+  ResolvedArtifactSecurityPolicy,
   ExecutableDeviceOperation,
   ExecutableValue,
   EffectiveSessionContract,
@@ -62,7 +62,7 @@ import type {
   SessionCapabilityId,
 } from '@termwright/protocol';
 import {
-  DEFAULT_ARTIFACT_VALUE_POLICY,
+  resolveArtifactSecurityPolicy,
   ABSOLUTE_LIMITS,
   DEFAULT_LIMITS,
   DEFAULT_NEGOTIATION_MS,
@@ -440,7 +440,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   readonly window: TerminalWindow;
   readonly terminalState: TerminalState;
   readonly timeouts: Required<TimeoutClasses>;
-  readonly artifactValuePolicy: ArtifactValuePolicy;
+  readonly artifactSecurity: ResolvedArtifactSecurityPolicy;
   readonly events: SessionEvents;
   readonly scrollback: ScrollbackApi;
   readonly selection: SelectionApi;
@@ -481,6 +481,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #providerFailure: TermwrightError | null = null;
   #ptyFailure: PtyBackendError | null = null;
   #providerInputModes: ProviderTerminalInputModes | null = null;
+  #providerComposedNodeIds: ReadonlySet<string> = new Set();
   #crash: CrashReport | null = null;
   /** The in-flight evidence wait, shared by every pending pairing half. */
   #settling: Promise<void> | null = null;
@@ -515,7 +516,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
     this.#operationBudget = options.operationBudget;
     this.timeouts = resolveTimeouts(options.timeouts);
-    this.artifactValuePolicy = options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+    this.artifactSecurity = resolveArtifactSecurityPolicy(options.artifactSecurity);
     this.#emitter = new SessionEventEmitter((error) =>
       this.#diagnostic('listener-error', `a session event listener threw: ${String(error)}`),
     );
@@ -547,7 +548,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       maxPending: this.#protocolLimits.maxQueuedFrames,
       pairingTimeoutMs: PAIRING_TIMEOUT_MS,
       caughtUp: () => this.#evidenceSettled(),
-      onPublish: (paired) => this.#publishSemantic(paired.snapshot),
+      onPublish: (paired) => this.#publishSemantic(paired.snapshot, paired.changedNodes),
       onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, { revision }),
     });
     this.#resources.defer('revision pairing', () => this.#pairing.dispose());
@@ -671,8 +672,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
               );
               this.#notifyChange();
             },
-            onSnapshot: (snapshot) => {
-              this.#pairing.offerSnapshot(snapshot);
+            onSnapshot: (snapshot, changedNodes) => {
+              this.#pairing.offerSnapshot(snapshot, changedNodes);
               this.#notifyChange();
             },
             onLogRecord: (record) => this.#publishLogRecord(record),
@@ -1182,11 +1183,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       const integration = this.#vt.shellIntegration();
       const receipt: ActionReceipt = Object.freeze({
         intent,
-        plan: recordActionPlan(plan, this.artifactValuePolicy),
+        plan: recordActionPlan(plan, this.artifactSecurity.mode),
         before,
         after: this.checkpoint(),
         executed: Object.freeze(
-          executed.map((operation) => recordDeviceOperation(operation, this.artifactValuePolicy)),
+          executed.map((operation) => recordDeviceOperation(operation, this.artifactSecurity.mode)),
         ),
         outcome: 'completed',
       });
@@ -2192,7 +2193,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     );
     this.#pty?.write(data, kind);
     const timeMs = this.#now();
-    this.#evidence.rememberInput(data, kind, timeMs, this.artifactValuePolicy);
+    this.#evidence.rememberInput(data, kind, timeMs, this.artifactSecurity.mode);
     this.#emitter.emit('input', { data, timeMs, kind });
     await Promise.resolve();
   }
@@ -2286,11 +2287,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       const executed = await this.executeDeviceOperations(plan.operations, before);
       const receipt: ActionReceipt = Object.freeze({
         intent,
-        plan: recordActionPlan(plan, this.artifactValuePolicy),
+        plan: recordActionPlan(plan, this.artifactSecurity.mode),
         before,
         after: this.checkpoint(),
         executed: Object.freeze(
-          executed.map((operation) => recordDeviceOperation(operation, this.artifactValuePolicy)),
+          executed.map((operation) => recordDeviceOperation(operation, this.artifactSecurity.mode)),
         ),
         outcome: 'completed',
       });
@@ -2642,7 +2643,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     );
   }
 
-  #publishSemantic(snapshot: SemanticSnapshot): void {
+  #publishSemantic(
+    snapshot: SemanticSnapshot,
+    changedNodes: ReadonlyMap<string, SemanticNode | undefined> | null,
+  ): void {
     const composed = composeProviderEvidence(snapshot, this.#attachment?.providers ?? []);
     if (!composed.ok) {
       const failure =
@@ -2676,6 +2680,17 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       return;
     }
     snapshot = composed.snapshot;
+    let effectiveChanges = changedNodes;
+    if (changedNodes !== null) {
+      const affected = new Set([
+        ...changedNodes.keys(),
+        ...this.#providerComposedNodeIds,
+        ...composed.composedNodeIds,
+      ]);
+      const finalNodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+      effectiveChanges = new Map([...affected].map((id) => [id, finalNodes.get(id)] as const));
+    }
+    this.#providerComposedNodeIds = composed.composedNodeIds;
     this.#inputEvidence.noteSemanticCommit(snapshot.revision);
     if (composed.inputModes !== undefined) {
       const observedModes = this.#vt.modes();
@@ -2716,7 +2731,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       return;
     }
     this.#providerInputModes = composed.inputModes?.value ?? null;
-    this.#index = new SemanticIndex(snapshot);
+    if (this.#index === null || effectiveChanges === null)
+      this.#index = new SemanticIndex(snapshot);
+    else this.#index.update(snapshot, effectiveChanges);
     this.#observationSequence += 1;
     this.#emitter.emit('semantic-revision', {
       revision: snapshot.revision,

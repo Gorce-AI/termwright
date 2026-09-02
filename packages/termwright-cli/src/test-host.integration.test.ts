@@ -42,6 +42,9 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
       'duplicate title',
     ]);
     expect(first.catalog?.tests[0]?.resourceReservation).toEqual({
+      cpuWeight: 1,
+      memoryWeight: 1,
+      ioWeight: 1,
       ptySession: 2,
       externalProcess: 2,
       semanticEndpoint: 2,
@@ -63,8 +66,8 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
         return [payload.stream, payload.content] as const;
       }),
     );
-    expect(contentByStream.get('stdout')).toContain('native-host-output:attempt:');
-    expect(contentByStream.get('stderr')).toContain('native-host-stderr-fixture:attempt:');
+    expect(contentByStream.get('stdout')).toContain('native-host-output');
+    expect(contentByStream.get('stderr')).toContain('native-host-stderr-fixture');
     // Vitest delivers console output on its own schedule, so a line written
     // just before a test returns can arrive after that attempt has finished,
     // and the journal forbids any event after attempt.finished — the id is

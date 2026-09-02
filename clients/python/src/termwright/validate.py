@@ -572,8 +572,8 @@ def _snapshot_schema(value: Any, limits: ProtocolLimits) -> None:
     version = snapshot.get("v")
     _strict(snapshot, _SNAPSHOT_KEYS, ())
 
-    if version != 2:
-        raise _Issue(("v",), "expected the literal 2")
+    if version != 3:
+        raise _Issue(("v",), "expected the literal 3")
     if "sessionId" not in snapshot:
         raise _Issue(("sessionId",), "expected a string")
     if _text(snapshot["sessionId"], ("sessionId",), limits) == "":

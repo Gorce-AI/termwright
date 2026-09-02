@@ -19,7 +19,7 @@ const ev = (providerId: string) => ({
 describe('qualified geometry', () => {
   it('requires authoritative provenance for absent and revision-scoped reasons for unknown', () => {
     const base = {
-      v: 2,
+      v: 3,
       sessionId: 's',
       revision: 1,
       columns: 10,
@@ -80,7 +80,7 @@ describe('qualified geometry', () => {
     });
   });
 
-  it('accepts a fully qualified v2 snapshot and rejects legacy geometry in v2', () => {
+  it('accepts a fully qualified v3 snapshot and rejects unqualified geometry', () => {
     const geometry = {
       displayed: { status: 'known', value: true, evidence: ev('probe') },
       intendedRect: {
@@ -95,7 +95,7 @@ describe('qualified geometry', () => {
       },
     };
     const snapshot = {
-      v: 2,
+      v: 3,
       sessionId: 's',
       revision: 1,
       columns: 10,
@@ -178,7 +178,7 @@ describe('qualified geometry', () => {
       reason: 'framework-unobservable',
     };
     const snapshot = {
-      v: 2,
+      v: 3,
       sessionId: 's',
       revision: 1,
       columns: 10,
@@ -227,7 +227,7 @@ describe('qualified geometry', () => {
       reason: 'framework-unobservable',
     } as const;
     const base = {
-      v: 2,
+      v: 3,
       sessionId: 's',
       revision: 1,
       columns: 10,

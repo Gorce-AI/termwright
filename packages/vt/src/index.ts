@@ -10,7 +10,7 @@
  * ```ts
  * import { createTerminal } from '@termwright/vt';
  *
- * const { terminal, profile } = createTerminal({ columns: 100, rows: 30, profile: 'kitty' });
+ * const { terminal, profile } = createTerminal({ columns: 100, rows: 30 });
  * terminal.write('❤️');
  * console.log(profile.id); // written into the recording so the replay matches
  * ```
@@ -28,17 +28,16 @@ export {
 
 export {
   DEFAULT_PROFILE,
-  ITERM2_AMBIGUOUS_WIDE_PROFILE,
-  KITTY_PROFILE,
+  CJK_WIDE_PROFILE,
   TERMINAL_PROFILES,
   resolveProfile,
   resolveProfileId,
   type TerminalProfile,
   type TerminalProfileId,
   type TerminalProfileLike,
-  type UnicodeVersion,
 } from './profiles.js';
 
 export { createLinkResolver, type CellLink, type LinkResolver } from './links.js';
 
 export { isAmbiguousWidth, type UnicodeOverrides } from './unicode.js';
+export { measureTextCellWidth } from './graphemes/provider.js';

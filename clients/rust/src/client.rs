@@ -28,7 +28,7 @@ use crate::logs::{AttrValue, LogLevel, LogRecord, MAX_LOG_ATTRS};
 use crate::marker::encode_marker;
 use crate::messages::{
     default_capabilities, parse_driver_message, Hello, HelloAck, LogMessage, ProbeInfo,
-    ProtocolErrorMessage, RevisionCommit, SnapshotMessage,
+    ProtocolErrorMessage, RevisionCommit, SemanticFullMessage,
 };
 use crate::roles::Capability;
 use crate::tree::Snapshot;
@@ -208,7 +208,7 @@ impl Client {
             log_seq: 0,
             log_bucket: None,
             logs_dropped: 0,
-            subscribe: "snapshots".to_owned(),
+            subscribe: "semantic".to_owned(),
             evidence_lease: None,
         }
     }
@@ -435,7 +435,7 @@ impl Client {
         }
 
         let revision = self.revision + 1;
-        snapshot.v = 2;
+        snapshot.v = 3;
         snapshot.session_id = session_id.clone();
         snapshot.revision = revision;
         if let Some(lease) = self.evidence_lease.as_ref() {
@@ -461,14 +461,10 @@ impl Client {
         // Encode every frame before writing the first byte. A local ceiling
         // failure is recoverable; sending the tree and only then discovering
         // that its commit cannot be encoded would leave the wire half-applied.
-        let tree_frame = if self.subscribe != "revisions" {
-            Some(encode_frame(
-                &SnapshotMessage::new(snapshot),
-                self.limits.max_frame_bytes,
-            )?)
-        } else {
-            None
-        };
+        let tree_frame = Some(encode_frame(
+            &SemanticFullMessage::new(snapshot),
+            self.limits.max_frame_bytes,
+        )?);
         let commit_frame =
             encode_frame(&RevisionCommit::new(revision), self.limits.max_frame_bytes)?;
 
@@ -696,12 +692,11 @@ impl Client {
         self.evidence_lease.take()
     }
 
-    pub(crate) fn publication_config(&self) -> Option<(String, String, Limits, String, bool, i64)> {
+    pub(crate) fn publication_config(&self) -> Option<(String, String, Limits, bool, i64)> {
         Some((
             self.token.clone(),
             self.session_id.clone()?,
             self.limits,
-            self.subscribe.clone(),
             self.marker_enabled,
             self.revision,
         ))

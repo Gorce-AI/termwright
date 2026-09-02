@@ -5,7 +5,7 @@ import { parseSelector, roleQuery, textMatcher } from './selectors.js';
 
 function tree(nodes: readonly Partial<SemanticNode>[]): SemanticIndex {
   const snapshot: SemanticSnapshot = {
-    v: 2,
+    v: 3,
     sessionId: 's',
     revision: 3,
     columns: 80,
@@ -138,6 +138,35 @@ describe('matchSemantic', () => {
     const node = broken.node('x') as SemanticNode;
     expect(broken.ancestors(node)).toEqual([]);
     expect(matchSemantic(broken, parseSelector('dialog button').steps)).toHaveLength(0);
+  });
+
+  it('updates only changed locator indexes while preserving semantic order', () => {
+    const index = tree([
+      { id: 'root', role: 'application', name: 'app' },
+      { id: 'a', parentId: 'root', role: 'button', name: 'Old', testId: 'old' },
+      { id: 'b', parentId: 'root', role: 'button', name: 'Keep', testId: 'keep' },
+    ]);
+    const changed = {
+      ...(index.node('a') as SemanticNode),
+      role: 'textbox' as const,
+      name: 'New',
+      testId: 'new',
+    };
+    const next = {
+      ...index.snapshot,
+      revision: 4,
+      nodes: [index.node('root')!, changed, index.node('b')!],
+    };
+    index.update(next, new Map([['a', changed]]));
+
+    expect(matchSemantic(index, parseSelector('button').steps).map((node) => node.id)).toEqual([
+      'b',
+    ]);
+    expect(matchSemantic(index, parseSelector('textbox').steps).map((node) => node.id)).toEqual([
+      'a',
+    ]);
+    expect(matchSemantic(index, parseSelector('#old').steps)).toEqual([]);
+    expect(matchSemantic(index, parseSelector('#new').steps).map((node) => node.id)).toEqual(['a']);
   });
 });
 

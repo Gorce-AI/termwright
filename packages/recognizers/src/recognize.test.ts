@@ -493,7 +493,7 @@ describe('the protocol accepts what this produces', () => {
     );
 
     expect(snapshot).toMatchObject({
-      v: 2,
+      v: 3,
       coordinateSpace: { status: 'known', value: 'viewport-cells' },
       hitGrid: { status: 'unsupported' },
       nodes: [

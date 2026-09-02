@@ -20,15 +20,6 @@
     "./config": {
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
-    },
-    "./vitest-engine": {
-      "types": "./dist/vitest-engine.d.ts",
-      "import": "./dist/vitest-engine.js"
-    },
-    "./runner": {
-      "types": "./dist/runner.d.ts",
-      "import": "./dist/runner.js",
-      "default": "./dist/runner.js"
     }
   },
   "files": [

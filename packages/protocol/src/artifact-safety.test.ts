@@ -5,6 +5,7 @@ import {
   publicValue,
   recordActionPlan,
   projectActionReceiptForArtifact,
+  resolveArtifactSecurityPolicy,
   sensitive,
 } from './index.js';
 import type { SemanticSnapshot } from './tree.js';
@@ -36,6 +37,24 @@ const unknownGeometry = () => ({
 describe('artifact-safe device operations', () => {
   it('uses a redacted secure default', () => {
     expect(DEFAULT_ARTIFACT_VALUE_POLICY).toBe('redacted');
+    expect(resolveArtifactSecurityPolicy(undefined).mode).toBe('redacted');
+  });
+
+  it('owns and bounds configured secret matchers', () => {
+    const pattern = /token=[A-Z]+/u;
+    const policy = resolveArtifactSecurityPolicy({
+      mode: 'redacted',
+      secrets: ['secret', 'secret', ''],
+      patterns: [{ pattern, maxMatchChars: 32 }],
+    });
+    expect(policy.secrets).toEqual(['secret']);
+    expect(policy.patterns[0]?.pattern).not.toBe(pattern);
+    expect(() =>
+      resolveArtifactSecurityPolicy({
+        mode: 'redacted',
+        patterns: [{ pattern, maxMatchChars: 0 }],
+      }),
+    ).toThrow(/positive integer/u);
   });
 
   it('never copies an unclassified or sensitive input into a redacted plan', () => {
@@ -164,7 +183,7 @@ describe('artifact-safe device operations', () => {
 
   it('projects semantic values without weakening already-safe observations', () => {
     const snapshot: SemanticSnapshot = {
-      v: 2,
+      v: 3,
       sessionId: 's',
       revision: 1,
       columns: 80,

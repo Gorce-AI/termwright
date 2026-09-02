@@ -40,7 +40,7 @@
     {
       "name": "attempt-started",
       "value": {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000014",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -66,7 +66,7 @@
     {
       "name": "diagnostic-with-cause",
       "value": {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000015",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -95,7 +95,7 @@
     {
       "name": "state-without-wall-clock",
       "value": {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000016",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -145,12 +145,12 @@
         }
       },
       "code": "invalid-envelope",
-      "detail": "v must be exactly 2"
+      "detail": "v must be exactly 3"
     },
     {
       "name": "cross-domain-id",
       "value": {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000014",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -178,7 +178,7 @@
     {
       "name": "detached-attempt-identity",
       "value": {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000014",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -202,7 +202,7 @@
     {
       "name": "self-cause",
       "value": {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000017",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -233,7 +233,7 @@
     {
       "name": "non-finite-time",
       "value": {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000014",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -261,7 +261,7 @@
     {
       "name": "unknown-envelope-field",
       "value": {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000014",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -293,7 +293,7 @@
       "name": "monotonic",
       "values": [
         {
-          "v": 2,
+          "v": 3,
           "eventId": "event:00000000-0000-4000-8000-000000000014",
           "producerId": "producer:00000000-0000-4000-8000-000000000008",
           "epoch": 0,
@@ -316,7 +316,7 @@
           }
         },
         {
-          "v": 2,
+          "v": 3,
           "eventId": "event:00000000-0000-4000-8000-000000000015",
           "producerId": "producer:00000000-0000-4000-8000-000000000008",
           "epoch": 0,
@@ -348,7 +348,7 @@
       "name": "duplicate-sequence-coordinate",
       "values": [
         {
-          "v": 2,
+          "v": 3,
           "eventId": "event:00000000-0000-4000-8000-000000000014",
           "producerId": "producer:00000000-0000-4000-8000-000000000008",
           "epoch": 0,
@@ -371,7 +371,7 @@
           }
         },
         {
-          "v": 2,
+          "v": 3,
           "eventId": "event:00000000-0000-4000-8000-000000000015",
           "producerId": "producer:00000000-0000-4000-8000-000000000008",
           "epoch": 0,
@@ -396,14 +396,14 @@
       ],
       "verdicts": [
         "accept",
-        "event-collision"
+        "sequence-regression"
       ]
     },
     {
       "name": "monotonic-clock-regression",
       "values": [
         {
-          "v": 2,
+          "v": 3,
           "eventId": "event:00000000-0000-4000-8000-000000000014",
           "producerId": "producer:00000000-0000-4000-8000-000000000008",
           "epoch": 0,
@@ -426,7 +426,7 @@
           }
         },
         {
-          "v": 2,
+          "v": 3,
           "eventId": "event:00000000-0000-4000-8000-000000000015",
           "producerId": "producer:00000000-0000-4000-8000-000000000008",
           "epoch": 0,
@@ -458,7 +458,7 @@
       "name": "epoch-regression",
       "values": [
         {
-          "v": 2,
+          "v": 3,
           "eventId": "event:00000000-0000-4000-8000-000000000014",
           "producerId": "producer:00000000-0000-4000-8000-000000000008",
           "epoch": 2,
@@ -481,7 +481,7 @@
           }
         },
         {
-          "v": 2,
+          "v": 3,
           "eventId": "event:00000000-0000-4000-8000-000000000015",
           "producerId": "producer:00000000-0000-4000-8000-000000000008",
           "epoch": 1,
@@ -513,7 +513,7 @@
   "journal": {
     "diagnosticGap": [
       {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-0000000001f4",
         "producerId": "producer:00000000-0000-4000-8000-0000000001f3",
         "epoch": 0,
@@ -525,9 +525,6 @@
           "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
           "runId": "run:00000000-0000-4000-8000-000000000002"
         },
-        "causedBy": [
-          "event:00000000-0000-4000-8000-000000000014"
-        ],
         "payload": {
           "dropped": 1,
           "firstEventId": "event:00000000-0000-4000-8000-000000000014",
@@ -535,7 +532,7 @@
         }
       },
       {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000015",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,
@@ -560,7 +557,7 @@
     ],
     "coalescedState": [
       {
-        "v": 2,
+        "v": 3,
         "eventId": "event:00000000-0000-4000-8000-000000000015",
         "producerId": "producer:00000000-0000-4000-8000-000000000008",
         "epoch": 0,

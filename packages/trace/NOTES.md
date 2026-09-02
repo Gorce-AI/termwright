@@ -34,7 +34,7 @@ The line is _"is this a `.twtrace` at all?"_ versus _"it is one, and it lies"_:
 - `not-found` — the path holds nothing, holds something that is not an archive,
   or `packTrace` was pointed at a directory without `meta.json`.
 - `protocol-violation` — malformed `meta.json`, unsupported version, missing zip
-  member, corrupt `session.cast`, missing `castOffset`, unknown terminal
+  member, corrupt `session.cast`, invalid monotonic `t`, unknown terminal
   profile.
 
 The interesting case is a file that exists but does not unzip, which stays a
@@ -45,33 +45,28 @@ reverse mistake only makes them look twice at a path they can already see.
 
 ## The archive format
 
-### The two timelines
+### Canonical time and lazy presentation time
 
-Every artefact carries two times, and mixing them up is the easiest bug to write
-here:
+Trace v4 persists one canonical time and derives presentation time:
 
 - `t` — wall-clock milliseconds since recording started.
 - `castOffset` — position on the **cast timeline**: `t` after hidden windows
   were removed and idle gaps compressed.
 
 `hide()`/`show()` windows drop `o`/`i` cast events entirely. Markers, semantic
-snapshots and step events are _kept_ — they are not screen data, and losing them
-would break the step list — but they collapse onto the window's start.
+revisions and step events are kept. `timeline.jsonl` stores cast anchors and
+hidden windows independently of those domain streams.
 
-Idle trimming is applied at `finalize()`, not while recording, so the same
-session can be exported with different limits. `timeline.ts` computes cast times
-for the retained events and interpolates everything else between those knots, so
+Idle policy is fixed when the writer is created so append-only cast intervals
+can be emitted immediately. `timeline.ts` computes reader projections and
+interpolates everything else between the anchors, so
 a snapshot recorded in the middle of a 20 s gap trimmed to 1 s lands at 500 ms
 rather than past the end of the gap.
 
-`castOffset` is **required** on every `events.jsonl` line and readers never fall
-back to `t`. That is deliberate, not strictness for its own sake: the two are
-equal only in a recording that was neither hidden nor trimmed, so a fallback
-would place events correctly in the easy case and silently wrong in exactly the
-recordings where the timeline matters. The writer cannot know the offset until
-`finalize()`, which is why the buffered event type omits the field
-(`PendingTraceEvent`) and `writeArchive` is the one place that can complete an
-event — the type system enforces what the format requires.
+`castOffset` is forbidden on v4 disk records. Repeating it on every record made
+the previous writer retain and rewrite the complete run at `finalize()`.
+Readers derive it from canonical `t` and the separate timeline, preserving the
+public seek-oriented facade without making persistence finalize-heavy.
 
 ### The replay measures characters like the session
 
@@ -79,8 +74,8 @@ Terminal construction goes through `createTerminal` in `@termwright/vt`, never
 `new Terminal(...)` here, and the profile travels with the recording as
 `meta.terminalProfile`.
 
-This is load-bearing. The two used to be built separately, and the replay lacked
-the Unicode 11 addon the driver activated: a session counted `🚀` as two columns
+This is load-bearing. The two used to be built separately, and replay lacked
+the Unicode provider the driver activated: a session counted `🚀` as two columns
 and its own replay counted it as one. Nothing threw — the reconstructed frame
 just sat a column away from the screen the test asserted against. Activation was
 the second half of the trap, since registering a Unicode provider without
@@ -167,15 +162,15 @@ package does not expose that comparison, because knowing it costs a full stream
 of `logs.jsonl` and `stateAt` should not pay for it; a consumer that wants it
 already has `meta.logs.count` and `logs()`.
 
-### Eviction is counted at the end, not on the next event
+### Log admission is counted at the end, not on the next event
 
 The driver's team flagged a bug pattern worth checking for: a counter
 accumulated during rate limiting and reported _when the next event arrives_
 loses the last window whenever a flood ends the session — exactly when the
 number matters.
 
-The log ring buffer keeps the newest `maxLogEntries` and increments
-`droppedLogs`, read once in `buildLogSummary()` at `finalize()`. There is a test
+The append-only log stream admits up to `maxLogEntries` and increments
+`droppedLogs` after the ceiling, read once in `buildLogSummary()` at `finalize()`. There is a test
 that floods past the ceiling and then ends the session with no further event of
 any kind; the count is still right.
 
@@ -209,7 +204,8 @@ Two properties of the event worth remembering:
 - Buffered output is capped at `maxOutputBytes` (32 MB default). On overflow the
   writer stops recording output and sets `meta.truncated`; steps, semantics and
   events keep recording. Losing the tail of a recording beats an OOM in CI.
-- Consecutive output chunks with the same millisecond are coalesced up to 64 kB.
+- Pending appends are bounded by both record count and UTF-8 byte size;
+  saturation becomes a controlled capacity failure.
 - The reader streams `session.cast`, `events.jsonl`, `semantics.jsonl` and
   `logs.jsonl` line by line and caches only a small index of semantic records
   (time, revision, cast offset) — never the snapshots themselves. `semanticAt()`

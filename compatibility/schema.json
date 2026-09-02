@@ -273,7 +273,8 @@
         "text-ranges",
         "render-revisions",
         "logs",
-        "pointer-hit-grid"
+        "pointer-hit-grid",
+        "incremental-tree"
       ]
     },
     "providerCapability": {

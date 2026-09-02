@@ -35,8 +35,14 @@ describe('test-host persistence seams', () => {
     expect(persistence.append(event).ok).toBe(true);
     await persistence.flush();
     expect(persistence.recorded).toEqual([event]);
-    expect(persistence.persisted).toEqual([event]);
     expect(flushed).toEqual([event]);
+    expect(persistence.metrics()).toMatchObject({
+      acceptedEvents: 1,
+      sinkCalls: 1,
+      peakBacklogEvents: 1,
+    });
+    expect(persistence.metrics().acceptedBytes).toBeGreaterThan(0);
+    expect(persistence.metrics().peakBacklogBytes).toBeGreaterThan(0);
   });
 
   it('retains an exact failed sink batch and preserves later event ordering on retry', async () => {
@@ -72,12 +78,42 @@ describe('test-host persistence seams', () => {
     });
     expect(persistence.append(first).ok).toBe(true);
     await expect(persistence.flush()).rejects.toThrow('projection unavailable');
-    expect(persistence.persisted).toEqual([]);
     expect(persistence.append(second).ok).toBe(true);
     await persistence.flush();
     expect(written).toEqual([first, second]);
-    expect(persistence.persisted).toEqual([first, second]);
     expect(persistence.recorded).toEqual([first, second]);
+  });
+
+  it('keeps only a bounded live projection while streaming every canonical event', async () => {
+    const ids = new RunIdFactory();
+    const invocationId = ids.create('invocation');
+    const runId = ids.create('run');
+    const producer = new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 });
+    let streamed = 0;
+    const persistence = new RunEventPersistence({
+      invocationId,
+      runId,
+      gapProducer: new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 }),
+      sink: (events) => {
+        streamed += events.length;
+      },
+    });
+    const total = RunEventPersistence.MAX_PROJECTED_EVENTS + 128;
+    for (let index = 0; index < total; index += 1) {
+      const event = producer.emit({
+        eventClass: 'authoritative',
+        type: 'run.configuration',
+        identity: { invocationId, runId },
+        payload: { index },
+      });
+      expect(persistence.append(event).ok).toBe(true);
+      if (index % 64 === 63) await persistence.flush();
+    }
+    await persistence.flush();
+    expect(streamed).toBe(total);
+    expect(persistence.metrics().acceptedEvents).toBe(total);
+    expect(persistence.recorded).toHaveLength(RunEventPersistence.MAX_PROJECTED_EVENTS);
+    expect(persistence.recorded[0]?.payload).toEqual({ index: 128 });
   });
 
   it('builds a frozen manifest without a host or filesystem transaction', () => {
@@ -92,6 +128,7 @@ describe('test-host persistence seams', () => {
         profile: 'unit',
         scheduler: { pool: 'forks', maxWorkers: 1, fileParallelism: false },
         capacities: {},
+        perAttempt: {},
         perTerminal: {},
       },
       timeouts: { totalRunMs: 100, finalizationReserveMs: 10 },
@@ -102,12 +139,12 @@ describe('test-host persistence seams', () => {
       status: 'passed',
       specs: [],
       attempts: [],
-      events: [],
+      telemetry: fixtureTelemetry(),
       durationMs: 7,
       finishedAt: 20,
     });
     expect(manifest).toMatchObject({
-      v: 3,
+      v: 7,
       startedAt: 10,
       finishedAt: 20,
       durationMs: 7,
@@ -196,3 +233,31 @@ describe('test-host persistence seams', () => {
     expect(() => budget.elapsedMs()).toThrow(/monotonic clock regressed/u);
   });
 });
+
+function fixtureTelemetry() {
+  return {
+    coordinatorCpuUserMicros: 1,
+    coordinatorCpuSystemMicros: 1,
+    coordinatorRssStartBytes: 1,
+    coordinatorRssEndBytes: 1,
+    coordinatorPeakSampledRssBytes: 1,
+    workerPeakRssBytes: 'unavailable' as const,
+    workerCpuUserMicros: 'unavailable' as const,
+    workerCpuSystemMicros: 'unavailable' as const,
+    ownedProcessPeakRssBytes: 'unavailable' as const,
+    ownedProcessCountPeak: 'unavailable' as const,
+    ptySlotsPeak: 0,
+    terminalOutputBytes: 0,
+    semanticBytes: 0,
+    semanticFullCount: 0,
+    semanticDeltaCount: 0,
+    journalAcceptedEvents: 0,
+    journalAcceptedBytes: 0,
+    journalSinkCalls: 0,
+    journalPeakBacklogEvents: 0,
+    journalPeakBacklogBytes: 0,
+    traceBytes: 0,
+    tempDiskPeakBytes: 'unavailable' as const,
+    finalArtifactBytes: 0,
+  };
+}

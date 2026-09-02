@@ -47,7 +47,7 @@ export function node(
 /** Wraps nodes into a snapshot, deriving `rootIds` from the parentless ones. */
 export function snapshot(nodes: readonly SemanticNode[], revision = 1): SemanticSnapshot {
   return {
-    v: 2,
+    v: 3,
     sessionId: 'session-1',
     revision,
     columns: 80,

@@ -9,16 +9,45 @@ import {
   beginRunManifest,
   runDirectoryName,
   type RunManifest as NativeRunManifest,
+  type RunResourceTelemetry,
   type RunStartProvenance,
 } from '@termwright/run-history';
 import { readRunHistory, readRunManifest } from './runs.js';
+
+const fixtureTelemetry = (): RunResourceTelemetry => ({
+  coordinatorCpuUserMicros: 1,
+  coordinatorCpuSystemMicros: 1,
+  coordinatorRssStartBytes: 1,
+  coordinatorRssEndBytes: 1,
+  coordinatorPeakSampledRssBytes: 1,
+  workerPeakRssBytes: 100,
+  workerCpuUserMicros: 2,
+  workerCpuSystemMicros: 4,
+  ownedProcessPeakRssBytes: 'unavailable',
+  ownedProcessCountPeak: 'unavailable',
+  ptySlotsPeak: 0,
+  terminalOutputBytes: 0,
+  semanticBytes: 0,
+  semanticFullCount: 0,
+  semanticDeltaCount: 0,
+  journalAcceptedEvents: 0,
+  journalAcceptedBytes: 0,
+  journalSinkCalls: 0,
+  journalPeakBacklogEvents: 0,
+  journalPeakBacklogBytes: 0,
+  traceBytes: 0,
+  tempDiskPeakBytes: 'unavailable',
+  finalArtifactBytes: 0,
+});
 
 describe('native run history UI projection', () => {
   it('projects exact specs, attempts, flaky state and captured provenance', async () => {
     const dir = await emptyDir();
     const start = provenance(100);
     const native = manifest(start);
-    await (await beginRunManifest(dir, start)).commit(native);
+    const transaction = await beginRunManifest(dir, start);
+    await transaction.appendEvents(native.events);
+    await transaction.commit(native);
 
     const [summary] = await readRunHistory(dir);
     expect(summary).toMatchObject({
@@ -122,6 +151,7 @@ function provenance(startedAt: number): RunStartProvenance {
       profile: 'default',
       scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },
       capacities: { ptySession: 2 },
+      perAttempt: {},
       perTerminal: { ptySession: 1 },
     },
     timeouts: { totalRunMs: 60_000, finalizationReserveMs: 5_000 },
@@ -196,7 +226,16 @@ function manifest(start: RunStartProvenance): NativeRunManifest {
       eventClass: 'authoritative',
       type: 'attempt.finished',
       identity,
-      payload: { ...payload, state: attempt.status },
+      payload: {
+        ...payload,
+        state: attempt.status,
+        worker: {
+          capability: 'worker-process',
+          cpuUserMicros: 1,
+          cpuSystemMicros: 2,
+          peakSampledRssBytes: 100,
+        },
+      },
     });
     monotonicTime += 1;
     return [started, finished];
@@ -234,6 +273,13 @@ function manifest(start: RunStartProvenance): NativeRunManifest {
       },
     ],
     attempts,
+    telemetry: fixtureTelemetry(),
+    eventStream: {
+      file: 'events.ndjson',
+      count: events.length,
+      bytes: 0,
+      sha256: '0'.repeat(64),
+    },
     events,
   };
 }

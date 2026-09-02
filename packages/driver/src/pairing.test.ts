@@ -4,7 +4,7 @@ import { RevisionPairing, type PairedRevision } from './pairing.js';
 
 function snapshot(revision: number): SemanticSnapshot {
   return {
-    v: 2,
+    v: 3,
     sessionId: 's',
     revision,
     columns: 80,

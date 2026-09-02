@@ -417,7 +417,7 @@ describe('what reaches the driver', () => {
     renderer.emit();
 
     const snapshot = snapshots[0]!;
-    expect(snapshot.v).toBe(2);
+    expect(snapshot.v).toBe(3);
     expect(snapshot.nodes[1]?.geometry?.intendedRect).toMatchObject({
       status: 'known',
       value: { row: 1, column: 2, width: 4, height: 1 },

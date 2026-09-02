@@ -5,8 +5,8 @@ export const ENV_ENDPOINT = 'TERMWRIGHT_ENDPOINT';
 export const ENV_TOKEN = 'TERMWRIGHT_TOKEN';
 
 /** Current and only supported protocol major version. */
-export const PROTOCOL_VERSION = 2 as const;
-export const PROTOCOL_ID = 'termwright/2' as const;
+export const PROTOCOL_VERSION = 3 as const;
+export const PROTOCOL_ID = 'termwright/3' as const;
 export type ProtocolId = typeof PROTOCOL_ID;
 
 /** Entropy behind a session token, in bytes (256 bits). */

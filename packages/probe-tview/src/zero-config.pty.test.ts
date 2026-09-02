@@ -235,7 +235,7 @@ describe.skipIf(!runnable)('tview T0+T1 injection', () => {
     sessions.push(app);
     await app.waitForText('readme.md');
     await waitForPairedSemanticRevision(app, 1);
-    expect(app.semanticTree()?.v).toBe(2);
+    expect(app.semanticTree()?.v).toBe(3);
     expect(await app.getByRole('list', { name: 'Files' }).count()).toBe(1);
     expect(await app.getByRole('button', { name: 'Save' }).count()).toBe(1);
     expect(app.contract()?.framework?.instrumentation).toEqual(

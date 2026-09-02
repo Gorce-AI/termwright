@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFrameDecoder, encodeFrame, projectDto } from './framing.js';
+import { createFrameDecoder, encodeFrame, framedByteLength, projectDto } from './framing.js';
 import { ProtocolViolation } from './errors.js';
 
 const MAX = 4096;
@@ -137,6 +137,12 @@ describe('createFrameDecoder', () => {
     expect(Object.isFrozen(message.nested)).toBe(true);
     expect(Object.isFrozen(message.nested.deep)).toBe(true);
   });
+
+  it('retains the authoritative wire-body byte length on the owned DTO', () => {
+    const encoded = frame({ text: '€', nested: { ok: true } });
+    const [message] = createFrameDecoder(MAX).push(encoded);
+    expect(framedByteLength(message)).toBe(encoded.byteLength - 4);
+  });
 });
 
 describe('projectDto', () => {
@@ -146,6 +152,11 @@ describe('projectDto', () => {
     expect(output).toEqual(input);
     expect(output).not.toBe(input);
     expect(Object.isFrozen(output.a[3])).toBe(true);
+  });
+
+  it('returns an already-owned DTO by identity instead of projecting it twice', () => {
+    const owned = projectDto({ nested: { value: 1 } }, 8);
+    expect(projectDto(owned, 8)).toBe(owned);
   });
 
   it('rejects accessors without invoking them', () => {

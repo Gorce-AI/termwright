@@ -16,7 +16,7 @@ import type {
   ActionIntent,
   ExecutableActionPlan,
   ActionReceipt,
-  ArtifactValuePolicy,
+  ResolvedArtifactSecurityPolicy,
   Condition,
   ExecutableDeviceOperation,
   ExecutableValue,
@@ -91,7 +91,7 @@ import {
 export interface LocatorContext {
   readonly sessionId: string;
   readonly timeouts: Required<TimeoutClasses>;
-  readonly artifactValuePolicy: ArtifactValuePolicy;
+  readonly artifactSecurity: ResolvedArtifactSecurityPolicy;
   operationTimeout?(requestedMs: number, operation: string): number;
   actionObservationState():
     'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
@@ -1588,7 +1588,7 @@ export class LocatorImpl {
       plan.checkpoint,
       retry.deadline,
     );
-    const recordedPlan = recordActionPlan(plan, this.#ctx.artifactValuePolicy);
+    const recordedPlan = recordActionPlan(plan, this.#ctx.artifactSecurity.mode);
     return Object.freeze({
       intent: plan.intent,
       plan: recordedPlan,
@@ -1596,7 +1596,7 @@ export class LocatorImpl {
       after: this.#ctx.checkpoint(),
       executed: Object.freeze(
         executed.map((operation) =>
-          recordDeviceOperation(operation, this.#ctx.artifactValuePolicy),
+          recordDeviceOperation(operation, this.#ctx.artifactSecurity.mode),
         ),
       ),
       outcome: 'completed',

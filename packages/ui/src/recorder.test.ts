@@ -26,7 +26,7 @@ async function record(): Promise<{
   const harness = new FakeHarness('rec');
   const recorder = await startRecorder({
     command: ['node', 'agent.js'],
-    artifactValuePolicy: 'raw',
+    artifactSecurity: { mode: 'raw' },
     launch: async () => harness.asHarness(),
   });
   return { harness, recorder };
@@ -41,7 +41,7 @@ function enableAuthoritativePointer(harness: FakeHarness, target = 'b1'): void {
     contractId: 'rec:0',
     sessionId: 's1',
     epoch: 0,
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     framework: null,
     providers: [
       {

@@ -135,10 +135,12 @@ pub enum Capability {
     Logs,
     /// Publishes a complete exact fresh-pointer ownership grid.
     PointerHitGrid,
+    /// Publishes revision-based semantic deltas after an initial full tree.
+    IncrementalTree,
 }
 
 /// Every adapter capability.
-pub const ADAPTER_CAPABILITIES: [&str; 11] = [
+pub const ADAPTER_CAPABILITIES: [&str; 12] = [
     "tree",
     "intended-geometry",
     "clipped-geometry",
@@ -150,6 +152,7 @@ pub const ADAPTER_CAPABILITIES: [&str; 11] = [
     "render-revisions",
     "logs",
     "pointer-hit-grid",
+    "incremental-tree",
 ];
 
 /// Whether `role` is one of the roles.

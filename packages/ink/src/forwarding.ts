@@ -43,6 +43,7 @@ import type {
   WaitOptions,
 } from '@termwright/driver';
 import type {
+  ResolvedArtifactSecurityPolicy,
   EffectiveSessionContract,
   ObservationStamp,
   SemanticRole,
@@ -64,6 +65,10 @@ export abstract class ForwardingHarness implements TerminalHarness {
 
   get terminalProfile(): string {
     return this.session.terminalProfile;
+  }
+
+  get artifactSecurity(): ResolvedArtifactSecurityPolicy {
+    return this.session.artifactSecurity;
   }
 
   get shell(): ShellApi {

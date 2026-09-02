@@ -141,6 +141,10 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - run: pnpm build
+      - name: Certify Unicode provider loading and worker independence
+        run: pnpm certify:unicode-load
+      - name: Certify the differential Unicode geometry corpus
+        run: pnpm certify:unicode-corpus
       # The workspace package exports dist/index.js. Test resolution only after
       # the same build a packed consumer receives; checking before this point
       # tests an impossible half-built workspace rather than native loading.
@@ -179,6 +183,16 @@ jobs:
           rm -f "$native_package_path"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
+      - name: Certify the packed Native Host in a clean consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-clean-room-packs"
+          install_dir="$RUNNER_TEMP/termwright-clean-room-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          node scripts/check-installed-termwright.mjs "$install_dir"
       - run: pnpm -r --filter './packages/*' run typecheck
       - name: Run the certified Termwright host
         shell: bash
@@ -579,6 +593,10 @@ jobs:
           path: packages/pty-win32-x64
 
       - run: pnpm build
+      - name: Certify Unicode provider loading and worker independence
+        run: pnpm certify:unicode-load
+      - name: Certify the differential Unicode geometry corpus
+        run: pnpm certify:unicode-corpus
 
       # A selection step, not a smoke test. The exact backend name proves the
       # job below is exercising the native package it intends to certify.
@@ -635,6 +653,17 @@ jobs:
           pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
+
+      - name: Certify the packed Native Host in a clean consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-clean-room-packs"
+          install_dir="$RUNNER_TEMP/termwright-clean-room-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          node scripts/check-installed-termwright.mjs "$install_dir"
 
       - name: Run the certified Termwright host
         shell: bash
@@ -1533,6 +1562,69 @@ jobs:
           examples/bubbletea-login examples/getting-started examples/ink-todo
           examples/opentui-form examples/ratatui-list examples/textual-notes
           examples/tview-menu
+
+      - name: Certify OpenTUI from packed packages in a fresh consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-opentui-packs"
+          install_dir="$RUNNER_TEMP/termwright-opentui-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir" @termwright/probe-opentui
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz \
+            vitest@latest @opentui/core@0.5.3
+          node scripts/check-installed-opentui.mjs "$install_dir"
+
+      - name: Certify Textual from wheels and tarballs in a fresh consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-textual-packs"
+          install_dir="$RUNNER_TEMP/termwright-textual-install"
+          wheel_dir="$RUNNER_TEMP/termwright-textual-wheels"
+          venv_dir="$RUNNER_TEMP/termwright-textual-venv"
+          mkdir -p "$pack_dir" "$install_dir" "$wheel_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          python -m pip wheel --no-deps --wheel-dir "$wheel_dir" ./clients/python
+          python -m venv "$venv_dir"
+          "$venv_dir/bin/python" -m pip install "$wheel_dir"/termwright-*.whl 'textual>=8.2.8'
+          node scripts/check-installed-textual.mjs "$install_dir" "$venv_dir/bin/python"
+
+      - name: Certify Bubble Tea from packaged Go and npm sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-go-packs"
+          install_dir="$RUNNER_TEMP/termwright-go-install"
+          client_dir="$RUNNER_TEMP/termwright-go-client"
+          mkdir -p "$pack_dir" "$install_dir" "$client_dir"
+          git archive --format=tar HEAD:clients/go | tar -x -C "$client_dir"
+          pnpm pack:clean-room -- "$pack_dir" @termwright/probe-charm
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          node scripts/check-installed-go.mjs "$install_dir" "$client_dir"
+
+      - name: Certify Ratatui from crate and npm packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-ratatui-packs"
+          install_dir="$RUNNER_TEMP/termwright-ratatui-install"
+          crate_dir="$RUNNER_TEMP/termwright-ratatui-crates"
+          mkdir -p "$pack_dir" "$install_dir" "$crate_dir/protocol" "$crate_dir/probe"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          cargo package --locked --no-verify --manifest-path clients/rust/Cargo.toml \
+            --target-dir "$crate_dir/package-protocol"
+          cargo package --locked --no-verify --manifest-path clients/rust-probe/Cargo.toml \
+            --target-dir "$crate_dir/package-probe"
+          protocol_crate=$(find "$crate_dir/package-protocol/package" -name '*.crate' -print -quit)
+          probe_crate=$(find "$crate_dir/package-probe/package" -name '*.crate' -print -quit)
+          test -n "$protocol_crate" && test -n "$probe_crate"
+          tar -xzf "$protocol_crate" -C "$crate_dir/protocol" --strip-components=1
+          tar -xzf "$probe_crate" -C "$crate_dir/probe" --strip-components=1
+          node scripts/check-installed-ratatui.mjs \
+            "$install_dir" "$crate_dir/protocol" "$crate_dir/probe"
 
       - name: Upload failure reports
         if: ${{ failure() || cancelled() }}

@@ -9,6 +9,9 @@
   "scripts": {
     "build": "pnpm --filter @termwright/protocol run build && pnpm -r --filter=./packages/* --filter='!@termwright/protocol' --fail-if-no-match run build && node scripts/immutable-build-manifest.mjs --write",
     "build:native": "pnpm --dir packages/pty run build:native",
+    "certify:unicode-corpus": "node scripts/certify-unicode-corpus.mjs",
+    "certify:unicode-load": "node scripts/certify-unicode-load-matrix.mjs",
+    "certify:trace-streaming": "pnpm --filter @termwright/trace build && node --expose-gc scripts/certify-trace-streaming.mjs",
     "check:fast": "pnpm format:check && pnpm lint && pnpm check:package-metadata && pnpm check:platform-deviations && pnpm check:determinism && pnpm check:semantic-completeness && pnpm check:mission-completion && node scripts/sync-protocol-version.mjs --check",
     "check:local": "pnpm check:fast && pnpm build:native && pnpm build && node scripts/check-optional-native-externals.mjs && pnpm check:packed-private-boundaries && pnpm check:pty && pnpm typecheck && pnpm -r --filter=./examples/* --fail-if-no-match run build && pnpm -r --filter=./examples/* --fail-if-no-match run typecheck && pnpm test -- --resource-profile local --json && pnpm test:darwin-fast-exit && pnpm test:coverage && pnpm test:compatibility && pnpm test:examples && pnpm check:generated-docs && pnpm docs:api && git diff --exit-code -- website/src/content/docs/api && pnpm --filter @termwright/website run check && pnpm --filter @termwright/website run build && pnpm --filter @termwright/website run check:links && pnpm check:vectors",
     "check:package-metadata": "node scripts/check-package-metadata.mjs",
@@ -42,14 +45,22 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "pack:npm-artifacts": "node scripts/pack-npm-artifacts.mjs"
+    "pack:npm-artifacts": "node scripts/pack-npm-artifacts.mjs",
+    "pack:clean-room": "node scripts/pack-clean-room-termwright.mjs"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.0",
     "@changesets/cli": "^3.0.0",
+    "@termless/vterm": "0.8.4",
     "@types/node": "^22.15.0",
     "@vitest/coverage-v8": "4.1.11",
+    "@wterm/core": "0.3.4",
+    "@wterm/ghostty": "0.3.4",
+    "@xterm/addon-unicode-graphemes": "0.4.0",
+    "@xterm/addon-unicode11": "0.9.0",
+    "@xterm/headless": "6.0.0",
     "eslint": "^9.10.0",
+    "ghostty-web": "0.4.0",
     "prettier": "3.9.6",
     "tsup": "^8.3.0",
     "typedoc": "^0.28.20",

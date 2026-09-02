@@ -25,7 +25,7 @@ function baseSnapshot(): Record<string, unknown> {
     visibleRect: { status: 'known', value: { ...rect }, evidence: evidence() },
   });
   return {
-    v: 2,
+    v: 3,
     sessionId: 's1',
     revision: 1,
     columns: 80,

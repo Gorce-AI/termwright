@@ -190,7 +190,7 @@ describe('VtScreen', () => {
     expect(screen.regionUnchangedSince(screen.revision, [{ row: 0, from: 0, to: 6 }])).toBe(true);
   });
 
-  it('applies Unicode 11 widths', async () => {
+  it('applies modern extended-grapheme widths', async () => {
     const screen = createVt();
     await screen.write('😀x');
     const snapshot = captureScreen(screen);

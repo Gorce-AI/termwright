@@ -89,6 +89,45 @@ describe('run journal worker transport', () => {
       ['attempt.started', 0],
       ['attempt.finished', 1],
     ]);
+    expect(client.snapshot()).toMatchObject({
+      pendingEvents: 0,
+      pendingBytes: 0,
+      peakPendingEvents: 2,
+      batches: 1,
+    });
+    expect(client.snapshot().peakPendingBytes).toBeGreaterThan(0);
+    await client.close();
+  });
+
+  it('fails admission at the bounded client backlog instead of allocating another promise', async () => {
+    const runId = createRunId('run');
+    const server = await startRunJournalServer({ runId, append: () => undefined });
+    servers.push(server);
+    const client = await connectRunJournalWorker({
+      endpoint: server.endpoint,
+      token: server.token,
+      runId,
+      workerId: 'bounded-worker',
+      workerEpoch: 1,
+      handshakeDeadline: deadline(),
+      maxPendingEvents: 1,
+    });
+    const producer = new RunEventProducer({
+      producerId: client.binding.producerId,
+      epoch: client.binding.producerEpoch,
+    });
+    const identity = { invocationId: createRunId('invocation'), runId } as const;
+    const first = client.append(
+      producer.emit({ eventClass: 'diagnostic', type: 'run.warning', identity, payload: {} }),
+      deadline(),
+    );
+    await expect(
+      client.append(
+        producer.emit({ eventClass: 'diagnostic', type: 'run.warning', identity, payload: {} }),
+        deadline(),
+      ),
+    ).rejects.toMatchObject({ code: 'capacity' });
+    await first;
     await client.close();
   });
 
@@ -386,10 +425,10 @@ describe('run journal worker transport', () => {
       payload: { state: 'passed' },
     });
     socket.write(
-      Buffer.concat([
-        encodeFrame({ v: 1, type: 'append', requestId: 'append-1', event: first }, 384 * 1024),
-        encodeFrame({ v: 1, type: 'append', requestId: 'append-2', event: second }, 384 * 1024),
-      ]),
+      encodeFrame(
+        { v: 1, type: 'append-batch', requestId: 'append-batch', events: [first, second] },
+        384 * 1024,
+      ),
     );
     await appendStarted;
     let closeResolved = false;

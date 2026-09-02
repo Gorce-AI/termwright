@@ -6,7 +6,7 @@
         "name": "hello",
         "message": {
           "type": "hello",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "token": "test-token",
           "adapter": {
             "name": "vectors",
@@ -30,9 +30,9 @@
       {
         "name": "snapshot",
         "message": {
-          "type": "snapshot",
+          "type": "semantic-full",
           "snapshot": {
-            "v": 2,
+            "v": 3,
             "sessionId": "s-0001",
             "revision": 1,
             "columns": 80,
@@ -446,7 +446,7 @@
         "name": "hello-empty-token",
         "message": {
           "type": "hello",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "token": "",
           "adapter": {
             "name": "vectors",
@@ -466,7 +466,7 @@
         "name": "hello-unknown-capability",
         "message": {
           "type": "hello",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "token": "test-token",
           "adapter": {
             "name": "vectors",
@@ -477,7 +477,7 @@
           ]
         },
         "code": "malformed",
-        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"intended-geometry\"|\"clipped-geometry\"|\"states\"|\"focus-state\"|\"actions\"|\"action-recipes\"|\"text-ranges\"|\"render-revisions\"|\"logs\"|\"pointer-hit-grid\""
+        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"intended-geometry\"|\"clipped-geometry\"|\"states\"|\"focus-state\"|\"actions\"|\"action-recipes\"|\"text-ranges\"|\"render-revisions\"|\"logs\"|\"pointer-hit-grid\"|\"incremental-tree\""
       },
       {
         "name": "hello-v1-rejected",
@@ -503,7 +503,7 @@
         "name": "hello-extra-field",
         "message": {
           "type": "hello",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "token": "test-token",
           "adapter": {
             "name": "vectors",
@@ -541,9 +541,9 @@
       {
         "name": "snapshot-invalid-body",
         "message": {
-          "type": "snapshot",
+          "type": "semantic-full",
           "snapshot": {
-            "v": 2,
+            "v": 3,
             "sessionId": "s-0001",
             "revision": 0,
             "columns": 80,
@@ -1026,7 +1026,7 @@
         "name": "hello-ack",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1041,17 +1041,26 @@
             "maxLogRecordBytes": 32768,
             "maxLogQueue": 1000
           },
-          "subscribe": "snapshots",
+          "subscribe": "semantic",
           "marker": {
             "enabled": true
           }
         }
       },
       {
+        "name": "semantic-resync-request",
+        "message": {
+          "type": "semantic-resync-request",
+          "sessionId": "s-0001",
+          "expectedBaseRevision": 3,
+          "reason": "base-mismatch"
+        }
+      },
+      {
         "name": "hello-ack-unknown-limit-key",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1068,7 +1077,7 @@
             "maxQuantumFlux": 7,
             "maxTeaPots": 1
           },
-          "subscribe": "snapshots",
+          "subscribe": "semantic",
           "marker": {
             "enabled": true
           }
@@ -1078,7 +1087,7 @@
         "name": "hello-ack-unknown-envelope-field",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1093,7 +1102,7 @@
             "maxLogRecordBytes": 32768,
             "maxLogQueue": 1000
           },
-          "subscribe": "snapshots",
+          "subscribe": "semantic",
           "marker": {
             "enabled": true
           },
@@ -1104,7 +1113,7 @@
         "name": "hello-ack-unknown-nested-field",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1119,7 +1128,7 @@
             "maxLogRecordBytes": 32768,
             "maxLogQueue": 1000
           },
-          "subscribe": "snapshots",
+          "subscribe": "semantic",
           "marker": {
             "enabled": true,
             "style": "dcs"
@@ -1127,10 +1136,20 @@
         }
       },
       {
+        "name": "error",
+        "message": {
+          "type": "error",
+          "code": "bad-token",
+          "message": "nope"
+        }
+      }
+    ],
+    "reject": [
+      {
         "name": "hello-ack-subscribe-revisions",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1149,23 +1168,15 @@
           "marker": {
             "enabled": true
           }
-        }
+        },
+        "code": "malformed",
+        "detail": "subscribe: Invalid input: expected \"semantic\""
       },
-      {
-        "name": "error",
-        "message": {
-          "type": "error",
-          "code": "bad-token",
-          "message": "nope"
-        }
-      }
-    ],
-    "reject": [
       {
         "name": "hello-ack-missing-limit-key",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1179,7 +1190,7 @@
             "maxLogRecordBytes": 32768,
             "maxLogQueue": 1000
           },
-          "subscribe": "snapshots",
+          "subscribe": "semantic",
           "marker": {
             "enabled": true
           }
@@ -1206,7 +1217,7 @@
             "maxLogRecordBytes": 32768,
             "maxLogQueue": 1000
           },
-          "subscribe": "snapshots",
+          "subscribe": "semantic",
           "marker": {
             "enabled": true
           }
@@ -1218,7 +1229,7 @@
         "name": "hello-ack-empty-session",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1233,7 +1244,7 @@
             "maxLogRecordBytes": 32768,
             "maxLogQueue": 1000
           },
-          "subscribe": "snapshots",
+          "subscribe": "semantic",
           "marker": {
             "enabled": true
           }
@@ -1245,7 +1256,7 @@
         "name": "hello-ack-bad-subscribe",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1266,15 +1277,15 @@
           }
         },
         "code": "malformed",
-        "detail": "subscribe: Invalid option: expected one of \"snapshots\"|\"revisions\""
+        "detail": "subscribe: Invalid input: expected \"semantic\""
       },
       {
         "name": "hello-ack-missing-limits",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/2",
+          "protocol": "termwright/3",
           "sessionId": "s-0001",
-          "subscribe": "snapshots",
+          "subscribe": "semantic",
           "marker": {
             "enabled": true
           }
@@ -1294,9 +1305,9 @@
       {
         "name": "unknown-type",
         "message": {
-          "type": "snapshot",
+          "type": "semantic-full",
           "snapshot": {
-            "v": 2,
+            "v": 3,
             "sessionId": "s-0001",
             "revision": 1,
             "columns": 80,

@@ -361,13 +361,13 @@ describe('attachSession', () => {
   it('announces the session before anything it produces', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
-    session.terminalProfile = 'iterm2-ambiguous-wide';
+    session.terminalProfile = 'cjk-wide';
     attachSession(hub, session);
     expect(hub.backlog[0]).toEqual({
       v: 1,
       type: 'session',
       sessionId: 's1',
-      terminalProfile: 'iterm2-ambiguous-wide',
+      terminalProfile: 'cjk-wide',
       columns: 80,
       rows: 24,
     });

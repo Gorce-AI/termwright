@@ -4,7 +4,13 @@
  * yield rectangles only — a generic match never acquires a role it does not
  * have.
  */
-import type { Rect, SemanticNode, SemanticSnapshot, SemanticState } from '@termwright/protocol';
+import type {
+  Rect,
+  SemanticNode,
+  SemanticRole,
+  SemanticSnapshot,
+  SemanticState,
+} from '@termwright/protocol';
 import type { CellAttributes, CellColor, CellSnapshot } from './api.js';
 import type { CapturedRow } from './screen.js';
 import {
@@ -16,12 +22,23 @@ import {
 
 /** Node index derived once per accepted snapshot. */
 export class SemanticIndex {
-  readonly snapshot: SemanticSnapshot;
+  #snapshot: SemanticSnapshot;
   readonly #byId = new Map<string, SemanticNode>();
+  readonly #byRole = new Map<SemanticRole, Set<string>>();
+  readonly #byTestId = new Map<string, Set<string>>();
+  readonly #byExactName = new Map<string, Set<string>>();
+  readonly #ordinal = new Map<string, number>();
 
   constructor(snapshot: SemanticSnapshot) {
-    this.snapshot = snapshot;
-    for (const node of snapshot.nodes) this.#byId.set(node.id, node);
+    this.#snapshot = snapshot;
+    for (const [ordinal, node] of snapshot.nodes.entries()) {
+      this.#add(node);
+      this.#ordinal.set(node.id, ordinal);
+    }
+  }
+
+  get snapshot(): SemanticSnapshot {
+    return this.#snapshot;
   }
 
   get nodes(): readonly SemanticNode[] {
@@ -30,6 +47,55 @@ export class SemanticIndex {
 
   node(id: string): SemanticNode | undefined {
     return this.#byId.get(id);
+  }
+
+  /** Commit an already validated delta without rebuilding unaffected indexes. */
+  update(
+    snapshot: SemanticSnapshot,
+    changedNodes: ReadonlyMap<string, SemanticNode | undefined>,
+  ): void {
+    let orderChanged = false;
+    for (const [id, next] of changedNodes) {
+      const previous = this.#byId.get(id);
+      if ((previous === undefined) !== (next === undefined)) orderChanged = true;
+      if (previous !== undefined) this.#remove(previous);
+      if (next !== undefined) this.#add(next);
+    }
+    this.#snapshot = snapshot;
+    if (orderChanged) {
+      this.#ordinal.clear();
+      for (const [ordinal, node] of snapshot.nodes.entries()) this.#ordinal.set(node.id, ordinal);
+    }
+  }
+
+  candidates(step: SemanticStep): readonly SemanticNode[] {
+    const sets: Set<string>[] = [];
+    if (step.role !== undefined) sets.push(this.#byRole.get(step.role) ?? new Set());
+    if (step.testId !== undefined) sets.push(this.#byTestId.get(step.testId) ?? new Set());
+    if (step.name?.kind === 'exact') sets.push(this.#byExactName.get(step.name.text) ?? new Set());
+    if (sets.length === 0) return this.nodes;
+    sets.sort((left, right) => left.size - right.size);
+    return [...sets[0]!]
+      .filter((id) => sets.slice(1).every((set) => set.has(id)))
+      .map((id) => this.#byId.get(id))
+      .filter((node): node is SemanticNode => node !== undefined)
+      .sort(
+        (left, right) => (this.#ordinal.get(left.id) ?? 0) - (this.#ordinal.get(right.id) ?? 0),
+      );
+  }
+
+  #add(node: SemanticNode): void {
+    this.#byId.set(node.id, node);
+    addIndex(this.#byRole, node.role, node.id);
+    addIndex(this.#byExactName, node.name, node.id);
+    if (node.testId !== undefined) addIndex(this.#byTestId, node.testId, node.id);
+  }
+
+  #remove(node: SemanticNode): void {
+    this.#byId.delete(node.id);
+    removeIndex(this.#byRole, node.role, node.id);
+    removeIndex(this.#byExactName, node.name, node.id);
+    if (node.testId !== undefined) removeIndex(this.#byTestId, node.testId, node.id);
   }
 
   /** Ancestors from the immediate parent upwards; bounded by the tree depth. */
@@ -63,6 +129,19 @@ export class SemanticIndex {
       .filter((name): name is string => name !== undefined && name.length > 0);
     return parts.length === 0 ? node.name : parts.join(' ');
   }
+}
+
+function addIndex<K>(index: Map<K, Set<string>>, key: K, id: string): void {
+  const ids = index.get(key) ?? new Set<string>();
+  ids.add(id);
+  index.set(key, ids);
+}
+
+function removeIndex<K>(index: Map<K, Set<string>>, key: K, id: string): void {
+  const ids = index.get(key);
+  if (ids === undefined) return;
+  ids.delete(id);
+  if (ids.size === 0) index.delete(key);
 }
 
 function stateMatches(node: SemanticNode, expected: Readonly<Partial<SemanticState>>): boolean {
@@ -113,7 +192,7 @@ export function matchSemantic(
   const last = steps[steps.length - 1];
   if (last === undefined) return [];
   const out: SemanticNode[] = [];
-  for (const node of index.nodes) {
+  for (const node of index.candidates(last)) {
     if (scopeId !== undefined && !index.isDescendantOf(node, scopeId)) continue;
     if (!stepMatches(index, node, last)) continue;
     if (!ancestorsMatch(index, node, steps.slice(0, -1))) continue;

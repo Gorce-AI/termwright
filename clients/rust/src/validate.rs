@@ -1018,8 +1018,8 @@ fn check_snapshot_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
     let version = object.get("v").and_then(Value::as_i64);
     strict(object, &SNAPSHOT_KEYS, &root)?;
 
-    if version != Some(2) {
-        return Err(Issue::new(vec!["v".into()], "expected the literal 2"));
+    if version != Some(3) {
+        return Err(Issue::new(vec!["v".into()], "expected the literal 3"));
     }
     if text(object.get("sessionId"), vec!["sessionId".into()], limits)?.is_empty() {
         return Err(Issue::new(
@@ -1679,7 +1679,7 @@ pub fn validate_snapshot(value: &Value, limits: &Limits) -> Result<(), Validatio
 
     let ids: HashSet<&str> = by_id.keys().copied().collect();
 
-    if snapshot["v"].as_i64() == Some(2) {
+    if snapshot["v"].as_i64() == Some(3) {
         let hit_grid = snapshot["hitGrid"]
             .as_object()
             .expect("checked by the schema layer");

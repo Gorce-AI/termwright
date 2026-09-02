@@ -179,7 +179,7 @@ pub enum EvidenceStrength {
     Diagnostic,
 }
 
-/// Display and layout facts for one protocol-v2 semantic node.
+/// Display and layout facts for one protocol-v3 semantic node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NodeGeometryObservations {
@@ -746,7 +746,7 @@ impl Snapshot {
     /// filled in by [`crate::Client::publish`].
     pub fn new(columns: i64, rows: i64) -> Self {
         Self {
-            v: 2,
+            v: 3,
             session_id: String::new(),
             revision: 0,
             columns,

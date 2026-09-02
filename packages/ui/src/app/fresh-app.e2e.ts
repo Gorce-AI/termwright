@@ -98,6 +98,89 @@ it('renders a canonical partial-skip verdict as yellow without relying on skippe
 });
 
 describe('fresh React runner', () => {
+  it('rebuilds Unicode geometry when the selected terminal profile changes', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    const viewport = page.locator('.tw-terminal-viewport');
+    await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');
+
+    const startedAt = Date.now();
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:unicode', mode: 'live', startedAt });
+    server.hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 'unicode-case',
+      title: 'renders Unicode geometry',
+      file: '/repo/unicode.test.ts',
+      startedAt,
+      sessionId: 'unicode-session',
+    });
+    const announce = (terminalProfile: 'default' | 'cjk-wide') =>
+      server.hub.publish({
+        v: 1,
+        type: 'session',
+        sessionId: 'unicode-session',
+        testId: 'unicode-case',
+        terminalProfile,
+        columns: 20,
+        rows: 4,
+      });
+    announce('default');
+    server.hub.publish({
+      v: 1,
+      type: 'output',
+      sessionId: 'unicode-session',
+      dataB64: Buffer.from('\x1bc👨‍👩‍👧X').toString('base64'),
+      t: 1,
+    });
+    await page.locator('.tw-case-button').filter({ hasText: 'renders Unicode geometry' }).click();
+    await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');
+    await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('3');
+
+    server.hub.publish({
+      v: 1,
+      type: 'output',
+      sessionId: 'unicode-session',
+      dataB64: Buffer.from('\x1bc│X').toString('base64'),
+      t: 2,
+    });
+    await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');
+
+    announce('cjk-wide');
+    server.hub.publish({
+      v: 1,
+      type: 'output',
+      sessionId: 'unicode-session',
+      dataB64: Buffer.from('\x1bcकिंX').toString('base64'),
+      t: 3,
+    });
+    await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('cjk-wide');
+    await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');
+
+    server.hub.publish({
+      v: 1,
+      type: 'output',
+      sessionId: 'unicode-session',
+      dataB64: Buffer.from('\x1bc│X').toString('base64'),
+      t: 4,
+    });
+    await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('3');
+
+    announce('default');
+    server.hub.publish({
+      v: 1,
+      type: 'output',
+      sessionId: 'unicode-session',
+      dataB64: Buffer.from('\x1bc│X').toString('base64'),
+      t: 5,
+    });
+    await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');
+    await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('distinguishes initialization failure from a valid empty project', async () => {
     const failedServer = await startUiServer();
     servers.push(failedServer);
@@ -305,7 +388,7 @@ describe('fresh React runner', () => {
         sessionId,
         revision: 1,
         snapshot: {
-          v: 2,
+          v: 3,
           sessionId,
           revision: 1,
           columns,
@@ -368,13 +451,13 @@ describe('fresh React runner', () => {
         },
       });
     };
-    publishSession('opaque-a', 'Ink', 'unicode', 80, 24, 'FIRST SCREEN', 'First inspector');
-    publishSession('opaque-b', 'OpenTUI', 'wide', 100, 30, 'SECOND SCREEN', 'Second inspector');
+    publishSession('opaque-a', 'Ink', 'default', 80, 24, 'FIRST SCREEN', 'First inspector');
+    publishSession('opaque-b', 'OpenTUI', 'cjk-wide', 100, 30, 'SECOND SCREEN', 'Second inspector');
     const selector = page.getByLabel('Terminal session');
     await expect.poll(() => selector.locator('option').count()).toBe(2);
     expect(await selector.locator('option').allTextContents()).toEqual([
-      'Ink · unicode · 80×24 · #1',
-      'OpenTUI · wide · 100×30 · #2',
+      'Ink · default · 80×24 · #1',
+      'OpenTUI · cjk-wide · 100×30 · #2',
     ]);
     expect((await selector.locator('option').allTextContents()).join(' ')).not.toContain('opaque-');
     await page.getByRole('button', { name: 'Expand inspector' }).click();

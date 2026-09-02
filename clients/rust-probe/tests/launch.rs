@@ -99,10 +99,10 @@ fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
                 if frame.value.get("type").and_then(serde_json::Value::as_str) == Some("hello") {
                     let ack = serde_json::json!({
                         "type": "hello-ack",
-                        "protocol": "termwright/2",
+                        "protocol": "termwright/3",
                         "sessionId": "s-no-crossterm",
                         "limits": DEFAULT_LIMITS,
-                        "subscribe": "snapshots",
+                        "subscribe": "semantic",
                         "marker": { "enabled": true },
                     });
                     let encoded =
@@ -276,7 +276,7 @@ fn a_project_without_crossterm_builds_with_two_patches_and_fails_semantics_close
     let mut fatal = None;
     while Instant::now() < deadline && fatal.is_none() {
         match received.recv_timeout(Duration::from_millis(200)) {
-            Ok(message) if message["type"] == "snapshot" => snapshot = Some(message),
+            Ok(message) if message["type"] == "semantic-full" => snapshot = Some(message),
             Ok(message) if message["type"] == "error" => fatal = Some(message),
             Ok(_) => {}
             Err(_) => break,

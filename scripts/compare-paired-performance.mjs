@@ -22,6 +22,8 @@ const MEAN_METRICS = new Set([
   'firstRunPreAttemptMs',
   'postStartupRunOrchestrationMs',
   'semanticHotPathP95Us',
+  'semanticBytesPerFrame',
+  'semanticFullSnapshots',
   'charmOverheadRatio',
   'opentuiOverheadRatio',
 ]);

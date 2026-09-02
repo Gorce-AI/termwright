@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionabilityExplanation
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:195
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:218
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:195
 
 > `readonly` **actionable**: `boolean`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:196
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:219
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:196
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:198
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:221
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:198
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:197
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:220
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:197
 
 > `readonly` `optional` **reason?**: `object`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:201
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:224
 
 #### code
 
@@ -63,7 +63,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:201
 
 > `readonly` **requirements**: readonly [`ConditionResult`](../conditionresult/)[]
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:199
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:222
 
 ***
 
@@ -71,4 +71,4 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:199
 
 > `readonly` `optional` **strategy?**: `string`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:200
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:223

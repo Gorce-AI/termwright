@@ -16,6 +16,7 @@ import {
 } from '@termwright/evidence-provider';
 import {
   createFrameDecoder,
+  diffSemanticSnapshots,
   encodeFrame,
   encodeMarker,
   parseDriverMessage,
@@ -68,6 +69,7 @@ export interface ConnectOptions {
 export interface ProbePerformanceMetrics {
   readonly enabled: boolean;
   readonly fullSnapshots: number;
+  readonly deltas: number;
   readonly semanticBytes: number;
   readonly semanticNodes: number;
   readonly unknownFrameworkNodes: number;
@@ -90,6 +92,7 @@ export interface ProbePerformanceMetrics {
 
 interface MutableProbePerformanceMetrics {
   fullSnapshots: number;
+  deltas: number;
   semanticBytes: number;
   semanticNodes: number;
   unknownFrameworkNodes: number;
@@ -136,6 +139,8 @@ export class ProbeChannel {
   readonly #evidenceProviders: FrozenEvidenceProviderRegistry;
   #open = true;
   #revision = 0;
+  #lastSnapshot: SemanticSnapshot | null = null;
+  #forceFullSnapshot = true;
   readonly #performance: MutableProbePerformanceMetrics | null;
   readonly #performanceSink: (() => void) | null;
 
@@ -157,6 +162,7 @@ export class ProbeChannel {
     this.#performance = performanceMetrics
       ? {
           fullSnapshots: 0,
+          deltas: 0,
           semanticBytes: 0,
           semanticNodes: 0,
           unknownFrameworkNodes: 0,
@@ -197,6 +203,11 @@ export class ProbeChannel {
     return this.#revision;
   }
 
+  /** True after connect/resync until a full semantic keyframe is accepted for sending. */
+  get requiresFullSnapshot(): boolean {
+    return this.#forceFullSnapshot;
+  }
+
   /**
    * A stable, immutable debug snapshot. Disabled collection reports no
    * fabricated zeros for averages that were never observed.
@@ -207,6 +218,7 @@ export class ProbeChannel {
       return Object.freeze({
         enabled: false,
         fullSnapshots: 0,
+        deltas: 0,
         semanticBytes: 0,
         semanticNodes: 0,
         unknownFrameworkNodes: 0,
@@ -223,10 +235,11 @@ export class ProbeChannel {
         parentNormalizationMicrosecondsPerFrame: null,
       });
     }
-    const frames = metrics.fullSnapshots;
+    const frames = metrics.fullSnapshots + metrics.deltas;
     return Object.freeze({
       enabled: true,
-      fullSnapshots: frames,
+      fullSnapshots: metrics.fullSnapshots,
+      deltas: metrics.deltas,
       semanticBytes: metrics.semanticBytes,
       semanticNodes: metrics.semanticNodes,
       unknownFrameworkNodes: metrics.unknownFrameworkNodes,
@@ -283,18 +296,26 @@ export class ProbeChannel {
     });
     const qualifiedSnapshot: SemanticSnapshot =
       providerEvidence.length === 0 ? snapshot : Object.freeze({ ...snapshot, providerEvidence });
-    const sent = this.#send(
-      { type: 'snapshot', snapshot: qualifiedSnapshot },
-      this.#performance !== null,
-    );
+    const previousSnapshot = this.#lastSnapshot;
+    const sendFull = this.#forceFullSnapshot || previousSnapshot === null;
+    const message: AdapterToDriverMessage = sendFull
+      ? { type: 'semantic-full', snapshot: qualifiedSnapshot }
+      : {
+          type: 'semantic-delta',
+          delta: diffSemanticSnapshots(previousSnapshot!, qualifiedSnapshot),
+        };
+    const sent = this.#send(message, this.#performance !== null);
     if (sent === undefined) {
       if (this.#performance !== null) this.#performance.droppedEvents += 1;
       this.#emitPerformance();
       return undefined;
     }
+    this.#lastSnapshot = qualifiedSnapshot;
+    this.#forceFullSnapshot = false;
     this.#revision = snapshot.revision;
     if (this.#performance !== null) {
-      this.#performance.fullSnapshots += 1;
+      if (sendFull) this.#performance.fullSnapshots += 1;
+      else this.#performance.deltas += 1;
       this.#performance.semanticBytes += sent.bytes;
       this.#performance.semanticNodes += snapshot.nodes.length;
       this.#performance.unknownFrameworkNodes += snapshot.nodes.filter(
@@ -368,6 +389,13 @@ export class ProbeChannel {
     if (message.type === 'error') {
       this.close();
       return;
+    }
+    if (message.type === 'semantic-resync-request') {
+      if (message.sessionId !== this.session.sessionId) {
+        this.close();
+        return;
+      }
+      this.#forceFullSnapshot = true;
     }
   }
 
@@ -512,7 +540,7 @@ export async function connectProbe(options: ConnectOptions): Promise<ProbeChanne
               protocol: PROTOCOL_ID,
               token: options.token,
               adapter: { name: options.adapterName, version: options.adapterVersion },
-              capabilities: options.capabilities,
+              capabilities: [...new Set([...options.capabilities, 'incremental-tree'])],
               probe: options.probe,
               ...(evidenceProviders.registrations.length === 0
                 ? {}

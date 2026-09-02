@@ -36,7 +36,7 @@ import {
   type StepId,
 } from '@termwright/protocol';
 import type { RemoteResourceLease } from '@termwright/resource-broker/transport';
-import { createTraceWriter, type TraceWriter } from '@termwright/trace';
+import { createTraceWriter, type TraceResourceUsage, type TraceWriter } from '@termwright/trace';
 import { connectLiveSession, type LiveSessionConnection } from '@termwright/ui/live-client';
 import { getTermwrightConfig, type ResolvedTermwrightConfig, type TraceMode } from './config.js';
 import { appendCrashSection, collectCrashes, toReportCrash, type ReportCrash } from './crash.js';
@@ -395,6 +395,7 @@ export const test = markTermwrightTestApi(
                 command,
                 columns: screen.columns,
                 rows: screen.rows,
+                idleTimeLimit: 2,
                 runIdentity: {
                   invocationId: attemptContext.invocationId,
                   runId: attemptContext.runId,
@@ -660,12 +661,21 @@ export const test = markTermwrightTestApi(
         let verifiedTeardown = closed.has(session);
         try {
           if (session.writer !== undefined) {
+            let resources: TraceResourceUsage;
             if (keep) {
-              const archive = await session.writer.finalize({ idleTimeLimit: 2 });
+              const archive = await session.writer.finalize();
               scope?.traces.push(archive.dir);
+              resources = archive.resources;
             } else {
-              session.writer.dispose();
+              resources = await session.writer.dispose();
             }
+            currentAttemptEventRecorder().record({
+              eventClass: 'authoritative',
+              type: 'trace.resource',
+              sessionId: session.runSessionId,
+              phase: 'cleanup',
+              payload: { ...resources },
+            });
           }
         } catch (error) {
           verifiedTeardown = false;

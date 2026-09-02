@@ -460,6 +460,7 @@ const frame = defineTool({
         ? renderScreenshot(reconstructed.grid, {
             scale: args.screenshotScale,
             theme: args.screenshotTheme,
+            semantic: reconstructed.semantic,
           })
         : undefined;
     return {

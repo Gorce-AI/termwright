@@ -18,11 +18,11 @@ from .logs import LogRecord, validate_log_record
 from .roles import CAPABILITY_SET, EVIDENCE_PROVIDER_CAPABILITY_SET
 from .validate import validate_snapshot
 
-PROTOCOL_ID = "termwright/2"
-PROTOCOL_VERSION = 2
+PROTOCOL_ID = "termwright/3"
+PROTOCOL_VERSION = 3
 
 ERROR_CODES = ("bad-token", "bad-version", "malformed", "limit-exceeded", "duplicate-semantic-key", "adapter-guarantee-violation", "internal")
-SUBSCRIBE_MODES = ("snapshots", "revisions")
+SUBSCRIBE_MODES = ("semantic",)
 
 MAX_IDENTIFIER_LENGTH = 1024
 _MAX_SAFE_INTEGER = 2**53 - 1
@@ -73,15 +73,19 @@ def hello(
         "capabilities": list(capabilities),
     }
     if probe is not None:
+        if not isinstance(probe.get("instrumentation"), Mapping):
+            raise ProtocolViolation(
+                "marker-argument", "probe.instrumentation is required for every probe"
+            )
         message["probe"] = dict(probe)
     if providers:
         message["providers"] = [dict(provider) for provider in providers]
     return message
 
 
-def snapshot_message(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
+def semantic_full_message(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
     """Wrap a wire-form snapshot in its envelope."""
-    return {"type": "snapshot", "snapshot": dict(snapshot)}
+    return {"type": "semantic-full", "snapshot": dict(snapshot)}
 
 
 def revision_commit(revision: int) -> Dict[str, Any]:
@@ -260,6 +264,12 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
         for item in capabilities:
             if item not in CAPABILITY_SET:
                 return _malformed(f"capabilities: unknown capability {item!r}")
+        if "probe" in message:
+            probe = message["probe"]
+            if not isinstance(probe, dict):
+                return _malformed("probe: expected an object")
+            if not isinstance(probe.get("instrumentation"), dict):
+                return _malformed("probe.instrumentation: required")
         if "providers" in message:
             providers = message["providers"]
             if not isinstance(providers, list) or len(providers) > 64:
@@ -295,7 +305,7 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
         issue = _exact_keys(message, ("type", "revision")) or _revision(message.get("revision"), "revision")
         return _malformed(issue) if issue else ParseResult(ok=True, message=message)
 
-    if kind == "snapshot":
+    if kind == "semantic-full":
         issue = _exact_keys(message, ("type", "snapshot"))
         if issue:
             return _malformed(issue)
@@ -368,7 +378,7 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
             if issue:
                 return _malformed(issue)
         if message["subscribe"] not in SUBSCRIBE_MODES:
-            return _malformed("subscribe: expected 'snapshots' or 'revisions'")
+            return _malformed("subscribe: expected 'semantic'")
         marker = message["marker"]
         if not isinstance(marker, dict):
             return _malformed("marker: expected an object")
@@ -381,6 +391,24 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
             issue = _check_log_budget(message["logs"])
             if issue:
                 return _malformed(issue)
+        return ParseResult(ok=True, message=message)
+
+    if kind == "semantic-resync-request":
+        issue = _required_keys(
+            message, ("type", "sessionId", "expectedBaseRevision", "reason")
+        )
+        if issue:
+            return _malformed(issue)
+        issue = _identifier(message["sessionId"], "sessionId")
+        if issue:
+            return _malformed(issue)
+        expected = message["expectedBaseRevision"]
+        if expected is not None:
+            issue = _revision(expected, "expectedBaseRevision")
+            if issue:
+                return _malformed(issue)
+        if message["reason"] not in ("base-mismatch", "missing-base", "driver-reset"):
+            return _malformed("reason: unknown semantic resync reason")
         return ParseResult(ok=True, message=message)
 
     if kind == "error":

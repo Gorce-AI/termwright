@@ -357,7 +357,7 @@ function qualifySnapshot(
   };
   return {
     ...base,
-    v: 2,
+    v: 3,
     nodes,
     coordinateSpace: {
       status: 'known',

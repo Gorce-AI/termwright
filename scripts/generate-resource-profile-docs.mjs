@@ -113,6 +113,9 @@ function resourceLabel(resource) {
     semanticEndpoint: 'Semantic endpoints',
     nativeHostPressure: 'Native-host pressure',
     traceWriter: 'Trace writers',
+    cpuWeight: 'CPU weight',
+    memoryWeight: 'Memory weight',
+    ioWeight: 'I/O weight',
   };
   return labels[resource] ?? `\`${resource}\``;
 }

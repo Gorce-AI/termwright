@@ -7,6 +7,7 @@ import type {
   SemanticNode,
   SemanticSnapshot,
 } from '@termwright/protocol';
+import { resolveArtifactSecurityPolicy } from '@termwright/protocol';
 import { LocatorImpl, type LocatorContext } from './locator.js';
 import { SemanticIndex } from './matching.js';
 import { roleQuery, textMatcher } from './selectors.js';
@@ -22,7 +23,7 @@ const contract: EffectiveSessionContract = Object.freeze({
   contractId: 'retry:0',
   sessionId: 'retry',
   epoch: 0,
-  protocol: 'termwright/2',
+  protocol: 'termwright/3',
   framework: null,
   providers: Object.freeze([]),
   capabilities: Object.freeze(
@@ -77,7 +78,7 @@ function fixture(initial: 'disabled' | 'covered' | 'ready') {
     });
   const snapshot = (): SemanticSnapshot =>
     Object.freeze({
-      v: 2,
+      v: 3,
       sessionId: 'retry',
       revision: sequence,
       columns: 40,
@@ -110,7 +111,7 @@ function fixture(initial: 'disabled' | 'covered' | 'ready') {
     });
   const ctx: LocatorContext = {
     sessionId: 'retry',
-    artifactValuePolicy: 'redacted',
+    artifactSecurity: resolveArtifactSecurityPolicy(undefined),
     timeouts: { action: 1_000, text: 1_000, idle: 1_000, ready: 1_000, exit: 1_000 },
     actionObservationState: () => 'settled',
     negotiationPending: () => false,
