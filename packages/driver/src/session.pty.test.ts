@@ -1850,6 +1850,21 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
       const beforePendingFocus = terminal.checkpoint();
       await terminal.write('F');
       await terminal.waitForText('[Reject]');
+
+      const markerObserved = new Promise<void>((resolve) => {
+        const off = terminal.events.on('semantic-revision', (event) => {
+          if (event.revision !== 2) return;
+          off();
+          resolve();
+        });
+      });
+      // The semantic socket and PTY are independent transports. Seeing the
+      // new screen cannot prove that frame-begin has reached the driver. Pair
+      // its marker first: revision 2 can only publish after both the snapshot
+      // and PTY marker were observed, while FRAME_END remains withheld.
+      await control.releaseMarker();
+      await markerObserved;
+
       let startedActionId: string | undefined;
       const offStarted = terminal.events.on('action-start', (event) => {
         if (event.api === 'activate') startedActionId = event.actionId;
@@ -1898,39 +1913,14 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
       expect(activationSettled).toBe(false);
       expect(waitDiagnostic.actionId).toBe(startedActionId);
       const whileFocusFrameOpen = terminal.checkpoint();
-      // Screen revisions are transport observations: one logical initial
-      // frame can span multiple PTY chunks before its marker, so its exact
-      // paired revision is not fixed at 1. The causal contract is stronger:
-      // the published pair is unchanged, while the visible Reject frame has
-      // advanced the screen beyond that still-published pair.
+      // Marker pairing may publish the tree, but the explicit open frame still
+      // forbids physical input until its revision-commit closes FRAME_END.
       expect(beforePendingFocus.semanticRevision).toBe(1);
       expect(beforePendingFocus.pairedScreenRevision).not.toBeNull();
-      expect(whileFocusFrameOpen.semanticRevision).toBe(beforePendingFocus.semanticRevision);
-      expect(whileFocusFrameOpen.pairedScreenRevision).toBe(
-        beforePendingFocus.pairedScreenRevision,
-      );
-      if (whileFocusFrameOpen.pairedScreenRevision === null) {
-        throw new Error('the initial semantic revision lost its paired screen');
-      }
-      expect(whileFocusFrameOpen.screenRevision).toBeGreaterThan(
-        whileFocusFrameOpen.pairedScreenRevision,
-      );
+      expect(whileFocusFrameOpen.semanticRevision).toBe(2);
+      expect(whileFocusFrameOpen.pairedScreenRevision).not.toBeNull();
       expect(terminal.screen().text()).toContain('[Reject]');
-
-      const markerObserved = new Promise<void>((resolve) => {
-        const off = terminal.events.on('semantic-revision', (event) => {
-          if (event.revision !== 2) return;
-          off();
-          resolve();
-        });
-      });
-      // Two acknowledged phases force the adverse cross-transport ordering:
-      // the driver publishes marker-paired revision 2 while FRAME_END is still
-      // withheld, and only the second command may deliver that commit.
-      await control.releaseMarker();
-      await markerObserved;
       expect(activationSettled).toBe(false);
-      expect(terminal.checkpoint().semanticRevision).toBe(2);
 
       await control.releaseCommit();
       const activation = await activationOutcome;
