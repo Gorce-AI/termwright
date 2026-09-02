@@ -145,12 +145,12 @@ profile; admission still cannot exceed any capacity in the table.
 
 <!-- BEGIN GENERATED RESOURCE PROFILES -->
 <!-- Generated from TERMWRIGHT_RESOURCE_PROFILES; do not edit this block by hand. -->
-| Profile | Workers | PTY sessions | External processes | Semantic endpoints | Native-host pressure | Trace writers | Per terminal |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `local` | 2 | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
-| `ci` | 2 | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
-| `windows-ci` | 2 | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
-| `stress` | 16 | 16 | 16 | 16 | 16 | 16 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
+| Profile | Workers | PTY sessions | External processes | Semantic endpoints | Native-host pressure | Trace writers | CPU weight | Memory weight | I/O weight | Per terminal |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `local` | 2 | 4 | 4 | 4 | 4 | 4 | 2 | 2 | 2 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
+| `ci` | 2 | 4 | 4 | 4 | 4 | 4 | 2 | 2 | 2 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
+| `windows-ci` | 2 | 4 | 4 | 4 | 4 | 4 | 2 | 2 | 2 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
+| `stress` | 16 | 16 | 16 | 16 | 16 | 16 | 16 | 16 | 16 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |
 <!-- END GENERATED RESOURCE PROFILES -->
 
 The profile's PTY count is independent of Vitest's worker count. Every live
