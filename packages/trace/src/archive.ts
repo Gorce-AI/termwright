@@ -4,11 +4,12 @@
  * line-oriented interface so readers never branch on the container.
  */
 
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { once } from 'node:events';
 import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { unzipSync, zipSync } from 'fflate';
+import { unzipSync, Zip, ZipDeflate } from 'fflate';
 import { TraceError } from './errors.js';
 import { TRACE_FILES } from './types.js';
 
@@ -21,6 +22,8 @@ export interface ArchiveFiles {
   has(name: string): Promise<boolean>;
   /** Whole-file read; use {@link ArchiveFiles.lines} for the large ones. */
   read(name: string): Promise<string>;
+  /** Streams exact member bytes for verification and packaging. */
+  bytes(name: string): AsyncIterable<Uint8Array>;
   /** Streams non-empty lines, without trailing newlines. */
   lines(name: string): AsyncIterable<string>;
   close(): Promise<void>;
@@ -67,6 +70,9 @@ function openDirectory(dir: string): ArchiveFiles {
     },
     async read(name) {
       return readFile(join(dir, name), 'utf8');
+    },
+    bytes(name) {
+      return createReadStream(join(dir, name));
     },
     lines(name) {
       return streamLines(join(dir, name));
@@ -117,6 +123,10 @@ async function openZip(file: string): Promise<ArchiveFiles> {
     async read(name) {
       return text(name);
     },
+    async *bytes(name) {
+      const value = flattened.get(name);
+      if (value !== undefined) yield value;
+    },
     lines(name) {
       return iterateLines(flattened.has(name) ? text(name) : '');
     },
@@ -155,10 +165,9 @@ async function* iterateLines(text: string): AsyncGenerator<string> {
  * @returns the number of bytes written
  */
 export async function packTrace(dir: string, outFile: string): Promise<number> {
-  const entries: Record<string, Uint8Array> = {};
-  const commit = await readFile(join(dir, TRACE_FILES.commit)).catch(() => null);
-  if (commit === null) {
-    const hasMeta = (await readFile(join(dir, TRACE_FILES.meta)).catch(() => null)) !== null;
+  const committed = (await stat(join(dir, TRACE_FILES.commit)).catch(() => null)) !== null;
+  if (!committed) {
+    const hasMeta = (await stat(join(dir, TRACE_FILES.meta)).catch(() => null)) !== null;
     throw new TraceError(
       hasMeta ? 'protocol-violation' : 'not-found',
       hasMeta ? `${dir} is an incomplete .twtrace archive` : `${dir} is not a .twtrace archive`,
@@ -169,20 +178,41 @@ export async function packTrace(dir: string, outFile: string): Promise<number> {
       },
     );
   }
-  for (const member of ARCHIVE_MEMBERS) {
-    const bytes =
-      member === TRACE_FILES.commit ? commit : await readFile(join(dir, member)).catch(() => null);
-    if (bytes === null) {
-      if (member === TRACE_FILES.meta) {
-        throw new TraceError('not-found', `${dir} is not a .twtrace archive`);
-      }
-      continue;
+  const output = createWriteStream(outFile, { flags: 'wx' });
+  let written = 0;
+  let streamError: unknown;
+  const zip = new Zip((error, data, final) => {
+    if (error !== null) {
+      streamError = error;
+      output.destroy(error);
+      return;
     }
-    entries[member] = new Uint8Array(bytes);
+    written += data.byteLength;
+    output.write(data);
+    if (final) output.end();
+  });
+  try {
+    for (const member of ARCHIVE_MEMBERS) {
+      const path = join(dir, member);
+      const info = await stat(path).catch(() => null);
+      if (info === null) continue;
+      const entry = new ZipDeflate(member, { level: 6 });
+      zip.add(entry);
+      for await (const chunk of createReadStream(path)) {
+        entry.push(new Uint8Array(chunk), false);
+        if (output.writableNeedDrain) await once(output, 'drain');
+      }
+      entry.push(new Uint8Array(0), true);
+    }
+    zip.end();
+    await once(output, 'finish');
+    if (streamError !== undefined) throw streamError;
+    return written;
+  } catch (error) {
+    zip.terminate();
+    output.destroy();
+    throw error;
   }
-  const zipped = zipSync(entries, { level: 6 });
-  await writeFile(outFile, zipped);
-  return zipped.byteLength;
 }
 
 /**

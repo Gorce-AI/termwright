@@ -395,6 +395,7 @@ export const test = markTermwrightTestApi(
                 command,
                 columns: screen.columns,
                 rows: screen.rows,
+                idleTimeLimit: 2,
                 runIdentity: {
                   invocationId: attemptContext.invocationId,
                   runId: attemptContext.runId,
@@ -661,10 +662,10 @@ export const test = markTermwrightTestApi(
         try {
           if (session.writer !== undefined) {
             if (keep) {
-              const archive = await session.writer.finalize({ idleTimeLimit: 2 });
+              const archive = await session.writer.finalize();
               scope?.traces.push(archive.dir);
             } else {
-              session.writer.dispose();
+              await session.writer.dispose();
             }
           }
         } catch (error) {

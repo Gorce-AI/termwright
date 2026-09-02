@@ -7,9 +7,10 @@
  * |-------------------|------------------------------------------------------|
  * | `meta.json`       | {@link TraceMeta}                                     |
  * | `session.cast`    | asciicast **v3** recording, markers = test steps      |
- * | `events.jsonl`    | one {@link TraceEvent} per line                       |
- * | `semantics.jsonl` | one {@link SemanticRecord} per line                   |
- * | `logs.jsonl`      | one {@link TraceLogEntry} per line (absent when none) |
+ * | `events.jsonl`    | raw monotonic events                                  |
+ * | `semantics.jsonl` | keyframes and revision deltas                         |
+ * | `logs.jsonl`      | raw monotonic application log entries                |
+ * | `timeline.jsonl`  | cast anchors and hidden-window transforms            |
  *
  * See `/CONTRACTS.md` §Trace — that file is normative, this one mirrors it in
  * TypeScript.
@@ -33,10 +34,11 @@ import type {
   ShardId,
   SpecId,
   SemanticSnapshot,
+  SemanticDelta,
 } from '@termwright/protocol';
 
 /** Current archive version. Readers reject anything else. */
-export const TRACE_VERSION = 1 as const;
+export const TRACE_VERSION = 4 as const;
 
 /** File names inside an archive. */
 export const TRACE_FILES = {
@@ -45,6 +47,7 @@ export const TRACE_FILES = {
   events: 'events.jsonl',
   semantics: 'semantics.jsonl',
   logs: 'logs.jsonl',
+  timeline: 'timeline.jsonl',
   commit: 'COMMITTED',
 } as const;
 
@@ -103,6 +106,13 @@ export interface TraceMeta {
   readonly logs?: TraceLogSummary;
 }
 
+/** One append-only transform record in `timeline.jsonl`. */
+export interface TraceHiddenWindow {
+  readonly kind: 'hidden-window';
+  readonly start: number;
+  readonly end: number;
+}
+
 export interface TraceRunIdentity {
   readonly invocationId: InvocationId;
   readonly runId: RunId;
@@ -127,8 +137,7 @@ export interface TraceLogSummary {
   /** Entries actually written to `logs.jsonl`. */
   readonly count: number;
   /**
-   * Entries evicted to stay under the writer's ceiling. The **oldest** go
-   * first: when a program floods its log the interesting part is the end.
+   * Entries refused after reaching the append-only writer ceiling.
    */
   readonly dropped: number;
   /** Distinct sources seen, in first-seen order. */
@@ -393,6 +402,32 @@ export interface SemanticRecord {
   readonly castOffset: number;
   readonly snapshot: SemanticSnapshot;
 }
+
+/** Append-only semantic representation used on disk by trace v4. */
+export type StoredSemanticRecord =
+  | {
+      readonly kind: 'keyframe';
+      readonly t: number;
+      readonly revision: number;
+      readonly snapshot: SemanticSnapshot;
+    }
+  | {
+      readonly kind: 'delta';
+      readonly t: number;
+      readonly revision: number;
+      readonly baseRevision: number;
+      readonly delta: SemanticDelta;
+    };
+
+/** A trace event as persisted; presentation time is derived by the reader. */
+export type StoredTraceEvent = TraceEvent extends infer Event
+  ? Event extends TraceEvent
+    ? Omit<Event, 'castOffset'>
+    : never
+  : never;
+
+/** A log entry as persisted; presentation time is derived by the reader. */
+export type StoredTraceLogEntry = Omit<TraceLogEntry, 'castOffset'>;
 
 /** Flattened view of a step, as returned by the reader. */
 export interface StepSummary {

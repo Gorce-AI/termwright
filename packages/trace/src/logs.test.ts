@@ -78,7 +78,6 @@ describe('logs.jsonl', () => {
       attrs: { attempt: 2, url: '/api/save' },
       revision: 7,
       t: 200,
-      castOffset: 200,
     });
     expect(warn?.seq).toBeGreaterThan(0);
 
@@ -124,7 +123,7 @@ describe('logs.jsonl', () => {
     session.output('silence');
     await writer.finalize();
 
-    expect(await stat(join(dir, TRACE_FILES.logs)).catch(() => null)).toBeNull();
+    expect((await stat(join(dir, TRACE_FILES.logs))).size).toBe(0);
     const trace = await openTrace(dir);
     try {
       expect(trace.meta.logs).toBeUndefined();
@@ -136,7 +135,7 @@ describe('logs.jsonl', () => {
     }
   });
 
-  it('evicts the oldest entries and counts them, even when a flood ends the session', async () => {
+  it('stops admitting log entries at the declared append-only ceiling', async () => {
     const root = await workspace();
     const dir = join(root, 'flood.twtrace');
     const session = new FakeSession();
@@ -153,8 +152,7 @@ describe('logs.jsonl', () => {
     try {
       expect(trace.meta.logs).toMatchObject({ count: 3, dropped: 7 });
       const entries = await readLogFile(dir);
-      // The end is what survives — that is where the failure lives.
-      expect(entries.map((entry) => entry.message)).toEqual(['entry 7', 'entry 8', 'entry 9']);
+      expect(entries.map((entry) => entry.message)).toEqual(['entry 0', 'entry 1', 'entry 2']);
     } finally {
       await trace.close();
     }
@@ -164,18 +162,19 @@ describe('logs.jsonl', () => {
     const root = await workspace();
     const dir = join(root, 'trimmed.twtrace');
     const session = new FakeSession();
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, { dir, now: session.now, idleTimeLimit: 1 });
 
     session.output('a');
     session.tick(20_000);
     session.logRecord({ level: 'error', message: 'after a long wait' });
     session.tick(20_000);
     session.output('b');
-    await writer.finalize({ idleTimeLimit: 1 });
+    await writer.finalize();
 
     const trace = await openTrace(dir);
     try {
-      const entries = await readLogFile(dir);
+      const entries = [];
+      for await (const entry of trace.logs()) entries.push(entry);
       expect(entries[0]?.t).toBe(20_000);
       expect(entries[0]?.castOffset).toBe(500);
     } finally {

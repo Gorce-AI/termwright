@@ -160,7 +160,6 @@ describe('actions from the driver', () => {
       ref: 'semantic:n8@42',
       ok: true,
       t: 50,
-      castOffset: 50,
       observation: {
         sessionId: 't1',
         contractId: 't1:0',

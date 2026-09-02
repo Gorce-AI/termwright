@@ -72,6 +72,63 @@ describe('trace staging names', () => {
 });
 
 describe('createTraceWriter', () => {
+  it('fails closed when one record exceeds the bounded append backlog', async () => {
+    const root = await workspace();
+    const dir = join(root, 'capacity.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      maxPendingRecords: 4,
+      maxPendingBytes: 64,
+    });
+
+    session.output('x'.repeat(256));
+    await expect(writer.finalize()).rejects.toMatchObject({ code: 'capacity' });
+    expect(await stat(join(dir, TRACE_FILES.commit)).catch(() => null)).toBeNull();
+  });
+
+  it('stores a semantic keyframe followed by a content-sized delta', async () => {
+    const root = await workspace();
+    const dir = join(root, 'semantic-delta.twtrace');
+    const session = new FakeSession('semantic-delta');
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.semantic(
+      snapshot(
+        1,
+        [
+          node({ id: 'a', role: 'button', name: 'Before' }),
+          node({ id: 'b', role: 'text', name: 'Stable' }),
+        ],
+        'semantic-delta',
+      ),
+    );
+    session.semantic(
+      snapshot(
+        2,
+        [
+          node({ id: 'a', role: 'button', name: 'After' }),
+          node({ id: 'b', role: 'text', name: 'Stable' }),
+        ],
+        'semantic-delta',
+      ),
+    );
+    await writer.finalize();
+
+    const lines = (await readFile(join(dir, TRACE_FILES.semantics), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { kind: string; snapshot?: unknown });
+    expect(lines.map((line) => line.kind)).toEqual(['keyframe', 'delta']);
+    expect(lines[1]).not.toHaveProperty('snapshot');
+
+    const trace = await openTrace(dir);
+    const reconstructed = [];
+    for await (const record of trace.semantics()) reconstructed.push(record.snapshot);
+    expect(reconstructed.at(-1)?.nodes.find((item) => item.id === 'a')?.name).toBe('After');
+    await trace.close();
+  });
+
   it('replays output, semantic state and exit emitted before the writer attaches', async () => {
     const root = await workspace();
     const dir = join(root, 'startup-replay.twtrace');
@@ -263,7 +320,7 @@ describe('createTraceWriter', () => {
     const start = traceEvents.find(
       (event) => event.kind === 'step-start' && event.title === 'inner',
     );
-    expect(start?.castOffset).toBe(200);
+    expect(start).not.toHaveProperty('castOffset');
     expect(start).toMatchObject({ parentStepId: 's1' });
   });
 
@@ -348,12 +405,12 @@ describe('createTraceWriter', () => {
     const root = await workspace();
     const dir = join(root, 'idle.twtrace');
     const session = new FakeSession();
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, { dir, now: session.now, idleTimeLimit: 2 });
 
     session.output('a');
     session.tick(30_000);
     session.output('b');
-    await writer.finalize({ idleTimeLimit: 2 });
+    await writer.finalize();
 
     const { header, events } = await readCast(dir);
     expect(header.idle_time_limit).toBe(2);
@@ -369,14 +426,14 @@ describe('createTraceWriter', () => {
     const root = await workspace();
     const dir = join(root, 'semantic-offset.twtrace');
     const session = new FakeSession();
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, { dir, now: session.now, idleTimeLimit: 1 });
 
     session.output('a');
     session.tick(10_000);
     session.semantic(snapshot(1, [node({ id: 'n1', role: 'text', name: 'idle' })]));
     session.tick(10_000);
     session.output('b');
-    await writer.finalize({ idleTimeLimit: 1 });
+    await writer.finalize();
 
     const trace = await openTrace(dir);
     try {
@@ -503,19 +560,16 @@ describe('createTraceWriter', () => {
     expect(await stat(join(dir, TRACE_FILES.commit))).not.toBeNull();
   });
 
-  it('stops observing the session after dispose', async () => {
+  it('removes its private trace after dispose', async () => {
     const root = await workspace();
     const dir = join(root, 'disposed.twtrace');
     const session = new FakeSession();
     const writer = createTraceWriter(session, { dir, now: session.now });
 
     session.output('before');
-    writer.dispose();
+    await writer.dispose();
     session.tick(10);
     session.output('after');
-    await writer.finalize();
-
-    const { events } = await readCast(dir);
-    expect(events.map((event) => event.data)).toEqual(['before']);
+    expect(await stat(dir).catch(() => null)).toBeNull();
   });
 });
