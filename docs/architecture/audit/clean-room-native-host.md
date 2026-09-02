@@ -32,13 +32,18 @@ artifacts.
 
 The nightly Linux, macOS, and Windows Node 22/24 soak rows now install the same
 tarballs with Ink 7.1.1 and React, then compare 30-second and 180-second real
-Ink attempts in one fresh consumer. The application publishes a semantic
-status on every retained render and writes through a real PTY. The oracle
-requires output, semantic-delta, and trace bytes to scale with duration while
-the worker peak RSS may grow by at most 96 MiB; both attempts retain committed
-trace v4 archives and run with zero retries. A local 2-second/8-second execution
-passed with 41/159 deltas, 122,348/418,460 trace bytes, and 36,093,952 bytes of
-RSS growth. The actual multi-minute rows are external certification pending.
+Ink attempts in one fresh consumer. The application renders a ZWJ family,
+skin-tone emoji, a flag, Devanagari, Hangul and CJK; publishes semantic status
+and button geometry; owns an SGR pointer router; and writes through a real PTY.
+The oracle requires the semantic and screen button rectangles to agree after
+the ZWJ, a real semantic-locator click to deliver mouse down/up, and trace
+replay to produce a non-empty PNG. It also requires output, semantic-delta, and
+trace bytes to scale with duration while the worker peak RSS may grow by at
+most 96 MiB. Both attempts retain committed trace v4 archives and run with zero
+retries. A local macOS arm64 Node 24.1.0 2-second/8-second execution passed with
+41/176 deltas, 115,922/394,478 trace bytes, 36,536,320 bytes of RSS growth and a
+39,009-byte replay screenshot. The actual multi-minute and cross-platform rows
+are external certification pending.
 
 OpenTUI, Textual, Go and Rust still need equivalent framework-specific
 clean-room consumers; existing workspace examples do not count as substitutes.

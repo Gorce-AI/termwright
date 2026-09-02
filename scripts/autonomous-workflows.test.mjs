@@ -835,6 +835,10 @@ describe('autonomous workflow security', () => {
 
   it('runs the packed multi-minute Ink resource oracle on every nightly host row', async () => {
     const reliability = await readWorkflow('reliability.yml');
+    const oracle = await readFile(
+      new URL('./check-installed-long-run.mjs', import.meta.url),
+      'utf8',
+    );
     for (const job of ['nightly-soak-posix', 'nightly-soak-windows']) {
       const block = jobBlock(reliability, job);
       expect(block, job).toContain("TERMWRIGHT_LONG_RUN_SHORT_MS: '30000'");
@@ -844,6 +848,12 @@ describe('autonomous workflow security', () => {
       expect(block, job).toContain('node scripts/check-installed-long-run.mjs');
       expect(block, job).toContain('if-no-files-found: error');
     }
+    expect(oracle).toContain("getByRole('button', {name: 'Activate'})");
+    expect(oracle).toContain("getByScreenText('[Activate]')");
+    expect(oracle).toContain("['mouse:down', 'mouse:up']");
+    expect(oracle).toContain("cli, 'screenshot'");
+    expect(oracle).toContain('👨‍👩‍👧 ');
+    expect(oracle).toContain('👍🏽 🇵🇱 किं 각 世');
   });
 
   it('fails website CI when generated documentation drifts from its sources', async () => {
