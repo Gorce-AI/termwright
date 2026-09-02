@@ -169,7 +169,8 @@ export function TerminalStage(props: TerminalStageProps) {
       applied.generation += 1;
       const generation = applied.generation;
       terminal.write('', () => {
-        if (generation !== appliedRef.current.generation) return;
+        if (generation !== appliedRef.current.generation || terminalRef.current !== terminal)
+          return;
         terminal.reset();
         terminal.clear();
         terminal.resize(targetColumns, targetRows);
@@ -191,7 +192,8 @@ export function TerminalStage(props: TerminalStageProps) {
         applied.generation += 1;
         const generation = applied.generation;
         terminal.write('', () => {
-          if (generation !== appliedRef.current.generation) return;
+          if (generation !== appliedRef.current.generation || terminalRef.current !== terminal)
+            return;
           terminal.reset();
           terminal.clear();
           terminal.resize(targetColumns, targetRows);
@@ -209,6 +211,7 @@ export function TerminalStage(props: TerminalStageProps) {
       applied.replayTime = props.replayTimeMs;
     }
     terminal.write('', () => {
+      if (terminalRef.current !== terminal) return;
       host.dataset['terminalCursorX'] = String(terminal.buffer.active.cursorX);
       requestAnimationFrame(() => fitRef.current());
     });
