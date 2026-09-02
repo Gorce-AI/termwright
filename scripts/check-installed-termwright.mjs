@@ -92,12 +92,15 @@ try {
     ),
   );
   if (
-    manifest.v !== 5 ||
+    manifest.v !== 7 ||
     manifest.status !== 'passed' ||
     manifest.specs?.length !== 2 ||
     manifest.eventStream?.file !== 'events.ndjson' ||
     manifest.eventStream?.count < 1 ||
-    manifest.telemetry?.coordinatorRssStartBytes <= 0
+    manifest.telemetry?.coordinatorRssStartBytes <= 0 ||
+    manifest.telemetry?.terminalOutputBytes <= 0 ||
+    manifest.telemetry?.traceBytes <= 0 ||
+    manifest.telemetry?.finalArtifactBytes <= 0
   ) {
     throw new Error(`packed host manifest failed certification: ${JSON.stringify(manifest)}`);
   }
@@ -111,6 +114,26 @@ try {
     createHash('sha256').update(eventBytes).digest('hex') !== manifest.eventStream.sha256
   ) {
     throw new Error('packed host run-event stream differs from its manifest commitment');
+  }
+  const events = eventBytes.toString('utf8').trimEnd().split('\n').map(JSON.parse);
+  const traceResources = events
+    .filter((event) => event.type === 'trace.resource')
+    .map((event) => event.payload);
+  if (traceResources.length !== 1) {
+    throw new Error(`packed host wrote ${traceResources.length} trace resource records`);
+  }
+  const traceResource = traceResources[0];
+  for (const metric of [
+    'terminalOutputBytes',
+    'semanticBytes',
+    'semanticFullCount',
+    'semanticDeltaCount',
+    'traceBytes',
+    'finalArtifactBytes',
+  ]) {
+    if (manifest.telemetry[metric] !== traceResource[metric]) {
+      throw new Error(`packed host ${metric} differs from canonical trace resource evidence`);
+    }
   }
 
   const traces = (await readdir(join(project, 'artifacts', 'traces'))).filter((name) =>
