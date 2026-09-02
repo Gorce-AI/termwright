@@ -237,7 +237,7 @@
     "state",
     "diagnostic"
   ],
-  "runEventVersion": 2,
+  "runEventVersion": 3,
   "runEventLimits": {
     "maxEventBytes": 262144,
     "maxPayloadDepth": 32,
