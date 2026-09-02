@@ -9,6 +9,7 @@ import {
   bootstrapPackageOrder,
   bootstrapTag,
   bootstrapVersion,
+  canonicalizePackedArchive,
   packNpmArtifacts,
   parseArguments,
   validatePackageSelection,
@@ -94,6 +95,35 @@ function placeholderArchive(name, override = {}, { diagnostic, extraEntry } = {}
   return result;
 }
 
+function dependencyArchive(dependencies) {
+  const root = mkdtempSync(join(tmpdir(), 'termwright-standard-pack-check-'));
+  temporary.push(root);
+  const result = join(root, 'package.tgz');
+  writeFileSync(
+    result,
+    gzipSync(
+      Buffer.concat([
+        tarEntry('package/index.js', 'export {};\n'),
+        tarEntry(
+          'package/package.json',
+          `${JSON.stringify(
+            {
+              name: '@termwright/example',
+              version: '0.4.1',
+              repository: { url: 'git+https://github.com/Gorce-AI/termwright.git' },
+              dependencies,
+            },
+            null,
+            2,
+          )}\n`,
+        ),
+        Buffer.alloc(1024),
+      ]),
+    ),
+  );
+  return result;
+}
+
 function tarEntry(name, contents) {
   const payload = Buffer.from(contents);
   const header = Buffer.alloc(512);
@@ -113,6 +143,18 @@ function tarEntry(name, contents) {
 }
 
 describe('npm artifact packing contract', () => {
+  it('canonicalizes dependency record order without changing package semantics', () => {
+    const first = dependencyArchive({ zeta: '1.0.0', alpha: '1.0.0' });
+    const second = dependencyArchive({ alpha: '1.0.0', zeta: '1.0.0' });
+    canonicalizePackedArchive(first);
+    canonicalizePackedArchive(second);
+    expect(readFileSync(first)).toEqual(readFileSync(second));
+    expect(Object.keys(validatePackedArchive(first, '@termwright/example').dependencies)).toEqual([
+      'alpha',
+      'zeta',
+    ]);
+  });
+
   it('accepts pnpm script argument forwarding without weakening option parsing', () => {
     expect(
       parseArguments([

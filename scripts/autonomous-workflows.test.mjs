@@ -431,6 +431,9 @@ describe('autonomous workflow security', () => {
     expect(npmPublish.indexOf('npm publish --access public')).toBeLessThan(
       npmPublish.lastIndexOf('verify-published-artifact.mjs npm "$archive"'),
     );
+    expect(npmPublish).toContain("NPM_REGISTRY_OBSERVATION_SECONDS: '900'");
+    expect(npmPublish).toContain('visibility will be confirmed after every upload');
+    expect(npmPublish).toContain('pending+=("$name@$version:artifact=$state,tag=$tag_state")');
     expect(finalize).toContain(
       'verify-published-artifact.mjs npm-tag "$package" latest "$VERSION"',
     );
