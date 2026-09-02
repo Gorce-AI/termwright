@@ -143,6 +143,7 @@ export interface RunCompletion {
   readonly runId: RunId;
   readonly state: TerminalRunState;
   readonly catalog: NativeTestCatalog | undefined;
+  /** Bounded recent evidence projection in canonical order; history owns the complete stream. */
   readonly events: readonly RunEvent[];
   readonly failures: readonly NativeTestFailure[];
   readonly skips: readonly NativeTestSkip[];
@@ -177,6 +178,7 @@ export interface TermwrightTestHostOptions {
   /** Explicit variables installed in Vitest workers without mutating host process state. */
   readonly workerEnv?: Readonly<Record<string, string>>;
   readonly filters?: readonly string[];
+  /** Best-effort live batch projection; canonical run-history persistence is independent. */
   readonly journalSink?: (events: readonly RunEvent[]) => void | Promise<void>;
   /** Best-effort live projection. Canonical persistence never depends on it. */
   readonly eventObserver?: (event: RunEvent) => void;
@@ -320,13 +322,6 @@ export class TermwrightTestHost {
     if (this.#active !== undefined) throw new Error(`run ${this.#active.runId} is still active`);
 
     const runId = this.#ids.create('run');
-    const persistence = new RunEventPersistence({
-      invocationId: this.invocationId,
-      runId,
-      gapProducer: this.#gapProducer,
-      sink: this.#sink,
-      ...(this.#eventObserver === undefined ? {} : { observer: this.#eventObserver }),
-    });
     let settle!: (completion: RunCompletion) => void;
     const completed = new Promise<RunCompletion>((resolve) => {
       settle = resolve;
@@ -336,12 +331,21 @@ export class TermwrightTestHost {
       request.timeoutMs ?? this.#timeouts.runMs,
       this.#timeouts.finalizationReserveMs,
     );
+    const history = this.#beginHistory(runId, startedAt, budget);
+    const persistence = new RunEventPersistence({
+      invocationId: this.invocationId,
+      runId,
+      gapProducer: this.#gapProducer,
+      sink: async (events) => (await history).appendEvents(events),
+      projectionSink: this.#sink,
+      ...(this.#eventObserver === undefined ? {} : { observer: this.#eventObserver }),
+    });
     const active: ActiveRun = {
       runId,
       state: 'requested',
       cancellationRequested: false,
       persistence,
-      history: this.#beginHistory(runId, startedAt, budget),
+      history,
       attempts: new Map(),
       controlFailures: [],
       budget,
@@ -730,11 +734,10 @@ export class TermwrightTestHost {
         // only the terminal event is missing". Those have different causes and
         // the barrier is where a reader finds out which one happened.
         const lastSeen = (attemptId: string): string => {
-          const events = active.persistence.recorded.filter(
-            (event) => event.identity.attemptId === attemptId,
-          );
-          const last = events.at(-1);
-          return last === undefined ? 'no events' : `${events.length} events, last ${last.type}`;
+          const activity = active.persistence.attemptActivity(attemptId);
+          return activity === undefined
+            ? 'no events'
+            : `${activity.count} events, last ${activity.lastType}`;
         };
         const lifecycleFailure = new Error(
           `authoritative attempt journal incomplete: ${unfinished.length} attempts unfinished` +
@@ -1295,7 +1298,6 @@ export class TermwrightTestHost {
       status,
       specs,
       attempts: completedAttempts,
-      events: active.persistence.recorded,
       telemetry: active.telemetry.finish(active.persistence.metrics(), ptySlotsPeak),
       durationMs: active.budget.elapsedMs(),
     };

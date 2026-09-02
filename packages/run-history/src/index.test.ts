@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -50,15 +50,28 @@ describe('native run history transaction', () => {
     const runs = await runsDirectory();
     const start = provenance();
     const transaction = await beginRunManifest(runs, start, { writer: nodeWriter() });
-    await transaction.prepare(manifest(start));
+    const value = manifest(start);
+    await transaction.appendEvents(value.events);
+    await transaction.prepare(value);
     expect(await readRunHistory(runs)).toMatchObject([{ state: 'incomplete', runId: start.runId }]);
     const path = await transaction.commitPrepared();
     expect(path).toBe(join(runs, runDirectoryName(start.runId), 'manifest.json'));
-    expect(await readRunManifest(runs, start.runId)).toMatchObject({
+    const record = await readRunManifest(runs, start.runId);
+    expect(record).toMatchObject({
       state: 'complete',
       runId: start.runId,
-      manifest: { invocationId: start.invocationId },
+      manifest: {
+        invocationId: start.invocationId,
+        eventStream: { file: 'events.ndjson', count: value.events.length },
+      },
     });
+    const persisted = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    expect(persisted).not.toHaveProperty('events');
+    expect(
+      Buffer.byteLength(
+        await readFile(join(runs, runDirectoryName(start.runId), 'events.ndjson'), 'utf8'),
+      ),
+    ).toBe((persisted['eventStream'] as { bytes: number }).bytes);
     await expect(transaction.commitPrepared()).rejects.toThrow(/not prepared/u);
   });
 
@@ -79,12 +92,21 @@ describe('native run history transaction', () => {
 
     const mismatched = provenance();
     const mismatchTransaction = await beginRunManifest(runs, mismatched, { writer: nodeWriter() });
-    await mismatchTransaction.commit(manifest(mismatched));
+    const mismatchedManifest = manifest(mismatched);
+    await mismatchTransaction.appendEvents(mismatchedManifest.events);
+    await mismatchTransaction.commit(mismatchedManifest);
     await writeFile(
       join(runs, runDirectoryName(mismatched.runId), 'COMMITTED'),
       marker('0'.repeat(64)),
       'utf8',
     );
+
+    const tampered = provenance();
+    const tamperedManifest = manifest(tampered);
+    const tamperedTransaction = await beginRunManifest(runs, tampered, { writer: nodeWriter() });
+    await tamperedTransaction.appendEvents(tamperedManifest.events);
+    await tamperedTransaction.commit(tamperedManifest);
+    await appendFile(join(runs, runDirectoryName(tampered.runId), 'events.ndjson'), '{}\n', 'utf8');
 
     const unsupported = provenance();
     const unsupportedDirectory = join(runs, runDirectoryName(unsupported.runId));
@@ -110,6 +132,7 @@ describe('native run history transaction', () => {
           'directory' in record && record.directory === runDirectoryName(mismatched.runId),
       )?.state,
     ).toBe('corrupt');
+    expect(records.find((record) => record.runId === tampered.runId)?.state).toBe('corrupt');
     expect(records.find((record) => record.runId === unsupported.runId)).toMatchObject({
       state: 'unsupported-version',
       version: 99,
@@ -132,7 +155,13 @@ describe('native run history transaction', () => {
       beginRunManifest(runs, first, { writer: nodeWriter() }),
       beginRunManifest(runs, second, { writer: nodeWriter() }),
     ]);
-    await Promise.all([one.commit(manifest(first)), two.commit(manifest(second))]);
+    const firstManifest = manifest(first);
+    const secondManifest = manifest(second);
+    await Promise.all([
+      one.appendEvents(firstManifest.events),
+      two.appendEvents(secondManifest.events),
+    ]);
+    await Promise.all([one.commit(firstManifest), two.commit(secondManifest)]);
     expect(
       (await readRunHistory(runs)).filter((record) => record.state === 'complete'),
     ).toHaveLength(2);
@@ -178,7 +207,12 @@ describe('native run history transaction', () => {
     );
     expect(
       parseManifest(
-        JSON.stringify({ ...passed, status: 'incomplete', events: [...passed.events, correction] }),
+        JSON.stringify({
+          ...passed,
+          status: 'incomplete',
+          eventStream: { ...passed.eventStream, count: passed.events.length + 1 },
+          events: [...passed.events, correction],
+        }),
       ).state,
     ).toBe('complete');
   });
@@ -369,6 +403,7 @@ describe('native run history transaction', () => {
     const yellow = {
       ...forgedGreen,
       status: 'passed-with-skips' as const,
+      eventStream: { ...forgedGreen.eventStream, count: forgedGreen.events.length },
       events: forgedGreen.events.map((event) =>
         event.type === 'run.state' ? { ...event, payload: { state: 'passed-with-skips' } } : event,
       ),
@@ -461,6 +496,12 @@ function manifest(start: RunStartProvenance): RunManifest {
       },
     ],
     telemetry: fixtureTelemetry(),
+    eventStream: {
+      file: 'events.ndjson',
+      count: 4,
+      bytes: 0,
+      sha256: '0'.repeat(64),
+    },
     events: [
       producer.emit({
         eventClass: 'authoritative',
@@ -507,6 +548,10 @@ function nodeWriter(): RunManifestWriter {
     async writeExclusive(path, body) {
       await writeFile(path, body, { encoding: 'utf8', flag: 'wx' });
     },
+    async append(path, body) {
+      await appendFile(path, body, 'utf8');
+    },
+    async syncFile() {},
     async syncDirectory() {},
     async rename(source, destination) {
       await rename(source, destination);
@@ -515,5 +560,5 @@ function nodeWriter(): RunManifestWriter {
 }
 
 function marker(digest: string): string {
-  return `termwright-run-history-v1 sha256:${digest}\n`;
+  return `termwright-run-history-v2 sha256:${digest}\n`;
 }

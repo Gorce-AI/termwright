@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -91,12 +92,25 @@ try {
     ),
   );
   if (
-    manifest.v !== 4 ||
+    manifest.v !== 5 ||
     manifest.status !== 'passed' ||
     manifest.specs?.length !== 2 ||
+    manifest.eventStream?.file !== 'events.ndjson' ||
+    manifest.eventStream?.count < 1 ||
     manifest.telemetry?.coordinatorRssStartBytes <= 0
   ) {
     throw new Error(`packed host manifest failed certification: ${JSON.stringify(manifest)}`);
+  }
+  const eventBytes = await readFile(
+    join(project, '.termwright', 'runs', runDirectories[0], 'events.ndjson'),
+  );
+  const eventCount = eventBytes.toString('utf8').trimEnd().split('\n').length;
+  if (
+    eventBytes.byteLength !== manifest.eventStream.bytes ||
+    eventCount !== manifest.eventStream.count ||
+    createHash('sha256').update(eventBytes).digest('hex') !== manifest.eventStream.sha256
+  ) {
+    throw new Error('packed host run-event stream differs from its manifest commitment');
   }
 
   const traces = (await readdir(join(project, 'artifacts', 'traces'))).filter((name) =>

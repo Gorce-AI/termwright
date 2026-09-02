@@ -209,9 +209,9 @@ export async function writeNativeRunFixture(
       payload: { state: status },
     }),
   );
-  await (
-    await beginRunManifest(runsDir, start)
-  ).commit({
+  const transaction = await beginRunManifest(runsDir, start);
+  await transaction.appendEvents(events);
+  await transaction.commit({
     ...start,
     v: RUN_MANIFEST_VERSION,
     finishedAt: startedAt + duration,
@@ -220,7 +220,6 @@ export async function writeNativeRunFixture(
     specs,
     attempts,
     telemetry: fixtureRunTelemetry(),
-    events,
   });
   return start.runId;
 }

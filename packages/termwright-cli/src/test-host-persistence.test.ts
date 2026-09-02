@@ -35,7 +35,6 @@ describe('test-host persistence seams', () => {
     expect(persistence.append(event).ok).toBe(true);
     await persistence.flush();
     expect(persistence.recorded).toEqual([event]);
-    expect(persistence.persisted).toEqual([event]);
     expect(flushed).toEqual([event]);
     expect(persistence.metrics()).toMatchObject({
       acceptedEvents: 1,
@@ -79,12 +78,42 @@ describe('test-host persistence seams', () => {
     });
     expect(persistence.append(first).ok).toBe(true);
     await expect(persistence.flush()).rejects.toThrow('projection unavailable');
-    expect(persistence.persisted).toEqual([]);
     expect(persistence.append(second).ok).toBe(true);
     await persistence.flush();
     expect(written).toEqual([first, second]);
-    expect(persistence.persisted).toEqual([first, second]);
     expect(persistence.recorded).toEqual([first, second]);
+  });
+
+  it('keeps only a bounded live projection while streaming every canonical event', async () => {
+    const ids = new RunIdFactory();
+    const invocationId = ids.create('invocation');
+    const runId = ids.create('run');
+    const producer = new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 });
+    let streamed = 0;
+    const persistence = new RunEventPersistence({
+      invocationId,
+      runId,
+      gapProducer: new RunEventProducer({ producerId: ids.create('producer'), epoch: 0 }),
+      sink: (events) => {
+        streamed += events.length;
+      },
+    });
+    const total = RunEventPersistence.MAX_PROJECTED_EVENTS + 128;
+    for (let index = 0; index < total; index += 1) {
+      const event = producer.emit({
+        eventClass: 'authoritative',
+        type: 'run.configuration',
+        identity: { invocationId, runId },
+        payload: { index },
+      });
+      expect(persistence.append(event).ok).toBe(true);
+      if (index % 64 === 63) await persistence.flush();
+    }
+    await persistence.flush();
+    expect(streamed).toBe(total);
+    expect(persistence.metrics().acceptedEvents).toBe(total);
+    expect(persistence.recorded).toHaveLength(RunEventPersistence.MAX_PROJECTED_EVENTS);
+    expect(persistence.recorded[0]?.payload).toEqual({ index: 128 });
   });
 
   it('builds a frozen manifest without a host or filesystem transaction', () => {
@@ -110,13 +139,12 @@ describe('test-host persistence seams', () => {
       status: 'passed',
       specs: [],
       attempts: [],
-      events: [],
       telemetry: fixtureTelemetry(),
       durationMs: 7,
       finishedAt: 20,
     });
     expect(manifest).toMatchObject({
-      v: 4,
+      v: 5,
       startedAt: 10,
       finishedAt: 20,
       durationMs: 7,

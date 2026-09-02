@@ -43,7 +43,9 @@ describe('native run history UI projection', () => {
     const dir = await emptyDir();
     const start = provenance(100);
     const native = manifest(start);
-    await (await beginRunManifest(dir, start)).commit(native);
+    const transaction = await beginRunManifest(dir, start);
+    await transaction.appendEvents(native.events);
+    await transaction.commit(native);
 
     const [summary] = await readRunHistory(dir);
     expect(summary).toMatchObject({
@@ -261,6 +263,12 @@ function manifest(start: RunStartProvenance): NativeRunManifest {
     ],
     attempts,
     telemetry: fixtureTelemetry(),
+    eventStream: {
+      file: 'events.ndjson',
+      count: events.length,
+      bytes: 0,
+      sha256: '0'.repeat(64),
+    },
     events,
   };
 }

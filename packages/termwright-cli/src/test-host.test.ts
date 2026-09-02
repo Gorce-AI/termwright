@@ -895,7 +895,7 @@ describe('TermwrightTestHost', () => {
     await host.close();
   });
 
-  it('classifies collection faults as infrastructure and journal faults as incomplete', async () => {
+  it('classifies collection faults as infrastructure and isolates live projection faults', async () => {
     const collectionEngine = new FakeEngine();
     collectionEngine.collectionErrors = [new Error('worker channel closed')];
     const collectionHost = hostFromEngine(collectionEngine, hostOptions());
@@ -923,17 +923,17 @@ describe('TermwrightTestHost', () => {
         throw new Error('ENOSPC');
       },
     });
-    const incomplete = await sinkHost.requestRun().completed;
-    expect(incomplete.state).toBe('incomplete');
-    expect(String(incomplete.error)).toContain('ENOSPC');
-    const sinkRecord = await readRunManifest(sinkOptions.runsDir, incomplete.runId);
+    const projected = await sinkHost.requestRun().completed;
+    expect(projected.state).toBe('passed');
+    expect(projected.error).toBeUndefined();
+    const sinkRecord = await readRunManifest(sinkOptions.runsDir, projected.runId);
     expect(sinkRecord.state).toBe('complete');
     if (sinkRecord.state !== 'complete')
       throw new Error('expected canonical history despite projection failure');
-    expect(sinkRecord.manifest.status).toBe('incomplete');
+    expect(sinkRecord.manifest.status).toBe('passed');
     expect(
       sinkRecord.manifest.events.some((event) => event.type === 'run.persistence-failed'),
-    ).toBe(true);
+    ).toBe(false);
     await sinkHost.close();
   });
 
@@ -1351,6 +1351,8 @@ const EPHEMERAL_RUN_MANIFEST_WRITER: RunManifestWriter = Object.freeze({
     return false;
   },
   async writeExclusive() {},
+  async append() {},
+  async syncFile() {},
   async syncDirectory() {},
   async rename() {},
 });

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, open, readFile, readdir, rename, stat } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, readdir, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   parseRunId,
@@ -15,9 +15,11 @@ import {
   type SpecId,
 } from '@termwright/protocol/run-events';
 
-export const RUN_MANIFEST_VERSION = 4 as const;
-export const RUN_HISTORY_COMMIT_VERSION = 1 as const;
+export const RUN_MANIFEST_VERSION = 5 as const;
+export const RUN_HISTORY_COMMIT_VERSION = 2 as const;
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
+export const MAX_RUN_EVENT_STREAM_BYTES = 512 * 1024 * 1024;
+export const MAX_RUN_EVENT_STREAM_EVENTS = 1_000_000;
 
 export type NativeRunStatus =
   | 'passed'
@@ -130,9 +132,16 @@ export interface RunManifest extends RunStartProvenance {
   readonly specs: readonly NativeRunSpec[];
   readonly attempts: readonly NativeRunAttempt[];
   readonly telemetry: RunResourceTelemetry;
-  /** Canonical run journal; external reporters are projections of this log. */
+  readonly eventStream: {
+    readonly file: 'events.ndjson';
+    readonly count: number;
+    readonly bytes: number;
+    readonly sha256: string;
+  };
+  /** Reader facade over the independently checksummed canonical event stream. */
   readonly events: readonly RunEvent[];
 }
+export type RunManifestSummary = Omit<RunManifest, 'events' | 'eventStream'>;
 export type RunHistoryRecord =
   | { readonly state: 'complete'; readonly runId: RunId; readonly manifest: RunManifest }
   | {
@@ -156,9 +165,10 @@ export type RunHistoryRecord =
 
 export interface RunManifestTransaction {
   readonly start: RunStartProvenance;
-  prepare(manifest: RunManifest): Promise<void>;
+  appendEvents(events: readonly RunEvent[]): Promise<void>;
+  prepare(manifest: RunManifestSummary): Promise<void>;
   commitPrepared(): Promise<string>;
-  commit(manifest: RunManifest): Promise<string>;
+  commit(manifest: RunManifestSummary): Promise<string>;
 }
 
 /** Injectable durable writer used by alternative stores and deterministic fault tests. */
@@ -166,6 +176,8 @@ export interface RunManifestWriter {
   mkdir(path: string, options?: { readonly recursive?: boolean }): Promise<void>;
   exists(path: string): Promise<boolean>;
   writeExclusive(path: string, body: string): Promise<void>;
+  append(path: string, body: string): Promise<void>;
+  syncFile(path: string): Promise<void>;
   syncDirectory(path: string): Promise<void>;
   rename(source: string, destination: string): Promise<void>;
 }
@@ -192,11 +204,68 @@ export async function beginRunManifest(
     throw new Error(`run history collision for ${start.runId}`, { cause: error });
   }
   await writer.writeExclusive(join(stagingPath, 'start.json'), json(start));
-  let state: 'open' | 'prepared' | 'committed' = 'open';
+  const eventPath = join(stagingPath, 'events.ndjson');
+  await writer.writeExclusive(eventPath, '');
+  const eventHash = createHash('sha256');
+  const eventOrder = new RunEventStreamValidator();
+  let eventCount = 0;
+  let eventBytes = 0;
+  let state: 'open' | 'prepared' | 'committed' | 'failed' = 'open';
   let preparedPath: string | undefined;
-  const prepare = async (manifest: RunManifest): Promise<void> => {
+  const appendEvents = async (events: readonly RunEvent[]): Promise<void> => {
     if (state !== 'open') throw new Error(`run ${start.runId} manifest transaction is ${state}`);
-    validateManifest(manifest);
+    if (events.length === 0) return;
+    const lines: string[] = [];
+    for (const event of events) {
+      const parsed = validateRunEvent(event);
+      if (!parsed.ok)
+        throw new TypeError(`invalid run journal event: ${parsed.code}: ${parsed.detail}`);
+      if (
+        event.identity.invocationId !== start.invocationId ||
+        event.identity.runId !== start.runId
+      ) {
+        throw new TypeError('run journal event identity differs from transaction');
+      }
+      lines.push(`${JSON.stringify(event)}\n`);
+    }
+    const body = lines.join('');
+    const bodyBytes = Buffer.byteLength(body, 'utf8');
+    if (
+      eventCount + events.length > MAX_RUN_EVENT_STREAM_EVENTS ||
+      eventBytes + bodyBytes > MAX_RUN_EVENT_STREAM_BYTES
+    ) {
+      throw new RangeError('run event stream exceeds its configured count or byte capacity');
+    }
+    for (const event of events) {
+      const accepted = eventOrder.accept(event);
+      if (!accepted.ok) {
+        state = 'failed';
+        throw new TypeError(`invalid run journal ordering: ${accepted.code}: ${accepted.detail}`);
+      }
+    }
+    try {
+      await writer.append(eventPath, body);
+    } catch (error) {
+      state = 'failed';
+      throw error;
+    }
+    eventHash.update(body);
+    eventCount += events.length;
+    eventBytes += bodyBytes;
+  };
+  const prepare = async (summary: RunManifestSummary): Promise<void> => {
+    if (state !== 'open') throw new Error(`run ${start.runId} manifest transaction is ${state}`);
+    const manifest: RunManifest = {
+      ...summary,
+      eventStream: {
+        file: 'events.ndjson',
+        count: eventCount,
+        bytes: eventBytes,
+        sha256: eventHash.copy().digest('hex'),
+      },
+      events: [],
+    };
+    validateManifestSummary(summary);
     if (
       manifest.runId !== start.runId ||
       manifest.invocationId !== start.invocationId ||
@@ -204,15 +273,17 @@ export async function beginRunManifest(
     ) {
       throw new Error('run manifest identity/start provenance changed during execution');
     }
-    const body = json(manifest);
+    const { events: _events, ...persistedManifest } = manifest;
+    const body = json(persistedManifest);
     if (Buffer.byteLength(body, 'utf8') > MAX_MANIFEST_BYTES) {
       throw new RangeError(
         `run manifest exceeds the ${MAX_MANIFEST_BYTES}-byte transactional limit`,
       );
     }
-    const parsed = parseManifest(body);
-    if (parsed.state !== 'complete')
-      throw new Error(`run manifest failed round-trip validation: ${parsed.state}`);
+    const roundTrip = parseJsonObject(body);
+    if (roundTrip === null) throw new Error('run manifest failed JSON round-trip validation');
+    validateManifestSummary(roundTrip as unknown as RunManifestSummary);
+    await writer.syncFile(eventPath);
     await writer.writeExclusive(join(stagingPath, 'manifest.json'), body);
     const digest = createHash('sha256').update(body).digest('hex');
     await writer.writeExclusive(join(stagingPath, 'COMMITTED'), commitMarker(digest));
@@ -236,9 +307,10 @@ export async function beginRunManifest(
   };
   return Object.freeze({
     start,
+    appendEvents,
     prepare,
     commitPrepared,
-    async commit(manifest: RunManifest): Promise<string> {
+    async commit(manifest: RunManifestSummary): Promise<string> {
       await prepare(manifest);
       return commitPrepared();
     },
@@ -273,7 +345,7 @@ export async function readRunManifest(runsDir: string, runId: RunId): Promise<Ru
   return { state: 'corrupt', runId, directory, reason: 'run history directory does not exist' };
 }
 
-export function parseManifest(raw: string): RunHistoryRecord {
+export function parseManifest(raw: string, streamedEvents?: readonly RunEvent[]): RunHistoryRecord {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -297,11 +369,15 @@ export function parseManifest(raw: string): RunHistoryRecord {
   if (version !== RUN_MANIFEST_VERSION)
     return { state: 'unsupported-version', runId, directory: '', version };
   try {
-    validateManifest(value as unknown as RunManifest);
+    const manifest = {
+      ...value,
+      events: streamedEvents ?? value['events'],
+    } as unknown as RunManifest;
+    validateManifest(manifest);
     return {
       state: 'complete',
-      runId: (value as unknown as RunManifest).runId,
-      manifest: value as unknown as RunManifest,
+      runId: manifest.runId,
+      manifest,
     };
   } catch (error) {
     return {
@@ -359,7 +435,44 @@ async function readDirectory(runsDir: string, directory: string): Promise<RunHis
   const digest = createHash('sha256').update(raw).digest('hex');
   if (commit[2] !== digest)
     return { state: 'corrupt', runId, directory, reason: 'commit digest does not match manifest' };
-  const parsed = parseManifest(raw);
+  const header = parseJsonObject(raw);
+  if (header === null) {
+    return { state: 'corrupt', runId, directory, reason: 'manifest is truncated or invalid JSON' };
+  }
+  const manifestVersion = typeof header['v'] !== 'number' ? null : header['v'];
+  if (manifestVersion !== RUN_MANIFEST_VERSION) {
+    return { state: 'unsupported-version', runId, directory, version: manifestVersion };
+  }
+  const eventStream =
+    object(header) && object(header['eventStream']) ? header['eventStream'] : null;
+  if (
+    eventStream === null ||
+    eventStream['file'] !== 'events.ndjson' ||
+    !nonNegativeInteger(eventStream['count']) ||
+    !nonNegativeInteger(eventStream['bytes']) ||
+    eventStream['count'] > MAX_RUN_EVENT_STREAM_EVENTS ||
+    eventStream['bytes'] > MAX_RUN_EVENT_STREAM_BYTES ||
+    !/^[0-9a-f]{64}$/u.test(String(eventStream['sha256']))
+  ) {
+    return { state: 'corrupt', runId, directory, reason: 'manifest event stream is invalid' };
+  }
+  const eventRaw = await readEventText(join(path, 'events.ndjson'), eventStream['bytes']);
+  if (eventRaw === null) {
+    return { state: 'corrupt', runId, directory, reason: 'event stream is missing or truncated' };
+  }
+  if (createHash('sha256').update(eventRaw).digest('hex') !== eventStream['sha256']) {
+    return {
+      state: 'corrupt',
+      runId,
+      directory,
+      reason: 'event stream digest does not match manifest',
+    };
+  }
+  const events = parseEventLines(eventRaw);
+  if (events === null) {
+    return { state: 'corrupt', runId, directory, reason: 'event stream contains invalid NDJSON' };
+  }
+  const parsed = parseManifest(raw, events);
   if (parsed.state === 'complete' && parsed.runId !== runIdFromDirectory(directory)) {
     return {
       state: 'corrupt',
@@ -439,6 +552,23 @@ function validateHostCapacity(
   validateStringRecord(value.sources, 'hostCapacity.sources');
 }
 function validateManifest(value: RunManifest): void {
+  validateManifestSummary(value);
+  if (
+    !object(value.eventStream) ||
+    value.eventStream.file !== 'events.ndjson' ||
+    !nonNegativeInteger(value.eventStream.count) ||
+    !nonNegativeInteger(value.eventStream.bytes) ||
+    value.eventStream.count > MAX_RUN_EVENT_STREAM_EVENTS ||
+    value.eventStream.bytes > MAX_RUN_EVENT_STREAM_BYTES ||
+    !/^[0-9a-f]{64}$/u.test(value.eventStream.sha256) ||
+    value.eventStream.count !== value.events.length
+  ) {
+    throw new TypeError('invalid run event stream metadata');
+  }
+  validateManifestEvidence(value);
+}
+
+function validateManifestSummary(value: RunManifestSummary): void {
   validateStart(value);
   if (value.v !== RUN_MANIFEST_VERSION) throw new TypeError('unsupported manifest version');
   finite(value.finishedAt, 'finishedAt');
@@ -457,12 +587,8 @@ function validateManifest(value: RunManifest): void {
     ].includes(value.status)
   )
     throw new TypeError('invalid run status');
-  if (
-    !Array.isArray(value.specs) ||
-    !Array.isArray(value.attempts) ||
-    !Array.isArray(value.events)
-  ) {
-    throw new TypeError('specs/attempts/events must be arrays');
+  if (!Array.isArray(value.specs) || !Array.isArray(value.attempts)) {
+    throw new TypeError('specs/attempts must be arrays');
   }
   validateRunTelemetry(value.telemetry);
   const specs = new Map<RunnerTaskId, NativeRunSpec>();
@@ -521,6 +647,10 @@ function validateManifest(value: RunManifest): void {
     )
       throw new TypeError('attempt identity does not match its native spec');
   }
+}
+
+function validateManifestEvidence(value: RunManifest): void {
+  const specs = new Map(value.specs.map((spec) => [spec.runnerTaskId, spec]));
   for (const event of value.events) {
     const parsed = validateRunEvent(event);
     if (!parsed.ok)
@@ -536,7 +666,12 @@ function validateManifest(value: RunManifest): void {
   const journalAttempts = new Map<string, { readonly start: RunEvent; finish?: RunEvent }>();
   const attemptHierarchies = new Map<
     string,
-    Pick<RunEvent['identity'], 'executionId' | 'runnerTaskId' | 'projectId' | 'specId'>
+    {
+      readonly executionId: RunEvent['identity']['executionId'] | undefined;
+      readonly runnerTaskId: RunEvent['identity']['runnerTaskId'] | undefined;
+      readonly projectId: RunEvent['identity']['projectId'] | undefined;
+      readonly specId: RunEvent['identity']['specId'] | undefined;
+    }
   >();
   const finishedAttempts = new Set<string>();
   const sessions = new Map<
@@ -882,6 +1017,36 @@ async function readText(path: string): Promise<string | null> {
     return null;
   }
 }
+async function readEventText(path: string, expectedBytes: number): Promise<string | null> {
+  try {
+    const s = await stat(path);
+    if (s.size !== expectedBytes) return null;
+    return await readFile(path, 'utf8');
+  } catch {
+    return null;
+  }
+}
+function parseJsonObject(raw: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return object(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function parseEventLines(raw: string): RunEvent[] | null {
+  if (raw === '') return [];
+  if (!raw.endsWith('\n')) return null;
+  const events: RunEvent[] = [];
+  for (const line of raw.slice(0, -1).split('\n')) {
+    try {
+      events.push(JSON.parse(line) as RunEvent);
+    } catch {
+      return null;
+    }
+  }
+  return events;
+}
 async function readJson(path: string): Promise<unknown> {
   const raw = await readText(path);
   if (raw === null) return null;
@@ -906,6 +1071,17 @@ export const NODE_RUN_MANIFEST_WRITER = Object.freeze<RunManifestWriter>({
   },
   exists,
   writeExclusive: durableWrite,
+  async append(path, body) {
+    await appendFile(path, body, 'utf8');
+  },
+  async syncFile(path) {
+    const file = await open(path, 'r');
+    try {
+      await file.sync();
+    } finally {
+      await file.close();
+    }
+  },
   async syncDirectory(path) {
     let directory;
     try {

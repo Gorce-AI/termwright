@@ -7,15 +7,22 @@ use `termwright` and do not write manifests themselves.
 Host and reporter integrations can install the storage API with
 `pnpm add @termwright/run-history`.
 
-Each run starts in a private staging directory. Commit writes and fsyncs the
-validated manifest plus a SHA-256 commit marker, then atomically renames the
-directory into place and syncs its parent. A colliding RunId fails instead of
-overwriting history. The canonical journal, attempt index, result, runtime,
-resource profile, timeouts, and CI/Git provenance must agree before commit.
-Manifest v4 also requires capability-aware resource telemetry. Coordinator
+Each run starts in a private staging directory. Event batches append to an
+independently checksummed `events.ndjson`; no complete journal array is needed
+by the writer. Commit writes the bounded manifest, binds it to the event count,
+byte length, and SHA-256 digest, writes the commit marker, then atomically
+renames the directory into place and syncs its parent. A colliding RunId fails
+instead of overwriting history. The canonical journal, attempt index, result,
+runtime, resource profile, timeouts, and CI/Git provenance are verified by the
+reader. Manifest v5 also requires capability-aware resource telemetry. Coordinator
 CPU/RSS and bounded-journal metrics are numeric measurements. Metrics the host
 cannot yet observe authoritatively, such as whole-process-tree RSS on POSIX,
 are the literal `unavailable`, never a fabricated zero.
+
+The canonical stream fails with an explicit capacity error above 1,000,000
+events or 512 MiB. Authoritative evidence is never silently dropped, and an
+untrusted manifest cannot make the materializing reader allocate beyond those
+bounds.
 
 Manifest status preserves `passed-with-skips` as a separate terminal verdict.
 Readers must not collapse it into `passed`: the Native Host evaluates the
@@ -29,6 +36,7 @@ decision without relying on attempt counters.
 import { beginRunManifest, readRunHistory } from '@termwright/run-history';
 
 const transaction = await beginRunManifest('.termwright/runs', start);
+await transaction.appendEvents(eventBatch);
 await transaction.commit(manifest);
 
 const records = await readRunHistory('.termwright/runs');
@@ -47,8 +55,8 @@ limit.
 
 `NODE_RUN_MANIFEST_WRITER` is the durable filesystem implementation. Supplying
 a custom `RunManifestWriter` is intended for alternative stores and fault
-tests; it must preserve exclusive creation, file and directory durability, and
-atomic rename semantics.
+tests; it must preserve exclusive creation, append order, event-file and
+directory durability, and atomic rename semantics.
 
 Node.js 22 and 24 are supported. The on-disk format is internal release data;
 consume it through this package rather than reading its files directly.
