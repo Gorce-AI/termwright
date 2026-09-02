@@ -1,5 +1,13 @@
 # @termwright/probe-runtime
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/evidence-provider@0.4.1
+  - @termwright/protocol@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes

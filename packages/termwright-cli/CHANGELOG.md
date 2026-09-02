@@ -1,5 +1,25 @@
 # termwright
 
+## 0.4.1
+
+### Patch Changes
+
+- [#137](https://github.com/Gorce-AI/termwright/pull/137) [`bfb306d`](https://github.com/Gorce-AI/termwright/commit/bfb306dad13a6e34d667bf061e3f97a3aebe8464) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Canonicalize packed dependency metadata and batch npm visibility checks so delayed registry processing cannot strand a partial release.
+- Updated dependencies []:
+  - @termwright/desktop-host@0.4.1
+  - @termwright/driver@0.4.1
+  - @termwright/gherkin@0.4.1
+  - @termwright/ink@0.4.1
+  - @termwright/mcp@0.4.1
+  - @termwright/protocol@0.4.1
+  - @termwright/resource-broker@0.4.1
+  - @termwright/run-history@0.4.1
+  - @termwright/run-journal-transport@0.4.1
+  - @termwright/screenshot@0.4.1
+  - @termwright/test@0.4.1
+  - @termwright/trace@0.4.1
+  - @termwright/ui@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # @termwright/opentui
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/protocol@0.4.1
+
 ## 0.4.0
 
 ### Patch Changes

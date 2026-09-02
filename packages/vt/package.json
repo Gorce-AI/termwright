@@ -1,6 +1,6 @@
 {
   "name": "@termwright/vt",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "termwright VT core: one terminal factory and one terminal profile, shared by driver, trace, screenshot and ui",
   "license": "MIT",
   "repository": {

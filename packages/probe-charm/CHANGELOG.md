@@ -1,5 +1,13 @@
 # @termwright/probe-charm
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/probe-go@0.4.1
+  - @termwright/protocol@0.4.1
+
 ## 0.4.0
 
 ### Patch Changes
