@@ -42,7 +42,7 @@ const run = promisify(execFile);
 export const CLIENT_MODULE = 'github.com/gorce-ai/termwright/clients/go';
 
 /** Version of this probe. It participates in every instrumented-copy key. */
-export const PROBE_VERSION = '0.3.1';
+export const PROBE_VERSION = '0.3.2';
 
 /** Exact Bubbles module paths; like Bubble Tea, v2 moved to a vanity domain. */
 export const BUBBLES_MODULES: Readonly<Record<CharmMajor, string>> = {
