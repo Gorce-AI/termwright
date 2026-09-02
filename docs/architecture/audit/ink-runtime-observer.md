@@ -239,7 +239,7 @@ React Ink commit (when one exists)
 waitUntilRenderFlush + ordered terminal evidence
     -> output is causally complete
 bounded semantic publication + same-writer marker
-    -> authoritative SemanticTreeV2 revision
+    -> authoritative SemanticTreeV3 revision
 ```
 
 No semantic revision may be emitted merely because a React commit occurred.
