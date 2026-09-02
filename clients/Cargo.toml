@@ -1,0 +1,8 @@
+[workspace]
+members = [
+  "rust",
+  "rust-probe",
+  "rust-ratatui",
+]
+exclude = ["rust-probe/tests/fixtures/annotated-app"]
+resolver = "2"
