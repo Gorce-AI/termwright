@@ -320,6 +320,8 @@ describe('performance baseline comparator', () => {
       'leakedFileDescriptors',
       'leakedProcesses',
       'semanticHotPathP95Us',
+      'semanticBytesPerFrame',
+      'semanticFullSnapshots',
       'charmOverheadRatio',
       'opentuiOverheadRatio',
     ]);

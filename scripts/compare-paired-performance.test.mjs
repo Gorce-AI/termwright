@@ -490,6 +490,16 @@ function completeObservation(overrides = {}) {
       'microseconds/frame',
       'packages/performance benchmark: semantic pipeline',
     ),
+    semanticBytesPerFrame: metric(
+      3_084,
+      'bytes/frame',
+      'packages/performance benchmark: semantic encoded bytes',
+    ),
+    semanticFullSnapshots: metric(
+      1,
+      'count',
+      'packages/performance benchmark: semantic full publications',
+    ),
     charmOverheadRatio: metric(1, 'ratio', 'packages/performance benchmark: Charm E2E'),
     opentuiOverheadRatio: metric(
       1,

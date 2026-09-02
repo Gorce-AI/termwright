@@ -45,6 +45,18 @@
       "relativeTolerance": 0.5,
       "absoluteTolerance": 50
     },
+    "semanticBytesPerFrame": {
+      "unit": "bytes/frame",
+      "direction": "lower",
+      "relativeTolerance": 0.1,
+      "absoluteTolerance": 128
+    },
+    "semanticFullSnapshots": {
+      "unit": "count",
+      "direction": "lower",
+      "relativeTolerance": 0,
+      "absoluteTolerance": 0
+    },
     "charmOverheadRatio": {
       "unit": "ratio",
       "direction": "lower",

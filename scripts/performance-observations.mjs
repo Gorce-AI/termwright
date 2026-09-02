@@ -54,6 +54,18 @@ export async function loadPerformanceObservations(options, expectedSubjectSha) {
         'p95',
         'packages/performance benchmark: semantic pipeline',
       ),
+      semanticBytesPerFrame: reportMetric(
+        semantic.metrics,
+        'bytesPerFrame',
+        'value',
+        'packages/performance benchmark: semantic encoded bytes',
+      ),
+      semanticFullSnapshots: reportMetric(
+        semantic.metrics,
+        'fullSnapshots',
+        'value',
+        'packages/performance benchmark: semantic full publications',
+      ),
       charmOverheadRatio: reportMetric(
         charm.metrics,
         'applicationOverheadRatio',

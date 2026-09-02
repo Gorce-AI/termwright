@@ -3,10 +3,12 @@ export const PERFORMANCE_BASELINE_VERSION = 4 as const;
 export const PERFORMANCE_BASELINE_POLICY_KIND = 'termwright-performance-baseline-policy' as const;
 export const PERFORMANCE_BASELINE_POLICY_VERSION = 3 as const;
 
-export type BaselineUnit = 'milliseconds' | 'bytes' | 'count' | 'microseconds/frame' | 'ratio';
+export type BaselineUnit =
+  'milliseconds' | 'bytes' | 'bytes/frame' | 'count' | 'microseconds/frame' | 'ratio';
 const BASELINE_UNITS: readonly BaselineUnit[] = [
   'milliseconds',
   'bytes',
+  'bytes/frame',
   'count',
   'microseconds/frame',
   'ratio',
