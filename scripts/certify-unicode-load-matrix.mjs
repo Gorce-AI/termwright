@@ -138,7 +138,6 @@ process.stdout.write(
   `${JSON.stringify({ node: process.version, watchdogMs, upstreamSourceDefect, results }, null, 2)}\n`,
 );
 
-const upstream = results.filter((result) => result.name.startsWith('xterm-upstream-'));
 const fixed = results.filter((result) => result.name.startsWith('xterm-fixed-trie-model-'));
 const owned = results.filter((result) => result.name.startsWith('termwright-owned-'));
 if (!upstreamSourceDefect) {
