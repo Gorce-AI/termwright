@@ -61,6 +61,7 @@ const (
 	CapRenderRevisions  Capability = "render-revisions"
 	CapLogs             Capability = "logs"
 	CapPointerHitGrid   Capability = "pointer-hit-grid"
+	CapIncrementalTree  Capability = "incremental-tree"
 )
 
 var roleSet = map[Role]struct{}{
@@ -80,7 +81,7 @@ var actionSet = map[Action]struct{}{
 var capabilitySet = map[Capability]struct{}{
 	CapTree: {}, CapIntendedGeometry: {}, CapClippedGeometry: {}, CapStates: {}, CapFocusState: {},
 	CapActions: {}, CapActionRecipes: {}, CapTextRanges: {}, CapRenderRevisions: {},
-	CapLogs: {}, CapPointerHitGrid: {},
+	CapLogs: {}, CapPointerHitGrid: {}, CapIncrementalTree: {},
 }
 
 // ValidRole reports whether r is a known role.
@@ -96,4 +97,4 @@ func ValidCapability(c Capability) bool { _, ok := capabilitySet[c]; return ok }
 const ActionCount = 7
 
 // CapabilityCount is the size of the closed capability set.
-const CapabilityCount = 9
+const CapabilityCount = 12

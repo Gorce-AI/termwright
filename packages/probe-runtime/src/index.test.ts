@@ -34,11 +34,11 @@ async function endpoint(): Promise<{
   };
 }
 
-function snapshot(): SemanticSnapshot {
+function snapshot(revision = 1, name = ''): SemanticSnapshot {
   return {
-    v: 2,
+    v: 3,
     sessionId: 's1',
-    revision: 1,
+    revision,
     columns: 80,
     rows: 24,
     rootIds: ['root'],
@@ -46,7 +46,7 @@ function snapshot(): SemanticSnapshot {
       {
         id: 'root',
         role: 'application',
-        name: '',
+        name,
         geometry: {
           displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
           intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
@@ -85,7 +85,7 @@ describe('shared probe transport', () => {
                   protocol: PROTOCOL_ID,
                   sessionId: 's1',
                   limits: DEFAULT_LIMITS,
-                  subscribe: 'snapshots',
+                  subscribe: 'semantic',
                   marker: { enabled: true },
                 },
                 DEFAULT_LIMITS.maxFrameBytes,
@@ -128,6 +128,11 @@ describe('shared probe transport', () => {
         probeVersion: '0.1.0',
         identityKind: 'stable',
         capabilities: ['stable-identity'],
+        instrumentation: {
+          highestTier: 'T0',
+          semanticClass: 'A',
+          degradedCapabilities: [],
+        },
       },
       capabilities: ['tree', 'render-revisions'],
       adapterName: '@termwright/probe-ink',
@@ -150,11 +155,11 @@ describe('shared probe transport', () => {
       providers: [{ id: 'app.router', version: '1', method: 'native' }],
     });
     expect(messages.slice(1).map((message) => message.type)).toEqual([
-      'snapshot',
+      'semantic-full',
       'revision-commit',
     ]);
     expect(messages[1]).toMatchObject({
-      type: 'snapshot',
+      type: 'semantic-full',
       snapshot: {
         providerEvidence: [
           {
@@ -166,15 +171,42 @@ describe('shared probe transport', () => {
         ],
       },
     });
+    channel?.publish(snapshot(2, 'changed'));
+    await expect.poll(() => messages.length).toBe(5);
+    expect(messages[3]).toMatchObject({
+      type: 'semantic-delta',
+      delta: {
+        revision: 2,
+        baseRevision: 1,
+        updateNodes: [{ id: 'root', set: { name: 'changed' } }],
+      },
+    });
+
+    peer?.write(
+      encodeFrame(
+        {
+          type: 'semantic-resync-request',
+          sessionId: 's1',
+          expectedBaseRevision: 2,
+          reason: 'driver-reset',
+        },
+        DEFAULT_LIMITS.maxFrameBytes,
+      ),
+    );
+    await expect.poll(() => channel?.requiresFullSnapshot).toBe(true);
+    channel?.publish(snapshot(3, 'resynced'));
+    await expect.poll(() => messages.length).toBe(7);
+    expect(messages[5]).toMatchObject({ type: 'semantic-full', snapshot: { revision: 3 } });
     const payload = (marker as string).slice((marker as string).indexOf(';') + 1, -1);
     expect(verifyMarkerPayload(payload, token, 's1')).toMatchObject({ revision: 1 });
     expect(channel?.performanceMetrics()).toMatchObject({
       enabled: true,
-      fullSnapshots: 1,
-      semanticNodes: 1,
+      fullSnapshots: 2,
+      deltas: 1,
+      semanticNodes: 3,
       unknownFrameworkNodes: 0,
       droppedEvents: 0,
-      markerRequests: 1,
+      markerRequests: 3,
       averageSemanticNodesPerFrame: 1,
       coalescedEvents: 1,
       probeEventsPerFrame: 7,
@@ -194,7 +226,7 @@ describe('shared probe transport', () => {
       adapter: '@termwright/probe-ink',
       framework: 'ink',
       sessionId: 's1',
-      metrics: { fullSnapshots: 1, coalescedEvents: 1, probeEventsPerFrame: 7 },
+      metrics: { fullSnapshots: 2, deltas: 1, coalescedEvents: 1, probeEventsPerFrame: 7 },
     });
 
     channel?.close();
@@ -221,6 +253,11 @@ describe('shared probe transport', () => {
           probeVersion: '0.1.0',
           identityKind: 'stable',
           capabilities: [],
+          instrumentation: {
+            highestTier: 'T0',
+            semanticClass: 'A',
+            degradedCapabilities: [],
+          },
         },
         capabilities: ['tree'],
         adapterName: 'test',

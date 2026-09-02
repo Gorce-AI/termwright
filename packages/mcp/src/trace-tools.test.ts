@@ -99,7 +99,7 @@ function tree(revision: number, approveDisabled: boolean): SemanticSnapshot {
     visibleRect: { status: 'unknown' as const, reason: 'awaiting-revision-pair' as const },
   });
   return {
-    v: 2,
+    v: 3,
     sessionId: 'sess-1',
     revision,
     columns: 40,

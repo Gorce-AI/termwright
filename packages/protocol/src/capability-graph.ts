@@ -49,6 +49,7 @@ export const ADAPTER_CAPABILITIES = Object.freeze([
   'render-revisions',
   'logs',
   'pointer-hit-grid',
+  'incremental-tree',
 ] as const);
 export type AdapterCapability = (typeof ADAPTER_CAPABILITIES)[number];
 

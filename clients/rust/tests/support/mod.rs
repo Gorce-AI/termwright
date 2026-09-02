@@ -86,10 +86,10 @@ pub fn start_fake_driver(path: &str, logs: Option<Value>) -> Driver {
                         if frame.value.get("type").and_then(Value::as_str) == Some("hello") {
                             let mut ack = json!({
                                 "type": "hello-ack",
-                                "protocol": "termwright/2",
+                                "protocol": "termwright/3",
                                 "sessionId": SESSION,
                                 "limits": DEFAULT_LIMITS,
-                                "subscribe": "snapshots",
+                                "subscribe": "semantic",
                                 "marker": { "enabled": true },
                             });
                             if let Some(budget) = logs.clone() {

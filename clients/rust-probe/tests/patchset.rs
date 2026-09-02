@@ -501,10 +501,10 @@ fn start_driver_sessions(
                     {
                         let ack = serde_json::json!({
                             "type": "hello-ack",
-                            "protocol": "termwright/2",
+                            "protocol": "termwright/3",
                             "sessionId": format!("s-e2e-{epoch}"),
                             "limits": DEFAULT_LIMITS,
-                            "subscribe": "snapshots",
+                            "subscribe": "semantic",
                             "marker": { "enabled": true },
                         });
                         let encoded =
@@ -612,7 +612,7 @@ fn main() {
         "the probe claimed an identity Ratatui cannot support"
     );
     assert_eq!(declared["frameworkVersion"], framework_version());
-    assert_eq!(hello["protocol"], "termwright/2");
+    assert_eq!(hello["protocol"], "termwright/3");
     assert!(
         snapshot.is_none(),
         "unsupported backend published: {snapshot:?}"

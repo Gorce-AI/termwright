@@ -307,7 +307,7 @@ class SemanticSnapshot:
     rootIds: Sequence[str] = field(default_factory=list)
     nodes: Sequence[SemanticNode] = field(default_factory=list)
     cursor: Optional[CursorInfo] = None
-    v: int = 2
+    v: int = 3
 
     def to_wire(self) -> Dict[str, Any]:
         wire: Dict[str, Any] = {

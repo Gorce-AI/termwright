@@ -21,7 +21,7 @@ const unknown = {
 
 function snapshot(overrides: Partial<SemanticSnapshot> = {}): SemanticSnapshot {
   return {
-    v: 2,
+    v: 3,
     sessionId: 's1',
     revision: 3,
     columns: 20,
@@ -225,6 +225,7 @@ describe('provider evidence composition', () => {
       ]),
     ).toMatchObject({
       ok: true,
+      composedNodeIds: new Set(['root']),
       snapshot: {
         nodes: [
           {

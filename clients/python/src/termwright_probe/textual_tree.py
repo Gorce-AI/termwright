@@ -506,7 +506,7 @@ def build_snapshot(
         rows=rows,
         rootIds=root_ids,
         nodes=nodes,
-        v=2,
+        v=3,
         coordinateSpace=WireObservation(status="known", value="viewport-cells", evidence=framework_evidence("textual-probe")),
         hitGrid=WireObservation(status="known", value={"regions": hit_regions}, evidence=framework_evidence("textual-compositor-hit-grid")),
     )

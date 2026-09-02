@@ -255,7 +255,11 @@ function computeDepths(
  * @returns `{ ok: true, snapshot }` with a deep-frozen snapshot, or
  * `{ ok: false, code, detail }`. Never throws.
  */
-export function validateSnapshot(value: unknown, limits: ProtocolLimits): ValidationResult {
+export function validateSnapshot(
+  value: unknown,
+  limits: ProtocolLimits,
+  wireBytes?: number,
+): ValidationResult {
   let projected: unknown;
   try {
     projected = projectDto<unknown>(value, limits.maxDepth);
@@ -266,12 +270,13 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
     return fail('schema', 'value could not be projected into a plain DTO');
   }
 
-  // Projection guarantees JSON-representability, so stringify cannot throw.
-  const serialised = JSON.stringify(projected);
-  if (serialised === undefined) {
+  // At a wire boundary the frame prefix already supplied the exact byte
+  // length. Standalone callers still get the same safe size check once.
+  const serialised = wireBytes === undefined ? JSON.stringify(projected) : undefined;
+  if (wireBytes === undefined && serialised === undefined) {
     return fail('schema', 'snapshot is not a JSON object');
   }
-  const bytes = Buffer.byteLength(serialised, 'utf8');
+  const bytes = wireBytes ?? Buffer.byteLength(serialised!, 'utf8');
   if (bytes > limits.maxSnapshotBytes) {
     return fail('bytes', `snapshot is ${bytes} bytes, ceiling is ${limits.maxSnapshotBytes}`);
   }

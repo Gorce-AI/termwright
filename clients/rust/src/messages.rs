@@ -19,10 +19,10 @@ use crate::validate::validate_snapshot;
 use crate::Violation;
 
 /// The wire protocol identifier both sides must agree on.
-pub const PROTOCOL_ID: &str = "termwright/2";
+pub const PROTOCOL_ID: &str = "termwright/3";
 
 /// The current major version.
-pub const PROTOCOL_VERSION: u8 = 2;
+pub const PROTOCOL_VERSION: u8 = 3;
 
 /// Longest token, identifier or free-text message accepted.
 const MAX_IDENTIFIER_LENGTH: usize = 1024;
@@ -66,7 +66,7 @@ pub struct Hello {
     /// Wire discriminator (`type` on the wire).
     #[serde(rename = "type")]
     pub kind: String,
-    /// Protocol identifier; must be `termwright/2`.
+    /// Protocol identifier; must be `termwright/3`.
     pub protocol: String,
     /// Per-launch session token from the environment.
     pub token: String,
@@ -203,7 +203,7 @@ pub struct ProbeInfo {
     pub identity_kind: ProbeIdentityKind,
     /// Optional abilities, from the protocol's closed set.
     pub capabilities: Vec<String>,
-    /// Runtime injection facts. Optional for older/custom protocol-v2 probes.
+    /// Runtime injection facts for a custom probe.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instrumentation: Option<ProbeInstrumentation>,
 }
@@ -249,6 +249,12 @@ impl ProbeInfo {
             return Err(Violation::new(
                 "schema",
                 "frame-local identity cannot advertise stable-identity",
+            ));
+        }
+        if self.instrumentation.is_none() {
+            return Err(Violation::new(
+                "schema",
+                "instrumentation is required for every probe",
             ));
         }
         if let Some(instrumentation) = &self.instrumentation {
@@ -335,13 +341,13 @@ pub struct HelloAck {
     /// Wire discriminator (`type` on the wire).
     #[serde(rename = "type")]
     pub kind: String,
-    /// Protocol identifier; must be `termwright/2`.
+    /// Protocol identifier; must be `termwright/3`.
     pub protocol: String,
     /// Session this snapshot belongs to.
     pub session_id: String,
     /// Ceilings the driver imposes for this session.
     pub limits: Limits,
-    /// What the driver wants pushed: snapshots or revisions.
+    /// The semantic publication channel selected by the driver.
     pub subscribe: String,
     /// Whether render markers are wanted.
     pub marker: MarkerConfig,
@@ -372,7 +378,7 @@ impl RevisionCommit {
 
 /// Carries a full tree for one revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct SnapshotMessage<'a> {
+pub struct SemanticFullMessage<'a> {
     /// Wire discriminator (`type` on the wire).
     #[serde(rename = "type")]
     pub kind: &'static str,
@@ -380,11 +386,11 @@ pub struct SnapshotMessage<'a> {
     pub snapshot: &'a Snapshot,
 }
 
-impl<'a> SnapshotMessage<'a> {
+impl<'a> SemanticFullMessage<'a> {
     /// Wrap a snapshot in its envelope.
     pub fn new(snapshot: &'a Snapshot) -> Self {
         Self {
-            kind: "snapshot",
+            kind: "semantic-full",
             snapshot,
         }
     }
@@ -629,7 +635,7 @@ pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), Parse
             require_keys(object, &["type", "revision"], &[])?;
             whole_number(object, "revision", true)
         }
-        "snapshot" => {
+        "semantic-full" => {
             require_keys(object, &["type", "snapshot"], &[])?;
             check_embedded_snapshot(&object["snapshot"], limits)
         }
@@ -703,12 +709,8 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
                 whole_number(limits_object, field, true)?;
             }
             match object.get("subscribe").and_then(Value::as_str) {
-                Some("snapshots") | Some("revisions") => {}
-                _ => {
-                    return Err(ParseError::malformed(
-                        "subscribe: expected 'snapshots' or 'revisions'",
-                    ))
-                }
+                Some("semantic") => {}
+                _ => return Err(ParseError::malformed("subscribe: expected 'semantic'")),
             }
             let marker = object
                 .get("marker")
@@ -722,6 +724,22 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
                 check_log_budget(logs)?;
             }
             Ok(())
+        }
+        "semantic-resync-request" => {
+            required_keys(
+                object,
+                &["type", "sessionId", "expectedBaseRevision", "reason"],
+            )?;
+            identifier(object, "sessionId", false)?;
+            if !object["expectedBaseRevision"].is_null() {
+                whole_number(object, "expectedBaseRevision", true)?;
+            }
+            match object["reason"].as_str() {
+                Some("base-mismatch" | "missing-base" | "driver-reset") => Ok(()),
+                _ => Err(ParseError::malformed(
+                    "reason: unknown semantic resync reason",
+                )),
+            }
         }
         "error" => check_error_message(object, false),
         _ => Err(ParseError::malformed("unknown or missing message type")),

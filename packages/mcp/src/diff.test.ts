@@ -49,7 +49,7 @@ const geometry = (rect?: {
 
 function snapshot(revision: number, nodes: readonly SemanticNode[]): SemanticSnapshot {
   return {
-    v: 2,
+    v: 3,
     sessionId: 's1',
     revision,
     columns: 80,

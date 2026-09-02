@@ -6,6 +6,7 @@ import { createServer, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  applySemanticDelta,
   createFrameDecoder,
   encodeFrame,
   generateToken,
@@ -44,6 +45,7 @@ export async function startFakeDriver(): Promise<FakeDriver> {
   let hello: HelloMessage | undefined;
   let rejection: string | undefined;
   let connection: Socket | undefined;
+  let currentSnapshot: SemanticSnapshot | undefined;
 
   const notify = (): void => {
     for (const waiter of waiters.splice(0)) waiter();
@@ -79,15 +81,57 @@ export async function startFakeDriver(): Promise<FakeDriver> {
                 protocol: message.protocol,
                 sessionId,
                 limits: DEFAULT_LIMITS,
-                subscribe: 'snapshots',
+                subscribe: 'semantic',
                 marker: { enabled: true },
               },
               DEFAULT_LIMITS.maxFrameBytes,
             ),
           );
           notify();
-        } else if (message.type === 'snapshot') {
+        } else if (message.type === 'semantic-full') {
+          currentSnapshot = message.snapshot;
           snapshots.push(message.snapshot);
+          notify();
+        } else if (message.type === 'semantic-delta') {
+          if (currentSnapshot === undefined) {
+            rejection = 'semantic delta arrived before a full base snapshot';
+            socket.write(
+              encodeFrame(
+                {
+                  type: 'semantic-resync-request',
+                  sessionId,
+                  expectedBaseRevision: null,
+                  reason: 'missing-base',
+                },
+                DEFAULT_LIMITS.maxFrameBytes,
+              ),
+            );
+            notify();
+            continue;
+          }
+          const applied = applySemanticDelta(currentSnapshot, message.delta, DEFAULT_LIMITS);
+          if (!applied.ok) {
+            rejection = `${applied.code}: ${applied.detail}`;
+            if (applied.resyncRequired) {
+              socket.write(
+                encodeFrame(
+                  {
+                    type: 'semantic-resync-request',
+                    sessionId,
+                    expectedBaseRevision: currentSnapshot.revision,
+                    reason: 'base-mismatch',
+                  },
+                  DEFAULT_LIMITS.maxFrameBytes,
+                ),
+              );
+            } else {
+              socket.destroy();
+            }
+            notify();
+            continue;
+          }
+          currentSnapshot = applied.snapshot;
+          snapshots.push(currentSnapshot);
           notify();
         }
       }

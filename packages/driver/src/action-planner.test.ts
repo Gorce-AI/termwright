@@ -76,7 +76,7 @@ function context(
     contractId: 's:0',
     sessionId: 's',
     epoch: 0,
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     framework: null,
     providers: Object.freeze([]),
     capabilities: Object.freeze(capabilities),

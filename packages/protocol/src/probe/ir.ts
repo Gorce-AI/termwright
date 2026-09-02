@@ -317,11 +317,8 @@ export interface ProbeInfo {
   /** The best identity this probe can offer for any object. */
   readonly identityKind: ProbeIdentityKind;
   readonly capabilities: readonly ProbeCapability[];
-  /**
-   * How this concrete run attached and what it could not observe.
-   * Optional on the wire so existing protocol-v2/custom adapters remain valid.
-   */
-  readonly instrumentation?: ProbeInstrumentation;
+  /** How this concrete run attached and what it could not observe. */
+  readonly instrumentation: ProbeInstrumentation;
 }
 
 /**

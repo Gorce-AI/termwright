@@ -70,7 +70,7 @@ class FakeDriver:
         self,
         path: str,
         logs: Optional[Dict[str, Any]] = None,
-        subscribe: str = "snapshots",
+        subscribe: str = "semantic",
     ) -> None:
         self.path = path
         self.logs = logs
@@ -186,7 +186,7 @@ async def test_handshake_and_publish(endpoint):
     await driver.wait_for(2)
 
     snapshot_frame, commit_frame = driver.received[0], driver.received[1]
-    assert snapshot_frame["type"] == "snapshot"
+    assert snapshot_frame["type"] == "semantic-full"
     assert snapshot_frame["snapshot"]["sessionId"] == SESSION
     assert snapshot_frame["snapshot"]["revision"] == 1
     assert commit_frame == {"type": "revision-commit", "revision": 1}
@@ -282,23 +282,23 @@ async def test_nowait_oversize_has_no_marker_and_recovers():
 
     decoder = FrameDecoder(limits.maxFrameBytes, limits.maxDepth)
     messages = [message for frame in writer.frames for message in decoder.push(frame)]
-    assert [message["type"] for message in messages] == ["snapshot", "revision-commit"]
+    assert [message["type"] for message in messages] == ["semantic-full", "revision-commit"]
     assert messages[0]["snapshot"]["revision"] == 1
     assert messages[1]["revision"] == 1
     assert client.connected
 
 
-async def test_a_revisions_subscription_gets_commits_only(endpoint):
-    driver = FakeDriver(endpoint, subscribe="revisions")
+async def test_the_single_semantic_subscription_always_gets_a_full_tree(endpoint):
+    driver = FakeDriver(endpoint, subscribe="semantic")
     await driver.start()
     client = SemanticClient(endpoint, TOKEN, adapter_name="pytest", adapter_version="0.1.0")
     assert await client.start(timeout=2.0) is True
 
     await client.publish(sample_snapshot())
-    await driver.wait_for(1)
+    await driver.wait_for(2)
 
     kinds = [frame["type"] for frame in driver.received]
-    assert kinds == ["revision-commit"], kinds
+    assert kinds == ["semantic-full", "revision-commit"], kinds
 
     await client.close()
     await driver.close()
@@ -363,7 +363,7 @@ async def test_a_write_to_a_stalled_driver_is_bounded(endpoint):
             "protocol": PROTOCOL_ID,
             "sessionId": SESSION,
             "limits": DEFAULT_LIMITS.to_wire(),
-            "subscribe": "snapshots",
+            "subscribe": "semantic",
             "marker": {"enabled": True},
         }
         writer.write(encode_frame(ack, DEFAULT_LIMITS.maxFrameBytes))

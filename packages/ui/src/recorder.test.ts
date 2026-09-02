@@ -41,7 +41,7 @@ function enableAuthoritativePointer(harness: FakeHarness, target = 'b1'): void {
     contractId: 'rec:0',
     sessionId: 's1',
     epoch: 0,
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     framework: null,
     providers: [
       {

@@ -1,6 +1,6 @@
 {
-  "protocolId": "termwright/2",
-  "protocolVersion": 2,
+  "protocolId": "termwright/3",
+  "protocolVersion": 3,
   "frameHeaderBytes": 4,
   "markerOscCode": 8487,
   "markerOscPrefix": "twm;",
@@ -71,7 +71,8 @@
     "text-ranges",
     "render-revisions",
     "logs",
-    "pointer-hit-grid"
+    "pointer-hit-grid",
+    "incremental-tree"
   ],
   "capabilityGraphVersion": 5,
   "capabilityNodeCategories": [

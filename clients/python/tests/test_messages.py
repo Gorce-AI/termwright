@@ -22,20 +22,28 @@ def ack(**changes):
         "protocol": PROTOCOL_ID,
         "sessionId": "s-1",
         "limits": DEFAULT_LIMITS.to_wire(),
-        "subscribe": "snapshots",
+        "subscribe": "semantic",
         "marker": {"enabled": True},
     }
     message.update(changes)
     return message
 
 
-def test_protocol_v2_messages_are_accepted():
+def test_protocol_v3_messages_are_accepted():
     tree = snapshot(nodes=[node(id="root", role="application", name="app")], root_ids=["root"])
     messages = [
         (parse_adapter_message, hello("token", "pytest", "0.1.0", ["tree"])),
-        (parse_adapter_message, {"type": "snapshot", "snapshot": tree.to_wire()}),
+        (parse_adapter_message, {"type": "semantic-full", "snapshot": tree.to_wire()}),
         (parse_driver_message, ack()),
-        (parse_driver_message, ack(subscribe="revisions")),
+        (
+            parse_driver_message,
+            {
+                "type": "semantic-resync-request",
+                "sessionId": "s-1",
+                "expectedBaseRevision": None,
+                "reason": "driver-reset",
+            },
+        ),
     ]
     for parser, message in messages:
         result = parser(message, DEFAULT_LIMITS)

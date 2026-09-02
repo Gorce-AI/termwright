@@ -127,7 +127,7 @@ func New(endpoint, token string, options Options) *Client {
 		token:     token,
 		options:   options,
 		limits:    limits,
-		subscribe: "snapshots",
+		subscribe: "semantic",
 		ready:     make(chan error, 1),
 	}
 }
@@ -397,7 +397,6 @@ func (c *Client) preparePublicationMode(snapshot *Snapshot, nonBlocking bool) (*
 		snapshot.ProviderEvidence = c.providerLease.Collect(c.sessionID, revision, snapshot.Columns, snapshot.Rows)
 	}
 	limits := c.limits
-	subscribe := c.subscribe
 	markerEnabled := c.marker
 	sessionID := c.sessionID
 	c.mu.Unlock()
@@ -414,21 +413,19 @@ func (c *Client) preparePublicationMode(snapshot *Snapshot, nonBlocking bool) (*
 		revision:        revision,
 		metricsSnapshot: Snapshot{Revision: revision, Nodes: append([]Node(nil), snapshot.Nodes...)},
 	}
-	if subscribe != "revisions" {
-		if !nonBlocking {
-			c.options.Debug.Line("io", fmt.Sprintf("r%d snapshot nodes=%d", snapshot.Revision, len(snapshot.Nodes)))
-		}
-		started := time.Now()
-		frame, err := EncodeFrame(SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, limits.MaxFrameBytes)
-		prepared.serialization += time.Since(started)
-		if err != nil {
-			if !nonBlocking {
-				c.performanceDrop()
-			}
-			return nil, err
-		}
-		prepared.treeFrame = frame
+	if !nonBlocking {
+		c.options.Debug.Line("io", fmt.Sprintf("r%d semantic-full nodes=%d", snapshot.Revision, len(snapshot.Nodes)))
 	}
+	started := time.Now()
+	frame, err := EncodeFrame(SemanticFullMessage{Type: "semantic-full", Snapshot: snapshot}, limits.MaxFrameBytes)
+	prepared.serialization += time.Since(started)
+	if err != nil {
+		if !nonBlocking {
+			c.performanceDrop()
+		}
+		return nil, err
+	}
+	prepared.treeFrame = frame
 	commit, err := EncodeFrame(RevisionCommit{Type: "revision-commit", Revision: revision}, limits.MaxFrameBytes)
 	if err != nil {
 		if !nonBlocking {

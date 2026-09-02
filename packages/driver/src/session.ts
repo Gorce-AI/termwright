@@ -481,6 +481,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #providerFailure: TermwrightError | null = null;
   #ptyFailure: PtyBackendError | null = null;
   #providerInputModes: ProviderTerminalInputModes | null = null;
+  #providerComposedNodeIds: ReadonlySet<string> = new Set();
   #crash: CrashReport | null = null;
   /** The in-flight evidence wait, shared by every pending pairing half. */
   #settling: Promise<void> | null = null;
@@ -547,7 +548,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       maxPending: this.#protocolLimits.maxQueuedFrames,
       pairingTimeoutMs: PAIRING_TIMEOUT_MS,
       caughtUp: () => this.#evidenceSettled(),
-      onPublish: (paired) => this.#publishSemantic(paired.snapshot),
+      onPublish: (paired) => this.#publishSemantic(paired.snapshot, paired.changedNodes),
       onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, { revision }),
     });
     this.#resources.defer('revision pairing', () => this.#pairing.dispose());
@@ -671,8 +672,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
               );
               this.#notifyChange();
             },
-            onSnapshot: (snapshot) => {
-              this.#pairing.offerSnapshot(snapshot);
+            onSnapshot: (snapshot, changedNodes) => {
+              this.#pairing.offerSnapshot(snapshot, changedNodes);
               this.#notifyChange();
             },
             onLogRecord: (record) => this.#publishLogRecord(record),
@@ -2642,7 +2643,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     );
   }
 
-  #publishSemantic(snapshot: SemanticSnapshot): void {
+  #publishSemantic(
+    snapshot: SemanticSnapshot,
+    changedNodes: ReadonlyMap<string, SemanticNode | undefined> | null,
+  ): void {
     const composed = composeProviderEvidence(snapshot, this.#attachment?.providers ?? []);
     if (!composed.ok) {
       const failure =
@@ -2676,6 +2680,17 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       return;
     }
     snapshot = composed.snapshot;
+    let effectiveChanges = changedNodes;
+    if (changedNodes !== null) {
+      const affected = new Set([
+        ...changedNodes.keys(),
+        ...this.#providerComposedNodeIds,
+        ...composed.composedNodeIds,
+      ]);
+      const finalNodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+      effectiveChanges = new Map([...affected].map((id) => [id, finalNodes.get(id)] as const));
+    }
+    this.#providerComposedNodeIds = composed.composedNodeIds;
     this.#inputEvidence.noteSemanticCommit(snapshot.revision);
     if (composed.inputModes !== undefined) {
       const observedModes = this.#vt.modes();
@@ -2716,7 +2731,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       return;
     }
     this.#providerInputModes = composed.inputModes?.value ?? null;
-    this.#index = new SemanticIndex(snapshot);
+    if (this.#index === null || effectiveChanges === null)
+      this.#index = new SemanticIndex(snapshot);
+    else this.#index.update(snapshot, effectiveChanges);
     this.#observationSequence += 1;
     this.#emitter.emit('semantic-revision', {
       revision: snapshot.revision,

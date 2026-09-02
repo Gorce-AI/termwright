@@ -1,6 +1,6 @@
 /** Self-contained performance-report schema and validator for runtime-neutral consumers. */
 export const PERFORMANCE_REPORT_KIND = 'termwright-performance-report' as const;
-export const PERFORMANCE_REPORT_VERSION = 3 as const;
+export const PERFORMANCE_REPORT_VERSION = 4 as const;
 
 const CHARM_MEASUREMENT_ORDER = [
   'reference-first',
@@ -40,6 +40,7 @@ export interface ScenarioMetrics {
   readonly probeEventsPerFrame: PerformanceMetric;
   readonly bytesPerFrame: PerformanceMetric;
   readonly fullSnapshots: PerformanceMetric;
+  readonly deltas: PerformanceMetric;
   readonly droppedEvents: PerformanceMetric;
   readonly coalescedEvents: PerformanceMetric;
   readonly semanticNodesPerFrame: PerformanceMetric;
@@ -121,6 +122,7 @@ export function validatePerformanceReport(value: unknown): asserts value is Perf
     'probeEventsPerFrame',
     'bytesPerFrame',
     'fullSnapshots',
+    'deltas',
     'droppedEvents',
     'coalescedEvents',
     'semanticNodesPerFrame',
@@ -136,6 +138,7 @@ export function validatePerformanceReport(value: unknown): asserts value is Perf
     probeEventsPerFrame: 'events/frame',
     bytesPerFrame: 'bytes/frame',
     fullSnapshots: 'count',
+    deltas: 'count',
     droppedEvents: 'count',
     coalescedEvents: 'count',
     semanticNodesPerFrame: 'nodes/frame',

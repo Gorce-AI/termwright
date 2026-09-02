@@ -464,7 +464,7 @@ export async function assertCandidateSemanticSession(session, candidateId) {
   const contract = await session.settled();
   if (
     contract.capabilities['semantic-tree'].status !== 'supported' ||
-    session.semanticTree()?.v !== 2
+    session.semanticTree()?.v !== 3
   ) {
     throw new Error(`${candidateId}: candidate application produced no supported semantic tree`);
   }

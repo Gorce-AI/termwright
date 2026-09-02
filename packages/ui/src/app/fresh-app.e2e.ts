@@ -388,7 +388,7 @@ describe('fresh React runner', () => {
         sessionId,
         revision: 1,
         snapshot: {
-          v: 2,
+          v: 3,
           sessionId,
           revision: 1,
           columns,

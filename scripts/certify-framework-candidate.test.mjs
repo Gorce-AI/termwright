@@ -579,7 +579,7 @@ describe('framework candidate evidence binding', () => {
       settled: async () => ({
         capabilities: { 'semantic-tree': { status: 'supported' } },
       }),
-      semanticTree: () => ({ v: 2 }),
+      semanticTree: () => ({ v: 3 }),
     };
     await expect(
       assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9'),
@@ -591,7 +591,7 @@ describe('framework candidate evidence binding', () => {
       settled: async () => ({
         capabilities: { 'semantic-tree': { status: 'unsupported' } },
       }),
-      semanticTree: () => ({ v: 2 }),
+      semanticTree: () => ({ v: 3 }),
     };
     await expect(assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9')).rejects.toThrow(
       /no supported semantic tree/u,

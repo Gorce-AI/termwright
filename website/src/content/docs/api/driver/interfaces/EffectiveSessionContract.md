@@ -86,7 +86,7 @@ Runtime attachment facts declared by a framework probe, when available.
 
 ### protocol
 
-> `readonly` **protocol**: `"termwright/2"`
+> `readonly` **protocol**: `"termwright/3"`
 
 Defined in: protocol/dist/contract-CH9gmj2Y.d.ts:728
 

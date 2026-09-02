@@ -32,7 +32,7 @@ const geometry = (rect: { row: number; column: number; width: number; height: nu
 /** A dialog fixture exercising roles, states, relations and geometry. */
 function fixture(): SemanticSnapshot {
   const snapshot = {
-    v: 2,
+    v: 3,
     sessionId: 's1',
     revision: 7,
     columns: 80,
@@ -324,7 +324,7 @@ describe('toAccessKitTreeUpdate — edges', () => {
   it('exports a single-node tree', () => {
     const snapshot = validateSnapshot(
       {
-        v: 2,
+        v: 3,
         sessionId: 's',
         revision: 1,
         columns: 80,
@@ -349,7 +349,7 @@ describe('toAccessKitTreeUpdate — edges', () => {
   it('omits an empty label rather than exporting an empty string', () => {
     const snapshot = validateSnapshot(
       {
-        v: 2,
+        v: 3,
         sessionId: 's',
         revision: 1,
         columns: 80,
@@ -390,7 +390,7 @@ describe('toAccessKitTreeUpdate — edges', () => {
     }
     const snapshot = validateSnapshot(
       {
-        v: 2,
+        v: 3,
         sessionId: 's',
         revision: 1,
         columns: 80,

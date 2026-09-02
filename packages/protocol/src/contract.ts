@@ -83,7 +83,7 @@ export interface EffectiveSessionContract {
   readonly contractId: string;
   readonly sessionId: string;
   readonly epoch: number;
-  readonly protocol: 'termwright/2';
+  readonly protocol: 'termwright/3';
   readonly framework: {
     readonly name: string;
     readonly version: string;

@@ -138,7 +138,7 @@ function marker(revision, forSession = sessionId, terminator = '\x07') {
 
 function tree(revision, nodes, overrides = {}) {
   return {
-    v: 2,
+    v: 3,
     sessionId,
     revision,
     columns: 80,
@@ -201,7 +201,7 @@ function validNodes(label) {
 
 /** Publishes a well-formed revision: snapshot, commit, then the render marker. */
 function publish(revision, label = 'Peer') {
-  socket.write(frame({ type: 'snapshot', snapshot: tree(revision, validNodes(label)) }));
+  socket.write(frame({ type: 'semantic-full', snapshot: tree(revision, validNodes(label)) }));
   socket.write(frame({ type: 'revision-commit', revision }));
   process.stdout.write(REPAINT + marker(revision));
   published = revision;
@@ -215,7 +215,7 @@ const SCENARIOS = {
     socket.write(frame(hello({ protocol: 'termwright/99' })));
   },
   'no-hello': () => {
-    socket.write(frame({ type: 'snapshot', snapshot: tree(1, validNodes('Peer')) }));
+    socket.write(frame({ type: 'semantic-full', snapshot: tree(1, validNodes('Peer')) }));
   },
 
   'duplicate-hello': () => {
@@ -234,7 +234,7 @@ const SCENARIOS = {
     socket.write(Buffer.concat([header, Buffer.from('{"type":"sna', 'utf8')]));
   },
   'duplicate-frames': () => {
-    const message = frame({ type: 'snapshot', snapshot: tree(2, validNodes('Twice')) });
+    const message = frame({ type: 'semantic-full', snapshot: tree(2, validNodes('Twice')) });
     socket.write(message);
     socket.write(message);
     process.stdout.write(marker(2));
@@ -282,7 +282,7 @@ const SCENARIOS = {
     process.stdout.write(marker(5));
   },
   'tree-without-marker': () => {
-    socket.write(frame({ type: 'snapshot', snapshot: tree(4, validNodes('Unpaired')) }));
+    socket.write(frame({ type: 'semantic-full', snapshot: tree(4, validNodes('Unpaired')) }));
     socket.write(frame({ type: 'revision-commit', revision: 4 }));
   },
   'rapid-rerender': () => {
@@ -294,12 +294,12 @@ const SCENARIOS = {
     say('PEER FLOOD OUTPUT COMPLETE');
     for (let revision = 2; revision <= 100; revision += 1) {
       socket.write(
-        frame({ type: 'snapshot', snapshot: tree(revision, validNodes(`Flood${revision}`)) }),
+        frame({ type: 'semantic-full', snapshot: tree(revision, validNodes(`Flood${revision}`)) }),
       );
     }
   },
   'disconnect-mid-render': () => {
-    socket.end(frame({ type: 'snapshot', snapshot: tree(2, validNodes('Torn')) }));
+    socket.end(frame({ type: 'semantic-full', snapshot: tree(2, validNodes('Torn')) }));
   },
   'hostile-unicode': () => {
     // A lone high surrogate survives JSON.stringify as an escape, so the bytes
@@ -325,7 +325,7 @@ const SCENARIOS = {
   'deep-nesting': () => {
     let value = 'leaf';
     for (let depth = 0; depth < MAX_DEPTH * 2; depth += 1) value = { nested: value };
-    socket.write(frame({ type: 'snapshot', snapshot: value }));
+    socket.write(frame({ type: 'semantic-full', snapshot: value }));
   },
   'too-many-nodes': () => {
     const nodes = [{ id: 'n1', role: 'region', name: 'Peer', geometry: unknownGeometry() }];
@@ -390,7 +390,7 @@ const SCENARIOS = {
   },
   'marker-st-terminator': () => {
     // ST rather than BEL. The tree must pair exactly as it does with BEL.
-    socket.write(frame({ type: 'snapshot', snapshot: tree(2, validNodes('Terminated')) }));
+    socket.write(frame({ type: 'semantic-full', snapshot: tree(2, validNodes('Terminated')) }));
     process.stdout.write(marker(2, sessionId, '\x1b\\'));
     published = 2;
   },
@@ -401,7 +401,7 @@ const SCENARIOS = {
   },
   'foreign-marker': () => {
     // A marker MAC bound to a different session must not commit anything here.
-    socket.write(frame({ type: 'snapshot', snapshot: tree(2, validNodes('Forged')) }));
+    socket.write(frame({ type: 'semantic-full', snapshot: tree(2, validNodes('Forged')) }));
     process.stdout.write(marker(2, 'another-session'));
   },
 };
@@ -413,7 +413,7 @@ function hello(overrides = {}) {
   if (NEEDS_LOGS.has(scenario)) capabilities.push('logs');
   return {
     type: 'hello',
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     token,
     adapter: { name: 'adversarial-peer', version: '0.1.0' },
     capabilities,
@@ -433,7 +433,7 @@ function sendLog(seq, message) {
 
 /** Sends a deliberately chosen snapshot together with its marker. */
 function send(snapshot) {
-  socket.write(frame({ type: 'snapshot', snapshot }));
+  socket.write(frame({ type: 'semantic-full', snapshot }));
   process.stdout.write(marker(snapshot.revision));
 }
 

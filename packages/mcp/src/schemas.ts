@@ -119,7 +119,7 @@ export const refEntrySchema = z.object({
 /** Whether the session publishes a semantic tree. */
 export const semanticTreeState = z.enum(['available', 'unavailable']);
 
-/** Authoritative/diagnostic evidence identity shared with protocol v2. */
+/** Authoritative/diagnostic evidence identity shared with semantic protocol v3. */
 export const evidenceProvenanceSchema = z.object({
   source: z.enum(['framework', 'application', 'terminal', 'recognizer', 'driver']),
   method: z.enum([

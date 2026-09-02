@@ -22,7 +22,7 @@ const contract: EffectiveSessionContract = Object.freeze({
   contractId: 'retry:0',
   sessionId: 'retry',
   epoch: 0,
-  protocol: 'termwright/2',
+  protocol: 'termwright/3',
   framework: null,
   providers: Object.freeze([]),
   capabilities: Object.freeze(
@@ -77,7 +77,7 @@ function fixture(initial: 'disabled' | 'covered' | 'ready') {
     });
   const snapshot = (): SemanticSnapshot =>
     Object.freeze({
-      v: 2,
+      v: 3,
       sessionId: 'retry',
       revision: sequence,
       columns: 40,

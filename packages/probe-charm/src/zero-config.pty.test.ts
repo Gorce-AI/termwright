@@ -245,7 +245,7 @@ describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe',
 
     await app.waitForText('ready');
     await app.settled();
-    expect(app.semanticTree()?.v).toBe(2);
+    expect(app.semanticTree()?.v).toBe(3);
     expect(app.contract()?.framework).toMatchObject({
       name: 'charm',
       version: 'v1.3.10',
@@ -386,7 +386,7 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     sessions.push(app);
     await app.waitForText('Sign in');
     await app.settled();
-    expect(app.semanticTree()?.v).toBe(2);
+    expect(app.semanticTree()?.v).toBe(3);
 
     const tree = app.semanticTree();
     expect(tree?.hitGrid).toEqual({
@@ -422,7 +422,7 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
       sessions.push(app);
       await app.waitForText('Loading');
       await app.settled();
-      expect(app.semanticTree()?.v).toBe(2);
+      expect(app.semanticTree()?.v).toBe(3);
       expect(app.contract()?.framework).toMatchObject({
         name: 'charm',
         version,

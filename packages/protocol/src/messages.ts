@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import type { SemanticSnapshot } from './tree.js';
+import type { SemanticDelta, SemanticSnapshot } from './tree.js';
 import type { LogRecord } from './logs.js';
 import type { ProbeInfo } from './probe/ir.js';
 import type { ProtocolLimits } from './limits.js';
 import { PROTOCOL_ID, type ProtocolId } from './env.js';
 import { ProtocolViolation } from './errors.js';
-import { projectDto } from './framing.js';
+import { framedByteLength, projectDto } from './framing.js';
 import { validateSnapshot } from './validate.js';
 import { validateLogRecord } from './logs.js';
 import { probeInfoSchema, validateProbeInfo } from './probe/validate.js';
@@ -51,7 +51,7 @@ export interface HelloAckMessage {
   readonly sessionId: string;
   readonly limits: ProtocolLimits;
   /** Which semantic traffic the driver wants pushed. */
-  readonly subscribe: 'snapshots' | 'revisions';
+  readonly subscribe: 'semantic';
   /** Marker configuration: producer must emit the signed OSC 8487 commit marker. */
   readonly marker: { readonly enabled: boolean };
   /**
@@ -79,10 +79,24 @@ export interface RevisionCommitMessage {
   readonly revision: number;
 }
 
-/** adapter → driver, full snapshot for a revision (subscribe: 'snapshots'). */
-export interface SnapshotMessage {
-  readonly type: 'snapshot';
+/** adapter → driver, authoritative full state and resynchronization keyframe. */
+export interface SemanticFullMessage {
+  readonly type: 'semantic-full';
   readonly snapshot: SemanticSnapshot;
+}
+
+/** adapter → driver, revision-based domain patch. */
+export interface SemanticDeltaMessage {
+  readonly type: 'semantic-delta';
+  readonly delta: SemanticDelta;
+}
+
+/** driver → adapter, request the next publication as a full keyframe. */
+export interface SemanticResyncRequestMessage {
+  readonly type: 'semantic-resync-request';
+  readonly sessionId: string;
+  readonly expectedBaseRevision: number | null;
+  readonly reason: 'base-mismatch' | 'missing-base' | 'driver-reset';
 }
 
 /**
@@ -137,12 +151,14 @@ export interface ProtocolErrorMessage {
 export type AdapterToDriverMessage =
   | HelloMessage
   | RevisionCommitMessage
-  | SnapshotMessage
+  | SemanticFullMessage
+  | SemanticDeltaMessage
   | FrameBeginMessage
   | LogMessage
   | ProtocolErrorMessage;
 
-export type DriverToAdapterMessage = HelloAckMessage | ProtocolErrorMessage;
+export type DriverToAdapterMessage =
+  HelloAckMessage | SemanticResyncRequestMessage | ProtocolErrorMessage;
 
 // --------------------------------------------------------------------------
 // Runtime validation
@@ -273,9 +289,14 @@ const revisionCommitSchema = z.strictObject({
   revision: revisionNumber,
 });
 
-const snapshotEnvelopeSchema = z.strictObject({
-  type: z.literal('snapshot'),
+const semanticFullEnvelopeSchema = z.strictObject({
+  type: z.literal('semantic-full'),
   snapshot: z.unknown(),
+});
+
+const semanticDeltaEnvelopeSchema = z.strictObject({
+  type: z.literal('semantic-delta'),
+  delta: z.unknown(),
 });
 
 const logEnvelopeSchema = z.strictObject({
@@ -289,7 +310,7 @@ const helloAckSchema = z.object({
   protocol: z.literal(PROTOCOL_ID),
   sessionId: nonEmptyIdentifier,
   limits: limitsSchema,
-  subscribe: z.enum(['snapshots', 'revisions']),
+  subscribe: z.literal('semantic'),
   marker: z.object({ enabled: z.boolean() }),
   logs: z
     .object({
@@ -298,6 +319,13 @@ const helloAckSchema = z.object({
       burst: safeIndex,
     })
     .optional(),
+});
+
+const semanticResyncRequestSchema = z.object({
+  type: z.literal('semantic-resync-request'),
+  sessionId: nonEmptyIdentifier,
+  expectedBaseRevision: z.union([revisionNumber, z.null()]),
+  reason: z.enum(['base-mismatch', 'missing-base', 'driver-reset']),
 });
 
 function malformed(detail: string): MessageParseResult<never> {
@@ -337,8 +365,12 @@ function check(schema: z.ZodType, value: unknown): string | null {
  * contract failures retain their typed provider classification; the rest are
  * `malformed`.
  */
-function checkSnapshot(value: unknown, limits: ProtocolLimits): MessageParseResult<never> | null {
-  const result = validateSnapshot(value, limits);
+function checkSnapshot(
+  value: unknown,
+  limits: ProtocolLimits,
+  wireBytes?: number,
+): MessageParseResult<never> | null {
+  const result = validateSnapshot(value, limits, wireBytes);
   if (result.ok) return null;
   const overCapacity =
     result.code === 'bytes' ||
@@ -423,11 +455,19 @@ export function parseAdapterMessage(
         ? { ok: true, message: dto as RevisionCommitMessage }
         : malformed(issue);
     }
-    case 'snapshot': {
-      const issue = check(snapshotEnvelopeSchema, dto);
+    case 'semantic-full': {
+      const issue = check(semanticFullEnvelopeSchema, dto);
       if (issue !== null) return malformed(issue);
-      const bad = checkSnapshot((dto as { snapshot: unknown }).snapshot, limits);
-      return bad ?? { ok: true, message: dto as SnapshotMessage };
+      const bad = checkSnapshot(
+        (dto as { snapshot: unknown }).snapshot,
+        limits,
+        framedByteLength(dto),
+      );
+      return bad ?? { ok: true, message: dto as SemanticFullMessage };
+    }
+    case 'semantic-delta': {
+      const issue = check(semanticDeltaEnvelopeSchema, dto);
+      return issue === null ? { ok: true, message: dto as SemanticDeltaMessage } : malformed(issue);
     }
     case 'frame-begin': {
       const issue = check(frameBeginSchema, dto);
@@ -487,6 +527,12 @@ export function parseDriverMessage(
       }
       const issue = check(helloAckSchema, dto);
       return issue === null ? { ok: true, message: dto as HelloAckMessage } : malformed(issue);
+    }
+    case 'semantic-resync-request': {
+      const issue = check(semanticResyncRequestSchema, dto);
+      return issue === null
+        ? { ok: true, message: dto as SemanticResyncRequestMessage }
+        : malformed(issue);
     }
     case 'error': {
       const issue = check(errorFromDriverSchema, dto);

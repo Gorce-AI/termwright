@@ -347,7 +347,7 @@ describe('terminal session resource lifecycle', () => {
         encodeFrame(
           {
             type: 'hello',
-            protocol: 'termwright/2',
+            protocol: 'termwright/3',
             token: endpoint.token,
             adapter: { name: 'controlled-adapter', version: '1.0.0' },
             capabilities: ['tree', 'render-revisions'],
@@ -530,7 +530,7 @@ describe('terminal session resource lifecycle', () => {
         } as unknown as SemanticChannel;
         completeAttach = () =>
           options.hooks.onAttach({
-            protocol: 'termwright/2',
+            protocol: 'termwright/3',
             adapter: { name: 'controlled-adapter', version: '1.0.0' },
             capabilities: ['tree', 'render-revisions'],
             markerEnabled: true,

@@ -115,7 +115,7 @@ const snapshotFacts = {
 /** The tree published at each of the fixture's two revisions. */
 export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
   {
-    v: 2,
+    v: 3,
     sessionId: 'trace-session',
     revision: 1,
     columns: 80,
@@ -140,7 +140,7 @@ export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
     ...snapshotFacts,
   },
   {
-    v: 2,
+    v: 3,
     sessionId: 'trace-session',
     revision: 2,
     columns: 80,

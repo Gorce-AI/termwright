@@ -1,6 +1,6 @@
 {
   "kind": "termwright-performance-report",
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "generatedAt": "2026-08-25T15:03:27.981Z",
   "environment": {
     "runtime": "bun 1.2.15; @opentui/core 0.5.3",
@@ -32,6 +32,12 @@
           "reason": "bytesSeenInJs contains terminal render bytes and markers, not semantic-channel bytes."
         },
         "fullSnapshots": {
+          "status": "unavailable",
+          "unit": "count",
+          "value": null,
+          "reason": "The marker-route benchmark deliberately has no semantic driver."
+        },
+        "deltas": {
           "status": "unavailable",
           "unit": "count",
           "value": null,

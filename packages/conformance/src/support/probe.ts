@@ -553,7 +553,7 @@ export class AdapterProbe {
       protocol: PROTOCOL_ID,
       sessionId: this.sessionId,
       limits: DEFAULT_LIMITS,
-      subscribe: 'snapshots',
+      subscribe: 'semantic',
       marker: { enabled: parsed.message.capabilities.includes('render-revisions') },
       // Granted only to an adapter that asked: an adapter that never announced
       // `logs` must not be handed a budget it can then claim it was given.

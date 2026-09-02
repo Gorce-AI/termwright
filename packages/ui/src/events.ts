@@ -1293,8 +1293,8 @@ function parseEffectiveSessionContract(value: unknown): EffectiveSessionContract
     throw new UiProtocolError('session.contract must be an object');
   }
   const record = value as Record<string, unknown>;
-  if (record['protocol'] !== 'termwright/2')
-    throw new UiProtocolError('session.contract protocol must be termwright/2');
+  if (record['protocol'] !== 'termwright/3')
+    throw new UiProtocolError('session.contract protocol must be termwright/3');
   const epoch = requireNumber(record, 'epoch', 'session.contract');
   if (!Number.isInteger(epoch) || epoch < 0)
     throw new UiProtocolError('session.contract epoch must be a non-negative integer');
@@ -1508,7 +1508,7 @@ function parseEffectiveSessionContract(value: unknown): EffectiveSessionContract
     contractId: requireBoundedString(record, 'contractId', 'session.contract'),
     sessionId: requireBoundedString(record, 'sessionId', 'session.contract'),
     epoch,
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     framework,
     providers: Object.freeze(providers),
     capabilities: Object.freeze(capabilities),

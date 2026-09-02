@@ -52,7 +52,7 @@ describe('generateToken', () => {
 
 describe('protocol identity', () => {
   it('pins the version and id together', () => {
-    expect(PROTOCOL_VERSION).toBe(2);
+    expect(PROTOCOL_VERSION).toBe(3);
     expect(PROTOCOL_ID).toBe(`termwright/${PROTOCOL_VERSION}`);
   });
 });

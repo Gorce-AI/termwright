@@ -112,6 +112,16 @@
       }
     },
     {
+      "id": "adapter.incremental-tree",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: incremental-tree.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes incremental-tree."
+      }
+    },
+    {
       "id": "probe.stable-identity",
       "category": "evidence",
       "layer": "producer",

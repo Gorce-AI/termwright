@@ -493,8 +493,8 @@ func TestTermwrightGeometryDoesNotInventComponentLayout(t *testing.T) {
 		node:        protocol.Node{Role: protocol.RoleTextbox, Name: "Host", P: protocol.ProvenanceFramework},
 	}})
 
-	if snapshot.V != 2 || snapshot.HitGrid.Status != "unsupported" {
-		t.Fatalf("snapshot does not carry required v2 observations: %+v", snapshot)
+	if snapshot.V != 3 || snapshot.HitGrid.Status != "unsupported" {
+		t.Fatalf("snapshot does not carry required v3 observations: %+v", snapshot)
 	}
 	if root.Geometry.Displayed.Status != "known" {
 		t.Fatalf("root frame production was not retained: %+v", root.Geometry)

@@ -80,7 +80,7 @@ func TestConstantsMatchTheReference(t *testing.T) {
 	}
 	loadVectors(t, "constants", &vectors)
 
-	if ProtocolID != "termwright/2" || ProtocolVersion != 2 {
+	if ProtocolID != "termwright/3" || ProtocolVersion != 3 {
 		t.Errorf("protocol identity drifted: %s/%d", ProtocolID, ProtocolVersion)
 	}
 	if vectors.FrameHeaderBytes != FrameHeaderBytes || vectors.MarkerMACBytes != MarkerMACBytes {
@@ -522,7 +522,7 @@ func TestLimitsTolerateUnknownCeilings(t *testing.T) {
 		"protocol":  ProtocolID,
 		"sessionId": "s-1",
 		"limits":    limits,
-		"subscribe": "snapshots",
+		"subscribe": "semantic",
 		"marker":    map[string]any{"enabled": true},
 	}
 	if _, err := ParseDriverMessage(ack, DefaultLimits); err != nil {
@@ -556,7 +556,7 @@ func TestLimitsStillRequireEveryKnownCeiling(t *testing.T) {
 		"protocol":  ProtocolID,
 		"sessionId": "s-1",
 		"limits":    limits,
-		"subscribe": "snapshots",
+		"subscribe": "semantic",
 		"marker":    map[string]any{"enabled": true},
 	}
 	_, err := ParseDriverMessage(ack, DefaultLimits)
@@ -594,7 +594,7 @@ func TestClosedSetsStayClosedInBothDirections(t *testing.T) {
 	base := func() map[string]any {
 		return map[string]any{
 			"type": "hello-ack", "protocol": ProtocolID, "sessionId": "s-1",
-			"limits": limits, "subscribe": "snapshots",
+			"limits": limits, "subscribe": "semantic",
 			"marker": map[string]any{"enabled": true},
 		}
 	}

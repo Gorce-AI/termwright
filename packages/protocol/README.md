@@ -16,31 +16,34 @@ pnpm add @termwright/protocol
 
 ## Current protocol
 
-The only supported protocol id is `termwright/2` (`PROTOCOL_VERSION === 2`).
-Every semantic snapshot has `v: 2` and uses evidence-qualified observations.
+The only supported protocol id is `termwright/3` (`PROTOCOL_VERSION === 3`).
+Every semantic snapshot has `v: 3` and uses evidence-qualified observations.
 The endpoint and token select the private semantic session; clients do not
 choose a protocol at runtime.
 
-Each semantic revision is published as a complete snapshot.
+The first semantic revision and every resynchronization use `semantic-full`.
+Incremental producers then publish revision-based `semantic-delta` messages;
+full-only producers may keep publishing `semantic-full`.
 
 ## Package surface
 
-| Module      | Provides                                                                                     |
-| ----------- | -------------------------------------------------------------------------------------------- |
-| `env`       | Endpoint/token names, `PROTOCOL_VERSION`, `PROTOCOL_ID`                                      |
-| `roles`     | Closed semantic role and action vocabularies                                                 |
-| `limits`    | Default, absolute, and negotiated protocol limits                                            |
-| `tree`      | `SemanticSnapshot`, `SemanticNode`, observations, rectangles, portable state, extended state |
-| `node-keys` | Closed semantic-node key set shared by validators                                            |
-| `probe`     | Probe IR, metadata, identity, capability, and provenance vocabularies                        |
-| `logs`      | Structured application-log records and validation                                            |
-| `messages`  | Wire message types and both directional parsers                                              |
-| `framing`   | Length-prefixed JSON framing and hostile-data projection                                     |
-| `marker`    | Authenticated render-marker encoding and verification                                        |
-| `validate`  | Full snapshot validation                                                                     |
-| `accesskit` | Pure conversion to AccessKit-compatible data                                                 |
-| `errors`    | Typed protocol violations                                                                    |
-| `run-state` | Closed run lifecycle, terminal verdicts, and transition validation                           |
+| Module           | Provides                                                                                     |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `env`            | Endpoint/token names, `PROTOCOL_VERSION`, `PROTOCOL_ID`                                      |
+| `roles`          | Closed semantic role and action vocabularies                                                 |
+| `limits`         | Default, absolute, and negotiated protocol limits                                            |
+| `tree`           | `SemanticSnapshot`, `SemanticNode`, observations, rectangles, portable state, extended state |
+| `node-keys`      | Closed semantic-node key set shared by validators                                            |
+| `probe`          | Probe IR, metadata, identity, capability, and provenance vocabularies                        |
+| `logs`           | Structured application-log records and validation                                            |
+| `messages`       | Wire message types and both directional parsers                                              |
+| `framing`        | Length-prefixed JSON framing and hostile-data projection                                     |
+| `marker`         | Authenticated render-marker encoding and verification                                        |
+| `validate`       | Full snapshot validation                                                                     |
+| `semantic-state` | Deterministic diff, atomic delta application, and resynchronization semantics                |
+| `accesskit`      | Pure conversion to AccessKit-compatible data                                                 |
+| `errors`         | Typed protocol violations                                                                    |
+| `run-state`      | Closed run lifecycle, terminal verdicts, and transition validation                           |
 
 `passed-with-skips` is a terminal run verdict distinct from both plain
 `passed` and fully `skipped`. It preserves partial-skip evidence for hosts and
@@ -62,7 +65,7 @@ socket.on('data', (chunk: Uint8Array) => {
       return;
     }
 
-    if (result.message.type === 'snapshot') {
+    if (result.message.type === 'semantic-full') {
       retain(result.message.snapshot); // validated and immutable
     }
   }
@@ -81,7 +84,7 @@ The adapter sends `hello` first and exactly once:
 ```ts
 {
   type: 'hello',
-  protocol: 'termwright/2',
+  protocol: 'termwright/3',
   token,
   adapter: {name: 'my-probe', version: '1.0.0'},
   capabilities: ['tree', 'states', 'actions', 'render-revisions'],
@@ -90,6 +93,11 @@ The adapter sends `hello` first and exactly once:
     probeVersion: '1.0.0',
     identityKind: 'stable',
     capabilities: ['visible-rect'],
+    instrumentation: {
+      highestTier: 'T0',
+      semanticClass: 'A',
+      degradedCapabilities: [],
+    },
   },
 }
 ```
@@ -99,22 +107,26 @@ adapter. Adapter capabilities describe optional wire traffic or guarantees.
 Probe metadata describes the framework facts that were actually audited.
 
 The driver replies with `hello-ack` containing the same protocol id, a session
-id, active limits, snapshot subscription, marker configuration, and an optional
+id, active limits, the `semantic` subscription, marker configuration, and an optional
 log budget.
 
 Unknown protocol ids are reported as `bad-version`. A malformed hello is never
 partially accepted.
 
-## Full snapshot publication
+## Semantic publication
 
 After a framework completes a render, the producer publishes in this order:
 
-1. `snapshot` containing the complete semantic state for revision N;
+1. `semantic-full` or `semantic-delta` containing semantic revision N;
 2. `revision-commit` for N;
 3. the authenticated OSC marker after the terminal bytes for N are flushed.
 
-If the driver subscribes to `revisions`, the producer sends the commit without
-the tree. Otherwise every semantic revision carries a complete snapshot.
+Every delta names `baseRevision`. A receiver applies it to staging state,
+validates the reconstructed tree and evidence, and publishes it atomically.
+When the base is absent or different, the receiver sends
+`semantic-resync-request`; the producer's next publication is a full tree.
+Absent patch fields mean unchanged, while `clear` explicitly removes an
+optional field.
 
 A full snapshot includes the session id, revision, viewport, optional cursor,
 roots, all nodes, coordinate-space observation, and hit-grid observation. Each
@@ -245,7 +257,7 @@ metadata without breaking an already published client.
 ## Cross-language conformance
 
 `clients/test-vectors/` contains reference-generated frame bytes, hostile
-cases, marker sequences, observation cases, and valid and invalid v2
+cases, marker sequences, observation cases, and valid and invalid v3
 snapshots. The generator validates each expectation before writing it.
 
 Framework integrations should also run `@termwright/conformance` against a
@@ -254,6 +266,7 @@ fixture demonstrates the same fact independently.
 
 ## Protocol evolution
 
-Additive changes are allowed only when an existing v2 reader can survive them.
+Before 1.0, wire-breaking changes replace the previous protocol across all
+built-in clients; old semantic readers and negotiation paths are removed.
 Changing a required field, closed-set member without a gate, encoding, unit, or
 observable meaning requires a coordinated protocol-major change.

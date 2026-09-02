@@ -163,7 +163,7 @@ describe('the shape of the tree', () => {
   it('carries the session, revision and viewport through unchanged', () => {
     const snapshot = recognize(frameOf(object({ frameworkType: 'Box' })), OPTIONS);
 
-    expect(snapshot).toMatchObject({ v: 2, sessionId: 's-1', revision: 7, columns: 80, rows: 24 });
+    expect(snapshot).toMatchObject({ v: 3, sessionId: 's-1', revision: 7, columns: 80, rows: 24 });
   });
 
   it('accepts an empty frame rather than treating it as an error', () => {

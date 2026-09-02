@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LIMITS } from './limits.js';
-import { encodeFrame, createFrameDecoder } from './framing.js';
+import { encodeFrame, createFrameDecoder, framedByteLength } from './framing.js';
 import { parseAdapterMessage, parseDriverMessage } from './messages.js';
 
 const LIMITS = DEFAULT_LIMITS;
@@ -18,7 +18,7 @@ function validSnapshot(): Record<string, unknown> {
     visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
   });
   return {
-    v: 2,
+    v: 3,
     sessionId: 's1',
     revision: 3,
     columns: 80,
@@ -41,7 +41,7 @@ function validSnapshot(): Record<string, unknown> {
 function hello(): Record<string, unknown> {
   return {
     type: 'hello',
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     token: 'deadbeef',
     adapter: { name: '@termwright/ink', version: '0.1.0' },
     capabilities: ['tree'],
@@ -51,10 +51,10 @@ function hello(): Record<string, unknown> {
 function helloAck(): Record<string, unknown> {
   return {
     type: 'hello-ack',
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     sessionId: 's1',
     limits: { ...LIMITS },
-    subscribe: 'snapshots',
+    subscribe: 'semantic',
     marker: { enabled: true },
   };
 }
@@ -74,7 +74,19 @@ describe('parseAdapterMessage', () => {
   it('accepts each adapter → driver message', () => {
     expect(adapterCode(hello())).toBe('ok');
     expect(adapterCode({ type: 'revision-commit', revision: 7 })).toBe('ok');
-    expect(adapterCode({ type: 'snapshot', snapshot: validSnapshot() })).toBe('ok');
+    expect(adapterCode({ type: 'semantic-full', snapshot: validSnapshot() })).toBe('ok');
+    expect(
+      adapterCode({
+        type: 'semantic-delta',
+        delta: {
+          v: 3,
+          sessionId: 's1',
+          revision: 4,
+          baseRevision: 3,
+          updateNodes: [{ id: 'root', set: { name: 'updated' } }],
+        },
+      }),
+    ).toBe('ok');
     expect(adapterCode({ type: 'error', code: 'malformed', message: 'bad frame' })).toBe('ok');
   });
 
@@ -82,6 +94,14 @@ describe('parseAdapterMessage', () => {
     const result = parseAdapterMessage(hello(), LIMITS);
     if (!result.ok) throw new Error(result.detail);
     expect(Object.isFrozen(result.message)).toBe(true);
+  });
+
+  it('preserves the decoder byte count through validation', () => {
+    const wire = encodeFrame({ type: 'semantic-full', snapshot: validSnapshot() }, 1_000_000);
+    const [decoded] = createFrameDecoder(1_000_000).push(wire);
+    const result = parseAdapterMessage(decoded, LIMITS);
+    if (!result.ok) throw new Error(result.detail);
+    expect(framedByteLength(result.message)).toBe(wire.byteLength - 4);
   });
 
   it('flags a foreign protocol version distinctly from malformed input', () => {
@@ -204,7 +224,7 @@ describe('parseAdapterMessage', () => {
         },
       ],
     };
-    expect(adapterCode({ type: 'snapshot', snapshot: broken })).toBe('malformed');
+    expect(adapterCode({ type: 'semantic-full', snapshot: broken })).toBe('malformed');
 
     const heavy = {
       ...validSnapshot(),
@@ -245,7 +265,7 @@ describe('parseAdapterMessage', () => {
       ],
     };
     const result = parseAdapterMessage(
-      { type: 'snapshot', snapshot: heavy },
+      { type: 'semantic-full', snapshot: heavy },
       { ...LIMITS, maxNodes: 4 },
     );
     expect(result.ok ? 'ok' : result.code).toBe('limit-exceeded');
@@ -336,6 +356,7 @@ describe('parseAdapterMessage — probe lifecycle', () => {
     probeVersion: '0.1.0',
     identityKind: 'stable',
     capabilities: ['stable-identity', 'operations'],
+    instrumentation: { highestTier: 'T0', semanticClass: 'A', degradedCapabilities: [] },
   };
 
   it('accepts a hello carrying a probe block, and one without', () => {
@@ -370,6 +391,14 @@ describe('parseAdapterMessage — probe lifecycle', () => {
 describe('parseDriverMessage', () => {
   it('accepts each driver → adapter message', () => {
     expect(driverCode(helloAck())).toBe('ok');
+    expect(
+      driverCode({
+        type: 'semantic-resync-request',
+        sessionId: 's1',
+        expectedBaseRevision: 3,
+        reason: 'base-mismatch',
+      }),
+    ).toBe('ok');
     expect(driverCode({ type: 'error', code: 'bad-token', message: 'nope' })).toBe('ok');
   });
 
@@ -499,13 +528,17 @@ describe('parseDriverMessage', () => {
 });
 
 describe('framing and parsing together', () => {
-  it('round-trips a snapshot message across the wire', () => {
-    const message = { type: 'snapshot', snapshot: validSnapshot() };
+  it('round-trips a full semantic message without re-projecting the decoded DTO', () => {
+    const message = { type: 'semantic-full', snapshot: validSnapshot() };
     const decoder = createFrameDecoder(LIMITS.maxFrameBytes);
     const [decoded] = decoder.push(encodeFrame(message, LIMITS.maxFrameBytes));
 
     const result = parseAdapterMessage(decoded, LIMITS);
     if (!result.ok) throw new Error(`${result.code}: ${result.detail}`);
     expect(result.message).toEqual(message);
+    if (result.message.type !== 'semantic-full') throw new Error('expected semantic-full');
+    expect(result.message.snapshot).toBe(
+      (decoded as { readonly snapshot: Record<string, unknown> }).snapshot,
+    );
   });
 });

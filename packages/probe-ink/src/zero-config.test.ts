@@ -157,7 +157,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
   });
 
   it.each(runtimes)(
-    'publishes an explicit qualified v2 contract under %s',
+    'publishes an explicit qualified v3 contract under %s',
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
@@ -165,7 +165,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
       const hello = await driver.waitForHandshake();
       const [snapshot] = await driver.waitForSnapshots(1);
       expect(hello.protocol).toBe(PROTOCOL_ID);
-      expect(snapshot?.v).toBe(2);
+      expect(snapshot?.v).toBe(3);
       expect(snapshot?.coordinateSpace).toMatchObject({ status: 'known', value: 'viewport-cells' });
       expect(snapshot?.hitGrid).toMatchObject({ status: 'unsupported' });
       expect(snapshot?.nodes.every((node) => node.geometry !== undefined)).toBe(true);

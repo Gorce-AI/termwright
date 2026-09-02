@@ -115,15 +115,15 @@ fn observation_vectors_preserve_unknown_and_half_open_geometry() {
     assert_eq!(ratios["touching-outside-edge"], 0.0);
     let qualified: termwright_protocol::Snapshot =
         serde_json::from_value(vectors["qualifiedSnapshot"].clone())
-            .expect("Rust wire types decode the qualified v2 vector");
-    assert_eq!(qualified.v, 2);
+            .expect("Rust wire types decode the qualified v3 vector");
+    assert_eq!(qualified.v, 3);
     assert!(!qualified.nodes.is_empty());
     assert!(matches!(
         qualified.hit_grid,
         termwright_protocol::Observation::Known { .. }
     ));
     validate_snapshot(&vectors["qualifiedSnapshot"], &DEFAULT_LIMITS)
-        .expect("qualified v2 vector validates structurally");
+        .expect("qualified v3 vector validates structurally");
 
     let mut unmapped = vectors["qualifiedSnapshot"].clone();
     unmapped["hitGrid"]["value"]["regions"][0]["recipientId"] = Value::String("missing".into());
@@ -488,7 +488,7 @@ fn hello_ack_with(limits: Value, extra: Option<(&str, Value)>) -> Value {
         "protocol": PROTOCOL_ID,
         "sessionId": "s-1",
         "limits": limits,
-        "subscribe": "snapshots",
+        "subscribe": "semantic",
         "marker": { "enabled": true },
     });
     if let Some((key, value)) = extra {

@@ -164,7 +164,7 @@ describe('artifact-safe device operations', () => {
 
   it('projects semantic values without weakening already-safe observations', () => {
     const snapshot: SemanticSnapshot = {
-      v: 2,
+      v: 3,
       sessionId: 's',
       revision: 1,
       columns: 80,

@@ -168,7 +168,7 @@ function releaseScreenFirstFocusFrame() {
   enqueueOutput(async () => {
     await writeSocketAndFlush(
       pending.socket,
-      encodeFrame({ type: 'snapshot', snapshot: pending.snapshot }, 1024 * 1024),
+      encodeFrame({ type: 'semantic-full', snapshot: pending.snapshot }, 1024 * 1024),
     );
     await writeSocketAndFlush(
       pending.socket,
@@ -450,7 +450,7 @@ function qualifiedSnapshot(snapshot) {
         );
   return {
     ...snapshot,
-    v: 2,
+    v: 3,
     nodes,
     coordinateSpace: withoutBounds
       ? { status: 'unsupported', capability: 'coordinate-space', reason: 'framework-unobservable' }
@@ -631,7 +631,7 @@ function publish() {
     // production adapters are required to do. Serializing this task also
     // prevents frame N+1 from entering between frame N and marker N.
     await writeAndFlush(frame);
-    publicationSocket.write(encodeFrame({ type: 'snapshot', snapshot }, 1024 * 1024));
+    publicationSocket.write(encodeFrame({ type: 'semantic-full', snapshot }, 1024 * 1024));
     publicationSocket.write(
       encodeFrame({ type: 'revision-commit', revision: publishedRevision }, 1024 * 1024),
     );
@@ -759,7 +759,7 @@ process.stdin.on('data', (chunk) => {
     };
     pendingFocusMarkerWritten = false;
     socket?.write(encodeFrame({ type: 'frame-begin', revision: pendingRevision }, 1024 * 1024));
-    socket?.write(encodeFrame({ type: 'snapshot', snapshot: pendingSnapshot }, 1024 * 1024));
+    socket?.write(encodeFrame({ type: 'semantic-full', snapshot: pendingSnapshot }, 1024 * 1024));
     // The test releases marker and commit as two acknowledged phases only after
     // an action starts. That forces marker observation while FRAME_END remains
     // withheld; runner speed cannot decide which branch the test covers.
@@ -853,7 +853,7 @@ if (endpoint === undefined || token === undefined) {
         encodeFrame(
           {
             type: 'hello',
-            protocol: 'termwright/2',
+            protocol: 'termwright/3',
             token,
             adapter: { name: 'fixture', version: '0.1.0' },
             capabilities: [
@@ -935,6 +935,18 @@ if (endpoint === undefined || token === undefined) {
                       ...(probeMode === 'stable' || pendingFocusFrame ? ['stable-identity'] : []),
                       ...(pendingFocusFrame ? ['frame-begin'] : []),
                     ],
+                    instrumentation:
+                      probeMode === 'frame-local'
+                        ? {
+                            highestTier: 'T2',
+                            semanticClass: 'B',
+                            degradedCapabilities: ['intended-geometry', 'clipped-geometry'],
+                          }
+                        : {
+                            highestTier: 'T3',
+                            semanticClass: 'A',
+                            degradedCapabilities: [],
+                          },
                   },
                 }),
           },

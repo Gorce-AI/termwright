@@ -26,7 +26,7 @@ const unknown = (): NodeGeometryObservations => ({
 });
 
 const snapshot: SemanticSnapshot = {
-  v: 2,
+  v: 3,
   sessionId: 's1',
   revision: 7,
   columns: 80,

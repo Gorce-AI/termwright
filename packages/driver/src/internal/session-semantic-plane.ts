@@ -133,7 +133,7 @@ export function buildSessionContract(input: SessionContractInput): EffectiveSess
     contractId: `${input.sessionId}:0`,
     sessionId: input.sessionId,
     epoch: 0,
-    protocol: 'termwright/2' as const,
+    protocol: 'termwright/3' as const,
     framework:
       attachment === null
         ? null

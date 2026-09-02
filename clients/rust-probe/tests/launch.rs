@@ -99,10 +99,10 @@ fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
                 if frame.value.get("type").and_then(serde_json::Value::as_str) == Some("hello") {
                     let ack = serde_json::json!({
                         "type": "hello-ack",
-                        "protocol": "termwright/2",
+                        "protocol": "termwright/3",
                         "sessionId": "s-no-crossterm",
                         "limits": DEFAULT_LIMITS,
-                        "subscribe": "snapshots",
+                        "subscribe": "semantic",
                         "marker": { "enabled": true },
                     });
                     let encoded =

@@ -197,7 +197,7 @@ wrapped and no listener is registered.
 
 ## Semantic snapshots
 
-The semantic channel uses `termwright/2` and complete evidence-qualified
+The semantic channel uses `termwright/3` and complete evidence-qualified
 snapshots. Each semantic revision is validated independently, retained, and
 paired with its authenticated render marker.
 

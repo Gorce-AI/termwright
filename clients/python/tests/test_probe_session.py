@@ -173,12 +173,12 @@ async def test_it_publishes_a_valid_tree_for_a_real_app(endpoint):
         await wait_for(lambda: client.connected)
         session.on_frame(commit_for(app))
         await wait_for(
-            lambda: any(m.get("type") == "snapshot" for m in driver.received)
+            lambda: any(m.get("type") == "semantic-full" for m in driver.received)
         )
         await pilot.pause()
         await client.close()
 
-    published = [m for m in driver.received if m.get("type") == "snapshot"]
+    published = [m for m in driver.received if m.get("type") == "semantic-full"]
     assert published, "nothing reached the driver"
     snapshot = published[-1]["snapshot"]
     result = validate_snapshot(snapshot, DEFAULT_LIMITS)
@@ -432,7 +432,7 @@ async def test_a_vanilla_app_in_a_child_process_publishes_a_tree(endpoint, tmp_p
         )
         try:
             await wait_for(
-                lambda: any(m.get("type") == "snapshot" for m in driver.received),
+                lambda: any(m.get("type") == "semantic-full" for m in driver.received),
                 timeout=30.0,
             )
         finally:
@@ -440,7 +440,7 @@ async def test_a_vanilla_app_in_a_child_process_publishes_a_tree(endpoint, tmp_p
                 child.terminate()
             await child.wait()
 
-    published = [m for m in driver.received if m.get("type") == "snapshot"]
+    published = [m for m in driver.received if m.get("type") == "semantic-full"]
     assert published, "the child published nothing"
     snapshot = published[-1]["snapshot"]
     result = validate_snapshot(snapshot, DEFAULT_LIMITS)

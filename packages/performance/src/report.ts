@@ -1,8 +1,12 @@
 import { performance } from 'node:perf_hooks';
+import { isDeepStrictEqual } from 'node:util';
 import {
+  applySemanticDelta,
   createFrameDecoder,
   DEFAULT_LIMITS,
+  diffSemanticSnapshots,
   encodeFrame,
+  framedByteLength,
   parseAdapterMessage,
   type FrameDecoder,
   type ProbeFrame,
@@ -93,6 +97,7 @@ function exerciseFrame(
   framework: string,
   revision: number,
   decoder: FrameDecoder,
+  previous: SemanticSnapshot | null,
   now: () => number,
 ): {
   readonly snapshot: SemanticSnapshot;
@@ -100,6 +105,7 @@ function exerciseFrame(
   readonly serializationMicroseconds: number;
   readonly parentNormalizationMicroseconds: number;
   readonly probeHotPathMicroseconds: number;
+  readonly publication: 'full' | 'delta';
 } {
   const normalizationStarted = now();
   const snapshot = recognize(frame, {
@@ -113,7 +119,11 @@ function exerciseFrame(
   const normalizationEnded = now();
 
   const serializationStarted = now();
-  const wire = encodeFrame({ type: 'snapshot', snapshot }, DEFAULT_LIMITS.maxFrameBytes);
+  const envelope =
+    previous === null
+      ? ({ type: 'semantic-full', snapshot } as const)
+      : ({ type: 'semantic-delta', delta: diffSemanticSnapshots(previous, snapshot) } as const);
+  const wire = encodeFrame(envelope, DEFAULT_LIMITS.maxFrameBytes);
   const serializationEnded = now();
 
   // This is the actual parent-side hostile-input boundary: UTF-8/JSON decode,
@@ -122,18 +132,37 @@ function exerciseFrame(
   const decoded = decoder.push(wire);
   const parsed = parseAdapterMessage(decoded[0], DEFAULT_LIMITS);
   const parentEnded = now();
-  if (decoded.length !== 1 || !parsed.ok || parsed.message.type !== 'snapshot') {
+  if (decoded.length !== 1 || !parsed.ok) {
     throw new Error('benchmark frame did not survive the production wire parser');
+  }
+  let committed: SemanticSnapshot;
+  if (parsed.message.type === 'semantic-full') {
+    committed = parsed.message.snapshot;
+  } else if (parsed.message.type === 'semantic-delta' && previous !== null) {
+    const applied = applySemanticDelta(
+      previous,
+      parsed.message.delta,
+      DEFAULT_LIMITS,
+      framedByteLength(parsed.message),
+    );
+    if (!applied.ok) throw new Error(`benchmark delta did not apply: ${applied.detail}`);
+    committed = applied.snapshot;
+  } else {
+    throw new Error('benchmark publication kind did not match its committed base');
+  }
+  if (!isDeepStrictEqual(committed, snapshot)) {
+    throw new Error('incremental reconstruction differs from the full-snapshot oracle');
   }
 
   const normalizationMicroseconds = (normalizationEnded - normalizationStarted) * 1_000;
   const serializationMicroseconds = (serializationEnded - serializationStarted) * 1_000;
   return {
-    snapshot,
+    snapshot: committed,
     bytes: wire.byteLength,
     serializationMicroseconds,
     parentNormalizationMicroseconds: (parentEnded - parentStarted) * 1_000,
     probeHotPathMicroseconds: normalizationMicroseconds + serializationMicroseconds,
+    publication: envelope.type === 'semantic-full' ? 'full' : 'delta',
   };
 }
 
@@ -152,8 +181,16 @@ export function runPerformanceBenchmark(options: BenchmarkOptions = {}): Perform
     // it here as well: allocating a decoder per frame would measure a path the
     // application never takes and overstate parent normalization cost.
     const decoder = createFrameDecoder(DEFAULT_LIMITS.maxFrameBytes);
+    let warmupCommitted: SemanticSnapshot | null = null;
     for (let index = 1; index <= warmupIterations; index += 1) {
-      exerciseFrame(scenario.makeFrame(index, nodeCount), scenario.framework, index, decoder, now);
+      warmupCommitted = exerciseFrame(
+        scenario.makeFrame(index, nodeCount),
+        scenario.framework,
+        index,
+        decoder,
+        warmupCommitted,
+        now,
+      ).snapshot;
     }
 
     const samples: Samples = {
@@ -166,9 +203,15 @@ export function runPerformanceBenchmark(options: BenchmarkOptions = {}): Perform
       probeHotPathMicroseconds: [],
     };
 
+    let committed: SemanticSnapshot | null = null;
+    let fullSnapshots = 0;
+    let deltas = 0;
     for (let index = 1; index <= iterations; index += 1) {
       const frame = scenario.makeFrame(index, nodeCount);
-      const result = exerciseFrame(frame, scenario.framework, index, decoder, now);
+      const result = exerciseFrame(frame, scenario.framework, index, decoder, committed, now);
+      committed = result.snapshot;
+      if (result.publication === 'full') fullSnapshots += 1;
+      else deltas += 1;
       samples.probeEvents.push(frame.objects.length + (frame.operations?.length ?? 0));
       samples.bytes.push(result.bytes);
       samples.semanticNodes.push(result.snapshot.nodes.length);
@@ -203,8 +246,13 @@ export function runPerformanceBenchmark(options: BenchmarkOptions = {}): Perform
         ),
         fullSnapshots: exact(
           'count',
-          iterations,
-          'The current TypeScript probe transport sends one full snapshot per benchmark frame.',
+          fullSnapshots,
+          'Initial keyframes sent by the incremental TypeScript probe transport.',
+        ),
+        deltas: exact(
+          'count',
+          deltas,
+          'Revision-based semantic deltas reconstructed against the full-snapshot oracle.',
         ),
         droppedEvents: unavailable(
           'count',

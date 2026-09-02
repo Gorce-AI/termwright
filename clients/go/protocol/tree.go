@@ -259,7 +259,7 @@ type Snapshot struct {
 func NewSnapshot(sessionID string, revision int64, columns, rows int) *Snapshot {
 	space := "viewport-cells"
 	return &Snapshot{
-		V: 2, SessionID: sessionID, Revision: revision, Columns: columns, Rows: rows,
+		V: 3, SessionID: sessionID, Revision: revision, Columns: columns, Rows: rows,
 		RootIDs: []string{}, Nodes: []Node{},
 		CoordinateSpace: Observation[string]{Status: "known", Value: &space, Evidence: DefaultEvidence("semantic-adapter")},
 		HitGrid:         Observation[PointerHitGrid]{Status: "unsupported", Capability: string(CapPointerHitGrid), Reason: "not-negotiated"},

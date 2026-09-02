@@ -108,7 +108,7 @@
     }
   ],
   "qualifiedSnapshot": {
-    "v": 2,
+    "v": 3,
     "sessionId": "observation-vector",
     "revision": 7,
     "columns": 12,

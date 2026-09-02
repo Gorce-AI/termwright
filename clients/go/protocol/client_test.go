@@ -133,7 +133,7 @@ func (d *fakeDriver) serve(t *testing.T) {
 					d.record(message)
 					subscribe := d.subscribe
 					if subscribe == "" {
-						subscribe = "snapshots"
+						subscribe = "semantic"
 					}
 					d.send(HelloAck{
 						Type:      "hello-ack",
@@ -278,7 +278,7 @@ func TestNoClientWithoutACompleteEnvironment(t *testing.T) {
 	}
 	client := fromEnvValues("/tmp/tw.sock", testToken, Options{})
 	if client == nil {
-		t.Error("termwright/2 did not create a client")
+		t.Error("termwright/3 did not create a client")
 	}
 
 	// A Windows pipe path is a real endpoint, not a reason to stay dormant:
@@ -343,7 +343,7 @@ func TestHandshakeAndPublish(t *testing.T) {
 		t.Errorf("raw hello carried dishonest probe capabilities: %#v", probe["capabilities"])
 	}
 	snapshotFrame := frames[1]
-	if snapshotFrame["type"] != "snapshot" {
+	if snapshotFrame["type"] != "semantic-full" {
 		t.Fatalf("second frame is %v, want a snapshot", snapshotFrame["type"])
 	}
 	body := snapshotFrame["snapshot"].(map[string]any)
@@ -483,8 +483,8 @@ func TestPublishRefusesAnInvalidSnapshot(t *testing.T) {
 	}
 }
 
-func TestSnapshotMessageMarshalsAsAnEnvelope(t *testing.T) {
-	body, err := marshalCanonical(SnapshotMessage{Type: "snapshot", Snapshot: sampleSnapshot()})
+func TestSemanticFullMessageMarshalsAsAnEnvelope(t *testing.T) {
+	body, err := marshalCanonical(SemanticFullMessage{Type: "semantic-full", Snapshot: sampleSnapshot()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,7 +492,7 @@ func TestSnapshotMessageMarshalsAsAnEnvelope(t *testing.T) {
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		t.Fatal(err)
 	}
-	if parsed["type"] != "snapshot" {
+	if parsed["type"] != "semantic-full" {
 		t.Errorf("envelope type is %v", parsed["type"])
 	}
 	if _, ok := parsed["snapshot"].(map[string]any); !ok {
@@ -565,7 +565,7 @@ func startStalledDriver(t *testing.T, path string) *stalledDriver {
 		}
 		ack, _ := EncodeFrame(map[string]any{
 			"type": "hello-ack", "protocol": ProtocolID, "sessionId": "s-1",
-			"limits": DefaultLimits, "subscribe": "snapshots",
+			"limits": DefaultLimits, "subscribe": "semantic",
 			"marker": map[string]any{"enabled": true},
 		}, DefaultLimits.MaxFrameBytes)
 		_, _ = conn.Write(ack)

@@ -256,7 +256,7 @@ function parseContract(value: unknown, sessionId: string, path: string): Effecti
   };
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail('is not an object');
   const contract = value as Record<string, unknown>;
-  if (contract['protocol'] !== 'termwright/2' || contract['sessionId'] !== sessionId)
+  if (contract['protocol'] !== 'termwright/3' || contract['sessionId'] !== sessionId)
     fail('does not identify this v2 session');
   const nonEmpty = (candidate: unknown, field: string): string => {
     if (typeof candidate !== 'string' || candidate.length === 0 || candidate.length > 2_048)
@@ -426,7 +426,7 @@ function parseContract(value: unknown, sessionId: string, path: string): Effecti
     contractId: nonEmpty(contract['contractId'], 'contractId'),
     sessionId,
     epoch: integer(contract['epoch'], 'epoch'),
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     framework,
     providers: Object.freeze(providers),
     capabilities: Object.freeze(capabilities),

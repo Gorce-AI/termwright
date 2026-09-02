@@ -7,8 +7,8 @@ An instrumented app publishes its widget tree over a unix socket and commits
 each render with a signed OSC marker, so the driver can assert on _roles and
 names_ instead of screen-scraping cells.
 
-The protocol client speaks `termwright/2`. Every published semantic revision
-is a complete v2 snapshot with evidence-qualified geometry and pointer
+The protocol client speaks `termwright/3`. Every published semantic revision
+is a complete v3 snapshot with evidence-qualified geometry and pointer
 observations.
 
 **Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` the
@@ -211,7 +211,7 @@ or, on a session that came up:
 ```text
   tw:sem  [p41207]   0.002s dial unix:/tmp/tw-8f21/s timeout=5000ms
   tw:sem  [p41207]   0.003s hello sent adapter=textual/1.0.0 caps=tree,states,actions,render-revisions,intended-geometry,clipped-geometry,pointer-hit-grid
-  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=snapshots logs=off
+  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=semantic logs=off
   tw:io   [3f9c1a04]  0.048s r1 snapshot nodes=17
 ```
 

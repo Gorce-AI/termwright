@@ -79,7 +79,7 @@ export function recognize(frame: ProbeFrame, options: RecognizeOptions): Semanti
   }
 
   return {
-    v: 2,
+    v: 3,
     sessionId: options.sessionId,
     revision: options.revision,
     columns: options.columns,

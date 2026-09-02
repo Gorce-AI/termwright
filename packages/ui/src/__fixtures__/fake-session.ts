@@ -35,7 +35,7 @@ export function frameworkContract(
     contractId: `${sessionId}:contract`,
     sessionId,
     epoch: 1,
-    protocol: 'termwright/2',
+    protocol: 'termwright/3',
     framework: {
       name,
       version,
@@ -264,7 +264,7 @@ export function snapshot(
   sessionId = 's1',
 ): SemanticSnapshot {
   return {
-    v: 2,
+    v: 3,
     sessionId,
     revision,
     columns: 80,

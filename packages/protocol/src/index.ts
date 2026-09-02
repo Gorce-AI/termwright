@@ -20,3 +20,4 @@ export * from './marker.js';
 export * from './conpty-host-rpc.js';
 export * from './framing.js';
 export * from './validate.js';
+export * from './semantic-state.js';

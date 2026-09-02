@@ -21,10 +21,12 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import {
   ADAPTER_CAPABILITIES,
+  applySemanticDelta,
   ProtocolViolation,
   type ProtocolViolationCode,
   createFrameDecoder,
   encodeFrame,
+  framedByteLength,
   parseAdapterMessage,
   PROTOCOL_ID,
   type AdapterCapability,
@@ -78,7 +80,10 @@ export interface LogBudget {
 /** Callbacks the session installs on the channel. */
 export interface SemanticChannelHooks {
   /** A validated snapshot arrived (not yet paired with a render marker). */
-  onSnapshot(snapshot: SemanticSnapshot): void;
+  onSnapshot(
+    snapshot: SemanticSnapshot,
+    changedNodes: ReadonlyMap<string, SemanticNode | undefined> | null,
+  ): void;
   /**
    * An advisory `revision-commit` arrived.
    *
@@ -211,6 +216,7 @@ export class SemanticChannel {
   #admissionOpen = true;
   #attached: Socket | null = null;
   #attachment: SemanticAttachment | null = null;
+  #semanticState: SemanticSnapshot | null = null;
   #closed = false;
   #closePromise: Promise<void> | null = null;
 
@@ -451,6 +457,7 @@ export class SemanticChannel {
     const capabilities = hello.capabilities.filter((entry): entry is AdapterCapability =>
       CAPABILITY_SET.has(entry),
     );
+    this.#semanticState = null;
 
     this.#attached = socket;
     // Publishing zero pending before onAttach could freeze a generic contract
@@ -463,7 +470,7 @@ export class SemanticChannel {
       protocol: hello.protocol,
       sessionId: this.#options.sessionId,
       limits: this.#options.limits,
-      subscribe: 'snapshots',
+      subscribe: 'semantic',
       marker: { enabled: markerEnabled },
       // Absent means disabled: an adapter without this field must stay quiet.
       ...(logsEnabled ? { logs: { enabled: true, ...this.#options.logBudget } } : {}),
@@ -536,12 +543,12 @@ export class SemanticChannel {
         this.#options.hooks.onFrameBegin(message.revision);
         return true;
       }
-      case 'snapshot': {
+      case 'semantic-full': {
         if (message.snapshot.sessionId !== this.#options.sessionId) {
           this.#fail(socket, 'malformed', 'snapshot carries a foreign sessionId');
           return false;
         }
-        if (message.snapshot.v !== 2) {
+        if (message.snapshot.v !== 3) {
           this.#fail(
             socket,
             'bad-version',
@@ -549,7 +556,7 @@ export class SemanticChannel {
           );
           return false;
         }
-        if (!this.#acceptsTreeFields(socket, message.snapshot.nodes, 'snapshot')) return false;
+        if (!this.#acceptsTreeFields(socket, message.snapshot.nodes, 'semantic-full')) return false;
         if (
           message.snapshot.hitGrid.status === 'known' &&
           this.#attachment?.capabilities.includes('pointer-hit-grid') !== true
@@ -557,11 +564,62 @@ export class SemanticChannel {
           this.#fail(
             socket,
             'malformed',
-            "snapshot contains a known hit grid without the 'pointer-hit-grid' capability",
+            "semantic-full contains a known hit grid without the 'pointer-hit-grid' capability",
           );
           return false;
         }
-        this.#acceptTree(message.snapshot);
+        this.#semanticState = message.snapshot;
+        this.#acceptTree(message.snapshot, null);
+        return true;
+      }
+      case 'semantic-delta': {
+        if (this.#attachment?.capabilities.includes('incremental-tree') !== true) {
+          this.#fail(
+            socket,
+            'malformed',
+            "semantic-delta sent without the 'incremental-tree' capability",
+          );
+          return false;
+        }
+        const base = this.#semanticState;
+        if (base === null) {
+          this.#requestResync(socket, null, 'missing-base');
+          return true;
+        }
+        const applied = applySemanticDelta(
+          base,
+          message.delta,
+          this.#options.limits,
+          framedByteLength(message),
+        );
+        if (!applied.ok) {
+          if (applied.resyncRequired) {
+            this.#requestResync(socket, base.revision, 'base-mismatch');
+            this.#options.hooks.onDiagnostic(
+              'revision-commit',
+              `semantic delta could not be applied: ${applied.detail}; requested a full resynchronization`,
+              { revision: message.delta.revision },
+            );
+            return true;
+          }
+          this.#fail(socket, 'malformed', `semantic delta ${applied.code}: ${applied.detail}`);
+          return false;
+        }
+        if (!this.#acceptsTreeFields(socket, applied.snapshot.nodes, 'semantic-delta'))
+          return false;
+        if (
+          applied.snapshot.hitGrid.status === 'known' &&
+          this.#attachment?.capabilities.includes('pointer-hit-grid') !== true
+        ) {
+          this.#fail(
+            socket,
+            'malformed',
+            "semantic-delta produces a known hit grid without the 'pointer-hit-grid' capability",
+          );
+          return false;
+        }
+        this.#semanticState = applied.snapshot;
+        this.#acceptTree(applied.snapshot, applied.changedNodes);
         return true;
       }
       case 'log': {
@@ -594,8 +652,24 @@ export class SemanticChannel {
   }
 
   /** Records a tree as the newest one held, and hands it to the session. */
-  #acceptTree(snapshot: SemanticSnapshot): void {
-    this.#options.hooks.onSnapshot(snapshot);
+  #acceptTree(
+    snapshot: SemanticSnapshot,
+    changedNodes: ReadonlyMap<string, SemanticNode | undefined> | null,
+  ): void {
+    this.#options.hooks.onSnapshot(snapshot, changedNodes);
+  }
+
+  #requestResync(
+    socket: Socket,
+    expectedBaseRevision: number | null,
+    reason: 'base-mismatch' | 'missing-base' | 'driver-reset',
+  ): void {
+    this.#send(socket, {
+      type: 'semantic-resync-request',
+      sessionId: this.#options.sessionId,
+      expectedBaseRevision,
+      reason,
+    });
   }
 
   /**
@@ -603,7 +677,7 @@ export class SemanticChannel {
    * influence locators. Shape validation proves that a field is well-formed;
    * this gate proves that the sender was entitled to send it.
    *
-   * Geometry observations are required by the v2 snapshot schema. The
+   * Geometry observations are required by the v3 snapshot schema. The
    * handshake separately declares whether intended and clipped geometry are
    * guaranteed by this session contract.
    */

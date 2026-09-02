@@ -1,7 +1,7 @@
 {
   "kind": "termwright-performance-report",
-  "schemaVersion": 3,
-  "generatedAt": "2026-08-25T15:02:50.793Z",
+  "schemaVersion": 4,
+  "generatedAt": "2026-09-02T05:36:13.324Z",
   "environment": {
     "runtime": "node v24.1.0",
     "platform": "darwin",
@@ -29,15 +29,21 @@
         "bytesPerFrame": {
           "status": "measured",
           "unit": "bytes/frame",
-          "value": 57387.893,
-          "p95": 57388,
+          "value": 3083.841,
+          "p95": 3052,
           "note": "Length-prefixed snapshot frame, including the four-byte wire header."
         },
         "fullSnapshots": {
           "status": "measured",
           "unit": "count",
-          "value": 1000,
-          "note": "The current TypeScript probe transport sends one full snapshot per benchmark frame."
+          "value": 1,
+          "note": "Initial keyframes sent by the incremental TypeScript probe transport."
+        },
+        "deltas": {
+          "status": "measured",
+          "unit": "count",
+          "value": 999,
+          "note": "Revision-based semantic deltas reconstructed against the full-snapshot oracle."
         },
         "droppedEvents": {
           "status": "unavailable",
@@ -73,8 +79,8 @@
         "probeSerializationTime": {
           "status": "measured",
           "unit": "microseconds/frame",
-          "value": 172.41459000000165,
-          "p95": 187.1250000000373,
+          "value": 167.6969470000028,
+          "p95": 193.416999999954,
           "note": "Production encodeFrame JSON serialization, UTF-8 encoding and length prefix."
         },
         "parentNormalizationTime": {
@@ -86,15 +92,15 @@
         "parentProtocolValidationTime": {
           "status": "measured",
           "unit": "microseconds/frame",
-          "value": 2096.893462999994,
-          "p95": 2848.165999999992,
+          "value": 76.92265899999994,
+          "p95": 87.83300000004601,
           "note": "Production parent frame decode, immutable DTO projection, schema checks and semantic validation; this is validation, not semantic normalization."
         },
         "probeHotPathTime": {
           "status": "measured",
           "unit": "microseconds/frame",
-          "value": 253.9946790000032,
-          "p95": 278.49999999995134,
+          "value": 238.7879740000025,
+          "p95": 278.58400000013717,
           "note": "Recognizer normalization plus serialization on the current JavaScript probe path; excludes framework observation and socket I/O."
         },
         "applicationOverheadRatio": {

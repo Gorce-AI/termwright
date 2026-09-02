@@ -872,8 +872,8 @@ func checkSnapshotSchema(value any, limits Limits) *issue {
 	if problem := checkStrict(object, snapshotKeys, nil); problem != nil {
 		return problem
 	}
-	if !ok || version != 2 {
-		return fail([]string{"v"}, "expected the literal 2")
+	if !ok || version != 3 {
+		return fail([]string{"v"}, "expected the literal 3")
 	}
 	sessionID, problem := checkText(object["sessionId"], []string{"sessionId"}, limits)
 	if problem != nil {
@@ -1351,7 +1351,7 @@ func ValidateSnapshot(value any, limits Limits) error {
 	for id := range byID {
 		ids[id] = struct{}{}
 	}
-	if snapshot["v"].(float64) == 2 {
+	if snapshot["v"].(float64) == 3 {
 		observation := snapshot["hitGrid"].(map[string]any)
 		if observation["status"] == "known" {
 			grid := observation["value"].(map[string]any)

@@ -393,7 +393,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     expect(instrumented.stdout.replaceAll(markerPattern(), '')).toBe(vanilla.stdout);
   }, 90_000);
 
-  it('publishes qualified v2 geometry and the native exact hit grid', async () => {
+  it('publishes qualified v3 geometry and the native exact hit grid', async () => {
     const driver = await startFakeDriver();
     open.push(driver);
     await launchInstrumented({ driver, steps: 2 });
@@ -403,7 +403,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     expect(hello.capabilities).toContain('clipped-geometry');
     expect(hello.probe?.capabilities).toContain('visible-rect');
     const [snapshot] = await driver.waitForSnapshots(1);
-    expect(snapshot?.v).toBe(2);
+    expect(snapshot?.v).toBe(3);
     expect(snapshot?.coordinateSpace).toMatchObject({ status: 'known', value: 'viewport-cells' });
     expect(snapshot?.hitGrid).toMatchObject({ status: 'known' });
     expect(snapshot?.nodes.some((node) => node.geometry?.intendedRect.status === 'known')).toBe(

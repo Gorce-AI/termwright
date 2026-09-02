@@ -37,6 +37,8 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 const encoder = new TextEncoder();
 /** `fatal` makes malformed UTF-8 throw instead of yielding U+FFFD. */
 const decoder = new TextDecoder('utf-8', { fatal: true });
+const ownedProjectedDtos = new WeakSet<object>();
+const framedByteLengths = new WeakMap<object, number>();
 
 function assertPositiveByteCeiling(maxFrameBytes: number): void {
   if (!Number.isSafeInteger(maxFrameBytes) || maxFrameBytes <= 0) {
@@ -171,7 +173,11 @@ function decodeBody(body: Uint8Array): unknown {
     // Also covers RangeError from pathologically nested JSON.
     throw new ProtocolViolation('frame-malformed', 'frame body is not valid JSON');
   }
-  return projectDto(parsed, FRAME_PROJECTION_DEPTH);
+  const projected = projectDto(parsed, FRAME_PROJECTION_DEPTH);
+  if (typeof projected === 'object' && projected !== null) {
+    framedByteLengths.set(projected, body.byteLength);
+  }
+  return projected;
 }
 
 /**
@@ -262,6 +268,7 @@ function projectNode(
   if (value === null || typeof value !== 'object') {
     return projectScalar(value, path);
   }
+  if (ownedProjectedDtos.has(value)) return value;
   if (depth > maxDepth) {
     throw new ProtocolViolation('dto-depth', `nesting exceeds ${maxDepth} at ${path}`);
   }
@@ -285,7 +292,9 @@ function projectNode(
 
   // `seen` is never cleared: a value reachable twice is an alias, not a
   // legitimate repeat, and must be rejected rather than duplicated.
-  return Object.freeze(result);
+  const frozen = Object.freeze(result);
+  ownedProjectedDtos.add(frozen);
+  return frozen;
 }
 
 function projectArray(
@@ -367,5 +376,12 @@ export function projectDto<T>(value: unknown, maxDepth: number): T {
   if (!Number.isSafeInteger(maxDepth) || maxDepth < 0) {
     throw new ProtocolViolation('dto-depth', 'maxDepth must be a non-negative safe integer');
   }
+  if (typeof value === 'object' && value !== null && ownedProjectedDtos.has(value))
+    return value as T;
   return projectNode(value, 0, maxDepth, new Set<object>(), '$') as T;
+}
+
+/** Exact JSON body bytes for a DTO produced by the frame decoder, if any. */
+export function framedByteLength(value: unknown): number | undefined {
+  return typeof value === 'object' && value !== null ? framedByteLengths.get(value) : undefined;
 }

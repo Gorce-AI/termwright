@@ -44,6 +44,11 @@ describe('validateProbeInfo', () => {
       probeVersion: '0.1.0',
       identityKind: 'frame-local',
       capabilities: ['operations'],
+      instrumentation: {
+        highestTier: 'T2',
+        semanticClass: 'B',
+        degradedCapabilities: ['intended-geometry', 'clipped-geometry'],
+      },
     });
     expect(result.ok).toBe(true);
   });
@@ -71,9 +76,9 @@ describe('validateProbeInfo', () => {
     expect(validateProbeInfo({ ...info, probeVersion: '' }).ok).toBe(false);
   });
 
-  it('accepts legacy protocol-v2 ProbeInfo without instrumentation metadata', () => {
-    const { instrumentation: _instrumentation, ...legacy } = info;
-    expect(validateProbeInfo(legacy).ok).toBe(true);
+  it('rejects probe metadata without the current instrumentation contract', () => {
+    const { instrumentation: _instrumentation, ...incomplete } = info;
+    expect(validateProbeInfo(incomplete).ok).toBe(false);
   });
 
   it('strictly validates and deeply freezes instrumentation metadata', () => {

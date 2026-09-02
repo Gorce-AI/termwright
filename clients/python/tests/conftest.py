@@ -29,7 +29,7 @@ def load_vectors(name: str) -> Dict[str, Any]:
 
 
 def geometry(rect: Rect = Rect(0, 0, 1, 1)) -> NodeGeometryObservations:
-    """Known viewport geometry for protocol-v2 unit fixtures."""
+    """Known viewport geometry for protocol-v3 unit fixtures."""
     return NodeGeometryObservations(
         displayed=Observation("known", True, evidence=framework_evidence("python-test")),
         intendedRect=Observation("known", rect, evidence=framework_evidence("python-test")),

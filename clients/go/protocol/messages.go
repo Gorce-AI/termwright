@@ -5,10 +5,10 @@ import (
 )
 
 // ProtocolID is the wire protocol identifier both sides must agree on.
-const ProtocolID = "termwright/2"
+const ProtocolID = "termwright/3"
 
 // ProtocolVersion is the current major version.
-const ProtocolVersion = 2
+const ProtocolVersion = 3
 
 // maxIdentifierLength bounds tokens, ids and free-text error messages.
 const maxIdentifierLength = 1024
@@ -85,8 +85,8 @@ type RevisionCommit struct {
 	Revision int64  `json:"revision"`
 }
 
-// SnapshotMessage carries a full tree for one revision.
-type SnapshotMessage struct {
+// SemanticFullMessage carries a full tree for one revision.
+type SemanticFullMessage struct {
 	Type     string    `json:"type"`
 	Snapshot *Snapshot `json:"snapshot"`
 }
@@ -353,7 +353,7 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		}
 		return object, nil
 
-	case "snapshot":
+	case "semantic-full":
 		if problem := requireKeys(object, []string{"type", "snapshot"}, nil); problem != nil {
 			return nil, problem
 		}
@@ -446,8 +446,8 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 			}
 		}
 		subscribe, _ := object["subscribe"].(string)
-		if subscribe != "snapshots" && subscribe != "revisions" {
-			return nil, malformed("subscribe: expected 'snapshots' or 'revisions'")
+		if subscribe != "semantic" {
+			return nil, malformed("subscribe: expected 'semantic'")
 		}
 		marker, ok := object["marker"].(map[string]any)
 		if !ok {
@@ -463,6 +463,24 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 			if problem := checkLogBudget(logs); problem != nil {
 				return nil, problem
 			}
+		}
+		return object, nil
+
+	case "semantic-resync-request":
+		if problem := requiredKeys(object, []string{"type", "sessionId", "expectedBaseRevision", "reason"}); problem != nil {
+			return nil, problem
+		}
+		if problem := identifier(object, "sessionId", false); problem != nil {
+			return nil, problem
+		}
+		if object["expectedBaseRevision"] != nil {
+			if problem := wholeNumber(object, "expectedBaseRevision", true); problem != nil {
+				return nil, problem
+			}
+		}
+		reason, _ := object["reason"].(string)
+		if reason != "base-mismatch" && reason != "missing-base" && reason != "driver-reset" {
+			return nil, malformed("reason: unknown semantic resync reason")
 		}
 		return object, nil
 

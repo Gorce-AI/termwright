@@ -26,7 +26,7 @@ const interpreter = python ?? 'python3';
 const command = [interpreter, '-m', 'termwright_probe', '--', interpreter, script];
 
 describe.skipIf(!runnable)('the notes app', () => {
-  test('publishes qualified v2 geometry and exact pointer ownership', async ({ terminal }) => {
+  test('publishes qualified v3 geometry and exact pointer ownership', async ({ terminal }) => {
     const app = await terminal.launch({ command });
     await app.waitForText('write the release notes');
     const add = app.getByRole('button', { name: 'Add' });
@@ -39,11 +39,11 @@ describe.skipIf(!runnable)('the notes app', () => {
     const draft = app.getByRole('textbox');
     await app.waitForQuiet();
     await draft.click();
-    await app.type('v2 pointer');
-    await expect(draft).toHaveText('v2 pointer');
+    await app.type('v3 pointer');
+    await expect(draft).toHaveText('v3 pointer');
   });
 
-  test('refuses a covered v2 pointer target instead of firing through the modal', async ({
+  test('refuses a covered v3 pointer target instead of firing through the modal', async ({
     terminal,
   }) => {
     const app = await terminal.launch({ command });
