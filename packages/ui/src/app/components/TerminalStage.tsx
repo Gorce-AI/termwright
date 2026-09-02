@@ -140,9 +140,15 @@ export function TerminalStage(props: TerminalStageProps) {
     return () => {
       observer.disconnect();
       input.dispose();
-      terminal.dispose();
       terminalRef.current = null;
       fitRef.current = () => undefined;
+      // xterm's parser drains write() asynchronously. Disposing its services
+      // while that queue is active makes InputHandler read the already-disposed
+      // buffer's dimensions. Detach this generation's DOM immediately, then
+      // dispose only after the final admitted write has completed. The
+      // microtask keeps disposal outside xterm's own write callback stack.
+      surface.replaceChildren();
+      terminal.write('', () => queueMicrotask(() => terminal.dispose()));
     };
   }, [profile.id]);
 
