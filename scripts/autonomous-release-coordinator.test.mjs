@@ -251,6 +251,7 @@ describe('trusted autonomous coordinator', () => {
       validateChangedFiles('version', [
         'compatibility/registry.json',
         'website/src/content/docs/reference/geometry-visibility.md',
+        'clients/Cargo.lock',
         'examples/ratatui-list/app/Cargo.lock',
         'examples/ratatui-list/build-tool/Cargo.lock',
         'packages/probe-tview/assets/tview_probe.go.txt',
@@ -264,6 +265,9 @@ describe('trusted autonomous coordinator', () => {
     expect(() =>
       validateChangedFiles('version', ['examples/ratatui-list/other/Cargo.lock']),
     ).toThrow(/forbidden path/u);
+    expect(() => validateChangedFiles('version', ['clients/rust/Cargo.lock'])).toThrow(
+      /forbidden path/u,
+    );
     expect(() =>
       validateChangedFiles('version', ['packages/probe-tview/assets/tview_probe.go.txt.bak']),
     ).toThrow(/forbidden path/u);
