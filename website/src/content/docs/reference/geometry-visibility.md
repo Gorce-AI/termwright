@@ -64,7 +64,7 @@ Public availability is computed by traversing the same graph used by certificati
 | Framework | Certification ID | Instrumentation policy | Checksum source of truth |
 | --- | --- | --- | --- |
 | Ink | ink@7.1.1/0.3.1 | checksummed-instrumentation | `packages/probe-ink/src/certified-instrumentation.json` |
-| OpenTUI | opentui@0.5.3/0.3.1<br>opentui@0.5.4/0.3.1<br>opentui@0.5.6/0.3.1<br>opentui@0.5.7/0.3.1<br>opentui@0.5.8/0.3.1<br>opentui@0.5.9/0.3.1 | runtime-capability-and-behavior | `packages/probe-opentui/src/certified-runtime.json` |
+| OpenTUI | opentui@0.5.3/0.3.1<br>opentui@0.5.4/0.3.1<br>opentui@0.5.6/0.3.1<br>opentui@0.5.7/0.3.1<br>opentui@0.5.8/0.3.1<br>opentui@0.5.9/0.3.1<br>opentui@0.5.10/0.3.1 | runtime-capability-and-behavior | `packages/probe-opentui/src/certified-runtime.json` |
 | Textual | textual@runtime-capability/0.3.1 | runtime-capability-and-behavior | not applicable (capability certification) |
 | tview | tview@compile-capability/0.3.1 | compile-and-behavioral-capability | not applicable (capability certification) |
 | Ratatui | ratatui@0.30.2/0.3.1 | checksummed-replacement | `clients/rust-probe/upstream-patches/ratatui-core/0.1.2/manifest.json`<br>`clients/rust-probe/upstream-patches/ratatui-crossterm/0.1.2/manifest.json`<br>`clients/rust-probe/upstream-patches/ratatui-widgets/0.3.2/manifest.json` |

@@ -573,7 +573,8 @@
           "opentui@0.5.6/0.3.1",
           "opentui@0.5.7/0.3.1",
           "opentui@0.5.8/0.3.1",
-          "opentui@0.5.9/0.3.1"
+          "opentui@0.5.9/0.3.1",
+          "opentui@0.5.10/0.3.1"
         ],
         "strategy": "runtime-capability-and-behavior"
       },
@@ -676,6 +677,16 @@
                 "version": "0.5.9"
               }
             ]
+          },
+          {
+            "frameworkVersion": "0.5.10",
+            "id": "opentui-0.5.10",
+            "modules": [
+              {
+                "name": "@opentui/core",
+                "version": "0.5.10"
+              }
+            ]
           }
         ]
       },
@@ -723,7 +734,7 @@
         }
       ],
       "versions": {
-        "declared": "0.5.3 or 0.5.4 or 0.5.6 or 0.5.7 or 0.5.8 or 0.5.9",
+        "declared": "0.5.3 or 0.5.4 or 0.5.6 or 0.5.7 or 0.5.8 or 0.5.9 or 0.5.10",
         "policy": "exact",
         "verified": [
           "0.5.3",
@@ -731,7 +742,8 @@
           "0.5.6",
           "0.5.7",
           "0.5.8",
-          "0.5.9"
+          "0.5.9",
+          "0.5.10"
         ]
       }
     },
