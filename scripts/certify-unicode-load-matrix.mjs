@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -117,16 +118,32 @@ const scenarios = [
 const results = [];
 for (const scenario of scenarios) results.push(await runScenario(scenario));
 
+// Whether the allocator happens to return a sliced pooled Buffer is runtime
+// dependent. Node 24 can therefore make the latent upstream bug disappear
+// from this particular load even though the pinned source still discards the
+// Buffer view bounds. Bind that evidence to source instead of demanding a
+// probabilistic runtime failure.
+const upstreamTrieSource = await readFile(
+  new URL(
+    '../node_modules/@xterm/addon-unicode-graphemes/src/third-party/unicode-trie.ts',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const upstreamSourceDefect =
+  upstreamTrieSource.includes('new DataView(data.buffer);') &&
+  !upstreamTrieSource.includes('new DataView(data.buffer, data.byteOffset, data.byteLength);');
+
 process.stdout.write(
-  `${JSON.stringify({ node: process.version, watchdogMs, results }, null, 2)}\n`,
+  `${JSON.stringify({ node: process.version, watchdogMs, upstreamSourceDefect, results }, null, 2)}\n`,
 );
 
 const upstream = results.filter((result) => result.name.startsWith('xterm-upstream-'));
 const fixed = results.filter((result) => result.name.startsWith('xterm-fixed-trie-model-'));
 const owned = results.filter((result) => result.name.startsWith('termwright-owned-'));
-if (upstream.every((result) => result.status === 'pass')) {
+if (!upstreamSourceDefect) {
   throw new Error(
-    'Pinned xterm grapheme candidate no longer reproduces the pooled-Buffer defect. Re-certify upstream instead of retaining a stale patch model.',
+    'Pinned xterm grapheme source no longer contains the pooled-Buffer defect. Re-certify upstream instead of retaining a stale patch model.',
   );
 }
 if (fixed.some((result) => result.status !== 'pass')) {

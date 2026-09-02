@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
@@ -8,6 +9,13 @@ const installRoot = resolve(process.argv[2] ?? process.cwd());
 const python = resolve(process.argv[3] ?? '');
 if (process.argv[3] === undefined)
   throw new Error('clean-room Textual checker requires venv Python');
+const pythonManifest = await readFile(
+  fileURLToPath(new URL('../clients/python/pyproject.toml', import.meta.url)),
+  'utf8',
+);
+const expectedVersion = /^version\s*=\s*"([^"]+)"$/m.exec(pythonManifest)?.[1];
+if (expectedVersion === undefined)
+  throw new Error('Python client manifest has no unambiguous project version');
 const project = await mkdtemp(join(installRoot, 'termwright-textual-clean-room-'));
 
 try {
@@ -27,7 +35,7 @@ try {
     realpath(resolve(python, '..', '..')),
   ]);
   if (
-    provenance.termwright !== '0.3.1' ||
+    provenance.termwright !== expectedVersion ||
     !installedSource.startsWith(`${venvRoot}/`) ||
     installedSource.includes('/clients/python/')
   ) {

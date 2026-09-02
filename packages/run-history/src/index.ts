@@ -1213,7 +1213,11 @@ export const NODE_RUN_MANIFEST_WRITER = Object.freeze<RunManifestWriter>({
     await appendFile(path, body, 'utf8');
   },
   async syncFile(path) {
-    const file = await open(path, 'r');
+    // Windows FlushFileBuffers requires a handle with write access. Node 24
+    // reports EPERM for fsync on the read-only handle even though POSIX accepts
+    // it, so retain durability with r+ instead of treating the platform error
+    // as an unsupported directory-sync case.
+    const file = await open(path, 'r+');
     try {
       await file.sync();
     } finally {
