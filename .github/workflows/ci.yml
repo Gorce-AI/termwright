@@ -1591,6 +1591,19 @@ jobs:
           "$venv_dir/bin/python" -m pip install "$wheel_dir"/termwright-*.whl 'textual>=8.2.8'
           node scripts/check-installed-textual.mjs "$install_dir" "$venv_dir/bin/python"
 
+      - name: Certify Bubble Tea from packaged Go and npm sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-go-packs"
+          install_dir="$RUNNER_TEMP/termwright-go-install"
+          client_dir="$RUNNER_TEMP/termwright-go-client"
+          mkdir -p "$pack_dir" "$install_dir" "$client_dir"
+          git archive --format=tar HEAD:clients/go | tar -x -C "$client_dir"
+          pnpm pack:clean-room -- "$pack_dir" @termwright/probe-charm
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          node scripts/check-installed-go.mjs "$install_dir" "$client_dir"
+
       - name: Upload failure reports
         if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

@@ -875,6 +875,14 @@ describe('autonomous workflow security', () => {
     );
   });
 
+  it('runs Bubble Tea from archived Go sources and npm tarballs', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const examples = jobBlock(workflow, 'examples');
+    expect(examples).toContain('git archive --format=tar HEAD:clients/go');
+    expect(examples).toContain('pnpm pack:clean-room -- "$pack_dir" @termwright/probe-charm');
+    expect(examples).toContain('node scripts/check-installed-go.mjs "$install_dir" "$client_dir"');
+  });
+
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
     const website = jobBlock(workflow, 'website');

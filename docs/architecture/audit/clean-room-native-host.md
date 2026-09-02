@@ -44,6 +44,17 @@ qualified geometry and pointer eligibility. Local evidence on 2026-09-02
 snapshot, five deltas and a 50,336-byte trace. The Linux CI examples lane builds
 and installs the wheel without editable mode; remote execution remains pending.
 
+The Go canary archives `clients/go` from the exact commit, extracts it outside
+the repository, and installs `@termwright/probe-charm` plus its dependency
+closure from npm tarballs. A fresh Bubble Tea v1.3.10/Bubbles v1.0.0 module
+imports no Termwright code; the packaged compiler preparation path injects the
+probe and receives the extracted client explicitly. Local evidence on
+2026-09-02 (macOS arm64, Node 24.1.0, Go 1.24.4) passed Unicode, semantic focus,
+typing, Enter submission and clean exit with one full snapshot, three deltas
+and a 14,602-byte trace. The Linux CI examples lane repeats this from `git
+archive`; remote execution remains pending. Default module-proxy resolution is
+not claimed until the matching 0.4 Go tag exists.
+
 The existing Linux/macOS build matrix and Windows native-driver matrix now run
 the canary on Node 22 and Node 24 after their native addon is available. Those
 remote rows remain pending until the changed workflow executes. The trusted
@@ -65,5 +76,5 @@ retries. A local macOS arm64 Node 24.1.0 2-second/8-second execution passed with
 39,009-byte replay screenshot. The actual multi-minute and cross-platform rows
 are external certification pending.
 
-Go and Rust still need equivalent framework-specific clean-room consumers;
+Rust still needs an equivalent framework-specific clean-room consumer;
 existing workspace examples do not count as substitutes.
