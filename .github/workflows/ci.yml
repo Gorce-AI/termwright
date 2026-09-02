@@ -1563,6 +1563,18 @@ jobs:
           examples/opentui-form examples/ratatui-list examples/textual-notes
           examples/tview-menu
 
+      - name: Certify OpenTUI from packed packages in a fresh consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-opentui-packs"
+          install_dir="$RUNNER_TEMP/termwright-opentui-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir" @termwright/probe-opentui
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz \
+            vitest@latest @opentui/core@0.5.3
+          node scripts/check-installed-opentui.mjs "$install_dir"
+
       - name: Upload failure reports
         if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

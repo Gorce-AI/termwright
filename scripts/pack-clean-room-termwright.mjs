@@ -8,7 +8,8 @@ import { validatePackedArchive } from './pack-npm-artifacts.mjs';
 const root = resolve(import.meta.dirname, '..');
 const arguments_ = process.argv.slice(2);
 if (arguments_[0] === '--') arguments_.shift();
-const output = resolve(arguments_[0] ?? 'clean-room/npm');
+const output = resolve(arguments_.shift() ?? 'clean-room/npm');
+const additionalRoots = arguments_;
 const pnpmCli = process.env.npm_execpath;
 if (!pnpmCli) throw new Error('npm_execpath is missing; invoke through pnpm');
 mkdirSync(output, { recursive: true });
@@ -37,6 +38,10 @@ const visit = (name) => {
   }
 };
 visit('termwright');
+for (const name of additionalRoots) {
+  if (!packages.has(name)) throw new Error(`unknown clean-room package root ${name}`);
+  visit(name);
+}
 
 const nativeName = `@termwright/pty-${process.platform}-${process.arch}`;
 if (!packages.has(nativeName))
@@ -72,5 +77,6 @@ try {
 }
 
 console.log(
-  `packed ${selected.size} clean-room packages for ${process.platform}-${process.arch} in ${basename(output)}`,
+  `packed ${selected.size} clean-room packages for ${process.platform}-${process.arch} in ${basename(output)}` +
+    (additionalRoots.length === 0 ? '' : ` (additional roots: ${additionalRoots.join(', ')})`),
 );

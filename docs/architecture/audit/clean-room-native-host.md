@@ -24,6 +24,16 @@ tests. The installed manifest v7 and trace v4 resource evidence were
 independently checked after installation, demonstrating that this is an
 executable certification rather than structural inspection.
 
+The packer also accepts explicit additional package roots, while still
+resolving their local dependency closure from source and rejecting an unknown
+root. The OpenTUI canary uses that path for `@termwright/probe-opentui`: a
+fresh consumer installs 22 local tarballs plus registry OpenTUI, launches the
+real application through Bun, and proves focus, typing, Enter submission,
+qualified geometry, pointer eligibility and Unicode text. Local evidence on
+2026-09-02 (macOS arm64, Node 24.1.0, Bun 1.2.15) passed with one semantic full
+snapshot, two deltas and a 22,626-byte trace. The Linux CI examples lane now
+runs the same tarball-only canary; that remote execution remains pending.
+
 The existing Linux/macOS build matrix and Windows native-driver matrix now run
 the canary on Node 22 and Node 24 after their native addon is available. Those
 remote rows remain pending until the changed workflow executes. The trusted
@@ -45,5 +55,5 @@ retries. A local macOS arm64 Node 24.1.0 2-second/8-second execution passed with
 39,009-byte replay screenshot. The actual multi-minute and cross-platform rows
 are external certification pending.
 
-OpenTUI, Textual, Go and Rust still need equivalent framework-specific
-clean-room consumers; existing workspace examples do not count as substitutes.
+Textual, Go and Rust still need equivalent framework-specific clean-room
+consumers; existing workspace examples do not count as substitutes.

@@ -856,6 +856,14 @@ describe('autonomous workflow security', () => {
     expect(oracle).toContain('👍🏽 🇵🇱 किं 각 世');
   });
 
+  it('runs OpenTUI from tarballs rather than workspace links', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const examples = jobBlock(workflow, 'examples');
+    expect(examples).toContain('pnpm pack:clean-room -- "$pack_dir" @termwright/probe-opentui');
+    expect(examples).toContain('vitest@latest @opentui/core@0.5.3');
+    expect(examples).toContain('node scripts/check-installed-opentui.mjs "$install_dir"');
+  });
+
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
     const website = jobBlock(workflow, 'website');
