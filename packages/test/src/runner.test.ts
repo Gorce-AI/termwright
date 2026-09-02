@@ -294,6 +294,15 @@ describe('native AttemptContext', () => {
         .filter((event) => event.type === 'attempt.finished')
         .map((event) => (event.payload as { state: string }).state),
     ).toEqual(expect.arrayContaining(['passed', 'failed', 'skipped']));
+    for (const event of journalEvents.filter(
+      (candidate) => candidate.type === 'attempt.finished',
+    )) {
+      const worker = (event.payload as { worker?: Record<string, unknown> }).worker;
+      expect(worker).toMatchObject({ capability: 'worker-process' });
+      expect(worker?.['peakSampledRssBytes']).toEqual(expect.any(Number));
+      expect(worker?.['cpuUserMicros']).toEqual(expect.any(Number));
+      expect(worker?.['cpuSystemMicros']).toEqual(expect.any(Number));
+    }
     expect(hostileTerminalObservedAfterUserFailure).toBe(true);
     expect(soleFinishedFailureObservedBeforeTerminal).toBe(true);
 

@@ -24,7 +24,9 @@ const fixtureTelemetry = (): RunResourceTelemetry => ({
   coordinatorRssStartBytes: 1,
   coordinatorRssEndBytes: 1,
   coordinatorPeakSampledRssBytes: 1,
-  workerPeakRssBytes: 'unavailable',
+  workerPeakRssBytes: 64 * 1024 * 1024,
+  workerCpuUserMicros: 100,
+  workerCpuSystemMicros: 20,
   ownedProcessPeakRssBytes: 'unavailable',
   ownedProcessCountPeak: 'unavailable',
   ptySlotsPeak: 0,
@@ -220,7 +222,7 @@ describe('native run history transaction', () => {
   it('requires explicit unavailable resource metrics instead of fabricated zeroes', () => {
     const start = provenance();
     const valid = manifest(start);
-    expect(valid.telemetry.workerPeakRssBytes).toBe('unavailable');
+    expect(valid.telemetry.workerPeakRssBytes).toBe(64 * 1024 * 1024);
     expect(
       parseManifest(
         JSON.stringify({
@@ -230,8 +232,31 @@ describe('native run history transaction', () => {
       ).state,
     ).toBe('corrupt');
     const missing = { ...valid.telemetry } as Record<string, unknown>;
-    delete missing['workerPeakRssBytes'];
+    delete missing['ownedProcessPeakRssBytes'];
     expect(parseManifest(JSON.stringify({ ...valid, telemetry: missing })).state).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...valid,
+          telemetry: {
+            ...valid.telemetry,
+            workerCpuUserMicros: (valid.telemetry.workerCpuUserMicros as number) + 1,
+          },
+        }),
+      ).state,
+    ).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...valid,
+          events: valid.events.map((event) =>
+            event.type === 'attempt.finished'
+              ? { ...event, payload: { ...(event.payload as object), worker: undefined } }
+              : event,
+          ),
+        }),
+      ).state,
+    ).toBe('corrupt');
   });
 
   it('requires current monotonic run and attempt timing evidence', () => {
@@ -513,7 +538,18 @@ function manifest(start: RunStartProvenance): RunManifest {
         eventClass: 'authoritative',
         type: 'attempt.finished',
         identity,
-        payload: { nativeTaskId: 'native_0', repeat: 0, retry: 0, state: 'passed' },
+        payload: {
+          nativeTaskId: 'native_0',
+          repeat: 0,
+          retry: 0,
+          state: 'passed',
+          worker: {
+            capability: 'worker-process',
+            cpuUserMicros: 100,
+            cpuSystemMicros: 20,
+            peakSampledRssBytes: 64 * 1024 * 1024,
+          },
+        },
       }),
       producer.emit({
         eventClass: 'authoritative',

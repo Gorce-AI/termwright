@@ -16,13 +16,15 @@ export interface NativeRunFixtureTest {
   readonly retries?: readonly ('failed' | 'passed' | 'skipped' | 'incomplete')[];
 }
 
-export const fixtureRunTelemetry = (): RunResourceTelemetry => ({
+export const fixtureRunTelemetry = (completedAttempts = 0): RunResourceTelemetry => ({
   coordinatorCpuUserMicros: 1,
   coordinatorCpuSystemMicros: 1,
   coordinatorRssStartBytes: 1,
   coordinatorRssEndBytes: 1,
   coordinatorPeakSampledRssBytes: 1,
-  workerPeakRssBytes: 'unavailable',
+  workerPeakRssBytes: completedAttempts === 0 ? 'unavailable' : 100,
+  workerCpuUserMicros: completedAttempts === 0 ? 'unavailable' : completedAttempts,
+  workerCpuSystemMicros: completedAttempts === 0 ? 'unavailable' : completedAttempts * 2,
   ownedProcessPeakRssBytes: 'unavailable',
   ownedProcessCountPeak: 'unavailable',
   ptySlotsPeak: 0,
@@ -155,7 +157,16 @@ export async function writeNativeRunFixture(
           eventClass: 'authoritative',
           type: 'attempt.finished',
           identity,
-          payload: { ...payload, state: attempt.status },
+          payload: {
+            ...payload,
+            state: attempt.status,
+            worker: {
+              capability: 'worker-process',
+              cpuUserMicros: 1,
+              cpuSystemMicros: 2,
+              peakSampledRssBytes: 100,
+            },
+          },
         }),
       );
     }
@@ -219,7 +230,9 @@ export async function writeNativeRunFixture(
     status,
     specs,
     attempts,
-    telemetry: fixtureRunTelemetry(),
+    telemetry: fixtureRunTelemetry(
+      attempts.filter((attempt) => attempt.status !== 'incomplete').length,
+    ),
   });
   return start.runId;
 }

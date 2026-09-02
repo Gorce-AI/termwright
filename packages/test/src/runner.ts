@@ -15,6 +15,7 @@ import {
 // root entry exports the same concrete class as `TestRunner`; note that its
 // `VitestTestRunner` export is the interface type, not this class.
 import { TestRunner as VitestTestRunner, vi } from 'vitest';
+import { clearInterval, setInterval } from 'node:timers';
 import { installTerminalLaunchResourceProvider } from '@termwright/driver/experimental';
 import type { ResourceVector } from '@termwright/resource-broker';
 import {
@@ -318,11 +319,13 @@ export class TermwrightTestRunner extends VitestTestRunner {
     );
     installAttemptEventRecorder(attemptEvents);
     let started = false;
+    let resourceSampler: AttemptResourceSampler | undefined;
     try {
       if (reservationAdmission !== undefined) {
         await reservationAdmission;
         budget.start();
       }
+      resourceSampler = new AttemptResourceSampler();
       await journal.client.append(
         journal.producer.emit({
           eventClass: 'authoritative',
@@ -338,6 +341,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
         context,
         journal,
         attemptEvents,
+        resourceSampler,
         this.#hostContext.journal.acknowledgementTimeoutMs,
       );
       super.onBeforeTryTask(test);
@@ -360,6 +364,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
                 nativeTaskId: task.id,
                 repeat: native.repeats,
                 retry: native.retry,
+                worker: resourceSampler!.finish(),
               },
             }),
             eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'cleanup'),
@@ -376,6 +381,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
       }
       const admitted = await reservationAdmission?.catch(() => undefined);
       await admitted?.release().catch(() => undefined);
+      resourceSampler?.stop();
       clearAttemptContext();
       throw error;
     }
@@ -758,6 +764,7 @@ function installAttemptFinalizer(
   context: AttemptContext,
   journal: WorkerJournal,
   attemptEvents: AttemptEventRecorder,
+  resourceSampler: AttemptResourceSampler,
   acknowledgementTimeoutMs: number,
 ): void {
   let finalized = false;
@@ -804,6 +811,7 @@ function installAttemptFinalizer(
         nativeTaskId: context.nativeTaskId,
         repeat: context.repeat,
         retry: context.retry,
+        worker: resourceSampler.finish(),
       },
     });
     try {
@@ -862,6 +870,49 @@ function installAttemptFinalizer(
       await emit('failed');
     },
   });
+}
+
+interface AttemptWorkerResources {
+  readonly [key: string]: string | number;
+  readonly capability: 'worker-process';
+  readonly cpuUserMicros: number;
+  readonly cpuSystemMicros: number;
+  readonly peakSampledRssBytes: number;
+}
+
+class AttemptResourceSampler {
+  readonly #cpuStart = process.cpuUsage();
+  readonly #rssStart = process.memoryUsage().rss;
+  readonly #timer: ReturnType<typeof setInterval>;
+  #peakRss = this.#rssStart;
+  #result: AttemptWorkerResources | undefined;
+
+  constructor() {
+    this.#timer = setInterval(() => this.#sample(), 50);
+    this.#timer.unref?.();
+  }
+
+  stop(): void {
+    clearInterval(this.#timer);
+  }
+
+  finish(): AttemptWorkerResources {
+    if (this.#result !== undefined) return this.#result;
+    this.stop();
+    this.#sample();
+    const cpu = process.cpuUsage(this.#cpuStart);
+    this.#result = Object.freeze({
+      capability: 'worker-process',
+      cpuUserMicros: cpu.user,
+      cpuSystemMicros: cpu.system,
+      peakSampledRssBytes: this.#peakRss,
+    });
+    return this.#result;
+  }
+
+  #sample(): void {
+    this.#peakRss = Math.max(this.#peakRss, process.memoryUsage().rss);
+  }
 }
 
 function createAttemptEventRecorder(

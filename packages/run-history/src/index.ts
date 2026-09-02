@@ -15,7 +15,7 @@ import {
   type SpecId,
 } from '@termwright/protocol/run-events';
 
-export const RUN_MANIFEST_VERSION = 5 as const;
+export const RUN_MANIFEST_VERSION = 6 as const;
 export const RUN_HISTORY_COMMIT_VERSION = 2 as const;
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 export const MAX_RUN_EVENT_STREAM_BYTES = 512 * 1024 * 1024;
@@ -107,6 +107,8 @@ export interface RunResourceTelemetry {
   /** Maximum of bounded periodic samples plus exact start/end samples. */
   readonly coordinatorPeakSampledRssBytes: number;
   readonly workerPeakRssBytes: number | UnavailableRunMetric;
+  readonly workerCpuUserMicros: number | UnavailableRunMetric;
+  readonly workerCpuSystemMicros: number | UnavailableRunMetric;
   readonly ownedProcessPeakRssBytes: number | UnavailableRunMetric;
   readonly ownedProcessCountPeak: number | UnavailableRunMetric;
   readonly ptySlotsPeak: number;
@@ -862,6 +864,30 @@ function validateManifestEvidence(value: RunManifest): void {
     throw new TypeError('attempt index differs from canonical journal');
   for (const attempt of value.attempts)
     validateAttemptAgainstJournal(attempt, journalAttempts.get(attempt.attemptId));
+  const workerSamples = [...journalAttempts.values()]
+    .map((attempt) =>
+      attempt.finish === undefined ? undefined : workerResources(attempt.finish.payload),
+    )
+    .filter((sample): sample is AttemptWorkerResources => sample !== undefined);
+  const expectedWorkerPeak =
+    workerSamples.length === 0
+      ? 'unavailable'
+      : Math.max(...workerSamples.map((sample) => sample.peakSampledRssBytes));
+  const expectedWorkerUser =
+    workerSamples.length === 0
+      ? 'unavailable'
+      : workerSamples.reduce((total, sample) => total + sample.cpuUserMicros, 0);
+  const expectedWorkerSystem =
+    workerSamples.length === 0
+      ? 'unavailable'
+      : workerSamples.reduce((total, sample) => total + sample.cpuSystemMicros, 0);
+  if (
+    value.telemetry.workerPeakRssBytes !== expectedWorkerPeak ||
+    value.telemetry.workerCpuUserMicros !== expectedWorkerUser ||
+    value.telemetry.workerCpuSystemMicros !== expectedWorkerSystem
+  ) {
+    throw new TypeError('run worker telemetry differs from canonical attempt evidence');
+  }
   for (const [sessionId, session] of sessions) {
     if (session.finish === undefined)
       throw new TypeError(`session ${sessionId} has no session.finished`);
@@ -899,6 +925,30 @@ function validateManifestEvidence(value: RunManifest): void {
   }
 }
 
+interface AttemptWorkerResources {
+  readonly cpuUserMicros: number;
+  readonly cpuSystemMicros: number;
+  readonly peakSampledRssBytes: number;
+}
+
+function workerResources(payload: unknown): AttemptWorkerResources {
+  const terminal = object(payload) ? payload : {};
+  const worker = object(terminal['worker']) ? terminal['worker'] : {};
+  if (
+    worker['capability'] !== 'worker-process' ||
+    !nonNegativeInteger(worker['cpuUserMicros']) ||
+    !nonNegativeInteger(worker['cpuSystemMicros']) ||
+    !nonNegativeInteger(worker['peakSampledRssBytes'])
+  ) {
+    throw new TypeError('attempt.finished lacks valid worker-process telemetry');
+  }
+  return {
+    cpuUserMicros: worker['cpuUserMicros'],
+    cpuSystemMicros: worker['cpuSystemMicros'],
+    peakSampledRssBytes: worker['peakSampledRssBytes'],
+  };
+}
+
 function validateRunTelemetry(value: RunResourceTelemetry): void {
   if (!object(value)) throw new TypeError('invalid run telemetry');
   for (const name of [
@@ -908,6 +958,8 @@ function validateRunTelemetry(value: RunResourceTelemetry): void {
     'coordinatorRssEndBytes',
     'coordinatorPeakSampledRssBytes',
     'workerPeakRssBytes',
+    'workerCpuUserMicros',
+    'workerCpuSystemMicros',
     'ownedProcessPeakRssBytes',
     'ownedProcessCountPeak',
     'ptySlotsPeak',

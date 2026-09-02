@@ -144,7 +144,7 @@ describe('test-host persistence seams', () => {
       finishedAt: 20,
     });
     expect(manifest).toMatchObject({
-      v: 5,
+      v: 6,
       startedAt: 10,
       finishedAt: 20,
       durationMs: 7,
@@ -242,6 +242,8 @@ function fixtureTelemetry() {
     coordinatorRssEndBytes: 1,
     coordinatorPeakSampledRssBytes: 1,
     workerPeakRssBytes: 'unavailable' as const,
+    workerCpuUserMicros: 'unavailable' as const,
+    workerCpuSystemMicros: 'unavailable' as const,
     ownedProcessPeakRssBytes: 'unavailable' as const,
     ownedProcessCountPeak: 'unavailable' as const,
     ptySlotsPeak: 0,

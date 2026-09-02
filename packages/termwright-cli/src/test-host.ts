@@ -1298,7 +1298,7 @@ export class TermwrightTestHost {
       status,
       specs,
       attempts: completedAttempts,
-      telemetry: active.telemetry.finish(active.persistence.metrics(), ptySlotsPeak),
+      telemetry: active.telemetry.finish(active.persistence.metrics(), ptySlotsPeak, attempts),
       durationMs: active.budget.elapsedMs(),
     };
   }
@@ -1328,18 +1328,36 @@ class RunTelemetrySampler {
     clearInterval(this.#timer);
   }
 
-  finish(journal: JournalTelemetrySnapshot, ptySlotsPeak: number): RunResourceTelemetry {
+  finish(
+    journal: JournalTelemetrySnapshot,
+    ptySlotsPeak: number,
+    attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
+  ): RunResourceTelemetry {
     if (this.#result !== undefined) return this.#result;
     this.stop();
     const rssEnd = this.#sample();
     const cpu = process.cpuUsage(this.#cpuStart);
+    const worker = [...attempts.values()]
+      .map((attempt) => attempt.finished?.worker)
+      .filter((value): value is AttemptWorkerResources => value !== undefined);
     this.#result = Object.freeze({
       coordinatorCpuUserMicros: cpu.user,
       coordinatorCpuSystemMicros: cpu.system,
       coordinatorRssStartBytes: this.#rssStart,
       coordinatorRssEndBytes: rssEnd,
       coordinatorPeakSampledRssBytes: this.#peakRss,
-      workerPeakRssBytes: 'unavailable',
+      workerPeakRssBytes:
+        worker.length === 0
+          ? 'unavailable'
+          : Math.max(...worker.map((value) => value.peakSampledRssBytes)),
+      workerCpuUserMicros:
+        worker.length === 0
+          ? 'unavailable'
+          : worker.reduce((total, value) => total + value.cpuUserMicros, 0),
+      workerCpuSystemMicros:
+        worker.length === 0
+          ? 'unavailable'
+          : worker.reduce((total, value) => total + value.cpuSystemMicros, 0),
       ownedProcessPeakRssBytes: 'unavailable',
       ownedProcessCountPeak: 'unavailable',
       ptySlotsPeak,
@@ -1624,7 +1642,15 @@ interface ObservedAttempt {
     readonly state: NativeRunAttempt['status'];
     readonly monotonicTime: number;
     readonly observedAfterRunMs: number;
+    readonly worker: AttemptWorkerResources;
   };
+}
+
+interface AttemptWorkerResources {
+  readonly capability: 'worker-process';
+  readonly cpuUserMicros: number;
+  readonly cpuSystemMicros: number;
+  readonly peakSampledRssBytes: number;
 }
 
 function observeAttemptEvent(
@@ -1688,6 +1714,7 @@ function observeAttemptEvent(
     state: payload.state,
     monotonicTime: event.monotonicTime,
     observedAfterRunMs,
+    worker: payload.worker,
   };
 }
 
@@ -1703,6 +1730,7 @@ function attemptPayload(
   readonly repeat: number;
   readonly retry: number;
   readonly state: NativeRunAttempt['status'];
+  readonly worker: AttemptWorkerResources;
 };
 function attemptPayload(payload: unknown, terminal: boolean) {
   if (typeof payload !== 'object' || payload === null)
@@ -1720,12 +1748,25 @@ function attemptPayload(payload: unknown, terminal: boolean) {
   if (terminal && state !== 'passed' && state !== 'failed' && state !== 'skipped') {
     throw new Error('attempt.finished payload has invalid state');
   }
+  const worker = record['worker'];
+  if (
+    terminal &&
+    (typeof worker !== 'object' ||
+      worker === null ||
+      (worker as Record<string, unknown>)['capability'] !== 'worker-process' ||
+      !nonNegativeInteger((worker as Record<string, unknown>)['cpuUserMicros']) ||
+      !nonNegativeInteger((worker as Record<string, unknown>)['cpuSystemMicros']) ||
+      !nonNegativeInteger((worker as Record<string, unknown>)['peakSampledRssBytes']))
+  ) {
+    throw new Error('attempt.finished payload has invalid worker resource telemetry');
+  }
   return terminal
     ? {
         nativeTaskId: record['nativeTaskId'],
         repeat: record['repeat'],
         retry: record['retry'],
         state,
+        worker: Object.freeze({ ...(worker as AttemptWorkerResources) }),
       }
     : { nativeTaskId: record['nativeTaskId'], repeat: record['repeat'], retry: record['retry'] };
 }

@@ -20,7 +20,9 @@ const fixtureTelemetry = (): RunResourceTelemetry => ({
   coordinatorRssStartBytes: 1,
   coordinatorRssEndBytes: 1,
   coordinatorPeakSampledRssBytes: 1,
-  workerPeakRssBytes: 'unavailable',
+  workerPeakRssBytes: 100,
+  workerCpuUserMicros: 2,
+  workerCpuSystemMicros: 4,
   ownedProcessPeakRssBytes: 'unavailable',
   ownedProcessCountPeak: 'unavailable',
   ptySlotsPeak: 0,
@@ -224,7 +226,16 @@ function manifest(start: RunStartProvenance): NativeRunManifest {
       eventClass: 'authoritative',
       type: 'attempt.finished',
       identity,
-      payload: { ...payload, state: attempt.status },
+      payload: {
+        ...payload,
+        state: attempt.status,
+        worker: {
+          capability: 'worker-process',
+          cpuUserMicros: 1,
+          cpuSystemMicros: 2,
+          peakSampledRssBytes: 100,
+        },
+      },
     });
     monotonicTime += 1;
     return [started, finished];

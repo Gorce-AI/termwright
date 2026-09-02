@@ -160,7 +160,18 @@ class FakeEngine implements TermwrightVitestEngine {
               eventClass: 'authoritative',
               type: 'attempt.finished',
               identity: eventIdentity,
-              payload: { nativeTaskId, repeat: 0, retry: 0, state },
+              payload: {
+                nativeTaskId,
+                repeat: 0,
+                retry: 0,
+                state,
+                worker: {
+                  capability: 'worker-process',
+                  cpuUserMicros: 100,
+                  cpuSystemMicros: 20,
+                  peakSampledRssBytes: 64 * 1024 * 1024,
+                },
+              },
             }),
             performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
           );
@@ -856,7 +867,9 @@ describe('TermwrightTestHost', () => {
     });
     expect(record.manifest.durationMs).toBeGreaterThanOrEqual(0);
     expect(record.manifest.telemetry).toMatchObject({
-      workerPeakRssBytes: 'unavailable',
+      workerPeakRssBytes: 64 * 1024 * 1024,
+      workerCpuUserMicros: 100,
+      workerCpuSystemMicros: 20,
       ownedProcessPeakRssBytes: 'unavailable',
       ownedProcessCountPeak: 'unavailable',
       ptySlotsPeak: 0,
