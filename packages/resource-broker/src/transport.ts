@@ -763,6 +763,9 @@ function resourceVector(value: unknown): ResourceVector {
     'semanticEndpoint',
     'nativeHostPressure',
     'traceWriter',
+    'cpuWeight',
+    'memoryWeight',
+    'ioWeight',
   ]);
   for (const key of Object.keys(input))
     if (!allowed.has(key)) throw protocolError(`unknown resource class ${key}`);

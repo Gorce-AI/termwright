@@ -58,8 +58,13 @@ export {
 export type { TermwrightHostDeadlineRuntime } from './test-host-persistence.js';
 export type { TermwrightVitestEngine } from './test-host-engine.js';
 
-export { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
+export {
+  TERMWRIGHT_RESOURCE_PROFILES,
+  detectTermwrightHostCapacity,
+  resolveTermwrightResourceProfile,
+} from './resource-profiles.js';
 export type {
+  TermwrightHostCapacity,
   TermwrightResourceProfile,
   TermwrightResourceProfileName,
 } from './resource-profiles.js';
@@ -921,7 +926,8 @@ export class TermwrightTestHost {
       const metadata = testCase.meta();
       const resourceReservation = resourceReservationFromMetadata(
         metadata,
-        this.#resourceProfile.capacities.nativeHostPressure,
+        this.#resourceProfile.capacities,
+        this.#resourceProfile.perAttempt ?? {},
       );
       return Object.freeze({
         runnerTaskId: identity.runnerTaskId,
@@ -1081,7 +1087,16 @@ export class TermwrightTestHost {
           name: this.#resourceProfile.name,
           scheduler: { ...this.#resourceProfile.scheduler },
           capacities: { ...this.#resourceProfile.capacities },
+          perAttempt: { ...(this.#resourceProfile.perAttempt ?? {}) },
           perTerminal: { ...this.#resourceProfile.perTerminal },
+          ...(this.#resourceProfile.hostCapacity === undefined
+            ? {}
+            : {
+                hostCapacity: {
+                  ...this.#resourceProfile.hostCapacity,
+                  sources: { ...this.#resourceProfile.hostCapacity.sources },
+                },
+              }),
         },
         timeouts: {
           totalRunMs: active.budget.totalMs,
@@ -1642,15 +1657,16 @@ function nonNegativeInteger(value: unknown): value is number {
 /** Converts the closed public hint into the broker's complete atomic vector. */
 function resourceReservationFromMetadata(
   metadata: unknown,
-  exclusiveNativeHostPressure: number,
-): ResourceVector | undefined {
+  capacities: Readonly<Record<string, number | undefined>>,
+  perAttempt: ResourceVector,
+): ResourceVector {
   if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))
-    return undefined;
+    return perAttempt;
   const termwright = (metadata as Record<string, unknown>)['termwright'];
   if (typeof termwright !== 'object' || termwright === null || Array.isArray(termwright))
-    return undefined;
+    return perAttempt;
   const resources = (termwright as Record<string, unknown>)['resources'];
-  if (resources === undefined) return undefined;
+  if (resources === undefined) return perAttempt;
   if (typeof resources !== 'object' || resources === null || Array.isArray(resources)) {
     throw new TypeError('collected termwright.resources metadata is not an object');
   }
@@ -1660,7 +1676,8 @@ function resourceReservationFromMetadata(
       key !== 'terminals' &&
       key !== 'traceWriters' &&
       key !== 'nativeHost' &&
-      key !== 'hostPressure'
+      key !== 'hostPressure' &&
+      key !== 'load'
     ) {
       throw new TypeError(`collected termwright.resources contains unknown key ${key}`);
     }
@@ -1689,14 +1706,26 @@ function resourceReservationFromMetadata(
       'collected termwright.resources cannot combine nativeHost and hostPressure',
     );
   }
+  const load = record['load'];
+  if (
+    load !== undefined &&
+    load !== 'light' &&
+    load !== 'normal' &&
+    load !== 'heavy' &&
+    load !== 'exclusive'
+  ) {
+    throw new TypeError(
+      'collected termwright.resources.load must be light, normal, heavy or exclusive',
+    );
+  }
+  const weighted = resourceLoadVector(load ?? 'normal', capacities);
   const nativeHostPressure =
     nativeHost === 'exclusive' || hostPressure === 'exclusive'
-      ? exclusiveNativeHostPressure
+      ? (capacities['nativeHostPressure'] ?? 0)
       : terminals;
-  if (terminals === 0 && traceWriters === 0 && nativeHostPressure === 0) {
-    throw new TypeError('collected termwright.resources must reserve at least one resource');
-  }
   return Object.freeze({
+    ...perAttempt,
+    ...weighted,
     ...(terminals === 0
       ? {}
       : {
@@ -1706,6 +1735,23 @@ function resourceReservationFromMetadata(
         }),
     ...(nativeHostPressure === 0 ? {} : { nativeHostPressure }),
     ...(traceWriters === 0 ? {} : { traceWriter: traceWriters }),
+  });
+}
+
+function resourceLoadVector(
+  load: 'light' | 'normal' | 'heavy' | 'exclusive',
+  capacities: Readonly<Record<string, number | undefined>>,
+): ResourceVector {
+  const factor = load === 'heavy' ? 2 : 1;
+  const value = (resource: 'cpuWeight' | 'memoryWeight' | 'ioWeight'): number => {
+    const capacity = capacities[resource] ?? 0;
+    if (load === 'exclusive') return capacity;
+    return Math.min(capacity, factor);
+  };
+  return Object.freeze({
+    cpuWeight: value('cpuWeight'),
+    memoryWeight: value('memoryWeight'),
+    ioWeight: value('ioWeight'),
   });
 }
 

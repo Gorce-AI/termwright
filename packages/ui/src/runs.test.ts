@@ -122,6 +122,7 @@ function provenance(startedAt: number): RunStartProvenance {
       profile: 'default',
       scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },
       capacities: { ptySession: 2 },
+      perAttempt: {},
       perTerminal: { ptySession: 1 },
     },
     timeouts: { totalRunMs: 60_000, finalizationReserveMs: 5_000 },

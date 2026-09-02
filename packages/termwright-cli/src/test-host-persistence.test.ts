@@ -92,6 +92,7 @@ describe('test-host persistence seams', () => {
         profile: 'unit',
         scheduler: { pool: 'forks', maxWorkers: 1, fileParallelism: false },
         capacities: {},
+        perAttempt: {},
         perTerminal: {},
       },
       timeouts: { totalRunMs: 100, finalizationReserveMs: 10 },

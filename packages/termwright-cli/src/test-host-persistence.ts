@@ -276,7 +276,11 @@ export class RunHistoryPersistence {
         profile: options.resourceProfile.name,
         scheduler: Object.freeze({ ...options.resourceProfile.scheduler }),
         capacities: Object.freeze({ ...options.resourceProfile.capacities }),
+        perAttempt: Object.freeze({ ...(options.resourceProfile.perAttempt ?? {}) }),
         perTerminal: Object.freeze({ ...options.resourceProfile.perTerminal }),
+        ...(options.resourceProfile.hostCapacity === undefined
+          ? {}
+          : { hostCapacity: options.resourceProfile.hostCapacity }),
       }),
       timeouts: Object.freeze({
         totalRunMs: options.totalRunMs,

@@ -580,6 +580,9 @@ function validateResourceVector(value: unknown): ResourceVector {
     'semanticEndpoint',
     'nativeHostPressure',
     'traceWriter',
+    'cpuWeight',
+    'memoryWeight',
+    'ioWeight',
   ] as const;
   if (!plainDataObject(value, keys)) return invalidHostContext();
   const record = value as Record<string, unknown>;

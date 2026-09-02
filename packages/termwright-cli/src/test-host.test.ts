@@ -293,10 +293,14 @@ describe('TermwrightTestHost', () => {
           capacities: {
             ptySession: 4,
             externalProcess: 4,
+            cpuWeight: 2,
+            memoryWeight: 2,
+            ioWeight: 2,
             semanticEndpoint: 4,
             nativeHostPressure: 4,
             traceWriter: 4,
           },
+          perAttempt: { cpuWeight: 1, memoryWeight: 1, ioWeight: 1 },
           perTerminal: { semanticEndpoint: 1, nativeHostPressure: 1 },
         },
         timeouts: { totalRunMs: 600_000, finalizationReserveMs: 30_000 },
@@ -349,6 +353,9 @@ describe('TermwrightTestHost', () => {
       externalProcess: 1,
       semanticEndpoint: 1,
       nativeHostPressure: 4,
+      cpuWeight: 1,
+      memoryWeight: 1,
+      ioWeight: 1,
     });
     await host.close();
   });
@@ -367,6 +374,29 @@ describe('TermwrightTestHost', () => {
     await host.requestRun().completed;
     expect(engine.contexts.at(-1)?.tasks['host-pressure']?.resourceReservation).toEqual({
       nativeHostPressure: 4,
+      cpuWeight: 1,
+      memoryWeight: 1,
+      ioWeight: 1,
+    });
+    await host.close();
+  });
+
+  it('maps a heavy load hint onto the host CPU, memory and I/O vector', async () => {
+    const engine = new FakeEngine();
+    const heavy = testCase('heavy', 'heavy', 'passed', 0, true, [], {
+      termwright: {
+        provider: { id: '@termwright/test', version: 1 },
+        resources: { load: 'heavy' },
+      },
+    });
+    engine.tests = [heavy];
+    engine.runResult = result([heavy]);
+    const host = hostFromEngine(engine, hostOptions());
+    await host.requestRun().completed;
+    expect(engine.contexts.at(-1)?.tasks['heavy']?.resourceReservation).toEqual({
+      cpuWeight: 2,
+      memoryWeight: 2,
+      ioWeight: 2,
     });
     await host.close();
   });
@@ -396,6 +426,9 @@ describe('TermwrightTestHost', () => {
       externalProcess: 1,
       semanticEndpoint: 1,
       nativeHostPressure: 4,
+      cpuWeight: 1,
+      memoryWeight: 1,
+      ioWeight: 1,
     });
     await host.close();
   });

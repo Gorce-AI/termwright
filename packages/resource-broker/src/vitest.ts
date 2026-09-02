@@ -22,6 +22,8 @@ export interface TermwrightTestResources {
   readonly nativeHost?: 'shared' | 'exclusive';
   /** Exclusively reserves host-wide process/toolchain pressure without requiring a terminal. */
   readonly hostPressure?: 'exclusive';
+  /** Coarse host CPU/memory/I/O admission cost; defaults to `normal`. */
+  readonly load?: 'light' | 'normal' | 'heavy' | 'exclusive';
 }
 
 /** Vitest's Test API with declaration-time atomic resource ownership. */
@@ -94,7 +96,8 @@ function validateResources(value: TermwrightTestResources): Readonly<TermwrightT
       key !== 'terminals' &&
       key !== 'traceWriters' &&
       key !== 'nativeHost' &&
-      key !== 'hostPressure'
+      key !== 'hostPressure' &&
+      key !== 'load'
     ) {
       throw new TypeError(`test.resources() does not recognize ${key}`);
     }
@@ -104,6 +107,7 @@ function validateResources(value: TermwrightTestResources): Readonly<TermwrightT
     traceWriters?: number;
     nativeHost?: 'shared' | 'exclusive';
     hostPressure?: 'exclusive';
+    load?: 'light' | 'normal' | 'heavy' | 'exclusive';
   } = {};
   for (const key of ['terminals', 'traceWriters'] as const) {
     const amount = record[key];
@@ -123,13 +127,25 @@ function validateResources(value: TermwrightTestResources): Readonly<TermwrightT
     throw new TypeError('test.resources().hostPressure must be exclusive');
   }
   if (hostPressure !== undefined) result.hostPressure = hostPressure;
+  const load = record['load'];
+  if (
+    load !== undefined &&
+    load !== 'light' &&
+    load !== 'normal' &&
+    load !== 'heavy' &&
+    load !== 'exclusive'
+  ) {
+    throw new TypeError('test.resources().load must be light, normal, heavy or exclusive');
+  }
+  if (load !== undefined) result.load = load;
   if (result.nativeHost !== undefined && result.hostPressure !== undefined) {
     throw new TypeError('test.resources() cannot combine nativeHost and hostPressure');
   }
   if (
     (result.terminals ?? 0) === 0 &&
     (result.traceWriters ?? 0) === 0 &&
-    result.hostPressure === undefined
+    result.hostPressure === undefined &&
+    result.load === undefined
   ) {
     throw new RangeError('test.resources() must reserve at least one resource');
   }

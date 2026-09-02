@@ -45,9 +45,20 @@ export interface RunStartProvenance {
       readonly pool: string;
       readonly maxWorkers: number;
       readonly fileParallelism: boolean;
+      readonly decisions?: readonly string[];
     };
     readonly capacities: Readonly<Record<string, number>>;
+    readonly perAttempt: Readonly<Record<string, number>>;
     readonly perTerminal: Readonly<Record<string, number>>;
+    readonly hostCapacity?: {
+      readonly availableCpu: number;
+      readonly memoryLimitBytes: number;
+      readonly memoryReserveBytes: number;
+      readonly memoryBudgetBytes: number;
+      readonly tempDiskAvailableBytes: number | 'unavailable';
+      readonly tempDiskBudgetBytes: number | 'unavailable';
+      readonly sources: Readonly<Record<string, string>>;
+    };
   };
   readonly timeouts: {
     readonly totalRunMs: number;
@@ -356,8 +367,18 @@ function validateStart(value: RunStartProvenance): void {
   ) {
     throw new TypeError('invalid resource scheduler');
   }
+  if (
+    value.resources.scheduler.decisions !== undefined &&
+    (!Array.isArray(value.resources.scheduler.decisions) ||
+      !value.resources.scheduler.decisions.every((decision) => text(decision)))
+  ) {
+    throw new TypeError('invalid resource scheduler decisions');
+  }
   validateNumberRecord(value.resources?.capacities, 'resource capacities');
+  validateNumberRecord(value.resources?.perAttempt, 'per-attempt resources');
   validateNumberRecord(value.resources?.perTerminal, 'per-terminal resources');
+  if (value.resources.hostCapacity !== undefined)
+    validateHostCapacity(value.resources.hostCapacity);
   finite(value.timeouts?.totalRunMs, 'timeouts.totalRunMs');
   finite(value.timeouts?.finalizationReserveMs, 'timeouts.finalizationReserveMs');
   if (value.timeouts.finalizationReserveMs >= value.timeouts.totalRunMs) {
@@ -374,6 +395,22 @@ function validateStart(value: RunStartProvenance): void {
     )
       throw new TypeError('invalid Git provenance');
   }
+}
+
+function validateHostCapacity(
+  value: NonNullable<RunStartProvenance['resources']['hostCapacity']>,
+): void {
+  finite(value.availableCpu, 'hostCapacity.availableCpu');
+  finite(value.memoryLimitBytes, 'hostCapacity.memoryLimitBytes');
+  finite(value.memoryReserveBytes, 'hostCapacity.memoryReserveBytes');
+  finite(value.memoryBudgetBytes, 'hostCapacity.memoryBudgetBytes');
+  for (const [name, amount] of [
+    ['tempDiskAvailableBytes', value.tempDiskAvailableBytes],
+    ['tempDiskBudgetBytes', value.tempDiskBudgetBytes],
+  ] as const) {
+    if (amount !== 'unavailable') finite(amount, `hostCapacity.${name}`);
+  }
+  validateStringRecord(value.sources, 'hostCapacity.sources');
 }
 function validateManifest(value: RunManifest): void {
   validateStart(value);
