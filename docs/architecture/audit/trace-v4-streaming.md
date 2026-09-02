@@ -76,5 +76,6 @@ queues and active state, not accumulated trace bytes.
 - ZIP reading and unpacking remain size-capped whole-container operations. The
   runtime format and pack path are streaming; a future portable-reader audit
   should select a random-access or streaming unzip implementation.
-- Artifact Security 2.0, especially terminal-aware output sanitization, is the
-  next phase and must run before bytes enter this spool.
+- Artifact Security 2.0 now runs before bytes enter the spool. Its remaining
+  OS/runtime and raster canary evidence is tracked in
+  `artifact-security-2.md` rather than treated as a Trace v4 format gap.

@@ -1,6 +1,6 @@
 # Unicode and terminal-engine decision
 
-Status: accepted for the post-0.3.1 campaign
+Status: **IMPLEMENTED — EXTERNAL CERTIFICATION PENDING**
 
 Baseline: `4b82096b7951e7ae6494eb37fb06b4e4ab32a6ba`
 
