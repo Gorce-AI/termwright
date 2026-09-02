@@ -44,7 +44,17 @@ describe('Ink React bridge under Bun', () => {
       instance.unmount();
       await exited;
       release();
-      console.log(JSON.stringify(commits));
+      // waitUntilExit is the authoritative Ink lifecycle boundary. Do not then
+      // make the test depend on unrelated handles that Bun may retain on
+      // Windows: publish the observation, wait for the pipe write itself, and
+      // leave only after the parent can read the complete payload.
+      await new Promise((resolve, reject) => {
+        process.stdout.write(JSON.stringify(commits) + '\\n', error => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      process.exit(0);
     `;
     const { stdout, stderr } = await execFileAsync('bun', ['--eval', script], {
       cwd: fileURLToPath(new URL('.', inkUrl)),
