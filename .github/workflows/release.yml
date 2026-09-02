@@ -600,6 +600,17 @@ jobs:
             release/npm/termwright-driver-*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
 
+      - name: Certify the packed Native Host in a clean consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-release-clean-room-packs"
+          install_dir="$RUNNER_TEMP/termwright-release-clean-room-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          node scripts/check-installed-termwright.mjs "$install_dir"
+
       - name: Build and test the Python distribution
         working-directory: clients/python
         shell: bash

@@ -45,7 +45,8 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "pack:npm-artifacts": "node scripts/pack-npm-artifacts.mjs"
+    "pack:npm-artifacts": "node scripts/pack-npm-artifacts.mjs",
+    "pack:clean-room": "node scripts/pack-clean-room-termwright.mjs"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.0",

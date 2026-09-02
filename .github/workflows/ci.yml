@@ -183,6 +183,16 @@ jobs:
           rm -f "$native_package_path"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
+      - name: Certify the packed Native Host in a clean consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-clean-room-packs"
+          install_dir="$RUNNER_TEMP/termwright-clean-room-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          node scripts/check-installed-termwright.mjs "$install_dir"
       - run: pnpm -r --filter './packages/*' run typecheck
       - name: Run the certified Termwright host
         shell: bash
@@ -643,6 +653,17 @@ jobs:
           pnpm --dir packages/pty pack --pack-destination "$pack_dir"
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
           node scripts/check-installed-driver.mjs "$install_dir"
+
+      - name: Certify the packed Native Host in a clean consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-clean-room-packs"
+          install_dir="$RUNNER_TEMP/termwright-clean-room-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm pack:clean-room -- "$pack_dir"
+          npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
+          node scripts/check-installed-termwright.mjs "$install_dir"
 
       - name: Run the certified Termwright host
         shell: bash
