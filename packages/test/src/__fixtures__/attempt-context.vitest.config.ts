@@ -27,6 +27,7 @@ const task = () => ({
   specId: createRunId('spec'),
   file: fixture,
   fullName: 'attempt context fixture',
+  resourceDecision: 'fixture',
 });
 
 export default defineConfig({

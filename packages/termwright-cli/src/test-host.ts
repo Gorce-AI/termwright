@@ -1,6 +1,7 @@
 /** First-class Termwright process host backed by the exact-certified Vitest engine. */
 
 import { inspect } from 'node:util';
+import { dirname } from 'node:path';
 import { ResourceBroker, type ResourceVector } from '@termwright/resource-broker';
 import {
   startResourceBrokerServer,
@@ -31,6 +32,7 @@ import {
 import type { UserConsoleLog } from 'vitest';
 import type { TestCase, TestRunResult } from 'vitest/node';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
+import { ResourceCostHistory, type ResourceCostEstimate } from './resource-history.js';
 import { preflightTestHost, type TermwrightHostPreflightOptions } from './preflight.js';
 import {
   classifyVitestResult,
@@ -84,6 +86,8 @@ export interface NativeTestCase {
   readonly resourceReservation?: ResourceVector;
   /** Whether concrete subleases must stay within an explicit declaration. */
   readonly strictResourceReservation?: boolean;
+  /** Persisted admission rationale; contains no raw historical identity. */
+  readonly resourceDecision: string;
 }
 
 export interface NativeTestCatalog {
@@ -225,6 +229,7 @@ export class TermwrightTestHost {
   readonly #sink: (events: readonly RunEvent[]) => void | Promise<void>;
   readonly #eventObserver: ((event: RunEvent) => void) | undefined;
   readonly #resourceProfile: TermwrightResourceProfile;
+  readonly #resourceHistory: Promise<ResourceCostHistory>;
   readonly #cwd: string;
   readonly #runsDir: string;
   readonly #runManifestWriter: RunManifestWriter | undefined;
@@ -250,12 +255,14 @@ export class TermwrightTestHost {
     options: TermwrightTestHostOptions,
     ids = new RunIdFactory(),
     gitProvenance: RunStartProvenance['git'] | undefined = undefined,
+    resourceHistory: ResourceCostHistory = ResourceCostHistory.memory(),
   ) {
     this.#engine = engine;
     this.#filters = Object.freeze([...(options.filters ?? [])]);
     this.#sink = options.journalSink ?? (() => undefined);
     this.#eventObserver = options.eventObserver;
     this.#resourceProfile = options.resourceProfile;
+    this.#resourceHistory = Promise.resolve(resourceHistory);
     this.#cwd = options.cwd;
     this.#runsDir = options.runsDir;
     this.#runManifestWriter = options.runManifestWriter;
@@ -300,21 +307,36 @@ export class TermwrightTestHost {
       void creation.then(({ engine }) => engine.close()).catch(() => undefined);
       throw error;
     }
-    return new TermwrightTestHost(created.engine, {
-      ...options,
-      skipDeclarations,
-      filters: hostRelativeFilters([...(options.filters ?? []), ...created.filters], options.cwd),
-    });
+    return new TermwrightTestHost(
+      created.engine,
+      {
+        ...options,
+        skipDeclarations,
+        filters: hostRelativeFilters([...(options.filters ?? []), ...created.filters], options.cwd),
+      },
+      new RunIdFactory(),
+      undefined,
+      await ResourceCostHistory.load(dirname(options.runsDir)),
+    );
   }
 
   /** Test seam; production callers use {@link open}. */
   static fromEngine(
     engine: TermwrightVitestEngine,
     options: TermwrightTestHostOptions,
-    dependencies: { readonly gitProvenance?: RunStartProvenance['git'] } = {},
+    dependencies: {
+      readonly gitProvenance?: RunStartProvenance['git'];
+      readonly resourceHistory?: ResourceCostHistory;
+    } = {},
   ): TermwrightTestHost {
     assertCertifiedVitestRuntime(engine.version);
-    return new TermwrightTestHost(engine, options, new RunIdFactory(), dependencies.gitProvenance);
+    return new TermwrightTestHost(
+      engine,
+      options,
+      new RunIdFactory(),
+      dependencies.gitProvenance,
+      dependencies.resourceHistory,
+    );
   }
 
   requestRun(request: RunRequest = {}): RunHandle {
@@ -533,7 +555,11 @@ export class TermwrightTestHost {
           `no test matched the host filters [${this.#filters.join(', ')}] under root ${this.#cwd}`,
         );
       }
-      const catalog = this.#catalog(active.runId, collection.tests);
+      const resourceHistory = await active.budget.execution(
+        'resource history load',
+        () => this.#resourceHistory,
+      );
+      const catalog = this.#catalog(active.runId, collection.tests, resourceHistory);
       active.catalog = catalog;
       const selected = this.#select(catalog, request.runnerTaskIds);
       active.selected = selected;
@@ -561,6 +587,7 @@ export class TermwrightTestHost {
             specId: test.specId,
             file: test.file,
             fullName: test.fullName,
+            resourceDecision: test.resourceDecision,
             ...(test.resourceReservation === undefined
               ? {}
               : {
@@ -876,6 +903,15 @@ export class TermwrightTestHost {
           history.prepare(this.#manifestInput(active, attempts, terminal, ptySlotsPeak)),
         );
         await active.budget.finalization('run history commit', () => history.commitPrepared());
+        await active.budget
+          .finalization('resource history update', () =>
+            this.#updateResourceHistory(active, attempts),
+          )
+          .catch((error: unknown) => {
+            process.stderr.write(
+              `termwright: resource history update failed: ${describeFailure(error)}\n`,
+            );
+          });
       } catch (error) {
         failure =
           failure === undefined
@@ -912,7 +948,11 @@ export class TermwrightTestHost {
     });
   }
 
-  #catalog(runId: RunId, tests: readonly TestCase[]): NativeTestCatalog {
+  #catalog(
+    runId: RunId,
+    tests: readonly TestCase[],
+    resourceHistory: ResourceCostHistory,
+  ): NativeTestCatalog {
     // The native host owns the complete Vitest graph. Terminal-aware metadata
     // enriches a case; it must never act as a filter that silently drops pure
     // unit tests from certification.
@@ -939,10 +979,22 @@ export class TermwrightTestHost {
         this.#tasks.set(testCase.id, identity);
       }
       const metadata = testCase.meta();
-      const resourceReservation = resourceReservationFromMetadata(
+      const costIdentity = ResourceCostHistory.identity({
+        project,
+        file: testCase.module.moduleId,
+        fullName: testCase.fullName,
+        ...(testCase.location === undefined ? {} : testCase.location),
+      });
+      const estimate = resourceHistory.estimate(costIdentity);
+      const declaredReservation = resourceReservationFromMetadata(
         metadata,
         this.#resourceProfile.capacities,
         this.#resourceProfile.perAttempt ?? {},
+      );
+      const resourceReservation = applyHistoricalMemoryCost(
+        declaredReservation,
+        estimate,
+        this.#resourceProfile,
       );
       const strictResourceReservation = hasExplicitResourceMetadata(metadata);
       return Object.freeze({
@@ -957,6 +1009,7 @@ export class TermwrightTestHost {
           ? {}
           : { location: Object.freeze({ ...testCase.location }) }),
         metadata,
+        resourceDecision: resourceDecision(estimate, resourceReservation),
         ...(resourceReservation === undefined ? {} : { resourceReservation }),
         ...(strictResourceReservation ? { strictResourceReservation: true } : {}),
       });
@@ -965,6 +1018,34 @@ export class TermwrightTestHost {
       throw new Error('Vitest collection returned duplicate native test ids');
     }
     return Object.freeze({ runId, tests: Object.freeze(catalog) });
+  }
+
+  async #updateResourceHistory(
+    active: ActiveRun,
+    attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
+  ): Promise<void> {
+    const history = await this.#resourceHistory;
+    const byTask = new Map(
+      (active.selected ?? []).map((test) => [test.runnerTaskId, test] as const),
+    );
+    for (const attempt of attempts.values()) {
+      if (attempt.finished === undefined) continue;
+      const test = byTask.get(attempt.task);
+      if (test === undefined) continue;
+      history.observe(
+        ResourceCostHistory.identity({
+          project: test.project,
+          file: test.file,
+          fullName: test.fullName,
+          ...(test.location === undefined ? {} : test.location),
+        }),
+        {
+          durationMs: Math.max(0, attempt.finished.monotonicTime - attempt.startedAt),
+          workerPeakRssBytes: attempt.finished.worker.peakSampledRssBytes,
+        },
+      );
+    }
+    await history.save();
   }
 
   #select(
@@ -1885,6 +1966,36 @@ function resourceLoadVector(
     memoryWeight: value('memoryWeight'),
     ioWeight: value('ioWeight'),
   });
+}
+
+function applyHistoricalMemoryCost(
+  declared: ResourceVector,
+  estimate: ResourceCostEstimate | undefined,
+  profile: TermwrightResourceProfile,
+): ResourceVector {
+  const capacity = profile.capacities.memoryWeight ?? 0;
+  const budget = profile.hostCapacity?.memoryBudgetBytes;
+  if (estimate === undefined || budget === undefined || capacity === 0) return declared;
+  const bytesPerWeight = budget / capacity;
+  const historicalWeight = Math.max(1, Math.ceil(estimate.workerPeakRssP95Bytes / bytesPerWeight));
+  return Object.freeze({
+    ...declared,
+    memoryWeight: Math.min(capacity, Math.max(declared.memoryWeight ?? 0, historicalWeight)),
+  });
+}
+
+function resourceDecision(
+  estimate: ResourceCostEstimate | undefined,
+  reservation: ResourceVector,
+): string {
+  if (estimate === undefined) {
+    return `history=miss; conservative reservation=${JSON.stringify(reservation)}`;
+  }
+  return (
+    `history=samples:${estimate.samples},duration-p50:${estimate.durationP50Ms},` +
+    `duration-p95:${estimate.durationP95Ms},rss-p95:${estimate.workerPeakRssP95Bytes}; ` +
+    `reservation=${JSON.stringify(reservation)}`
+  );
 }
 
 function boundedResourceAmount(value: unknown, label: string): number {

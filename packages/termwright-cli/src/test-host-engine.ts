@@ -43,6 +43,7 @@ export interface TermwrightHostTaskIdentity {
   readonly fullName: string;
   readonly resourceReservation?: ResourceVector;
   readonly strictResourceReservation?: boolean;
+  readonly resourceDecision: string;
 }
 
 export interface TermwrightRunnerContext {

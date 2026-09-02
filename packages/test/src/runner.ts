@@ -92,6 +92,7 @@ export interface TermwrightHostTaskIdentity {
   /** Atomic broker vector acquired before attempt.started is emitted. */
   readonly resourceReservation?: ResourceVector;
   readonly strictResourceReservation?: boolean;
+  readonly resourceDecision: string;
 }
 const taskIdentities = new WeakMap<object, TermwrightHostTaskIdentity>();
 const taskBrokers = new WeakMap<object, ResourceBrokerClient>();
@@ -331,7 +332,15 @@ export class TermwrightTestRunner extends VitestTestRunner {
           eventClass: 'authoritative',
           type: 'attempt.started',
           identity: attemptIdentity(context),
-          payload: { nativeTaskId: task.id, repeat: native.repeats, retry: native.retry },
+          payload: {
+            nativeTaskId: task.id,
+            repeat: native.repeats,
+            retry: native.retry,
+            admission: {
+              decision: identity.resourceDecision,
+              resources: identity.resourceReservation ?? {},
+            },
+          },
         }),
         eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'operation'),
       );
@@ -474,6 +483,7 @@ export function validateHostContext(value: unknown): TermwrightRunnerContext {
         'fullName',
         'resourceReservation',
         'strictResourceReservation',
+        'resourceDecision',
       ])
     )
       return invalidHostContext();
@@ -495,6 +505,7 @@ export function validateHostContext(value: unknown): TermwrightRunnerContext {
       ...(identity['resourceReservation'] === undefined
         ? {}
         : { resourceReservation: validateResourceVector(identity['resourceReservation']) }),
+      resourceDecision: boundedString(identity['resourceDecision'], 'resource decision', 2_048),
       ...(identity['strictResourceReservation'] === true
         ? { strictResourceReservation: true }
         : identity['strictResourceReservation'] === undefined

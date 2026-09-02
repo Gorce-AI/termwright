@@ -31,10 +31,33 @@ head-of-line reason. Run configuration and run-manifest provenance contain the
 effective capacities, per-attempt cost, detected host budget, and planner
 decisions, so CI admission is inspectable rather than guessed.
 
+## Historical cost feedback
+
+The Native Host maintains one local, advisory `resource-costs-v1.json` beside
+the run-history directory. Stable test identity is stored only as a SHA-256 of
+project, normalized file, full name, and source location. Each of at most 2,048
+entries retains the newest 32 duration and worker-RSS measurements. P50, p95,
+and EWMA are computed from those bounded samples; malformed or oversized cache
+data becomes a conservative cache miss.
+
+Historical p95 worker RSS may only raise `memoryWeight`; it never lowers an
+explicit declaration or changes CPU/I/O from duration alone. The conversion
+uses the detected host memory budget per broker weight and caps at the existing
+ResourceBroker capacity. Every task carries its cache hit/miss, sample count,
+quantiles, and final vector into the authoritative `attempt.started` event.
+Cache persistence is private (`0700` directory, `0600` atomic replacement),
+contains no terminal output or test names, and cannot invalidate already
+committed run evidence.
+
+Local Node 24 evidence on 2026-09-02 ran the same Native Host identity twice:
+the first canonical start recorded `history=miss`; the second recorded a
+one-sample hit with duration p50/p95, RSS p95, and the resulting unchanged
+conservative vector. The cache contained 51 hashed entries, was `0600`, and the
+focused storage/host/real-runner matrix passed 51/51 tests without retry.
+
 ## Remaining evidence
 
-Historical p50/p95 cost feedback and whole-process-tree CPU/RSS accounting are
-not part of this checkpoint. Windows Job Object metrics and truthful POSIX
-capability reporting still require implementation. External Node 22/24 and
-constrained Linux/macOS/Windows runs are also pending; until then this area is
-not PASS.
+Whole-process-tree CPU/RSS accounting is not part of this checkpoint. Windows
+Job Object metrics and truthful POSIX capability reporting still require
+implementation. External Node 22/24 and constrained Linux/macOS/Windows runs
+are also pending; until then this area is not PASS.

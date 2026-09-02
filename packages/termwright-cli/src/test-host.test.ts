@@ -22,6 +22,7 @@ import {
   TermwrightTestHost,
   HostRunBudget,
   TERMWRIGHT_RESOURCE_PROFILES,
+  resolveTermwrightResourceProfile,
   TermwrightHostStartupCleanupError,
   TermwrightHostTimeoutError,
   assessSkipPolicy,
@@ -31,6 +32,7 @@ import {
   type TermwrightTestHostOptions,
   type TermwrightVitestEngine,
 } from './test-host.js';
+import { ResourceCostHistory } from './resource-history.js';
 import { CERTIFIED_VITEST_VERSION, type TermwrightRunnerContext } from './test-host-engine.js';
 
 describe('workflow attempt certification', () => {
@@ -413,6 +415,46 @@ describe('TermwrightTestHost', () => {
     await host.close();
   });
 
+  it('raises memory admission from bounded p95 history and records the decision', async () => {
+    const engine = new FakeEngine();
+    const learned = testCase('learned', 'learned pressure');
+    engine.tests = [learned];
+    engine.runResult = result([learned]);
+    const history = ResourceCostHistory.memory({ now: () => 1 });
+    history.observe(
+      ResourceCostHistory.identity({
+        project: 'default',
+        file: '/workspace/example.test.ts',
+        fullName: 'learned pressure',
+        line: 1,
+        column: 1,
+      }),
+      { durationMs: 500, workerPeakRssBytes: 1_100 * 1024 * 1024 },
+    );
+    const profile = resolveTermwrightResourceProfile('local', process.cwd(), {
+      availableCpu: 4,
+      memoryLimitBytes: 2 * 1024 * 1024 * 1024,
+      memoryReserveBytes: 0,
+      memoryBudgetBytes: 2 * 1024 * 1024 * 1024,
+      tempDiskAvailableBytes: 20 * 1024 * 1024 * 1024,
+      tempDiskBudgetBytes: 18 * 1024 * 1024 * 1024,
+      sources: { cpu: 'host', memory: 'host', tempDisk: 'filesystem' },
+    });
+    const host = hostFromEngine(
+      engine,
+      { ...hostOptions(), resourceProfile: profile },
+      { resourceHistory: history },
+    );
+    const completion = await host.requestRun().completed;
+    expect(engine.contexts.at(-1)?.tasks['learned']?.resourceReservation).toMatchObject({
+      memoryWeight: 3,
+    });
+    expect(completion.catalog?.tests[0]?.resourceDecision).toContain(
+      'history=samples:1,duration-p50:500',
+    );
+    await host.close();
+  });
+
   it('composes exclusive host pressure with the declared terminal vector', async () => {
     const engine = new FakeEngine();
     const pressure = testCase(
@@ -656,6 +698,7 @@ describe('TermwrightTestHost', () => {
       file: test.module.moduleId,
       fullName: test.fullName,
       metadata: {},
+      resourceDecision: 'fixture',
     }));
     expect(
       assessSkipPolicy(
@@ -701,6 +744,7 @@ describe('TermwrightTestHost', () => {
       file,
       fullName: test.fullName,
       metadata: {},
+      resourceDecision: 'fixture',
     }));
     const skipped = selected.map((test) => ({
       runnerTaskId: test.runnerTaskId,
@@ -1373,11 +1417,15 @@ const EPHEMERAL_RUN_MANIFEST_WRITER: RunManifestWriter = Object.freeze({
 function hostFromEngine(
   engine: TermwrightVitestEngine,
   options: TermwrightTestHostOptions = hostOptions(),
+  dependencies: Parameters<typeof TermwrightTestHost.fromEngine>[2] = {},
 ): TermwrightTestHost {
   // Repository discovery belongs to the production open() boundary. Running
   // it here would launch real git processes for every injected-engine unit
   // case without exercising additional host behavior.
-  const host = TermwrightTestHost.fromEngine(engine, options, { gitProvenance: null });
+  const host = TermwrightTestHost.fromEngine(engine, options, {
+    gitProvenance: null,
+    ...dependencies,
+  });
   onTestFinished(() => host.close());
   return host;
 }

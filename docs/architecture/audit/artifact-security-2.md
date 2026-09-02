@@ -14,6 +14,13 @@ tails, diagnostics, metadata and environment values. Therefore the private
 temporary trace and the published trace have the same policy. The writer never
 writes raw and rewrites later.
 
+The scheduler cost cache is a separate persistence boundary with a deliberately
+non-artifact schema: SHA-256 stable-test identities plus numeric duration/RSS
+samples only. It never receives event payloads, terminal bytes, environment,
+paths, or test names; the directory/file modes are `0700`/`0600`, writes use
+atomic replacement, and malformed or oversized input is discarded as an
+advisory cache miss.
+
 ## Terminal stream
 
 The sanitizer is stateful across UTF-8 chunks and separates printable data from

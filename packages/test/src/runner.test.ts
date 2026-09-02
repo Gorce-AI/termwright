@@ -88,6 +88,7 @@ describe('exact Vitest certification', () => {
           specId: createRunId('spec'),
           file: '/workspace/example.test.ts',
           fullName: 'example test',
+          resourceDecision: 'history=miss; conservative reservation={}',
           resourceReservation: { ptySession: 2, externalProcess: 2, semanticEndpoint: 2 },
         },
       },
@@ -269,6 +270,9 @@ describe('native AttemptContext', () => {
       const lifecycle = events.filter((event) => event.type.startsWith('attempt.'));
       expect(lifecycle.map((event) => event.type)).toEqual(['attempt.started', 'attempt.finished']);
       expect(lifecycle[0]?.identity).toEqual(lifecycle[1]?.identity);
+      expect(
+        (lifecycle[0]?.payload as { admission?: { decision?: string } }).admission?.decision,
+      ).toContain('history=');
     }
     expect(
       journalEvents
