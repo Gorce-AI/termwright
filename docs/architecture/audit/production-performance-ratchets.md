@@ -51,6 +51,12 @@ with GC exposed and its JSON evidence retained. This is a deterministic
 resource workload, not an elapsed-time sleep. Those rows remain external
 certification pending until the workflow executes.
 
+The packed Ink long-run oracle additionally compares two real PTY/semantic
+attempts in the same worker. Its local 2-second/8-second qualification grew
+trace bytes from 122,348 to 418,460 and semantic deltas from 41 to 159 while
+sampled worker peak RSS grew by 36,093,952 bytes. Nightly certification uses
+30-second/180-second attempts and rejects more than 96 MiB of RSS growth.
+
 External work remains: execute the paired gate on its pinned macOS runner,
 collect the Node 22/24 and OS certification matrix, and add direct counters for
 trace RSS, process-tree RSS, and host-wide temp-disk peak before those rows can

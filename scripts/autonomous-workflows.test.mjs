@@ -833,6 +833,19 @@ describe('autonomous workflow security', () => {
     expect(trace).toContain('trace-streaming-${{ matrix.os }}-node-${{ matrix.node }}');
   });
 
+  it('runs the packed multi-minute Ink resource oracle on every nightly host row', async () => {
+    const reliability = await readWorkflow('reliability.yml');
+    for (const job of ['nightly-soak-posix', 'nightly-soak-windows']) {
+      const block = jobBlock(reliability, job);
+      expect(block, job).toContain("TERMWRIGHT_LONG_RUN_SHORT_MS: '30000'");
+      expect(block, job).toContain("TERMWRIGHT_LONG_RUN_MS: '180000'");
+      expect(block, job).toContain('pnpm pack:clean-room');
+      expect(block, job).toContain('vitest@latest ink@7.1.1 react@19.2.8');
+      expect(block, job).toContain('node scripts/check-installed-long-run.mjs');
+      expect(block, job).toContain('if-no-files-found: error');
+    }
+  });
+
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
     const website = jobBlock(workflow, 'website');
