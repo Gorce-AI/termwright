@@ -15,7 +15,7 @@ import {
   type SpecId,
 } from '@termwright/protocol/run-events';
 
-export const RUN_MANIFEST_VERSION = 3 as const;
+export const RUN_MANIFEST_VERSION = 4 as const;
 export const RUN_HISTORY_COMMIT_VERSION = 1 as const;
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 
@@ -96,6 +96,31 @@ export interface NativeRunSpec {
   readonly file: string;
   readonly fullName: string;
 }
+export type UnavailableRunMetric = 'unavailable';
+export interface RunResourceTelemetry {
+  readonly coordinatorCpuUserMicros: number;
+  readonly coordinatorCpuSystemMicros: number;
+  readonly coordinatorRssStartBytes: number;
+  readonly coordinatorRssEndBytes: number;
+  /** Maximum of bounded periodic samples plus exact start/end samples. */
+  readonly coordinatorPeakSampledRssBytes: number;
+  readonly workerPeakRssBytes: number | UnavailableRunMetric;
+  readonly ownedProcessPeakRssBytes: number | UnavailableRunMetric;
+  readonly ownedProcessCountPeak: number | UnavailableRunMetric;
+  readonly ptySlotsPeak: number;
+  readonly terminalOutputBytes: number | UnavailableRunMetric;
+  readonly semanticBytes: number | UnavailableRunMetric;
+  readonly semanticFullCount: number | UnavailableRunMetric;
+  readonly semanticDeltaCount: number | UnavailableRunMetric;
+  readonly journalAcceptedEvents: number;
+  readonly journalAcceptedBytes: number;
+  readonly journalSinkCalls: number;
+  readonly journalPeakBacklogEvents: number;
+  readonly journalPeakBacklogBytes: number;
+  readonly traceBytes: number | UnavailableRunMetric;
+  readonly tempDiskPeakBytes: number | UnavailableRunMetric;
+  readonly finalArtifactBytes: number | UnavailableRunMetric;
+}
 export interface RunManifest extends RunStartProvenance {
   readonly v: typeof RUN_MANIFEST_VERSION;
   readonly finishedAt: number;
@@ -104,6 +129,7 @@ export interface RunManifest extends RunStartProvenance {
   readonly status: NativeRunStatus;
   readonly specs: readonly NativeRunSpec[];
   readonly attempts: readonly NativeRunAttempt[];
+  readonly telemetry: RunResourceTelemetry;
   /** Canonical run journal; external reporters are projections of this log. */
   readonly events: readonly RunEvent[];
 }
@@ -438,6 +464,7 @@ function validateManifest(value: RunManifest): void {
   ) {
     throw new TypeError('specs/attempts/events must be arrays');
   }
+  validateRunTelemetry(value.telemetry);
   const specs = new Map<RunnerTaskId, NativeRunSpec>();
   const specIds = new Set<SpecId>();
   for (const spec of value.specs) {
@@ -734,6 +761,38 @@ function validateManifest(value: RunManifest): void {
     }
   } else if (terminalState !== value.status) {
     throw new TypeError('manifest status differs from canonical terminal run.state');
+  }
+}
+
+function validateRunTelemetry(value: RunResourceTelemetry): void {
+  if (!object(value)) throw new TypeError('invalid run telemetry');
+  for (const name of [
+    'coordinatorCpuUserMicros',
+    'coordinatorCpuSystemMicros',
+    'coordinatorRssStartBytes',
+    'coordinatorRssEndBytes',
+    'coordinatorPeakSampledRssBytes',
+    'workerPeakRssBytes',
+    'ownedProcessPeakRssBytes',
+    'ownedProcessCountPeak',
+    'ptySlotsPeak',
+    'terminalOutputBytes',
+    'semanticBytes',
+    'semanticFullCount',
+    'semanticDeltaCount',
+    'journalAcceptedEvents',
+    'journalAcceptedBytes',
+    'journalSinkCalls',
+    'journalPeakBacklogEvents',
+    'journalPeakBacklogBytes',
+    'traceBytes',
+    'tempDiskPeakBytes',
+    'finalArtifactBytes',
+  ] as const) {
+    const metric = value[name];
+    if (metric !== 'unavailable' && (!Number.isFinite(metric) || metric < 0)) {
+      throw new TypeError(`invalid run telemetry metric ${name}`);
+    }
   }
 }
 

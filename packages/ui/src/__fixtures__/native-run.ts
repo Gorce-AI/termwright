@@ -5,6 +5,7 @@ import {
   type NativeRunStatus,
   type NativeRunAttempt,
   type RunStartProvenance,
+  type RunResourceTelemetry,
 } from '@termwright/run-history';
 
 export interface NativeRunFixtureTest {
@@ -14,6 +15,30 @@ export interface NativeRunFixtureTest {
   readonly durationMs?: number | null;
   readonly retries?: readonly ('failed' | 'passed' | 'skipped' | 'incomplete')[];
 }
+
+export const fixtureRunTelemetry = (): RunResourceTelemetry => ({
+  coordinatorCpuUserMicros: 1,
+  coordinatorCpuSystemMicros: 1,
+  coordinatorRssStartBytes: 1,
+  coordinatorRssEndBytes: 1,
+  coordinatorPeakSampledRssBytes: 1,
+  workerPeakRssBytes: 'unavailable',
+  ownedProcessPeakRssBytes: 'unavailable',
+  ownedProcessCountPeak: 'unavailable',
+  ptySlotsPeak: 0,
+  terminalOutputBytes: 'unavailable',
+  semanticBytes: 'unavailable',
+  semanticFullCount: 'unavailable',
+  semanticDeltaCount: 'unavailable',
+  journalAcceptedEvents: 0,
+  journalAcceptedBytes: 0,
+  journalSinkCalls: 0,
+  journalPeakBacklogEvents: 0,
+  journalPeakBacklogBytes: 0,
+  traceBytes: 'unavailable',
+  tempDiskPeakBytes: 'unavailable',
+  finalArtifactBytes: 'unavailable',
+});
 
 /** Creates only the current native-host schema; never a reporter/legacy manifest. */
 export async function writeNativeRunFixture(
@@ -194,6 +219,7 @@ export async function writeNativeRunFixture(
     status,
     specs,
     attempts,
+    telemetry: fixtureRunTelemetry(),
     events,
   });
   return start.runId;

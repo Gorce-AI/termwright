@@ -94,6 +94,8 @@ export class RunEventJournal {
   #pendingBytes = 0;
   #peakPending = 0;
   #peakPendingBytes = 0;
+  #acceptedEvents = 0;
+  #acceptedBytes = 0;
 
   constructor(options: {
     readonly invocationId: InvocationId;
@@ -211,6 +213,8 @@ export class RunEventJournal {
       this.#entries.push(entry);
       this.#pendingBytes += bytes;
       this.#counts.state += 1;
+      this.#acceptedEvents += 1;
+      this.#acceptedBytes += bytes;
       this.#observePeak();
       return Object.freeze({ ok: true, ordinal });
     }
@@ -223,6 +227,8 @@ export class RunEventJournal {
     this.#entries.push(entry);
     this.#pendingBytes += bytes;
     this.#counts[event.eventClass] += 1;
+    this.#acceptedEvents += 1;
+    this.#acceptedBytes += bytes;
     this.#observePeak();
     return Object.freeze({ ok: true, ordinal });
   }
@@ -315,6 +321,14 @@ export class RunEventJournal {
 
   get peakPendingBytes(): number {
     return this.#peakPendingBytes;
+  }
+
+  get acceptedEvents(): number {
+    return this.#acceptedEvents;
+  }
+
+  get acceptedBytes(): number {
+    return this.#acceptedBytes;
   }
 
   #count(eventClass: RunEvent['eventClass']): number {

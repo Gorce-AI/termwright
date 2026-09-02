@@ -12,6 +12,10 @@ validated manifest plus a SHA-256 commit marker, then atomically renames the
 directory into place and syncs its parent. A colliding RunId fails instead of
 overwriting history. The canonical journal, attempt index, result, runtime,
 resource profile, timeouts, and CI/Git provenance must agree before commit.
+Manifest v4 also requires capability-aware resource telemetry. Coordinator
+CPU/RSS and bounded-journal metrics are numeric measurements. Metrics the host
+cannot yet observe authoritatively, such as whole-process-tree RSS on POSIX,
+are the literal `unavailable`, never a fabricated zero.
 
 Manifest status preserves `passed-with-skips` as a separate terminal verdict.
 Readers must not collapse it into `passed`: the Native Host evaluates the

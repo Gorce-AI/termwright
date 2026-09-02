@@ -7,6 +7,7 @@ import {
   beginRunManifest,
   type NativeRunAttempt,
   type RunManifest,
+  type RunResourceTelemetry,
   type RunManifestTransaction,
   type RunManifestWriter,
   type RunStartProvenance,
@@ -185,6 +186,7 @@ export class RunEventPersistence {
   readonly #persisted: RunEvent[] = [];
   readonly #sink: (events: readonly RunEvent[]) => void | Promise<void>;
   readonly #observer: ((event: RunEvent) => void) | undefined;
+  #sinkCalls = 0;
 
   constructor(options: {
     readonly invocationId: InvocationId;
@@ -209,6 +211,22 @@ export class RunEventPersistence {
     return this.#persisted;
   }
 
+  metrics(): Readonly<{
+    acceptedEvents: number;
+    acceptedBytes: number;
+    sinkCalls: number;
+    peakBacklogEvents: number;
+    peakBacklogBytes: number;
+  }> {
+    return Object.freeze({
+      acceptedEvents: this.#journal.acceptedEvents,
+      acceptedBytes: this.#journal.acceptedBytes,
+      sinkCalls: this.#sinkCalls,
+      peakBacklogEvents: this.#journal.peakPending,
+      peakBacklogBytes: this.#journal.peakPendingBytes,
+    });
+  }
+
   append(event: RunEvent): ReturnType<RunEventJournal['append']> {
     const result = this.#journal.append(event);
     if (!result.ok) return result;
@@ -225,6 +243,7 @@ export class RunEventPersistence {
     const barrier = this.#journal.barrier();
     await this.#journal.flushThrough(barrier, async (events) => {
       await this.#sink(events);
+      this.#sinkCalls += 1;
       this.#persisted.push(...events);
     });
   }
@@ -303,6 +322,7 @@ export class RunHistoryPersistence {
     readonly specs: readonly PersistedSpec[];
     readonly attempts: readonly PersistedAttempt[];
     readonly events: readonly RunEvent[];
+    readonly telemetry: RunResourceTelemetry;
     readonly durationMs: number;
     readonly finishedAt?: number;
   }): Promise<void> {
@@ -321,6 +341,7 @@ export function createRunManifest(
     readonly specs: readonly PersistedSpec[];
     readonly attempts: readonly PersistedAttempt[];
     readonly events: readonly RunEvent[];
+    readonly telemetry: RunResourceTelemetry;
     readonly durationMs: number;
     readonly finishedAt?: number;
   },
@@ -333,6 +354,7 @@ export function createRunManifest(
     status: input.status,
     specs: Object.freeze(input.specs.map((spec) => Object.freeze({ ...spec }))),
     attempts: Object.freeze(input.attempts.map((attempt) => Object.freeze({ ...attempt }))),
+    telemetry: Object.freeze({ ...input.telemetry }),
     events: Object.freeze([...input.events]),
   });
 }

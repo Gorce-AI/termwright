@@ -9,6 +9,7 @@ import {
 import { startRunJournalServer, type RunJournalServer } from '@termwright/run-journal-transport';
 import {
   type NativeRunAttempt,
+  type RunResourceTelemetry,
   type RunManifestWriter,
   type RunStartProvenance,
 } from '@termwright/run-history';
@@ -201,6 +202,7 @@ interface ActiveRun {
   readonly attempts: Map<AttemptId, ObservedAttempt>;
   readonly controlFailures: Error[];
   readonly budget: HostRunBudget;
+  readonly telemetry: RunTelemetrySampler;
   selected?: readonly NativeTestCase[];
   readonly completed: Promise<RunCompletion>;
 }
@@ -343,6 +345,7 @@ export class TermwrightTestHost {
       attempts: new Map(),
       controlFailures: [],
       budget,
+      telemetry: new RunTelemetrySampler(),
       completed,
     };
     this.#active = active;
@@ -434,6 +437,7 @@ export class TermwrightTestHost {
     let resourceFailure: Error | undefined;
     let resourceCancellation: Promise<void> | undefined;
     let history: RunHistoryPersistence | undefined;
+    let ptySlotsPeak = 0;
     try {
       history = await active.budget.execution('run history startup', () => active.history);
       const broker = new ResourceBroker({
@@ -455,6 +459,8 @@ export class TermwrightTestHost {
                 `run journal rejected worker event: ${appended.code}: ${appended.detail}`,
               );
             }
+            const usage = broker.snapshot().used;
+            ptySlotsPeak = Math.max(ptySlotsPeak, usage.ptySession);
             if (event.type === 'attempt.finished' && event.identity.attemptId !== undefined) {
               const snapshot = broker.snapshot();
               const attemptId = event.identity.attemptId;
@@ -864,7 +870,7 @@ export class TermwrightTestHost {
         // projection-failure events. The rename is the only certification
         // commit; a staging directory is always read as incomplete.
         await active.budget.finalization('run history prepare', () =>
-          history.prepare(this.#manifestInput(active, attempts, terminal)),
+          history.prepare(this.#manifestInput(active, attempts, terminal, ptySlotsPeak)),
         );
         await active.budget.finalization('run history commit', () => history.commitPrepared());
       } catch (error) {
@@ -888,6 +894,7 @@ export class TermwrightTestHost {
     }
 
     if (this.#active === active) this.#active = undefined;
+    active.telemetry.stop();
 
     return Object.freeze({
       invocationId: this.invocationId,
@@ -1250,6 +1257,7 @@ export class TermwrightTestHost {
     active: ActiveRun,
     attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
     status: TerminalRunState,
+    ptySlotsPeak: number,
   ): Parameters<RunHistoryPersistence['prepare']>[0] {
     const specs = (active.selected ?? []).map((test) =>
       Object.freeze({
@@ -1288,8 +1296,71 @@ export class TermwrightTestHost {
       specs,
       attempts: completedAttempts,
       events: active.persistence.recorded,
+      telemetry: active.telemetry.finish(active.persistence.metrics(), ptySlotsPeak),
       durationMs: active.budget.elapsedMs(),
     };
+  }
+}
+
+interface JournalTelemetrySnapshot {
+  readonly acceptedEvents: number;
+  readonly acceptedBytes: number;
+  readonly sinkCalls: number;
+  readonly peakBacklogEvents: number;
+  readonly peakBacklogBytes: number;
+}
+
+class RunTelemetrySampler {
+  readonly #cpuStart = process.cpuUsage();
+  readonly #rssStart = process.memoryUsage().rss;
+  readonly #timer: ReturnType<typeof setInterval>;
+  #peakRss = this.#rssStart;
+  #result: RunResourceTelemetry | undefined;
+
+  constructor() {
+    this.#timer = setInterval(() => this.#sample(), 50);
+    this.#timer.unref?.();
+  }
+
+  stop(): void {
+    clearInterval(this.#timer);
+  }
+
+  finish(journal: JournalTelemetrySnapshot, ptySlotsPeak: number): RunResourceTelemetry {
+    if (this.#result !== undefined) return this.#result;
+    this.stop();
+    const rssEnd = this.#sample();
+    const cpu = process.cpuUsage(this.#cpuStart);
+    this.#result = Object.freeze({
+      coordinatorCpuUserMicros: cpu.user,
+      coordinatorCpuSystemMicros: cpu.system,
+      coordinatorRssStartBytes: this.#rssStart,
+      coordinatorRssEndBytes: rssEnd,
+      coordinatorPeakSampledRssBytes: this.#peakRss,
+      workerPeakRssBytes: 'unavailable',
+      ownedProcessPeakRssBytes: 'unavailable',
+      ownedProcessCountPeak: 'unavailable',
+      ptySlotsPeak,
+      terminalOutputBytes: 'unavailable',
+      semanticBytes: 'unavailable',
+      semanticFullCount: 'unavailable',
+      semanticDeltaCount: 'unavailable',
+      journalAcceptedEvents: journal.acceptedEvents,
+      journalAcceptedBytes: journal.acceptedBytes,
+      journalSinkCalls: journal.sinkCalls,
+      journalPeakBacklogEvents: journal.peakBacklogEvents,
+      journalPeakBacklogBytes: journal.peakBacklogBytes,
+      traceBytes: 'unavailable',
+      tempDiskPeakBytes: 'unavailable',
+      finalArtifactBytes: 'unavailable',
+    });
+    return this.#result;
+  }
+
+  #sample(): number {
+    const rss = process.memoryUsage().rss;
+    this.#peakRss = Math.max(this.#peakRss, rss);
+    return rss;
   }
 }
 

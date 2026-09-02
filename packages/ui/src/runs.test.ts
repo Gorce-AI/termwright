@@ -9,9 +9,34 @@ import {
   beginRunManifest,
   runDirectoryName,
   type RunManifest as NativeRunManifest,
+  type RunResourceTelemetry,
   type RunStartProvenance,
 } from '@termwright/run-history';
 import { readRunHistory, readRunManifest } from './runs.js';
+
+const fixtureTelemetry = (): RunResourceTelemetry => ({
+  coordinatorCpuUserMicros: 1,
+  coordinatorCpuSystemMicros: 1,
+  coordinatorRssStartBytes: 1,
+  coordinatorRssEndBytes: 1,
+  coordinatorPeakSampledRssBytes: 1,
+  workerPeakRssBytes: 'unavailable',
+  ownedProcessPeakRssBytes: 'unavailable',
+  ownedProcessCountPeak: 'unavailable',
+  ptySlotsPeak: 0,
+  terminalOutputBytes: 'unavailable',
+  semanticBytes: 'unavailable',
+  semanticFullCount: 'unavailable',
+  semanticDeltaCount: 'unavailable',
+  journalAcceptedEvents: 0,
+  journalAcceptedBytes: 0,
+  journalSinkCalls: 0,
+  journalPeakBacklogEvents: 0,
+  journalPeakBacklogBytes: 0,
+  traceBytes: 'unavailable',
+  tempDiskPeakBytes: 'unavailable',
+  finalArtifactBytes: 'unavailable',
+});
 
 describe('native run history UI projection', () => {
   it('projects exact specs, attempts, flaky state and captured provenance', async () => {
@@ -235,6 +260,7 @@ function manifest(start: RunStartProvenance): NativeRunManifest {
       },
     ],
     attempts,
+    telemetry: fixtureTelemetry(),
     events,
   };
 }

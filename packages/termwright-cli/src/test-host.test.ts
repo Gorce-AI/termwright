@@ -855,6 +855,28 @@ describe('TermwrightTestHost', () => {
       git: null,
     });
     expect(record.manifest.durationMs).toBeGreaterThanOrEqual(0);
+    expect(record.manifest.telemetry).toMatchObject({
+      workerPeakRssBytes: 'unavailable',
+      ownedProcessPeakRssBytes: 'unavailable',
+      ownedProcessCountPeak: 'unavailable',
+      ptySlotsPeak: 0,
+      terminalOutputBytes: 'unavailable',
+      semanticBytes: 'unavailable',
+      traceBytes: 'unavailable',
+      tempDiskPeakBytes: 'unavailable',
+      finalArtifactBytes: 'unavailable',
+    });
+    expect(record.manifest.telemetry.coordinatorRssStartBytes).toBeGreaterThan(0);
+    expect(record.manifest.telemetry.coordinatorRssEndBytes).toBeGreaterThan(0);
+    expect(record.manifest.telemetry.coordinatorPeakSampledRssBytes).toBeGreaterThanOrEqual(
+      Math.max(
+        record.manifest.telemetry.coordinatorRssStartBytes,
+        record.manifest.telemetry.coordinatorRssEndBytes,
+      ),
+    );
+    expect(record.manifest.telemetry.journalAcceptedEvents).toBe(record.manifest.events.length);
+    expect(record.manifest.telemetry.journalAcceptedBytes).toBeGreaterThan(0);
+    expect(record.manifest.telemetry.journalPeakBacklogEvents).toBeGreaterThan(0);
     expect(record.manifest.attempts[0]?.attemptId).toMatch(/^attempt:/u);
     expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeGreaterThanOrEqual(0);
     expect(record.manifest.attempts[0]?.startedAfterRunMs).toBeLessThanOrEqual(

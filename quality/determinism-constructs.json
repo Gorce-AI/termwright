@@ -10,7 +10,7 @@
     "platformSkips": "additionally governed by quality/platform-deviations.json"
   },
   "summary": {
-    "bounded-deadline-or-managed-background-task": 41,
+    "bounded-deadline-or-managed-background-task": 42,
     "deadline-or-scheduler-regression-test": 58,
     "deterministic-adversarial-fixture-schedule": 31,
     "display-or-persisted-wall-time-not-correctness-order": 91,
@@ -2339,6 +2339,12 @@
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void this.#drive(active, request).then(settle);"
+    },
+    {
+      "path": "packages/termwright-cli/src/test-host.ts",
+      "kind": "timer",
+      "classification": "bounded-deadline-or-managed-background-task",
+      "excerpt": "this.#timer = setInterval(() => this.#sample(), 50);"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",

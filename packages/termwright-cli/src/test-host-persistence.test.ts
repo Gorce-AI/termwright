@@ -37,6 +37,13 @@ describe('test-host persistence seams', () => {
     expect(persistence.recorded).toEqual([event]);
     expect(persistence.persisted).toEqual([event]);
     expect(flushed).toEqual([event]);
+    expect(persistence.metrics()).toMatchObject({
+      acceptedEvents: 1,
+      sinkCalls: 1,
+      peakBacklogEvents: 1,
+    });
+    expect(persistence.metrics().acceptedBytes).toBeGreaterThan(0);
+    expect(persistence.metrics().peakBacklogBytes).toBeGreaterThan(0);
   });
 
   it('retains an exact failed sink batch and preserves later event ordering on retry', async () => {
@@ -104,11 +111,12 @@ describe('test-host persistence seams', () => {
       specs: [],
       attempts: [],
       events: [],
+      telemetry: fixtureTelemetry(),
       durationMs: 7,
       finishedAt: 20,
     });
     expect(manifest).toMatchObject({
-      v: 3,
+      v: 4,
       startedAt: 10,
       finishedAt: 20,
       durationMs: 7,
@@ -197,3 +205,29 @@ describe('test-host persistence seams', () => {
     expect(() => budget.elapsedMs()).toThrow(/monotonic clock regressed/u);
   });
 });
+
+function fixtureTelemetry() {
+  return {
+    coordinatorCpuUserMicros: 1,
+    coordinatorCpuSystemMicros: 1,
+    coordinatorRssStartBytes: 1,
+    coordinatorRssEndBytes: 1,
+    coordinatorPeakSampledRssBytes: 1,
+    workerPeakRssBytes: 'unavailable' as const,
+    ownedProcessPeakRssBytes: 'unavailable' as const,
+    ownedProcessCountPeak: 'unavailable' as const,
+    ptySlotsPeak: 0,
+    terminalOutputBytes: 'unavailable' as const,
+    semanticBytes: 'unavailable' as const,
+    semanticFullCount: 'unavailable' as const,
+    semanticDeltaCount: 'unavailable' as const,
+    journalAcceptedEvents: 0,
+    journalAcceptedBytes: 0,
+    journalSinkCalls: 0,
+    journalPeakBacklogEvents: 0,
+    journalPeakBacklogBytes: 0,
+    traceBytes: 'unavailable' as const,
+    tempDiskPeakBytes: 'unavailable' as const,
+    finalArtifactBytes: 'unavailable' as const,
+  };
+}

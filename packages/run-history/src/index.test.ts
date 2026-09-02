@@ -13,10 +13,34 @@ import {
   runDirectoryName,
   type RunManifest,
   type RunManifestWriter,
+  type RunResourceTelemetry,
   type RunStartProvenance,
 } from './index.js';
 
 const directories: string[] = [];
+const fixtureTelemetry = (): RunResourceTelemetry => ({
+  coordinatorCpuUserMicros: 1,
+  coordinatorCpuSystemMicros: 1,
+  coordinatorRssStartBytes: 1,
+  coordinatorRssEndBytes: 1,
+  coordinatorPeakSampledRssBytes: 1,
+  workerPeakRssBytes: 'unavailable',
+  ownedProcessPeakRssBytes: 'unavailable',
+  ownedProcessCountPeak: 'unavailable',
+  ptySlotsPeak: 0,
+  terminalOutputBytes: 'unavailable',
+  semanticBytes: 'unavailable',
+  semanticFullCount: 'unavailable',
+  semanticDeltaCount: 'unavailable',
+  journalAcceptedEvents: 3,
+  journalAcceptedBytes: 1,
+  journalSinkCalls: 1,
+  journalPeakBacklogEvents: 3,
+  journalPeakBacklogBytes: 1,
+  traceBytes: 'unavailable',
+  tempDiskPeakBytes: 'unavailable',
+  finalArtifactBytes: 'unavailable',
+});
 afterEach(async () =>
   Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))),
 );
@@ -157,6 +181,23 @@ describe('native run history transaction', () => {
         JSON.stringify({ ...passed, status: 'incomplete', events: [...passed.events, correction] }),
       ).state,
     ).toBe('complete');
+  });
+
+  it('requires explicit unavailable resource metrics instead of fabricated zeroes', () => {
+    const start = provenance();
+    const valid = manifest(start);
+    expect(valid.telemetry.workerPeakRssBytes).toBe('unavailable');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...valid,
+          telemetry: { ...valid.telemetry, coordinatorRssEndBytes: -1 },
+        }),
+      ).state,
+    ).toBe('corrupt');
+    const missing = { ...valid.telemetry } as Record<string, unknown>;
+    delete missing['workerPeakRssBytes'];
+    expect(parseManifest(JSON.stringify({ ...valid, telemetry: missing })).state).toBe('corrupt');
   });
 
   it('requires current monotonic run and attempt timing evidence', () => {
@@ -419,6 +460,7 @@ function manifest(start: RunStartProvenance): RunManifest {
         durationMs: 4,
       },
     ],
+    telemetry: fixtureTelemetry(),
     events: [
       producer.emit({
         eventClass: 'authoritative',
