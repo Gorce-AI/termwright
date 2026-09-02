@@ -19,7 +19,7 @@ never substituted with zero.
 | final trace bytes                 | UNAVAILABLE |                         82,909,700 B | UNAVAILABLE |
 | journal calls                     | UNAVAILABLE |                                    2 | UNAVAILABLE |
 | journal peak backlog              |   unbounded |           244 events / 174,562 bytes |     bounded |
-| worker RSS                        | UNAVAILABLE |                        307,937,280 B | UNAVAILABLE |
+| worker RSS                        | UNAVAILABLE |                        220,561,408 B | UNAVAILABLE |
 | owned process RSS where available | UNAVAILABLE |                          UNAVAILABLE | UNAVAILABLE |
 | temp disk peak                    | UNAVAILABLE |                          UNAVAILABLE | UNAVAILABLE |
 | passing artifacts                 | UNAVAILABLE | deleted in `retain-on-failure` tests |   invariant |
@@ -30,10 +30,13 @@ The trace run wrote 20,000 events and 81,920,000 output bytes. Its steady-phase
 RSS range and finalization delta are bounded-memory evidence, not a claim that
 they are absolute peak RSS or a cross-machine baseline.
 
-The journal/worker rows come from a local 68-test Native Host run on macOS
-arm64/Node 24.1.0. Manifest v6 reconstructed the worker maximum and aggregate
-CPU from independently persisted `attempt.finished` evidence. They establish
-that the counters are live; they are not cross-machine regression thresholds.
+The journal/worker rows come from a local 11-test real-PTY Native Host run on
+macOS arm64/Node 24.1.0. Manifest v7 reconstructed the worker maximum and
+aggregate CPU from independently persisted `attempt.finished` evidence. The
+same run reconstructed 3,320 terminal bytes, 26,279 semantic bytes (six full
+records and three deltas), and 116,472 retained trace bytes from ten
+`trace.resource` records. They establish that the counters are live; they are
+not cross-machine regression thresholds.
 
 The paired performance policy now blocks regressions in semantic bytes/frame
 and full-publication count alongside the existing semantic hot-path, lifecycle,
@@ -50,5 +53,5 @@ certification pending until the workflow executes.
 
 External work remains: execute the paired gate on its pinned macOS runner,
 collect the Node 22/24 and OS certification matrix, and add direct counters for
-trace RSS, process-tree RSS, and temp/artifact bytes before those rows can
+trace RSS, process-tree RSS, and host-wide temp-disk peak before those rows can
 become release ratchets.

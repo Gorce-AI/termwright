@@ -84,6 +84,7 @@ export {
   type FinalizeOptions,
   type StepHandle,
   type TraceArchive,
+  type TraceResourceUsage,
   type TraceSource,
   type TraceWriter,
   type TraceWriterOptions,

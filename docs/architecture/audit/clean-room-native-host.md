@@ -13,7 +13,7 @@ The consumer has two independently discovered files: one imports the user's
 `vitest@latest`, while the other imports `termwright/test`. The latter launches
 a real TUI through the production native PTY, asserts a ZWJ family,
 Devanagari, and CJK text, performs an Enter action, and requires one atomically
-committed trace v4. The canary also requires one run manifest v6 containing
+committed trace v4. The canary also requires one run manifest v7 containing
 both specs and measured coordinator telemetry. Retries are zero.
 
 Local evidence on 2026-09-02: macOS arm64, Node 24.1.0, 21 locally packed

@@ -26,6 +26,7 @@ import {
   type RunId,
   type RunState,
   type RunnerTaskId,
+  type SessionId,
   type SpecId,
   type TerminalRunState,
 } from '@termwright/protocol';
@@ -1421,6 +1422,7 @@ class RunTelemetrySampler {
     const worker = [...attempts.values()]
       .map((attempt) => attempt.finished?.worker)
       .filter((value): value is AttemptWorkerResources => value !== undefined);
+    const trace = aggregateTraceResources(attempts);
     this.#result = Object.freeze({
       coordinatorCpuUserMicros: cpu.user,
       coordinatorCpuSystemMicros: cpu.system,
@@ -1442,18 +1444,18 @@ class RunTelemetrySampler {
       ownedProcessPeakRssBytes: 'unavailable',
       ownedProcessCountPeak: 'unavailable',
       ptySlotsPeak,
-      terminalOutputBytes: 'unavailable',
-      semanticBytes: 'unavailable',
-      semanticFullCount: 'unavailable',
-      semanticDeltaCount: 'unavailable',
+      terminalOutputBytes: trace.complete ? trace.terminalOutputBytes : 'unavailable',
+      semanticBytes: trace.complete ? trace.semanticBytes : 'unavailable',
+      semanticFullCount: trace.complete ? trace.semanticFullCount : 'unavailable',
+      semanticDeltaCount: trace.complete ? trace.semanticDeltaCount : 'unavailable',
       journalAcceptedEvents: journal.acceptedEvents,
       journalAcceptedBytes: journal.acceptedBytes,
       journalSinkCalls: journal.sinkCalls,
       journalPeakBacklogEvents: journal.peakBacklogEvents,
       journalPeakBacklogBytes: journal.peakBacklogBytes,
-      traceBytes: 'unavailable',
+      traceBytes: trace.complete ? trace.traceBytes : 'unavailable',
       tempDiskPeakBytes: 'unavailable',
-      finalArtifactBytes: 'unavailable',
+      finalArtifactBytes: trace.complete ? trace.finalArtifactBytes : 'unavailable',
     });
     return this.#result;
   }
@@ -1463,6 +1465,37 @@ class RunTelemetrySampler {
     this.#peakRss = Math.max(this.#peakRss, rss);
     return rss;
   }
+}
+
+function aggregateTraceResources(attempts: ReadonlyMap<AttemptId, ObservedAttempt>): {
+  readonly complete: boolean;
+  readonly terminalOutputBytes: number;
+  readonly semanticBytes: number;
+  readonly semanticFullCount: number;
+  readonly semanticDeltaCount: number;
+  readonly traceBytes: number;
+  readonly finalArtifactBytes: number;
+} {
+  let sessionCount = 0;
+  const records: TraceResourceEvidence[] = [];
+  for (const attempt of attempts.values()) {
+    sessionCount += attempt.sessions.size;
+    records.push(...attempt.traceResources.values());
+  }
+  const sum = (name: keyof TraceResourceEvidence): number => {
+    const total = records.reduce((value, record) => value + record[name], 0);
+    if (!Number.isSafeInteger(total)) throw new Error(`aggregate trace counter ${name} overflowed`);
+    return total;
+  };
+  return Object.freeze({
+    complete: records.length === sessionCount,
+    terminalOutputBytes: sum('terminalOutputBytes'),
+    semanticBytes: sum('semanticBytes'),
+    semanticFullCount: sum('semanticFullCount'),
+    semanticDeltaCount: sum('semanticDeltaCount'),
+    traceBytes: sum('traceBytes'),
+    finalArtifactBytes: sum('finalArtifactBytes'),
+  });
 }
 
 export function assessSkipPolicy(
@@ -1719,6 +1752,8 @@ interface ObservedAttempt {
   readonly retry: number;
   readonly startedAfterRunMs: number;
   readonly startedAt: number;
+  readonly sessions: Set<SessionId>;
+  readonly traceResources: Map<SessionId, TraceResourceEvidence>;
   finished?: {
     readonly state: NativeRunAttempt['status'];
     readonly monotonicTime: number;
@@ -1734,13 +1769,28 @@ interface AttemptWorkerResources {
   readonly peakSampledRssBytes: number;
 }
 
+interface TraceResourceEvidence {
+  readonly terminalOutputBytes: number;
+  readonly semanticBytes: number;
+  readonly semanticFullCount: number;
+  readonly semanticDeltaCount: number;
+  readonly traceBytes: number;
+  readonly finalArtifactBytes: number;
+}
+
 function observeAttemptEvent(
   event: RunEvent,
   expectedTasks: ReadonlySet<RunnerTaskId>,
   attempts: Map<AttemptId, ObservedAttempt>,
   observedAfterRunMs: number,
 ): void {
-  if (event.type !== 'attempt.started' && event.type !== 'attempt.finished') return;
+  if (
+    event.type !== 'attempt.started' &&
+    event.type !== 'attempt.finished' &&
+    event.type !== 'session.started' &&
+    event.type !== 'trace.resource'
+  )
+    return;
   const attemptId = event.identity.attemptId;
   const { runnerTaskId: task, executionId, projectId, specId } = event.identity;
   if (
@@ -1768,6 +1818,8 @@ function observeAttemptEvent(
       retry: payload.retry,
       startedAfterRunMs: observedAfterRunMs,
       startedAt: event.monotonicTime,
+      sessions: new Set(),
+      traceResources: new Map(),
     });
     return;
   }
@@ -1783,6 +1835,26 @@ function observeAttemptEvent(
   ) {
     throw new Error(`attempt ${attemptId} changed hierarchical identity during execution`);
   }
+  if (event.type === 'session.started') {
+    const sessionId = event.identity.sessionId;
+    if (sessionId === undefined || current.sessions.has(sessionId)) {
+      throw new Error('session.started lacks a unique session identity');
+    }
+    current.sessions.add(sessionId);
+    return;
+  }
+  if (event.type === 'trace.resource') {
+    const sessionId = event.identity.sessionId;
+    if (
+      sessionId === undefined ||
+      !current.sessions.has(sessionId) ||
+      current.traceResources.has(sessionId)
+    ) {
+      throw new Error('trace.resource lacks one matching traced session');
+    }
+    current.traceResources.set(sessionId, traceResourcePayload(event.payload));
+    return;
+  }
   const payload = attemptPayload(event.payload, true);
   if (
     payload.nativeTaskId !== current.nativeTaskId ||
@@ -1797,6 +1869,29 @@ function observeAttemptEvent(
     observedAfterRunMs,
     worker: payload.worker,
   };
+}
+
+function traceResourcePayload(payload: unknown): TraceResourceEvidence {
+  if (typeof payload !== 'object' || payload === null)
+    throw new Error('trace.resource payload is not an object');
+  const record = payload as Record<string, unknown>;
+  const names = [
+    'terminalOutputBytes',
+    'semanticBytes',
+    'semanticFullCount',
+    'semanticDeltaCount',
+    'traceBytes',
+    'finalArtifactBytes',
+  ] as const;
+  if (
+    Object.keys(record).length !== names.length ||
+    names.some((name) => !nonNegativeInteger(record[name]))
+  ) {
+    throw new Error('trace.resource payload has invalid exact counters');
+  }
+  return Object.freeze(
+    Object.fromEntries(names.map((name) => [name, record[name]])),
+  ) as unknown as TraceResourceEvidence;
 }
 
 function attemptPayload(

@@ -144,7 +144,7 @@ describe('test-host persistence seams', () => {
       finishedAt: 20,
     });
     expect(manifest).toMatchObject({
-      v: 6,
+      v: 7,
       startedAt: 10,
       finishedAt: 20,
       durationMs: 7,
@@ -247,17 +247,17 @@ function fixtureTelemetry() {
     ownedProcessPeakRssBytes: 'unavailable' as const,
     ownedProcessCountPeak: 'unavailable' as const,
     ptySlotsPeak: 0,
-    terminalOutputBytes: 'unavailable' as const,
-    semanticBytes: 'unavailable' as const,
-    semanticFullCount: 'unavailable' as const,
-    semanticDeltaCount: 'unavailable' as const,
+    terminalOutputBytes: 0,
+    semanticBytes: 0,
+    semanticFullCount: 0,
+    semanticDeltaCount: 0,
     journalAcceptedEvents: 0,
     journalAcceptedBytes: 0,
     journalSinkCalls: 0,
     journalPeakBacklogEvents: 0,
     journalPeakBacklogBytes: 0,
-    traceBytes: 'unavailable' as const,
+    traceBytes: 0,
     tempDiskPeakBytes: 'unavailable' as const,
-    finalArtifactBytes: 'unavailable' as const,
+    finalArtifactBytes: 0,
   };
 }

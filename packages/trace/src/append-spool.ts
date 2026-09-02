@@ -17,6 +17,16 @@ export interface AppendSpoolOptions {
   readonly maxPendingBytes: number;
 }
 
+export interface AppendSpoolUsage {
+  /** Bytes in canonical trace members, excluding the private incomplete marker. */
+  readonly bytes: number;
+  readonly fileBytes: Readonly<Record<string, number>>;
+}
+
+export interface AppendSpoolCommit extends AppendSpoolUsage {
+  readonly dir: string;
+}
+
 /**
  * A bounded, sequential append queue backed by a private staging directory.
  *
@@ -31,6 +41,7 @@ export class AppendSpool {
   readonly #initialization: Promise<void>;
   readonly #handles = new Map<string, FileHandle>();
   readonly #hashes = new Map<string, Hash>();
+  readonly #writtenBytes = new Map<string, number>();
   readonly #queue: PendingAppend[] = [];
   #head = 0;
   #pendingBytes = 0;
@@ -70,7 +81,7 @@ export class AppendSpool {
     this.#startDrain();
   }
 
-  async commit(finalFiles: Readonly<Record<string, string>>): Promise<string> {
+  async commit(finalFiles: Readonly<Record<string, string>>): Promise<AppendSpoolCommit> {
     this.#sealed = true;
     await this.#initialization;
     await this.#draining;
@@ -93,23 +104,23 @@ export class AppendSpool {
     const checksums = Object.fromEntries(
       [...this.#hashes.entries()].map(([name, hash]) => [name, hash.copy().digest('hex')]),
     );
-    await durableWrite(
-      join(staging, TRACE_FILES.commit),
-      `${JSON.stringify({ v: 4, checksums })}\n`,
-      true,
-    );
+    const commitBody = `${JSON.stringify({ v: 4, checksums })}\n`;
+    await durableWrite(join(staging, TRACE_FILES.commit), commitBody, true);
+    this.#writtenBytes.set(TRACE_FILES.commit, Buffer.byteLength(commitBody, 'utf8'));
     await fsyncDirectory(staging);
     await rename(staging, this.#target);
     this.#staging = undefined;
     await fsyncDirectory(dirname(this.#target));
-    return this.#target;
+    return Object.freeze({ dir: this.#target, ...this.#usage() });
   }
 
-  async abort(): Promise<void> {
+  async abort(): Promise<AppendSpoolUsage> {
     this.#sealed = true;
     await this.#initialization;
     await this.#draining;
+    const usage = this.#usage();
     await this.#abortFiles();
+    return usage;
   }
 
   #startDrain(): void {
@@ -147,6 +158,10 @@ export class AppendSpool {
           const body = bodies.join('');
           hash.update(body);
           await handle.write(body, null, 'utf8');
+          this.#writtenBytes.set(
+            name,
+            (this.#writtenBytes.get(name) ?? 0) + Buffer.byteLength(body, 'utf8'),
+          );
         }
       } catch (error) {
         this.#failure = error;
@@ -173,9 +188,11 @@ export class AppendSpool {
       this.#handles.set(name, handle);
       const hash = createHash('sha256');
       this.#hashes.set(name, hash);
+      this.#writtenBytes.set(name, 0);
       if (body !== '') {
         hash.update(body);
         await handle.write(body, null, 'utf8');
+        this.#writtenBytes.set(name, Buffer.byteLength(body, 'utf8'));
       }
     }
   }
@@ -187,6 +204,15 @@ export class AppendSpool {
     const staging = this.#requireStaging();
     await durableWrite(join(staging, name), body, true);
     this.#hashes.set(name, createHash('sha256').update(body));
+    this.#writtenBytes.set(name, Buffer.byteLength(body, 'utf8'));
+  }
+
+  #usage(): AppendSpoolUsage {
+    const fileBytes = Object.freeze(Object.fromEntries(this.#writtenBytes));
+    return Object.freeze({
+      bytes: Object.values(fileBytes).reduce((total, value) => total + value, 0),
+      fileBytes,
+    });
   }
 
   #requireStaging(): string {

@@ -15,7 +15,7 @@ import {
   type SpecId,
 } from '@termwright/protocol/run-events';
 
-export const RUN_MANIFEST_VERSION = 6 as const;
+export const RUN_MANIFEST_VERSION = 7 as const;
 export const RUN_HISTORY_COMMIT_VERSION = 2 as const;
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 export const MAX_RUN_EVENT_STREAM_BYTES = 512 * 1024 * 1024;
@@ -680,6 +680,7 @@ function validateManifestEvidence(value: RunManifest): void {
     string,
     { readonly attemptId: string; readonly start: number; finish?: number }
   >();
+  const traceResources = new Map<string, TraceResourceEvidence>();
   const steps = new Map<
     string,
     { readonly attemptId: string; readonly start: number; finish?: number }
@@ -813,6 +814,20 @@ function validateManifestEvidence(value: RunManifest): void {
       }
       session.finish = index;
     }
+    if (event.type === 'trace.resource') {
+      const sessionId = event.identity.sessionId;
+      const session = sessionId === undefined ? undefined : sessions.get(sessionId);
+      if (
+        attemptId === undefined ||
+        sessionId === undefined ||
+        session === undefined ||
+        session.attemptId !== attemptId ||
+        traceResources.has(sessionId)
+      ) {
+        throw new TypeError('trace.resource lacks one unique matching session');
+      }
+      traceResources.set(sessionId, traceResourceEvidence(event.payload));
+    }
     if (event.type === 'step.started') {
       const stepId = event.identity.stepId;
       if (attemptId === undefined || stepId === undefined || steps.has(stepId)) {
@@ -888,6 +903,23 @@ function validateManifestEvidence(value: RunManifest): void {
   ) {
     throw new TypeError('run worker telemetry differs from canonical attempt evidence');
   }
+  const expectedTrace = aggregateTraceEvidence(sessions.size, [...traceResources.values()]);
+  if (
+    value.telemetry.terminalOutputBytes !==
+      (expectedTrace.complete ? expectedTrace.terminalOutputBytes : 'unavailable') ||
+    value.telemetry.semanticBytes !==
+      (expectedTrace.complete ? expectedTrace.semanticBytes : 'unavailable') ||
+    value.telemetry.semanticFullCount !==
+      (expectedTrace.complete ? expectedTrace.semanticFullCount : 'unavailable') ||
+    value.telemetry.semanticDeltaCount !==
+      (expectedTrace.complete ? expectedTrace.semanticDeltaCount : 'unavailable') ||
+    value.telemetry.traceBytes !==
+      (expectedTrace.complete ? expectedTrace.traceBytes : 'unavailable') ||
+    value.telemetry.finalArtifactBytes !==
+      (expectedTrace.complete ? expectedTrace.finalArtifactBytes : 'unavailable')
+  ) {
+    throw new TypeError('run trace telemetry differs from canonical session evidence');
+  }
   for (const [sessionId, session] of sessions) {
     if (session.finish === undefined)
       throw new TypeError(`session ${sessionId} has no session.finished`);
@@ -929,6 +961,57 @@ interface AttemptWorkerResources {
   readonly cpuUserMicros: number;
   readonly cpuSystemMicros: number;
   readonly peakSampledRssBytes: number;
+}
+
+interface TraceResourceEvidence {
+  readonly terminalOutputBytes: number;
+  readonly semanticBytes: number;
+  readonly semanticFullCount: number;
+  readonly semanticDeltaCount: number;
+  readonly traceBytes: number;
+  readonly finalArtifactBytes: number;
+}
+
+function traceResourceEvidence(payload: unknown): TraceResourceEvidence {
+  const record = object(payload) ? payload : {};
+  const names = [
+    'terminalOutputBytes',
+    'semanticBytes',
+    'semanticFullCount',
+    'semanticDeltaCount',
+    'traceBytes',
+    'finalArtifactBytes',
+  ] as const;
+  if (
+    Object.keys(record).length !== names.length ||
+    names.some((name) => !nonNegativeInteger(record[name]))
+  ) {
+    throw new TypeError('trace.resource lacks valid exact counters');
+  }
+  return Object.freeze(
+    Object.fromEntries(names.map((name) => [name, record[name]])),
+  ) as unknown as TraceResourceEvidence;
+}
+
+function aggregateTraceEvidence(
+  sessionCount: number,
+  records: readonly TraceResourceEvidence[],
+): TraceResourceEvidence & { readonly complete: boolean } {
+  const sum = (name: keyof TraceResourceEvidence): number => {
+    const total = records.reduce((value, record) => value + record[name], 0);
+    if (!Number.isSafeInteger(total))
+      throw new TypeError(`aggregate trace counter ${name} overflowed`);
+    return total;
+  };
+  return Object.freeze({
+    complete: records.length === sessionCount,
+    terminalOutputBytes: sum('terminalOutputBytes'),
+    semanticBytes: sum('semanticBytes'),
+    semanticFullCount: sum('semanticFullCount'),
+    semanticDeltaCount: sum('semanticDeltaCount'),
+    traceBytes: sum('traceBytes'),
+    finalArtifactBytes: sum('finalArtifactBytes'),
+  });
 }
 
 function workerResources(payload: unknown): AttemptWorkerResources {

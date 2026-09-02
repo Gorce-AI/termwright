@@ -13,6 +13,7 @@ import { connectRunJournalWorker } from '@termwright/run-journal-transport';
 import { connectResourceBrokerWorker } from '@termwright/resource-broker/transport';
 import {
   NODE_RUN_MANIFEST_WRITER,
+  parseManifest,
   readRunManifest,
   type RunManifestWriter,
 } from '@termwright/run-history';
@@ -72,6 +73,16 @@ class FakeEngine implements TermwrightVitestEngine {
   sourceListener: ((file: string) => void) | undefined;
   consoleListener: ((log: UserConsoleLog) => void) | undefined;
   consoleContent: string | undefined;
+  traceResources:
+    | {
+        readonly terminalOutputBytes: number;
+        readonly semanticBytes: number;
+        readonly semanticFullCount: number;
+        readonly semanticDeltaCount: number;
+        readonly traceBytes: number;
+        readonly finalArtifactBytes: number;
+      }
+    | undefined;
 
   setRunnerContext(context: TermwrightRunnerContext): void {
     this.contexts.push(context);
@@ -151,6 +162,36 @@ class FakeEngine implements TermwrightVitestEngine {
             resources: { semanticEndpoint: 1 },
             deadline: performance.timeOrigin + performance.now() + 5_000,
           });
+        }
+        if (!this.omitAttemptLifecycle && this.traceResources !== undefined) {
+          const sessionId = ids.create('session');
+          await client.append(
+            producer.emit({
+              eventClass: 'authoritative',
+              type: 'session.started',
+              identity: { ...eventIdentity, sessionId },
+              payload: { driverSessionId: 'fake-session', terminalProfile: 'modern-unicode' },
+            }),
+            performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
+          );
+          await client.append(
+            producer.emit({
+              eventClass: 'authoritative',
+              type: 'session.finished',
+              identity: { ...eventIdentity, sessionId },
+              payload: { cleanup: 'verified' },
+            }),
+            performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
+          );
+          await client.append(
+            producer.emit({
+              eventClass: 'authoritative',
+              type: 'trace.resource',
+              identity: { ...eventIdentity, sessionId },
+              payload: this.traceResources,
+            }),
+            performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
+          );
         }
         const state =
           this.tests.find((test) => test.id === nativeTaskId)?.result()?.state === 'failed'
@@ -895,6 +936,14 @@ describe('TermwrightTestHost', () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-history', 'persist me')];
     engine.runResult = result(engine.tests);
+    engine.traceResources = {
+      terminalOutputBytes: 4_096,
+      semanticBytes: 512,
+      semanticFullCount: 1,
+      semanticDeltaCount: 7,
+      traceBytes: 8_192,
+      finalArtifactBytes: 0,
+    };
     const options = hostOptions({ durable: true });
     const host = hostFromEngine(engine, options);
     const completion = await host.requestRun().completed;
@@ -917,12 +966,22 @@ describe('TermwrightTestHost', () => {
       ownedProcessPeakRssBytes: 'unavailable',
       ownedProcessCountPeak: 'unavailable',
       ptySlotsPeak: 0,
-      terminalOutputBytes: 'unavailable',
-      semanticBytes: 'unavailable',
-      traceBytes: 'unavailable',
+      terminalOutputBytes: 4_096,
+      semanticBytes: 512,
+      semanticFullCount: 1,
+      semanticDeltaCount: 7,
+      traceBytes: 8_192,
       tempDiskPeakBytes: 'unavailable',
-      finalArtifactBytes: 'unavailable',
+      finalArtifactBytes: 0,
     });
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...record.manifest,
+          telemetry: { ...record.manifest.telemetry, traceBytes: 8_193 },
+        }),
+      ).state,
+    ).toBe('corrupt');
     expect(record.manifest.telemetry.coordinatorRssStartBytes).toBeGreaterThan(0);
     expect(record.manifest.telemetry.coordinatorRssEndBytes).toBeGreaterThan(0);
     expect(record.manifest.telemetry.coordinatorPeakSampledRssBytes).toBeGreaterThanOrEqual(

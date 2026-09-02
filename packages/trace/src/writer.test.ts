@@ -317,6 +317,19 @@ describe('createTraceWriter', () => {
     expect(archive.meta.semanticTree).toBe(true);
     expect(archive.meta.platform).toBe('linux');
     expect(archive.meta.runIdentity).toEqual(runIdentity);
+    const persistedBytes = (
+      await Promise.all(
+        Object.values(TRACE_FILES).map(async (name) => (await stat(join(dir, name))).size),
+      )
+    ).reduce((total, bytes) => total + bytes, 0);
+    expect(archive.resources).toEqual({
+      terminalOutputBytes: 11,
+      semanticBytes: (await stat(join(dir, TRACE_FILES.semantics))).size,
+      semanticFullCount: 1,
+      semanticDeltaCount: 0,
+      traceBytes: persistedBytes,
+      finalArtifactBytes: persistedBytes,
+    });
 
     const trace = await openTrace(dir);
     try {
@@ -584,6 +597,9 @@ describe('createTraceWriter', () => {
     const archive = await writer.finalize();
 
     expect(archive.meta.truncated).toBe(true);
+    expect(archive.resources.terminalOutputBytes).toBe(
+      Buffer.byteLength('0123456789this chunk pushes past the limitdropped too'),
+    );
     const { events } = await readCast(dir);
     expect(events.map((event) => event.data)).toEqual(['0123456789']);
   });
@@ -620,9 +636,15 @@ describe('createTraceWriter', () => {
     const writer = createTraceWriter(session, { dir, now: session.now });
 
     session.output('before');
-    await writer.dispose();
+    const resources = await writer.dispose();
     session.tick(10);
     session.output('after');
     expect(await stat(dir).catch(() => null)).toBeNull();
+    expect(resources).toMatchObject({
+      terminalOutputBytes: 6,
+      traceBytes: expect.any(Number),
+      finalArtifactBytes: 0,
+    });
+    expect(resources.traceBytes).toBeGreaterThan(0);
   });
 });

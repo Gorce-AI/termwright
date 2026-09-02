@@ -124,6 +124,21 @@ export interface TraceArchive {
   readonly meta: TraceMeta;
   /** Cast duration in milliseconds after hide/trim transforms. */
   readonly durationMs: number;
+  readonly resources: TraceResourceUsage;
+}
+
+/** Exact counters owned by one streaming trace writer. */
+export interface TraceResourceUsage {
+  /** Raw PTY output bytes observed, including hidden or artifact-truncated output. */
+  readonly terminalOutputBytes: number;
+  /** Exact UTF-8 bytes written to the semantic trace member. */
+  readonly semanticBytes: number;
+  readonly semanticFullCount: number;
+  readonly semanticDeltaCount: number;
+  /** Canonical trace-member bytes generated before optional disposal. */
+  readonly traceBytes: number;
+  /** Durable archive bytes; zero when a private retain-on-failure spool was deleted. */
+  readonly finalArtifactBytes: number;
 }
 
 /** Records a live session into a `.twtrace` archive. */
@@ -159,7 +174,7 @@ export interface TraceWriter {
   /** Detaches from the session and writes the archive. Callable once. */
   finalize(options?: FinalizeOptions): Promise<TraceArchive>;
   /** Detaches and securely removes the private staging trace. */
-  dispose(): Promise<void>;
+  dispose(): Promise<TraceResourceUsage>;
 }
 
 const DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
@@ -210,7 +225,8 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
   const unsubscribers: (() => void)[] = [];
 
   let stepCounter = 0;
-  let outputBytes = 0;
+  let terminalOutputBytes = 0;
+  let retainedOutputBytes = 0;
   let truncated = false;
   let hideStart: number | null = null;
   let sealed = false;
@@ -229,6 +245,8 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
   let lastCastHidden = 0;
   let hiddenTotal = 0;
   let durationMs = 0;
+  let semanticFullCount = 0;
+  let semanticDeltaCount = 0;
 
   const spool = new AppendSpool({
     target: options.dir,
@@ -311,9 +329,10 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         // Decode unconditionally so the streaming decoder keeps its state even
         // across hidden windows; discard the text when hidden.
         const text = sanitizer.push(decoder.decode(data, { stream: true }));
+        terminalOutputBytes += data.byteLength;
         if (truncated || inHiddenWindow(wall)) return;
-        outputBytes += data.byteLength;
-        if (outputBytes > maxOutputBytes) {
+        retainedOutputBytes += data.byteLength;
+        if (retainedOutputBytes > maxOutputBytes) {
           truncated = true;
           return;
         }
@@ -403,6 +422,8 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
           // keyframe intervals.
           if (JSON.stringify(candidate).length < JSON.stringify(full).length) record = candidate;
         }
+        if (record.kind === 'keyframe') semanticFullCount += 1;
+        else semanticDeltaCount += 1;
         spool.enqueue(TRACE_FILES.semantics, `${JSON.stringify(record)}\n`);
         lastSemantic = projected;
         break;
@@ -672,8 +693,14 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       };
       finalizePromise = spool
         .commit({ [TRACE_FILES.meta]: `${JSON.stringify(meta, null, 2)}\n` })
-        .then((dir) => {
-          const archive = { dir, meta, durationMs: meta.durationMs ?? 0 };
+        .then((committed) => {
+          const resources = resourceUsage(committed.bytes, committed.bytes, committed.fileBytes);
+          const archive = {
+            dir: committed.dir,
+            meta,
+            durationMs: meta.durationMs ?? 0,
+            resources,
+          };
           finalizedArchive = archive;
           return archive;
         })
@@ -684,12 +711,28 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       return finalizePromise;
     },
 
-    async dispose(): Promise<void> {
+    async dispose(): Promise<TraceResourceUsage> {
       sealed = true;
       detach();
-      await spool.abort();
+      const usage = await spool.abort();
+      return resourceUsage(usage.bytes, 0, usage.fileBytes);
     },
   };
+
+  function resourceUsage(
+    traceBytes: number,
+    finalArtifactBytes: number,
+    fileBytes: Readonly<Record<string, number>>,
+  ): TraceResourceUsage {
+    return Object.freeze({
+      terminalOutputBytes,
+      semanticBytes: fileBytes[TRACE_FILES.semantics] ?? 0,
+      semanticFullCount,
+      semanticDeltaCount,
+      traceBytes,
+      finalArtifactBytes,
+    });
+  }
 
   function assertLive(): void {
     if (sealed) {
