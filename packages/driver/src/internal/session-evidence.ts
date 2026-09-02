@@ -7,6 +7,7 @@ import type {
   SessionDiagnostic,
 } from '../api.js';
 import type { ArtifactValuePolicy, SemanticSnapshot } from '@termwright/protocol';
+import { BoundedRing } from './bounded-ring.js';
 
 const MAX_DIAGNOSTICS = 200;
 const MAX_APP_LOGS = 1_000;
@@ -46,9 +47,9 @@ export interface CrashEvidence {
  */
 export class SessionEvidenceJournal {
   readonly #sink: SessionEvidenceSink;
-  readonly #diagnostics: SessionDiagnostic[] = [];
-  readonly #appLogs: AppLogEvent[] = [];
-  readonly #recentInputs: CrashInput[] = [];
+  readonly #diagnostics = new BoundedRing<SessionDiagnostic>(MAX_DIAGNOSTICS);
+  readonly #appLogs = new BoundedRing<AppLogEvent>(MAX_APP_LOGS);
+  readonly #recentInputs = new BoundedRing<CrashInput>(CRASH_INPUTS);
 
   constructor(sink: SessionEvidenceSink) {
     this.#sink = sink;
@@ -69,23 +70,21 @@ export class SessionEvidenceJournal {
       timeMs: this.#sink.now(),
     });
     this.#diagnostics.push(entry);
-    if (this.#diagnostics.length > MAX_DIAGNOSTICS) this.#diagnostics.shift();
     this.#sink.diagnostic(entry);
   }
 
   diagnostics(): readonly SessionDiagnostic[] {
-    return Object.freeze([...this.#diagnostics]);
+    return Object.freeze(this.#diagnostics.toArray());
   }
 
   appLog(event: AppLogEvent): void {
     const retained = Object.freeze(event);
     this.#appLogs.push(retained);
-    if (this.#appLogs.length > MAX_APP_LOGS) this.#appLogs.shift();
     this.#sink.appLog(retained);
   }
 
   appLogs(): readonly AppLogEvent[] {
-    return Object.freeze([...this.#appLogs]);
+    return Object.freeze(this.#appLogs.toArray());
   }
 
   rememberInput(
@@ -103,7 +102,6 @@ export class SessionEvidenceJournal {
         : {}),
     });
     this.#recentInputs.push(entry);
-    if (this.#recentInputs.length > CRASH_INPUTS) this.#recentInputs.shift();
   }
 
   crashReport(evidence: CrashEvidence): CrashReport {
@@ -111,8 +109,8 @@ export class SessionEvidenceJournal {
       exit: evidence.exit,
       screenTail: crashTail(evidence.screenLines),
       lastSemanticTree: evidence.lastSemanticTree,
-      recentInputs: Object.freeze([...this.#recentInputs]),
-      diagnosticsTail: Object.freeze(this.#diagnostics.slice(-CRASH_DIAGNOSTICS)),
+      recentInputs: Object.freeze(this.#recentInputs.toArray()),
+      diagnosticsTail: Object.freeze(this.#diagnostics.tail(CRASH_DIAGNOSTICS)),
       timeMs: this.#sink.now(),
     });
   }
