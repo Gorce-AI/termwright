@@ -58,7 +58,12 @@ describe('RunEventJournal invariants', () => {
       invocationId,
       runId,
       gapProducer: gapProducer(),
-      limits: { maxAuthoritativeEvents: 1, maxStateKeys: 2, maxDiagnosticEvents: 2 },
+      limits: {
+        maxAuthoritativeEvents: 1,
+        maxStateKeys: 2,
+        maxDiagnosticEvents: 2,
+        maxPendingBytes: 16_384,
+      },
     });
     expect(journal.append(event(0, 'authoritative'))).toMatchObject({ ok: true });
     expect(journal.append(event(1, 'authoritative'))).toMatchObject({
@@ -100,7 +105,12 @@ describe('RunEventJournal invariants', () => {
       invocationId,
       runId,
       gapProducer: gapProducer(),
-      limits: { maxAuthoritativeEvents: 2, maxStateKeys: 2, maxDiagnosticEvents: 2 },
+      limits: {
+        maxAuthoritativeEvents: 2,
+        maxStateKeys: 2,
+        maxDiagnosticEvents: 2,
+        maxPendingBytes: 16_384,
+      },
     });
     journal.append(event(0, 'diagnostic', { index: 0 }));
     journal.append(event(1, 'diagnostic', { index: 1 }));
@@ -117,6 +127,36 @@ describe('RunEventJournal invariants', () => {
       firstEventId: event(0, 'diagnostic').eventId,
     });
     expect(batch.slice(1).map((item) => item.seq)).toEqual([1, 2]);
+  });
+
+  it('bounds owned bytes and releases them only after a successful flush', async () => {
+    const journal = new RunEventJournal({
+      invocationId,
+      runId,
+      gapProducer: gapProducer(),
+      limits: {
+        maxAuthoritativeEvents: 10,
+        maxStateKeys: 10,
+        maxDiagnosticEvents: 10,
+        maxPendingBytes: 4_096,
+      },
+    });
+    expect(journal.append(event(0, 'authoritative', { body: 'x'.repeat(5_000) }))).toMatchObject({
+      ok: false,
+      code: 'journal-full',
+    });
+    expect(journal.pendingBytes).toBe(0);
+    expect(journal.append(event(0, 'state', { body: 'first' }), { stateKey: 'run' }).ok).toBe(true);
+    const firstBytes = journal.pendingBytes;
+    expect(journal.append(event(1, 'state', { body: 'replacement' }), { stateKey: 'run' }).ok).toBe(
+      true,
+    );
+    expect(journal.pendingBytes).toBeGreaterThan(0);
+    expect(journal.pendingBytes).toBeLessThan(firstBytes * 2);
+    await journal.flushThrough(journal.barrier(), () => {});
+    expect(journal.pendingBytes).toBe(0);
+    expect(journal.peakPending).toBe(1);
+    expect(journal.peakPendingBytes).toBeGreaterThan(0);
   });
 
   it('keeps the exact sealed batch when the sink fails, then invalidates a successful barrier', async () => {

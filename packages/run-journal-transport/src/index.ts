@@ -25,10 +25,19 @@ const MAX_FRAME_BYTES = 384 * 1024;
 const MAX_CONNECTIONS = 1_000;
 const MAX_REQUESTS_PER_CONNECTION = 100_000;
 const HANDSHAKE_TIMEOUT_MS = 5_000;
+const DEFAULT_MAX_PENDING_EVENTS = 2_048;
+const DEFAULT_MAX_PENDING_BYTES = 8 * 1024 * 1024;
+const MAX_BATCH_EVENTS = 64;
+const MAX_BATCH_BYTES = 256 * 1024;
 
 export class RunJournalTransportError extends Error {
   readonly code:
-    'authentication-failed' | 'connection-closed' | 'protocol-error' | 'stale-worker' | 'timeout';
+    | 'authentication-failed'
+    | 'capacity'
+    | 'connection-closed'
+    | 'protocol-error'
+    | 'stale-worker'
+    | 'timeout';
   constructor(code: RunJournalTransportError['code'], message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'RunJournalTransportError';
@@ -58,6 +67,13 @@ export interface RunJournalClient {
   readonly binding: RunJournalProducerBinding;
   append(event: RunEvent, deadline: number): Promise<void>;
   flush(deadline: number): Promise<void>;
+  snapshot(): {
+    readonly pendingEvents: number;
+    readonly pendingBytes: number;
+    readonly peakPendingEvents: number;
+    readonly peakPendingBytes: number;
+    readonly batches: number;
+  };
   close(): Promise<void>;
 }
 
@@ -196,10 +212,14 @@ export async function startRunJournalServer(
       previous?.connection.socket.destroy();
       return;
     }
-    if (type === 'append') {
-      const parsed = validateRunEvent(message.event);
-      if (!parsed.ok) throw protocol(`invalid run event: ${parsed.code}: ${parsed.detail}`);
-      const event = parsed.value;
+    if (type === 'append-batch') {
+      if (
+        !Array.isArray(message.events) ||
+        message.events.length < 1 ||
+        message.events.length > MAX_BATCH_EVENTS
+      ) {
+        throw protocol(`append batch must contain 1..${MAX_BATCH_EVENTS} events`);
+      }
       const binding = connection.binding as RunJournalProducerBinding;
       const current = workers.get(connection.identity.workerId);
       if (current?.connection !== connection || current.epoch !== connection.identity.workerEpoch) {
@@ -208,15 +228,21 @@ export async function startRunJournalServer(
           'event came from a superseded worker incarnation',
         );
       }
-      if (
-        event.identity.runId !== options.runId ||
-        event.producerId !== binding.producerId ||
-        event.epoch !== binding.producerEpoch
-      ) {
-        throw protocol('event producer/run binding does not match authenticated worker');
-      }
+      const events = message.events.map((value) => {
+        const parsed = validateRunEvent(value);
+        if (!parsed.ok) throw protocol(`invalid run event: ${parsed.code}: ${parsed.detail}`);
+        const event = parsed.value;
+        if (
+          event.identity.runId !== options.runId ||
+          event.producerId !== binding.producerId ||
+          event.epoch !== binding.producerEpoch
+        ) {
+          throw protocol('event producer/run binding does not match authenticated worker');
+        }
+        return event;
+      });
       try {
-        await options.append(event);
+        for (const event of events) await options.append(event);
       } catch (error) {
         appendFailures.push(error);
         throw error;
@@ -280,6 +306,8 @@ export async function connectRunJournalWorker(
     readonly endpoint: string;
     readonly token: string;
     readonly handshakeDeadline: number;
+    readonly maxPendingEvents?: number;
+    readonly maxPendingBytes?: number;
   },
 ): Promise<RunJournalClient> {
   const now = monotonicEpochNow();
@@ -298,7 +326,27 @@ export async function connectRunJournalWorker(
   >();
   let sequence = 0;
   let closed = false;
-  let serial = Promise.resolve();
+  const maxPendingEvents = positiveInteger(
+    options.maxPendingEvents ?? DEFAULT_MAX_PENDING_EVENTS,
+    'maxPendingEvents',
+  );
+  const maxPendingBytes = positiveInteger(
+    options.maxPendingBytes ?? DEFAULT_MAX_PENDING_BYTES,
+    'maxPendingBytes',
+  );
+  const appendQueue: Array<{
+    readonly event: RunEvent;
+    readonly bytes: number;
+    readonly deadline: number;
+    readonly resolve: () => void;
+    readonly reject: (error: Error) => void;
+  }> = [];
+  let appendQueueBytes = 0;
+  let appendBatches = 0;
+  let peakPendingEvents = 0;
+  let peakPendingBytes = 0;
+  let drainPromise: Promise<void> | null = null;
+  let drainScheduled = false;
   let closePromise: Promise<void> | undefined;
   const socketClosed = new Promise<void>((resolve) => {
     socket.once('close', resolve);
@@ -424,23 +472,89 @@ export async function connectRunJournalWorker(
       workerId: options.workerId,
       workerEpoch: options.workerEpoch,
     });
+    const startDrain = (): Promise<void> => {
+      drainScheduled = false;
+      if (drainPromise !== null) return drainPromise;
+      drainPromise = (async () => {
+        while (appendQueue.length > 0) {
+          const batch = [] as typeof appendQueue;
+          let batchBytes = 0;
+          for (const entry of appendQueue) {
+            if (
+              batch.length >= MAX_BATCH_EVENTS ||
+              (batch.length > 0 && batchBytes + entry.bytes > MAX_BATCH_BYTES)
+            )
+              break;
+            batch.push(entry);
+            batchBytes += entry.bytes;
+          }
+          const deadline = Math.min(...batch.map((entry) => entry.deadline));
+          try {
+            await request('append-batch', { events: batch.map((entry) => entry.event) }, deadline);
+            appendBatches += 1;
+            for (const entry of batch) entry.resolve();
+          } catch (error) {
+            const failure = journalTransportError(error, 'journal append batch failed');
+            for (const entry of batch) entry.reject(failure);
+            throw failure;
+          } finally {
+            appendQueue.splice(0, batch.length);
+            appendQueueBytes -= batchBytes;
+          }
+        }
+      })().finally(() => {
+        drainPromise = null;
+        if (appendQueue.length > 0) scheduleDrain();
+      });
+      return drainPromise;
+    };
+    const scheduleDrain = (): void => {
+      if (drainScheduled || drainPromise !== null) return;
+      drainScheduled = true;
+      queueMicrotask(() => void startDrain().catch(() => undefined));
+    };
     return Object.freeze({
       identity,
       binding,
       append(event: RunEvent, deadline: number): Promise<void> {
-        const operation = serial.then(async () => {
-          await request('append', { event }, deadline);
+        const bytes = Buffer.byteLength(JSON.stringify(event), 'utf8');
+        if (
+          appendQueue.length >= maxPendingEvents ||
+          bytes > maxPendingBytes ||
+          appendQueueBytes + bytes > maxPendingBytes
+        ) {
+          return Promise.reject(
+            new RunJournalTransportError(
+              'capacity',
+              `journal client backlog exceeded ${maxPendingEvents} events or ${maxPendingBytes} bytes`,
+            ),
+          );
+        }
+        const operation = new Promise<void>((resolve, reject) => {
+          appendQueue.push({ event, bytes, deadline, resolve, reject });
+          appendQueueBytes += bytes;
+          peakPendingEvents = Math.max(peakPendingEvents, appendQueue.length);
+          peakPendingBytes = Math.max(peakPendingBytes, appendQueueBytes);
         });
-        serial = operation.catch(() => undefined);
+        scheduleDrain();
         return operation;
       },
       async flush(deadline: number): Promise<void> {
-        await serial;
+        while (appendQueue.length > 0 || drainPromise !== null) await startDrain();
         await request('flush', {}, deadline);
+      },
+      snapshot() {
+        return Object.freeze({
+          pendingEvents: appendQueue.length,
+          pendingBytes: appendQueueBytes,
+          peakPendingEvents,
+          peakPendingBytes,
+          batches: appendBatches,
+        });
       },
       close(): Promise<void> {
         closePromise ??= (async () => {
-          await serial;
+          while (appendQueue.length > 0 || drainPromise !== null) await startDrain();
           if (!closed) {
             closed = true;
             socket.end();
@@ -484,6 +598,7 @@ function errorFromWire(value: unknown): RunJournalTransportError {
   const code = text(error.code, 'error.code', 64);
   const allowed = [
     'authentication-failed',
+    'capacity',
     'connection-closed',
     'protocol-error',
     'stale-worker',
@@ -493,6 +608,12 @@ function errorFromWire(value: unknown): RunJournalTransportError {
     ? (code as (typeof allowed)[number])
     : 'protocol-error';
   return new RunJournalTransportError(typed, text(error.message, 'error.message', 4_096));
+}
+
+function positiveInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value < 1)
+    throw protocol(`${name} must be a positive integer`);
+  return value;
 }
 function record(value: unknown, name: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value))

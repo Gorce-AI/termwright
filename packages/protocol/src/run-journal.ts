@@ -17,12 +17,15 @@ export interface RunEventJournalLimits {
   readonly maxStateKeys: number;
   /** Diagnostic events retained; evictions produce an explicit gap event. */
   readonly maxDiagnosticEvents: number;
+  /** Total owned serialized bytes pending across every event class. */
+  readonly maxPendingBytes: number;
 }
 
 export const DEFAULT_RUN_EVENT_JOURNAL_LIMITS: RunEventJournalLimits = Object.freeze({
   maxAuthoritativeEvents: 10_000,
   maxStateKeys: 10_000,
   maxDiagnosticEvents: 1_000,
+  maxPendingBytes: 16 * 1024 * 1024,
 });
 
 export interface RunEventFlushBarrier {
@@ -44,6 +47,7 @@ export type RunEventJournalAppendResult =
 interface JournalEntry {
   readonly ordinal: number;
   readonly event: RunEvent;
+  readonly bytes: number;
   readonly stateKey?: string;
 }
 
@@ -53,7 +57,10 @@ interface DiagnosticGap {
   readonly firstEventId: RunEventId;
   lastEventId: RunEventId;
   event?: RunEvent;
+  bytes: number;
 }
+
+const DIAGNOSTIC_GAP_RESERVATION_BYTES = 4 * 1024;
 
 /**
  * In-memory ordering core used by the first-class Termwright test host.
@@ -73,12 +80,20 @@ export class RunEventJournal {
   readonly #currentState = new Map<string, JournalEntry>();
   readonly #gaps: DiagnosticGap[] = [];
   readonly #barriers = new Map<number, number>();
+  readonly #counts: Record<RunEvent['eventClass'], number> = {
+    authoritative: 0,
+    state: 0,
+    diagnostic: 0,
+  };
   #openGap: DiagnosticGap | undefined;
   #nextOrdinal = 0;
   #nextBarrierToken = 0;
   #flushedThrough = -1;
   #sealedThrough = -1;
   #flushActive = false;
+  #pendingBytes = 0;
+  #peakPending = 0;
+  #peakPendingBytes = 0;
 
   constructor(options: {
     readonly invocationId: InvocationId;
@@ -110,6 +125,19 @@ export class RunEventJournal {
     ) {
       return failure('stale-run', 'event belongs to another invocation or run');
     }
+    const bytes = Buffer.byteLength(JSON.stringify(event), 'utf8');
+    const previousState =
+      event.eventClass === 'state' ? this.#currentState.get(options.stateKey!) : undefined;
+    const bytesAfterReplacement = this.#pendingBytes - (previousState?.bytes ?? 0) + bytes;
+    if (
+      event.eventClass !== 'diagnostic' &&
+      (bytes > this.#limits.maxPendingBytes || bytesAfterReplacement > this.#limits.maxPendingBytes)
+    ) {
+      return failure(
+        'journal-full',
+        `journal byte backlog would exceed ${this.#limits.maxPendingBytes} bytes`,
+      );
+    }
     if (event.eventClass === 'state' && !validStateKey(options.stateKey)) {
       return failure(
         'state-key-required',
@@ -135,6 +163,36 @@ export class RunEventJournal {
         'state key queue is full; create a barrier and flush before accepting another key',
       );
     }
+    const diagnosticsToDrop: JournalEntry[] = [];
+    if (event.eventClass === 'diagnostic') {
+      const candidates = this.#entries.filter(
+        (candidate) =>
+          candidate.event.eventClass === 'diagnostic' && candidate.ordinal > this.#sealedThrough,
+      );
+      let projectedCount = this.#count('diagnostic');
+      let projectedBytes = this.#pendingBytes + bytes;
+      for (const candidate of candidates) {
+        const needsGapReservation = diagnosticsToDrop.length === 0 && this.#openGap === undefined;
+        if (
+          projectedCount < this.#limits.maxDiagnosticEvents &&
+          projectedBytes <= this.#limits.maxPendingBytes
+        )
+          break;
+        diagnosticsToDrop.push(candidate);
+        projectedCount -= 1;
+        projectedBytes -= candidate.bytes;
+        if (needsGapReservation) projectedBytes += DIAGNOSTIC_GAP_RESERVATION_BYTES;
+      }
+      if (
+        projectedCount >= this.#limits.maxDiagnosticEvents ||
+        projectedBytes > this.#limits.maxPendingBytes
+      ) {
+        return failure(
+          'journal-full',
+          'diagnostic queue cannot reserve a loss marker within the byte/count bounds',
+        );
+      }
+    }
     const ordered = this.#validator.accept(event);
     if (!ordered.ok) return ordered;
 
@@ -143,32 +201,29 @@ export class RunEventJournal {
     const entry = Object.freeze({
       ordinal,
       event,
+      bytes,
       ...(options.stateKey === undefined ? {} : { stateKey: options.stateKey }),
     });
     if (event.eventClass === 'state') {
-      const previous = this.#currentState.get(options.stateKey!);
+      const previous = previousState;
       if (previous !== undefined) this.#removeEntry(previous);
       this.#currentState.set(options.stateKey!, entry);
       this.#entries.push(entry);
+      this.#pendingBytes += bytes;
+      this.#counts.state += 1;
+      this.#observePeak();
       return Object.freeze({ ok: true, ordinal });
     }
     if (event.eventClass === 'diagnostic') {
-      while (this.#count('diagnostic') >= this.#limits.maxDiagnosticEvents) {
-        const dropped = this.#entries.find(
-          (candidate) =>
-            candidate.event.eventClass === 'diagnostic' && candidate.ordinal > this.#sealedThrough,
-        );
-        if (dropped === undefined) {
-          // A barrier froze every retained diagnostic. Drop the new event and
-          // describe that loss at the next barrier; never rewrite a sealed batch.
-          this.#recordDiagnosticGap(entry);
-          return Object.freeze({ ok: true, ordinal });
-        }
+      for (const dropped of diagnosticsToDrop) {
         this.#removeEntry(dropped);
         this.#recordDiagnosticGap(dropped);
       }
     }
     this.#entries.push(entry);
+    this.#pendingBytes += bytes;
+    this.#counts[event.eventClass] += 1;
+    this.#observePeak();
     return Object.freeze({ ok: true, ordinal });
   }
 
@@ -222,11 +277,18 @@ export class RunEventJournal {
     }
     const flushed = new Set(ordinary);
     for (let index = this.#entries.length - 1; index >= 0; index -= 1) {
-      if (flushed.has(this.#entries[index]!)) this.#entries.splice(index, 1);
+      if (flushed.has(this.#entries[index]!)) {
+        this.#pendingBytes -= this.#entries[index]!.bytes;
+        this.#counts[this.#entries[index]!.event.eventClass] -= 1;
+        this.#entries.splice(index, 1);
+      }
     }
     const flushedGaps = new Set(gaps);
     for (let index = this.#gaps.length - 1; index >= 0; index -= 1) {
-      if (flushedGaps.has(this.#gaps[index]!)) this.#gaps.splice(index, 1);
+      if (flushedGaps.has(this.#gaps[index]!)) {
+        this.#pendingBytes -= this.#gaps[index]!.bytes;
+        this.#gaps.splice(index, 1);
+      }
     }
     this.#flushedThrough = barrier.highWaterMark;
     for (const [token, highWaterMark] of this.#barriers) {
@@ -243,16 +305,29 @@ export class RunEventJournal {
     return this.#entries.length + this.#gaps.length + (this.#openGap === undefined ? 0 : 1);
   }
 
+  get pendingBytes(): number {
+    return this.#pendingBytes;
+  }
+
+  get peakPending(): number {
+    return this.#peakPending;
+  }
+
+  get peakPendingBytes(): number {
+    return this.#peakPendingBytes;
+  }
+
   #count(eventClass: RunEvent['eventClass']): number {
-    return this.#entries.reduce(
-      (count, entry) => count + (entry.event.eventClass === eventClass ? 1 : 0),
-      0,
-    );
+    return this.#counts[eventClass];
   }
 
   #removeEntry(entry: JournalEntry): void {
     const index = this.#entries.indexOf(entry);
-    if (index >= 0) this.#entries.splice(index, 1);
+    if (index >= 0) {
+      this.#entries.splice(index, 1);
+      this.#pendingBytes -= entry.bytes;
+      this.#counts[entry.event.eventClass] -= 1;
+    }
   }
 
   #recordDiagnosticGap(dropped: JournalEntry): void {
@@ -262,7 +337,10 @@ export class RunEventJournal {
         count: 1,
         firstEventId: dropped.event.eventId,
         lastEventId: dropped.event.eventId,
+        bytes: DIAGNOSTIC_GAP_RESERVATION_BYTES,
       };
+      this.#pendingBytes += DIAGNOSTIC_GAP_RESERVATION_BYTES;
+      this.#observePeak();
       return;
     }
     this.#openGap.count += 1;
@@ -283,8 +361,19 @@ export class RunEventJournal {
         lastEventId: gap.lastEventId,
       }),
     });
+    const bytes = Buffer.byteLength(JSON.stringify(gap.event), 'utf8');
+    if (bytes > DIAGNOSTIC_GAP_RESERVATION_BYTES) {
+      throw new RangeError('journal diagnostic gap exceeded its byte reservation');
+    }
+    this.#pendingBytes += bytes - gap.bytes;
+    gap.bytes = bytes;
     this.#gaps.push(gap);
     this.#openGap = undefined;
+  }
+
+  #observePeak(): void {
+    this.#peakPending = Math.max(this.#peakPending, this.pending);
+    this.#peakPendingBytes = Math.max(this.#peakPendingBytes, this.#pendingBytes);
   }
 }
 

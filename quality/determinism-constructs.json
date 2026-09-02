@@ -17,7 +17,7 @@
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 177,
     "explicit-test-selection-reviewed-with-platform-registry": 73,
-    "managed-or-diagnostic-background-task": 73,
+    "managed-or-diagnostic-background-task": 74,
     "production-polling-review": 1,
     "production-process-isolation-review": 40,
     "test-observer-or-intentional-background-task": 15,
@@ -2243,6 +2243,12 @@
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "startedAt: Date.now(),"
+    },
+    {
+      "path": "packages/run-journal-transport/src/index.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "queueMicrotask(() => void startDrain().catch(() => undefined));"
     },
     {
       "path": "packages/run-journal-transport/src/index.ts",
