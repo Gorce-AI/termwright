@@ -276,7 +276,7 @@ fn a_project_without_crossterm_builds_with_two_patches_and_fails_semantics_close
     let mut fatal = None;
     while Instant::now() < deadline && fatal.is_none() {
         match received.recv_timeout(Duration::from_millis(200)) {
-            Ok(message) if message["type"] == "snapshot" => snapshot = Some(message),
+            Ok(message) if message["type"] == "semantic-full" => snapshot = Some(message),
             Ok(message) if message["type"] == "error" => fatal = Some(message),
             Ok(_) => {}
             Err(_) => break,

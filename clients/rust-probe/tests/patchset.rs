@@ -596,7 +596,7 @@ fn main() {
     for message in received {
         match message.get("type").and_then(serde_json::Value::as_str) {
             Some("hello") => hello = Some(message),
-            Some("snapshot") => snapshot = Some(message),
+            Some("semantic-full") => snapshot = Some(message),
             Some("error") => protocol_error = Some(message),
             _ => {}
         }
@@ -717,7 +717,7 @@ fn main() {
 
     let mut snapshot = None;
     for message in received {
-        if message["type"] == "snapshot" {
+        if message["type"] == "semantic-full" {
             snapshot = Some(message);
         }
     }
@@ -887,7 +887,7 @@ fn main() {
     assert_eq!(sessions, [Some("ratatui"), Some("ratatui")]);
     let snapshots: Vec<_> = messages
         .iter()
-        .filter(|message| message["type"] == "snapshot")
+        .filter(|message| message["type"] == "semantic-full")
         .map(|message| message["snapshot"]["revision"].as_i64())
         .collect();
     assert_eq!(
@@ -1086,7 +1086,7 @@ fn main() {
 
     let snapshots = messages
         .iter()
-        .filter(|message| message["type"] == "snapshot")
+        .filter(|message| message["type"] == "semantic-full")
         .count();
     assert_eq!(
         snapshots, 1,
@@ -1210,7 +1210,7 @@ fn main() {
     let mut snapshots = 0;
     let mut fatal = None;
     for message in received {
-        if message["type"] == "snapshot" {
+        if message["type"] == "semantic-full" {
             snapshots += 1;
         } else if message["type"] == "error" {
             fatal = Some(message);
@@ -1376,7 +1376,7 @@ fn main() {
     let mut snapshots = 0;
     let mut fatal = None;
     for message in received {
-        if message["type"] == "snapshot" {
+        if message["type"] == "semantic-full" {
             snapshots += 1;
         } else if message["type"] == "error" {
             fatal = Some(message);
@@ -1469,7 +1469,7 @@ fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
     for message in received {
         match message.get("type").and_then(serde_json::Value::as_str) {
             Some("hello") => hello = Some(message),
-            Some("snapshot") => snapshot = Some(message),
+            Some("semantic-full") => snapshot = Some(message),
             _ => {}
         }
     }
@@ -1679,7 +1679,7 @@ fn main() {
 
     let mut snapshot = None;
     for message in received {
-        if message.get("type").and_then(serde_json::Value::as_str) == Some("snapshot") {
+        if message.get("type").and_then(serde_json::Value::as_str) == Some("semantic-full") {
             snapshot = Some(message);
         }
     }
