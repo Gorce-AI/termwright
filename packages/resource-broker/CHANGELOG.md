@@ -1,5 +1,19 @@
 # @termwright/resource-broker
 
+## 0.4.0
+
+### Minor Changes
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Resolve worker and terminal admission from cgroup-aware CPU, memory, and temp
+  disk budgets, and atomically schedule every attempt with CPU/memory/I/O weights.
+  Use a bounded local p50/p95/EWMA cache to raise memory admission from measured
+  worker RSS while retaining conservative defaults for new tests.
+
+### Patch Changes
+
+- Updated dependencies [[`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd)]:
+  - @termwright/protocol@0.4.0
+
 ## 0.3.2
 
 ### Patch Changes

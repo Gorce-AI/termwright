@@ -1,5 +1,41 @@
 # @termwright/ui
 
+## 0.4.0
+
+### Minor Changes
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Publish exact streaming trace resource counters, including each writer's private staging-disk high-water, through authoritative run events and require run manifest v7 to reconstruct their aggregates independently.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace the scalar artifact value option with one secure policy, sanitize every
+  Trace v4 stream before temporary persistence, and mask sensitive screenshot
+  cells before rasterisation.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace finalize-heavy embedded run events with manifest v5 and an append-only,
+  independently checksummed `events.ndjson` stream. Keep live event projections
+  bounded while canonical history is written batch by batch.
+
+### Patch Changes
+
+- [#134](https://github.com/Gorce-AI/termwright/pull/134) [`9f7e024`](https://github.com/Gorce-AI/termwright/commit/9f7e024c09c6d6ee401523cda4ffb4261891aed2) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Drain the browser terminal write queue before disposing a terminal generation during profile changes.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace protocol v2 full-snapshot publication with protocol v3 semantic
+  keyframes, revision-based domain deltas, explicit resynchronization, and
+  incrementally maintained locator indexes. The driver projects framed input
+  once, applies deltas atomically, and retains the last committed state after any
+  invalid update. All built-in TypeScript, Go, Python, and Rust producers now
+  speak only the new protocol.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace the Unicode 11 terminal model and branded profile aliases with one
+  Unicode 15 extended-grapheme provider and explicit `default`/`cjk-wide`
+  terminal policies. Runner rendering now uses exactly the same provider as live
+  sessions and replay, including when the selected profile changes.
+- Updated dependencies [[`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd)]:
+  - @termwright/protocol@0.4.0
+  - @termwright/run-history@0.4.0
+  - @termwright/driver@0.4.0
+  - @termwright/trace@0.4.0
+  - @termwright/vt@0.4.0
+
 ## 0.3.2
 
 ### Patch Changes

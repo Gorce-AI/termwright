@@ -1,5 +1,31 @@
 # @termwright/run-history
 
+## 0.4.0
+
+### Minor Changes
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Require capability-aware resource telemetry in native run manifest v6, expose
+  bounded journal admission metrics, and report unavailable capabilities without
+  fabricated zeroes.
+  Attempt finalization now publishes measured worker-process CPU and sampled peak
+  RSS; manifest v6 validates and aggregates that evidence.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Publish exact streaming trace resource counters, including each writer's private staging-disk high-water, through authoritative run events and require run manifest v7 to reconstruct their aggregates independently.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Resolve worker and terminal admission from cgroup-aware CPU, memory, and temp
+  disk budgets, and atomically schedule every attempt with CPU/memory/I/O weights.
+  Use a bounded local p50/p95/EWMA cache to raise memory admission from measured
+  worker RSS while retaining conservative defaults for new tests.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace finalize-heavy embedded run events with manifest v5 and an append-only,
+  independently checksummed `events.ndjson` stream. Keep live event projections
+  bounded while canonical history is written batch by batch.
+
+### Patch Changes
+
+- Updated dependencies [[`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd)]:
+  - @termwright/protocol@0.4.0
+
 ## 0.3.2
 
 ### Patch Changes

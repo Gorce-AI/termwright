@@ -1,6 +1,6 @@
 {
   "name": "@termwright/trace",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "trace format: asciicast v3 + events + semantics, readers/writers, HTML report",
   "license": "MIT",
   "repository": {

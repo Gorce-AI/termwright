@@ -1,5 +1,48 @@
 # @termwright/test
 
+## 0.4.0
+
+### Minor Changes
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Require capability-aware resource telemetry in native run manifest v6, expose
+  bounded journal admission metrics, and report unavailable capabilities without
+  fabricated zeroes.
+  Attempt finalization now publishes measured worker-process CPU and sampled peak
+  RSS; manifest v6 validates and aggregates that evidence.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Publish exact streaming trace resource counters, including each writer's private staging-disk high-water, through authoritative run events and require run manifest v7 to reconstruct their aggregates independently.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Keep Vitest behind one private engine adapter, finalize concrete attempts through
+  the public `onAfterRetryTask` lifecycle hook, and remove the runner and engine
+  subpath exports.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Resolve worker and terminal admission from cgroup-aware CPU, memory, and temp
+  disk budgets, and atomically schedule every attempt with CPU/memory/I/O weights.
+  Use a bounded local p50/p95/EWMA cache to raise memory admission from measured
+  worker RSS while retaining conservative defaults for new tests.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace the finalize-buffered trace format with Trace v4: bounded append-only
+  spooling, incremental checksums, raw monotonic timestamps with lazy presentation
+  mapping, semantic keyframes and deltas, secure async disposal, and streaming
+  portable packaging. Previous Termwright trace formats are intentionally not
+  readable.
+
+### Patch Changes
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace protocol v2 full-snapshot publication with protocol v3 semantic
+  keyframes, revision-based domain deltas, explicit resynchronization, and
+  incrementally maintained locator indexes. The driver projects framed input
+  once, applies deltas atomically, and retains the last committed state after any
+  invalid update. All built-in TypeScript, Go, Python, and Rust producers now
+  speak only the new protocol.
+- Updated dependencies [[`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`9f7e024`](https://github.com/Gorce-AI/termwright/commit/9f7e024c09c6d6ee401523cda4ffb4261891aed2), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd)]:
+  - @termwright/protocol@0.4.0
+  - @termwright/run-journal-transport@0.4.0
+  - @termwright/driver@0.4.0
+  - @termwright/ui@0.4.0
+  - @termwright/trace@0.4.0
+  - @termwright/resource-broker@0.4.0
+
 ## 0.3.2
 
 ### Patch Changes

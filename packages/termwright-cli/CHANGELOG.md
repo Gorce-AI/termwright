@@ -1,5 +1,57 @@
 # termwright
 
+## 0.4.0
+
+### Minor Changes
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Bound EventJournal admission by serialized bytes as well as event count, expose
+  peak backlog telemetry, and replace per-event worker RPCs with bounded batches.
+  Run-event protocol v3 also bounds event, producer, collision, and
+  causal-reference validation state; causes must refer backwards within the
+  declared horizon.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Require capability-aware resource telemetry in native run manifest v6, expose
+  bounded journal admission metrics, and report unavailable capabilities without
+  fabricated zeroes.
+  Attempt finalization now publishes measured worker-process CPU and sampled peak
+  RSS; manifest v6 validates and aggregates that evidence.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Publish exact streaming trace resource counters, including each writer's private staging-disk high-water, through authoritative run events and require run manifest v7 to reconstruct their aggregates independently.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Keep Vitest behind one private engine adapter, finalize concrete attempts through
+  the public `onAfterRetryTask` lifecycle hook, and remove the runner and engine
+  subpath exports.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Resolve worker and terminal admission from cgroup-aware CPU, memory, and temp
+  disk budgets, and atomically schedule every attempt with CPU/memory/I/O weights.
+  Use a bounded local p50/p95/EWMA cache to raise memory admission from measured
+  worker RSS while retaining conservative defaults for new tests.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace the scalar artifact value option with one secure policy, sanitize every
+  Trace v4 stream before temporary persistence, and mask sensitive screenshot
+  cells before rasterisation.
+
+- [#132](https://github.com/Gorce-AI/termwright/pull/132) [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace finalize-heavy embedded run events with manifest v5 and an append-only,
+  independently checksummed `events.ndjson` stream. Keep live event projections
+  bounded while canonical history is written batch by batch.
+
+### Patch Changes
+
+- Updated dependencies [[`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`9f7e024`](https://github.com/Gorce-AI/termwright/commit/9f7e024c09c6d6ee401523cda4ffb4261891aed2), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd), [`712018f`](https://github.com/Gorce-AI/termwright/commit/712018fdaed300ff233949c611b2ac0f93e399dd)]:
+  - @termwright/protocol@0.4.0
+  - @termwright/run-journal-transport@0.4.0
+  - @termwright/run-history@0.4.0
+  - @termwright/test@0.4.0
+  - @termwright/driver@0.4.0
+  - @termwright/ui@0.4.0
+  - @termwright/trace@0.4.0
+  - @termwright/mcp@0.4.0
+  - @termwright/resource-broker@0.4.0
+  - @termwright/screenshot@0.4.0
+  - @termwright/ink@0.4.0
+  - @termwright/gherkin@0.4.0
+  - @termwright/desktop-host@0.4.0
+
 ## 0.3.2
 
 ### Patch Changes
