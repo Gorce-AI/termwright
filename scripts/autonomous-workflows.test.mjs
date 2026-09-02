@@ -890,6 +890,7 @@ describe('autonomous workflow security', () => {
     expect(examples).toContain('--manifest-path clients/Cargo.toml');
     expect(examples).toContain('--package termwright-protocol');
     expect(examples).toContain('--package termwright-probe-ratatui');
+    expect(examples).toContain("toolchain: '1.98.0'");
     expect(examples).toContain('tar -xzf "$protocol_crate"');
     expect(examples).toContain('node scripts/check-installed-ratatui.mjs');
   });
