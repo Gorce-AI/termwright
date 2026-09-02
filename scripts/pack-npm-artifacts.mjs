@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { isDirectExecution } from './is-direct-execution.mjs';
 import { inspectSafeTarGz } from './safe-tar.mjs';
 
@@ -271,6 +271,85 @@ function digest(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
+const unorderedManifestRecords = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+  'peerDependenciesMeta',
+];
+
+function sortedRecord(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, value[key]]),
+  );
+}
+
+export function canonicalizePublishedManifest(manifest) {
+  for (const field of unorderedManifestRecords) {
+    if (manifest[field] !== undefined) manifest[field] = sortedRecord(manifest[field]);
+  }
+  return manifest;
+}
+
+function tarField(buffer, start, length) {
+  const terminator = buffer.indexOf(0, start);
+  const end = terminator >= start && terminator < start + length ? terminator : start + length;
+  return buffer.subarray(start, end).toString('utf8').trim();
+}
+
+function tarSize(header) {
+  const encoded = tarField(header, 124, 12);
+  if (!/^[0-7]+$/u.test(encoded)) fail('packed archive has an invalid tar entry size');
+  const size = Number.parseInt(encoded, 8);
+  if (!Number.isSafeInteger(size) || size < 0) fail('packed archive has an invalid tar entry size');
+  return size;
+}
+
+export function canonicalizePackedArchive(archive) {
+  const original = readFileSync(archive);
+  const inspected = inspectSafeTarGz(original);
+  const manifestEntry = inspected.find(
+    (entry) => entry.type === '0' && entry.path === 'package/package.json',
+  );
+  if (manifestEntry === undefined) fail(`${archive} carries no regular package manifest`);
+  const manifestText = manifestEntry.payload.toString('utf8');
+  const trailingNewline = manifestText.endsWith('\n') ? '\n' : '';
+  const canonicalManifest = Buffer.from(
+    `${JSON.stringify(
+      canonicalizePublishedManifest(JSON.parse(manifestText)),
+      null,
+      2,
+    )}${trailingNewline}`,
+  );
+  if (canonicalManifest.length !== manifestEntry.payload.length)
+    fail(`${archive} manifest canonicalization changed its byte length`);
+
+  const tar = gunzipSync(original);
+  let offset = 0;
+  let replacements = 0;
+  while (offset + 512 <= tar.length) {
+    const header = tar.subarray(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) break;
+    const size = tarSize(header);
+    const name = [tarField(header, 345, 155), tarField(header, 0, 100)].filter(Boolean).join('/');
+    const payloadOffset = offset + 512;
+    if (name === 'package/package.json' && String.fromCharCode(header[156] || 0x30) === '0') {
+      if (size !== canonicalManifest.length)
+        fail(`${archive} manifest size does not match its tar header`);
+      canonicalManifest.copy(tar, payloadOffset);
+      replacements += 1;
+    }
+    offset = payloadOffset + Math.ceil(size / 512) * 512;
+  }
+  if (replacements !== 1) fail(`${archive} has an ambiguous package manifest inventory`);
+  writeFileSync(archive, gzipSync(tar, { level: 9 }));
+  inspectSafeTarGz(readFileSync(archive));
+}
+
 export function packNpmArtifacts(options) {
   const root = resolve(import.meta.dirname, '..');
   const output = resolve(root, options.output);
@@ -316,6 +395,7 @@ export function packNpmArtifacts(options) {
     if (created.length !== 1 || !created[0].endsWith('.tgz'))
       fail(`packing ${name} created an unexpected inventory: ${created.join(', ')}`);
     const archive = join(output, created[0]);
+    if (!bootstrap) canonicalizePackedArchive(archive);
     const manifest = validatePackedArchive(archive, name, {
       bootstrap,
     });
