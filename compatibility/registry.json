@@ -10,7 +10,7 @@
         "kind": "termwright-sdk",
         "notes": "Optional developer intent is consumed by the zero-config probe. Ink-retained aria-role and aria-state remain separate framework-native accessibility hints with framework provenance. The SDK cannot override physical facts.",
         "package": "@termwright/ink",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "capabilityGraph": {
         "applicationIntegrated": [
@@ -238,12 +238,12 @@
         ]
       },
       "certification": {
-        "adapterVersion": "0.3.1",
+        "adapterVersion": "0.3.2",
         "checksumSources": [
           "packages/probe-ink/src/certified-instrumentation.json"
         ],
         "ids": [
-          "ink@7.1.1/0.3.1"
+          "ink@7.1.1/0.3.2"
         ],
         "strategy": "checksummed-instrumentation"
       },
@@ -324,7 +324,7 @@
         "identityKind": "stable",
         "launch": "withProbe('node' | 'bun', argv) preload",
         "package": "@termwright/probe-ink",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "runtimes": [
         {
@@ -354,7 +354,7 @@
         "kind": "termwright-sdk",
         "notes": "Optional developer intent on existing Renderables is consumed by the zero-config probe. The SDK does not own the renderer and cannot override physical or framework state.",
         "package": "@termwright/opentui",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "capabilityGraph": {
         "applicationIntegrated": [
@@ -563,17 +563,18 @@
         ]
       },
       "certification": {
-        "adapterVersion": "0.3.1",
+        "adapterVersion": "0.3.2",
         "checksumSources": [
           "packages/probe-opentui/src/certified-runtime.json"
         ],
         "ids": [
-          "opentui@0.5.3/0.3.1",
-          "opentui@0.5.4/0.3.1",
-          "opentui@0.5.6/0.3.1",
-          "opentui@0.5.7/0.3.1",
-          "opentui@0.5.8/0.3.1",
-          "opentui@0.5.9/0.3.1"
+          "opentui@0.5.3/0.3.2",
+          "opentui@0.5.4/0.3.2",
+          "opentui@0.5.6/0.3.2",
+          "opentui@0.5.7/0.3.2",
+          "opentui@0.5.8/0.3.2",
+          "opentui@0.5.9/0.3.2",
+          "opentui@0.5.10/0.3.2"
         ],
         "strategy": "runtime-capability-and-behavior"
       },
@@ -676,6 +677,16 @@
                 "version": "0.5.9"
               }
             ]
+          },
+          {
+            "frameworkVersion": "0.5.10",
+            "id": "opentui-0.5.10",
+            "modules": [
+              {
+                "name": "@opentui/core",
+                "version": "0.5.10"
+              }
+            ]
           }
         ]
       },
@@ -708,7 +719,7 @@
         "identityKind": "stable",
         "launch": "withProbe('node' | 'bun', argv) preload",
         "package": "@termwright/probe-opentui",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "runtimes": [
         {
@@ -723,7 +734,7 @@
         }
       ],
       "versions": {
-        "declared": "0.5.3 or 0.5.4 or 0.5.6 or 0.5.7 or 0.5.8 or 0.5.9",
+        "declared": "0.5.3 or 0.5.4 or 0.5.6 or 0.5.7 or 0.5.8 or 0.5.9 or 0.5.10",
         "policy": "exact",
         "verified": [
           "0.5.3",
@@ -731,7 +742,8 @@
           "0.5.6",
           "0.5.7",
           "0.5.8",
-          "0.5.9"
+          "0.5.9",
+          "0.5.10"
         ]
       }
     },
@@ -744,7 +756,7 @@
         "kind": "termwright-sdk",
         "notes": "The class decorator and weak instance registry support dynamic intent, descriptive actions, relationships, extended state and stable semantic keys. Duplicate keys are a fatal duplicate-semantic-key provider violation. Physical geometry, focus, visibility and rendered text remain probe-owned.",
         "package": "termwright",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "capabilityGraph": {
         "applicationIntegrated": [
@@ -957,10 +969,10 @@
         "unsupported": []
       },
       "certification": {
-        "adapterVersion": "0.3.1",
+        "adapterVersion": "0.3.2",
         "checksumSources": [],
         "ids": [
-          "textual@runtime-capability/0.3.1"
+          "textual@runtime-capability/0.3.2"
         ],
         "strategy": "runtime-capability-and-behavior"
       },
@@ -1041,7 +1053,7 @@
         "identityKind": "stable",
         "launch": "python -m termwright_probe -- python app.py, or termwright_probe.with_probe(argv)",
         "package": "termwright",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "runtimes": [
         {
@@ -1069,7 +1081,7 @@
         "kind": "termwright-sdk",
         "notes": "Annotations add intent, closed descriptive actions and SemanticKey relationships to stable widget objects. Relationships resolve in a bounded second pass; duplicate keys are a fatal duplicate-semantic-key provider violation and missing relationship targets remain absent. Nodes keep framework provenance with annotation/recognizer exceptions in px. The SDK has no bounds, focus, visibility, value, rendered-text or framework-state fields.",
         "package": "github.com/gorce-ai/termwright/clients/go/annotate",
-        "packageVersion": "v0.3.1"
+        "packageVersion": "v0.3.2"
       },
       "capabilityGraph": {
         "applicationIntegrated": [
@@ -1263,10 +1275,10 @@
         ]
       },
       "certification": {
-        "adapterVersion": "0.3.1",
+        "adapterVersion": "0.3.2",
         "checksumSources": [],
         "ids": [
-          "tview@compile-capability/0.3.1"
+          "tview@compile-capability/0.3.2"
         ],
         "strategy": "compile-and-behavioral-capability"
       },
@@ -1297,7 +1309,7 @@
           {
             "addedUnits": [
               {
-                "sourceDigest": "sha256:2d71f43c0cbace7fb927fb8b0b43bfe276ccd7f52ab29ec522727abc761190b6",
+                "sourceDigest": "sha256:acc8228b99ab85ca71e1c22e2343e0aa2b6faa745e1b91245a4934ba1129660f",
                 "target": "zz_termwright_probe.go"
               }
             ],
@@ -1628,7 +1640,7 @@
         "identityKind": "stable",
         "launch": "prepareInstrumentedBuild({moduleDir}) and run the controlled Go build/test command from the returned moduleDir with the returned -toolexec arguments",
         "package": "@termwright/probe-tview",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "runtimes": [
         {
@@ -1661,7 +1673,7 @@
         "kind": "termwright-sdk",
         "notes": "The wrapper adds role, name, description, testId, explicit domain JSON, descriptive actions, relationships and an optional stable semantic key to the exact intercepted render call. Bounds, occlusion and collection state remain probe-owned.",
         "package": "termwright-ratatui",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "capabilityGraph": {
         "applicationIntegrated": [
@@ -1876,14 +1888,14 @@
         ]
       },
       "certification": {
-        "adapterVersion": "0.3.1",
+        "adapterVersion": "0.3.2",
         "checksumSources": [
           "clients/rust-probe/upstream-patches/ratatui-core/0.1.2/manifest.json",
           "clients/rust-probe/upstream-patches/ratatui-crossterm/0.1.2/manifest.json",
           "clients/rust-probe/upstream-patches/ratatui-widgets/0.3.2/manifest.json"
         ],
         "ids": [
-          "ratatui@0.30.2/0.3.1"
+          "ratatui@0.30.2/0.3.2"
         ],
         "strategy": "checksummed-replacement"
       },
@@ -2001,7 +2013,7 @@
         "identityKind": "frame-local",
         "launch": "prepare_instrumented_build(&PrepareOptions) and pass returned Cargo --config/env values",
         "package": "termwright-probe-ratatui",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "runtimes": [
         {
@@ -2033,7 +2045,7 @@
         "kind": "termwright-sdk",
         "notes": "Value-type models declare intent, closed descriptive actions and string-key relationships through Provider. A unique SemanticKey stabilizes that annotated node across copied model values; duplicate keys are a fatal duplicate-semantic-key provider violation. Native value/state remain framework-owned, and p/px records every merge.",
         "package": "github.com/gorce-ai/termwright/clients/go/annotate",
-        "packageVersion": "v0.3.1"
+        "packageVersion": "v0.3.2"
       },
       "capabilityGraph": {
         "applicationIntegrated": [
@@ -2229,7 +2241,7 @@
         ]
       },
       "certification": {
-        "adapterVersion": "0.3.1",
+        "adapterVersion": "0.3.2",
         "checksumSources": [
           "packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json",
           "packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json",
@@ -2238,9 +2250,9 @@
           "packages/probe-charm/upstream-patches/bubbletea/v2.0.9/manifest.json"
         ],
         "ids": [
-          "charm@v1.3.10/0.3.1",
-          "charm@v2.0.8/0.3.1",
-          "charm@v2.0.9/0.3.1"
+          "charm@v1.3.10/0.3.2",
+          "charm@v2.0.8/0.3.2",
+          "charm@v2.0.9/0.3.2"
         ],
         "strategy": "checksummed-replacement"
       },
@@ -2498,7 +2510,7 @@
         "identityKind": "frame-local",
         "launch": "prepareInstrumentedBuild({moduleDir}) and build from the returned moduleDir with the returned GOWORK and goArgs",
         "package": "@termwright/probe-charm",
-        "packageVersion": "0.3.1"
+        "packageVersion": "0.3.2"
       },
       "runtimes": [
         {

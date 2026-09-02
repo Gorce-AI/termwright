@@ -1,6 +1,6 @@
 {
   "name": "@termwright/pty-darwin-x64",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Prebuilt Termwright PTY addon for macOS x64",
   "license": "MIT",
   "repository": {

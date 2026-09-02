@@ -1,6 +1,6 @@
 {
   "name": "@termwright/screenshot",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "terminal screenshots: cell grid to self-contained SVG (embedded glyph outlines) and PNG via resvg, no Chromium",
   "license": "MIT",
   "repository": {
