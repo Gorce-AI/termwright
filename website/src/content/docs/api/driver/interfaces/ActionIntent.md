@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionIntent
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:147
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:170
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:147
 
 > `readonly` **kind**: [`ActionKind`](../../type-aliases/actionkind/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:148
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:171
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:148
 
 > `readonly` `optional` **selector?**: `string`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:149
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:172
 
 ***
 
@@ -35,4 +35,4 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:149
 
 > `readonly` `optional` **targetRef?**: [`LocatorRef`](../../type-aliases/locatorref/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:150
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:173

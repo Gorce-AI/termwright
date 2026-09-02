@@ -72,3 +72,17 @@ export class Unicode15GraphemeProvider implements IUnicodeVersionProvider {
     return 1;
   }
 }
+
+/** Measures text with the exact Unicode provider used by the canonical terminal. */
+export function measureTextCellWidth(text: string, ambiguousCharsAreWide = false): number {
+  const provider = new Unicode15GraphemeProvider();
+  provider.ambiguousCharsAreWide = ambiguousCharsAreWide;
+  let preceding = 0;
+  let width = 0;
+  for (const character of text) {
+    const next = provider.charProperties(character.codePointAt(0) ?? 0, preceding);
+    if (preceding !== 0 && (next & 1) === 0) width += unpackWidth(preceding);
+    preceding = next;
+  }
+  return width + (preceding === 0 ? 0 : unpackWidth(preceding));
+}

@@ -46,7 +46,7 @@ import type {
   ActionIntent,
   ExecutableActionPlan,
   ActionReceipt,
-  ArtifactValuePolicy,
+  ResolvedArtifactSecurityPolicy,
   ExecutableDeviceOperation,
   ExecutableValue,
   EffectiveSessionContract,
@@ -62,7 +62,7 @@ import type {
   SessionCapabilityId,
 } from '@termwright/protocol';
 import {
-  DEFAULT_ARTIFACT_VALUE_POLICY,
+  resolveArtifactSecurityPolicy,
   ABSOLUTE_LIMITS,
   DEFAULT_LIMITS,
   DEFAULT_NEGOTIATION_MS,
@@ -440,7 +440,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   readonly window: TerminalWindow;
   readonly terminalState: TerminalState;
   readonly timeouts: Required<TimeoutClasses>;
-  readonly artifactValuePolicy: ArtifactValuePolicy;
+  readonly artifactSecurity: ResolvedArtifactSecurityPolicy;
   readonly events: SessionEvents;
   readonly scrollback: ScrollbackApi;
   readonly selection: SelectionApi;
@@ -516,7 +516,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
     this.#operationBudget = options.operationBudget;
     this.timeouts = resolveTimeouts(options.timeouts);
-    this.artifactValuePolicy = options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+    this.artifactSecurity = resolveArtifactSecurityPolicy(options.artifactSecurity);
     this.#emitter = new SessionEventEmitter((error) =>
       this.#diagnostic('listener-error', `a session event listener threw: ${String(error)}`),
     );
@@ -1183,11 +1183,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       const integration = this.#vt.shellIntegration();
       const receipt: ActionReceipt = Object.freeze({
         intent,
-        plan: recordActionPlan(plan, this.artifactValuePolicy),
+        plan: recordActionPlan(plan, this.artifactSecurity.mode),
         before,
         after: this.checkpoint(),
         executed: Object.freeze(
-          executed.map((operation) => recordDeviceOperation(operation, this.artifactValuePolicy)),
+          executed.map((operation) => recordDeviceOperation(operation, this.artifactSecurity.mode)),
         ),
         outcome: 'completed',
       });
@@ -2193,7 +2193,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     );
     this.#pty?.write(data, kind);
     const timeMs = this.#now();
-    this.#evidence.rememberInput(data, kind, timeMs, this.artifactValuePolicy);
+    this.#evidence.rememberInput(data, kind, timeMs, this.artifactSecurity.mode);
     this.#emitter.emit('input', { data, timeMs, kind });
     await Promise.resolve();
   }
@@ -2287,11 +2287,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       const executed = await this.executeDeviceOperations(plan.operations, before);
       const receipt: ActionReceipt = Object.freeze({
         intent,
-        plan: recordActionPlan(plan, this.artifactValuePolicy),
+        plan: recordActionPlan(plan, this.artifactSecurity.mode),
         before,
         after: this.checkpoint(),
         executed: Object.freeze(
-          executed.map((operation) => recordDeviceOperation(operation, this.artifactValuePolicy)),
+          executed.map((operation) => recordDeviceOperation(operation, this.artifactSecurity.mode)),
         ),
         outcome: 'completed',
       });

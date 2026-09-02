@@ -1,2 +1,2 @@
-{"t":0,"castOffset":0,"source":"file","label":"server.log","message":"listening on 3000"}
-{"t":1050,"castOffset":1050,"source":"adapter","label":"db.pool","logger":"db.pool","level":"warn","message":"pool exhausted","attrs":{"size":10},"seq":1,"ts":1700000000000}
+{"t":0,"source":"file","label":"server.log","message":"listening on 3000"}
+{"t":1050,"source":"adapter","label":"db.pool","logger":"db.pool","level":"warn","message":"pool exhausted","attrs":{"size":10},"seq":1,"ts":1700000000000}

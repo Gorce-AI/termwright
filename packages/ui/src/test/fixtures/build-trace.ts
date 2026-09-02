@@ -18,6 +18,7 @@ const TRACE_MEMBERS = [
   'events.jsonl',
   'semantics.jsonl',
   'logs.jsonl',
+  'timeline.jsonl',
 ];
 
 const unknownGeometry = (): NodeGeometryObservations => ({
@@ -121,6 +122,7 @@ export async function buildFixtureTrace(
   const rows = options.rows ?? 24;
   await cp(join(ARCHIVES, 'complete'), dir, { recursive: true });
   if (columns !== 80 || rows !== 24) await resizeFixture(dir, columns, rows);
+  else await refreshCommit(dir);
   return dir;
 }
 
@@ -134,6 +136,7 @@ export async function buildFixtureTrace(
 export async function buildCrashedFixtureTrace(): Promise<string> {
   const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-crash-')), 'crashed.twtrace');
   await cp(join(ARCHIVES, 'crashed'), dir, { recursive: true });
+  await refreshCommit(dir);
   return dir;
 }
 
@@ -161,6 +164,10 @@ async function resizeFixture(dir: string, columns: number, rows: number): Promis
     });
   await writeFile(semanticsPath, `${semantics.join('\n')}\n`, 'utf8');
 
+  await refreshCommit(dir);
+}
+
+async function refreshCommit(dir: string): Promise<void> {
   const checksums: Record<string, string> = {};
   for (const name of TRACE_MEMBERS) {
     try {
@@ -170,5 +177,5 @@ async function resizeFixture(dir: string, columns: number, rows: number): Promis
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
-  await writeFile(join(dir, 'COMMITTED'), `${JSON.stringify({ v: 1, checksums })}\n`, 'utf8');
+  await writeFile(join(dir, 'COMMITTED'), `${JSON.stringify({ v: 4, checksums })}\n`, 'utf8');
 }

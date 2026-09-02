@@ -36,13 +36,13 @@ await terminal.close();
 
 ## Properties
 
-### artifactValuePolicy?
+### artifactSecurity?
 
-> `readonly` `optional` **artifactValuePolicy?**: `"raw"` \| `"none"` \| `"redacted"`
+> `readonly` `optional` **artifactSecurity?**: `ArtifactSecurityPolicy`
 
 Defined in: [driver/src/api.ts:134](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L134)
 
-Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in.
+One policy for every artifact boundary. Defaults to secure `redacted`.
 
 ***
 

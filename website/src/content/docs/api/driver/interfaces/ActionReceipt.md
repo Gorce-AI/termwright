@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionReceipt
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:207
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:230
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:207
 
 > `readonly` **after**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:211
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:234
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:211
 
 > `readonly` **before**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:210
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:233
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:210
 
 > `readonly` **executed**: readonly [`RecordedDeviceOperation`](../../type-aliases/recordeddeviceoperation/)[]
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:212
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:235
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:212
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:208
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:231
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:208
 
 > `readonly` **outcome**: `"completed"` \| `"partial"` \| `"failed"`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:213
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:236
 
 ***
 
@@ -59,4 +59,4 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:213
 
 > `readonly` **plan**: [`ActionPlan`](../actionplan/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:209
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:232

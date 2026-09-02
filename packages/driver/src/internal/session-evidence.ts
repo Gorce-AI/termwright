@@ -92,13 +92,15 @@ export class SessionEvidenceJournal {
     data: Uint8Array,
     kind: CrashInput['kind'],
     timeMs: number,
-    artifactValuePolicy: ArtifactValuePolicy,
+    artifactSecurityMode: ArtifactValuePolicy,
   ): void {
     const entry: CrashInput = Object.freeze({
       timeMs,
       kind,
       bytes: data.length,
-      ...(kind === 'mouse' || artifactValuePolicy === 'raw' ? { preview: previewBytes(data) } : {}),
+      ...(kind === 'mouse' || artifactSecurityMode === 'raw'
+        ? { preview: previewBytes(data) }
+        : {}),
     });
     this.#recentInputs.push(entry);
     if (this.#recentInputs.length > CRASH_INPUTS) this.#recentInputs.shift();

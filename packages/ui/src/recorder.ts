@@ -18,8 +18,8 @@
 import { writeFile } from 'node:fs/promises';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
 import {
-  DEFAULT_ARTIFACT_VALUE_POLICY,
-  type ArtifactValuePolicy,
+  resolveArtifactSecurityPolicy,
+  type ArtifactSecurityPolicy,
   type EffectiveSessionContract,
   type PointerHitGrid,
   type SemanticSnapshot,
@@ -42,7 +42,7 @@ export interface RecorderOptions {
   /** Where {@link RecorderSession.save} writes by default. */
   readonly outFile?: string;
   /** Input captured into generated source. Defaults to secure `redacted`. */
-  readonly artifactValuePolicy?: ArtifactValuePolicy;
+  readonly artifactSecurity?: ArtifactSecurityPolicy;
   /** Injectable launcher, so tests can record against a fake harness. */
   readonly launch?: (options: LaunchOptions) => Promise<TerminalHarness>;
 }
@@ -104,6 +104,9 @@ export async function startRecorder(options: RecorderOptions): Promise<RecorderS
     ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.columns === undefined ? {} : { columns: options.columns }),
     ...(options.rows === undefined ? {} : { rows: options.rows }),
+    ...(options.artifactSecurity === undefined
+      ? {}
+      : { artifactSecurity: options.artifactSecurity }),
   });
   return new Recorder(harness, options);
 }
@@ -244,7 +247,7 @@ class Recorder implements RecorderSession {
   }
 
   #recordPayload(kind: 'type' | 'paste', text: string, t: number): void {
-    const policy = this.#options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+    const policy = resolveArtifactSecurityPolicy(this.#options.artifactSecurity).mode;
     if (policy === 'none') return;
     if (policy === 'redacted') {
       this.#push({
@@ -260,7 +263,7 @@ class Recorder implements RecorderSession {
   }
 
   #recordRaw(bytes: Uint8Array, t: number): void {
-    const policy = this.#options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+    const policy = resolveArtifactSecurityPolicy(this.#options.artifactSecurity).mode;
     if (policy === 'none') return;
     if (policy === 'redacted') {
       this.#push({ kind: 'withheld-input', inputKind: 'raw', bytes: bytes.length, t });

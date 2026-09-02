@@ -13,4 +13,4 @@ editUrl: false
 
 > **RecordedValue** = \{ `sensitivity`: `ValueSensitivity`; `status`: `"known"`; `value`: `string`; \} \| \{ `reason`: `"artifact-policy"`; `sensitivity`: `ValueSensitivity` \| `"unknown"`; `status`: `"withheld"`; \}
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:21
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:44

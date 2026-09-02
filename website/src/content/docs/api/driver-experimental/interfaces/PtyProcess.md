@@ -316,7 +316,7 @@ postcondition.
 
 ##### kind?
 
-`"raw"` \| `"key"` \| `"mouse"` \| `"paste"`
+`"key"` \| `"mouse"` \| `"paste"` \| `"raw"`
 
 #### Returns
 

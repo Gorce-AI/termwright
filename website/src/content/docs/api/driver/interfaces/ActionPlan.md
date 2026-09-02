@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionPlan
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:184
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:207
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:184
 
 > `readonly` **actionId**: `string`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:185
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:208
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:185
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:188
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:211
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:188
 
 > `readonly` **contractId**: `string`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:186
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:209
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:186
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:187
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:210
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:187
 
 > `readonly` **operations**: readonly [`RecordedDeviceOperation`](../../type-aliases/recordeddeviceoperation/)[]
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:192
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:215
 
 ***
 
@@ -59,7 +59,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:192
 
 > `readonly` `optional` **physicalRegion?**: [`PhysicalRegion`](../physicalregion/)
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:191
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:214
 
 ***
 
@@ -67,7 +67,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:191
 
 > `readonly` **requirements**: readonly [`ConditionResult`](../conditionresult/)[]
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:189
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:212
 
 ***
 
@@ -75,7 +75,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:189
 
 > `readonly` **strategy**: `string`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:190
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:213
 
 ***
 
@@ -83,4 +83,4 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:190
 
 > `readonly` **valuePolicy**: `"raw"` \| `"none"` \| `"redacted"`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:193
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:216

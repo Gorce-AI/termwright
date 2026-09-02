@@ -9,6 +9,7 @@
 
 import type { CellSnapshot } from '@termwright/driver';
 import type { CursorInfo } from '@termwright/protocol';
+import type { Rect } from '@termwright/protocol';
 
 /**
  * The slice of the driver's `ScreenSnapshot` a screenshot needs.
@@ -72,6 +73,8 @@ export interface ScreenshotOptions {
   readonly cursor?: boolean;
   /** `'outline'` (default) embeds glyph outlines; `'text'` never does. */
   readonly glyphs?: GlyphMode;
+  /** Cell rectangles replaced before rasterisation; their original glyphs never enter the SVG. */
+  readonly maskRects?: readonly Rect[];
 }
 
 /** Result of {@link renderSvg}. */

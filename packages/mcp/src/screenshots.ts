@@ -8,6 +8,7 @@
  */
 import { LIGHT_THEME, renderPng } from '@termwright/screenshot';
 import type { ScreenFrame } from '@termwright/screenshot';
+import type { Rect, SemanticSnapshot } from '@termwright/protocol';
 import { McpError } from './errors.js';
 
 /** Ceilings for images leaving the server. */
@@ -41,6 +42,8 @@ export interface ScreenshotRequest {
   readonly scale?: number | undefined;
   /** Light background instead of the default dark one. */
   readonly theme?: 'dark' | 'light' | undefined;
+  /** Paired semantics used to mask known-sensitive cells before rasterisation. */
+  readonly semantic?: SemanticSnapshot | null | undefined;
 }
 
 /**
@@ -68,6 +71,7 @@ export function renderScreenshot(
   try {
     rendered = renderPng(frame, {
       scale,
+      maskRects: sensitiveRects(request.semantic),
       ...(request.theme === 'light' ? { theme: LIGHT_THEME } : {}),
     });
   } catch (error) {
@@ -94,4 +98,20 @@ export function renderScreenshot(
     selfContained: rendered.selfContained,
     fallbackCharacters: [...rendered.fallbackCharacters],
   };
+}
+
+function sensitiveRects(snapshot: SemanticSnapshot | null | undefined): readonly Rect[] {
+  if (snapshot === null || snapshot === undefined) return [];
+  const rectangles: Rect[] = [];
+  for (const node of snapshot.nodes) {
+    if (
+      node.value === undefined ||
+      !('sensitivity' in node.value) ||
+      node.value.sensitivity !== 'sensitive'
+    )
+      continue;
+    const visible = node.geometry.visibleRect;
+    if (visible.status === 'known') rectangles.push(visible.value);
+  }
+  return rectangles;
 }

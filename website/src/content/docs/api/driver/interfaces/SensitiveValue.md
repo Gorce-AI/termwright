@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SensitiveValue
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:11
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:34
 
 Explicit wrapper for values which must not enter artifacts by default.
 
@@ -21,7 +21,7 @@ Explicit wrapper for values which must not enter artifacts by default.
 
 > `readonly` **sensitivity**: `"sensitive"`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:12
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:35
 
 ***
 
@@ -29,4 +29,4 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:12
 
 > `readonly` **value**: `string`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:13
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:36

@@ -13,6 +13,6 @@ editUrl: false
 
 > **AnyLocator** = [`SemanticLocator`](../../interfaces/semanticlocator/) \| [`ScreenLocator`](../../interfaces/screenlocator/)
 
-Defined in: [driver/src/api.ts:679](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L679)
+Defined in: [driver/src/api.ts:681](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L681)
 
 Internal/cross-surface union. It exposes only operations valid in both domains.

@@ -72,6 +72,59 @@ describe('trace staging names', () => {
 });
 
 describe('createTraceWriter', () => {
+  it('keeps a configured canary out of every temporary and final trace stream', async () => {
+    const root = await workspace();
+    const dir = join(root, 'redacted-canary.twtrace');
+    const secret = 'TERMWRIGHT_CANARY_SECRET_7f912a';
+    const session = new FakeSession('redacted-canary');
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      artifactSecurity: { mode: 'redacted', secrets: [secret] },
+    });
+
+    session.input(secret, 'paste');
+    session.output(secret.slice(0, 8));
+    session.output(`\u001b[31m${secret.slice(8)}\u001b[0m`);
+    session.output(`\u001b]0;${secret}\u0007`);
+    session.logRecord({ level: 'error', message: secret, attrs: { token: secret } });
+    session.semantic(
+      snapshot(
+        1,
+        [
+          node({
+            id: 'password',
+            role: 'textbox',
+            name: secret,
+            value: {
+              status: 'known',
+              value: secret,
+              sensitivity: 'sensitive',
+              evidence: {
+                source: 'application',
+                method: 'native',
+                strength: 'authoritative',
+                providerId: 'app',
+              },
+            },
+          }),
+        ],
+        'redacted-canary',
+      ),
+    );
+    session.crash({
+      exit: { code: 1, signal: null },
+      screenTail: [secret],
+      diagnosticsTail: [{ code: 'endpoint-error', detail: secret, timeMs: 1 }],
+    });
+    await writer.finalize();
+
+    for (const member of Object.values(TRACE_FILES)) {
+      const body = await readFile(join(dir, member), 'utf8');
+      expect(body, member).not.toContain(secret);
+    }
+  });
+
   it('fails closed when one record exceeds the bounded append backlog', async () => {
     const root = await workspace();
     const dir = join(root, 'capacity.twtrace');
@@ -470,7 +523,7 @@ describe('createTraceWriter', () => {
     const writer = createTraceWriter(session, {
       dir,
       now: session.now,
-      artifactValuePolicy: 'raw',
+      artifactSecurity: { mode: 'raw' },
     });
 
     session.input('\u0003', 'raw');

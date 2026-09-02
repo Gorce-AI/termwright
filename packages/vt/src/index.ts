@@ -40,3 +40,4 @@ export {
 export { createLinkResolver, type CellLink, type LinkResolver } from './links.js';
 
 export { isAmbiguousWidth, type UnicodeOverrides } from './unicode.js';
+export { measureTextCellWidth } from './graphemes/provider.js';

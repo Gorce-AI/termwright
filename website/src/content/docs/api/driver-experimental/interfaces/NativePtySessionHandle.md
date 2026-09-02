@@ -219,7 +219,7 @@ Defined in: [native-pty-backend.ts:17](https://github.com/Gorce-AI/termwright/bl
 
 ##### kind
 
-`"raw"` \| `"key"` \| `"mouse"` \| `"paste"`
+`"key"` \| `"mouse"` \| `"paste"` \| `"raw"`
 
 #### Returns
 

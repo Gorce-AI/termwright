@@ -22,7 +22,7 @@ export interface DoctorReport {
     readonly profiles: typeof TERMWRIGHT_RESOURCE_PROFILES;
     readonly semantics: 'explicit-session-contract';
     readonly flakyPolicy: 'fail';
-    readonly artifactValuePolicy: 'redacted';
+    readonly artifactSecurity: { readonly mode: 'redacted' };
     readonly hostTimeouts: typeof DEFAULT_TERMWRIGHT_HOST_TIMEOUTS;
   };
 }
@@ -90,7 +90,7 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
       profiles: TERMWRIGHT_RESOURCE_PROFILES,
       semantics: 'explicit-session-contract',
       flakyPolicy: 'fail',
-      artifactValuePolicy: 'redacted',
+      artifactSecurity: Object.freeze({ mode: 'redacted' }),
       hostTimeouts: DEFAULT_TERMWRIGHT_HOST_TIMEOUTS,
     }),
   });
@@ -167,7 +167,7 @@ export function formatDoctor(report: DoctorReport): string {
       `${report.effectiveConfig.defaultProfile.scheduler.pool}, ` +
       `${report.effectiveConfig.defaultProfile.scheduler.maxWorkers} workers, ` +
       `${report.effectiveConfig.defaultProfile.capacities.ptySession} PTYs, ` +
-      `flaky=${report.effectiveConfig.flakyPolicy}, artifacts=${report.effectiveConfig.artifactValuePolicy}`,
+      `flaky=${report.effectiveConfig.flakyPolicy}, artifacts=${report.effectiveConfig.artifactSecurity.mode}`,
     '',
     report.ok ? 'Ready to run Termwright.' : 'Termwright needs attention before tests can run.',
   ].join('\n');

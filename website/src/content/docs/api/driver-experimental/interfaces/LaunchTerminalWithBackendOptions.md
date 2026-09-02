@@ -21,17 +21,17 @@ Low-level integration options exported only from `@termwright/driver/experimenta
 
 ## Properties
 
-### artifactValuePolicy?
+### artifactSecurity?
 
-> `readonly` `optional` **artifactValuePolicy?**: `"none"` \| `"redacted"` \| `"raw"`
+> `readonly` `optional` **artifactSecurity?**: `ArtifactSecurityPolicy`
 
 Defined in: [api.ts:134](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L134)
 
-Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in.
+One policy for every artifact boundary. Defaults to secure `redacted`.
 
 #### Inherited from
 
-`LaunchTerminalOptions.artifactValuePolicy`
+`LaunchTerminalOptions.artifactSecurity`
 
 ***
 

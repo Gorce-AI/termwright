@@ -157,11 +157,11 @@ wrong often enough to be worse than no colour.
 how many entries were refused after the append-only `maxLogEntries` ceiling
 (10 000 by default).
 
-Redaction happens at the source, in `@termwright/logs`. **Lines tailed from a
-log file are not redacted**: they arrive as raw text, so treat them the way you
-treat a crash's screen tail.
+Every log line and structured attribute passes the same artifact sanitizer
+before the append spool. Source-side redaction remains useful defense in depth,
+but is no longer the persistence boundary.
 
-Semantic values and input/action payloads use `artifactValuePolicy`:
+Semantic values and input/action payloads use `artifactSecurity.mode`:
 `redacted` (the secure default), `none`, or explicit `raw`. Sensitive semantic
 values are stored as typed `withheld` observations. Executable keyboard values
 never enter an `ActionReceipt`; receipts contain recorded projections only.
@@ -178,12 +178,9 @@ if (trace.meta.crash !== undefined) {
 }
 ```
 
-**`meta.crash.screenTail` is not redacted.** It is what the terminal showed,
-verbatim — whatever the program or the tty's echo displayed is in there, secrets
-included. Treat an archive carrying a crash like a screenshot when you store it,
-upload it as a CI artifact or forward it. Input previews are omitted unless the
-session explicitly selected raw artifact values. This does not protect text the
-application echoed to the terminal.
+Crash tails, diagnostics and input previews pass the same policy as the live
+streams. `redacted` matches registered secrets across output chunks and ANSI
+style controls; `raw` is the only mode that stores them verbatim.
 
 ## The report
 

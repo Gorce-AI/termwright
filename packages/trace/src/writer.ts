@@ -5,10 +5,10 @@
 
 import {
   diffSemanticSnapshots,
-  DEFAULT_ARTIFACT_VALUE_POLICY,
   projectActionReceiptForArtifact,
   projectSemanticSnapshotForArtifact,
-  type ArtifactValuePolicy,
+  resolveArtifactSecurityPolicy,
+  type ArtifactSecurityPolicy,
   type EffectiveSessionContract,
   type SemanticSnapshot,
 } from '@termwright/protocol';
@@ -17,6 +17,7 @@ import { basename } from 'node:path';
 import { formatCastEvent, formatCastHeader, type CastEventCode, type CastHeader } from './cast.js';
 import { TraceError } from './errors.js';
 import { AppendSpool } from './append-spool.js';
+import { TerminalSanitizer } from './terminal-sanitizer.js';
 import {
   TRACE_FILES,
   TRACE_VERSION,
@@ -45,6 +46,7 @@ import {
 export interface TraceSource {
   readonly sessionId: string;
   readonly events: SessionEvents;
+  readonly artifactSecurity?: ArtifactSecurityPolicy;
   /** Called on every `semantic-revision` to capture the tree, when available. */
   semanticTree?(): SemanticSnapshot | null;
   readonly terminalProfile?: string;
@@ -76,11 +78,11 @@ export interface TraceWriterOptions {
   /**
    * Record PTY input as asciicast `i` events too. Off by default: inputs are
    * represented in `events.jsonl`, and players ignore them. Exact bytes are
-   * only available when `artifactValuePolicy` is explicitly `raw`.
+   * only available when `artifactSecurity.mode` is explicitly `raw`.
    */
   readonly recordInput?: boolean;
-  /** Semantic value policy. Defaults to `redacted`; `raw` is explicit opt-in. */
-  readonly artifactValuePolicy?: ArtifactValuePolicy;
+  /** One policy for every trace persistence channel. Defaults to redacted. */
+  readonly artifactSecurity?: ArtifactSecurityPolicy;
   /**
    * Byte ceiling for buffered output. On overflow the writer stops recording
    * output and sets `meta.truncated`. Default 32 MiB.
@@ -191,7 +193,11 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     options.idleTimeLimit !== undefined && options.idleTimeLimit > 0
       ? options.idleTimeLimit * 1000
       : Number.POSITIVE_INFINITY;
-  const artifactValuePolicy = options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+  const artifactSecurity = resolveArtifactSecurityPolicy(
+    options.artifactSecurity ?? session.artifactSecurity,
+  );
+  const sanitizer = new TerminalSanitizer(artifactSecurity);
+  registerSemanticSecrets(session.semanticTree?.() ?? null);
   const startClock = now();
   const wallStartedAt = Date.now();
   const startedAt = new Date(wallStartedAt).toISOString();
@@ -281,7 +287,16 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
   }
 
   function pushEvent(event: StoredTraceEvent): void {
-    spool.enqueue(TRACE_FILES.events, `${JSON.stringify(event)}\n`);
+    spool.enqueue(TRACE_FILES.events, `${JSON.stringify(sanitizeJson(event, sanitizer))}\n`);
+  }
+
+  function registerSemanticSecrets(snapshot: SemanticSnapshot | null): void {
+    if (snapshot === null || artifactSecurity.mode !== 'redacted') return;
+    for (const node of snapshot.nodes) {
+      if (node.value?.status === 'known' && node.value.sensitivity === 'sensitive') {
+        sanitizer.register(node.value.value);
+      }
+    }
   }
 
   function inHiddenWindow(wall: number): boolean {
@@ -295,7 +310,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         const wall = driverTime(timeMs);
         // Decode unconditionally so the streaming decoder keeps its state even
         // across hidden windows; discard the text when hidden.
-        const text = decoder.decode(data, { stream: true });
+        const text = sanitizer.push(decoder.decode(data, { stream: true }));
         if (truncated || inHiddenWindow(wall)) return;
         outputBytes += data.byteLength;
         if (outputBytes > maxOutputBytes) {
@@ -308,8 +323,12 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       case 'input': {
         const { data, timeMs, kind } = recorded.payload;
         const wall = driverTime(timeMs);
+        if (artifactSecurity.mode === 'redacted' && kind !== 'mouse') {
+          const candidate = new TextDecoder('utf-8', { fatal: false }).decode(data);
+          if (candidate !== '') sanitizer.register(candidate);
+        }
         pushEvent(
-          artifactValuePolicy === 'raw'
+          artifactSecurity.mode === 'raw'
             ? {
                 t: wall,
                 kind: 'input',
@@ -327,7 +346,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         );
         if (
           options.recordInput === true &&
-          artifactValuePolicy === 'raw' &&
+          artifactSecurity.mode === 'raw' &&
           !inHiddenWindow(wall)
         ) {
           pushCast(wall, 'i', new TextDecoder('utf-8').decode(data));
@@ -357,8 +376,12 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
             `semantic event revision ${revision} carried snapshot revision ${snapshot.revision}`,
           );
         }
+        registerSemanticSecrets(snapshot);
         const t = driverTime(timeMs);
-        const projected = projectSemanticSnapshotForArtifact(snapshot, artifactValuePolicy);
+        const projected = sanitizeJson(
+          projectSemanticSnapshotForArtifact(snapshot, artifactSecurity.mode),
+          sanitizer,
+        );
         const full: StoredSemanticRecord = {
           kind: 'keyframe',
           t,
@@ -402,10 +425,10 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
           t: wall,
           castOffset: round(presentationAt(wall)),
           exit: { code: report.exit.code, signal: report.exit.signal },
-          screenTail: [...report.screenTail],
+          screenTail: report.screenTail.map((line) => sanitizer.sanitizeComplete(line)),
           lastSemanticRevision,
-          recentInputs: [...report.recentInputs],
-          diagnosticsTail: [...report.diagnosticsTail],
+          recentInputs: sanitizeJson(report.recentInputs, sanitizer),
+          diagnosticsTail: sanitizeJson(report.diagnosticsTail, sanitizer),
         };
         pushEvent({
           t: wall,
@@ -432,7 +455,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
           ...(event.observation === undefined ? {} : { observation: event.observation }),
           ...(event.receipt === undefined
             ? {}
-            : { receipt: projectActionReceiptForArtifact(event.receipt, artifactValuePolicy) }),
+            : { receipt: projectActionReceiptForArtifact(event.receipt, artifactSecurity.mode) }),
           ...(event.actionability === undefined ? {} : { actionability: event.actionability }),
           ...(stepId === undefined ? {} : { stepId }),
         });
@@ -450,8 +473,8 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
           ...(event.path === undefined ? {} : { path: event.path }),
           ...(record?.logger === undefined ? {} : { logger: record.logger }),
           ...(record?.level === undefined ? {} : { level: record.level }),
-          message: record?.message ?? event.line ?? '',
-          ...(record?.attrs === undefined ? {} : { attrs: record.attrs }),
+          message: sanitizer.sanitizeComplete(record?.message ?? event.line ?? ''),
+          ...(record?.attrs === undefined ? {} : { attrs: sanitizeJson(record.attrs, sanitizer) }),
           ...(record?.seq === undefined ? {} : { seq: record.seq }),
           ...(record?.revision === undefined ? {} : { revision: record.revision }),
           ...(record?.ts === undefined ? {} : { ts: record.ts }),
@@ -619,7 +642,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       }
       for (const stepId of [...openSteps].reverse()) closeStep(stepId, 'skipped');
       detach();
-      const tail = decoder.decode();
+      const tail = sanitizer.push(decoder.decode()) + sanitizer.finish();
       if (!truncated && tail !== '') pushOutput(endWall, tail);
       const recordedExit = exit ?? finalizeOptions.exit;
       const contract = session.contract?.() ?? null;
@@ -628,7 +651,7 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         v: TRACE_VERSION,
         sessionId: session.sessionId,
         ...(options.runIdentity === undefined ? {} : { runIdentity: options.runIdentity }),
-        command: options.command ?? [],
+        command: sanitizeJson(options.command ?? [], sanitizer),
         columns: options.columns ?? 100,
         rows: options.rows ?? 30,
         startedAt,
@@ -708,9 +731,11 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
       ...(options.idleTimeLimit !== undefined && options.idleTimeLimit > 0
         ? { idle_time_limit: options.idleTimeLimit }
         : {}),
-      ...(options.command === undefined ? {} : { command: options.command.join(' ') }),
-      ...(options.title === undefined ? {} : { title: options.title }),
-      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.command === undefined
+        ? {}
+        : { command: sanitizer.sanitizeComplete(options.command.join(' ')) }),
+      ...(options.title === undefined ? {} : { title: sanitizer.sanitizeComplete(options.title) }),
+      ...(options.env === undefined ? {} : { env: sanitizeJson(options.env, sanitizer) }),
     };
   }
 
@@ -732,4 +757,13 @@ export function traceStagingPrefix(target: string): string {
 
 function round(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function sanitizeJson<T>(value: T, sanitizer: TerminalSanitizer): T {
+  if (typeof value === 'string') return sanitizer.sanitizeComplete(value) as T;
+  if (Array.isArray(value)) return value.map((item) => sanitizeJson(item, sanitizer)) as T;
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, sanitizeJson(item, sanitizer)]),
+  ) as T;
 }

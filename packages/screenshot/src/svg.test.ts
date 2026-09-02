@@ -55,6 +55,21 @@ describe('renderSvg geometry', () => {
     expect(shot.svg).toContain('x="8 20"');
     expect(shot.width).toBe(24);
   });
+
+  it('removes masked glyphs before SVG persistence and covers their exact cells', () => {
+    const secret = 'CANARY';
+    const shot = renderSvg(textFrame(`${secret} ok`), {
+      ...TEXT_MODE,
+      cellWidth: 10,
+      lineHeight: 12,
+      padding: 0,
+      maskRects: [{ row: 0, column: 0, width: secret.length, height: 1 }],
+    });
+    expect(shot.svg).not.toContain(secret);
+    expect(shot.svg).toContain('>ok<');
+    const masks = [...shot.svg.matchAll(/<rect [^>]*fill="#d4d4d4"[^>]*\/>/gu)];
+    expect(masks).toHaveLength(secret.length);
+  });
 });
 
 describe('renderSvg colours', () => {

@@ -45,7 +45,7 @@ application intentionally publishes.
 
 ## Value recording policy
 
-`artifactValuePolicy` is `redacted` by default. Plain input strings are treated
+`artifactSecurity.mode` is `redacted` by default. Plain input strings are treated
 as sensitive. Use `sensitive(value)` to make intent explicit, or
 `publicValue(value)` when a value is safe to record. Only `raw` stores sensitive
 device-operation payloads; artifact readers reject a receipt whose declared

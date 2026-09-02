@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PublicValue
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:15
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:38
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:15
 
 > `readonly` **sensitivity**: `"public"`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:16
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:39
 
 ***
 
@@ -27,4 +27,4 @@ Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:16
 
 > `readonly` **value**: `string`
 
-Defined in: protocol/dist/action-model-BP9Znu6L.d.ts:17
+Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:40

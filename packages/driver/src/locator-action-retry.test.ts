@@ -7,6 +7,7 @@ import type {
   SemanticNode,
   SemanticSnapshot,
 } from '@termwright/protocol';
+import { resolveArtifactSecurityPolicy } from '@termwright/protocol';
 import { LocatorImpl, type LocatorContext } from './locator.js';
 import { SemanticIndex } from './matching.js';
 import { roleQuery, textMatcher } from './selectors.js';
@@ -110,7 +111,7 @@ function fixture(initial: 'disabled' | 'covered' | 'ready') {
     });
   const ctx: LocatorContext = {
     sessionId: 'retry',
-    artifactValuePolicy: 'redacted',
+    artifactSecurity: resolveArtifactSecurityPolicy(undefined),
     timeouts: { action: 1_000, text: 1_000, idle: 1_000, ready: 1_000, exit: 1_000 },
     actionObservationState: () => 'settled',
     negotiationPending: () => false,

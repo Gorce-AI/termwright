@@ -26,7 +26,7 @@ async function record(): Promise<{
   const harness = new FakeHarness('rec');
   const recorder = await startRecorder({
     command: ['node', 'agent.js'],
-    artifactValuePolicy: 'raw',
+    artifactSecurity: { mode: 'raw' },
     launch: async () => harness.asHarness(),
   });
   return { harness, recorder };
