@@ -1614,12 +1614,18 @@ jobs:
           mkdir -p "$pack_dir" "$install_dir" "$crate_dir/protocol" "$crate_dir/probe"
           pnpm pack:clean-room -- "$pack_dir"
           npm install --prefix "$install_dir" --ignore-scripts "$pack_dir"/*.tgz vitest@latest
-          cargo package --locked --no-verify --manifest-path clients/rust/Cargo.toml \
-            --target-dir "$crate_dir/package-protocol"
-          cargo package --locked --no-verify --manifest-path clients/rust-probe/Cargo.toml \
-            --target-dir "$crate_dir/package-probe"
-          protocol_crate=$(find "$crate_dir/package-protocol/package" -name '*.crate' -print -quit)
-          probe_crate=$(find "$crate_dir/package-probe/package" -name '*.crate' -print -quit)
+          # Package the unpublished lockstep crates together. Cargo then creates
+          # registry-normalized archives under the documented assumption that
+          # every selected workspace package will be published to that registry.
+          # Packaging dependants one at a time cannot work on a version PR: the
+          # new protocol version does not exist on crates.io until release time.
+          cargo package --locked --no-verify \
+            --manifest-path clients/Cargo.toml \
+            --package termwright-protocol \
+            --package termwright-probe-ratatui \
+            --target-dir "$crate_dir/package"
+          protocol_crate=$(find "$crate_dir/package/package" -name 'termwright-protocol-*.crate' -print -quit)
+          probe_crate=$(find "$crate_dir/package/package" -name 'termwright-probe-ratatui-*.crate' -print -quit)
           test -n "$protocol_crate" && test -n "$probe_crate"
           tar -xzf "$protocol_crate" -C "$crate_dir/protocol" --strip-components=1
           tar -xzf "$probe_crate" -C "$crate_dir/probe" --strip-components=1

@@ -1,5 +1,5 @@
 # Rust
-rust/target/
+target/
 # Python
 python/*.egg-info/
 python/build/

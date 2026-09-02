@@ -886,12 +886,10 @@ describe('autonomous workflow security', () => {
   it('runs Ratatui from crate packages and npm tarballs', async () => {
     const workflow = await readWorkflow('ci.yml');
     const examples = jobBlock(workflow, 'examples');
-    expect(examples).toContain(
-      'cargo package --locked --no-verify --manifest-path clients/rust/Cargo.toml',
-    );
-    expect(examples).toContain(
-      'cargo package --locked --no-verify --manifest-path clients/rust-probe/Cargo.toml',
-    );
+    expect(examples).toContain('cargo package --locked --no-verify');
+    expect(examples).toContain('--manifest-path clients/Cargo.toml');
+    expect(examples).toContain('--package termwright-protocol');
+    expect(examples).toContain('--package termwright-probe-ratatui');
     expect(examples).toContain('tar -xzf "$protocol_crate"');
     expect(examples).toContain('node scripts/check-installed-ratatui.mjs');
   });

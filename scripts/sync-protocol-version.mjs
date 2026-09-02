@@ -6,9 +6,10 @@
  *
  *   @termwright/protocol     packages/protocol/package.json   (source of truth)
  *   termwright (PyPI)        clients/python/pyproject.toml
- *   termwright-protocol      clients/rust/Cargo.toml (+ Cargo.lock)
- *   termwright-probe-ratatui clients/rust-probe/Cargo.toml (+ Cargo.lock)
- *   termwright-ratatui       clients/rust-ratatui/Cargo.toml (+ Cargo.lock)
+ *   termwright-protocol      clients/rust/Cargo.toml
+ *   termwright-probe-ratatui clients/rust-probe/Cargo.toml
+ *   termwright-ratatui       clients/rust-ratatui/Cargo.toml
+ *                            (+ shared clients/Cargo.lock)
  *   clients/go               no manifest — the git tag IS the version
  *
  * The npm package is the source of truth because changesets already owns it:
@@ -191,7 +192,7 @@ const targets = [
   {
     // Cargo.lock records the workspace member's own version; leaving it
     // behind makes `cargo publish` fail on a dirty lockfile.
-    file: 'clients/rust/Cargo.lock',
+    file: 'clients/Cargo.lock',
     pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
     render: (version) => version,
     whole: true,
@@ -202,13 +203,13 @@ const targets = [
     render: (version) => `version = "${version}"`,
   },
   {
-    file: 'clients/rust-probe/Cargo.lock',
+    file: 'clients/Cargo.lock',
     pattern: /(?<=name = "termwright-probe-ratatui"\nversion = ")([^"]+)(?=")/,
     render: (version) => version,
     whole: true,
   },
   {
-    file: 'clients/rust-probe/Cargo.lock',
+    file: 'clients/Cargo.lock',
     pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
     render: (version) => version,
     whole: true,
@@ -219,19 +220,19 @@ const targets = [
     render: (version) => `version = "${version}"`,
   },
   {
-    file: 'clients/rust-ratatui/Cargo.lock',
+    file: 'clients/Cargo.lock',
     pattern: /(?<=name = "termwright-ratatui"\nversion = ")([^"]+)(?=")/,
     render: (version) => version,
     whole: true,
   },
   {
-    file: 'clients/rust-ratatui/Cargo.lock',
+    file: 'clients/Cargo.lock',
     pattern: /(?<=name = "termwright-probe-ratatui"\nversion = ")([^"]+)(?=")/,
     render: (version) => version,
     whole: true,
   },
   {
-    file: 'clients/rust-ratatui/Cargo.lock',
+    file: 'clients/Cargo.lock',
     pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
     render: (version) => version,
     whole: true,

@@ -7,3 +7,7 @@ publish = false
 [dependencies]
 ratatui = "=0.30.2"
 termwright-ratatui = { path = "../../../../rust-ratatui" }
+
+# This is an intentionally independent application fixture, not a publishable
+# member of the clients workspace that contains it.
+[workspace]
