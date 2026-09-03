@@ -1441,8 +1441,7 @@ class RunTelemetrySampler {
         worker.length === 0
           ? 'unavailable'
           : worker.reduce((total, value) => total + value.cpuSystemMicros, 0),
-      ownedProcessPeakRssBytes: 'unavailable',
-      ownedProcessCountPeak: 'unavailable',
+      ownedProcesses: aggregateOwnedProcessResources(attempts),
       ptySlotsPeak,
       terminalOutputBytes: trace.complete ? trace.terminalOutputBytes : 'unavailable',
       semanticBytes: trace.complete ? trace.semanticBytes : 'unavailable',
@@ -1497,6 +1496,55 @@ function aggregateTraceResources(attempts: ReadonlyMap<AttemptId, ObservedAttemp
     traceBytes: sum('traceBytes'),
     tempDiskPeakBytes: sum('tempDiskPeakBytes'),
     finalArtifactBytes: sum('finalArtifactBytes'),
+  });
+}
+
+function aggregateOwnedProcessResources(
+  attempts: ReadonlyMap<AttemptId, ObservedAttempt>,
+): RunResourceTelemetry['ownedProcesses'] {
+  const records = [...attempts.values()].flatMap((attempt) => [...attempt.sessions.values()]);
+  if (
+    records.length === 0 ||
+    records.some((record) => record === undefined || record === 'unavailable')
+  ) {
+    return 'unavailable';
+  }
+  const available = records as readonly OwnedProcessResourceEvidence[];
+  const sum = (name: keyof OwnedProcessResourceEvidence): number => {
+    const total = available.reduce(
+      (value, record) => value + (typeof record[name] === 'number' ? record[name] : 0),
+      0,
+    );
+    if (!Number.isSafeInteger(total)) throw new Error(`aggregate Job Object ${name} overflowed`);
+    return total;
+  };
+  return Object.freeze({
+    source: 'windows-job-object',
+    sessions: available.length,
+    cpu: Object.freeze({
+      kind: 'sum-of-session-job-time-100ns',
+      user: sum('userTime100ns'),
+      kernel: sum('kernelTime100ns'),
+    }),
+    memory: Object.freeze({
+      kind: 'max-session-peak-job-memory',
+      bytes: Math.max(...available.map((record) => record.peakJobMemoryBytes)),
+    }),
+    processes: Object.freeze({
+      kind: 'sum-of-session-job-totals',
+      totalCreated: sum('totalProcesses'),
+      totalTerminated: sum('totalTerminatedProcesses'),
+      activeAtCapture: sum('activeProcesses'),
+    }),
+    io: Object.freeze({
+      kind: 'sum-of-session-job-io',
+      readOperations: sum('readOperationCount'),
+      writeOperations: sum('writeOperationCount'),
+      otherOperations: sum('otherOperationCount'),
+      readBytes: sum('readTransferBytes'),
+      writeBytes: sum('writeTransferBytes'),
+      otherBytes: sum('otherTransferBytes'),
+    }),
   });
 }
 
@@ -1754,7 +1802,7 @@ interface ObservedAttempt {
   readonly retry: number;
   readonly startedAfterRunMs: number;
   readonly startedAt: number;
-  readonly sessions: Set<SessionId>;
+  readonly sessions: Map<SessionId, OwnedProcessResourceEvidence | 'unavailable' | undefined>;
   readonly traceResources: Map<SessionId, TraceResourceEvidence>;
   finished?: {
     readonly state: NativeRunAttempt['status'];
@@ -1781,6 +1829,22 @@ interface TraceResourceEvidence {
   readonly finalArtifactBytes: number;
 }
 
+interface OwnedProcessResourceEvidence {
+  readonly source: 'windows-job-object';
+  readonly userTime100ns: number;
+  readonly kernelTime100ns: number;
+  readonly peakJobMemoryBytes: number;
+  readonly readOperationCount: number;
+  readonly writeOperationCount: number;
+  readonly otherOperationCount: number;
+  readonly readTransferBytes: number;
+  readonly writeTransferBytes: number;
+  readonly otherTransferBytes: number;
+  readonly totalProcesses: number;
+  readonly activeProcesses: number;
+  readonly totalTerminatedProcesses: number;
+}
+
 function observeAttemptEvent(
   event: RunEvent,
   expectedTasks: ReadonlySet<RunnerTaskId>,
@@ -1791,6 +1855,7 @@ function observeAttemptEvent(
     event.type !== 'attempt.started' &&
     event.type !== 'attempt.finished' &&
     event.type !== 'session.started' &&
+    event.type !== 'session.finished' &&
     event.type !== 'trace.resource'
   )
     return;
@@ -1821,7 +1886,7 @@ function observeAttemptEvent(
       retry: payload.retry,
       startedAfterRunMs: observedAfterRunMs,
       startedAt: event.monotonicTime,
-      sessions: new Set(),
+      sessions: new Map(),
       traceResources: new Map(),
     });
     return;
@@ -1843,7 +1908,19 @@ function observeAttemptEvent(
     if (sessionId === undefined || current.sessions.has(sessionId)) {
       throw new Error('session.started lacks a unique session identity');
     }
-    current.sessions.add(sessionId);
+    current.sessions.set(sessionId, undefined);
+    return;
+  }
+  if (event.type === 'session.finished') {
+    const sessionId = event.identity.sessionId;
+    if (
+      sessionId === undefined ||
+      !current.sessions.has(sessionId) ||
+      current.sessions.get(sessionId) !== undefined
+    ) {
+      throw new Error('session.finished lacks one unfinished matching session');
+    }
+    current.sessions.set(sessionId, ownedProcessResourcePayload(event.payload));
     return;
   }
   if (event.type === 'trace.resource') {
@@ -1872,6 +1949,45 @@ function observeAttemptEvent(
     observedAfterRunMs,
     worker: payload.worker,
   };
+}
+
+function ownedProcessResourcePayload(
+  payload: unknown,
+): OwnedProcessResourceEvidence | 'unavailable' {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new Error('session.finished payload is not an object');
+  }
+  const value = (payload as Record<string, unknown>)['ownedProcessResources'];
+  if (value === 'unavailable') return value;
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    (value as Record<string, unknown>)['source'] !== 'windows-job-object'
+  ) {
+    throw new Error('session.finished lacks capability-qualified owned process resources');
+  }
+  const resource = value as Record<string, unknown>;
+  const names = [
+    'userTime100ns',
+    'kernelTime100ns',
+    'peakJobMemoryBytes',
+    'readOperationCount',
+    'writeOperationCount',
+    'otherOperationCount',
+    'readTransferBytes',
+    'writeTransferBytes',
+    'otherTransferBytes',
+    'totalProcesses',
+    'activeProcesses',
+    'totalTerminatedProcesses',
+  ] as const;
+  if (
+    Object.keys(resource).length !== names.length + 1 ||
+    names.some((name) => !nonNegativeInteger(resource[name]))
+  ) {
+    throw new Error('session.finished has invalid Windows Job Object accounting');
+  }
+  return Object.freeze({ ...resource }) as unknown as OwnedProcessResourceEvidence;
 }
 
 function traceResourcePayload(payload: unknown): TraceResourceEvidence {

@@ -130,7 +130,7 @@ test.resources({terminals: 1, traceWriters: 1})('drives packed Textual', async (
     .filter((event) => event.type === 'trace.resource')
     .map((event) => event.payload);
   if (
-    manifest.v !== 7 ||
+    manifest.v !== 8 ||
     manifest.status !== 'passed' ||
     resources.length !== 1 ||
     resources[0].semanticFullCount !== 1 ||

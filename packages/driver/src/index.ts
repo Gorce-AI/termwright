@@ -50,6 +50,7 @@ export type {
   Mouse,
   MousePoint,
   OperationBudget,
+  OwnedProcessResourceUsage,
   RecordingOptions,
   ResizeReceipt,
   ResolvedTarget,

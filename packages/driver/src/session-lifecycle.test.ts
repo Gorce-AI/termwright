@@ -3,7 +3,7 @@ import { connect } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_LIMITS, encodeFrame, ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
-import type { ExitStatus } from './api.js';
+import type { ExitStatus, OwnedProcessResourceUsage } from './api.js';
 import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
 import { installTerminalLaunchResourceProvider } from './launch-resources.js';
 import { SemanticChannel } from './semantic.js';
@@ -30,6 +30,7 @@ class ControlledPty implements PtyProcess {
   readonly #onAttach: (() => void) | undefined;
   readonly #onDispose: (() => void) | undefined;
   readonly #initialData: Uint8Array | undefined;
+  readonly #ownedProcessResources: OwnedProcessResourceUsage | null;
   readonly #exitListeners = new Set<(status: ExitStatus) => void>();
   readonly #writeErrorListeners = new Set<(error: Error) => void>();
 
@@ -47,6 +48,7 @@ class ControlledPty implements PtyProcess {
       readonly onAttach?: () => void;
       readonly onDispose?: () => void;
       readonly initialData?: Uint8Array;
+      readonly ownedProcessResources?: OwnedProcessResourceUsage | null;
     } = {},
   ) {
     this.#failExitRegistration = options.failExitRegistration ?? false;
@@ -61,6 +63,7 @@ class ControlledPty implements PtyProcess {
     this.#onAttach = options.onAttach;
     this.#onDispose = options.onDispose;
     this.#initialData = options.initialData;
+    this.#ownedProcessResources = options.ownedProcessResources ?? null;
   }
 
   write(data: Uint8Array): void {
@@ -78,6 +81,9 @@ class ControlledPty implements PtyProcess {
   treeState(): 'gone' | 'unsupported' {
     if (this.#treeState === 'throw') throw new Error('tree confirmation failed');
     return this.#treeState;
+  }
+  ownedProcessResources(): OwnedProcessResourceUsage | null {
+    return this.#ownedProcessResources;
   }
   signal(sig: PtySignal): void {
     this.signalCalls.push(sig);
@@ -163,6 +169,33 @@ const terminalIt = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 afterEach(() => vi.restoreAllMocks());
 
 describe('terminal session resource lifecycle', () => {
+  terminalIt('captures owned-tree accounting immediately before PTY disposal', async () => {
+    const resources = {
+      source: 'windows-job-object',
+      userTime100ns: 10,
+      kernelTime100ns: 20,
+      peakJobMemoryBytes: 30,
+      readOperationCount: 1,
+      writeOperationCount: 2,
+      otherOperationCount: 3,
+      readTransferBytes: 40,
+      writeTransferBytes: 50,
+      otherTransferBytes: 60,
+      totalProcesses: 4,
+      activeProcesses: 0,
+      totalTerminatedProcesses: 4,
+    } as const;
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const terminal = await launchTerminalWithBackend({
+      command: ['controlled-app'],
+      backend: backendFor(new ControlledPty({ ownedProcessResources: resources }), endpoint),
+    });
+
+    expect(terminal.ownedProcessResources()).toBeNull();
+    await terminal.close();
+    expect(terminal.ownedProcessResources()).toEqual(resources);
+  });
+
   terminalIt('disconnects delayed terminal replies before closing PTY input', async () => {
     const teardown: string[] = [];
     let responseListener: Parameters<VtScreen['onResponse']>[0] | undefined;

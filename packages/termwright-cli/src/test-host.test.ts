@@ -7,6 +7,7 @@ import {
   DEFAULT_RUN_EVENT_LIMITS,
   RunEventProducer,
   RunIdFactory,
+  type RunEventJson,
   type RunnerTaskId,
 } from '@termwright/protocol';
 import { connectRunJournalWorker } from '@termwright/run-journal-transport';
@@ -84,6 +85,7 @@ class FakeEngine implements TermwrightVitestEngine {
         readonly finalArtifactBytes: number;
       }
     | undefined;
+  ownedProcessResources: RunEventJson = 'unavailable';
 
   setRunnerContext(context: TermwrightRunnerContext): void {
     this.contexts.push(context);
@@ -180,7 +182,10 @@ class FakeEngine implements TermwrightVitestEngine {
               eventClass: 'authoritative',
               type: 'session.finished',
               identity: { ...eventIdentity, sessionId },
-              payload: { cleanup: 'verified' },
+              payload: {
+                cleanup: 'verified',
+                ownedProcessResources: this.ownedProcessResources,
+              },
             }),
             performance.timeOrigin + performance.now() + context.journal.acknowledgementTimeoutMs,
           );
@@ -946,6 +951,21 @@ describe('TermwrightTestHost', () => {
       tempDiskPeakBytes: 8_256,
       finalArtifactBytes: 0,
     };
+    engine.ownedProcessResources = {
+      source: 'windows-job-object',
+      userTime100ns: 100,
+      kernelTime100ns: 20,
+      peakJobMemoryBytes: 12_345,
+      readOperationCount: 1,
+      writeOperationCount: 2,
+      otherOperationCount: 3,
+      readTransferBytes: 10,
+      writeTransferBytes: 20,
+      otherTransferBytes: 30,
+      totalProcesses: 2,
+      activeProcesses: 0,
+      totalTerminatedProcesses: 2,
+    };
     const options = hostOptions({ durable: true });
     const host = hostFromEngine(engine, options);
     const completion = await host.requestRun().completed;
@@ -965,8 +985,27 @@ describe('TermwrightTestHost', () => {
       workerPeakRssBytes: 64 * 1024 * 1024,
       workerCpuUserMicros: 100,
       workerCpuSystemMicros: 20,
-      ownedProcessPeakRssBytes: 'unavailable',
-      ownedProcessCountPeak: 'unavailable',
+      ownedProcesses: {
+        source: 'windows-job-object',
+        sessions: 1,
+        cpu: { kind: 'sum-of-session-job-time-100ns', user: 100, kernel: 20 },
+        memory: { kind: 'max-session-peak-job-memory', bytes: 12_345 },
+        processes: {
+          kind: 'sum-of-session-job-totals',
+          totalCreated: 2,
+          totalTerminated: 2,
+          activeAtCapture: 0,
+        },
+        io: {
+          kind: 'sum-of-session-job-io',
+          readOperations: 1,
+          writeOperations: 2,
+          otherOperations: 3,
+          readBytes: 10,
+          writeBytes: 20,
+          otherBytes: 30,
+        },
+      },
       ptySlotsPeak: 0,
       terminalOutputBytes: 4_096,
       semanticBytes: 512,
@@ -981,6 +1020,17 @@ describe('TermwrightTestHost', () => {
         JSON.stringify({
           ...record.manifest,
           telemetry: { ...record.manifest.telemetry, traceBytes: 8_193 },
+        }),
+      ).state,
+    ).toBe('corrupt');
+    expect(
+      parseManifest(
+        JSON.stringify({
+          ...record.manifest,
+          telemetry: {
+            ...record.manifest.telemetry,
+            ownedProcesses: 'unavailable',
+          },
         }),
       ).state,
     ).toBe('corrupt');

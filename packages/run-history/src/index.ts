@@ -15,7 +15,7 @@ import {
   type SpecId,
 } from '@termwright/protocol/run-events';
 
-export const RUN_MANIFEST_VERSION = 7 as const;
+export const RUN_MANIFEST_VERSION = 8 as const;
 export const RUN_HISTORY_COMMIT_VERSION = 2 as const;
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 export const MAX_RUN_EVENT_STREAM_BYTES = 512 * 1024 * 1024;
@@ -99,6 +99,34 @@ export interface NativeRunSpec {
   readonly fullName: string;
 }
 export type UnavailableRunMetric = 'unavailable';
+export interface WindowsJobRunTelemetry {
+  readonly source: 'windows-job-object';
+  readonly sessions: number;
+  readonly cpu: {
+    readonly kind: 'sum-of-session-job-time-100ns';
+    readonly user: number;
+    readonly kernel: number;
+  };
+  readonly memory: {
+    readonly kind: 'max-session-peak-job-memory';
+    readonly bytes: number;
+  };
+  readonly processes: {
+    readonly kind: 'sum-of-session-job-totals';
+    readonly totalCreated: number;
+    readonly totalTerminated: number;
+    readonly activeAtCapture: number;
+  };
+  readonly io: {
+    readonly kind: 'sum-of-session-job-io';
+    readonly readOperations: number;
+    readonly writeOperations: number;
+    readonly otherOperations: number;
+    readonly readBytes: number;
+    readonly writeBytes: number;
+    readonly otherBytes: number;
+  };
+}
 export interface RunResourceTelemetry {
   readonly coordinatorCpuUserMicros: number;
   readonly coordinatorCpuSystemMicros: number;
@@ -109,8 +137,7 @@ export interface RunResourceTelemetry {
   readonly workerPeakRssBytes: number | UnavailableRunMetric;
   readonly workerCpuUserMicros: number | UnavailableRunMetric;
   readonly workerCpuSystemMicros: number | UnavailableRunMetric;
-  readonly ownedProcessPeakRssBytes: number | UnavailableRunMetric;
-  readonly ownedProcessCountPeak: number | UnavailableRunMetric;
+  readonly ownedProcesses: WindowsJobRunTelemetry | UnavailableRunMetric;
   readonly ptySlotsPeak: number;
   readonly terminalOutputBytes: number | UnavailableRunMetric;
   readonly semanticBytes: number | UnavailableRunMetric;
@@ -678,7 +705,12 @@ function validateManifestEvidence(value: RunManifest): void {
   const finishedAttempts = new Set<string>();
   const sessions = new Map<
     string,
-    { readonly attemptId: string; readonly start: number; finish?: number }
+    {
+      readonly attemptId: string;
+      readonly start: number;
+      finish?: number;
+      ownedProcessResources?: OwnedProcessResourceEvidence | UnavailableRunMetric;
+    }
   >();
   const traceResources = new Map<string, TraceResourceEvidence>();
   const steps = new Map<
@@ -813,6 +845,7 @@ function validateManifestEvidence(value: RunManifest): void {
         throw new TypeError('session.finished lacks one matching session.started');
       }
       session.finish = index;
+      session.ownedProcessResources = sessionResourceEvidence(event.payload);
     }
     if (event.type === 'trace.resource') {
       const sessionId = event.identity.sessionId;
@@ -920,6 +953,12 @@ function validateManifestEvidence(value: RunManifest): void {
   ) {
     throw new TypeError('run trace telemetry differs from canonical session evidence');
   }
+  const expectedOwnedProcesses = aggregateOwnedProcessEvidence(
+    [...sessions.values()].map((session) => session.ownedProcessResources ?? 'unavailable'),
+  );
+  if (JSON.stringify(value.telemetry.ownedProcesses) !== JSON.stringify(expectedOwnedProcesses)) {
+    throw new TypeError('run owned-process telemetry differs from canonical session evidence');
+  }
   for (const [sessionId, session] of sessions) {
     if (session.finish === undefined)
       throw new TypeError(`session ${sessionId} has no session.finished`);
@@ -971,6 +1010,100 @@ interface TraceResourceEvidence {
   readonly traceBytes: number;
   readonly tempDiskPeakBytes: number;
   readonly finalArtifactBytes: number;
+}
+
+interface OwnedProcessResourceEvidence {
+  readonly source: 'windows-job-object';
+  readonly userTime100ns: number;
+  readonly kernelTime100ns: number;
+  readonly peakJobMemoryBytes: number;
+  readonly readOperationCount: number;
+  readonly writeOperationCount: number;
+  readonly otherOperationCount: number;
+  readonly readTransferBytes: number;
+  readonly writeTransferBytes: number;
+  readonly otherTransferBytes: number;
+  readonly totalProcesses: number;
+  readonly activeProcesses: number;
+  readonly totalTerminatedProcesses: number;
+}
+
+function sessionResourceEvidence(
+  payload: unknown,
+): OwnedProcessResourceEvidence | UnavailableRunMetric {
+  const record = object(payload) ? payload : {};
+  const value = record['ownedProcessResources'];
+  if (value === 'unavailable') return value;
+  if (!object(value) || value['source'] !== 'windows-job-object') {
+    throw new TypeError('session.finished lacks capability-qualified owned process resources');
+  }
+  const names = [
+    'userTime100ns',
+    'kernelTime100ns',
+    'peakJobMemoryBytes',
+    'readOperationCount',
+    'writeOperationCount',
+    'otherOperationCount',
+    'readTransferBytes',
+    'writeTransferBytes',
+    'otherTransferBytes',
+    'totalProcesses',
+    'activeProcesses',
+    'totalTerminatedProcesses',
+  ] as const;
+  if (
+    Object.keys(value).length !== names.length + 1 ||
+    names.some((name) => !nonNegativeInteger(value[name]))
+  ) {
+    throw new TypeError('session.finished has invalid Windows Job Object accounting');
+  }
+  return Object.freeze({ ...value }) as unknown as OwnedProcessResourceEvidence;
+}
+
+function aggregateOwnedProcessEvidence(
+  records: readonly (OwnedProcessResourceEvidence | UnavailableRunMetric)[],
+): WindowsJobRunTelemetry | UnavailableRunMetric {
+  if (records.length === 0 || records.some((record) => record === 'unavailable')) {
+    return 'unavailable';
+  }
+  const available = records as readonly OwnedProcessResourceEvidence[];
+  const sum = (name: keyof OwnedProcessResourceEvidence): number => {
+    const total = available.reduce(
+      (value, record) => value + (typeof record[name] === 'number' ? record[name] : 0),
+      0,
+    );
+    if (!Number.isSafeInteger(total))
+      throw new TypeError(`aggregate Job Object ${name} overflowed`);
+    return total;
+  };
+  return Object.freeze({
+    source: 'windows-job-object',
+    sessions: available.length,
+    cpu: Object.freeze({
+      kind: 'sum-of-session-job-time-100ns',
+      user: sum('userTime100ns'),
+      kernel: sum('kernelTime100ns'),
+    }),
+    memory: Object.freeze({
+      kind: 'max-session-peak-job-memory',
+      bytes: Math.max(...available.map((record) => record.peakJobMemoryBytes)),
+    }),
+    processes: Object.freeze({
+      kind: 'sum-of-session-job-totals',
+      totalCreated: sum('totalProcesses'),
+      totalTerminated: sum('totalTerminatedProcesses'),
+      activeAtCapture: sum('activeProcesses'),
+    }),
+    io: Object.freeze({
+      kind: 'sum-of-session-job-io',
+      readOperations: sum('readOperationCount'),
+      writeOperations: sum('writeOperationCount'),
+      otherOperations: sum('otherOperationCount'),
+      readBytes: sum('readTransferBytes'),
+      writeBytes: sum('writeTransferBytes'),
+      otherBytes: sum('otherTransferBytes'),
+    }),
+  });
 }
 
 function traceResourceEvidence(payload: unknown): TraceResourceEvidence {
@@ -1046,8 +1179,6 @@ function validateRunTelemetry(value: RunResourceTelemetry): void {
     'workerPeakRssBytes',
     'workerCpuUserMicros',
     'workerCpuSystemMicros',
-    'ownedProcessPeakRssBytes',
-    'ownedProcessCountPeak',
     'ptySlotsPeak',
     'terminalOutputBytes',
     'semanticBytes',
@@ -1066,6 +1197,41 @@ function validateRunTelemetry(value: RunResourceTelemetry): void {
     if (metric !== 'unavailable' && (!Number.isFinite(metric) || metric < 0)) {
       throw new TypeError(`invalid run telemetry metric ${name}`);
     }
+  }
+  if (value.ownedProcesses !== 'unavailable') validateOwnedProcessTelemetry(value.ownedProcesses);
+}
+
+function validateOwnedProcessTelemetry(value: WindowsJobRunTelemetry): void {
+  if (
+    !object(value) ||
+    value.source !== 'windows-job-object' ||
+    !positiveInteger(value.sessions) ||
+    !object(value.cpu) ||
+    value.cpu.kind !== 'sum-of-session-job-time-100ns' ||
+    !object(value.memory) ||
+    value.memory.kind !== 'max-session-peak-job-memory' ||
+    !object(value.processes) ||
+    value.processes.kind !== 'sum-of-session-job-totals' ||
+    !object(value.io) ||
+    value.io.kind !== 'sum-of-session-job-io'
+  ) {
+    throw new TypeError('invalid capability-qualified owned process telemetry');
+  }
+  for (const metric of [
+    value.cpu.user,
+    value.cpu.kernel,
+    value.memory.bytes,
+    value.processes.totalCreated,
+    value.processes.totalTerminated,
+    value.processes.activeAtCapture,
+    value.io.readOperations,
+    value.io.writeOperations,
+    value.io.otherOperations,
+    value.io.readBytes,
+    value.io.writeBytes,
+    value.io.otherBytes,
+  ]) {
+    if (!nonNegativeInteger(metric)) throw new TypeError('invalid owned process counter');
   }
 }
 

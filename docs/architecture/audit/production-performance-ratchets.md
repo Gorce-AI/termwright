@@ -35,7 +35,7 @@ trace size. The RSS range and finalization delta are bounded-memory evidence,
 not a cross-machine baseline.
 
 The journal/worker rows come from a local 11-test real-PTY Native Host run on
-macOS arm64/Node 24.1.0. Manifest v7 reconstructed the worker maximum and
+macOS arm64/Node 24.1.0. Manifest v8 reconstructed the worker maximum and
 aggregate CPU from independently persisted `attempt.finished` evidence. The
 same run reconstructed 3,320 terminal bytes, 26,279 semantic bytes (six full
 records and three deltas), and 116,472 retained trace bytes from ten

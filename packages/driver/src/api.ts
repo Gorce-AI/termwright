@@ -150,6 +150,24 @@ export declare function launchTerminal(options: LaunchOptions): Promise<Terminal
 // ---------------------------------------------------------------------------
 // Harness — the ONE interface shared by launchTerminal, mountInk and fixtures.
 
+/** Whole-tree accounting with the native source and units kept explicit. */
+export interface OwnedProcessResourceUsage {
+  readonly source: 'windows-job-object';
+  readonly userTime100ns: number;
+  readonly kernelTime100ns: number;
+  /** Peak committed memory charged to one Job Object; this is not RSS. */
+  readonly peakJobMemoryBytes: number;
+  readonly readOperationCount: number;
+  readonly writeOperationCount: number;
+  readonly otherOperationCount: number;
+  readonly readTransferBytes: number;
+  readonly writeTransferBytes: number;
+  readonly otherTransferBytes: number;
+  readonly totalProcesses: number;
+  readonly activeProcesses: number;
+  readonly totalTerminatedProcesses: number;
+}
+
 export interface TerminalHarness {
   readonly sessionId: string;
   /** Resolved policy inherited by traces, reports and other artifact sinks. */
@@ -259,6 +277,12 @@ export interface TerminalHarness {
    * `signal()`. Available as soon as the `exit` event fires.
    */
   crashReport(): CrashReport | null;
+
+  /**
+   * Native whole-tree accounting captured immediately before PTY disposal.
+   * Returns `null` when the backend cannot make an authoritative claim.
+   */
+  ownedProcessResources(): OwnedProcessResourceUsage | null;
 
   /** Idempotent; bounded physical cleanup. Never sends signals implicitly. */
   close(): Promise<void>;

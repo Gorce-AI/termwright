@@ -4,7 +4,7 @@ import {
   ptyUnavailableReason as nativeBindingUnavailableReason,
   spawnPty as spawnNativePty,
 } from '@termwright/pty';
-import type { ExitStatus } from './api.js';
+import type { ExitStatus, OwnedProcessResourceUsage } from './api.js';
 import { EarlyPtyOutput } from './internal/early-pty-output.js';
 import { ProcessLifecycleError } from './internal/process-supervisor.js';
 import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
@@ -22,6 +22,7 @@ export interface NativePtySessionHandle {
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
   treeState(): 'alive' | 'gone' | 'unsupported';
+  ownedProcessResources?(): OwnedProcessResourceUsage | null;
   onData(listener: (data: Uint8Array) => void): () => void;
   onExit(listener: (status: ExitStatus) => void): () => void;
   onError(listener: (error: Error) => void): () => void;
@@ -212,6 +213,9 @@ export function createNativePtyBackend(
           const state = session.treeState();
           if (state === 'unsupported' && fatalError !== undefined) throw fatalError;
           return state;
+        },
+        ownedProcessResources(): OwnedProcessResourceUsage | null {
+          return session.ownedProcessResources?.() ?? null;
         },
         dispose(): void {
           if (disposed) return;

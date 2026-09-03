@@ -586,6 +586,39 @@ long long Session::ActiveProcesses() const {
   return static_cast<long long>(accounting.ActiveProcesses);
 }
 
+bool Session::ResourceUsage(JobResourceUsage* usage) const {
+  if (usage == nullptr) return false;
+  std::lock_guard<std::mutex> lock(job_mutex_);
+  if (!job_.valid()) return false;
+
+  JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION accounting{};
+  JOBOBJECT_EXTENDED_LIMIT_INFORMATION memory{};
+  DWORD returned = 0;
+  if (!QueryInformationJobObject(job_.get(), JobObjectBasicAndIoAccountingInformation,
+                                 &accounting, sizeof(accounting), &returned)) {
+    return false;
+  }
+  if (!QueryInformationJobObject(job_.get(), JobObjectExtendedLimitInformation, &memory,
+                                 sizeof(memory), &returned)) {
+    return false;
+  }
+
+  usage->user_time_100ns = static_cast<uint64_t>(accounting.BasicInfo.TotalUserTime.QuadPart);
+  usage->kernel_time_100ns =
+      static_cast<uint64_t>(accounting.BasicInfo.TotalKernelTime.QuadPart);
+  usage->peak_job_memory_bytes = static_cast<uint64_t>(memory.PeakJobMemoryUsed);
+  usage->read_operation_count = accounting.IoInfo.ReadOperationCount;
+  usage->write_operation_count = accounting.IoInfo.WriteOperationCount;
+  usage->other_operation_count = accounting.IoInfo.OtherOperationCount;
+  usage->read_transfer_bytes = accounting.IoInfo.ReadTransferCount;
+  usage->write_transfer_bytes = accounting.IoInfo.WriteTransferCount;
+  usage->other_transfer_bytes = accounting.IoInfo.OtherTransferCount;
+  usage->total_processes = accounting.BasicInfo.TotalProcesses;
+  usage->active_processes = accounting.BasicInfo.ActiveProcesses;
+  usage->total_terminated_processes = accounting.BasicInfo.TotalTerminatedProcesses;
+  return true;
+}
+
 void Session::Dispose() {
   if (disposing_.exchange(true)) return;
 

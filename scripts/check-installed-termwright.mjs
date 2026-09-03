@@ -103,7 +103,7 @@ try {
     ),
   );
   if (
-    manifest.v !== 7 ||
+    manifest.v !== 8 ||
     manifest.status !== 'passed' ||
     manifest.specs?.length !== 3 ||
     manifest.eventStream?.file !== 'events.ndjson' ||

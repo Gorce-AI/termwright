@@ -17,7 +17,7 @@
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 177,
     "explicit-test-selection-reviewed-with-platform-registry": 73,
-    "managed-or-diagnostic-background-task": 74,
+    "managed-or-diagnostic-background-task": 73,
     "production-polling-review": 1,
     "production-process-isolation-review": 40,
     "test-observer-or-intentional-background-task": 15,
@@ -2633,12 +2633,6 @@
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void connection.catch(() => journalConnections.delete(key));"
-    },
-    {
-      "path": "packages/test/src/runner.ts",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void pending.catch(() => undefined);"
     },
     {
       "path": "packages/test/src/runner.ts",

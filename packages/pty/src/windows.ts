@@ -37,6 +37,7 @@ interface NativeSession {
   resize(columns: number, rows: number): boolean;
   terminateTree(): void;
   activeProcesses(): number;
+  resourceUsage(): WindowsJobResourceUsage | null;
   dispose(): void;
 }
 
@@ -302,6 +303,24 @@ export interface WindowsPtyExit {
   readonly signal: string | null;
 }
 
+/** Cumulative counters reported by the Job Object that owns one ConPTY tree. */
+export interface WindowsJobResourceUsage {
+  readonly source: 'windows-job-object';
+  readonly userTime100ns: number;
+  readonly kernelTime100ns: number;
+  /** Peak committed memory charged to this job; this is not RSS. */
+  readonly peakJobMemoryBytes: number;
+  readonly readOperationCount: number;
+  readonly writeOperationCount: number;
+  readonly otherOperationCount: number;
+  readonly readTransferBytes: number;
+  readonly writeTransferBytes: number;
+  readonly otherTransferBytes: number;
+  readonly totalProcesses: number;
+  readonly activeProcesses: number;
+  readonly totalTerminatedProcesses: number;
+}
+
 /**
  * A live ConPTY session.
  *
@@ -353,6 +372,7 @@ export interface WindowsPtyHandle {
   resize(columns: number, rows: number): boolean;
   terminateTree(): void;
   activeProcesses(): number;
+  resourceUsage(): WindowsJobResourceUsage | null;
   onData(listener: (data: Uint8Array) => void): () => void;
   onExit(listener: (status: WindowsPtyExit) => void): () => void;
   onError(listener: (error: Error) => void): () => void;
@@ -505,6 +525,9 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
     activeProcesses(): number {
       return disposed ? -1 : session.activeProcesses();
     },
+    resourceUsage(): WindowsJobResourceUsage | null {
+      return disposed ? null : validateJobResourceUsage(session.resourceUsage());
+    },
     onData(listener): () => void {
       dataListeners.add(listener);
       return () => dataListeners.delete(listener);
@@ -540,4 +563,31 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
       noticeListeners.clear();
     },
   };
+}
+
+function validateJobResourceUsage(
+  value: WindowsJobResourceUsage | null,
+): WindowsJobResourceUsage | null {
+  if (value === null) return null;
+  const counters = [
+    'userTime100ns',
+    'kernelTime100ns',
+    'peakJobMemoryBytes',
+    'readOperationCount',
+    'writeOperationCount',
+    'otherOperationCount',
+    'readTransferBytes',
+    'writeTransferBytes',
+    'otherTransferBytes',
+    'totalProcesses',
+    'activeProcesses',
+    'totalTerminatedProcesses',
+  ] as const;
+  if (
+    value.source !== 'windows-job-object' ||
+    counters.some((name) => !Number.isSafeInteger(value[name]) || value[name] < 0)
+  ) {
+    throw new Error('native ConPTY Job Object returned invalid resource accounting');
+  }
+  return Object.freeze({ ...value });
 }

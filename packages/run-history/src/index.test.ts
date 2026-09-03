@@ -27,8 +27,7 @@ const fixtureTelemetry = (): RunResourceTelemetry => ({
   workerPeakRssBytes: 64 * 1024 * 1024,
   workerCpuUserMicros: 100,
   workerCpuSystemMicros: 20,
-  ownedProcessPeakRssBytes: 'unavailable',
-  ownedProcessCountPeak: 'unavailable',
+  ownedProcesses: 'unavailable',
   ptySlotsPeak: 0,
   terminalOutputBytes: 0,
   semanticBytes: 0,
@@ -232,7 +231,7 @@ describe('native run history transaction', () => {
       ).state,
     ).toBe('corrupt');
     const missing = { ...valid.telemetry } as Record<string, unknown>;
-    delete missing['ownedProcessPeakRssBytes'];
+    delete missing['ownedProcesses'];
     expect(parseManifest(JSON.stringify({ ...valid, telemetry: missing })).state).toBe('corrupt');
     expect(
       parseManifest(

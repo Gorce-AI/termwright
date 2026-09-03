@@ -180,6 +180,30 @@ describe('the native PTY driver adapter', () => {
     expect(process.treeState?.()).toBe('gone');
   });
 
+  it('preserves capability-qualified Windows Job Object accounting', () => {
+    const resources = {
+      source: 'windows-job-object',
+      userTime100ns: 10,
+      kernelTime100ns: 20,
+      peakJobMemoryBytes: 30,
+      readOperationCount: 1,
+      writeOperationCount: 2,
+      otherOperationCount: 3,
+      readTransferBytes: 40,
+      writeTransferBytes: 50,
+      otherTransferBytes: 60,
+      totalProcesses: 4,
+      activeProcesses: 0,
+      totalTerminatedProcesses: 4,
+    } as const;
+    const process = createNativePtyBackend(
+      () => fakeSession({ ownedProcessResources: () => resources }),
+      'win32',
+    ).spawn({ command: ['C:\\app.exe'], env: {}, columns: 80, rows: 24 });
+
+    expect(process.ownedProcessResources?.()).toEqual(resources);
+  });
+
   it('terminates the Windows tree before closing its parent-owned ConPTY input', async () => {
     const events: string[] = [];
     const session = fakeSession({

@@ -27,6 +27,7 @@ import type {
   Keyboard,
   Mouse,
   OperationBudget,
+  OwnedProcessResourceUsage,
   ResizeReceipt,
   RoleLocatorOptions,
   ScreenSnapshot,
@@ -233,6 +234,10 @@ export abstract class ForwardingHarness implements TerminalHarness {
 
   crashReport(): CrashReport | null {
     return this.session.crashReport();
+  }
+
+  ownedProcessResources(): OwnedProcessResourceUsage | null {
+    return this.session.ownedProcessResources();
   }
 
   title(): string {
