@@ -82,6 +82,7 @@ test('asks before running a command', async ({ terminal }) => {
 - [SeedFiles](type-aliases/seedfiles/)
 - [StateSelection](type-aliases/stateselection/)
 - [StepRunner](type-aliases/steprunner/)
+- [TermwrightExpect](type-aliases/termwrightexpect/)
 - [TermwrightTestAPI](type-aliases/termwrighttestapi/)
 - [TraceMode](type-aliases/tracemode/)
 - [UpdateSnapshotsMode](type-aliases/updatesnapshotsmode/)
