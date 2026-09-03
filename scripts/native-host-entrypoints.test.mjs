@@ -833,7 +833,10 @@ describe('the native host is the only Termwright test entrypoint', () => {
       const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
       if (!directNative.test(source) && !indirectNative.has(file)) continue;
       expect(source, `${file} must use the resource-aware Vitest declaration API`).toMatch(
-        /from ['"](?:@termwright\/resource-broker\/vitest|@termwright\/test)['"]/u,
+        /from ['"](?:@termwright\/test-provider-internal|@termwright\/test)['"]/u,
+      );
+      expect(source, `${file} must not restore the removed broker/Vitest boundary`).not.toContain(
+        '@termwright/resource-broker/vitest',
       );
       expect(source, `${file} must declare its complete live terminal group`).toMatch(
         /\.resources\s*\(\s*\{[\s\S]*?terminals\s*:/u,
