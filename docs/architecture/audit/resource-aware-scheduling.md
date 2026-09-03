@@ -23,8 +23,10 @@ now includes `cpuWeight`, `memoryWeight`, and `ioWeight` alongside PTY, process,
 semantic endpoint, native-host, and trace capacity. Every collected test gets a
 normal per-attempt vector, including pure Vitest tests. `test.resources()` adds
 a closed `load: light | normal | heavy | exclusive` hint; users do not provide
-megabytes. Complete vectors are admitted atomically and resource pressure queues
-work without changing trace or semantic fidelity.
+megabytes. `hostPressure: 'exclusive'` reserves the complete CPU, memory, I/O,
+and native-host capacity rather than only excluding another native-host user.
+Complete vectors are admitted atomically and resource pressure queues work
+without changing trace or semantic fidelity.
 
 Broker snapshots explain queued work with the exact limiting resources and FIFO
 head-of-line reason. Run configuration and run-manifest provenance contain the
@@ -32,13 +34,21 @@ effective capacities, per-attempt cost, detected host budget, and planner
 decisions, so CI admission is inspectable rather than guessed.
 
 A deliberately small reference scheduler independently reconstructs strict
-FIFO admission from only capacities, queued vectors, and releases. Sixty-four
-seeded generated workloads compare every broker snapshot with that model. Each
-run asserts that no resource exceeds capacity, every individually admissible
-request completes, and two executions of the same seed produce the same grant
-waves. Holding every resource behind an initial barrier forces heavy and light
-requests through the queue and makes starvation or younger-request bypass
-observable rather than timing-dependent.
+FIFO admission for new attempts from only capacities, queued vectors, and
+releases. Sixty-four seeded generated workloads compare every broker snapshot
+with that model. Each run asserts that no resource exceeds capacity, every
+individually admissible request completes, and two executions of the same seed
+produce the same grant waves. Holding every resource behind an initial barrier
+forces heavy and light requests through the queue and makes starvation or
+younger-attempt bypass observable rather than timing-dependent.
+
+One bounded exception is required for liveness: an already-active attempt may
+acquire a fitting continuation resource ahead of a blocked new attempt. Without
+that rule, an active test holding CPU weight can deadlock while requesting its
+first terminal behind an exclusive waiter that needs the CPU weight to be
+released. The regression test holds a base lease, queues an exclusive waiter,
+then proves the active attempt can acquire and release its terminal before the
+exclusive waiter runs. It does not permit a new light attempt to bypass FIFO.
 
 A separate schedule-independence oracle runs the same isolated suite with
 serial, two-slot, and six-slot capacities, changes request order, and reverses

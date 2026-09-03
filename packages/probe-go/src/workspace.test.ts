@@ -43,7 +43,11 @@ const toolchain = await goAvailable();
 const roots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(
+    roots
+      .splice(0)
+      .map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 })),
+  );
 });
 
 async function scratch(): Promise<string> {

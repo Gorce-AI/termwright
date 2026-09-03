@@ -2135,7 +2135,14 @@ function resourceReservationFromMetadata(
       'collected termwright.resources.load must be light, normal, heavy or exclusive',
     );
   }
-  const weighted = resourceLoadVector(load ?? 'normal', capacities);
+  // `hostPressure` means host-wide exclusivity, not merely exclusivity against
+  // other native-host users. Reserve the complete weighted capacity as well so
+  // compiler/package-manager workloads cannot run beside ordinary attempts and
+  // starve their event loops while still claiming an exclusive admission.
+  const weighted = resourceLoadVector(
+    hostPressure === 'exclusive' ? 'exclusive' : (load ?? 'normal'),
+    capacities,
+  );
   const nativeHostPressure =
     nativeHost === 'exclusive' || hostPressure === 'exclusive'
       ? (capacities['nativeHostPressure'] ?? 0)

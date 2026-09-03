@@ -21,7 +21,7 @@ Defined in: [test/src/provider.ts:8](https://github.com/Gorce-AI/termwright/blob
 
 Defined in: [test/src/provider.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/provider.ts#L16)
 
-Exclusively reserves host-wide process/toolchain pressure without requiring a terminal.
+Exclusively reserves host-wide CPU, memory, I/O and process/toolchain pressure.
 
 ***
 

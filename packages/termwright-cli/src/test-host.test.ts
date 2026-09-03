@@ -435,9 +435,9 @@ describe('TermwrightTestHost', () => {
     await host.requestRun().completed;
     expect(engine.contexts.at(-1)?.tasks['host-pressure']?.resourceReservation).toEqual({
       nativeHostPressure: 4,
-      cpuWeight: 1,
-      memoryWeight: 1,
-      ioWeight: 1,
+      cpuWeight: 2,
+      memoryWeight: 2,
+      ioWeight: 2,
     });
     await host.close();
   });
@@ -527,9 +527,9 @@ describe('TermwrightTestHost', () => {
       externalProcess: 1,
       semanticEndpoint: 1,
       nativeHostPressure: 4,
-      cpuWeight: 1,
-      memoryWeight: 1,
-      ioWeight: 1,
+      cpuWeight: 2,
+      memoryWeight: 2,
+      ioWeight: 2,
     });
     await host.close();
   });

@@ -12,7 +12,7 @@ export interface TermwrightTestResources {
   readonly traceWriters?: number;
   /** Makes native transport pressure exclusive while preserving the true terminal count. */
   readonly nativeHost?: 'shared' | 'exclusive';
-  /** Exclusively reserves host-wide process/toolchain pressure without requiring a terminal. */
+  /** Exclusively reserves host-wide CPU, memory, I/O and process/toolchain pressure. */
   readonly hostPressure?: 'exclusive';
   /** Coarse host CPU/memory/I/O admission cost; defaults to `normal`. */
   readonly load?: 'light' | 'normal' | 'heavy' | 'exclusive';
