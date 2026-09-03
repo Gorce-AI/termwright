@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: PtySignal"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

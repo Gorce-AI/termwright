@@ -1,158 +1,101 @@
 ---
-title: Runner UI
-description: Run tests, inspect terminal evidence, replay traces, and record a test in the Termwright desktop app.
+title: Use the Runner
+description: Run tests, follow a live terminal, inspect failures, and replay traces in the Termwright desktop app.
 ---
 
-Runner UI is the interactive view of your Termwright suite. Use it while writing
-tests and investigating failures. `termwright ui` opens the Termwright desktop
-app by default and keeps Vitest in watch mode.
+Open the Runner while writing a test or investigating a failure:
 
 ```sh
 npx termwright ui
 ```
 
-Use `--browser` when you want the same UI in your system browser. Use
-`--no-open` for a server-only process.
+The desktop app starts the test catalogue in watch mode. Use `--browser` to open
+the same interface in your browser, or `--no-open` to start the server and print
+its local URL.
 
-## Runner at a glance
+## Run a test
 
-[![The full Runner test catalog with navigation, test hierarchy, status summary, and run controls.](/termwright/images/runner/spec-catalog.png)](/termwright/images/runner/spec-catalog.png)
+[![The Runner test catalogue with files, test names, status, and run controls.](/termwright/images/runner/spec-catalog.png)](/termwright/images/runner/spec-catalog.png)
 
-- **Specs** selects a directory, file, or case to run.
-- **Runner** follows live executions and replays retained evidence.
-- **Runs** opens dated reports from earlier runs.
-- **Settings** changes workspace layout and behavior.
+Open **Specs**, then run the whole project, a directory, a file, or one test.
+Only the selected scope appears in that run. While it is active, use **Stop** to
+cancel it.
 
-## Run tests
+To limit the initial catalogue from the command line:
 
-The catalog groups tests by directory and file. Run a directory, a file, one
-test, or the complete visible catalog. Expanding a group does not run it.
-Termwright preserves the selected scope in Runner: tests outside it are not
-shown as members of that run.
+```sh
+npx termwright ui -- tests/login.test.ts -t "rejects an invalid password"
+```
 
-The status counters beside the execution list show passed, failed, skipped,
-running, and waiting tests. A mixed pass/skip run is amber
-`passed-with-skips`, not an ordinary green pass, and Runner explains that the
-skip policy remains part of certification. During a run, overlapping Run
-controls are disabled and Stop becomes available.
+## Follow a live terminal
 
-## Follow an active run
+[![A running test with its current step and live terminal.](/termwright/images/runner/active-run.png)](/termwright/images/runner/active-run.png)
 
-[![An active run with a blue running test, its current step, and live terminal output.](/termwright/images/runner/active-run.png)](/termwright/images/runner/active-run.png)
-
-Runner can show several concurrently executing tests. Select a test in the
-execution list to switch its terminal and inspector evidence. A running test is
-blue; green is reserved for a completed pass.
-
-The Native Host journal is armed before workers and PTYs start. Run, Attempt,
-Session, Step, and Action events carry collision-safe identities plus a
-producer epoch and sequence. User stdout and stderr are structured diagnostic
-events attributed to the exact Attempt; the UI never parses reporter text to
-reconstruct lifecycle. A bounded diagnostic loss is rendered as an explicit
-gap, never as an apparently complete timeline.
-
-The execution list groups driver actions and assertions beneath their authored
-test or Gherkin step. Hover or select a row with a retained semantic target to
-highlight the corresponding terminal cells.
-
-## Replay a completed test
-
-[![A completed test with its retained terminal recording and replay controls visible at the bottom.](/termwright/images/runner/replay-player.png)](/termwright/images/runner/replay-player.png)
-
-A completed test with a retained trace opens in replay mode. The controls below
-the terminal seek, play, change playback speed, and jump to recorded markers.
-Pressing Play at the end starts again from the beginning.
-
-The terminal, execution list, semantic inspector, and logs all follow the same
-playhead. Logs from later in the recording are not shown while you inspect an
-earlier moment.
+The execution list shows the active test and its current named step. Select a
+different running test to switch the terminal, semantic inspector, and logs.
+Blue means running; green is reserved for a completed pass.
 
 ## Inspect a failure
 
-[![A failed test with the failing assertion, error details, and replay evidence visible together.](/termwright/images/runner/failure-inspection.png)](/termwright/images/runner/failure-inspection.png)
+[![A failed assertion beside the retained terminal and replay timeline.](/termwright/images/runner/failure-inspection.png)](/termwright/images/runner/failure-inspection.png)
 
-Open the failed test and start with the first failing execution row. Runner
-keeps the error, source location, earlier retry failures, terminal recording,
-crash details, and lost-log warning with the same test attempt.
+Start with the first failed row. The details show the assertion or action,
+source location, observed state, and any earlier retry failures. The terminal,
+semantics, logs, and step list stay attached to the same test attempt.
 
-If the trace artifact no longer exists, Runs disables Replay and explains why.
-For symptom-based help, see [Debug a failing test](../debugging/).
+If the test retained a trace, use the controls under the terminal to seek,
+play, change speed, or jump to an event. All panels follow the same playhead, so
+you see the state that existed when the selected action or assertion ran.
 
-## Inspect semantic state
+## Inspect semantic elements
 
-[![The semantic inspector showing a dialog and its button and textbox children.](/termwright/images/runner/semantics-inspector.png)](/termwright/images/runner/semantics-inspector.png)
+[![The semantic inspector showing a dialog and its controls.](/termwright/images/runner/semantics-inspector.png)](/termwright/images/runner/semantics-inspector.png)
 
-The inspector has three views:
+The **Tree** view shows roles, accessible names, state, and hierarchy published
+by the framework integration. Select a node to see its properties and whether
+the current integration supports actions such as click, focus, or type.
 
-- **Tree** presents roles, accessible names, state, and hierarchy.
-- **Semantic** presents readable properties for the selected node.
-- **Logs** presents application logs up to the current replay time.
+A terminal highlight appears only when the recorded state contains geometry for
+that element. Missing geometry remains unavailable; Runner does not derive a
+rectangle from matching text.
 
-For a live semantic node, **Semantic** also asks the worker's production
-`ActionPlanner` four questions: **Can click?**, **Can hover?**, **Can focus?**,
-and **Can type?**. Each answer carries the exact committed contract/revision,
-strategy, requirements and evidence provider used by the corresponding
-Locator action. Runner rejects a batch spanning different checkpoints; it does
-not reconstruct actionability from node fields in the browser.
+## Open an earlier run
 
-The Effective Session Contract card shows the certified adapter ID,
-application providers, terminal mouse observability, authoritative capability
-provenance, and the resulting contract-level input API. Current mouse mode,
-coverage, disabled state and occlusion remain runtime actionability results,
-not capability labels.
+[![Run history with dated results and replay actions.](/termwright/images/runner/run-history.png)](/termwright/images/runner/run-history.png)
 
-Selecting a node highlights it only when the trace contains exact geometry for
-that recorded state. Runner does not infer a rectangle from rendered text or
-paint order.
+Open **Runs** to inspect retained results from earlier executions. A run shows
+its tests, attempts, duration, result, and available traces. Incomplete or
+damaged records are labelled as such rather than displayed as empty successful
+runs.
 
-## Open a historical run
+Open a trace path directly when you downloaded it from CI. This starts the
+post-mortem viewer without running the test suite:
 
-[![Run history with dated test runs, status summaries, and replay actions.](/termwright/images/runner/run-history.png)](/termwright/images/runner/run-history.png)
-
-Runs lists retained reports with their date and time. Open a report to inspect
-its tests, attempts, canonical verdict, passed/failed/skipped counts, flaky
-result, earlier failure reasons, duration, and trace availability. Historical
-replays are contextual to each window or tab; opening a newer run does not
-replace an already pinned replay elsewhere.
-
-Only a staged, validated and atomically committed run directory is certified
-complete. Runner also lists incomplete, corrupt, and unsupported-version
-records explicitly so a persistence or host crash cannot look like an empty or
-successful run.
+```sh
+npx termwright ui --trace path/to/run.twtrace
+```
 
 ## Record a test
 
-[![Recorder launch dialog with command and save destination fields.](/termwright/images/runner/recorder.png)](/termwright/images/runner/recorder.png)
-
-Choose **New test → Record test**, or start directly:
+Choose **New test → Record test**, or launch the recorder directly:
 
 ```sh
-npx termwright ui --record --out-file tests/permission.test.ts -- node app.js
+npx termwright ui --record --out-file tests/login.test.ts -- node app.js
 ```
 
-Drive the real terminal, add named steps, capture semantic actions and
-assertions, then stop recording. Review and edit the generated source before
-you save it. Discard exits without writing the file.
+Interact with the program, add steps and assertions, then review the generated
+source before saving it. See [Record a test](../recorder/) for the full workflow.
 
-See [Record a test](../recorder/) for the complete workflow and its limits.
+## Change Runner preferences
 
-## Open an existing trace
+**Settings** controls the panel layout, replay speed, reduced motion, and source
+editor. Resetting the layout leaves other preferences unchanged.
 
-```sh
-npx termwright ui --trace .termwright/traces/permission.twtrace
-```
+For keyboard navigation and focus behavior, see
+[Runner accessibility](../accessibility/).
 
-This opens post-mortem mode without starting the test suite. A standalone HTML
-report uses the same React viewer with live-only controls removed.
+## Next steps
 
-## Change workspace preferences
-
-[![Runner Settings with workspace, replay, accessibility, editor, and reset controls.](/termwright/images/runner/settings.png)](/termwright/images/runner/settings.png)
-
-Settings controls layout, timeline behavior, replay speed, reduced motion, and
-the source editor. **Reset layout** preserves unrelated preferences; **Reset
-all** restores every UI preference. Copied diagnostics omit authentication,
-terminal output, raw semantic data, and generated source.
-
-See [Runner accessibility](../accessibility/) for keyboard, focus, and reduced
-motion behavior.
+- [Debug a failed test](../debugging/)
+- [Open traces and create HTML reports](../traces-reports/)
+- [Protect secrets in artifacts](../../reference/security/)

@@ -1,6 +1,7 @@
 ---
 title: "Function: nativePtyAvailable()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

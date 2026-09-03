@@ -41,8 +41,7 @@ available while the custom fixture finishes its cleanup.
 Use `test.override()` to change launch defaults for a file or nested `describe`:
 
 ```ts
-import { describe } from 'vitest';
-import { test } from 'termwright/test';
+import { describe, test } from 'termwright/test';
 
 test.override({ termwrightOptions: { columns: 120, trace: 'on' } });
 

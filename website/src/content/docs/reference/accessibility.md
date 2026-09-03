@@ -1,5 +1,6 @@
 ---
 title: AccessKit export
+pagefind: false
 description: Convert semantic snapshots into AccessKit data for an emulator or platform bridge.
 ---
 

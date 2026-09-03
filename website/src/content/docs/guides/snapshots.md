@@ -59,7 +59,7 @@ await expect(app).toMatchSemanticSnapshot('- button "Approve" [focused]', {
 The embedded Vitest engine's update flag is forwarded by the Termwright host:
 
 ```sh
-termwright test -- --update
+npx termwright test -- --update
 ```
 
 For CI or a scripted workflow, set `TERMWRIGHT_UPDATE_SNAPSHOTS` to one of:

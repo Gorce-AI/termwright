@@ -1,6 +1,7 @@
 ---
 title: "Function: encodePaste()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

@@ -1,6 +1,7 @@
 ---
 title: "Function: encodeMouse()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

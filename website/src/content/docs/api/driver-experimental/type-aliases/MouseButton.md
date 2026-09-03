@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: MouseButton"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

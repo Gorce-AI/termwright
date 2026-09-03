@@ -1,6 +1,7 @@
 ---
 title: "Variable: NATIVE_PTY_BACKEND_NAME"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

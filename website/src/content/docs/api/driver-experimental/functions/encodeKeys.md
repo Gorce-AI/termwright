@@ -1,6 +1,7 @@
 ---
 title: "Function: encodeKeys()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

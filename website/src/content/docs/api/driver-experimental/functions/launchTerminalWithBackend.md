@@ -1,6 +1,7 @@
 ---
 title: "Function: launchTerminalWithBackend()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

@@ -9,23 +9,23 @@ expect script can be a better fit for one-off automation.
 
 ## Compare the approaches
 
-| Need                                          | tmux    | expect / pexpect | Grid-only test tool | Termwright          |
-| --------------------------------------------- | ------- | ---------------- | ------------------- | ------------------- |
-| Control an already running session            | Yes     | No               | No                  | No                  |
-| Launch an isolated PTY                        | No      | Yes              | Yes                 | Yes                 |
-| Model a full VT screen                        | Partial | No               | Yes                 | Yes                 |
-| Retry assertions against screen state         | Manual  | Pattern-based    | Varies              | Yes                 |
-| Locate by role and name                       | No      | No               | No                  | With an integration |
-| Retain terminal, actions, semantics, and logs | No      | No               | Varies              | Yes                 |
+| Need                                  | tmux                 | expect / pexpect | Grid-only test tool | Termwright          |
+| ------------------------------------- | -------------------- | ---------------- | ------------------- | ------------------- |
+| Control an already running session    | Yes                  | No               | No                  | No                  |
+| Launch a command in a PTY             | Yes                  | Yes              | Yes                 | Yes                 |
+| Model a full VT screen                | Pane capture/history | No               | Yes                 | Yes                 |
+| Retry assertions against screen state | Custom scripting     | Pattern-based    | Varies              | Yes                 |
+| Locate by role and name               | No                   | No               | No                  | With an integration |
+| Keep integrated failure artifacts     | Custom scripting     | Custom scripting | Varies              | Yes                 |
 
 ## Use tmux when
 
-- the process already runs inside a human session;
-- a short shell script and a fixed delay are sufficient;
-- the goal is interactive session control rather than a repeatable assertion.
+- the process already runs inside a human or remote session;
+- the session must survive disconnects and be inspected manually;
+- the goal is session control rather than a repeatable product test.
 
-tmux `send-keys` and `capture-pane` do not own application startup, environment,
-terminal profile, or render completion.
+tmux can launch commands, send keys, and capture panes. A test suite must add
+its own isolation, assertions, readiness rules, cleanup, and failure artifacts.
 
 ## Use expect when
 

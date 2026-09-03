@@ -6,7 +6,7 @@ description: Write terminal workflows in physical .feature files and run them be
 Use Gherkin when product behavior is already discussed and reviewed as feature
 prose. TypeScript tests remain the simpler default for most test suites.
 
-Termwright runs each Scenario as a normal Vitest case with the same terminal,
+Termwright runs each Scenario as a normal Termwright test case with the same terminal,
 step, retry, trace, report, and Runner behavior as a `.test.ts` case.
 
 ## Install Termwright
@@ -63,7 +63,7 @@ need to add Termwright's internal packages beside the umbrella package.
 ## Manage scenario setup and resources
 
 Use `Before` and `After` for setup tied to each Scenario. Hooks are inert values
-in the same nearest-scope glue module as step definitions; they do not register
+in the step-definition module nearest the feature; they do not register
 process-global state.
 
 ```ts
@@ -77,7 +77,7 @@ export default defineSteps(
     world.app = undefined;
   }),
   Given('the application is ready', async ({ world }) => {
-    await (world.app as TerminalHarness).waitForQuiet();
+    await (world.app as TerminalHarness).waitForText('Permission required');
   }),
 );
 ```
@@ -179,9 +179,8 @@ plugin and an explicit `.feature` include there; execute through Termwright:
 ```ts
 // vitest.config.ts
 import { gherkinPlugin } from 'termwright/gherkin';
-import { defineConfig } from 'vitest/config';
 
-export default defineConfig({
+export default {
   plugins: [
     gherkinPlugin({
       featureRoot: 'tests/features',
@@ -191,7 +190,7 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts', 'tests/features/**/*.feature'],
   },
-});
+};
 ```
 
 Select the feature through the Termwright host:
@@ -209,7 +208,7 @@ npx termwright ui --tags '@e2e and not @slow'
 ```
 
 Filtering happens during feature collection, so excluded Scenario and Outline
-rows do not enter the Vitest suite.
+rows do not enter the test suite.
 
 ## Use Background and Scenario Outline
 

@@ -1,6 +1,7 @@
 ---
 title: "Function: textMatcher()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

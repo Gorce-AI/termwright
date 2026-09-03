@@ -700,32 +700,30 @@ describe('machine-readable framework compatibility registry', () => {
 
   it('keeps compatibility table cells aligned with their headers', () => {
     const page = text('website/src/content/docs/reference/compatibility.mdx');
-    expect([...page.matchAll(/<th>([^<]+)<\/th>/gu)].map((match) => match[1])).toEqual([
-      'Framework',
-      'Declared / verified',
-      'Runtime',
-      'Probe',
-      'Injection contract',
-      'Automatic probe capabilities',
-      'Effective session graph',
-      'Annotations',
-    ]);
+    const matrix = page.slice(page.indexOf('## Support matrix'));
+    const rows = matrix
+      .split('\n')
+      .filter((line) => line.startsWith('|'))
+      .map((line) =>
+        line
+          .split('|')
+          .slice(1, -1)
+          .map((cell) => cell.trim()),
+      );
 
-    const body = page.slice(page.indexOf('<tbody>'), page.indexOf('</tbody>'));
-    const fields = [
-      'entry.name',
-      'entry.versions.declared',
-      'entry.runtimes.map',
-      'entry.probe.package',
-      'entry.probe.identityKind',
-      'entry.capabilityGraph.automatic',
-      'entry.annotations',
-    ];
-    let previousOffset = -1;
-    for (const field of fields) {
-      const offset = body.indexOf(field);
-      expect(offset, field).toBeGreaterThan(previousOffset);
-      previousOffset = offset;
+    expect(rows[0]).toEqual([
+      'Framework',
+      'Version policy',
+      'Runtime',
+      'Stable identity',
+      'Viewport visibility',
+      'Click by locator',
+    ]);
+    expect(rows.slice(2)).toHaveLength(registry.frameworks.length);
+    for (const row of rows.slice(2)) {
+      expect(row).toHaveLength(rows[0]?.length);
+      expect(row[1]).toContain('.versions.verified');
+      expect(row[2]).toContain('.runtimes.map');
     }
   });
 

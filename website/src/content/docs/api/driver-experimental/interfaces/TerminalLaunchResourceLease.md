@@ -1,6 +1,7 @@
 ---
 title: "Interface: TerminalLaunchResourceLease"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

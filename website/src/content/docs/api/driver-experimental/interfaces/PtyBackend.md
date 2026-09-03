@@ -1,6 +1,7 @@
 ---
 title: "Interface: PtyBackend"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

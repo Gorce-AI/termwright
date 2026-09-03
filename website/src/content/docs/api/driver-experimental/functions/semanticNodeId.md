@@ -1,6 +1,7 @@
 ---
 title: "Function: semanticNodeId()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

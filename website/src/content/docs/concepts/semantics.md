@@ -1,62 +1,78 @@
 ---
-title: Terminal semantics
-description: Understand what a semantic tree adds to screen-level terminal testing and which facts remain framework-dependent.
+title: How semantic locators work
+description: Understand the difference between terminal cells and application elements.
 ---
 
-A terminal grid contains characters, colors, attributes, and cursor state. It
-does not say that a rectangle is a button, a text field has a label, or a list
-item is selected.
+A terminal screen contains characters, colors, attributes, and a cursor. It
+does not say that `[ Save ]` is a button, that an input is labelled “Name”, or
+that a list item is selected.
 
-A Termwright framework integration can publish that additional meaning as a
-semantic tree.
+A framework integration can publish those application elements as a semantic
+tree. Termwright keeps the screen and semantic tree separate because they
+answer different questions.
 
-## Screen and semantics answer different questions
-
-| Question                                     | Source                                       |
-| -------------------------------------------- | -------------------------------------------- |
-| What characters and styles were rendered?    | Terminal grid                                |
-| Did the program enable mouse or paste modes? | Terminal emulator                            |
-| Which element is a button named Save?        | Semantic tree                                |
-| Which node is focused or selected?           | Framework state                              |
-| Is a node clipped by the viewport?           | Qualified framework geometry, when available |
-| Which node receives a pointer at this cell?  | Exact framework hit test, when available     |
-
-Use both sources when both rendering and meaning matter.
+| Question                                     | Source                                |
+| -------------------------------------------- | ------------------------------------- |
+| What characters and styles were rendered?    | Terminal screen                       |
+| Did the program enable mouse or paste modes? | Terminal emulator                     |
+| Which element is a button named Save?        | Framework integration                 |
+| Which element is focused or selected?        | Framework integration, when available |
+| Is an element inside the viewport?           | Framework geometry, when available    |
+| Which element receives a click at this cell? | Framework hit testing, when available |
 
 ## Semantics are optional
 
-An uninstrumented program remains testable with screen text, cell snapshots,
-keyboard input, paste, resize, process state, traces, and reports. Semantic
-locators fail when no tree is available; they do not infer roles from terminal
-text.
+Every terminal application supports screen text, cell snapshots, keyboard
+input, paste, resize, process status, and traces. Add a framework integration
+only when roles, labels, element state, or locator-based pointer input make a
+test clearer.
 
-## Probes and annotations
+```ts
+// Works with any terminal program.
+await app.waitForText('Save changes?');
+await app.press('Enter');
 
-A probe observes framework state and publishes a tree after a rendered frame.
-An annotation can add application intent that the framework does not retain,
-such as a domain-specific name or relationship.
+// Requires a framework integration.
+const save = app.getByRole('button', { name: 'Save' });
+await expect(save).toBeAttached();
+```
 
-Annotations cannot supply physical facts such as current bounds, visibility,
-focus, clipping, or pointer ownership. Those facts must come from the framework
-observation.
+If no semantic tree is connected, a semantic locator fails with a capability
+error. It never treats matching screen text as an element role.
 
-## Revisions and identity
+## Where names and roles come from
 
-The terminal screen and semantic tree change over time. Assertions poll across
-those revisions. Stable semantic identities can be located again after a new
-frame; frame-local identities cannot.
+An integration observes the framework's runtime state after a rendered frame.
+Framework-native accessibility properties are used where available.
 
-Normal tests should use declarative locators instead of storing references.
-Tools that retain a reference must respect its identity kind and revision.
+Some frameworks discard application-specific meaning before rendering. Their
+Termwright SDK can annotate a component with a role, name, relationship, test
+ID, or domain state. An annotation cannot replace observed physical state such
+as focus, clipping, or pointer routing.
 
-## Geometry is not universal
+## Identity across frames
 
-Frameworks preserve different facts. Textual can expose a clipped visible
-region and exact pointer recipient. OpenTUI exposes an exact native hit grid but
-not a per-node clipped rectangle. Ink has neither clipping nor hit ownership.
+Retained UI frameworks usually provide a stable element identity. Immediate-
+mode frameworks such as Ratatui and Bubble Tea reconstruct their UI on each
+frame, so an ordinary element identity lasts for one frame. Use that
+integration's semantic key when a locator must follow the same domain element
+across updates.
 
-Termwright represents unavailable observations as unknown or unsupported. It
-does not convert missing geometry into visibility or clickability.
+Normal tests should keep declarative locators such as `getByRole()` rather than
+storing a resolved reference.
 
-See [Framework integrations](../../adapters/) and
-[Geometry and visibility](../../reference/geometry-visibility/).
+## Visibility and clicking vary by framework
+
+OpenTUI and Textual expose viewport geometry and exact pointer recipients.
+Ink exposes clipped viewport geometry, but locator clicks need application
+pointer setup. tview, Ratatui, and Bubble Tea require application pointer setup
+and do not expose viewport clipping automatically.
+
+Check the [framework compatibility table](../../reference/compatibility/) before
+using visibility assertions or locator-based mouse input.
+
+## Related pages
+
+- [Choose a locator](../../guides/locators/)
+- [Choose a framework integration](../../adapters/)
+- [Geometry and visibility](../../reference/geometry-visibility/)

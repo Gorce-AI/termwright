@@ -1,6 +1,7 @@
 ---
 title: "Function: parseRef()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

@@ -1,41 +1,49 @@
 ---
-title: Waiting and retries
-description: Understand when Termwright waits, what assertions retry, and how test retries differ from actionability waits.
+title: How waiting works
+description: Choose a specific wait or retrying assertion instead of a fixed delay.
 ---
 
-Termwright waits for observable changes instead of sleeping for a fixed delay.
-The relevant event may be a terminal screen revision, semantic revision,
-process event, or render marker.
-
-## Wait for the state you need
+Wait for the state the next line needs:
 
 ```ts
-await app.waitForText('Ready');
-await expect(app.getByRole('button', { name: 'Save' })).toBeFocused();
+await app.waitForText('Profile name');
+await app.type('release');
+await expect(app).toHaveText('Saved release');
 ```
 
-The assertion retries until it passes or reaches the expect timeout. This
-covers the normal gap between terminal output and the semantic revision for the
-same application frame.
+Termwright wakes a wait when the relevant terminal, semantic, log, or process
+state changes. It does not need a short polling sleep between checks.
 
-## Explicit waits
+## Choose a wait
 
-| Wait                      | Use when                                                                   |
-| ------------------------- | -------------------------------------------------------------------------- |
-| `waitForText()`           | The terminal grid must contain text.                                       |
-| `locator.waitFor()`       | A semantic node must become attached, hidden, or visible.                  |
-| `waitForShellPrompt()`    | Shell integration must authoritatively report an OSC 133 prompt.           |
-| `waitForQuiet({quietMs})` | You explicitly accept a heuristic interval with no screen/semantic change. |
-| `waitForRender()`         | You need a revision newer than a known screen revision.                    |
-| `waitForExit()`           | Process termination is the expected result.                                |
-| `settled()`               | Code must branch on whether semantic negotiation succeeded.                |
+| Wait                   | Use it when                                                        |
+| ---------------------- | ------------------------------------------------------------------ |
+| `waitForText()`        | The terminal screen must contain text                              |
+| `locator.waitFor()`    | An element must become attached, hidden, visible, or detached      |
+| `waitForExit()`        | Process termination is the expected result                         |
+| `waitForShellPrompt()` | An integrated shell reports a prompt                               |
+| `waitForRender()`      | Low-level code needs a screen revision newer than a known revision |
+| `settled()`            | Code needs to inspect which integration features connected         |
+| `waitForQuiet()`       | A geometry-dependent operation needs a heuristic quiet interval    |
 
-Avoid `setTimeout()` and fixed sleeps. They wait too long on fast machines and
-remain too short on slow ones.
+A retrying assertion is usually clearer than waiting for any render:
 
-When raw input must be followed by its next render, capture the boundary before
-sending the input. A post-input `waitForQuiet()` can legitimately observe the
-old screen as already quiet before the application handles the key.
+```ts
+await expect(app.getByRole('button', { name: 'Save' })).toBeEnabled();
+```
+
+## Avoid fixed sleeps
+
+A fixed delay waits too long on a fast machine and may still be too short on a
+slow one. It also hides the condition the test depends on.
+
+Use `waitForQuiet()` narrowly. “No recent screen change” does not prove that an
+application finished its work. It is useful when a pointer target or snapshot
+needs a moving layout to settle.
+
+## Wait for the render after raw input
+
+Low-level tests can capture a revision before input and wait for a later one:
 
 ```ts
 const before = app.checkpoint();
@@ -43,30 +51,36 @@ await app.keyboard.press('Tab');
 await app.waitForRender({ after: before.screenRevision });
 ```
 
-Prefer a web-first assertion on the intended result when one exists; it is more
-specific than waiting for any render.
+Prefer an assertion on the intended result when one exists. It explains the
+behavior and cannot pass on an unrelated render.
 
-## Action retries and assertion retries
+## Actions and assertions wait for different things
 
-An action may retry while its target is resolving or becoming actionable. It
-does not wait for an arbitrary application outcome. Assert that outcome after
-the action.
+An action can wait for its locator to resolve and become actionable. It does not
+wait for the application-specific result of the input. Assert that result:
 
 ```ts
 await save.activate();
 await expect(app).toHaveText('Saved');
 ```
 
-## Test retries
+Termwright does not repeat an action after physical input begins.
 
-Vitest schedules whole-case retries. Configure them with `test.retry`, the
-`--retry` CLI flag, or `termwrightRetry()`:
+## Whole-test retries
 
-```ts
-retry: termwrightRetry({ ci: 0, local: 0 });
+The `--retry` option reruns an entire failed test. It is separate from matcher
+waiting:
+
+```sh
+npx termwright test -- --retry=2
 ```
 
-This is separate from matcher event subscriptions. Reports retain the ordered
-reasons from earlier failed attempts and mark a final pass as flaky. A flaky
-run never satisfies the Native Host's certification result. Use a non-zero
-value only temporarily for diagnosis, not in checked-in certification config.
+This allows up to three attempts. If a later attempt passes, the run is marked
+flaky and exits non-zero. Use retries to gather failure traces, not to make an
+unstable test pass in CI.
+
+## Related pages
+
+- [Assert and wait](../../guides/assertions/)
+- [Debug an assertion timeout](../../tools/debugging/)
+- [Configure timeouts](../../reference/configuration/#set-timeouts)

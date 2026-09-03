@@ -1,19 +1,20 @@
 # @termwright/opentui
 
-Optional, annotation-only semantics for an ordinary OpenTUI application.
-`describeRenderable` associates developer intent with an existing Renderable;
-it does not instrument or own the renderer.
+Add application-specific roles, names, relationships, or state to OpenTUI
+Renderables observed by `@termwright/probe-opentui`.
+
+Keep this package on the same release version as `termwright` and
+`@termwright/probe-opentui`.
+
+Install it as an application dependency when production source imports the
+annotation API:
+
+```sh
+npm install @termwright/opentui
+```
 
 ```ts
-import { BoxRenderable, createCliRenderer } from '@opentui/core';
 import { describeRenderable } from '@termwright/opentui';
-
-const renderer = await createCliRenderer();
-const deployment = new BoxRenderable(renderer, {
-  id: 'deployment',
-  width: 24,
-  height: 3,
-});
 
 const dispose = describeRenderable(deployment, {
   role: 'status',
@@ -22,21 +23,13 @@ const dispose = describeRenderable(deployment, {
   extended: { environment: 'staging' },
 });
 
-renderer.root.add(deployment);
-// dispose() when the application no longer owns the annotation.
+// Call dispose() when the application removes the Renderable.
 ```
 
-Launch the application normally through `@termwright/probe-opentui`. The probe
-reads the process-local registry used by this SDK; registering an annotation
-does not require an active Termwright session. Renderables are weakly keyed,
-relationship targets use weak references, and the returned disposer cannot
-delete a newer annotation installed by another owner.
+Annotations add meaning but do not override text, focus, value, layout,
+visibility, or pointer behavior reported by OpenTUI. The package does not start
+or instrument the renderer; launch the application through
+`@termwright/probe-opentui` in the test.
 
-Supported intent is `role`, `name`, `description`, `testId`, JSON `extended`
-domain state, descriptive `actions`, and `labelledBy`/`describedBy`
-relationships. Geometry, visibility, clipping, focus, rendered text, widget
-value, selection and other framework/runtime state are exclusively observed by
-the probe and cannot be overridden here.
-
-There is deliberately no renderer instrumentation API, adapter mount helper,
-publisher, collector, or manual semantic channel in this package.
+See the [OpenTUI integration guide](https://gorce-ai.github.io/termwright/adapters/opentui/)
+for installation, a complete test, supported versions, and limitations.

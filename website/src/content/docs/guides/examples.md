@@ -6,15 +6,15 @@ description: Runnable projects and recipes for generic terminal applications and
 These examples run in the repository test pipeline. Start with the generic
 example, then choose the framework closest to your application.
 
-| Example                                                                                       | What it demonstrates                                                                                           |
-| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [Getting started](https://github.com/gorce-ai/termwright/tree/main/examples/getting-started)  | Generic Node CLI, real keyboard input, text assertions, and no semantic integration.                           |
-| [Ink todo](https://github.com/gorce-ai/termwright/tree/main/examples/ink-todo)                | End-to-end and component tests, semantic locators, snapshots, and production-router mouse evidence.            |
-| [OpenTUI form](https://github.com/gorce-ai/termwright/tree/main/examples/opentui-form)        | Focused input, semantic values, intended geometry, and exact pointer ownership.                                |
-| [Textual notes](https://github.com/gorce-ai/termwright/tree/main/examples/textual-notes)      | Python application launched through the Textual integration with semantic assertions.                          |
-| [tview menu](https://github.com/gorce-ai/termwright/tree/main/examples/tview-menu)            | Instrumented Go build, semantic navigation, and snapshots.                                                     |
-| [Bubble Tea login](https://github.com/gorce-ai/termwright/tree/main/examples/bubbletea-login) | Instrumented Go build, secret withholding, and a provider-backed Locator click handled as `tea.MouseClickMsg`. |
-| [Ratatui list](https://github.com/gorce-ai/termwright/tree/main/examples/ratatui-list)        | Instrumented Cargo build and a provider-backed Locator click handled as `crossterm::Event::Mouse`.             |
+| Example                                                                                       | What it demonstrates                                                                                  |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [Getting started](https://github.com/gorce-ai/termwright/tree/main/examples/getting-started)  | Generic Node CLI, real keyboard input, text assertions, and no semantic integration.                  |
+| [Ink todo](https://github.com/gorce-ai/termwright/tree/main/examples/ink-todo)                | End-to-end and component tests, semantic locators, snapshots, and application mouse routing.          |
+| [OpenTUI form](https://github.com/gorce-ai/termwright/tree/main/examples/opentui-form)        | Focused input, semantic values, intended geometry, and exact pointer ownership.                       |
+| [Textual notes](https://github.com/gorce-ai/termwright/tree/main/examples/textual-notes)      | Python application launched through the Textual integration with semantic assertions.                 |
+| [tview menu](https://github.com/gorce-ai/termwright/tree/main/examples/tview-menu)            | Instrumented Go build, semantic navigation, and snapshots.                                            |
+| [Bubble Tea login](https://github.com/gorce-ai/termwright/tree/main/examples/bubbletea-login) | Instrumented Go build, secret fields, and locator clicks handled as normal `tea.MouseClickMsg` input. |
+| [Ratatui list](https://github.com/gorce-ai/termwright/tree/main/examples/ratatui-list)        | Instrumented Cargo build and locator clicks handled as normal `crossterm::Event::Mouse` input.        |
 
 ## Run an example
 

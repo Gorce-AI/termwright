@@ -1,6 +1,7 @@
 ---
 title: "Interface: GenericQuery"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

@@ -1,16 +1,21 @@
 ---
 title: Ink
-description: Add semantic locators to an Ink 7 application with the Termwright integration.
+description: Use role-based locators with an Ink application.
 ---
 
-Use the Ink integration when tests need roles, names, focus, and retained
-component state. Plain terminal input and text assertions work without it.
+The Ink integration lets Termwright locate rendered components by role, name,
+state, and test ID. You do not need it for terminal text assertions or keyboard
+input.
 
-## Install the integration
+## Install and launch
 
 ```sh
 npm install --save-dev @termwright/probe-ink
 ```
+
+Keep `@termwright/probe-ink` on the same release version as `termwright`.
+
+Inject the probe when Termwright starts the application:
 
 ```ts
 import { fileURLToPath } from 'node:url';
@@ -20,38 +25,26 @@ import { test, expect } from 'termwright/test';
 const appPath = fileURLToPath(new URL('../app.mjs', import.meta.url));
 
 test('approves the request', async ({ terminal }) => {
-  const instrumented = withProbe('node', [process.execPath, appPath]);
-  const app = await terminal.launch({ command: instrumented.command });
+  const { command } = withProbe('node', [process.execPath, appPath]);
+  const app = await terminal.launch({ command });
+  const approve = app.getByRole('button', { name: 'Approve' });
+
+  await expect(approve).toBeAttached();
   await app.press('Tab');
   await app.press('Enter');
   await expect(app).toHaveText('Approved');
 });
 ```
 
-Use `bun` instead of `process.execPath` when the application runs on Bun. The
-preload is dormant outside a Termwright session.
+For an Ink application that runs on Bun, use
+`withProbe('bun', ['bun', appPath])`. The injected preload is inactive when the
+application is started outside Termwright.
 
-## Verify semantic observation
+## Add meaning to custom components
 
-```ts
-await expect(app.getByRole('button', { name: 'Approve' })).toBeAttached();
-```
-
-The certified renderer instrumentation publishes intended and clipped geometry
-automatically. Ink itself does not own a universal pointer router, so semantic
-pointer actions additionally require an application evidence provider exposing
-the application's production pointer regions and hit test. Termwright uses that
-evidence only to plan coordinates; the input still travels through the PTY.
-The runnable [Ink todo example](https://github.com/gorce-ai/termwright/tree/main/examples/ink-todo)
-registers its measured production router with `@termwright/evidence-provider`.
-Its E2E test clicks `getByRole('button', {name: 'Remove'})`, records the
-provider-backed plan, and proves that Ink's normal stdin mouse handler changed
-the application state.
-
-## Annotate a custom component
-
-Install `@termwright/ink` only when the host tree cannot express application
-meaning:
+Ink's `Box` and `Text` components do not say whether a region is a button,
+dialog, or status message. Add an annotation when that meaning is part of the
+behavior you want to test:
 
 ```tsx
 import { Box, Text, type DOMElement } from 'ink';
@@ -60,7 +53,8 @@ import { useSemantic } from '@termwright/ink';
 
 export function Approve() {
   const ref = useRef<DOMElement>(null);
-  useSemantic(ref, { role: 'button', name: 'Approve', testId: 'approve' });
+  useSemantic(ref, { role: 'button', name: 'Approve' });
+
   return (
     <Box ref={ref}>
       <Text>Approve</Text>
@@ -69,40 +63,35 @@ export function Approve() {
 }
 ```
 
-Annotations add role, name, description, test id, relationships, actions, and
-JSON domain state. They cannot override rendered text, focus, geometry,
-visibility, or framework-owned state.
+Install `@termwright/ink` only if the application uses these annotations. They
+can describe roles, names, relationships, available actions, and application
+state. Rendered text, focus, position, and visibility still come from Ink.
 
-`name` is the accessible name matched by
-`getByRole(role, {name: ...})`. Use the portable roles that describe the
-application contract, including `dialog`, `textbox`, `button`, `list`,
-`listitem`, `status`, and `alert`:
-
-```tsx
-import { Semantic } from '@termwright/ink';
-
-<Semantic role="dialog" name="Permission">
-  <Box flexDirection="column">
-    <Semantic role="button" name="Approve">
-      <Box>
-        <Text>Approve</Text>
-      </Box>
-    </Semantic>
-  </Box>
-</Semantic>;
+```sh
+npm install @termwright/ink
 ```
 
-Ink's `Box` and `Text` types do not prove application intent. The integration
-therefore does not infer interactive roles from their appearance. Annotate the
-component when a role or accessible name is part of the behavior under test.
+Keep the annotation package on that release as well.
 
-## Supported behavior
+## Pointer input
 
-The Ink versions listed in the compatibility registry are certified exactly.
-Stable host identity, display state, rendered
-text, retained ARIA state, intended geometry, and visible clipping are
-automatic. The checksummed hooks correlate Yoga layout and nested overflow with
-Static/live origins, emitted output, and the committed normal or alternate VT
-buffer. Exact hit testing is application-integrated, not inferred from those
-rectangles. See [Framework compatibility](../../reference/compatibility/) for
-the generated operation matrix.
+Termwright automatically observes the layout and the part of each component
+that is visible in the terminal viewport. Ink does not provide one standard
+mouse hit-test API, so locator-based `click()` also needs two pieces of
+application setup:
+
+1. the application must enable terminal mouse reporting;
+2. its production pointer router must be registered with
+   `@termwright/evidence-provider`.
+
+Without that setup, keyboard tests and semantic assertions still work, while a
+locator-based pointer action fails with an explanation instead of guessing a
+coordinate. See the runnable
+[Ink todo example](https://github.com/gorce-ai/termwright/tree/main/examples/ink-todo)
+for the complete mouse setup.
+
+Termwright supports the Ink versions listed in
+[Framework compatibility](../../reference/compatibility/). Other versions may
+still run as black-box terminal tests, but do not get semantic locators.
+The Node integration supports Node.js 22 and 24; the Bun integration requires
+Bun 1.2.15 or newer.

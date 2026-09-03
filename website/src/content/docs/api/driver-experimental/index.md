@@ -1,6 +1,7 @@
 ---
 title: "@termwright/driver/experimental"
 editUrl: false
+pagefind: false
 ---
 
 **@termwright/driver/experimental**

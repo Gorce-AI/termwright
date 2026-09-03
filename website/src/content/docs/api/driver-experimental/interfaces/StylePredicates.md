@@ -1,6 +1,7 @@
 ---
 title: "Interface: StylePredicates"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

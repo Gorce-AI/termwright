@@ -1,6 +1,7 @@
 ---
 title: "Interface: SemanticQuery"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

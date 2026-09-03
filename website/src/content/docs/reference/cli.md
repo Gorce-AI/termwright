@@ -24,72 +24,68 @@ exit code 1. Use `--json` in agents and environment diagnostics.
 ## `termwright test`
 
 ```text
-termwright test [--runs N] [--resource-profile <name>] [-- <vitest args>]
+termwright test [--runs N] [--resource-profile <name>]
+                [--tags <expression>] [-- <test-runner args>]
 ```
 
-Runs the exact-certified embedded Vitest engine under Termwright's native host.
-`--runs N` executes N complete cycles in that one persistent host, with a new
-RunId and full resource/journal/history barrier for each cycle. The result is
-the worst cycle; infrastructure loss stops subsequent cycles. `skipped`, an
-empty catalogue, and a filtered-zero run remain visible states but exit 1
-because they do not certify a passing suite.
+Runs the project tests once. `--runs N` repeats the complete selected suite in
+one Termwright process and returns the worst result. An infrastructure failure
+stops later repetitions. Skipped, empty, and filtered-zero runs remain visible
+but do not count as a passing suite.
 
 `passed-with-skips` is a distinct amber result. It exits 0 only when the exact
-skip policy matches; undeclared or ambiguous skips and missing required skips
-exit 1. With `--json`, the top-level `skipPolicy` is `matched` or `mismatch`,
-and each run includes its skipped test identities plus detailed policy issues.
-See [Running tests](../../running-tests/#run-the-full-suite) for the declaration
-format.
+skip policy matches. Undeclared or ambiguous skips and missing required skips
+exit 1. JSON output includes the skipped test identities and policy issues.
 
 Profiles are explicit: `local`, `ci`, `windows-ci`, or `stress`. Arguments after
-`--` belong to the embedded engine. Retries are diagnostic and any
-fail-then-pass cycle is `flaky`/nonzero.
+`--` are test selection and runner options such as a file path, `-t`, or
+`--retry`. `--tags` filters Gherkin scenarios with a Cucumber tag expression.
+Any fail-then-pass result is flaky and exits non-zero.
 
 ## `termwright watch`
 
 ```text
-termwright watch [--resource-profile <name>] [-- <vitest args>]
+termwright watch [--resource-profile <name>]
+                 [--tags <expression>] [-- <test-runner args>]
 ```
 
-Keeps the same Native Host alive, runs an initial cycle, and coalesces source
-changes into subsequent cycles. The process returns the worst observed result
-when interrupted. An all-skipped cycle, skip-policy mismatch, failure, or flaky
-cycle remains non-zero; infrastructure loss, cancellation, and crashes use the
-internal-failure exit code. JSON output includes `skips` and the detailed
-`skipPolicy` for every reported cycle.
+Runs an initial suite, then reruns after source changes. A change that arrives
+during a run is queued until that run finishes. The process returns the worst
+observed result when interrupted. `--tags` and arguments after `--` have the
+same meaning as for `test`.
 
 ## `termwright ui`
 
 ```text
-termwright ui [--trace <file>] [--tags <expression>] [--port N] [--host H]
+termwright ui [--trace <path>] [--tags <expression>] [--port N] [--host H]
               [--no-watch] [--browser | --no-open]
               [-- <vitest args>]
 termwright ui --record [--out-file <file>] -- <command>
 ```
 
-Starts the Runner and Vitest watch mode. Interactive use opens the Termwright
+Starts the Runner and test watch mode. Interactive use opens the Termwright
 desktop app by default.
 
 | Option                | Behavior                                                      |
 | --------------------- | ------------------------------------------------------------- |
 | `--browser`           | Open the Runner in the system browser.                        |
 | `--no-open`           | Start the server without opening a window.                    |
-| `--no-watch`          | Do not start the Vitest watcher.                              |
-| `--trace <file>`      | Open an existing `.twtrace` archive.                          |
+| `--no-watch`          | Do not start the test watcher.                                |
+| `--trace <path>`      | Open an existing `.twtrace` path.                             |
 | `--tags <expression>` | Select physical Gherkin cases with a Cucumber tag expression. |
 | `--record`            | Start recorder mode for the command after `--`.               |
 | `--out-file <file>`   | Set the generated test destination in recorder mode.          |
 | `--host <host>`       | Bind the Runner server to this host.                          |
 | `--port <port>`       | Bind to this port; `0` selects an available port.             |
 
-Arguments after `--` are passed to Vitest:
+Arguments after `--` are passed to the embedded test runner:
 
 ```sh
 npx termwright ui -- src/login.test.ts --retry=2
 ```
 
-The UI host discovers provider-owned TypeScript tests and physical Gherkin
-scenarios. Directory, file, and case runs are validated against that catalog.
+The Runner discovers TypeScript tests and physical Gherkin scenarios. You can
+then run a directory, file, or individual case from its catalog.
 
 ## `termwright report`
 
@@ -140,14 +136,14 @@ JSON output, CI, and non-interactive stdout suppress automatic window opening.
 
 ## Exit codes
 
-| Code | Meaning                     |
-| ---- | --------------------------- |
-| `0`  | Success.                    |
-| `1`  | Test or assertion failed.   |
-| `2`  | Invalid command-line usage. |
-| `3`  | No active session.          |
-| `4`  | IPC or transport failure.   |
-| `5`  | Internal failure.           |
+| Code | Meaning                                                               |
+| ---- | --------------------------------------------------------------------- |
+| `0`  | Success.                                                              |
+| `1`  | Test run failed, was flaky, or did not meet the accepted skip policy. |
+| `2`  | Invalid command-line usage.                                           |
+| `3`  | No active session.                                                    |
+| `4`  | IPC or transport failure.                                             |
+| `5`  | Internal failure.                                                     |
 
 Machine-readable errors include a `kind`, message, and applicable suggestion or
 candidates. Library errors include stable kinds such as `timeout`,

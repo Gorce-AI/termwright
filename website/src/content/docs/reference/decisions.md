@@ -1,5 +1,6 @@
 ---
 title: Decisions (ADRs)
+pagefind: false
 description: The load-bearing technical decisions, why each was made, and what would make us revisit it.
 ---
 

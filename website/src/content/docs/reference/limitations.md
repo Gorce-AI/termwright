@@ -1,72 +1,103 @@
 ---
-title: Platforms and limitations
-description: Current runtime requirements, framework constraints, and unsupported workflows.
+title: Supported platforms and limitations
+description: Runtime, operating-system, terminal, framework, pointer, security, and recorder limits.
 ---
 
-This page lists product limits that can change how a test should be written.
-Framework-specific operation support is maintained in
-[Framework compatibility](../compatibility/).
+Check this page before adding Termwright to a CI matrix or depending on a
+framework-specific assertion.
 
-## Runtime requirements
+## Runtime and operating systems
 
 <!-- BEGIN GENERATED RUNTIME REQUIREMENTS -->
 <!-- Generated from package.json; do not edit this block by hand. -->
-- Node.js must match `^22.0.0 || ^24.0.0`: supported major lines are 22 and 24; unlisted lines such as 23 and 25 are excluded.
-- Termwright embeds and certifies exactly Vitest 4.1.11.
+- Use Node.js 22 or 24. Other major versions are not supported.
+- You do not need to install Vitest separately. Termwright includes Vitest 4.1.11.
 <!-- END GENERATED RUNTIME REQUIREMENTS -->
-- PTY tests require an operating system and environment that can allocate a PTY.
-- The Ratatui semantic transport is supported on macOS and Linux, not Windows.
 
-## Generic terminal mode
+| Platform | Minimum | Architectures |
+| --- | --- | --- |
+| Linux | glibc 2.35 (Ubuntu 22.04 ABI floor) | x64, arm64 |
+| macOS | 13.5 | x64, arm64 |
+| Windows | Windows 10 1809 or Server 2019 | x64, arm64 |
 
-Generic mode observes terminal cells and sends real terminal input. It does not
-know application roles, accessible names, widget values, or component identity.
-Add a framework integration when tests need those facts.
+Alpine/musl is not supported by the native PTY package. A sandbox or container
+that forbids pseudoterminal allocation cannot run terminal tests.
 
-## Pointer actions
+The Ratatui semantic transport is supported on Linux and macOS, not Windows.
+Ratatui applications still run as black-box terminal programs on Windows.
 
-Pointer actions require exact recipient evidence and terminal mouse mode. Only
-frameworks that expose fresh-pointer routing can provide semantic click
-support. Use keyboard input when the compatibility matrix marks pointer actions
-unsupported.
+## What works without an integration
 
-## Visibility
+Every supported terminal application can use:
 
-`toBeVisible()` requires qualified viewport evidence. A framework that cannot
-expose clipping returns `unsupported`; a temporarily incomplete observation is
-`unknown`. Neither positive nor negated assertions pass without known evidence.
-Use `toBeAttached()` or `toBeDisplayed()` when that is the behavior you need.
+- rendered text and cell assertions;
+- keyboard input, paste, resize, and signals;
+- raw coordinate mouse input when the application enables mouse reporting;
+- process exit observation;
+- traces and reports.
 
-## Gherkin
+The terminal screen does not contain roles, labels, component identity, or
+widget state. Those APIs require a [framework integration](../../adapters/).
 
-Termwright provides scenario-scoped hooks and Cucumber tag-expression
-filtering, but not a Termwright-specific Gherkin language server. Use the official Cucumber
-extension for syntax and definition navigation. `.feature` files run through
-the same Vitest scheduler and Runner catalog as provider-owned TypeScript tests.
+## Framework versions
 
-## Trace evidence
+Ink, OpenTUI, Ratatui, and Bubble Tea use exact version lists. Textual and tview
+accept compatible versions when runtime or compile-time capability checks pass.
+See the [compatibility table](../compatibility/) before upgrading.
 
-Evidence that a framework or application never published cannot be reconstructed
-after the run. A report can show terminal output without a semantic tree, or an
-actionless test without a terminal session. Runner labels these states rather
-than fabricating steps or targets.
+When semantics are required and an integration cannot attach, launch fails.
+Otherwise the application can still be tested through the black-box terminal
+API; Termwright does not publish a partial semantic tree.
 
-## Recorder
+Support also varies by operation. In particular, visibility needs clipped
+viewport geometry, and clicking by locator needs the framework's actual pointer
+routing. Intended layout bounds alone are not enough.
 
-Recorder generates a starting test from observable terminal actions and
-semantic targets. It cannot infer domain assertions, replace missing framework
-semantics, or guarantee that generated selectors are the best long-term
-selectors. Review generated source before saving.
+## Visibility and pointer input
 
-## Secrets
+When an integration cannot observe viewport clipping, `toBeVisible()` and
+`not.toBeVisible()` both fail with an unsupported observation. Use
+`toBeAttached()` only when semantic-tree membership is the behavior you mean.
 
-Termwright withholds known password values from semantic output. Terminal bytes
-and application logs may still contain secrets emitted by the application.
-Sanitize fixtures and CI artifacts accordingly.
+Semantic pointer actions also require the application to enable terminal mouse
+reporting. Some integrations need application pointer setup in addition to the
+integration package. See [Geometry and visibility](../geometry-visibility/).
 
-## Unsupported framework versions
+## Terminal compatibility
 
-Build-instrumented integrations refuse unverified framework versions and
-dependency graphs. This prevents a partially instrumented build from producing
-plausible but incomplete semantic data. Check the compatibility page before
-upgrading the framework.
+Termwright uses one terminal model for tests. It does not reproduce every
+vendor-specific quirk of Terminal.app, Windows Terminal, iTerm2, or a remote
+terminal. Configure a terminal profile for width and behavior differences that
+Termwright supports, and run platform-specific behavior on the actual operating
+system.
+
+See [Terminal compatibility](../terminal-compatibility/) for the current model.
+
+## Traces cannot invent missing data
+
+A trace records what the terminal, integration, and application log channels
+provided during the run. It cannot reconstruct a semantic tree, pointer target,
+or log record that was never published.
+
+Interrupted and damaged traces are labelled incomplete. They are not replayed as
+successful empty runs.
+
+## Redaction has explicit limits
+
+Default trace redaction covers input values and secrets known to the session.
+It does not discover every application-specific secret, and live crash or MCP
+screen tails can contain terminal output verbatim. Read
+[Protect secrets](../security/) before sharing artifacts or using credentials.
+
+## Recorder output needs review
+
+Recorder can turn observed input and semantic targets into test source. It
+cannot choose domain assertions, add missing application semantics, or know
+which locator will remain stable through a future refactor. Review generated
+source before saving it.
+
+## Gherkin scope
+
+Termwright runs physical `.feature` files and supports scenario hooks and
+Cucumber tag expressions. It does not provide a Termwright-specific language
+server; use a Cucumber editor extension for syntax and step navigation.

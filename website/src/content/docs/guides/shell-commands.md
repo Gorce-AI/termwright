@@ -7,18 +7,21 @@ Use `terminal.shell` when a test drives several commands in one interactive
 shell and needs the result of each command separately.
 
 ```ts
+import { fileURLToPath } from 'node:url';
 import { expect, test } from 'termwright/test';
+
+const project = fileURLToPath(new URL('../../fixture-project', import.meta.url));
 
 test('builds the workspace', async ({ terminal }) => {
   const shell = await terminal.openShell({
-    cwd: '/workspace/project',
+    cwd: project,
   });
 
   const build = await shell.shell.run('npm run build');
 
   expect(build.exitCode).toBe(0);
   expect(build.output).toContain('built successfully');
-  expect(build.cwd).toBe('/workspace/project');
+  expect(build.cwd).toBe(project);
   expect(build.receipt.outcome).toBe('completed');
 });
 ```
@@ -47,7 +50,7 @@ the initial boundary.
 const status = shell.shell.status();
 
 expect(status.ready).toBe(true);
-expect(status.cwd).toBe('/workspace/project');
+expect(status.cwd).toBe(project);
 expect(status.title).toBe('project — zsh');
 expect(status.cursor).toMatchObject({ row: 4, column: 2 });
 expect(status.bellCount).toBe(0);
@@ -81,7 +84,6 @@ const result = await shell.shell.run('npm test', {
 Only one `run()` may be active per terminal session. Use separate sessions for
 concurrent commands.
 
-The returned `receipt` uses the same action model as locator and raw-device
-actions. It records the committed observation before and after submission, the
-`shell-keyboard-submit` plan, and the keyboard operations actually sent through
-the PTY. Session action events and traces consume that same receipt.
+The returned `receipt` records the state before and after submission and the
+keyboard input sent through the PTY. The same information appears in the
+session trace.

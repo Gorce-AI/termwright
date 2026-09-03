@@ -1,6 +1,7 @@
 ---
 title: "Interface: SemanticStep"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

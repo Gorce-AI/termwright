@@ -17,9 +17,9 @@ const profiles = {
 };
 
 describe('resource profile documentation generator', () => {
-  it('renders scheduler and every resource dimension from the source value', () => {
+  it('lists policies without presenting adaptive limits as fixed numbers', () => {
     expect(renderResourceProfiles(profiles)).toContain(
-      '| `local` | 4 | 4 | 4 | 4 | 4 | 4 | `semanticEndpoint` × 1, `nativeHostPressure` × 1 |',
+      '| `local` | Normal development | Host-derived |',
     );
   });
 
@@ -31,17 +31,17 @@ describe('resource profile documentation generator', () => {
     );
   });
 
-  it('rejects inconsistent capacity dimensions', () => {
+  it('rejects a profile without resource capacities', () => {
     expect(() =>
       renderResourceProfiles({
         ...profiles,
         ci: {
           name: 'ci',
           scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },
-          capacities: { ptySession: 4 },
+          capacities: {},
           perTerminal: { semanticEndpoint: 1 },
         },
       }),
-    ).toThrow(/capacity keys differ/u);
+    ).toThrow(/must declare capacities/u);
   });
 });

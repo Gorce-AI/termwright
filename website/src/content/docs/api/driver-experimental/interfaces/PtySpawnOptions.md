@@ -1,6 +1,7 @@
 ---
 title: "Interface: PtySpawnOptions"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

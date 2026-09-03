@@ -1,199 +1,87 @@
-# termwright
+# Termwright
 
-End-to-end testing for command-line and terminal user-interface applications.
-Run a real program in a PTY, send terminal input, use retrying assertions, and
-inspect failures in the desktop Runner. Framework integrations add semantic
-locators when the framework can provide them.
+Test interactive command-line applications through a real terminal.
+
+Termwright starts your program in a pseudoterminal, sends keyboard and mouse
+input, and asserts the rendered terminal screen. When a test fails, it keeps a
+trace you can replay in the desktop Runner.
+
+## Install
+
+Termwright supports Node.js 22 and 24 on macOS 13.5+ (x64/arm64), Windows 10
+1809+ or Server 2019+ (x64/arm64), and glibc 2.35+ Linux (x64/arm64).
 
 ```sh
-npm i -D termwright
+npm install --save-dev termwright
 ```
 
-## Your first test
+Vitest is included and managed by Termwright. Do not install a matching Vitest
+version just to run Termwright tests.
+
+## Write a test
 
 ```ts
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'termwright/test';
 
-const agent = fileURLToPath(new URL('../agent.js', import.meta.url));
+const program = fileURLToPath(new URL('../app.js', import.meta.url));
 
-test('asks before running a command', async ({ terminal }) => {
-  const app = await terminal.launch({ command: [process.execPath, agent] });
+test('approves a command', async ({ terminal }) => {
+  const app = await terminal.launch({ command: [process.execPath, program] });
 
   await app.waitForText('Permission required');
   await app.press('Enter');
 
-  await expect(app).toHaveText('approved');
+  await expect(app).toHaveText('running: ls -la');
 });
 ```
 
-```jsonc
-// vitest.config.ts — nothing termwright-specific is required to start.
-import { defineConfig } from 'vitest/config';
-export default defineConfig({ test: { testTimeout: 20_000 } });
-```
-
-The test uses text and keyboard input, so it works without a framework
-integration. Integrations provide roles, accessible names, state, geometry,
-and exact pointer ownership where the framework can observe them.
-
-## What you get from where
-
-| Import                                                                          | Contents                                                                           |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `termwright`                                                                    | `launchTerminal`, locators, actions, waits, the error taxonomy                     |
-| `termwright/test`                                                               | the Native Host authoring surface: `test`, `expect`, fixtures, matchers, snapshots |
-| `termwright/ink`                                                                | `mountInk`, `launchInkFixture` for Ink component tests                             |
-| `termwright/gherkin`                                                            | physical `.feature` support, step definitions and the explicit Vitest plugin       |
-| Everything a project needs is reachable from this one package. Termwright's     |
-| runner, journal, traces and live UI are installed and owned by the Native Host; |
-| there is no reporter users must inject into `vitest.config.ts`.                 |
-
-`termwright` on its own has no test-runner dependency, so a script or a
-`node:test` file can use it:
-
-```ts
-import { launchTerminal } from 'termwright';
-
-const app = await launchTerminal({ command: ['htop'] });
-await app.waitForText('CPU');
-console.log(app.screen().text());
-await app.close();
-```
-
-## The CLI
+Run it with:
 
 ```sh
-termwright ui                            # runner + Vitest in watch mode, opens Termwright desktop
-termwright test                          # certified one-shot native host
-termwright test --runs 50                # 50 complete RunIds in that one host
-termwright watch                         # same persistent host, source-triggered runs
-termwright ui --browser                  # use the same runner in the system browser
-termwright ui --no-open                  # …or just print the URL
-termwright ui --trace out/login.twtrace  # open a recording from CI and scrub it
-termwright report --trace out/login.twtrace  # …or write it as one shareable HTML file
-termwright codegen -- node agent.js      # drive a program, get a test back
-termwright mcp                           # serve the MCP tools to an agent
-termwright agent-context                 # versioned JSON: tools, params, exit codes
-termwright usage                         # one-screen cheat sheet
-termwright skill --out .claude/skills/tw # an agent-skill package
+npx termwright test
 ```
 
-`termwright ui` opens a local runner with Specs, Runner, Runs and Settings
-views. Runner keeps a single execution rail — cases with the selected case's
-Test body, steps and commands expanded inline — beside the live terminal,
-semantic inspector, logs and timeline. `test`, `watch`, and `ui` share one
-persistent Termwright-owned Vitest engine. UI discovery, targeted reruns and
-cancellation use native collected IDs in that engine; they never spawn sibling
-Vitest processes or reconstruct selection from file and title.
+The application does not need a Termwright dependency. This black-box mode
+works for any terminal program and can assert text, cells, process exit, and
+keyboard behavior. Mouse assertions also require the application to enable
+terminal mouse reporting.
 
-Vitest options remain native and are forwarded after `--`; for example,
-`termwright test -- --retry=2` allows two diagnostic attempts. A failed first
-attempt followed by a pass is still a non-certifying `flaky` run.
+## Add semantic locators
 
-The native host owns the complete graph collected by its embedded, exact-pinned
-Vitest engine. Tests may use Vitest's DSL, assertions, transforms and mocks,
-while Termwright assigns every case a Run/Execution/Attempt identity and applies
-the same lifecycle, journal and resource policy. Terminal-aware metadata enriches
-a case; it never filters an otherwise valid unit test out of certification.
-Direct `vitest` execution is not a Termwright product mode. The exact runner
-fails closed without its native-host context; repository tests use the same
-host rather than maintaining a compatibility path.
-
-Physical Gherkin features join that same catalogue automatically. Put paired
-step definitions beside the feature and import the authoring API from the
-umbrella package:
+Integrations for Ink, OpenTUI, Textual, tview, Bubble Tea, and Ratatui can expose
+roles, labels, state, and framework-owned geometry:
 
 ```ts
-import { fileURLToPath } from 'node:url';
-import { Given, defineSteps } from 'termwright/gherkin';
-
-const appPath = fileURLToPath(new URL('../app.js', import.meta.url));
-
-export default defineSteps(
-  Given('the login screen is open', async ({ terminal, world }) => {
-    world.app = await terminal.launch({ command: [process.execPath, appPath] });
-  }),
-);
+const approve = app.getByRole('button', { name: 'Approve' });
+await expect(approve).toBeAttached();
 ```
 
-`termwright ui` transforms `.feature` files in memory in the same owned Vitest
-host used for discovery, Run all and browser reruns. Scenario locations remain
-the physical `.feature` path and line, and generated test files are never
-written. Gherkin and TypeScript cases share this one UI; no Cucumber scheduler
-or second runner is started. Feature/Rule ancestry, tags and Scenario kind are
-provider-authored catalogue metadata, not guesses made by splitting titles.
-During execution, Given/When/Then are streamed as native Termwright step
-boundaries with their physical source. A terminal launched by a step, its live
-output, actions, assertions and retained replay all remain attached to that
-step. Actionless scenarios keep their prose and outcome without a fabricated
-terminal panel.
-The native host installs the Gherkin transform itself. It remains the only
-Termwright scheduler: there is no direct-Vitest compatibility path or separate
-Cucumber process.
+Visibility and pointer support differ by framework. Termwright does not infer a
+button from decorated text or guess where a mouse event will go. Check the
+[framework integration guide](https://gorce-ai.github.io/termwright/adapters/)
+before relying on semantic actions.
 
-Interactive use opens the packaged Termwright desktop application. Use
-`--browser` for the system browser or `--no-open` for a server-only process. In
-server-only mode, copy the complete printed URL because it includes the local
-authentication token:
-
-```
-termwright ui (live) — http://127.0.0.1:53219/?token=k3n…
-```
-
-Window opening is skipped with `--no-open`, `--json`, non-interactive stdout,
-and CI. The URL is printed in those cases.
-
-Add `--no-watch` to open the runner without starting a suite, and put Vitest
-arguments after `--`:
+## Inspect a failure
 
 ```sh
-termwright ui -- src/login.test.ts --reporter=dot
+npx termwright ui
 ```
 
-The native host composes its structured journal projection with every reporter
-configured by the project. Human reporter output is never parsed as control
-data. An initial `-t` or `--testNamePattern` scopes collection; browser
-selection is then carried by the collected native RunnerTaskId, never rebuilt
-from file/title text.
+The Runner shows the terminal, application logs, semantic state, and test steps
+from a failed attempt. Retained traces can also be opened directly:
 
-`termwright report` writes the same viewer as `ui --trace`, but as one HTML file
-with the bundle, recording and imported assets (including the SVG Termwright
-mark) inlined — no server, no network requests, so it travels as a CI artifact
-or an attachment. `--json` prints
-`{path, bytes, cut}`; when an archive exceeds the budget (8 MiB by default) both
-the CLI and the page say exactly how many frames and log records were left out,
-because a truncated artifact that looks complete is worse than a large one.
+```sh
+npx termwright ui --trace path/to/test.twtrace
+```
 
-That is a different artifact from the failure report `@termwright/trace`
-generates: this one is the whole viewer over one archive, that one is the visual
-and semantic diff around a single failing step.
+## Documentation
 
-`termwright mcp` forwards every argument to `@termwright/mcp` untouched, so
-`termwright mcp --http --port 7333` and `termwright-mcp --http --port 7333` are
-the same command.
+- [Install and run your first test](https://gorce-ai.github.io/termwright/getting-started/)
+- [Write terminal tests](https://gorce-ai.github.io/termwright/writing-tests/)
+- [Choose locators](https://gorce-ai.github.io/termwright/guides/locators/)
+- [Debug a failed test](https://gorce-ai.github.io/termwright/tools/debugging/)
+- [Supported platforms and limitations](https://gorce-ai.github.io/termwright/reference/limitations/)
 
-**Exit codes**: 0 ok, 1 assertion, 2 usage, 3 no-session, 4 ipc, 5 internal —
-the taxonomy in [`/CONTRACTS.md`](../../CONTRACTS.md) §MCP. `--json` makes
-output machine-readable, and failures carry a `kind`.
-
-A run containing both passed and skipped native cases ends as
-`passed-with-skips`, not `passed`. Human output names every skipped case and
-the UI renders the verdict in amber. Such a run exits successfully only when
-every skip matches exactly one applicable declaration supplied to the host or
-the repository's `quality/applicability-skips.json` and
-`quality/platform-deviations.json` registries; an undeclared,
-ambiguous, or unexpectedly absent required skip exits 1. A run in which every
-selected case is skipped remains `skipped` and never certifies. Human output
-names each skip; `termwright test --json` includes the aggregate `skipPolicy`
-plus per-run `skips` and detailed policy issues. Project-specific declarations
-can live in `quality/applicability-skips.json`. `termwright watch --json`
-emits the same skip identities and detailed policy result for every cycle.
-
-## Requirements
-
-Node >= 22, ESM only. The native host embeds and certifies exactly Vitest 4.1.11
-as its collection/transform/assertion engine. It is an implementation surface,
-not a user-selectable runner range.
-
-Implementation decisions: [`NOTES.md`](./NOTES.md).
+Termwright is released under the MIT license. Source and contribution guidance
+are available in the [GitHub repository](https://github.com/Gorce-AI/termwright).

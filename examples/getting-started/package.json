@@ -13,7 +13,6 @@
     "test": "termwright test"
   },
   "devDependencies": {
-    "termwright": "workspace:*",
-    "vitest": "4.1.11"
+    "termwright": "workspace:*"
   }
 }

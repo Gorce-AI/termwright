@@ -1,6 +1,7 @@
 ---
 title: "Interface: NativePtySessionHandle"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

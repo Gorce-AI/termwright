@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: ProcessLifecycleErrorCode"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

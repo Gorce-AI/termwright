@@ -1,6 +1,7 @@
 ---
 title: "Function: parseSelector()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

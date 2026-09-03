@@ -1,114 +1,39 @@
 # @termwright/probe-opentui
 
-Semantics from an OpenTUI application that **imports nothing of ours**.
-
-The application is launched with one extra flag. A module hook replaces
-`@opentui/core`'s entry with a shim that wraps `createCliRenderer`, and the
-probe observes the renderer's retained tree from there. Nothing is written into
-the project, no configuration file is needed, and the application's source is
-untouched.
+Add semantic locators to an OpenTUI application tested with Termwright.
 
 ## Install
 
 ```sh
-npm install --save-dev @termwright/probe-opentui
+npm install --save-dev termwright @termwright/probe-opentui
 ```
 
-The exact certified versions are generated in `src/certified-runtime.json` and
-published in the compatibility registry. Node >= 22, or Bun. Other OpenTUI
-versions fail closed before the probe advertises semantic capabilities.
+Keep `termwright` and `@termwright/probe-opentui` on the same release version.
 
-## Usage
+Supported OpenTUI versions are 0.5.3, 0.5.4, and 0.5.6 through 0.5.10. Use Bun
+1.2.15 or newer, or Node.js 22 or 24 when the application itself supports Node.
 
-A launcher composes the command; this package never spawns anything.
+## Launch with the probe
 
 ```ts
+import { fileURLToPath } from 'node:url';
 import { withProbe } from '@termwright/probe-opentui';
+import { expect, test } from 'termwright/test';
 
-const { command } = withProbe('bun', ['bun', 'app.ts']);
-// ['bun', '--preload', '/…/bun-preload.js', 'app.ts']
+const appPath = fileURLToPath(new URL('../app.ts', import.meta.url));
 
-await launchTerminal({ command, env: { TERMWRIGHT_ENDPOINT: endpoint, TERMWRIGHT_TOKEN: token } });
+test('shows the deploy button', async ({ terminal }) => {
+  const { command } = withProbe('bun', ['bun', appPath]);
+  const app = await terminal.launch({ command });
+
+  await expect(app.getByRole('button', { name: 'Deploy' })).toBeAttached();
+});
 ```
 
-Under Node the flag is `--import` instead, because the probe is ESM. Node gets
-a `file://` preload URL; Bun gets a native absolute path so the same command
-works with Bun's Windows resolver.
+The probe observes the Renderable tree, focus, values, layout, viewport
+clipping, and pointer targets. The application must enable terminal mouse
+reporting before a locator click can be sent. Unsupported OpenTUI versions can
+still run as black-box terminal tests but do not get semantic locators.
 
-The test suite treats Bun as optional on a developer machine. Certifying
-environments set `TERMWRIGHT_REQUIRE_BUN=1`, which makes an unavailable runtime
-or `TERMWRIGHT_SKIP_BUN=1` a hard failure instead of reduced coverage.
-
-## Dormant without instrumentation
-
-With no `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in the environment the
-entry points install **nothing** — no module hook, no global, no allocation —
-so a preload that ends up somewhere it was not meant to be is inert. The test
-suite asserts this in both runtimes.
-
-## What an instrumented run produces
-
-A vanilla application — no import, no annotation, no configuration — publishes a
-semantic tree built from what OpenTUI exposes: roles from the widget classes,
-real terminal cells for bounds, focus from the renderer, values from the input
-widgets. Output stays byte-identical to an uninstrumented run apart from the
-render-commit markers, which is asserted rather than asserted-to.
-
-What OpenTUI has no concept of — roles, `checked`, `disabled`, `expanded` — is
-reported as **unobservable** rather than as absent, so a test can tell "this is
-off" from "this framework never said".
-
-An application may optionally call `describeRenderable` from
-`@termwright/opentui`. The SDK stores only developer intent in a process-local
-weak registry; this injected probe consumes it and merges it with framework
-geometry, text, focus, value, selection, and visibility. The annotation API can
-provide `role`, `name`, `description`, `testId`, JSON `extended` domain state,
-actions, and relationships, but cannot override those physical/runtime facts.
-The renderer is still created and owned entirely by the application.
-
-## Deviations
-
-**`frameworkType` comes from `constructor.name`.** OpenTUI has no accessibility
-layer at all, so a class name is the only signal there is. It does not survive
-minification: a bundled application's widgets arrive as `generic` with a mangled
-type. Nothing is lost that was not already unknowable, but the names get worse.
-
-**Geometry is runtime-observed.** A runtime observer records render-command
-identity, intended rectangles, ancestor scissors, culling, and the committed
-frame boundary. Geometry no longer depends on generated-source instrumentation.
-
-**Output causality uses a narrow structural transform.** OpenTUI's public
-renderer hooks expose `FRAME`, but with threaded native output they do not
-expose whether frame bytes were successfully accepted by the terminal stream.
-The preload therefore parses package JavaScript as an AST and instruments only
-the renderer constructor's stdout/feed ownership path. It does not match exact
-source text, chunk names or bundle digests; an absent, duplicate or changed
-structural anchor fails closed. Runtime capability and behavioral conformance
-remain mandatory before the adapter connects.
-
-Split-footer has one precise upstream capability gap: OpenTUI applies a mutable
-native `renderOffset` below `root`, render-list, hit-grid, and `FRAME`; none of
-those public surfaces reports the terminal row where the footer was actually
-painted. `terminalHeight - height` is not equivalent during split scrollback or
-resize. The certified runtime wrapper therefore reads this one private field at
-the same-pass `FRAME` commit boundary, after native rendering. Missing or
-invalid origin evidence fails closed. This read remains necessary unless OpenTUI
-publishes the value.
-
-**`paint-order` is announced but omitted per tree where it cannot be honoured.**
-The z-order child list is a protected field upstream; when a version stops
-exposing it, the walk falls back to document order and drops `paintOrder`
-entirely rather than passing one off as the other.
-
-## Runtime notes
-
-The initial differential baseline used `@opentui/core@0.5.3`, Bun 1.2.15 and
-Node 22/24. Every additionally listed version must pass the same runtime
-capability and behavioral certification.
-
-- **Bun** is the primary runtime: `bun:ffi` is OpenTUI's supported FFI backend,
-  while `node:ffi` needs Node 26.1+ or an experimental flag. The flag must sit
-  before the entry file, and the application must be launched inside its own
-  tree or Bun resolves the framework from its own install cache instead.
-- **Node** uses `module.registerHooks` where available and falls back to
-  `module.register`, which covers the whole `>= 22` range.
+See the [OpenTUI integration guide](https://gorce-ai.github.io/termwright/adapters/opentui/)
+for annotations and current limitations.
