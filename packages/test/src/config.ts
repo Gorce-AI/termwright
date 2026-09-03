@@ -9,6 +9,7 @@
  */
 
 import type { TimeoutClasses } from '@termwright/driver';
+import { resolveProfileId, type TerminalProfileId } from '@termwright/vt';
 import {
   LOG_LEVEL_SEVERITY,
   SESSION_CAPABILITIES,
@@ -71,7 +72,7 @@ export interface TermwrightConfig {
   /** Extra environment for launched programs. Merged after the palette's. */
   readonly env?: Readonly<Record<string, string>>;
   /** Character-width and terminal behavior profile used by the emulator. */
-  readonly terminalProfile?: string;
+  readonly terminalProfile?: TerminalProfileId;
   /** Deterministic palette; also decorates cell snapshots with color names. */
   readonly palette?: ColorPalette;
   /** Overrides selected by the `TERMWRIGHT_PROFILE` environment variable. */
@@ -104,7 +105,7 @@ export interface ResolvedTermwrightConfig {
   readonly requiredCapabilities: readonly SessionCapabilityId[];
   readonly env: Readonly<Record<string, string>>;
   readonly palette: ColorPalette | undefined;
-  readonly terminalProfile: string | undefined;
+  readonly terminalProfile: TerminalProfileId | undefined;
   readonly updateSnapshots: UpdateSnapshotsMode | undefined;
   readonly failOnLogLevel: LogLevel | false;
   /** Name of the profile that was applied, when any. */
@@ -300,6 +301,12 @@ function validate(config: TermwrightConfig, path: string): void {
   }
   if (config.command !== undefined && config.command.length === 0) {
     throw new TypeError(`${path}.command must not be empty`);
+  }
+  if (
+    config.terminalProfile !== undefined &&
+    resolveProfileId(config.terminalProfile) === undefined
+  ) {
+    throw new TypeError(`${path}.terminalProfile is not a registered terminal profile`);
   }
   const required = config.requiredCapabilities ?? [];
   const supported = new Set<string>(SESSION_CAPABILITIES);

@@ -718,6 +718,9 @@ importers:
       '@termwright/ui':
         specifier: workspace:*
         version: link:../ui
+      '@termwright/vt':
+        specifier: workspace:*
+        version: link:../vt
       vitest:
         specifier: 4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))

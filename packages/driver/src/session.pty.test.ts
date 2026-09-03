@@ -13,6 +13,7 @@ import { AmbiguousLocatorError, ProbeAttachFailedError, TermwrightError } from '
 import { createNativePtyBackend, nativePtyAvailable } from './native-pty-backend.js';
 import { launchTerminal } from './session.js';
 import { sensitive } from '@termwright/protocol';
+import type { TerminalProfileId } from '@termwright/vt';
 
 const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtures');
@@ -829,7 +830,7 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
 
 describe.skipIf(!ptyAvailable())('terminal profiles', { timeout: 20_000 }, () => {
   /** Launches a program that prints one box-drawing character. */
-  async function printBoxChar(profile?: string): Promise<TerminalHarness> {
+  async function printBoxChar(profile?: TerminalProfileId): Promise<TerminalHarness> {
     const terminal = await launchTerminal({
       command: [
         process.execPath,
@@ -876,7 +877,7 @@ describe.skipIf(!ptyAvailable())('terminal profiles', { timeout: 20_000 }, () =>
   it('refuses an unknown profile instead of quietly picking one', async () => {
     const error = await launchTerminal({
       command: [process.execPath, '-e', '0'],
-      terminalProfile: 'konsole',
+      terminalProfile: 'konsole' as never,
     }).catch((cause: unknown) => cause as Error);
     expect((error as Error).message).toContain('unknown terminal profile');
   });

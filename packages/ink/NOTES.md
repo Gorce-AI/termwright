@@ -25,8 +25,8 @@ accessibility hints, not as Termwright annotations.
 
 The in-process backend supplies Ink with private stdin/stdout streams and the
 session environment without mutating the test runner. It calls normal
-`ink.render`, wrapped only by `@termwright/probe-ink/internal/testing`; that
-entry point is not part of the probe's public root API.
+`ink.render`, wrapped only by the probe's advanced `instrumentation` entry
+point; that entry point is not needed by application tests.
 
 Output produced synchronously inside `spawn()` is buffered until the driver
 subscribes, mirroring a PTY kernel buffer. `applyOnlcr` reproduces PTY newline

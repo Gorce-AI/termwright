@@ -113,6 +113,7 @@ export type {
   ScreenLocatorRef,
   ScreenCondition,
 } from '@termwright/protocol';
+export type { TerminalProfileId } from '@termwright/vt';
 
 export { launchTerminal, type LaunchTerminalOptions } from './session.js';
 export { publicValue, sensitive } from '@termwright/protocol';

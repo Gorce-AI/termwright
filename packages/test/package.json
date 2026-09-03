@@ -37,6 +37,7 @@
     "@termwright/run-journal-transport": "workspace:*",
     "@termwright/trace": "workspace:*",
     "@termwright/ui": "workspace:*",
+    "@termwright/vt": "workspace:*",
     "vitest": "4.1.11",
     "yaml": "^2.5.0"
   },

@@ -6,6 +6,7 @@
  * wait is driven by revisions or process events — the driver never sleeps.
  */
 import { existsSync } from 'node:fs';
+import type { TerminalProfileId } from '@termwright/vt';
 import type {
   ActionEvent,
   AppLogEvent,
@@ -959,8 +960,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // -------------------------------------------------------------------------
   // Observation
 
-  get terminalProfile(): string {
-    return this.#vt.profile.id;
+  get terminalProfile(): TerminalProfileId {
+    return this.#vt.profile.id as TerminalProfileId;
   }
 
   contract(): EffectiveSessionContract | null {

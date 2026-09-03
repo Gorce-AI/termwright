@@ -38,6 +38,7 @@ import type {
   SessionDiagnostic,
   SessionEvents,
   TerminalHarness,
+  TerminalProfileId,
   TerminalState,
   TerminalWindow,
   TextLocatorOptions,
@@ -64,7 +65,7 @@ export abstract class ForwardingHarness implements TerminalHarness {
     return this.session.sessionId;
   }
 
-  get terminalProfile(): string {
+  get terminalProfile(): TerminalProfileId {
     return this.session.terminalProfile;
   }
 

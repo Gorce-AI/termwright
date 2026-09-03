@@ -25,7 +25,7 @@
       "types": "./dist/bun-preload.d.ts",
       "import": "./dist/bun-preload.js"
     },
-    "./internal/testing": {
+    "./instrumentation": {
       "types": "./dist/instrument.d.ts",
       "import": "./dist/instrument.js"
     }

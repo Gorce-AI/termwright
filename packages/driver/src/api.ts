@@ -3,6 +3,7 @@
  * Ink component testing) programs against these types. Changes here require updating
  * CONTRACTS.md and notifying all package owners.
  */
+import type { TerminalProfileId } from '@termwright/vt';
 import type {
   EffectiveSessionContract,
   ActionReceipt,
@@ -108,7 +109,7 @@ export interface LaunchOptions {
    * It is recorded with the session so a replay, a screenshot and the runner
    * pane can count characters exactly as the live session did.
    */
-  readonly terminalProfile?: string;
+  readonly terminalProfile?: TerminalProfileId;
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   /**
@@ -173,7 +174,7 @@ export interface TerminalHarness {
   /** Resolved policy inherited by traces, reports and other artifact sinks. */
   readonly artifactSecurity: import('@termwright/protocol').ResolvedArtifactSecurityPolicy;
   /** Immutable terminal profile used to decode the very first PTY byte. */
-  readonly terminalProfile: string;
+  readonly terminalProfile: TerminalProfileId;
   /** Shell command boundaries and prompt state when the child emits OSC 133. */
   readonly shell: ShellApi;
   /** One physical keyboard implementation. Convenience methods delegate here. */

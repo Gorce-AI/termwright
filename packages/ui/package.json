@@ -20,17 +20,13 @@
     "./live-client": {
       "types": "./dist/live-client.d.ts",
       "import": "./dist/live-client.js"
-    },
-    "./provider": {
-      "types": "./dist/provider.d.ts",
-      "import": "./dist/provider.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "pnpm run check:boundary && tsup src/index.ts src/live-client.ts src/provider.ts --format esm --dts --sourcemap --clean && vite build",
+    "build": "pnpm run check:boundary && tsup src/index.ts src/live-client.ts --format esm --dts --sourcemap --clean && vite build",
     "build:app": "vite build",
     "check:boundary": "node scripts/check-boundary.mjs",
     "screenshots:docs": "node scripts/capture-docs-screenshots.mjs",

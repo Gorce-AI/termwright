@@ -5,7 +5,7 @@
 
 import type { ComponentType, ReactNode } from 'react';
 import { Box, measureElement, render, type Instance, type RenderOptions } from 'ink';
-import { wrapInkRender } from '@termwright/probe-ink/internal/testing';
+import { wrapInkRender } from '@termwright/probe-ink/instrumentation';
 import {
   SessionClosedError,
   type AppLogSource,
