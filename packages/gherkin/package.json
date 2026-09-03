@@ -39,8 +39,7 @@
     "@cucumber/tag-expressions": "^11.0.1",
     "@termwright/test": "workspace:*",
     "source-map-js": "1.2.1",
-    "tinyglobby": "0.2.17",
-    "vitest": "4.1.11"
+    "tinyglobby": "0.2.17"
   },
   "peerDependencies": {
     "vite": "^7.0.0"

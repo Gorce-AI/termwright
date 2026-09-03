@@ -1,4 +1,4 @@
-import type { TermwrightFixtures } from '@termwright/test';
+import type { TermwrightExpect, TermwrightFixtures } from '@termwright/test';
 
 /** The mutable state shared by every step in one Scenario or Outline row. */
 export type GherkinWorld = Record<string, unknown>;
@@ -15,7 +15,7 @@ export interface GherkinScenario {
 /** Termwright's native and project fixtures plus Gherkin's per-scenario state. */
 export type GherkinContext<Fixtures extends object = object> = TermwrightFixtures &
   Fixtures & {
-    readonly expect: (typeof import('vitest'))['expect'];
+    readonly expect: TermwrightExpect;
     readonly world: GherkinWorld;
     readonly scenario: GherkinScenario;
     /** Registers test-scoped cleanup. Cleanups run in reverse order after `After` hooks. */

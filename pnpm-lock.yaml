@@ -317,13 +317,13 @@ importers:
       tinyglobby:
         specifier: 0.2.17
         version: 0.2.17
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
     devDependencies:
       vite:
         specifier: ^7.3.0
         version: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   packages/ink:
     dependencies:
@@ -694,6 +694,7 @@ importers:
       '@termwright/ui':
         specifier: workspace:*
         version: link:../ui
+    devDependencies:
       vitest:
         specifier: 4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
@@ -721,9 +722,66 @@ importers:
       '@termwright/vt':
         specifier: workspace:*
         version: link:../vt
-      vitest:
+      '@vitest/expect':
         specifier: 4.1.11
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+        version: 4.1.11
+      '@vitest/mocker':
+        specifier: 4.1.11
+        version: 4.1.11(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+      '@vitest/pretty-format':
+        specifier: 4.1.11
+        version: 4.1.11
+      '@vitest/runner':
+        specifier: 4.1.11
+        version: 4.1.11
+      '@vitest/snapshot':
+        specifier: 4.1.11
+        version: 4.1.11
+      '@vitest/spy':
+        specifier: 4.1.11
+        version: 4.1.11
+      '@vitest/utils':
+        specifier: 4.1.11
+        version: 4.1.11
+      es-module-lexer:
+        specifier: 2.3.2
+        version: 2.3.2
+      expect-type:
+        specifier: 1.4.0
+        version: 1.4.0
+      magic-string:
+        specifier: 0.30.21
+        version: 0.30.21
+      obug:
+        specifier: 2.1.4
+        version: 2.1.4
+      pathe:
+        specifier: 2.0.3
+        version: 2.0.3
+      picomatch:
+        specifier: 4.0.5
+        version: 4.0.5
+      std-env:
+        specifier: 4.2.0
+        version: 4.2.0
+      tinybench:
+        specifier: 2.9.0
+        version: 2.9.0
+      tinyexec:
+        specifier: 1.3.0
+        version: 1.3.0
+      tinyglobby:
+        specifier: 0.2.17
+        version: 0.2.17
+      tinyrainbow:
+        specifier: 3.1.1
+        version: 3.1.1
+      vite:
+        specifier: 7.3.6
+        version: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
+      why-is-node-running:
+        specifier: 2.3.0
+        version: 2.3.0
       yaml:
         specifier: ^2.5.0
         version: 2.9.0
@@ -731,9 +789,9 @@ importers:
       '@termwright/test-provider-internal':
         specifier: workspace:*
         version: link:../test-provider-internal
-      '@vitest/runner':
+      vitest:
         specifier: 4.1.11
-        version: 4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   packages/test-provider-internal:
     dependencies:

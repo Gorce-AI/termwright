@@ -129,7 +129,7 @@ export interface TermwrightMatchers<R = unknown> {
   toHaveLogged(query: LogQuery, options?: PollOptions): R;
 }
 
-declare module 'vitest' {
+declare module '@vitest/expect' {
   // `any` mirrors Vitest's own declaration and keeps matcher augmentation compatible.
   interface Matchers<T = any> extends TermwrightMatchers<T> {}
 }

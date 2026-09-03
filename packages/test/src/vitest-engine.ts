@@ -16,7 +16,7 @@ export const TERMWRIGHT_RUNNER_CONTEXT_KEY = 'termwright.runner.context.v3' as c
 /** Reads the package which supplies the embedded Vitest engine. */
 export function installedVitestVersion(): string {
   const require = createRequire(import.meta.url);
-  const manifest = require('vitest/package.json') as { readonly version?: unknown };
+  const manifest = require('../vendor/vitest/package.json') as { readonly version?: unknown };
   if (typeof manifest.version !== 'string' || manifest.version === '') {
     throw new Error('the installed Vitest package has no valid version');
   }

@@ -37,7 +37,7 @@ Registers test-scoped cleanup. Cleanups run in reverse order after `After` hooks
 
 ### expect
 
-> `readonly` **expect**: `__module`\[`"expect"`\]
+> `readonly` **expect**: `TermwrightExpect`
 
 ### scenario
 

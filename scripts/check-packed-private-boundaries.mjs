@@ -67,8 +67,28 @@ const work = mkdtempSync(join(tmpdir(), 'termwright-private-boundaries-'));
 try {
   const pnpmCli = process.env.npm_execpath;
   if (!pnpmCli) throw new Error('npm_execpath is missing; run this check through pnpm');
+
+  const consumerPackageNames = [
+    '@termwright/protocol',
+    '@termwright/resource-broker',
+    '@termwright/run-journal-transport',
+    '@termwright/test',
+  ];
+  const packageClosure = new Set(consumerPackageNames);
+  for (const name of packageClosure) {
+    const manifest = manifests.get(name)?.manifest;
+    if (!manifest || manifest.private === true)
+      throw new Error(`packed consumer requires missing or private package ${name}`);
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const dependency of Object.keys(manifest[field] ?? {})) {
+        if (manifests.has(dependency) && manifests.get(dependency).manifest.private !== true)
+          packageClosure.add(dependency);
+      }
+    }
+  }
   const archives = Object.fromEntries(
-    ['protocol', 'resource-broker', 'run-journal-transport', 'test'].map((directory) => {
+    [...packageClosure].sort().map((name) => {
+      const directory = manifests.get(name).directory;
       const output = execFileSync(
         process.execPath,
         [pnpmCli, '--dir', `packages/${directory}`, 'pack', '--pack-destination', work],
@@ -82,14 +102,14 @@ try {
         .split(/\r?\n/u)
         .at(-1);
       if (!output) throw new Error(`pnpm pack produced no archive for ${directory}`);
-      return [directory, output];
+      return [name, output];
     }),
   );
+  const localPackages = Object.fromEntries(
+    Object.entries(archives).map(([name, archive]) => [name, `file:${archive}`]),
+  );
   const dependencies = Object.fromEntries(
-    Object.entries(archives).map(([directory, archive]) => [
-      `@termwright/${directory}`,
-      `file:${archive}`,
-    ]),
+    consumerPackageNames.map((name) => [name, localPackages[name]]),
   );
   dependencies.vitest = '4.1.11';
   writeFileSync(
@@ -99,7 +119,11 @@ try {
         private: true,
         type: 'module',
         dependencies,
-        pnpm: { overrides: { '@termwright/protocol': dependencies['@termwright/protocol'] } },
+        // A Version PR advances the whole release set before any of those
+        // versions exist in the registry. Resolve the exact packed candidate
+        // graph so this gate tests the release payload rather than the
+        // previously published release.
+        pnpm: { overrides: localPackages },
       },
       null,
       2,

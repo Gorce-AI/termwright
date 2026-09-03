@@ -3,16 +3,9 @@
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { UserConsoleLog } from 'vitest';
-import {
-  createVitest,
-  parseCLI,
-  type Reporter,
-  type TestCase,
-  type TestRunResult,
-  type Vitest,
-} from 'vitest/node';
+import type { Reporter, TestCase, TestRunResult, Vitest } from 'vitest/node';
 import {
   RunIdFactory,
   type InvocationId,
@@ -72,7 +65,7 @@ export interface TermwrightRunnerContext {
 export const CERTIFIED_VITEST_VERSION = '4.1.11' as const;
 const TERMWRIGHT_RUNNER_CONTEXT_KEY = 'termwright.runner.context.v3' as const;
 
-export function assertCertifiedVitestRuntime(version = installedVitestVersion()): void {
+export function assertCertifiedVitestRuntime(version = installedTermwrightVitestVersion()): void {
   if (version !== CERTIFIED_VITEST_VERSION) {
     throw new Error(
       `unsupported Vitest runtime ${version}; Termwright is exact-certified for ${CERTIFIED_VITEST_VERSION}`,
@@ -80,8 +73,8 @@ export function assertCertifiedVitestRuntime(version = installedVitestVersion())
   }
 }
 
-function installedVitestVersion(): string {
-  const manifest = createRequire(import.meta.url)('vitest/package.json') as {
+export function installedTermwrightVitestVersion(): string {
+  const manifest = createRequire(import.meta.url)(termwrightVitestPath('package.json')) as {
     readonly version?: unknown;
   };
   if (typeof manifest.version !== 'string' || manifest.version === '') {
@@ -150,6 +143,9 @@ export async function createCertifiedVitestEngine(options: CertifiedVitestEngine
   readonly engine: TermwrightVitestEngine;
   readonly filters: readonly string[];
 }> {
+  const { createVitest, parseCLI } = (await import(
+    pathToFileURL(termwrightVitestPath('dist/node.js')).href
+  )) as typeof import('vitest/node');
   assertCertifiedVitestRuntime();
   const parsed = parseCLI(['vitest', 'run', ...(options.vitestArgs ?? [])], {
     allowUnknownOptions: true,
@@ -205,6 +201,11 @@ export async function createCertifiedVitestEngine(options: CertifiedVitestEngine
     ),
     filters: parsed.filter,
   };
+}
+
+function termwrightVitestPath(path: string): string {
+  const testEntry = fileURLToPath(import.meta.resolve('@termwright/test'));
+  return resolve(dirname(testEntry), '..', 'vendor', 'vitest', path);
 }
 
 const VITEST_CATALOGUE_SELECTORS = Object.freeze([

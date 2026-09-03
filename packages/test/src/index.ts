@@ -31,11 +31,14 @@
  */
 
 import { registerTermwrightMatchers } from './matchers.js';
+import type { ExpectStatic } from '@vitest/expect';
 
 registerTermwrightMatchers();
 
 // Vitest's own API, re-exported so a test file has a single import.
 export { afterAll, afterEach, beforeAll, beforeEach, describe, expect, vi } from 'vitest';
+/** The assertion API bound to Termwright's private, exact-certified engine. */
+export type TermwrightExpect = ExpectStatic;
 
 // Public harness types belong beside the fixture that returns them. Consumers
 // of the umbrella `termwright` package should not need a second direct package

@@ -66,7 +66,9 @@
     "@termwright/test": "workspace:*",
     "@termwright/ui": "workspace:*",
     "@termwright/screenshot": "workspace:*",
-    "@termwright/trace": "workspace:*",
+    "@termwright/trace": "workspace:*"
+  },
+  "devDependencies": {
     "vitest": "4.1.11"
   }
 }
