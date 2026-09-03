@@ -6,13 +6,18 @@ import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 
 const execFileAsync = promisify(execFile);
 const it = resourceAwareIt.resources({ hostPressure: 'exclusive' });
+const BUN_PROCESS_DEADLINE_MS = 20_000;
+const BUN_TEST_DEADLINE_MS = 30_000;
 
 describe('Ink React bridge under Bun', () => {
-  it('observes a real committed Ink containerInfo without a skipped compatibility path', async () => {
-    const bridgeUrl = new URL('./react-commit-bridge.ts', import.meta.url).href;
-    const inkUrl = import.meta.resolve('ink');
-    const reconcilerUrl = inkUrl.replace(/index\.js$/u, 'reconciler.js');
-    const script = `
+  it(
+    'observes a real committed Ink containerInfo without a skipped compatibility path',
+    { timeout: BUN_TEST_DEADLINE_MS },
+    async () => {
+      const bridgeUrl = new URL('./react-commit-bridge.ts', import.meta.url).href;
+      const inkUrl = import.meta.resolve('ink');
+      const reconcilerUrl = inkUrl.replace(/index\.js$/u, 'reconciler.js');
+      const script = `
       import {Writable} from 'node:stream';
       import {createElement} from 'react';
       import {activateInkRendererObservation} from ${JSON.stringify(bridgeUrl)};
@@ -55,16 +60,22 @@ describe('Ink React bridge under Bun', () => {
         });
       });
       process.exit(0);
-    `;
-    const { stdout, stderr } = await execFileAsync('bun', ['--eval', script], {
-      cwd: fileURLToPath(new URL('.', inkUrl)),
-    });
-    expect(stderr).toBe('');
-    const commits = JSON.parse(stdout) as Array<{
-      same: boolean;
-      nodeName: string;
-    }>;
-    expect(commits.length).toBeGreaterThan(0);
-    expect(commits.at(-1)).toEqual({ same: true, nodeName: 'ink-root' });
-  });
+      `;
+      const { stdout, stderr } = await execFileAsync('bun', ['--eval', script], {
+        cwd: fileURLToPath(new URL('.', inkUrl)),
+        encoding: 'utf8',
+        // This is a cold external-runtime integration boundary, not an
+        // in-process unit. Give the child its own causal deadline and leave
+        // the outer test ten seconds to reap it and report the real failure.
+        timeout: BUN_PROCESS_DEADLINE_MS,
+      });
+      expect(stderr).toBe('');
+      const commits = JSON.parse(stdout) as Array<{
+        same: boolean;
+        nodeName: string;
+      }>;
+      expect(commits.length).toBeGreaterThan(0);
+      expect(commits.at(-1)).toEqual({ same: true, nodeName: 'ink-root' });
+    },
+  );
 });
