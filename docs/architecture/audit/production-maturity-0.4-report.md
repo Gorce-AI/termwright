@@ -213,6 +213,16 @@ Decision records: [bounded-event-journal.md](bounded-event-journal.md),
 Decision records: [vitest-engine-boundary.md](vitest-engine-boundary.md) and
 [clean-room-native-host.md](clean-room-native-host.md).
 
+### Executable public quick start
+
+The README and Getting Started application/test are one executable source
+contract. Delimited Markdown fences are compared byte-for-byte with
+`examples/getting-started`; drift fails `check:fast`. The packed clean-room
+consumer materializes the exact documented snippets, runs `termwright doctor`,
+then runs the unmodified documented test through tarball-only packages. The
+same consumer retains the independent Unicode and user-Vitest coexistence
+canaries, so documentation verification cannot weaken packaging coverage.
+
 ## Release evidence and package state
 
 The required performance table is maintained in

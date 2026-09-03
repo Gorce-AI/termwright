@@ -8,8 +8,8 @@
     "node": "^22.0.0 || ^24.0.0"
   },
   "scripts": {
-    "build": "node --check app.js",
-    "typecheck": "node --check app.js",
+    "build": "node --check app.mjs",
+    "typecheck": "node --check app.mjs",
     "test": "termwright test"
   },
   "devDependencies": {

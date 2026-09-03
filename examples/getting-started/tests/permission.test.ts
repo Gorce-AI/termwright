@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'termwright/test';
 
-const program = fileURLToPath(new URL('../app.js', import.meta.url));
+const program = fileURLToPath(new URL('../app.mjs', import.meta.url));
 
 test('approves a command', async ({ terminal }) => {
   const app = await terminal.launch({ command: [process.execPath, program] });

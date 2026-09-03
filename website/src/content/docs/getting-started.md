@@ -38,6 +38,8 @@ The command exits with code 0 when each required check passes.
 Save this as `app.mjs`. The `.mjs` extension keeps the example self-contained
 and does not require changing your project's module type.
 
+<!-- BEGIN QUICKSTART APP -->
+
 ```js
 import readline from 'node:readline';
 
@@ -53,6 +55,8 @@ process.stdin.once('keypress', (_input, key) => {
 });
 ```
 
+<!-- END QUICKSTART APP -->
+
 The program waits for Enter before printing its result. It uses raw input, so a
 plain redirected `stdin`/`stdout` test would not reproduce how it runs in a
 terminal.
@@ -60,6 +64,8 @@ terminal.
 ## Write the test
 
 Create `tests/permission.test.ts`:
+
+<!-- BEGIN QUICKSTART TEST -->
 
 ```ts
 import { fileURLToPath } from 'node:url';
@@ -76,6 +82,8 @@ test('approves a command', async ({ terminal }) => {
   await expect(app).toHaveText('running: ls -la');
 });
 ```
+
+<!-- END QUICKSTART TEST -->
 
 Run the test:
 
