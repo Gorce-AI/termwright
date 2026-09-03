@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -34,7 +34,7 @@ for (const [name, { manifest }] of manifests) {
   }
 }
 
-for (const directory of ['resource-broker', 'run-journal-transport']) {
+for (const directory of ['resource-broker', 'run-journal-transport', 'test']) {
   const dist = join(packagesRoot, directory, 'dist');
   for (const file of readdirSync(dist).filter(
     (name) => name.endsWith('.js') || name.endsWith('.d.ts'),
@@ -51,19 +51,11 @@ for (const directory of ['resource-broker', 'run-journal-transport']) {
   }
 }
 
-const brokerVitest = readFileSync(
-  join(packagesRoot, 'resource-broker', 'dist', 'vitest.js'),
-  'utf8',
-);
-if (!/from\s+["']vitest["']/u.test(brokerVitest)) {
-  errors.push(
-    "packages/resource-broker/dist/vitest.js must externalize the caller's Vitest singleton",
-  );
+if (existsSync(join(packagesRoot, 'resource-broker', 'dist', 'vitest.js'))) {
+  errors.push('packages/resource-broker/dist/vitest.js survived removal of the engine boundary');
 }
-if (Buffer.byteLength(brokerVitest) > 32 * 1024) {
-  errors.push(
-    'packages/resource-broker/dist/vitest.js unexpectedly contains a bundled test runtime',
-  );
+if (manifests.get('@termwright/resource-broker')?.manifest.exports?.['./vitest'] !== undefined) {
+  errors.push('@termwright/resource-broker still exports the removed Vitest adapter');
 }
 
 if (errors.length > 0) {
@@ -76,7 +68,7 @@ try {
   const pnpmCli = process.env.npm_execpath;
   if (!pnpmCli) throw new Error('npm_execpath is missing; run this check through pnpm');
   const archives = Object.fromEntries(
-    ['protocol', 'resource-broker', 'run-journal-transport'].map((directory) => {
+    ['protocol', 'resource-broker', 'run-journal-transport', 'test'].map((directory) => {
       const output = execFileSync(
         process.execPath,
         [pnpmCli, '--dir', `packages/${directory}`, 'pack', '--pack-destination', work],
@@ -120,9 +112,22 @@ try {
   const consumer = join(work, 'consumer.mjs');
   writeFileSync(
     consumer,
-    "await import('@termwright/resource-broker/transport');\nawait import('@termwright/resource-broker/vitest');\nawait import('@termwright/run-journal-transport');\n",
+    "await import('@termwright/resource-broker/transport');\nawait import('@termwright/run-journal-transport');\n",
   );
   execFileSync(process.execPath, [consumer], { cwd: work, stdio: 'inherit' });
+  const testConsumer = join(work, 'consumer.test.mjs');
+  writeFileSync(
+    testConsumer,
+    "import { expect, it } from 'vitest';\nimport { it as termwrightIt } from '@termwright/test';\nit('loads the packed provider boundary', () => {\n  expect(typeof termwrightIt.resources).toBe('function');\n});\n",
+  );
+  execFileSync(
+    process.execPath,
+    [join(work, 'node_modules/vitest/vitest.mjs'), 'run', 'consumer.test.mjs'],
+    {
+      cwd: work,
+      stdio: 'inherit',
+    },
+  );
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

@@ -17,7 +17,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { CharmDetectionError } from './detect.js';
 import {

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, onTestFinished, type TestContext } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { candidatePaths, spawnPty } from './index.js';
 
 const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });

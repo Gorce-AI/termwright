@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { nativePtyAvailable } from '@termwright/driver/experimental';
 import { Client, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveInMemory } from './server.js';

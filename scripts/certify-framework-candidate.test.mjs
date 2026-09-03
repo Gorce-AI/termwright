@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
+import { it as resourceAwareIt } from '../packages/test-provider-internal/src/index.ts';
 import {
   assertCandidateSemanticSession,
   assertRustTestDiscovered,

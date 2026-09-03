@@ -11,7 +11,7 @@
  * space capped at 128 MB, so exhaustion cases cannot pass on a roomy heap.
  */
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test';
 import { DEFAULT_LIMITS } from '@termwright/protocol';
 import type { SessionDiagnostic, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';

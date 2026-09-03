@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { resolveDefaultPtyBackend } from './backend-selection.js';
 import { NATIVE_PTY_BACKEND_NAME } from './native-pty-backend.js';
 import { launchTerminal } from './session.js';

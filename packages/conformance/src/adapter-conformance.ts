@@ -290,10 +290,10 @@ const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
  *
  * Call it at the top level of a test file; it declares its own `describe`.
  *
- * `vitest` is imported dynamically, so the package stays importable from a
- * plain script that only wants the fixture paths or the probe. That is why the
- * function is async: `await` it at the top level of the test file, which is
- * where vitest collects the suite from.
+ * Termwright's test surface is imported dynamically, so the package stays
+ * importable from a plain script that only wants fixture paths or the probe.
+ * That is why the function is async: `await` it at the top level of the test
+ * file, where the embedded engine collects the suite.
  *
  * @example
  * ```ts
@@ -307,8 +307,14 @@ const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
  * ```
  */
 export async function runAdapterConformance(options: AdapterConformanceOptions): Promise<void> {
-  const { afterAll, afterEach, beforeEach, describe, expect } = await import('vitest');
-  const { it: resourceAwareIt } = await import('@termwright/resource-broker/vitest');
+  const {
+    afterAll,
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it: resourceAwareIt,
+  } = await import('@termwright/test');
   const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
   const timeout = options.timeoutMs ?? 10_000;
   const toolchain =

@@ -108,7 +108,7 @@ describe('exact native skip-policy references', () => {
   it('recognizes resource-aware imports and configured declaration aliases', () => {
     expect(
       literalLeafTitles(`
-      import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+      import { it as resourceAwareIt } from '@termwright/test-provider-internal';
       const nativePressureIt = resourceAwareIt.resources({ terminals: 1, nativeHost: 'exclusive' });
       nativePressureIt('pressure case', () => {});
       resourceAwareIt.resources({ terminals: 2 })('group case', () => {});
@@ -118,7 +118,7 @@ describe('exact native skip-policy references', () => {
 
   it('finds platform skips through a resource-aware declaration chain', () => {
     const source = `
-      import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+      import { it as resourceAwareIt } from '@termwright/test-provider-internal';
       resourceAwareIt.resources({ terminals: 4 }).skipIf(process.platform !== 'win32')(
         'Windows ownership',
         () => {},

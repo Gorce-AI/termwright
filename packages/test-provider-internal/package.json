@@ -1,0 +1,25 @@
+{
+  "name": "@termwright/test-provider-internal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private embedded-Vitest declaration adapter for Termwright workspace and packed test API",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm --dir ../.. test -- -- --run packages/test-provider-internal"
+  },
+  "dependencies": {
+    "@termwright/protocol": "workspace:*",
+    "vitest": "4.1.11"
+  }
+}

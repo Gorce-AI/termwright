@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createServer, type Server, type Socket } from 'node:net';
 import { afterEach, describe, expect, onTestFinished } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import type { ActionEvent, ActionStartedEvent, SessionDiagnostic, TerminalHarness } from './api.js';
 import { AmbiguousLocatorError, ProbeAttachFailedError, TermwrightError } from './errors.js';
 import { createNativePtyBackend, nativePtyAvailable } from './native-pty-backend.js';

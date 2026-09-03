@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import type { AppLogEvent, SessionDiagnostic, TerminalHarness } from './api.js';
 import { nativePtyAvailable } from './native-pty-backend.js';
 import { launchTerminal } from './session.js';

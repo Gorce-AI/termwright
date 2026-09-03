@@ -21,7 +21,7 @@ import {
   writeWorkspace,
 } from '@termwright/probe-go';
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { BUBBLETEA_MODULES, type CharmMajor } from './detect.js';
 

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
+import { it as resourceAwareIt } from '../packages/test-provider-internal/src/index.ts';
 import {
   assertSourceBuiltConptyLock,
   verifyBinaryArchitecture,

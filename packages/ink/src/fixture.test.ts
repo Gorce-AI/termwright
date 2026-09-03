@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, vi } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test';
 import type { TerminalHarness } from '@termwright/driver';
 import { ControlChannel } from './control.js';
 import { launchInkFixture } from './fixture.js';

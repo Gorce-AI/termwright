@@ -8,7 +8,7 @@
  * child is handed before it can be ready at all.
  */
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test';
 import type { DiagnosticCode, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
 import {

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, onTestFinished } from 'vitest';
 import { encodeConPtyHostCursorResponse, parseConPtyHostCursorRequest } from '@termwright/protocol';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { bunTestCapability } from '../../../scripts/test-support/bun-runtime.mjs';
 import {
   spawnWindowsPty as spawnUnownedWindowsPty,

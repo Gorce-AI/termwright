@@ -61,7 +61,7 @@ export function literalLeafTitles(source) {
     if (
       ts.isImportDeclaration(node) &&
       ts.isStringLiteral(node.moduleSpecifier) &&
-      ['@termwright/resource-broker/vitest', '@termwright/test'].includes(node.moduleSpecifier.text)
+      ['@termwright/test', '@termwright/test-provider-internal'].includes(node.moduleSpecifier.text)
     ) {
       for (const element of node.importClause?.namedBindings?.elements ?? []) {
         if (

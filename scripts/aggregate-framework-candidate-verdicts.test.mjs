@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, vi } from 'vitest';
-import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
+import { it as resourceAwareIt } from '../packages/test-provider-internal/src/index.ts';
 import {
   aggregateCandidate,
   inventoryPlatformVerdicts,

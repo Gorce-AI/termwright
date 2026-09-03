@@ -29,7 +29,7 @@ import { dirname, join } from 'node:path';
 import { createTerminal, type Terminal } from '@termwright/vt';
 import { MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { createNativePtyBackend, nativePtyAvailable } from './native-pty-backend.js';
 import type { PtyProcess } from './pty.js';
 

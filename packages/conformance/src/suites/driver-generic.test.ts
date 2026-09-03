@@ -7,7 +7,7 @@
  * and exact exit/close semantics.
  */
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test';
 import {
   SemanticCapabilityUnavailableError,
   TermwrightError,

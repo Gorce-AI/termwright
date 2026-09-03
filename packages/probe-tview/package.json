@@ -33,6 +33,6 @@
   },
   "devDependencies": {
     "@termwright/driver": "workspace:*",
-    "@termwright/resource-broker": "workspace:*"
+    "@termwright/test-provider-internal": "workspace:*"
   }
 }

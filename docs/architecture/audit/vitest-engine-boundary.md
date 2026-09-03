@@ -39,6 +39,10 @@ fixture resolution, through the public finalization hook.
 - `@termwright/test/runner` and `@termwright/test/vitest-engine` are no longer
   package exports. The CLI locates the packaged private runner beside the
   package root entry.
+- `@termwright/resource-broker/vitest` is removed. The broker no longer declares
+  a Vitest peer or publishes an engine-facing helper; declaration-time resource
+  metadata lives inside `@termwright/test`, and conformance suites resolve the
+  same embedded test surface.
 - The host-facing engine interface and wire DTO are private to the CLI engine
   adapter. Public Termwright authoring APIs contain no Vitest task, reporter,
   or hook-array types.
