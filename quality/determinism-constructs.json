@@ -16,7 +16,7 @@
     "display-or-persisted-wall-time-not-correctness-order": 91,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 177,
-    "explicit-test-selection-reviewed-with-platform-registry": 73,
+    "explicit-test-selection-reviewed-with-platform-registry": 74,
     "managed-or-diagnostic-background-task": 73,
     "production-polling-review": 1,
     "production-process-isolation-review": 40,
@@ -1367,6 +1367,12 @@
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "this.#clockAnchor = { epochMs: Date.now(), sessionMs: this.#now() };"
+    },
+    {
+      "path": "packages/driver/src/shell-integration.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "it.skipIf(process.platform === 'win32')("
     },
     {
       "path": "packages/driver/src/shell.ts",
