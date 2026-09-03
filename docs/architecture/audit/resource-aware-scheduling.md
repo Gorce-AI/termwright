@@ -31,6 +31,15 @@ head-of-line reason. Run configuration and run-manifest provenance contain the
 effective capacities, per-attempt cost, detected host budget, and planner
 decisions, so CI admission is inspectable rather than guessed.
 
+A deliberately small reference scheduler independently reconstructs strict
+FIFO admission from only capacities, queued vectors, and releases. Sixty-four
+seeded generated workloads compare every broker snapshot with that model. Each
+run asserts that no resource exceeds capacity, every individually admissible
+request completes, and two executions of the same seed produce the same grant
+waves. Holding every resource behind an initial barrier forces heavy and light
+requests through the queue and makes starvation or younger-request bypass
+observable rather than timing-dependent.
+
 ## Historical cost feedback
 
 The Native Host maintains one local, advisory `resource-costs-v1.json` beside
@@ -57,7 +66,9 @@ focused storage/host/real-runner matrix passed 51/51 tests without retry.
 
 ## Remaining evidence
 
-Whole-process-tree CPU/RSS accounting is not part of this checkpoint. Windows
-Job Object metrics and truthful POSIX capability reporting still require
-implementation. External Node 22/24 and constrained Linux/macOS/Windows runs
-are also pending; until then this area is not PASS.
+Windows whole-job CPU, peak memory, process-count, and I/O accounting is now
+implemented through the already-owned Job Object and published with explicit
+metric source/kind/unit metadata. POSIX deliberately reports whole-tree
+accounting as `unavailable` instead of polling an ambiguous PID tree. External
+Node 22/24 and constrained Linux/macOS/Windows runs are still pending; until
+then this area is not PASS.
