@@ -17,8 +17,6 @@ function line(text) {
   appendFileSync(path, `${text}\n`);
 }
 
-process.stdout.write('LOG APP READY\r\n');
-
 process.stdin.setRawMode?.(true);
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {
@@ -44,3 +42,9 @@ process.stdin.on('data', (chunk) => {
     } else if (key === 'q') process.exit(0);
   }
 });
+
+// READY is an input-readiness contract, not merely proof that the process
+// wrote stdout. Publishing it before raw mode and the data listener were
+// installed let an immediate key race the line discipline and echo over the
+// screen on loaded Linux hosts.
+process.stdout.write('LOG APP READY\r\n');
