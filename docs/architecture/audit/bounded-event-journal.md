@@ -18,6 +18,18 @@ accounting are O(1), and current plus peak backlog are observable.
 
 ## Worker transport
 
+The initial bounded transport still had an unbounded layer in front of it: the
+attempt recorder serialized hot-path calls through a duration-proportional
+`pending = pending.then(...)` Promise chain. The transport limits could not
+bound objects retained by that chain because events reached admission only
+after earlier acknowledgements.
+
+The recorder now uses synchronous bounded admission. It allocates no Promise
+per admitted hot-path event, saturation throws at the producer call, and the
+attempt finalizer drains the queue as an explicit lifecycle barrier. A failed
+background delivery is retained and rethrown at that barrier; it cannot become
+an unhandled rejection or disappear behind a green verdict.
+
 The former one-request-per-event wire contract was removed. A worker now owns a
 bounded admission queue (event and byte limits), drains batches of at most 64
 events / 256 KiB, and reports a `capacity` error immediately when saturated.
@@ -49,9 +61,10 @@ canonical persistence retry an already appended batch.
 ## Evidence and remaining boundary
 
 Protocol tests cover byte saturation, state replacement, explicit diagnostic
-gaps and accounting after flush. Transport tests cover batching, bounded
-admission, stale producers and close-time drain. Current and peak transport
-backlog plus batch count are machine-observable.
+gaps and accounting after flush. Transport tests cover batching, synchronous
+count saturation against an intentionally blocked sink, bounded bytes, ordered
+drain, background sink failure, stale producers and close-time drain. Current
+and peak transport backlog plus batch count are machine-observable.
 
 Focused tests cover more events than the live projection capacity, verify that
 all canonical events are streamed while only the newest 4,096 remain in memory,

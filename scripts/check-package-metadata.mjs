@@ -16,9 +16,38 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PACKAGES = join(ROOT, 'packages');
 const REPOSITORY_URL = 'git+https://github.com/Gorce-AI/termwright.git';
+const SURFACE_PATH = join(ROOT, 'quality/public-api-surface.json');
+const SURFACE_CATEGORIES = [
+  'public-stable-ish',
+  'advanced-intentional',
+  'internal-accidentally-exported',
+  'obsolete',
+  'duplicate',
+];
+const surface = JSON.parse(await readFile(SURFACE_PATH, 'utf8'));
+const classifiedExports = new Map();
+
+if (surface.version !== 1) throw new Error('public API surface registry must use version 1');
+
+for (const category of SURFACE_CATEGORIES) {
+  for (const [packageName, subpaths] of Object.entries(surface[category] ?? {})) {
+    for (const subpath of subpaths) {
+      const identity = `${packageName}:${subpath}`;
+      const previous = classifiedExports.get(identity);
+      if (previous !== undefined) {
+        throw new Error(`${identity} is classified as both ${previous} and ${category}`);
+      }
+      classifiedExports.set(identity, category);
+      if (['internal-accidentally-exported', 'obsolete', 'duplicate'].includes(category)) {
+        throw new Error(`${identity} is classified ${category} and must be removed before release`);
+      }
+    }
+  }
+}
 
 const entries = await readdir(PACKAGES, { withFileTypes: true });
 const errors = [];
+const observedExports = new Set();
 let publicPackages = 0;
 
 for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
@@ -39,6 +68,19 @@ for (const entry of entries.sort((left, right) => left.name.localeCompare(right.
   if (manifest.private === true) continue;
   publicPackages += 1;
 
+  for (const subpath of Object.keys(manifest.exports ?? {})) {
+    const identity = `${manifest.name}:${subpath}`;
+    observedExports.add(identity);
+    if (!classifiedExports.has(identity)) {
+      errors.push(`${relative(ROOT, manifestPath)}: public export ${subpath} is not classified`);
+    }
+    if (/(^|\/)internal(?:\/|$)/u.test(subpath)) {
+      errors.push(
+        `${relative(ROOT, manifestPath)}: public export ${subpath} exposes an internal namespace`,
+      );
+    }
+  }
+
   const expected = {
     type: 'git',
     url: REPOSITORY_URL,
@@ -51,6 +93,12 @@ for (const entry of entries.sort((left, right) => left.name.localeCompare(right.
     actual?.directory !== expected.directory
   ) {
     errors.push(`${relative(ROOT, manifestPath)}: repository must be ${JSON.stringify(expected)}`);
+  }
+}
+
+for (const [identity, category] of classifiedExports) {
+  if (!observedExports.has(identity)) {
+    errors.push(`${relative(ROOT, SURFACE_PATH)}: ${category} entry ${identity} is not exported`);
   }
 }
 

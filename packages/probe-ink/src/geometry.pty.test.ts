@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { launchTerminal } from '@termwright/driver';
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');

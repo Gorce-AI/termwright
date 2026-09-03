@@ -165,6 +165,43 @@ describe('ResourceBroker', () => {
     await Promise.all([olderLease.release(), youngerLease.release()]);
   });
 
+  it('lets an active attempt complete a fitting continuation ahead of a blocked waiter', async () => {
+    const clock = new ManualClock();
+    const resources = broker(clock, 100, { cpuWeight: 4, ptySession: 1 });
+    const active = worker('active');
+    const exclusive = worker('exclusive');
+    resources.registerWorker(active);
+    resources.registerWorker(exclusive);
+
+    const baseLease = await resources.acquire({
+      ...attempt(active, 'active'),
+      resources: { cpuWeight: 1 },
+      deadline: clock.now + 100,
+    });
+    const exclusivePromise = resources.acquire({
+      ...attempt(exclusive, 'exclusive'),
+      resources: { cpuWeight: 4 },
+      deadline: clock.now + 100,
+    });
+    const continuationPromise = resources.acquire({
+      ...attempt(active, 'active'),
+      resources: { ptySession: 1 },
+      deadline: clock.now + 100,
+    });
+
+    const continuationLease = await continuationPromise;
+    expect(resources.snapshot().queue.map((entry) => entry.attemptId)).toEqual(['exclusive']);
+    expect(resources.snapshot().active.map((entry) => entry.attemptId)).toEqual([
+      'active',
+      'active',
+    ]);
+
+    await continuationLease.release();
+    await baseLease.release();
+    const exclusiveLease = await exclusivePromise;
+    await exclusiveLease.release();
+  });
+
   it('accounts every live lease even when one attempt owns several and shares an exact release promise', async () => {
     const clock = new ManualClock();
     const resources = broker(clock, 100, { ...CAPACITIES, ptySession: 2 });

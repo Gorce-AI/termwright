@@ -1,5 +1,5 @@
 import { TestRunner, describe, expect, it as vitestIt } from 'vitest';
-import { it as resourceIt } from './vitest.js';
+import { it as resourceIt } from './index.js';
 
 const sentinel = 'resource-aware collector sentinel';
 const suite = TestRunner.getCurrentSuite();

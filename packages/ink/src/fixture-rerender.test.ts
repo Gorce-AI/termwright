@@ -8,7 +8,7 @@
  */
 
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test';
 import { launchInkFixture, type InkFixtureHarness } from './fixture.js';
 import { MAX_CONTROL_BYTES } from './control.js';
 

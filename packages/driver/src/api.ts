@@ -3,6 +3,7 @@
  * Ink component testing) programs against these types. Changes here require updating
  * CONTRACTS.md and notifying all package owners.
  */
+import type { TerminalProfileId } from '@termwright/vt';
 import type {
   EffectiveSessionContract,
   ActionReceipt,
@@ -108,7 +109,7 @@ export interface LaunchOptions {
    * It is recorded with the session so a replay, a screenshot and the runner
    * pane can count characters exactly as the live session did.
    */
-  readonly terminalProfile?: string;
+  readonly terminalProfile?: TerminalProfileId;
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   /**
@@ -150,12 +151,30 @@ export declare function launchTerminal(options: LaunchOptions): Promise<Terminal
 // ---------------------------------------------------------------------------
 // Harness — the ONE interface shared by launchTerminal, mountInk and fixtures.
 
+/** Whole-tree accounting with the native source and units kept explicit. */
+export interface OwnedProcessResourceUsage {
+  readonly source: 'windows-job-object';
+  readonly userTime100ns: number;
+  readonly kernelTime100ns: number;
+  /** Peak committed memory charged to one Job Object; this is not RSS. */
+  readonly peakJobMemoryBytes: number;
+  readonly readOperationCount: number;
+  readonly writeOperationCount: number;
+  readonly otherOperationCount: number;
+  readonly readTransferBytes: number;
+  readonly writeTransferBytes: number;
+  readonly otherTransferBytes: number;
+  readonly totalProcesses: number;
+  readonly activeProcesses: number;
+  readonly totalTerminatedProcesses: number;
+}
+
 export interface TerminalHarness {
   readonly sessionId: string;
   /** Resolved policy inherited by traces, reports and other artifact sinks. */
   readonly artifactSecurity: import('@termwright/protocol').ResolvedArtifactSecurityPolicy;
   /** Immutable terminal profile used to decode the very first PTY byte. */
-  readonly terminalProfile: string;
+  readonly terminalProfile: TerminalProfileId;
   /** Shell command boundaries and prompt state when the child emits OSC 133. */
   readonly shell: ShellApi;
   /** One physical keyboard implementation. Convenience methods delegate here. */
@@ -259,6 +278,12 @@ export interface TerminalHarness {
    * `signal()`. Available as soon as the `exit` event fires.
    */
   crashReport(): CrashReport | null;
+
+  /**
+   * Native whole-tree accounting captured immediately before PTY disposal.
+   * Returns `null` when the backend cannot make an authoritative claim.
+   */
+  ownedProcessResources(): OwnedProcessResourceUsage | null;
 
   /** Idempotent; bounded physical cleanup. Never sends signals implicitly. */
   close(): Promise<void>;

@@ -107,7 +107,7 @@ Closes owned terminal input without disposing the output producer.
 
 > **dispose**(): `void`
 
-Defined in: [pty.ts:79](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L79)
+Defined in: [pty.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L81)
 
 Idempotent finalizer; hangs up a live PTY before releasing listeners.
 
@@ -225,6 +225,20 @@ Fatal asynchronous failures after `write()` accepted bytes.
 #### Returns
 
 [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
+
+***
+
+### ownedProcessResources()?
+
+> `optional` **ownedProcessResources**(): `OwnedProcessResourceUsage` \| `null`
+
+Defined in: [pty.ts:79](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L79)
+
+Native whole-tree accounting, when the ownership primitive supports it.
+
+#### Returns
+
+`OwnedProcessResourceUsage` \| `null`
 
 ***
 

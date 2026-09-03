@@ -1,5 +1,5 @@
 ---
-title: "Interface: ParameterTypeOptions\\<T\\>"
+title: "Interface: ParameterTypeOptions"
 editUrl: false
 ---
 

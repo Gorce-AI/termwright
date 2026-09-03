@@ -46,6 +46,9 @@ describe('defineTermwrightConfig', () => {
     );
     expect(() => defineTermwrightConfig({ timeouts: { expect: -1 } })).toThrow(/timeouts.expect/u);
     expect(() => defineTermwrightConfig({ command: [] })).toThrow(/must not be empty/u);
+    expect(() => defineTermwrightConfig({ terminalProfile: 'unicode-11' as never })).toThrow(
+      /terminalProfile is not a registered terminal profile/u,
+    );
     expect(() => defineTermwrightConfig({ requiredCapabilities: ['made-up' as never] })).toThrow(
       /unknown capability/u,
     );

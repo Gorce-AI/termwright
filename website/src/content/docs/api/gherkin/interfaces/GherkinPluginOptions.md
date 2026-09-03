@@ -1,5 +1,5 @@
 ---
-title: "Interface: GherkinPluginOptions\\<Fixtures\\>"
+title: "Interface: GherkinPluginOptions"
 editUrl: false
 ---
 

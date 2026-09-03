@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalWindow
 
-Defined in: [driver/src/api.ts:317](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L317)
+Defined in: [driver/src/api.ts:342](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L342)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > **blur**(): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:321](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L321)
+Defined in: [driver/src/api.ts:346](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L346)
 
 Sends CSI focus-out under the same contract and runtime proof as [TerminalWindow.focus](#focus).
 
@@ -50,7 +50,7 @@ Sends CSI focus-out under the same contract and runtime proof as [TerminalWindow
 
 > **focus**(): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:319](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L319)
+Defined in: [driver/src/api.ts:344](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L344)
 
 Sends CSI focus-in only when the frozen `focus-input` capability and current reporting mode are authoritative.
 

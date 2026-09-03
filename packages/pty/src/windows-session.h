@@ -80,6 +80,21 @@ struct SessionEvent {
   uint64_t write_generation = 0;  // kDrain
 };
 
+struct JobResourceUsage {
+  uint64_t user_time_100ns = 0;
+  uint64_t kernel_time_100ns = 0;
+  uint64_t peak_job_memory_bytes = 0;
+  uint64_t read_operation_count = 0;
+  uint64_t write_operation_count = 0;
+  uint64_t other_operation_count = 0;
+  uint64_t read_transfer_bytes = 0;
+  uint64_t write_transfer_bytes = 0;
+  uint64_t other_transfer_bytes = 0;
+  uint32_t total_processes = 0;
+  uint32_t active_processes = 0;
+  uint32_t total_terminated_processes = 0;
+};
+
 struct SpawnOptions {
   std::wstring command_line;
   std::wstring cwd;                 // empty means inherit
@@ -126,6 +141,8 @@ class Session {
   bool TerminateTree(std::string* error);
   /// Live members of the owned job, or -1 when the job cannot be queried.
   long long ActiveProcesses() const;
+  /// Cumulative accounting for the complete owned Job Object while it is open.
+  bool ResourceUsage(JobResourceUsage* usage) const;
   void Dispose();
 
  private:

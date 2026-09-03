@@ -6,6 +6,7 @@
  * wait is driven by revisions or process events — the driver never sleeps.
  */
 import { existsSync } from 'node:fs';
+import type { TerminalProfileId } from '@termwright/vt';
 import type {
   ActionEvent,
   AppLogEvent,
@@ -503,6 +504,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #observationSequence = 0;
   readonly #shellTracker = new ShellCommandTracker();
   #operationBudget: OperationBudget | undefined;
+  #ownedProcessResources: import('./api.js').OwnedProcessResourceUsage | null = null;
 
   constructor(
     options: LaunchTerminalWithBackendOptions,
@@ -958,8 +960,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // -------------------------------------------------------------------------
   // Observation
 
-  get terminalProfile(): string {
-    return this.#vt.profile.id;
+  get terminalProfile(): TerminalProfileId {
+    return this.#vt.profile.id as TerminalProfileId;
   }
 
   contract(): EffectiveSessionContract | null {
@@ -2325,6 +2327,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#evidence.appLogs();
   }
 
+  ownedProcessResources(): import('./api.js').OwnedProcessResourceUsage | null {
+    return this.#ownedProcessResources;
+  }
+
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics {
     return {
       semanticTree: this.#attachment !== null,
@@ -2419,7 +2425,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       await supervisor.shutdown({
         deadline: performance.now() + CLOSE_GRACE_MS,
         gracefulMs: Math.min(500, CLOSE_GRACE_MS),
-        beforeDispose: () => this.#closeTerminalResponseBridge(),
+        beforeDispose: () => {
+          this.#closeTerminalResponseBridge();
+          this.#ownedProcessResources = pty.ownedProcessResources?.() ?? null;
+        },
         ...(this.#lifecycle.backendStatus === null
           ? {}
           : { observedExit: this.#lifecycle.backendStatus }),

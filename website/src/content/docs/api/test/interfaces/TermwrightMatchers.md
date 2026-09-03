@@ -1,5 +1,5 @@
 ---
-title: "Interface: TermwrightMatchers\\<R\\>"
+title: "Interface: TermwrightMatchers"
 editUrl: false
 ---
 

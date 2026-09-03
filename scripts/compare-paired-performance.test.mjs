@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, vi } from 'vitest';
-import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
+import { it as resourceAwareIt } from '../packages/test-provider-internal/src/index.ts';
 
 import {
   capturePerformanceBaseline,

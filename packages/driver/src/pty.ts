@@ -1,5 +1,5 @@
 /** Backend-neutral PTY contracts implemented by the Termwright-owned native package. */
-import type { ExitStatus } from './api.js';
+import type { ExitStatus, OwnedProcessResourceUsage } from './api.js';
 
 /** Options accepted by {@link PtyBackend.spawn}. */
 export interface PtySpawnOptions {
@@ -75,6 +75,8 @@ export interface PtyProcess {
   onWriteDrain?(cb: () => void): PtyUnsubscribe;
   /** Liveness of the owned tree, when the backend has an OS primitive for it. */
   treeState?(): 'alive' | 'gone' | 'unsupported';
+  /** Native whole-tree accounting, when the ownership primitive supports it. */
+  ownedProcessResources?(): OwnedProcessResourceUsage | null;
   /** Idempotent finalizer; hangs up a live PTY before releasing listeners. */
   dispose(): void;
 }

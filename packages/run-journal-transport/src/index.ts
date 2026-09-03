@@ -65,7 +65,12 @@ export interface RunJournalServer {
 export interface RunJournalClient {
   readonly identity: RunJournalWorkerIdentity;
   readonly binding: RunJournalProducerBinding;
+  /** Synchronously admits a hot-path event into the bounded worker queue. */
+  enqueue(event: RunEvent, deadline: number): void;
+  /** Admits one event and resolves after its batch is acknowledged. */
   append(event: RunEvent, deadline: number): Promise<void>;
+  /** Drains admitted batches without issuing an additional transport request. */
+  drain(): Promise<void>;
   flush(deadline: number): Promise<void>;
   snapshot(): {
     readonly pendingEvents: number;
@@ -338,8 +343,8 @@ export async function connectRunJournalWorker(
     readonly event: RunEvent;
     readonly bytes: number;
     readonly deadline: number;
-    readonly resolve: () => void;
-    readonly reject: (error: Error) => void;
+    readonly resolve?: () => void;
+    readonly reject?: (error: Error) => void;
   }> = [];
   let appendQueueBytes = 0;
   let appendBatches = 0;
@@ -347,6 +352,7 @@ export async function connectRunJournalWorker(
   let peakPendingBytes = 0;
   let drainPromise: Promise<void> | null = null;
   let drainScheduled = false;
+  let backgroundFailure: Error | undefined;
   let closePromise: Promise<void> | undefined;
   const socketClosed = new Promise<void>((resolve) => {
     socket.once('close', resolve);
@@ -367,12 +373,16 @@ export async function connectRunJournalWorker(
   const fail = (error: Error): void => {
     if (closed) return;
     closed = true;
+    if (appendQueue.some((entry) => entry.reject === undefined)) backgroundFailure ??= error;
     socket.destroy();
     for (const request of pending.values()) {
       if (request.timer !== undefined) clearTimeout(request.timer);
       request.reject(error);
     }
     pending.clear();
+    for (const entry of appendQueue) entry.reject?.(error);
+    appendQueue.length = 0;
+    appendQueueBytes = 0;
   };
   socket.on('data', (chunk) => {
     try {
@@ -475,6 +485,7 @@ export async function connectRunJournalWorker(
     const startDrain = (): Promise<void> => {
       drainScheduled = false;
       if (drainPromise !== null) return drainPromise;
+      if (backgroundFailure !== undefined) return Promise.reject(backgroundFailure);
       drainPromise = (async () => {
         while (appendQueue.length > 0) {
           const batch = [] as typeof appendQueue;
@@ -492,14 +503,18 @@ export async function connectRunJournalWorker(
           try {
             await request('append-batch', { events: batch.map((entry) => entry.event) }, deadline);
             appendBatches += 1;
-            for (const entry of batch) entry.resolve();
-          } catch (error) {
-            const failure = journalTransportError(error, 'journal append batch failed');
-            for (const entry of batch) entry.reject(failure);
-            throw failure;
-          } finally {
             appendQueue.splice(0, batch.length);
             appendQueueBytes -= batchBytes;
+            for (const entry of batch) entry.resolve?.();
+          } catch (error) {
+            const failure = journalTransportError(error, 'journal append batch failed');
+            if (appendQueue.some((entry) => entry.reject === undefined)) {
+              backgroundFailure ??= failure;
+            }
+            for (const entry of appendQueue) entry.reject?.(failure);
+            appendQueue.length = 0;
+            appendQueueBytes = 0;
+            throw failure;
           }
         }
       })().finally(() => {
@@ -513,34 +528,62 @@ export async function connectRunJournalWorker(
       drainScheduled = true;
       queueMicrotask(() => void startDrain().catch(() => undefined));
     };
+    const admit = (
+      event: RunEvent,
+      deadline: number,
+      completion?: { readonly resolve: () => void; readonly reject: (error: Error) => void },
+    ): void => {
+      if (backgroundFailure !== undefined) throw backgroundFailure;
+      if (!Number.isFinite(deadline) || deadline <= monotonicEpochNow()) {
+        throw new RunJournalTransportError('timeout', 'journal append deadline expired');
+      }
+      const bytes = Buffer.byteLength(JSON.stringify(event), 'utf8');
+      if (
+        appendQueue.length >= maxPendingEvents ||
+        bytes > maxPendingBytes ||
+        appendQueueBytes + bytes > maxPendingBytes
+      ) {
+        throw new RunJournalTransportError(
+          'capacity',
+          `journal client backlog exceeded ${maxPendingEvents} events or ${maxPendingBytes} bytes`,
+        );
+      }
+      appendQueue.push({
+        event,
+        bytes,
+        deadline,
+        ...(completion === undefined ? {} : completion),
+      });
+      appendQueueBytes += bytes;
+      peakPendingEvents = Math.max(peakPendingEvents, appendQueue.length);
+      peakPendingBytes = Math.max(peakPendingBytes, appendQueueBytes);
+      scheduleDrain();
+    };
+    const drain = async (): Promise<void> => {
+      if (backgroundFailure !== undefined) throw backgroundFailure;
+      while (appendQueue.length > 0 || drainPromise !== null) await startDrain();
+      if (backgroundFailure !== undefined) throw backgroundFailure;
+    };
     return Object.freeze({
       identity,
       binding,
+      enqueue(event: RunEvent, deadline: number): void {
+        admit(event, deadline);
+      },
       append(event: RunEvent, deadline: number): Promise<void> {
-        const bytes = Buffer.byteLength(JSON.stringify(event), 'utf8');
-        if (
-          appendQueue.length >= maxPendingEvents ||
-          bytes > maxPendingBytes ||
-          appendQueueBytes + bytes > maxPendingBytes
-        ) {
-          return Promise.reject(
-            new RunJournalTransportError(
-              'capacity',
-              `journal client backlog exceeded ${maxPendingEvents} events or ${maxPendingBytes} bytes`,
-            ),
-          );
-        }
-        const operation = new Promise<void>((resolve, reject) => {
-          appendQueue.push({ event, bytes, deadline, resolve, reject });
-          appendQueueBytes += bytes;
-          peakPendingEvents = Math.max(peakPendingEvents, appendQueue.length);
-          peakPendingBytes = Math.max(peakPendingBytes, appendQueueBytes);
+        return new Promise<void>((resolve, reject) => {
+          try {
+            admit(event, deadline, { resolve, reject });
+          } catch (error) {
+            reject(journalTransportError(error, 'journal append admission failed'));
+          }
         });
-        scheduleDrain();
-        return operation;
+      },
+      drain(): Promise<void> {
+        return drain();
       },
       async flush(deadline: number): Promise<void> {
-        while (appendQueue.length > 0 || drainPromise !== null) await startDrain();
+        await drain();
         await request('flush', {}, deadline);
       },
       snapshot() {
@@ -554,12 +597,18 @@ export async function connectRunJournalWorker(
       },
       close(): Promise<void> {
         closePromise ??= (async () => {
-          while (appendQueue.length > 0 || drainPromise !== null) await startDrain();
+          let failure: unknown;
+          try {
+            await drain();
+          } catch (error) {
+            failure = error;
+          }
           if (!closed) {
             closed = true;
             socket.end();
           }
           await socketClosed;
+          if (failure !== undefined) throw failure;
         })();
         return closePromise;
       },

@@ -13,7 +13,7 @@ editUrl: false
 
 > **termwrightProjects**(`config`, `names?`): readonly [`TermwrightVitestProject`](../../interfaces/termwrightvitestproject/)[]
 
-Defined in: [test/src/config.ts:124](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L124)
+Defined in: [test/src/config.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L125)
 
 Runs the same Vitest tests once per named Termwright profile.
 

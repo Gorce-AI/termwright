@@ -9,7 +9,7 @@
  */
 
 import { afterEach, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test';
 import { createElement } from 'react';
 import type { Rect, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type { SemanticLocator, TerminalHarness } from '@termwright/driver';

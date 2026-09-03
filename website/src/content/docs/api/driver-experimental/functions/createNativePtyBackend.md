@@ -14,7 +14,7 @@ pagefind: false
 
 > **createNativePtyBackend**(`spawn?`, `platform?`): [`PtyBackend`](../../interfaces/ptybackend/)
 
-Defined in: [native-pty-backend.ts:58](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L58)
+Defined in: [native-pty-backend.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L59)
 
 Adapts the native package without adding lifecycle policy or weaker fallbacks.
 The package owns EOF, process groups/jobs and ordered writes; this layer only

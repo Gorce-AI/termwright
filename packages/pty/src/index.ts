@@ -15,6 +15,7 @@ import {
   windowsPtyAvailable,
   windowsPtyUnavailableReason,
   type WindowsConPtyRuntimeInfo,
+  type WindowsJobResourceUsage,
 } from './windows.js';
 import { NativeWriteDrainEpoch } from './write-drain-epoch.js';
 
@@ -128,7 +129,8 @@ export interface PtyExit {
 }
 
 export type PtySignal = 'INT' | 'TERM' | 'KILL' | 'HUP';
-export type { WindowsConPtyRuntimeInfo };
+export type { WindowsConPtyRuntimeInfo, WindowsJobResourceUsage };
+export type PtyOwnedProcessResourceUsage = WindowsJobResourceUsage;
 
 /** Runtime provenance and strict initialization status for the Windows backend. */
 export function conPtyRuntimeInfo(): WindowsConPtyRuntimeInfo {
@@ -165,6 +167,8 @@ export interface PtyHandle {
   resize(columns: number, rows: number): boolean;
   signal(signal: PtySignal): boolean;
   treeState(): 'alive' | 'gone' | 'unsupported';
+  /** Capability-qualified accounting for the complete owned process tree. */
+  ownedProcessResources(): PtyOwnedProcessResourceUsage | null;
   onData(listener: (data: Uint8Array) => void): () => void;
   onExit(listener: (status: PtyExit) => void): () => void;
   onError(listener: (error: Error) => void): () => void;
@@ -261,6 +265,9 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
       treeState(): 'alive' | 'gone' | 'unsupported' {
         const members = session.activeProcesses();
         return members < 0 ? 'unsupported' : members === 0 ? 'gone' : 'alive';
+      },
+      ownedProcessResources(): PtyOwnedProcessResourceUsage | null {
+        return session.resourceUsage();
       },
       onData(listener): () => void {
         return session.onData(listener);
@@ -386,6 +393,11 @@ export function spawnPty(options: PtySpawnOptions): PtyHandle {
     treeState(): 'alive' | 'gone' | 'unsupported' {
       const state = disposed ? -1 : session.treeState();
       return state > 0 ? 'alive' : state === 0 ? 'gone' : 'unsupported';
+    },
+    ownedProcessResources(): null {
+      // POSIX process groups prove ownership/liveness but do not provide a
+      // portable accounting object equivalent to Windows Job Objects.
+      return null;
     },
     onData(listener): () => void {
       dataListeners.add(listener);

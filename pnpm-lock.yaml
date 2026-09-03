@@ -208,15 +208,12 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@termwright/resource-broker':
+      '@termwright/test':
         specifier: workspace:*
-        version: link:../resource-broker
+        version: link:../test
       '@xterm/headless':
         specifier: ^6.0.0
         version: 6.0.0
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
@@ -236,9 +233,6 @@ importers:
       '@termwright/probe-tview':
         specifier: workspace:*
         version: link:../probe-tview
-      '@termwright/test':
-        specifier: workspace:*
-        version: link:../test
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18
@@ -290,9 +284,9 @@ importers:
         specifier: workspace:*
         version: link:../pty
     devDependencies:
-      '@termwright/resource-broker':
+      '@termwright/test-provider-internal':
         specifier: workspace:*
-        version: link:../resource-broker
+        version: link:../test-provider-internal
 
   packages/evidence-provider:
     dependencies:
@@ -343,9 +337,6 @@ importers:
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
-      '@termwright/resource-broker':
-        specifier: workspace:*
-        version: link:../resource-broker
       '@termwright/test':
         specifier: workspace:*
         version: link:../test
@@ -411,9 +402,9 @@ importers:
         specifier: ^4.0.0
         version: 4.4.3
     devDependencies:
-      '@termwright/resource-broker':
+      '@termwright/test-provider-internal':
         specifier: workspace:*
-        version: link:../resource-broker
+        version: link:../test-provider-internal
 
   packages/opentui:
     dependencies:
@@ -452,15 +443,15 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
-      '@termwright/resource-broker':
+      '@termwright/test-provider-internal':
         specifier: workspace:*
-        version: link:../resource-broker
+        version: link:../test-provider-internal
 
   packages/probe-go:
     devDependencies:
-      '@termwright/resource-broker':
+      '@termwright/test-provider-internal':
         specifier: workspace:*
-        version: link:../resource-broker
+        version: link:../test-provider-internal
 
   packages/probe-ink:
     dependencies:
@@ -486,9 +477,9 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
-      '@termwright/resource-broker':
+      '@termwright/test-provider-internal':
         specifier: workspace:*
-        version: link:../resource-broker
+        version: link:../test-provider-internal
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18
@@ -545,9 +536,9 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
-      '@termwright/resource-broker':
+      '@termwright/test-provider-internal':
         specifier: workspace:*
-        version: link:../resource-broker
+        version: link:../test-provider-internal
 
   packages/protocol:
     dependencies:
@@ -580,9 +571,9 @@ importers:
         specifier: workspace:*
         version: link:../pty-win32-x64
     devDependencies:
-      '@termwright/resource-broker':
+      '@termwright/test-provider-internal':
         specifier: workspace:*
-        version: link:../resource-broker
+        version: link:../test-provider-internal
       node-addon-api:
         specifier: ^8.3.0
         version: 8.9.2
@@ -727,6 +718,9 @@ importers:
       '@termwright/ui':
         specifier: workspace:*
         version: link:../ui
+      '@termwright/vt':
+        specifier: workspace:*
+        version: link:../vt
       vitest:
         specifier: 4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
@@ -734,9 +728,21 @@ importers:
         specifier: ^2.5.0
         version: 2.9.0
     devDependencies:
+      '@termwright/test-provider-internal':
+        specifier: workspace:*
+        version: link:../test-provider-internal
       '@vitest/runner':
         specifier: 4.1.11
         version: 4.1.11
+
+  packages/test-provider-internal:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   packages/trace:
     dependencies:
@@ -838,6 +844,9 @@ importers:
 
   website:
     dependencies:
+      '@astrojs/sitemap':
+        specifier: ^3.7.3
+        version: 3.7.3
       '@astrojs/starlight':
         specifier: ^0.34.0
         version: 0.34.8(astro@5.18.2(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.62.4)(typescript@5.9.3)(yaml@2.9.0))

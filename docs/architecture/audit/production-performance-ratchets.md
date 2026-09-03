@@ -13,9 +13,9 @@ never substituted with zero.
 | semantic validation µs/frame      |   2,096.893 |                               76.923 |      -96.3% |
 | full semantic snapshots/run       |       1,000 |                                    1 |      -99.9% |
 | deltas/run                        |           0 |                                  999 |        +999 |
-| trace peak RSS                    | UNAVAILABLE |   212,746,240 B sampled process peak | UNAVAILABLE |
-| trace finalization peak RSS       | UNAVAILABLE |                            +49,152 B | UNAVAILABLE |
-| long-run RSS slope                | UNAVAILABLE |       1,294,336 B steady-phase range | UNAVAILABLE |
+| trace peak RSS                    | UNAVAILABLE |   212,140,032 B sampled process peak | UNAVAILABLE |
+| trace finalization peak RSS       | UNAVAILABLE |                           +131,072 B | UNAVAILABLE |
+| long-run RSS slope                | UNAVAILABLE |       300,373 B / 2,500-event window | UNAVAILABLE |
 | final trace bytes                 | UNAVAILABLE |                         82,909,700 B | UNAVAILABLE |
 | journal calls                     | UNAVAILABLE |                                    2 | UNAVAILABLE |
 | journal peak backlog              |   unbounded |           244 events / 174,562 bytes |     bounded |
@@ -27,15 +27,19 @@ never substituted with zero.
 | full suite wall                   | UNAVAILABLE |                          UNAVAILABLE | UNAVAILABLE |
 
 The trace run wrote 20,000 events and 81,920,000 output bytes. Its
-212,746,240-byte RSS value is the maximum of explicit certification-process
+212,140,032-byte RSS value is the maximum of explicit certification-process
 samples, not trace-only allocation. The writer's 82,909,700-byte temporary-disk
 high-water is exact: it advances at every successful staging write and includes
 the private incomplete marker. In this run it did not exceed the committed
-trace size. The RSS range and finalization delta are bounded-memory evidence,
-not a cross-machine baseline.
+trace size. After four warm-up windows, four 2,500-event measurement windows
+had an 819,200-byte RSS range and a Theil-Sen trend of 300,373 bytes per window
+(120.15 bytes per event). The corresponding heap trend was 101,435 bytes per
+window. The gate retains both range and trend limits, so a one-off spike cannot
+hide a sustained leak and a noisy sample cannot define the slope. These are
+bounded-memory evidence, not a cross-machine baseline.
 
 The journal/worker rows come from a local 11-test real-PTY Native Host run on
-macOS arm64/Node 24.1.0. Manifest v7 reconstructed the worker maximum and
+macOS arm64/Node 24.1.0. Manifest v8 reconstructed the worker maximum and
 aggregate CPU from independently persisted `attempt.finished` evidence. The
 same run reconstructed 3,320 terminal bytes, 26,279 semantic bytes (six full
 records and three deltas), and 116,472 retained trace bytes from ten

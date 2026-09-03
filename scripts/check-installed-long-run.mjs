@@ -171,7 +171,7 @@ for (const [label, durationMs] of [['short', ${shortMs}], ['long', ${longMs}]]) 
     readFile(join(runDir, 'manifest.json'), 'utf8').then(JSON.parse),
     readFile(join(runDir, 'events.ndjson'), 'utf8'),
   ]);
-  if (manifest.v !== 7 || manifest.status !== 'passed')
+  if (manifest.v !== 8 || manifest.status !== 'passed')
     throw new Error(`long-run manifest failed: ${JSON.stringify(manifest)}`);
   const traces = await findTraces(project);
   if (traces.length !== 2) throw new Error(`long-run run produced ${traces.length} traces`);

@@ -13,14 +13,14 @@ The consumer has two independently discovered files: one imports the user's
 `vitest@latest`, while the other imports `termwright/test`. The latter launches
 a real TUI through the production native PTY, asserts a ZWJ family,
 Devanagari, and CJK text, performs an Enter action, and requires one atomically
-committed trace v4. The canary also requires one run manifest v7 containing
+committed trace v4. The canary also requires one run manifest v8 containing
 both specs, measured coordinator telemetry, and terminal/semantic/trace/final
 artifact counters that exactly equal its canonical `trace.resource` event.
 Retries are zero.
 
 Local evidence on 2026-09-02: macOS arm64, Node 24.1.0, 21 locally packed
 packages, 274 installed registry/tarball packages, two files and two passing
-tests. The installed manifest v7 and trace v4 resource evidence were
+tests. The installed manifest v8 and trace v4 resource evidence were
 independently checked after installation, demonstrating that this is an
 executable certification rather than structural inspection.
 

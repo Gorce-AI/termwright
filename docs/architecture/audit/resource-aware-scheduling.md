@@ -23,13 +23,38 @@ now includes `cpuWeight`, `memoryWeight`, and `ioWeight` alongside PTY, process,
 semantic endpoint, native-host, and trace capacity. Every collected test gets a
 normal per-attempt vector, including pure Vitest tests. `test.resources()` adds
 a closed `load: light | normal | heavy | exclusive` hint; users do not provide
-megabytes. Complete vectors are admitted atomically and resource pressure queues
-work without changing trace or semantic fidelity.
+megabytes. `hostPressure: 'exclusive'` reserves the complete CPU, memory, I/O,
+and native-host capacity rather than only excluding another native-host user.
+Complete vectors are admitted atomically and resource pressure queues work
+without changing trace or semantic fidelity.
 
 Broker snapshots explain queued work with the exact limiting resources and FIFO
 head-of-line reason. Run configuration and run-manifest provenance contain the
 effective capacities, per-attempt cost, detected host budget, and planner
 decisions, so CI admission is inspectable rather than guessed.
+
+A deliberately small reference scheduler independently reconstructs strict
+FIFO admission for new attempts from only capacities, queued vectors, and
+releases. Sixty-four seeded generated workloads compare every broker snapshot
+with that model. Each run asserts that no resource exceeds capacity, every
+individually admissible request completes, and two executions of the same seed
+produce the same grant waves. Holding every resource behind an initial barrier
+forces heavy and light requests through the queue and makes starvation or
+younger-attempt bypass observable rather than timing-dependent.
+
+One bounded exception is required for liveness: an already-active attempt may
+acquire a fitting continuation resource ahead of a blocked new attempt. Without
+that rule, an active test holding CPU weight can deadlock while requesting its
+first terminal behind an exclusive waiter that needs the CPU weight to be
+released. The regression test holds a base lease, queues an exclusive waiter,
+then proves the active attempt can acquire and release its terminal before the
+exclusive waiter runs. It does not permit a new light attempt to bypass FIFO.
+
+A separate schedule-independence oracle runs the same isolated suite with
+serial, two-slot, and six-slot capacities, changes request order, and reverses
+release order. It compares the sorted user-visible verdict and essential
+evidence for every test. Lease IDs, admission timing, and completion order are
+intentionally excluded: they are scheduler provenance, not test evidence.
 
 ## Historical cost feedback
 
@@ -57,7 +82,9 @@ focused storage/host/real-runner matrix passed 51/51 tests without retry.
 
 ## Remaining evidence
 
-Whole-process-tree CPU/RSS accounting is not part of this checkpoint. Windows
-Job Object metrics and truthful POSIX capability reporting still require
-implementation. External Node 22/24 and constrained Linux/macOS/Windows runs
-are also pending; until then this area is not PASS.
+Windows whole-job CPU, peak memory, process-count, and I/O accounting is now
+implemented through the already-owned Job Object and published with explicit
+metric source/kind/unit metadata. POSIX deliberately reports whole-tree
+accounting as `unavailable` instead of polling an ambiguous PID tree. External
+Node 22/24 and constrained Linux/macOS/Windows runs are still pending; until
+then this area is not PASS.

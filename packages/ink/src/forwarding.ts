@@ -27,6 +27,7 @@ import type {
   Keyboard,
   Mouse,
   OperationBudget,
+  OwnedProcessResourceUsage,
   ResizeReceipt,
   RoleLocatorOptions,
   ScreenSnapshot,
@@ -37,6 +38,7 @@ import type {
   SessionDiagnostic,
   SessionEvents,
   TerminalHarness,
+  TerminalProfileId,
   TerminalState,
   TerminalWindow,
   TextLocatorOptions,
@@ -63,7 +65,7 @@ export abstract class ForwardingHarness implements TerminalHarness {
     return this.session.sessionId;
   }
 
-  get terminalProfile(): string {
+  get terminalProfile(): TerminalProfileId {
     return this.session.terminalProfile;
   }
 
@@ -233,6 +235,10 @@ export abstract class ForwardingHarness implements TerminalHarness {
 
   crashReport(): CrashReport | null {
     return this.session.crashReport();
+  }
+
+  ownedProcessResources(): OwnedProcessResourceUsage | null {
+    return this.session.ownedProcessResources();
   }
 
   title(): string {

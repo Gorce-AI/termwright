@@ -25,7 +25,7 @@ Options for a Termwright-integrated interactive shell.
 
 > `readonly` `optional` **artifactSecurity?**: `ArtifactSecurityPolicy`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:89
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:90
 
 One policy for every artifact boundary. Defaults to secure `redacted`.
 
@@ -39,7 +39,7 @@ One policy for every artifact boundary. Defaults to secure `redacted`.
 
 > `readonly` `optional` **columns?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:67
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:68
 
 #### Inherited from
 
@@ -51,7 +51,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:67
 
 > `readonly` `optional` **cwd?**: `string`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:43
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:44
 
 #### Inherited from
 
@@ -63,7 +63,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:43
 
 > `readonly` `optional` **debug?**: `boolean`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:51
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:52
 
 Streams a live log of API calls, waits, revisions and diagnostics to
 stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
@@ -78,7 +78,7 @@ stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:44
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:45
 
 #### Inherited from
 
@@ -90,7 +90,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:44
 
 > `readonly` `optional` **envMode?**: `EnvMode`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:46
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:47
 
 Defaults to `'replace'`: a test process's secrets are not the child's.
 
@@ -127,7 +127,7 @@ await terminal.launch({
 
 > `readonly` `optional` **logs?**: readonly `AppLogSource`[]
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:57
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:58
 
 Log files to follow for the lifetime of the session. A file that does not
 exist yet is waited for; one that already exists is followed from its
@@ -143,7 +143,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **recording?**: `RecordingOptions`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:87
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:88
 
 #### Inherited from
 
@@ -155,7 +155,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:87
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"focus"` \| `"pointer-input"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:100
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:101
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`
@@ -171,7 +171,7 @@ before returning a harness when any requirement is missing.
 
 > `readonly` `optional` **rows?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:68
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:69
 
 #### Inherited from
 
@@ -183,7 +183,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:68
 
 > `readonly` `optional` **scrollbackLines?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:84
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:85
 
 #### Inherited from
 
@@ -195,7 +195,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:84
 
 > `readonly` `optional` **semanticFrameQueueCapacity?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:83
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:84
 
 Negotiated ceiling for semantic frames in flight between a framework
 probe and the driver. Defaults to 32 and is capped at 256. Compatible
@@ -212,7 +212,7 @@ closed instead of dropping or retrying a semantic revision.
 
 > `readonly` `optional` **semanticNegotiationMs?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:76
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:77
 
 Maximum time to discover an optional semantic adapter. Defaults to 2,000
 ms for generic auto-detection. A peer accepted within that window keeps
@@ -253,9 +253,9 @@ change only what it is about. `files` are written over it.
 
 ### terminalProfile?
 
-> `readonly` `optional` **terminalProfile?**: `string`
+> `readonly` `optional` **terminalProfile?**: `TerminalProfileId`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:66
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:67
 
 Terminal profile: which width tables and which of the switches terminals
 disagree on this session uses. The built-in ids are `'default'` and
@@ -274,7 +274,7 @@ pane can count characters exactly as the live session did.
 
 > `readonly` `optional` **timeouts?**: `TimeoutClasses`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:85
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:86
 
 #### Inherited from
 

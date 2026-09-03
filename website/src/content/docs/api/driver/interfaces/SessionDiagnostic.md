@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SessionDiagnostic
 
-Defined in: [driver/src/api.ts:1034](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1034)
+Defined in: [driver/src/api.ts:1059](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1059)
 
 One entry of the session diagnostics log.
 
@@ -21,7 +21,7 @@ One entry of the session diagnostics log.
 
 > `readonly` `optional` **actionId?**: `string`
 
-Defined in: [driver/src/api.ts:1040](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1040)
+Defined in: [driver/src/api.ts:1065](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1065)
 
 Correlates an action-observation wait with its action lifecycle.
 
@@ -31,7 +31,7 @@ Correlates an action-observation wait with its action lifecycle.
 
 > `readonly` **code**: [`DiagnosticCode`](../../type-aliases/diagnosticcode/)
 
-Defined in: [driver/src/api.ts:1035](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1035)
+Defined in: [driver/src/api.ts:1060](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1060)
 
 ***
 
@@ -39,7 +39,7 @@ Defined in: [driver/src/api.ts:1035](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **count?**: `number`
 
-Defined in: [driver/src/api.ts:1053](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1053)
+Defined in: [driver/src/api.ts:1078](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1078)
 
 How many items the entry accounts for, when it stands for several — the
 number that would otherwise be readable only by parsing [detail](#detail).
@@ -56,7 +56,7 @@ entries therefore answers "how many log entries never reached me".
 
 > `readonly` **detail**: `string`
 
-Defined in: [driver/src/api.ts:1036](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1036)
+Defined in: [driver/src/api.ts:1061](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1061)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: [driver/src/api.ts:1036](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **mode?**: `"mouse"` \| `"focus"`
 
-Defined in: [driver/src/api.ts:1064](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1064)
+Defined in: [driver/src/api.ts:1089](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1089)
 
 For `mode-unverifiable`: which mode could not be verified. A field rather
 than a code per mode, so a consumer reacting to "the driver is working
@@ -76,7 +76,7 @@ blind" writes one branch instead of a list that grows with the platform.
 
 > `readonly` `optional` **observationState?**: `"parser-in-flight"` \| `"semantic-frame-open"` \| `"pairing-pending"`
 
-Defined in: [driver/src/api.ts:1042](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1042)
+Defined in: [driver/src/api.ts:1067](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1067)
 
 The in-flight boundary an action is waiting to cross.
 
@@ -86,7 +86,7 @@ The in-flight boundary an action is waiting to cross.
 
 > `readonly` `optional` **revision?**: `number`
 
-Defined in: [driver/src/api.ts:1038](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1038)
+Defined in: [driver/src/api.ts:1063](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1063)
 
 The semantic revision the entry is about, when it is about one.
 
@@ -96,7 +96,7 @@ The semantic revision the entry is about, when it is about one.
 
 > `readonly` **timeMs**: `number`
 
-Defined in: [driver/src/api.ts:1065](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1065)
+Defined in: [driver/src/api.ts:1090](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1090)
 
 ***
 
@@ -104,7 +104,7 @@ Defined in: [driver/src/api.ts:1065](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **wireCode?**: `"adapter-guarantee-violation"` \| `"duplicate-semantic-key"` \| `"bad-token"` \| `"bad-version"` \| `"malformed"` \| `"limit-exceeded"` \| `"capability-provider-violation"` \| `"internal"`
 
-Defined in: [driver/src/api.ts:1058](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1058)
+Defined in: [driver/src/api.ts:1083](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1083)
 
 For `protocol-violation`: the wire error code sent to the adapter, so a
 caller can tell *which* failure closed the channel without parsing prose.

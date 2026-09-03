@@ -1,22 +1,27 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { readQuickstartContract } from './docs-contract.mjs';
 
 const execute = promisify(execFile);
 const installRoot = resolve(process.argv[2] ?? process.cwd());
 const project = await mkdtemp(join(installRoot, 'termwright-clean-room-'));
+const quickstart = await readQuickstartContract();
 
 try {
+  await mkdir(join(project, 'tests'));
   await Promise.all([
     writeFile(
       join(project, 'package.json'),
       `${JSON.stringify({ private: true, type: 'module' }, null, 2)}\n`,
       'utf8',
     ),
+    writeFile(join(project, 'app.mjs'), quickstart.app, 'utf8'),
+    writeFile(join(project, 'tests', 'permission.test.ts'), quickstart.docsTest, 'utf8'),
     writeFile(
-      join(project, 'app.mjs'),
+      join(project, 'unicode-app.mjs'),
       [
         "import readline from 'node:readline';",
         'readline.emitKeypressEvents(process.stdin);',
@@ -40,7 +45,7 @@ try {
       join(project, 'vitest.config.mjs'),
       [
         "import { defineConfig } from 'vitest/config';",
-        "export default defineConfig({ test: { include: ['*.test.mjs'], setupFiles: ['./setup.mjs'], testTimeout: 15000 } });",
+        "export default defineConfig({ test: { include: ['**/*.test.{mjs,ts}'], setupFiles: ['./setup.mjs'], testTimeout: 15000 } });",
       ].join('\n'),
       'utf8',
     ),
@@ -57,7 +62,7 @@ try {
       [
         "import { fileURLToPath } from 'node:url';",
         "import { expect, test } from 'termwright/test';",
-        "const program = fileURLToPath(new URL('./app.mjs', import.meta.url));",
+        "const program = fileURLToPath(new URL('./unicode-app.mjs', import.meta.url));",
         "test.resources({ terminals: 1, traceWriters: 1 })('drives a packed Unicode TUI', async ({ terminal }) => {",
         '  const app = await terminal.launch({ command: [process.execPath, program] });',
         "  await app.waitForText('Unicode: 👨‍👩‍👧‍👦 देवनागरी 界');",
@@ -70,16 +75,29 @@ try {
     ),
   ]);
 
-  const cli = join(installRoot, 'node_modules', 'termwright', 'dist', 'bin.js');
-  const execution = await execute(process.execPath, [cli, 'test', '--', '--run'], {
-    cwd: project,
-    env: {
-      ...process.env,
-      TERMWRIGHT_RETRIES: '0',
-      TERMWRIGHT_UPDATE_SNAPSHOTS: 'none',
-    },
-    timeout: 60_000,
-  });
+  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const environment = {
+    ...process.env,
+    TERMWRIGHT_RETRIES: '0',
+    TERMWRIGHT_UPDATE_SNAPSHOTS: 'none',
+  };
+  const executeNpx = (subcommand) => {
+    const args = ['--no-install', 'termwright', subcommand];
+    // Windows batch launchers cannot be passed directly to CreateProcess. Use
+    // cmd.exe explicitly with a command assembled solely from fixed values in
+    // this certification script, without Node's unsafe shell+args fallback.
+    const command =
+      process.platform === 'win32'
+        ? [process.env['ComSpec'] ?? 'cmd.exe', ['/d', '/s', '/c', [npx, ...args].join(' ')]]
+        : [npx, args];
+    return execute(command[0], command[1], {
+      cwd: project,
+      env: environment,
+      timeout: 60_000,
+    });
+  };
+  await executeNpx('doctor');
+  const execution = await executeNpx('test');
 
   const runDirectories = await readdir(join(project, '.termwright', 'runs'));
   if (runDirectories.length !== 1) {
@@ -92,9 +110,9 @@ try {
     ),
   );
   if (
-    manifest.v !== 7 ||
+    manifest.v !== 8 ||
     manifest.status !== 'passed' ||
-    manifest.specs?.length !== 2 ||
+    manifest.specs?.length !== 3 ||
     manifest.eventStream?.file !== 'events.ndjson' ||
     manifest.eventStream?.count < 1 ||
     manifest.telemetry?.coordinatorRssStartBytes <= 0 ||
@@ -119,10 +137,9 @@ try {
   const traceResources = events
     .filter((event) => event.type === 'trace.resource')
     .map((event) => event.payload);
-  if (traceResources.length !== 1) {
+  if (traceResources.length !== 2) {
     throw new Error(`packed host wrote ${traceResources.length} trace resource records`);
   }
-  const traceResource = traceResources[0];
   for (const metric of [
     'terminalOutputBytes',
     'semanticBytes',
@@ -131,7 +148,8 @@ try {
     'traceBytes',
     'finalArtifactBytes',
   ]) {
-    if (manifest.telemetry[metric] !== traceResource[metric]) {
+    const total = traceResources.reduce((sum, resource) => sum + resource[metric], 0);
+    if (manifest.telemetry[metric] !== total) {
       throw new Error(`packed host ${metric} differs from canonical trace resource evidence`);
     }
   }
@@ -139,13 +157,15 @@ try {
   const traces = (await readdir(join(project, 'artifacts', 'traces'))).filter((name) =>
     name.endsWith('.twtrace'),
   );
-  if (traces.length !== 1) throw new Error(`packed host wrote ${traces.length} traces`);
-  const traceDirectory = join(project, 'artifacts', 'traces', traces[0]);
-  const [meta, commit] = await Promise.all([
-    readFile(join(traceDirectory, 'meta.json'), 'utf8').then(JSON.parse),
-    readFile(join(traceDirectory, 'COMMITTED'), 'utf8').then(JSON.parse),
-  ]);
-  if (meta.v !== 4 || commit.v !== 4) throw new Error('packed host did not write trace v4');
+  if (traces.length !== 2) throw new Error(`packed host wrote ${traces.length} traces`);
+  for (const trace of traces) {
+    const traceDirectory = join(project, 'artifacts', 'traces', trace);
+    const [meta, commit] = await Promise.all([
+      readFile(join(traceDirectory, 'meta.json'), 'utf8').then(JSON.parse),
+      readFile(join(traceDirectory, 'COMMITTED'), 'utf8').then(JSON.parse),
+    ]);
+    if (meta.v !== 4 || commit.v !== 4) throw new Error('packed host did not write trace v4');
+  }
 
   process.stdout.write(execution.stdout);
   process.stderr.write(execution.stderr);

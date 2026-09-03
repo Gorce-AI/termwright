@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TermwrightRetryOptions
 
-Defined in: [test/src/config.ts:214](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L214)
+Defined in: [test/src/config.ts:215](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L215)
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: [test/src/config.ts:214](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **ci?**: `number`
 
-Defined in: [test/src/config.ts:216](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L216)
+Defined in: [test/src/config.ts:217](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L217)
 
 Additional attempts on CI. Default 0; diagnostics must opt in explicitly.
 
@@ -29,7 +29,7 @@ Additional attempts on CI. Default 0; diagnostics must opt in explicitly.
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string` \| `undefined`\>\>
 
-Defined in: [test/src/config.ts:220](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L220)
+Defined in: [test/src/config.ts:221](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L221)
 
 Environment used for CI detection and `TERMWRIGHT_RETRIES`.
 
@@ -39,6 +39,6 @@ Environment used for CI detection and `TERMWRIGHT_RETRIES`.
 
 > `readonly` `optional` **local?**: `number`
 
-Defined in: [test/src/config.ts:218](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L218)
+Defined in: [test/src/config.ts:219](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L219)
 
 Additional attempts outside CI. Default 0.

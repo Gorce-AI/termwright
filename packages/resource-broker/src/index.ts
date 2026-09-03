@@ -154,8 +154,11 @@ const DEFAULT_TIMERS: TimerApi = {
 /**
  * Host-owned, deterministic resource scheduler.
  *
- * Requests reserve their complete vector or nothing. FIFO head-of-line order
- * prevents a stream of small requests from starving an older large request.
+ * Requests reserve their complete vector or nothing. New attempts use FIFO
+ * head-of-line order so a stream of small requests cannot starve an older large
+ * request. An already-active attempt may extend its reservation ahead of that
+ * queue when the extension fits. This continuation priority prevents a
+ * hold-and-wait deadlock without admitting another competing attempt.
  */
 export class ResourceBroker {
   readonly #runId: RunId;
@@ -424,7 +427,8 @@ export class ResourceBroker {
 
   #drain(): void {
     for (;;) {
-      const pending = this.#queue[0];
+      const pendingIndex = this.#nextDrainableIndex();
+      const pending = this.#queue[pendingIndex];
       if (pending === undefined) return;
       if (pending.deadline <= this.#now()) {
         this.#cancel(
@@ -439,10 +443,20 @@ export class ResourceBroker {
         continue;
       }
       if (!this.#fits(pending.resources)) return;
-      this.#queue.shift();
+      this.#queue.splice(pendingIndex, 1);
       this.#settlePending(pending, attempt);
       pending.resolve(this.#grant(attempt, pending.resources));
     }
+  }
+
+  #nextDrainableIndex(): number {
+    for (let index = 0; index < this.#queue.length; index += 1) {
+      const pending = this.#queue[index];
+      if (pending === undefined || !this.#fits(pending.resources)) continue;
+      const attempt = this.#attempts.get(pending.identity.attemptId);
+      if (attempt !== undefined && attempt.leases.size > 0) return index;
+    }
+    return 0;
   }
 
   #settlePending(pending: PendingAcquire, attempt: AttemptState): void {

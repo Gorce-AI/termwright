@@ -131,6 +131,109 @@ describe('run journal worker transport', () => {
     await client.close();
   });
 
+  it('synchronously bounds hot-path admission while a slow sink drains one ordered batch', async () => {
+    const runId = createRunId('run');
+    let releaseAppend!: () => void;
+    let markStarted!: () => void;
+    const appendGate = new Promise<void>((resolve) => {
+      releaseAppend = resolve;
+    });
+    const appendStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const received: RunEvent[] = [];
+    const server = await startRunJournalServer({
+      runId,
+      append: async (event) => {
+        markStarted();
+        await appendGate;
+        received.push(event);
+      },
+    });
+    servers.push(server);
+    const client = await connectRunJournalWorker({
+      endpoint: server.endpoint,
+      token: server.token,
+      runId,
+      workerId: 'hot-path',
+      workerEpoch: 1,
+      handshakeDeadline: deadline(),
+      maxPendingEvents: 2,
+    });
+    const producer = new RunEventProducer({
+      producerId: client.binding.producerId,
+      epoch: client.binding.producerEpoch,
+    });
+    const identity = { invocationId: createRunId('invocation'), runId } as const;
+    const events = [0, 1, 2].map((index) =>
+      producer.emit({
+        eventClass: 'diagnostic',
+        type: 'run.warning',
+        identity,
+        payload: { detail: String(index) },
+      }),
+    );
+
+    expect(client.enqueue(events[0]!, deadline())).toBeUndefined();
+    expect(client.enqueue(events[1]!, deadline())).toBeUndefined();
+    expect(() => client.enqueue(events[2]!, deadline())).toThrow(
+      expect.objectContaining({ code: 'capacity' }),
+    );
+    expect(client.snapshot()).toMatchObject({
+      pendingEvents: 2,
+      peakPendingEvents: 2,
+      batches: 0,
+    });
+
+    const drained = client.drain();
+    await appendStarted;
+    expect(client.snapshot().pendingEvents).toBe(2);
+    releaseAppend();
+    await drained;
+    expect(received.map((event) => (event.payload as { detail: string }).detail)).toEqual([
+      '0',
+      '1',
+    ]);
+    expect(client.snapshot()).toMatchObject({ pendingEvents: 0, batches: 1 });
+    await client.close();
+  });
+
+  it('surfaces background delivery failures at the drain lifecycle barrier', async () => {
+    const runId = createRunId('run');
+    const server = await startRunJournalServer({
+      runId,
+      append: () => {
+        throw new Error('journal sink unavailable');
+      },
+    });
+    const client = await connectRunJournalWorker({
+      endpoint: server.endpoint,
+      token: server.token,
+      runId,
+      workerId: 'background-failure',
+      workerEpoch: 1,
+      handshakeDeadline: deadline(),
+    });
+    const producer = new RunEventProducer({
+      producerId: client.binding.producerId,
+      epoch: client.binding.producerEpoch,
+    });
+
+    client.enqueue(
+      producer.emit({
+        eventClass: 'authoritative',
+        type: 'run.started',
+        identity: { invocationId: createRunId('invocation'), runId },
+        payload: {},
+      }),
+      deadline(),
+    );
+
+    await expect(client.drain()).rejects.toThrow('journal sink unavailable');
+    await expect(client.close()).rejects.toThrow('journal sink unavailable');
+    await expect(server.close()).rejects.toThrow('journal server close failed');
+  });
+
   it('does not resolve client close before the socket is fully closed', async () => {
     const endpoint = testEndpoint('journal-client-close');
     let peer: Socket | undefined;

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '../packages/resource-broker/src/vitest.ts';
+import { it as resourceAwareIt } from '../packages/test-provider-internal/src/index.ts';
 import { pnpmInvocation } from './package-manager-command.mjs';
 
 const exec = promisify(execFile);
@@ -76,34 +76,43 @@ describe('private test-engine subpaths', () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-private-runner-'));
     scratch.push(directory);
     const archiveDirectory = join(directory, 'archives');
-    const packageDirectory = join(directory, 'node_modules', '@termwright', 'test');
     await mkdir(archiveDirectory, { recursive: true });
-    await mkdir(packageDirectory, { recursive: true });
-
-    await exec(
-      pnpm.command,
-      [...pnpm.args, '--dir', 'packages/test', 'pack', '--pack-destination', archiveDirectory],
-      { cwd: root },
-    );
-    const archive = (await readdir(archiveDirectory)).find((name) => name.endsWith('.tgz'));
-    expect(archive).toBeDefined();
-    await exec(
-      'tar',
-      [
-        '-xzf',
-        `archives/${archive}`,
-        '--strip-components=1',
-        '-C',
-        'node_modules/@termwright/test',
-      ],
-      { cwd: directory },
-    );
+    for (const packageName of ['test', 'resource-broker']) {
+      const packageDirectory = join(directory, 'node_modules', '@termwright', packageName);
+      await mkdir(packageDirectory, { recursive: true });
+      const before = new Set(await readdir(archiveDirectory));
+      await exec(
+        pnpm.command,
+        [
+          ...pnpm.args,
+          '--dir',
+          `packages/${packageName}`,
+          'pack',
+          '--pack-destination',
+          archiveDirectory,
+        ],
+        { cwd: root },
+      );
+      const archives = (await readdir(archiveDirectory)).filter((name) => !before.has(name));
+      expect(archives).toHaveLength(1);
+      await exec(
+        'tar',
+        [
+          '-xzf',
+          `archives/${archives[0]}`,
+          '--strip-components=1',
+          '-C',
+          `node_modules/@termwright/${packageName}`,
+        ],
+        { cwd: directory },
+      );
+    }
 
     const consumer = join(directory, 'consumer.mjs');
     await writeFile(
       consumer,
       [
-        "for (const specifier of ['@termwright/test/runner', '@termwright/test/vitest-engine']) {",
+        "for (const specifier of ['@termwright/test/runner', '@termwright/test/vitest-engine', '@termwright/resource-broker/vitest']) {",
         '  try {',
         '    await import(specifier);',
         '    throw new Error(`private engine subpath resolved: ${specifier}`);',

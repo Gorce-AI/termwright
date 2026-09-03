@@ -32,7 +32,7 @@
   "dependencies": {
     "@termwright/driver": "workspace:*",
     "@termwright/protocol": "workspace:*",
-    "@termwright/resource-broker": "workspace:*",
+    "@termwright/test": "workspace:*",
     "@xterm/headless": "^6.0.0"
   },
   "devDependencies": {
@@ -42,17 +42,8 @@
     "@termwright/mcp": "workspace:*",
     "@termwright/probe-ink": "workspace:*",
     "@termwright/probe-tview": "workspace:*",
-    "@termwright/test": "workspace:*",
     "@types/react": "^19.2.18",
     "ink": "^7.1.1",
     "react": "^19.2.8"
-  },
-  "peerDependencies": {
-    "vitest": "4.1.11"
-  },
-  "peerDependenciesMeta": {
-    "vitest": {
-      "optional": true
-    }
   }
 }

@@ -25,7 +25,7 @@
       "types": "./dist/bun-preload.d.ts",
       "import": "./dist/bun-preload.js"
     },
-    "./internal/testing": {
+    "./instrumentation": {
       "types": "./dist/instrument.d.ts",
       "import": "./dist/instrument.js"
     }
@@ -52,7 +52,7 @@
   },
   "devDependencies": {
     "@termwright/driver": "workspace:*",
-    "@termwright/resource-broker": "workspace:*",
+    "@termwright/test-provider-internal": "workspace:*",
     "@types/react": "^19.2.18",
     "ink": "7.1.1",
     "react": "^19.2.8"

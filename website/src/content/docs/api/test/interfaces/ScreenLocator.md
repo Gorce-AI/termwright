@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ScreenLocator
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:544
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:567
 
 ## Extends
 
@@ -23,7 +23,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:544
 
 > `readonly` **description**: `string`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:481
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:504
 
 Human-readable form of the query, as it appears in error messages.
 
@@ -37,7 +37,7 @@ Human-readable form of the query, as it appears in error messages.
 
 > `readonly` **domain**: `"screen"`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:479
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:502
 
 #### Inherited from
 
@@ -49,7 +49,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:479
 
 > **actionability**(`action`, `opts?`): `Promise`\<`ActionabilityExplanation`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:552
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:575
 
 #### Parameters
 
@@ -71,7 +71,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:552
 
 > **and**(`other`): `ScreenLocator`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:485
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:508
 
 #### Parameters
 
@@ -93,7 +93,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:485
 
 > **cellSnapshot**(`opts?`): `Promise`\<`LocatorCellSnapshot`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:509
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:532
 
 Atomic cells inside this locator's qualified rectangle.
 
@@ -117,7 +117,7 @@ Atomic cells inside this locator's qualified rectangle.
 
 > **checkpoint**(): `ObservationStamp`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:490
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:513
 
 Current committed observation used to arm race-free custom waits.
 
@@ -135,7 +135,7 @@ Current committed observation used to arm race-free custom waits.
 
 > **click**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:495
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:518
 
 #### Parameters
 
@@ -157,7 +157,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:495
 
 > **count**(): `Promise`\<`number`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:488
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:511
 
 #### Returns
 
@@ -173,7 +173,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:488
 
 > **doubleClick**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:496
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:519
 
 #### Parameters
 
@@ -195,7 +195,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:496
 
 > **dragTo**(`target`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:498
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:521
 
 #### Parameters
 
@@ -221,7 +221,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:498
 
 > **evaluateCondition**(`condition`, `opts?`): `Promise`\<`ConditionResult`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:551
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:574
 
 #### Parameters
 
@@ -243,7 +243,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:551
 
 > **filter**(`options`): `ScreenLocator`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:547
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:570
 
 #### Parameters
 
@@ -261,7 +261,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:547
 
 > **first**(): `ScreenLocator`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:482
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:505
 
 #### Returns
 
@@ -277,7 +277,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:482
 
 > **geometry**(): `Promise`\<`LocatorGeometry`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:501
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:524
 
 Atomic, evidence-qualified geometry. Never invents a rectangle.
 
@@ -295,7 +295,7 @@ Atomic, evidence-qualified geometry. Never invents a rectangle.
 
 > **getByScreenText**(`text`, `opts?`): `ScreenLocator`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:546
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:569
 
 #### Parameters
 
@@ -317,7 +317,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:546
 
 > **hitTest**(`opts?`): `Promise`\<`PointerHitTest`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:505
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:528
 
 Whether pointer input at the chosen cell reaches this exact target.
 
@@ -351,7 +351,7 @@ Whether pointer input at the chosen cell reaches this exact target.
 
 > **hover**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:497
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:520
 
 #### Parameters
 
@@ -373,7 +373,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:497
 
 > **last**(): `ScreenLocator`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:483
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:506
 
 #### Returns
 
@@ -389,7 +389,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:483
 
 > **nth**(`index`): `ScreenLocator`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:484
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:507
 
 #### Parameters
 
@@ -411,7 +411,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:484
 
 > **or**(`other`): `ScreenLocator`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:486
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:509
 
 #### Parameters
 
@@ -433,7 +433,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:486
 
 > **resolve**(`opts?`): `Promise`\<`ResolvedTarget`\<`"screen"`\>\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:487
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:510
 
 #### Parameters
 
@@ -455,7 +455,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:487
 
 > **textContent**(): `Promise`\<`string`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:510
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:533
 
 #### Returns
 
@@ -471,7 +471,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:510
 
 > **visibility**(): `Promise`\<`LocatorVisibility`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:503
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:526
 
 Attached/displayed/viewport facts without collapsing unknown to false.
 
@@ -489,7 +489,7 @@ Attached/displayed/viewport facts without collapsing unknown to false.
 
 > **waitFor**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:548
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:571
 
 #### Parameters
 
@@ -507,7 +507,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:548
 
 > **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:492
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:515
 
 Waits for a newer committed observation without a check/subscribe gap.
 
@@ -531,7 +531,7 @@ Waits for a newer committed observation without a check/subscribe gap.
 
 > **wheel**(`opts`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:499
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:522
 
 #### Parameters
 
@@ -553,7 +553,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:499
 
 > **within**(`parent`): `ScreenLocator`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:545
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:568
 
 #### Parameters
 

@@ -9,7 +9,7 @@
  */
 
 import type { LogLevel } from '@termwright/protocol';
-import type { SessionCapabilityId, TimeoutClasses } from '@termwright/driver';
+import type { SessionCapabilityId, TerminalProfileId, TimeoutClasses } from '@termwright/driver';
 import type { ResolvedTermwrightConfig, TestTimeoutClasses, TraceMode } from './config.js';
 
 /** Options a file or suite may override with `test.override`. */
@@ -18,7 +18,7 @@ export interface TermwrightOptions {
   readonly command?: readonly string[];
   readonly columns?: number;
   readonly rows?: number;
-  readonly terminalProfile?: string;
+  readonly terminalProfile?: TerminalProfileId;
   /** Replaces the project capability requirements for this scope. */
   readonly requiredCapabilities?: readonly SessionCapabilityId[];
   /**
@@ -39,7 +39,7 @@ export interface LaunchOverrides {
   readonly command?: readonly string[];
   readonly columns?: number;
   readonly rows?: number;
-  readonly terminalProfile?: string;
+  readonly terminalProfile?: TerminalProfileId;
   readonly requiredCapabilities?: readonly SessionCapabilityId[];
   readonly env?: Readonly<Record<string, string>>;
   readonly timeouts?: TimeoutClasses;
@@ -51,7 +51,7 @@ export interface MergedOptions {
   readonly command: readonly string[] | undefined;
   readonly columns: number;
   readonly rows: number;
-  readonly terminalProfile: string | undefined;
+  readonly terminalProfile: TerminalProfileId | undefined;
   readonly requiredCapabilities: readonly SessionCapabilityId[];
   readonly env: Readonly<Record<string, string>>;
   /** Driver timeout classes only; the `expect` class never reaches the driver. */

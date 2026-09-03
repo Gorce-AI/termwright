@@ -1,4 +1,4 @@
-/** Declaration-time resource ownership for tests run by the Termwright host. */
+/** Vitest-bound declaration-time resource ownership for Termwright tests. */
 
 import { TestRunner, it as vitestIt, test as vitestTest } from 'vitest';
 import {

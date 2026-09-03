@@ -16,6 +16,7 @@
     "check:links": "node scripts/check-links.mjs dist"
   },
   "dependencies": {
+    "@astrojs/sitemap": "^3.7.3",
     "@astrojs/starlight": "^0.34.0",
     "astro": "^5.6.0",
     "sharp": "^0.34.0"

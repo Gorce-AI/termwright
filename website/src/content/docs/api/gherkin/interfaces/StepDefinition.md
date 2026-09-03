@@ -1,5 +1,5 @@
 ---
-title: "Interface: StepDefinition\\<Fixtures\\>"
+title: "Interface: StepDefinition"
 editUrl: false
 ---
 

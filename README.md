@@ -26,11 +26,13 @@ npm install --save-dev termwright
 
 ## Write a test
 
+<!-- BEGIN QUICKSTART TEST -->
+
 ```ts
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'termwright/test';
 
-const program = fileURLToPath(new URL('../app.js', import.meta.url));
+const program = fileURLToPath(new URL('../app.mjs', import.meta.url));
 
 test('approves a command', async ({ terminal }) => {
   const app = await terminal.launch({ command: [process.execPath, program] });
@@ -41,6 +43,8 @@ test('approves a command', async ({ terminal }) => {
   await expect(app).toHaveText('running: ls -la');
 });
 ```
+
+<!-- END QUICKSTART TEST -->
 
 Run it with Termwright's test command:
 

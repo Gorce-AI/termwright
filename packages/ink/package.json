@@ -37,7 +37,6 @@
     "react": ">=19.2.0"
   },
   "devDependencies": {
-    "@termwright/resource-broker": "workspace:*",
     "@termwright/test": "workspace:*",
     "@types/react": "^19.2.18",
     "ink": "7.1.1",

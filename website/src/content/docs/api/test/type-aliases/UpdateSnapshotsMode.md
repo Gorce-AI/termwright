@@ -13,7 +13,7 @@ editUrl: false
 
 > **UpdateSnapshotsMode** = `"all"` \| `"changed"` \| `"missing"` \| `"none"`
 
-Defined in: [test/src/config.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L30)
+Defined in: [test/src/config.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L31)
 
 Snapshot writing policy.
 

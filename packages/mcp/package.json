@@ -38,6 +38,6 @@
     "@termwright/trace": "workspace:*"
   },
   "devDependencies": {
-    "@termwright/resource-broker": "workspace:*"
+    "@termwright/test-provider-internal": "workspace:*"
   }
 }

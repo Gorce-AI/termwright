@@ -158,6 +158,11 @@ export interface TerminalFactory {
   failOnLogLevel(level: LogLevel | false): void;
 }
 
+function ownedProcessResourcePayload(harness: TerminalHarness): RunEventJson {
+  const resources = harness.ownedProcessResources();
+  return resources === null ? 'unavailable' : ({ ...resources } as unknown as RunEventJson);
+}
+
 /** Fixtures added to Vitest's `test`. */
 export interface TermwrightFixtures {
   /**
@@ -621,7 +626,10 @@ export const test = markTermwrightTestApi(
             type: 'session.finished',
             sessionId: session.runSessionId,
             phase: 'cleanup',
-            payload: { cleanup: 'verified' },
+            payload: {
+              cleanup: 'verified',
+              ownedProcessResources: ownedProcessResourcePayload(session.harness),
+            },
           });
         } catch (error) {
           teardownFailures.push(error);
@@ -632,6 +640,7 @@ export const test = markTermwrightTestApi(
             phase: 'cleanup',
             payload: {
               cleanup: 'failed',
+              ownedProcessResources: ownedProcessResourcePayload(session.harness),
               detail:
                 error instanceof Error
                   ? error.message.slice(0, 16_384)

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, onTestFinished } from 'vitest';
 import { encodeConPtyHostCursorResponse, parseConPtyHostCursorRequest } from '@termwright/protocol';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { bunTestCapability } from '../../../scripts/test-support/bun-runtime.mjs';
 import {
   spawnWindowsPty as spawnUnownedWindowsPty,
@@ -1618,6 +1618,15 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     // Queried, not inferred: the job object is the owner, so this is a fact
     // about membership rather than a guess from a process-id snapshot.
     expect(handle.activeProcesses()).toBe(0);
+    const resources = handle.resourceUsage();
+    expect(resources).toMatchObject({
+      source: 'windows-job-object',
+      activeProcesses: 0,
+    });
+    expect(resources?.totalProcesses).toBeGreaterThanOrEqual(1);
+    expect(resources?.peakJobMemoryBytes).toBeGreaterThan(0);
+    expect(resources?.userTime100ns).toBeGreaterThanOrEqual(0);
+    expect(resources?.kernelTime100ns).toBeGreaterThanOrEqual(0);
     handle.dispose();
   });
 

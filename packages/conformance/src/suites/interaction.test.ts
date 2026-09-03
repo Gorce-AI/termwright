@@ -8,7 +8,7 @@
  * session ownership when more than one is open.
  */
 import { afterEach, describe, expect } from 'vitest';
-import { it as resourceAwareIt } from '@termwright/resource-broker/vitest';
+import { it as resourceAwareIt } from '@termwright/test';
 import type { AnyLocator, TerminalHarness } from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import { TermwrightError } from '@termwright/driver';

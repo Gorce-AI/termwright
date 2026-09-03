@@ -25,7 +25,7 @@ exit code 1. Use `--json` in agents and environment diagnostics.
 
 ```text
 termwright test [--runs N] [--resource-profile <name>]
-                [--tags <expression>] [-- <test-runner args>]
+                [--tags <expression>] [-- <vitest args>]
 ```
 
 Runs the project tests once. `--runs N` repeats the complete selected suite in
@@ -46,7 +46,7 @@ Any fail-then-pass result is flaky and exits non-zero.
 
 ```text
 termwright watch [--resource-profile <name>]
-                 [--tags <expression>] [-- <test-runner args>]
+                 [--tags <expression>] [-- <vitest args>]
 ```
 
 Runs an initial suite, then reruns after source changes. A change that arrives
@@ -57,9 +57,7 @@ same meaning as for `test`.
 ## `termwright ui`
 
 ```text
-termwright ui [--trace <path>] [--tags <expression>] [--port N] [--host H]
-              [--no-watch] [--browser | --no-open]
-              [-- <vitest args>]
+termwright ui [--resource-profile <name>] [--trace <file>] [--tags <expression>] [--port N] [--host H] [--no-watch] [--browser | --no-open] [-- <vitest args>]
 termwright ui --record [--out-file <file>] -- <command>
 ```
 
@@ -99,9 +97,7 @@ The result can be opened directly from disk or stored as a CI artifact.
 ## `termwright screenshot`
 
 ```text
-termwright screenshot --trace <file>
-                      [--at <ms> | --step <number>]
-                      [--out-file <file>] [--scale <number>]
+termwright screenshot --trace <file> [--at <ms> | --step N] [--out-file <file>] [--scale N]
 ```
 
 Renders one trace moment to PNG. With no time or step, the command selects the
@@ -116,6 +112,14 @@ termwright codegen [--out-file <file>] -- <command>
 An alias for using `ui --record` when recording is the only task.
 
 ## Agent commands
+
+```text
+termwright mcp [--http] [--port N]
+termwright mcp usage
+termwright agent-context
+termwright usage
+termwright skill [--out <dir>]
+```
 
 | Command                          | Result                                                 |
 | -------------------------------- | ------------------------------------------------------ |

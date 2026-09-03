@@ -1,5 +1,5 @@
 ---
-title: "Interface: ParameterTypeDefinition\\<T\\>"
+title: "Interface: ParameterTypeDefinition"
 editUrl: false
 ---
 

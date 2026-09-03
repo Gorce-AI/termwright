@@ -184,6 +184,7 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
             InstanceMethod("resize", &ConPtySession::Resize),
             InstanceMethod("terminateTree", &ConPtySession::TerminateTree),
             InstanceMethod("activeProcesses", &ConPtySession::ActiveProcesses),
+            InstanceMethod("resourceUsage", &ConPtySession::ResourceUsage),
             InstanceMethod("dispose", &ConPtySession::Dispose),
             InstanceAccessor("pid", &ConPtySession::Pid, nullptr),
         });
@@ -429,6 +430,36 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
 
   Napi::Value ActiveProcesses(const Napi::CallbackInfo& info) {
     return Napi::Number::New(info.Env(), static_cast<double>(session_->ActiveProcesses()));
+  }
+
+  Napi::Value ResourceUsage(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    termwright::JobResourceUsage usage{};
+    if (!session_->ResourceUsage(&usage)) return env.Null();
+    Napi::Object value = Napi::Object::New(env);
+    value.Set("source", Napi::String::New(env, "windows-job-object"));
+    value.Set("userTime100ns", Napi::Number::New(env, static_cast<double>(usage.user_time_100ns)));
+    value.Set("kernelTime100ns",
+              Napi::Number::New(env, static_cast<double>(usage.kernel_time_100ns)));
+    value.Set("peakJobMemoryBytes",
+              Napi::Number::New(env, static_cast<double>(usage.peak_job_memory_bytes)));
+    value.Set("readOperationCount",
+              Napi::Number::New(env, static_cast<double>(usage.read_operation_count)));
+    value.Set("writeOperationCount",
+              Napi::Number::New(env, static_cast<double>(usage.write_operation_count)));
+    value.Set("otherOperationCount",
+              Napi::Number::New(env, static_cast<double>(usage.other_operation_count)));
+    value.Set("readTransferBytes",
+              Napi::Number::New(env, static_cast<double>(usage.read_transfer_bytes)));
+    value.Set("writeTransferBytes",
+              Napi::Number::New(env, static_cast<double>(usage.write_transfer_bytes)));
+    value.Set("otherTransferBytes",
+              Napi::Number::New(env, static_cast<double>(usage.other_transfer_bytes)));
+    value.Set("totalProcesses", Napi::Number::New(env, usage.total_processes));
+    value.Set("activeProcesses", Napi::Number::New(env, usage.active_processes));
+    value.Set("totalTerminatedProcesses",
+              Napi::Number::New(env, usage.total_terminated_processes));
+    return value;
   }
 
   Napi::Value Dispose(const Napi::CallbackInfo& info) {

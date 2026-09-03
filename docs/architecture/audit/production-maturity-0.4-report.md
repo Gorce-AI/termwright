@@ -153,7 +153,8 @@ Decision records: [trace-v4-streaming.md](trace-v4-streaming.md) and
    authoritative saturation, append-only checksummed run history, cgroup v1/v2
    CPU and memory detection, filesystem budget, deterministic admission reasons,
    bounded p50/p95/EWMA history, worker CPU/RSS sampling, PTY/trace/journal and
-   artifact counters, and literal `unavailable` capabilities.
+   artifact counters, Windows Job Object CPU/memory/process/I/O accounting with
+   explicit native units, and literal `unavailable` capabilities.
 7. **Removed:** per-event worker RPC, finalize-heavy embedded run events,
    unbounded host projections, static core-only worker selection, and fabricated
    zeroes for unsupported metrics.
@@ -164,11 +165,11 @@ Decision records: [trace-v4-streaming.md](trace-v4-streaming.md) and
 9. **Performance evidence:** a real 11-test PTY run drained the journal in two
    sink calls with a bounded peak of 244 events / 174,562 bytes; semantic and
    trace counters reconstruct independently from the canonical event stream.
-10. **OS/runtime evidence:** local macOS arm64 Node 24 evidence passes; cgroup,
-    Windows, and full Node 22/24 host executions remain external.
-11. **Remaining limitations:** Windows Job Object resource accounting,
-    capability-qualified POSIX tree accounting, and host-wide temporary-disk
-    peak are intentionally `unavailable`, not inferred.
+10. **OS/runtime evidence:** local macOS arm64 Node 24 evidence passes; the
+    Windows Job query is implemented and unit-contract tested, while native
+    Windows and full Node 22/24 executions remain external.
+11. **Remaining limitations:** capability-qualified POSIX tree accounting and
+    host-wide temporary-disk peak are intentionally `unavailable`, not inferred.
 
 Decision records: [bounded-event-journal.md](bounded-event-journal.md),
 [resource-aware-scheduling.md](resource-aware-scheduling.md), and
@@ -212,6 +213,16 @@ Decision records: [bounded-event-journal.md](bounded-event-journal.md),
 
 Decision records: [vitest-engine-boundary.md](vitest-engine-boundary.md) and
 [clean-room-native-host.md](clean-room-native-host.md).
+
+### Executable public quick start
+
+The README and Getting Started application/test are one executable source
+contract. Delimited Markdown fences are compared byte-for-byte with
+`examples/getting-started`; drift fails `check:fast`. The packed clean-room
+consumer materializes the exact documented snippets, runs `termwright doctor`,
+then runs the unmodified documented test through tarball-only packages. The
+same consumer retains the independent Unicode and user-Vitest coexistence
+canaries, so documentation verification cannot weaken packaging coverage.
 
 ## Release evidence and package state
 

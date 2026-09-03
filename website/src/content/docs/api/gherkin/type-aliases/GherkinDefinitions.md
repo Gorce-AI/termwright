@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: GherkinDefinitions\\<Fixtures\\>"
+title: "Type Alias: GherkinDefinitions"
 editUrl: false
 ---
 
