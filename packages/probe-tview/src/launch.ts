@@ -15,7 +15,7 @@ const run = promisify(execFile);
 
 export const FRAMEWORK = 'github.com/rivo/tview';
 export const CLIENT_MODULE = 'github.com/gorce-ai/termwright/clients/go';
-export const PROBE_VERSION = '0.4.1';
+export const PROBE_VERSION = '0.5.0';
 const TCELL_FRAMEWORK = 'github.com/gdamore/tcell/v2';
 
 export interface PrepareOptions {

@@ -31,7 +31,7 @@ from .bootstrap import (
 )
 from .defer import when_imported
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 #: Set once :func:`install` has run, so a second `sitecustomize` on the path
 #: cannot attach the probe twice.
