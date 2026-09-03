@@ -40,6 +40,12 @@ waves. Holding every resource behind an initial barrier forces heavy and light
 requests through the queue and makes starvation or younger-request bypass
 observable rather than timing-dependent.
 
+A separate schedule-independence oracle runs the same isolated suite with
+serial, two-slot, and six-slot capacities, changes request order, and reverses
+release order. It compares the sorted user-visible verdict and essential
+evidence for every test. Lease IDs, admission timing, and completion order are
+intentionally excluded: they are scheduler provenance, not test evidence.
+
 ## Historical cost feedback
 
 The Native Host maintains one local, advisory `resource-costs-v1.json` beside

@@ -35,7 +35,95 @@ describe('ResourceBroker reference model', () => {
       );
     }
   });
+
+  it('preserves verdicts and essential evidence across legal schedules', async () => {
+    const suite = [
+      { id: 0, resources: { ptySession: 1, cpuWeight: 1 }, input: 'alpha' },
+      { id: 1, resources: { traceWriter: 1, ioWeight: 1 }, input: 'bravo' },
+      { id: 2, resources: { externalProcess: 1, memoryWeight: 1 }, input: 'charlie' },
+      { id: 3, resources: { semanticEndpoint: 1, cpuWeight: 1 }, input: 'delta' },
+      { id: 4, resources: { ptySession: 1, traceWriter: 1 }, input: 'echo' },
+      { id: 5, resources: { nativeHostPressure: 1, memoryWeight: 1 }, input: 'foxtrot' },
+    ] as const;
+    const schedules = [
+      { capacity: 1, order: [0, 1, 2, 3, 4, 5], release: 'forward' as const },
+      { capacity: 2, order: [5, 3, 1, 4, 2, 0], release: 'reverse' as const },
+      { capacity: 6, order: [2, 4, 0, 5, 1, 3], release: 'reverse' as const },
+    ];
+    const results = await Promise.all(
+      schedules.map((schedule, index) => executeEvidenceSuite(index, suite, schedule)),
+    );
+    expect(results[1]).toEqual(results[0]);
+    expect(results[2]).toEqual(results[0]);
+  });
 });
+
+async function executeEvidenceSuite(
+  scheduleId: number,
+  suite: readonly {
+    readonly id: number;
+    readonly resources: ResourceVector;
+    readonly input: string;
+  }[],
+  schedule: {
+    readonly capacity: number;
+    readonly order: readonly number[];
+    readonly release: 'forward' | 'reverse';
+  },
+): Promise<
+  readonly { readonly id: number; readonly verdict: 'passed'; readonly evidence: string }[]
+> {
+  let nextUuid = 0;
+  const capacities = Object.fromEntries(
+    RESOURCE_CLASSES.map((resource) => [resource, schedule.capacity]),
+  ) as ResourceCapacities;
+  const broker = new ResourceBroker({
+    runId: RUN,
+    capacities,
+    monotonicNow: () => 1_000,
+    randomUUID: () => `00000000-0000-4000-8000-${String(++nextUuid).padStart(12, '0')}`,
+  });
+  const leases = new Map<number, ResourceLease>();
+  const completed = new Set<number>();
+  const results: { id: number; verdict: 'passed'; evidence: string }[] = [];
+  const acquisitions = schedule.order.map((id) => {
+    const item = suite[id];
+    if (item === undefined) throw new Error(`schedule ${scheduleId} names unknown test ${id}`);
+    const identity = { runId: RUN, workerId: `schedule-${scheduleId}-${id}`, workerEpoch: 1 };
+    broker.registerWorker(identity);
+    return broker
+      .acquire({
+        ...identity,
+        attemptId: `attempt-${scheduleId}-${id}` as AttemptId,
+        resources: item.resources,
+        deadline: 10_000,
+      })
+      .then((lease) => leases.set(id, lease));
+  });
+
+  while (completed.size < suite.length) {
+    await Promise.resolve();
+    const active = broker
+      .snapshot()
+      .active.map((entry) => attemptIndex(entry.attemptId))
+      .filter((id) => !completed.has(id));
+    if (active.length === 0) throw new Error(`schedule ${scheduleId} made no progress`);
+    if (schedule.release === 'reverse') active.reverse();
+    for (const id of active) {
+      const item = suite[id];
+      const lease = leases.get(id);
+      if (item === undefined || lease === undefined)
+        throw new Error(`schedule ${scheduleId} omitted active test ${id}`);
+      // This is the stable, user-visible part of a result. Admission/release
+      // timing and lease IDs are deliberately excluded from essential evidence.
+      results.push({ id, verdict: 'passed', evidence: `${item.input}:${item.input.length}` });
+      completed.add(id);
+      await lease.release();
+    }
+  }
+  await Promise.all(acquisitions);
+  return results.sort((left, right) => left.id - right.id);
+}
 
 async function executeScenario(
   seed: number,

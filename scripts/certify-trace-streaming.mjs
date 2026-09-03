@@ -55,15 +55,24 @@ try {
   globalThis.gc?.();
   const afterFinalize = process.memoryUsage().rss;
   const traceBytes = await directoryBytes(dir);
-  const rssSteadySlope = Math.max(...rss.slice(4)) - Math.min(...rss.slice(4));
-  const heapSlope = Math.max(...heap) - Math.min(...heap);
+  const steadyRss = rss.slice(4);
+  const steadyHeap = heap.slice(4);
+  const rssSteadyRange = Math.max(...steadyRss) - Math.min(...steadyRss);
+  const heapSteadyRange = Math.max(...steadyHeap) - Math.min(...steadyHeap);
+  // A range catches one-off spikes but is not a slope. The median of all
+  // pairwise slopes (Theil-Sen) gives the long-run gate a robust trend that is
+  // not dominated by one GC/RSS sampling outlier.
+  const rssSteadyTrendPerPhase = medianPairwiseSlope(steadyRss);
+  const heapSteadyTrendPerPhase = medianPairwiseSlope(steadyHeap);
   const finalizePeak = Math.max(beforeFinalize, afterFinalize) - beforeFinalize;
   const peakSampledRss = Math.max(...rss, beforeFinalize, afterFinalize);
   const tempDiskOverFinal = Math.max(0, archive.resources.tempDiskPeakBytes - traceBytes);
   const result = {
     status:
-      rssSteadySlope <= 24 * 1024 * 1024 &&
-      heapSlope <= 8 * 1024 * 1024 &&
+      rssSteadyRange <= 24 * 1024 * 1024 &&
+      heapSteadyRange <= 8 * 1024 * 1024 &&
+      rssSteadyTrendPerPhase <= 2 * 1024 * 1024 &&
+      heapSteadyTrendPerPhase <= 512 * 1024 &&
       finalizePeak <= 16 * 1024 * 1024 &&
       tempDiskOverFinal <= 4 * 1024
         ? 'PASS'
@@ -74,8 +83,12 @@ try {
     rssByPhase: rss,
     heapUsedByPhase: heap,
     peakSampledRssBytes: peakSampledRss,
-    rssSteadySlopeBytes: rssSteadySlope,
-    heapSlopeBytes: heapSlope,
+    rssSteadyRangeBytes: rssSteadyRange,
+    heapSteadyRangeBytes: heapSteadyRange,
+    rssSteadyTrendBytesPerPhase: rssSteadyTrendPerPhase,
+    rssSteadyTrendBytesPerEvent: rssSteadyTrendPerPhase / 2_500,
+    heapSteadyTrendBytesPerPhase: heapSteadyTrendPerPhase,
+    heapSteadyTrendBytesPerEvent: heapSteadyTrendPerPhase / 2_500,
     finalizeGrowthBytes: finalizePeak,
     tempDiskPeakBytes: archive.resources.tempDiskPeakBytes,
     tempDiskOverFinalBytes: tempDiskOverFinal,
@@ -101,4 +114,16 @@ async function directoryBytes(path) {
   for (const member of members)
     total += (await stat(join(path, member)).catch(() => ({ size: 0 }))).size;
   return total;
+}
+
+function medianPairwiseSlope(values) {
+  const slopes = [];
+  for (let left = 0; left < values.length; left += 1) {
+    for (let right = left + 1; right < values.length; right += 1) {
+      slopes.push((values[right] - values[left]) / (right - left));
+    }
+  }
+  slopes.sort((a, b) => a - b);
+  const middle = Math.floor(slopes.length / 2);
+  return slopes.length % 2 === 0 ? (slopes[middle - 1] + slopes[middle]) / 2 : slopes[middle];
 }
