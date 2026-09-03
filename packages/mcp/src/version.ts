@@ -2,7 +2,7 @@
 export const SERVER_NAME = 'termwright';
 
 /** Package version. */
-export const SERVER_VERSION = '0.4.1';
+export const SERVER_VERSION = '0.5.0';
 
 /** Version of the `agent-context` document shape (independent of the package). */
 export const AGENT_CONTEXT_VERSION = 1;

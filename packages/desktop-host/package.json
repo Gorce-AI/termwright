@@ -1,6 +1,6 @@
 {
   "name": "@termwright/desktop-host",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Secure Electron host for the Termwright runner UI",
   "license": "MIT",
   "repository": {

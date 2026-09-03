@@ -1384,7 +1384,7 @@ dependencies = [
 
 [[package]]
 name = "termwright-probe-ratatui"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "serde_json",
  "termwright-protocol",
@@ -1392,7 +1392,7 @@ dependencies = [
 
 [[package]]
 name = "termwright-protocol"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "base64",
  "hmac",
@@ -1404,7 +1404,7 @@ dependencies = [
 
 [[package]]
 name = "termwright-ratatui"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "ratatui",
  "serde_json",
