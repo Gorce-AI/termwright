@@ -122,7 +122,13 @@ async function checkPty(): Promise<DoctorCheck> {
     const text: Uint8Array[] = [];
     const result = await new Promise<{ code: number | null; signal: string | null }>(
       (resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('PTY smoke timed out')), 2_000);
+        // A cold native host launch is startup work and must use the same
+        // documented budget as the host. A separate two-second deadline made
+        // doctor report false failures on otherwise-certified Windows runners.
+        const timer = setTimeout(
+          () => reject(new Error('PTY smoke timed out')),
+          DEFAULT_TERMWRIGHT_HOST_TIMEOUTS.startupMs,
+        );
         proc.onData((data) => text.push(data));
         proc.onExit((status) => {
           clearTimeout(timer);

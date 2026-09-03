@@ -81,19 +81,23 @@ try {
     TERMWRIGHT_RETRIES: '0',
     TERMWRIGHT_UPDATE_SNAPSHOTS: 'none',
   };
-  // Windows batch launchers cannot be passed directly to CreateProcess. The
-  // command and every argument here are fixed by this certification script, so
-  // using cmd.exe for the generated npx.cmd shim does not create an injection
-  // boundary.
-  const executeNpx = (args) =>
-    execute(npx, args, {
+  const executeNpx = (subcommand) => {
+    const args = ['--no-install', 'termwright', subcommand];
+    // Windows batch launchers cannot be passed directly to CreateProcess. Use
+    // cmd.exe explicitly with a command assembled solely from fixed values in
+    // this certification script, without Node's unsafe shell+args fallback.
+    const command =
+      process.platform === 'win32'
+        ? [process.env['ComSpec'] ?? 'cmd.exe', ['/d', '/s', '/c', [npx, ...args].join(' ')]]
+        : [npx, args];
+    return execute(command[0], command[1], {
       cwd: project,
       env: environment,
       timeout: 60_000,
-      shell: process.platform === 'win32',
     });
-  await executeNpx(['--no-install', 'termwright', 'doctor']);
-  const execution = await executeNpx(['--no-install', 'termwright', 'test']);
+  };
+  await executeNpx('doctor');
+  const execution = await executeNpx('test');
 
   const runDirectories = await readdir(join(project, '.termwright', 'runs'));
   if (runDirectories.length !== 1) {
