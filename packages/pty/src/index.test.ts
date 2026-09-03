@@ -15,6 +15,12 @@ const nativePressureIt = resourceAwareIt.resources({
   traceWriters: 0,
   nativeHost: 'exclusive',
 });
+const nativeOutputPressureIt = resourceAwareIt.resources({
+  terminals: 1,
+  traceWriters: 0,
+  nativeHost: 'exclusive',
+  load: 'heavy',
+});
 const darwinFastExitIt = resourceAwareIt.resources({
   terminals: 4,
   traceWriters: 0,
@@ -161,31 +167,34 @@ describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', 
     ).toThrow(/executable not found on PATH/u);
   });
 
-  it('delivers a megabyte tail and its sentinel before authoritative EOF', async (context) => {
-    const payloadBytes = 1024 * 1024;
-    const session = ownSession(
-      context,
-      collect(
-        node(
-          [
-            "const fs = require('node:fs');",
-            `const block = Buffer.alloc(${payloadBytes}, 0x78);`,
-            'let offset = 0;',
-            'while (offset < block.length) offset += fs.writeSync(1, block, offset);',
-            "fs.writeSync(1, Buffer.from('FINAL_SENTINEL'));",
-          ].join(''),
+  nativeOutputPressureIt(
+    'delivers a megabyte tail and its sentinel before authoritative EOF',
+    async (context) => {
+      const payloadBytes = 1024 * 1024;
+      const session = ownSession(
+        context,
+        collect(
+          node(
+            [
+              "const fs = require('node:fs');",
+              `const block = Buffer.alloc(${payloadBytes}, 0x78);`,
+              'let offset = 0;',
+              'while (offset < block.length) offset += fs.writeSync(1, block, offset);',
+              "fs.writeSync(1, Buffer.from('FINAL_SENTINEL'));",
+            ].join(''),
+          ),
         ),
-      ),
-    );
+      );
 
-    const status = await session.completed;
-    const output = Buffer.concat(session.chunks);
-    expect(status).toEqual({ code: 0, signal: null });
-    expect(session.handle.sawRealEof).toBe(true);
-    expect(session.handle.endReason).toBe(0);
-    expect(output.subarray(0, payloadBytes)).toEqual(Buffer.alloc(payloadBytes, 0x78));
-    expect(output.subarray(payloadBytes).toString('utf8')).toBe('FINAL_SENTINEL');
-  });
+      const status = await session.completed;
+      const output = Buffer.concat(session.chunks);
+      expect(status).toEqual({ code: 0, signal: null });
+      expect(session.handle.sawRealEof).toBe(true);
+      expect(session.handle.endReason).toBe(0);
+      expect(output.subarray(0, payloadBytes)).toEqual(Buffer.alloc(payloadBytes, 0x78));
+      expect(output.subarray(payloadBytes).toString('utf8')).toBe('FINAL_SENTINEL');
+    },
+  );
 
   it('writes exact bytes through the owned master', async () => {
     const session = collect(
