@@ -434,15 +434,17 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
     await terminal.waitForText('READY');
 
     const receipt = await terminal.resize({ columns: 40, rows: 8 });
+    await terminal.waitForText('SIZE:40x8');
     const screen = terminal.screen();
     expect(screen.columns).toBe(40);
     expect(screen.rows).toBe(8);
     expect(screen.text()).toContain('SIZE:40x8');
     expect(receipt.requested).toEqual({ columns: 40, rows: 8 });
     expect(receipt.after.screenRevision).toBeGreaterThan(receipt.before.screenRevision);
-    expect(receipt.pairedRender).toMatchObject({
-      status: 'known',
-      value: receipt.after.screenRevision,
+    expect(receipt.pairedRender).toEqual({
+      status: 'unsupported',
+      capability: 'resize-render-pairing',
+      reason: 'not-negotiated',
     });
   });
 

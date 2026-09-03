@@ -1,6 +1,6 @@
 {
   "name": "@termwright/run-journal-transport",
-  "version": "0.5.0",
+  "version": "0.4.1",
   "description": "Authenticated worker transport for authoritative Termwright run events",
   "license": "MIT",
   "repository": {

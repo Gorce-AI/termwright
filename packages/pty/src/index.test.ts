@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, onTestFinished, type TestContext } from 'vitest';
+import { afterAll, beforeAll, describe, expect, onTestFinished, type TestContext } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { candidatePaths, spawnPty } from './index.js';
 
@@ -539,6 +539,57 @@ describe('the Termwright-owned native PTY flow control', () => {
 });
 
 describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', () => {
+  let linuxFixtureDirectory: string | undefined;
+  let pidfdForeignDenialExecutable: string | undefined;
+  let procStatEsrchInterposer: string | undefined;
+  let deadThreadLeaderExecutable: string | undefined;
+
+  const compileLinuxFixture = (arguments_: readonly string[]): void => {
+    const compiled = spawnSync('cc', arguments_, {
+      encoding: 'utf8',
+      timeout: 5_000,
+    });
+    if (compiled.status !== 0) {
+      throw new Error(
+        `fixture compilation failed (${String(compiled.status)}): ${compiled.error?.message ?? compiled.stderr}`,
+      );
+    }
+  };
+
+  beforeAll(() => {
+    if (process.platform !== 'linux') return;
+    linuxFixtureDirectory = mkdtempSync(join(tmpdir(), 'termwright-linux-fixtures-'));
+    pidfdForeignDenialExecutable = join(linuxFixtureDirectory, 'pidfd-foreign-denial');
+    procStatEsrchInterposer = join(linuxFixtureDirectory, 'proc-stat-esrch.so');
+    deadThreadLeaderExecutable = join(linuxFixtureDirectory, 'dead-thread-leader');
+    compileLinuxFixture([
+      fileURLToPath(new URL('./fixtures/pidfd-foreign-denial.c', import.meta.url)),
+      '-o',
+      pidfdForeignDenialExecutable,
+    ]);
+    compileLinuxFixture([
+      '-shared',
+      '-fPIC',
+      '-pthread',
+      fileURLToPath(new URL('./fixtures/proc-stat-esrch.c', import.meta.url)),
+      '-o',
+      procStatEsrchInterposer,
+      '-ldl',
+    ]);
+    compileLinuxFixture([
+      '-pthread',
+      fileURLToPath(new URL('./fixtures/dead-thread-leader.c', import.meta.url)),
+      '-o',
+      deadThreadLeaderExecutable,
+    ]);
+  });
+
+  afterAll(() => {
+    if (linuxFixtureDirectory !== undefined) {
+      rmSync(linuxFixtureDirectory, { recursive: true, force: true });
+    }
+  });
+
   it('changes the kernel PTY size without a scheduling delay', async () => {
     const session = collect(
       node(
@@ -603,55 +654,63 @@ describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', 
     session.handle.dispose();
   });
 
-  it.runIf(process.platform === 'linux')('does not open pidfds for foreign process groups', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'termwright-pidfd-filter-'));
-    try {
-      const executable = join(directory, 'pidfd-foreign-denial');
-      const source = fileURLToPath(new URL('./fixtures/pidfd-foreign-denial.c', import.meta.url));
+  it.runIf(process.platform === 'linux')(
+    'does not open pidfds for foreign process groups',
+    async (context) => {
+      if (pidfdForeignDenialExecutable === undefined) {
+        throw new Error('the Linux pidfd fixture was not prepared');
+      }
       const fixture = fileURLToPath(
         new URL('./fixtures/pidfd-foreign-denial.mjs', import.meta.url),
       );
-      const compiled = spawnSync('cc', [source, '-o', executable], { encoding: 'utf8' });
-      if (compiled.status !== 0) {
-        throw new Error(
-          `fixture compilation failed (${String(compiled.status)}): ${compiled.stderr}`,
-        );
-      }
-
-      const result = spawnSync(executable, [process.execPath, fixture], {
+      const child = spawn(pidfdForeignDenialExecutable, [process.execPath, fixture], {
         cwd: process.cwd(),
         env: environment(),
-        encoding: 'utf8',
+        stdio: ['ignore', 'ignore', 'pipe'],
       });
-      expect(result.status, result.stderr).toBe(0);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
+      const stderr: Buffer[] = [];
+      child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+      const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+        (resolve, reject) => {
+          child.once('error', reject);
+          child.once('close', (code, signal) => resolve({ code, signal }));
+        },
+      );
+      const stopAndReap = async (): Promise<void> => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        if (child.pid !== undefined) await closed;
+      };
+      const abort = (): void => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      };
+      context.signal.addEventListener('abort', abort, { once: true });
+      context.onTestFinished(async () => {
+        context.signal.removeEventListener('abort', abort);
+        await stopAndReap();
+      });
+
+      const status = await closed;
+      expect(status, Buffer.concat(stderr).toString('utf8')).toEqual({
+        code: 0,
+        signal: null,
+      });
+    },
+  );
 
   const proveDisappearingProcStatEntry = async (phase: 'open' | 'read'): Promise<void> => {
     const directory = mkdtempSync(join(tmpdir(), 'termwright-proc-stat-esrch-'));
     try {
-      const interposer = join(directory, 'proc-stat-esrch.so');
       const marker = join(directory, 'armed');
-      const source = fileURLToPath(new URL('./fixtures/proc-stat-esrch.c', import.meta.url));
       const fixture = fileURLToPath(new URL('./fixtures/proc-stat-esrch.mjs', import.meta.url));
-      const compiled = spawnSync(
-        'cc',
-        ['-shared', '-fPIC', '-pthread', source, '-o', interposer, '-ldl'],
-        { encoding: 'utf8' },
-      );
-      if (compiled.status !== 0) {
-        throw new Error(
-          `fixture compilation failed (${String(compiled.status)}): ${compiled.stderr}`,
-        );
+      if (procStatEsrchInterposer === undefined) {
+        throw new Error('the Linux proc stat fixture was not prepared');
       }
 
       const child = spawn(process.execPath, [fixture], {
         cwd: process.cwd(),
         env: {
           ...environment(),
-          LD_PRELOAD: interposer,
+          LD_PRELOAD: procStatEsrchInterposer,
           TERMWRIGHT_PROCSTAT_ESRCH_MARKER: marker,
           TERMWRIGHT_PROCSTAT_ESRCH_PHASE: phase,
         },
@@ -697,24 +756,15 @@ describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', 
   it.runIf(process.platform === 'linux')(
     'waits for worker threads after their process leader becomes a zombie',
     async () => {
-      const directory = mkdtempSync(join(tmpdir(), 'termwright-pidfd-'));
-      try {
-        const executable = join(directory, 'dead-thread-leader');
-        const source = fileURLToPath(new URL('./fixtures/dead-thread-leader.c', import.meta.url));
-        const compiled = spawnSync('cc', ['-pthread', source, '-o', executable], {
-          encoding: 'utf8',
-        });
-        if (compiled.status !== 0) {
-          throw new Error(
-            `fixture compilation failed (${String(compiled.status)}): ${compiled.stderr}`,
-          );
-        }
-
+      if (deadThreadLeaderExecutable === undefined) {
+        throw new Error('the Linux dead-thread-leader fixture was not prepared');
+      }
+      {
         const session = collect(
           node(
             [
               "const { spawn } = require('node:child_process');",
-              `const child = spawn(${JSON.stringify(executable)}, [], { stdio: ['inherit', 'inherit', 'inherit', 'pipe'] });`,
+              `const child = spawn(${JSON.stringify(deadThreadLeaderExecutable)}, [], { stdio: ['inherit', 'inherit', 'inherit', 'pipe'] });`,
               "child.stdio[3].once('data', marker => {",
               'process.stdout.write(marker);',
               'child.stdio[3].destroy();',
@@ -727,8 +777,6 @@ describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', 
         expect(session.text()).toContain('DEAD_THREAD_LEADER_READY');
         expect(session.handle.treeState()).toBe('gone');
         session.handle.dispose();
-      } finally {
-        rmSync(directory, { recursive: true, force: true });
       }
     },
   );

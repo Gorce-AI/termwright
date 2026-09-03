@@ -100,8 +100,10 @@ await app.resize({ columns: 120, rows: 40 });
 await expect(app.getByRole('navigation')).toBeVisible();
 ```
 
-`resize()` confirms the terminal resize and following render. The assertion
-checks the application layout produced by that resize.
+`resize()` confirms the PTY and emulator dimensions. An instrumented adapter
+can also prove the paired application render in the returned receipt; a generic
+terminal cannot distinguish a resize repaint from unrelated output. The
+assertion above is the application-level proof of the resulting layout.
 
 ## Related pages
 

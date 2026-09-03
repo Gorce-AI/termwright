@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   integratedPowerShellCommand,
@@ -84,6 +85,16 @@ describe('managed shell integration', () => {
   it('single-quotes a POSIX command inside eval', () => {
     expect(wrapPosixShellCommand("printf '%s' \"it's safe\"")).toContain("it'\\''s safe");
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'always closes a failed POSIX command boundary when errexit is active',
+    () => {
+      const wrapped = wrapPosixShellCommand('false');
+      const result = spawnSync('/bin/sh', ['-e', '-c', wrapped], { encoding: 'utf8' });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain('\u001b]133;C\u0007\u001b]133;D;1\u0007');
+    },
+  );
 
   it('single-quotes a PowerShell command inside a scriptblock', () => {
     const wrapped = wrapPowerShellCommand("Write-Output 'it''s safe'");

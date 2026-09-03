@@ -1,6 +1,6 @@
 {
   "name": "@termwright/pty-win32-x64",
-  "version": "0.5.0",
+  "version": "0.4.1",
   "description": "Prebuilt termwright ConPTY addon for Windows x64",
   "license": "MIT",
   "repository": {

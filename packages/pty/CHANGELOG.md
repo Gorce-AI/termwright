@@ -1,16 +1,5 @@
 # @termwright/pty
 
-## 0.5.0
-
-### Minor Changes
-
-- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace misleading generic owned-process RSS/count fields with capability-qualified whole-tree accounting. Windows sessions now capture cumulative Job Object CPU, memory, process, and I/O counters before disposal; run manifest v8 preserves their native meanings and reports unsupported platforms as unavailable.
-
-### Patch Changes
-
-- Updated dependencies []:
-  - @termwright/protocol@0.5.0
-
 ## 0.4.1
 
 ### Patch Changes

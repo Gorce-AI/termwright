@@ -1,6 +1,6 @@
 [package]
 name = "termwright-probe-ratatui"
-version = "0.5.0"
+version = "0.4.1"
 edition = "2021"
 rust-version = "1.74"
 description = "Zero-config semantic probe for Ratatui applications: the std-side half that a patched ratatui-core calls into"
@@ -12,7 +12,7 @@ keywords = ["terminal", "tui", "testing", "accessibility"]
 categories = ["development-tools::testing", "command-line-interface"]
 
 [dependencies]
-termwright-protocol = { path = "../rust", version = "0.5.0" }
+termwright-protocol = { path = "../rust", version = "0.4.1" }
 serde_json = "1"
 
 # Keep runtime dependencies small: the protocol client owns transport and

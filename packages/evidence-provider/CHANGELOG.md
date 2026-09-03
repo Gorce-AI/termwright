@@ -1,12 +1,5 @@
 # @termwright/evidence-provider
 
-## 0.5.0
-
-### Patch Changes
-
-- Updated dependencies []:
-  - @termwright/protocol@0.5.0
-
 ## 0.4.1
 
 ### Patch Changes

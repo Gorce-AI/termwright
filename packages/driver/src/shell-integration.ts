@@ -8,8 +8,7 @@ export function wrapPosixShellCommand(command: string): string {
   const quoted = command.replaceAll("'", "'\\''");
   return (
     "printf '\\033]133;C\\007'; " +
-    `eval '${quoted}'; ` +
-    '__termwright_status=$?; ' +
+    `if eval '${quoted}'; then __termwright_status=0; else __termwright_status=$?; fi; ` +
     "printf '\\033]133;D;%s\\007\\033]7;file://localhost%s\\007\\033]133;A\\007\\033]133;B\\007' " +
     '"$__termwright_status" "$PWD"; unset __termwright_status'
   );

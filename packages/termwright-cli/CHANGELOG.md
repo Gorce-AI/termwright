@@ -1,31 +1,5 @@
 # termwright
 
-## 0.5.0
-
-### Minor Changes
-
-- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Make `hostPressure: 'exclusive'` reserve the host's complete weighted capacity, and let already-active attempts acquire fitting continuation resources ahead of blocked new attempts. New attempts remain FIFO, while dynamic terminal acquisition can no longer deadlock behind a waiter that needs the active attempt's resources.
-
-- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace misleading generic owned-process RSS/count fields with capability-qualified whole-tree accounting. Windows sessions now capture cumulative Job Object CPU, memory, process, and I/O counters before disposal; run manifest v8 preserves their native meanings and reports unsupported platforms as unavailable.
-
-### Patch Changes
-
-- [#144](https://github.com/Gorce-AI/termwright/pull/144) [`e69c346`](https://github.com/Gorce-AI/termwright/commit/e69c3462108c3966d7c5186b03b771335a19f82d) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Physically isolate Termwright's certified Vitest 4 engine from a consumer's Vitest installation, including npm 10 installs alongside Vitest 5. Make `termwright doctor` inspect that embedded engine, and keep Gherkin definitions coupled only to Termwright's public test API.
-- Updated dependencies [[`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e69c346`](https://github.com/Gorce-AI/termwright/commit/e69c3462108c3966d7c5186b03b771335a19f82d), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27)]:
-  - @termwright/resource-broker@0.5.0
-  - @termwright/test@0.5.0
-  - @termwright/gherkin@0.5.0
-  - @termwright/driver@0.5.0
-  - @termwright/run-history@0.5.0
-  - @termwright/ink@0.5.0
-  - @termwright/ui@0.5.0
-  - @termwright/run-journal-transport@0.5.0
-  - @termwright/mcp@0.5.0
-  - @termwright/screenshot@0.5.0
-  - @termwright/trace@0.5.0
-  - @termwright/desktop-host@0.5.0
-  - @termwright/protocol@0.5.0
-
 ## 0.4.1
 
 ### Patch Changes

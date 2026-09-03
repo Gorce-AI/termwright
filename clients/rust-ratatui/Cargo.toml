@@ -1,6 +1,6 @@
 [package]
 name = "termwright-ratatui"
-version = "0.5.0"
+version = "0.4.1"
 edition = "2021"
 rust-version = "1.88"
 description = "Author-intent annotations for custom Ratatui widgets observed by Termwright"
@@ -14,5 +14,5 @@ categories = ["development-tools::testing", "command-line-interface"]
 [dependencies]
 ratatui = { version = "=0.30.2", default-features = false, features = ["std"] }
 serde_json = "1"
-termwright-probe-ratatui = { path = "../rust-probe", version = "0.5.0" }
-termwright-protocol = { path = "../rust", version = "0.5.0" }
+termwright-probe-ratatui = { path = "../rust-probe", version = "0.4.1" }
+termwright-protocol = { path = "../rust", version = "0.4.1" }

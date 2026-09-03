@@ -1,6 +1,6 @@
 {
   "name": "@termwright/ui",
-  "version": "0.5.0",
+  "version": "0.4.1",
   "description": "interactive runner: local server + browser app (live view, inspector, time travel, recorder)",
   "license": "MIT",
   "repository": {
