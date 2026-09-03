@@ -1,0 +1,92 @@
+---
+title: Choose a framework integration
+description: Add role and label locators to Ink, OpenTUI, Textual, tview, Ratatui, or Bubble Tea applications.
+---
+
+import registry from '../../../../../compatibility/registry.json';
+
+export const frameworks = Object.fromEntries(
+  registry.frameworks.map((framework) => [framework.id, framework]),
+);
+
+You do not need an integration to test a terminal program. Start with the
+black-box API when text, cells, keys, resize, or process behavior are enough.
+
+Add an integration when a test should identify application controls by role,
+label, state, or framework identity:
+
+```ts
+const save = app.getByRole('button', { name: 'Save' });
+await expect(save).toBeAttached();
+```
+
+Install the integration from the same Termwright release as the test package.
+For example, Termwright 0.4.1 requires the 0.4.1 npm, Python, Go, and Rust
+integration packages. Mixing releases is unsupported because their semantic
+protocol changes together.
+
+## Supported frameworks
+
+| Framework                          | Tested versions                                                | Runtime                                                                                    | Semantic locators | Viewport visibility | Click by locator                   |
+| ---------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------- | ------------------- | ---------------------------------- |
+| [Ink](ink/)                        | <code>{frameworks.ink.versions.verified.join(', ')}</code>     | <code>{frameworks.ink.runtimes.map((r) => `${r.name} ${r.version}`).join('; ')}</code>     | Yes               | Yes                 | Requires application pointer setup |
+| [OpenTUI](opentui/)                | <code>{frameworks.opentui.versions.verified.join(', ')}</code> | <code>{frameworks.opentui.runtimes.map((r) => `${r.name} ${r.version}`).join('; ')}</code> | Yes               | Yes                 | Yes                                |
+| [Textual](textual/)                | <code>{frameworks.textual.versions.verified.join(', ')}</code> | <code>{frameworks.textual.runtimes.map((r) => `${r.name} ${r.version}`).join('; ')}</code> | Yes               | Yes                 | Yes                                |
+| [tview](tview/)                    | <code>{frameworks.tview.versions.verified.join(', ')}</code>   | <code>{frameworks.tview.runtimes.map((r) => `${r.name} ${r.version}`).join('; ')}</code>   | Yes               | No                  | Requires application pointer setup |
+| [Ratatui](ratatui/)                | <code>{frameworks.ratatui.versions.verified.join(', ')}</code> | <code>{frameworks.ratatui.runtimes.map((r) => `${r.name} ${r.version}`).join('; ')}</code> | Yes               | No                  | Requires application pointer setup |
+| [Bubble Tea / Bubbles](bubbletea/) | <code>{frameworks.charm.versions.verified.join(', ')}</code>   | <code>{frameworks.charm.runtimes.map((r) => `${r.name} ${r.version}`).join('; ')}</code>   | Yes               | No                  | Requires application pointer setup |
+
+The version cells come directly from Termwright's compatibility registry. Read
+the framework guide before installing an integration: JavaScript frameworks
+use a runtime wrapper, Python uses a probe launcher, and Go and Rust
+integrations prepare an instrumented build. Every locator click also requires
+the application to enable terminal mouse reporting.
+
+## What the integration changes
+
+An integration publishes a semantic tree alongside the terminal screen. Tests
+can then use:
+
+- roles and accessible names;
+- labels and relationships;
+- focus, selected, checked, disabled, and framework-specific state when exposed;
+- semantic snapshots; and
+- geometry and pointer actions where listed in the table.
+
+Input still goes through the terminal. Termwright does not call a component's
+event handler to make a test pass.
+
+## What it does not infer
+
+Decorated text that looks like `[ Save ]` is not automatically a button.
+Likewise, a component's layout rectangle does not prove that a mouse event will
+reach it. The integration reports the information its framework retains;
+unsupported information remains unavailable.
+
+Some frameworks need annotations for application-specific names, roles, or
+stable identities. Prefer framework-native accessibility properties where they
+exist. An annotation can add application meaning, but it cannot override actual
+focus, clipping, or pointer routing.
+
+## Verify the setup
+
+After following the framework guide, write one small semantic assertion:
+
+```ts
+const app = await terminal.launch({ command });
+
+await app.waitForText('Permission required');
+await expect(app.getByRole('button', { name: 'Approve' })).toBeAttached();
+```
+
+Open the Runner's semantic tree if the locator fails. Installing a package is
+not enough when the framework also requires a wrapper or instrumented build.
+
+## Need a different framework?
+
+Use the black-box terminal API if screen behavior is sufficient. Integration
+authoring is maintained with the contributor documentation rather than this
+user setup path.
+
+For exact version rules and framework-specific limitations, see the
+[compatibility reference](../reference/compatibility/).

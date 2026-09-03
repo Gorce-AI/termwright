@@ -1,56 +1,56 @@
 ---
-title: Locators
-description: Find semantic elements by role, label, text, test ID, or selector.
+title: Choose a locator
+description: Find controls by role or label, and find rendered regions by screen text.
 ---
 
-Termwright has two disjoint locator domains. `SemanticLocator` finds elements in
-the semantic tree published by your application or framework integration;
-`ScreenLocator` finds exact regions in the physical terminal grid. TypeScript
-rejects composition across those domains.
+Prefer a locator that describes how a user identifies the control:
 
 ```ts
 const save = app.getByRole('button', { name: 'Save' });
-await save.activate();
+await expect(save).toBeAttached();
 ```
 
-Locators resolve when you use them. You can create one before the matching
-element appears and pass it to a retrying assertion.
+Every locator in the table except `getByScreenText()` requires a
+[framework integration](../../adapters/). For an uninstrumented CLI or TUI, use
+rendered screen text instead.
 
-## Recommended locator order
+## Locator priority
 
-| Locator                   | Use when                                                                    |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `getByRole(role, {name})` | The element has user-facing meaning. This is the normal choice.             |
-| `getByLabel(text)`        | A form control is identified by its label.                                  |
-| `getByText(text)`         | Visible text is the behavior under test, not just a way to reach a control. |
-| `getByTestId(id)`         | The application has no stable user-facing identity for the element.         |
-| `locator(selector)`       | You need a structural or framework-specific selector.                       |
+| Prefer                      | Use it for                                                  |
+| --------------------------- | ----------------------------------------------------------- |
+| `getByRole(role, { name })` | A control with a user-facing role and name                  |
+| `getByLabel(text)`          | An input identified by a label                              |
+| `getByText(text)`           | Text belonging to a semantic element                        |
+| `getByTestId(id)`           | A stable identity with no useful user-facing name           |
+| `getByScreenText(text)`     | Characters and styling on the terminal grid                 |
+| `locator(selector)`         | An advanced semantic or framework-specific structural query |
 
-Programs without a semantic tree do not support these locators. Use
-`getByScreenText()`, cell assertions, and terminal-level input instead.
+Move down the list only when the earlier locator cannot express the behavior.
+Structural selectors and manual coordinates are more likely to change during a
+UI refactor.
 
-## Locate by role and name
+## Find a control by role
 
 ```ts
-const approve = app.getByRole('button', { name: 'Approve' });
-const anyDialog = app.getByRole('dialog');
-const matchingItem = app.getByRole('listitem', { name: /release/i });
+const approve = app.getByRole('button', { name: 'Approve', exact: true });
+const dialog = app.getByRole('dialog');
+const release = app.getByRole('listitem', { name: /release/i });
 ```
 
-Use an exact string for a stable accessible name. Use a regular expression when
-part of the name is intentionally variable.
+A string matches a case-insensitive substring by default. Add `exact: true` to
+match the complete name. Use a regular expression when the pattern is
+intentionally variable.
 
-Framework-specific filtering is available for integrations that retain a
-native component type:
+Locators are evaluated when an action or assertion uses them, so the element
+does not need to exist when you create the locator:
 
 ```ts
-const pane = app.getByRole('generic', { frameworkType: 'ScrollView' });
+const result = app.getByRole('status');
+await app.press('Enter');
+await expect(result).toHaveText('Saved');
 ```
 
-Treat this as specialized integration code. A role and name survive framework
-refactors more often.
-
-## Locate labeled controls
+## Find a labeled input
 
 ```ts
 const name = app.getByLabel('Profile name');
@@ -58,25 +58,15 @@ await name.focus();
 await name.type('release');
 ```
 
-`getByLabel()` depends on the framework integration publishing the label
-relationship. It does not infer labels from nearby rendered text.
+`getByLabel()` uses a label relationship published by the application
+integration. It does not assume that nearby text is a label. Finding the
+element and being able to focus or type into it are separate integration
+features.
 
-## Locate by text
+## Find rendered screen text
 
-```ts
-await expect(app.getByText('Connection lost')).toBeAttached();
-await expect(app.getByText(/items: \d+/)).toHaveText(/items: 3/);
-```
-
-Use `app.waitForText()` when you only need to wait for characters on the
-terminal grid. Use `getByText()` when you need a semantic element carrying that
-text.
-
-## Locate physical screen text
-
-`getByScreenText()` always searches the terminal grid, including when the
-session also has semantics. It never changes domains based on runtime state or
-options.
+`getByScreenText()` searches the physical terminal grid. It works with every
+application and can distinguish an occurrence or cell style:
 
 ```ts
 const secondError = app.getByScreenText('ERROR', {
@@ -87,15 +77,18 @@ const secondError = app.getByScreenText('ERROR', {
 await expect(secondError).toBeVisible();
 ```
 
-Use it for styled output, repeated rendered text, custom canvases, and programs
-without a framework integration. It returns a physical grid region, not a
-semantic role or component identity. It supports truthful pointer actions when
-that exact region is actionable, but deliberately has no `fill()`, `focus()`,
-semantic state, role descendants, or semantic filters.
+`occurrence` is one-based, so `2` selects the second matching region.
 
-## Scope a locator
+A screen locator represents a rectangle of terminal cells. Use it for styled
+output, custom drawing, and black-box applications. It cannot expose semantic
+state such as a role, label, checked state, or focus owner.
 
-Use `within()` when the same control appears in more than one region:
+Use `app.waitForText('Ready')` when you only need to wait for characters and do
+not need a reusable region.
+
+## Narrow a match
+
+Scope a common control to a semantic container:
 
 ```ts
 const dialog = app.getByRole('dialog', { name: 'Delete note' });
@@ -104,38 +97,32 @@ const confirm = app.getByRole('button', { name: 'Delete' }).within(dialog);
 await confirm.activate();
 ```
 
-The locator remains strict inside the scope.
-
-## Handle multiple matches
-
-An action on a locator with multiple matches fails. Narrow it by name or scope
-first. Use `first()` or `nth()` only when position is part of the behavior:
+An action fails if its locator matches more than one element. Narrow by name or
+scope first. Use `first()` or `nth()` only when order is part of the behavior:
 
 ```ts
 const rows = app.getByRole('listitem');
 await expect(rows.nth(1)).toHaveText('Second result');
 ```
 
-Inspect the count while diagnosing an ambiguous match:
+During debugging, inspect the number of matches:
 
 ```ts
 expect(await app.getByRole('button').count()).toBe(3);
 ```
 
-## Reuse a resolved reference
+## Semantic and screen locators do not mix
 
-`locatorForRef()` is intended for tools such as the Runner and MCP integrations
-that receive a semantic reference from a snapshot. Normal tests should prefer a
-declarative locator.
+Semantic locators represent application elements. Screen locators represent
+terminal cells. You can scope a semantic locator within another semantic
+locator, but not within a screen rectangle. TypeScript reports the mismatch.
 
-Refs carry their domain explicitly: `semantic:n8@42` or
-`screen:4,10,6,1@17`. Stable semantic identities may be resolved again after a new revision. A
-frame-local reference cannot. Grid references remain tied to the revision that
-created them.
+This distinction prevents a visual coincidence from becoming an application
+identity. See [How semantic locators work](../../concepts/semantics/) for the
+underlying model.
 
-## Related guides
+## Next steps
 
-- [Actions and input](../actions/)
-- [Assertions](../assertions/)
-- [Framework integrations](../../adapters/)
-- [Geometry and visibility](../../reference/geometry-visibility/)
+- [Send input](../actions/)
+- [Use retrying assertions](../assertions/)
+- [Check framework support](../../adapters/)

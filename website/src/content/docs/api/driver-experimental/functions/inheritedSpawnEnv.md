@@ -1,6 +1,7 @@
 ---
 title: "Function: inheritedSpawnEnv()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

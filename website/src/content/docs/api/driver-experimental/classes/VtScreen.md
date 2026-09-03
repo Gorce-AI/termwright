@@ -1,6 +1,7 @@
 ---
 title: "Class: VtScreen"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

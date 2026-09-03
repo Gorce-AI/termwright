@@ -1,34 +1,33 @@
 ---
-title: Termwright
-description: End-to-end testing for command-line and terminal user-interface applications.
+title: Test terminal applications
+description: Test interactive command-line applications through a real terminal.
 template: splash
 hero:
-  tagline: End-to-end testing for CLIs and TUIs. Run terminal applications in a real PTY, drive real input, use retrying assertions and semantic locators, and inspect failures with retained traces and the Runner.
+  tagline: Start a real CLI or TUI, interact with it, and replay what happened when a test fails.
   actions:
     - text: Write your first test
       link: getting-started/
       icon: right-arrow
-    - text: Open the Runner UI
-      link: tools/runner-ui/
-      variant: minimal
-    - text: GitHub
+    - text: View on GitHub
       link: https://github.com/gorce-ai/termwright
       icon: external
       variant: minimal
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+## Test the program a user runs
 
-## A terminal test
+```sh
+npm install --save-dev termwright
+```
 
 ```ts
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'termwright/test';
 
-const agent = fileURLToPath(new URL('../agent.js', import.meta.url));
+const program = fileURLToPath(new URL('../app.js', import.meta.url));
 
 test('approves a command', async ({ terminal }) => {
-  const app = await terminal.launch({ command: [process.execPath, agent] });
+  const app = await terminal.launch({ command: [process.execPath, program] });
 
   await app.waitForText('Permission required');
   await app.press('Enter');
@@ -37,59 +36,44 @@ test('approves a command', async ({ terminal }) => {
 });
 ```
 
-The application runs in a real PTY. `press()`, `type()`, resize, and signals use
-the same terminal boundary as a person running the program. Semantic pointer
-actions are available when an integration can prove the exact recipient.
+Termwright runs the command under a real pseudoterminal and reconstructs its
+screen instead of treating `stdout` as a string. The program receives terminal
+input, resize events, and signals as it would when run by a user.
 
-Semantic locators such as `getByRole()` require a supported framework
-integration. Programs without semantics remain testable through
-text, cells, keyboard input, snapshots, and process behavior.
-Semantics are a progressive enhancement: add an integration when roles, state,
-geometry, or exact pointer ownership make a test clearer or safer.
+The test above works with any terminal program. A supported framework
+integration can also expose controls by role or label. Visibility and pointer
+support vary by framework.
 
-[![Termwright Runner showing an execution timeline, terminal replay, and semantic inspector.](/termwright/images/runner/replay-player.png)](/termwright/images/runner/replay-player.png)
+## What a failure looks like
 
-The desktop Runner opens by default with `termwright ui`. Use it to run a
-directory, file, or case; follow concurrent tests; and inspect retained terminal,
-semantic, log, and retry evidence.
+[![A failed test open in the Termwright Runner.](/termwright/images/runner/failure-inspection.png)](/termwright/images/runner/failure-inspection.png)
 
-<CardGrid>
-  <Card title="Write tests" icon="document">
-    Start a process, interact with it, and use retrying assertions. [Follow the tutorial
-    →](getting-started/)
-  </Card>
-  <Card title="Debug in the Runner" icon="laptop">
-    Run a file or case, inspect the terminal and semantic tree, and replay retained traces. [Use the
-    Runner UI →](tools/runner-ui/)
-  </Card>
-  <Card title="Integrate a framework" icon="puzzle">
-    Add roles, state, geometry, and pointer ownership where the framework can observe them. [Choose
-    an integration →](adapters/)
-  </Card>
-</CardGrid>
+Failed tests retain a replayable trace by default. Run `npx termwright ui` while
+writing tests, or open a trace downloaded from CI:
 
-## Core workflows
+```sh
+npx termwright ui --trace path/to/test.twtrace
+```
 
-| Need                        | Recommended API                                        |
-| --------------------------- | ------------------------------------------------------ |
-| Wait for rendered output    | `await app.waitForText('Ready')`                       |
-| Send keyboard input         | `await app.press('Enter')` or `await app.type('text')` |
-| Find a semantic element     | `app.getByRole('button', {name: 'Save'})`              |
-| Assert a changing UI        | `await expect(locator).toBeFocused()`                  |
-| Protect terminal rendering  | `await expect(app).toMatchCellSnapshot()`              |
-| Protect application meaning | `await expect(app).toMatchSemanticSnapshot()`          |
-| Investigate a failure       | Runner replay or a self-contained HTML report          |
+## Choose the right level
 
-## Start with the normal workflow
+| What you need to test                                        | Use                                                            |
+| ------------------------------------------------------------ | -------------------------------------------------------------- |
+| Text, cells, keyboard input, resize, or process exit         | The built-in black-box terminal API                            |
+| Roles, labels, state, or semantic snapshots                  | A supported framework integration                              |
+| Click controls by locator                                    | An integration whose compatibility table lists pointer support |
+| A pure function or component state with no terminal behavior | Your normal unit-test tools                                    |
 
-Write repeatable tests with `termwright/test`, run them with the certified
-`termwright test` host in CI, and use the same host through Runner while
-developing or investigating failures. Add a framework
-integration when you need roles, accessible names, state, geometry, or exact
-pointer targeting.
+Termwright does not infer a button from decorated text or guess a pointer
+target. If the integration cannot report that information, use the screen-level
+API or test the behavior at another layer.
 
-Gherkin is available for teams that keep executable feature prose. The
-low-level driver is an advanced surface for custom tooling, not the normal test
-authoring path.
+## Start here
 
-[Install Termwright and run your first test →](getting-started/)
+1. [Install Termwright and run a test](getting-started/)
+2. [Learn the test workflow](writing-tests/)
+3. [Choose stable locators](guides/locators/)
+4. [Debug a failing test](tools/debugging/)
+
+See [supported platforms and limitations](reference/limitations/) before adding
+Termwright to CI.

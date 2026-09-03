@@ -1,6 +1,7 @@
 ---
 title: "Interface: RefQuery"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

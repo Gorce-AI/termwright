@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: PtyUnsubscribe"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

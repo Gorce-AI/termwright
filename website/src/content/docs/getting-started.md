@@ -1,53 +1,42 @@
 ---
-title: Getting started
-description: Install Termwright, run a terminal application in a real PTY, interact with it, and open the Runner UI.
+title: Install and run your first test
+description: Install Termwright, start a small terminal program, interact with it, and inspect a failure.
 ---
 
-This tutorial creates one test for a terminal program. It uses rendered text
-and keyboard input, so it works without a framework integration.
+This tutorial starts a real terminal program, presses a key, and checks the
+rendered result. It does not require a framework integration.
 
-## Prerequisites
+## Install Termwright
 
 <!-- BEGIN GENERATED RUNTIME REQUIREMENTS -->
 <!-- Generated from package.json; do not edit this block by hand. -->
-- Node.js must match `^22.0.0 || ^24.0.0`: supported major lines are 22 and 24; unlisted lines such as 23 and 25 are excluded.
-- Termwright embeds and certifies exactly Vitest 4.1.11.
+- Use Node.js 22 or 24. Other major versions are not supported.
+- You do not need to install Vitest separately. Termwright includes Vitest 4.1.11.
 <!-- END GENERATED RUNTIME REQUIREMENTS -->
-- an ESM project
-- macOS >= 13.5, Windows 10 version 1809 / Server 2019 or newer, or glibc-based Linux at
-  the Ubuntu 22.04 ABI floor (glibc >= 2.35)
 
-Alpine/musl is not currently supported by the prebuilt PTY dependency. For
-Linux CI, use a Debian- or Ubuntu-based Node image such as `node:22-slim`.
+The native PTY package supports macOS 13.5+, Windows 10 1809+ or Server 2019+,
+and glibc 2.35+ Linux. Alpine/musl is not supported. See
+[supported platforms](../reference/limitations/) for architectures and other
+limits.
 
-## Install Termwright
+Install the `termwright` package:
 
 ```sh
 npm install --save-dev termwright
 ```
 
-Verify the runtime, test engine, and native PTY immediately after installation:
+Then check that Termwright can load its test engine and native PTY backend:
 
 ```sh
 npx termwright doctor
 ```
 
-Add scripts that use the locally installed binaries:
+The command exits with code 0 when each required check passes.
 
-```json
-{
-  "scripts": {
-    "test": "termwright test",
-    "test:watch": "termwright watch",
-    "test:ui": "termwright ui"
-  }
-}
-```
+## Create a program to test
 
-## Create a terminal program
-
-Create `app.js` (the same source is checked in at
-[`examples/getting-started/app.js`](https://github.com/gorce-ai/termwright/blob/main/examples/getting-started/app.js)):
+Save this as `app.mjs`. The `.mjs` extension keeps the example self-contained
+and does not require changing your project's module type.
 
 ```js
 import readline from 'node:readline';
@@ -64,22 +53,22 @@ process.stdin.once('keypress', (_input, key) => {
 });
 ```
 
-Termwright launches this program inside a pseudo-terminal. The program sees a
-terminal, not a mocked stream.
+The program waits for Enter before printing its result. It uses raw input, so a
+plain redirected `stdin`/`stdout` test would not reproduce how it runs in a
+terminal.
 
 ## Write the test
 
-Create `tests/permission.test.ts`. This example is also executed from
-[`examples/getting-started/tests/permission.test.ts`](https://github.com/gorce-ai/termwright/blob/main/examples/getting-started/tests/permission.test.ts):
+Create `tests/permission.test.ts`:
 
 ```ts
-import {fileURLToPath} from 'node:url';
-import {expect, test} from 'termwright/test';
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'termwright/test';
 
-const program = fileURLToPath(new URL('../app.js', import.meta.url));
+const program = fileURLToPath(new URL('../app.mjs', import.meta.url));
 
-test('approves a command', async ({terminal}) => {
-  const app = await terminal.launch({command: [process.execPath, program]});
+test('approves a command', async ({ terminal }) => {
+  const app = await terminal.launch({ command: [process.execPath, program] });
 
   await app.waitForText('Permission required');
   await app.press('Enter');
@@ -88,52 +77,61 @@ test('approves a command', async ({terminal}) => {
 });
 ```
 
-Run it:
+Run the test:
 
 ```sh
-npm test
+npx termwright test
 ```
 
-The `terminal` fixture closes every launched session after the test. Each test
-also receives an isolated temporary working directory and a minimal inherited
-environment.
+The command reports one passing test and exits with code 0. Termwright closes
+the application and removes the test's temporary working directory after the
+test completes.
 
-## Open the Runner UI
+A runnable version of this example is available in
+[`examples/getting-started`](https://github.com/gorce-ai/termwright/tree/main/examples/getting-started).
+
+## Inspect a failure
+
+Change the expected text to `running: pwd` and run the test again. The assertion
+waits for the configured timeout, reports the observed terminal state, and keeps
+a trace for the failed attempt.
+
+Open the Runner:
 
 ```sh
-npm run test:ui
+npx termwright ui
 ```
 
-Interactive use opens the Termwright desktop application. The Specs view lets
-you run the project, a directory, a file, or one case. The Runner shows the
-terminal, test steps, retained evidence, and replay controls. Use
-`termwright ui --browser` to open the same interface in your system browser, or
-`termwright ui --no-open` to print the local URL only.
+The Runner starts in watch mode and will see the failed test in the current
+project. Select its failed attempt to inspect the terminal, steps, and replay
+timeline. Put the original expectation back when you are done.
 
-## Add semantic locators
+## Test your own program
 
-The first test uses text and keyboard input because every terminal program
-supports them. A framework integration can additionally publish roles, names, state,
-and—where the framework exposes it—geometry and pointer ownership.
-
-With semantics available, the interaction can be written as:
+Replace `program` with the command your users run. Keep command arguments as
+separate array items:
 
 ```ts
-await app.getByRole('button', {name: 'Approve'}).activate();
-await expect(app.getByRole('dialog')).toBeDetached();
+const app = await terminal.launch({
+  command: ['my-cli', 'deploy', '--environment', 'staging'],
+});
 ```
 
-Do not add arbitrary sleeps while waiting for the UI. Termwright waits and
-assertions observe terminal or semantic revisions and retry until their timeout.
+Use text and keyboard APIs for a black-box test. If your application uses Ink,
+OpenTUI, Textual, tview, Bubble Tea, or Ratatui, follow its
+[integration guide](../adapters/) before using controls by role or label. With
+an integration enabled:
 
-## Continue
+```ts
+const approve = app.getByRole('button', { name: 'Approve' });
+await expect(approve).toBeAttached();
+await app.press('Enter');
+await expect(app.getByRole('status')).toHaveText('Approved');
+```
 
-- [Write maintainable tests](../writing-tests/)
-- [Run a suite, file, or case](../running-tests/)
-- [Understand test files and isolation](../guides/test-files/)
-- [Choose locators](../guides/locators/)
-- [Send keyboard, pointer, and terminal input](../guides/actions/)
-- [Use assertions](../guides/assertions/)
-- [Choose snapshots](../guides/snapshots/)
-- [Choose a framework integration](../adapters/)
-- [Debug a failed test](../tools/debugging/)
+## Next steps
+
+- [Structure a test](../writing-tests/)
+- [Choose a locator](../guides/locators/)
+- [Send keyboard and mouse input](../guides/actions/)
+- [Run tests locally and in CI](../running-tests/)

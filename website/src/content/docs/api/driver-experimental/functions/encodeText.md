@@ -1,6 +1,7 @@
 ---
 title: "Function: encodeText()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

@@ -1,44 +1,36 @@
 ---
-title: Actions and input
-description: Send keyboard, text, paste, pointer, resize, and process input through the terminal boundary.
+title: Send input
+description: Press keys, type and paste text, use the mouse, resize the terminal, and send signals.
 ---
 
-Termwright actions operate through the pseudo-terminal. Choose the highest-level
-action that matches how the application is used.
+Termwright sends input through the same pseudoterminal used by the application.
+Choose the action that matches what a user does.
 
-## Recommended approach
-
-| Need                               | Use                                             |
-| ---------------------------------- | ----------------------------------------------- |
-| Activate the current control       | `locator.activate()`                            |
-| Send a key or chord                | `app.press()` or `locator.press()`              |
-| Type normal text                   | `app.type()` or `locator.type()`                |
-| Insert clipboard-style text        | `app.paste()`                                   |
-| Click an exact semantic target     | `locator.click()` when hit testing is supported |
-| Click empty space or a canvas cell | `app.mouse.click({row, column})`                |
-| Scroll a pointer-aware region      | `locator.wheel()`                               |
-| Change terminal dimensions         | `app.resize()`                                  |
-| Send raw bytes                     | `app.write()` as a low-level escape hatch       |
+| Task                        | API                                |
+| --------------------------- | ---------------------------------- |
+| Activate a known control    | `locator.activate()`               |
+| Press a key or chord        | `app.press()` or `locator.press()` |
+| Type text                   | `app.type()` or `locator.type()`   |
+| Paste text                  | `app.paste()`                      |
+| Click a supported control   | `locator.click()`                  |
+| Click a terminal coordinate | `app.mouse.click()`                |
+| Scroll                      | `locator.wheel()`                  |
+| Resize the terminal         | `app.resize()`                     |
 
 ## Activate a control
 
+Use `activate()` when the behavior is “activate this control” and the input
+method is not important:
+
 ```ts
 const save = app.getByRole('button', { name: 'Save' });
-const receipt = await save.activate();
+await save.activate();
+await expect(app.getByRole('status')).toHaveText('Saved');
 ```
 
-`activate()` may use an exact pointer click or Enter/Space when the target is
-already focused. It does not move focus by guessing a keyboard path. The
-returned receipt identifies the strategy. Prefer it when the intended behavior
-is “activate this control,” not “test mouse input.”
-
-`focus()` follows the same rule. A certified framework may publish an exact
-focus recipe, or an application can register two independent facts: its
-production focus manager as `focus-evidence` and its production keybinding path
-as an `action-strategy`. The recipe is a bounded sequence of real PTY key
-presses, every step appears in the receipt, and success requires a later
-committed revision in which the target is actually focused. Termwright never
-calls the focus manager or guesses a Tab order.
+Depending on the integration, Termwright may click the control or use a
+supported keyboard action. It does not guess a Tab sequence. The action fails
+before sending input if the integration cannot identify a valid strategy.
 
 ## Press keys
 
@@ -49,54 +41,55 @@ await app.press('Shift+Tab');
 await app.press('ArrowDown');
 ```
 
-Send separate user interactions as separate calls. This gives the application
-time to render between them and leaves clearer trace evidence:
+Send separate interactions as separate calls when the application must render
+between them:
 
 ```ts
 await app.press('ArrowDown');
-await expect(app.getByRole('listitem', { name: 'Settings' })).toHaveState({ selected: true });
+await expect(app.getByRole('listitem', { name: 'Settings' })).toBeSelected();
 await app.press('Enter');
 ```
 
-## Type and paste text
+`press('Tab Enter')` sends both chords in one write. This is useful for a key
+sequence consumed as a unit, but not for navigating between controls that
+rerender after each key.
+
+## Type or paste text
 
 ```ts
 await app.getByRole('textbox', { name: 'Name' }).type('release');
-await app.paste('multiple\nlines');
+await app.paste('first line\nsecond line');
 ```
 
-`type()` produces normal text input. `paste()` uses terminal paste behavior,
-including bracketed paste when the application enables it.
+`type()` sends normal text input. `paste()` uses bracketed paste when the
+application enables it, so multi-line content is not mistaken for separate
+commands by applications that support that terminal mode.
 
-## Click and drag
+Plain typed and pasted values are treated as sensitive in recorded action data
+by default. The application can still echo them to the terminal; read
+[Protect secrets](../../reference/security/) before using real credentials.
+
+## Click a control
 
 ```ts
 await app.getByRole('button', { name: 'Approve' }).click();
-await app.getByRole('button', { name: 'Open menu' }).click({ modifiers: ['control'] });
-await source.dragTo(destination, { steps: 12 });
+await app.getByRole('button', { name: 'Open menu' }).click({
+  modifiers: ['control'],
+});
 ```
 
-Pointer actions require terminal mouse reporting plus authoritative ownership.
-That ownership is either verified by a negotiated production hit test, or is
-an explicit application provider contract whose regions mean “cells currently
-routed to this semantic recipient.” Ordinary layout bounds, paint order, and
-annotations never become pointer ownership. When a hit test is negotiated,
-Termwright always intersects and verifies the region against it.
+All mouse input requires the application to enable terminal mouse reporting. A
+semantic click additionally requires:
 
-Use `hitTest()` to inspect support and the recipient:
+- a framework integration that can identify the cells routed to that control.
 
-```ts
-const hit = await approve.hitTest();
-expect(hit.receivesEvents).toMatchObject({ status: 'known', value: true });
-```
+Layout bounds alone are not enough. Check the
+[framework compatibility matrix](../../reference/compatibility/) before making
+pointer input part of a test. Keyboard actions remain available when semantic
+clicking is not supported.
 
-See the [framework compatibility matrix](../../reference/compatibility/) before
-depending on semantic pointer input. Keyboard input remains available when a
-framework cannot publish hit-test ownership.
-
-Raw coordinate actions use the same physical Mouse and PTY path. They are
-appropriate for empty space, outside-click behavior, terminal canvases, and
-mouse-capture tests:
+Use a coordinate when the coordinate itself matters—for example an outside
+click, a drawing canvas, or mouse-capture behavior:
 
 ```ts
 await app.mouse.click({ row: 3, column: 20, modifiers: ['shift'] });
@@ -107,63 +100,56 @@ await app.mouse.drag({
 });
 ```
 
-## Scroll
+Rows and columns are zero-based viewport coordinates.
+
+## Scroll and drag
 
 ```ts
 await list.wheel({ deltaY: 3 });
+await source.dragTo(destination, { steps: 12 });
 ```
 
-The application must have mouse tracking enabled. For keyboard-driven TUIs,
-prefer the same navigation keys a user would press.
+The same pointer requirements apply. For a keyboard-driven TUI, prefer the
+navigation keys its users normally press.
 
 ## Resize the terminal
 
 ```ts
-const receipt = await app.resize({ columns: 120, rows: 40 });
-expect(receipt.requested).toEqual({ columns: 120, rows: 40 });
+await app.resize({ columns: 120, rows: 40 });
+await expect(app).toHaveText('Wide layout');
 ```
 
-The receipt records the screen revision before and after the resize. Assert the
-resulting layout separately.
+Assert the responsive layout separately. The resize receipt confirms that the
+request completed; it does not decide what the application should render.
 
-## Focus, signals, and raw input
+## Send signals or raw terminal data
 
 ```ts
-await app.window.focus();
-await app.window.blur();
 await app.signal('INT');
-await app.write('\u001b[6n');
+await app.write('\u001b[A'); // raw bytes for an Up-arrow input
 ```
 
-Use these APIs only when focus events, process signals, or a terminal protocol
-sequence are themselves part of the test.
+Use `signal()` when signal handling is under test. `write()` sends raw data and
+is intended for terminal-protocol cases; prefer `press()`, `type()`, or
+`paste()` for normal user input.
 
-## Waiting around actions
+## Wait for the result
 
-Actions use one monotonic timeout budget across locator resolution, planning,
-retry waits, and the final pre-input revision check. Before any input is sent,
-Termwright may retry a stale committed observation or a target that is
-temporarily disabled, not displayed, missing its pointer region, or covered.
-It waits for a new committed observation; unrelated status/log wakeups do not
-cause repeated planning. Capability errors, strict-locator ambiguity, invalid
-options, closed sessions, and PTY write failures fail immediately. Once the
-first physical operation begins the action is never replayed, so a click or
-drag cannot be delivered twice.
-
-Live progress consumers can observe these waits through the
-`action-observation-wait` diagnostic. Its `actionId` matches the surrounding
-`action-start` and `action` events, and its `observationState` identifies the
-parser, semantic-frame, or render-pairing boundary still in flight.
-
-The deadline is checked after retry waits and again immediately before the
-first physical operation. An expired action therefore writes no late input.
-Actions still do not guess the final state of the application. Assert that
-state:
+A locator action waits until its target is ready or its action timeout expires.
+Once physical input starts, Termwright does not repeat it. Assert the state
+produced by the action:
 
 ```ts
 await save.activate();
 await expect(app).toHaveText('Saved');
 ```
 
-Use `waitForQuiet()` before a geometry-dependent action when an animation or
-layout transition is still moving the target.
+If an animation is moving a pointer target, call `waitForQuiet()` before the
+geometry-dependent action. Do not use it as a general replacement for a focused
+assertion.
+
+## Next steps
+
+- [Use retrying assertions](../assertions/)
+- [Check geometry and visibility support](../../reference/geometry-visibility/)
+- [Debug input that had no effect](../../tools/debugging/)

@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: NativePtySpawn"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

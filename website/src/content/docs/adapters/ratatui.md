@@ -1,18 +1,33 @@
 ---
 title: Ratatui
-description: Build a verified Ratatui application with frame-local semantic observation.
+description: Add semantic locators to a Rust Ratatui application.
 ---
 
-Ratatui is immediate mode. Termwright instruments the exact supported crate
-sources so it can observe widgets while each frame is rendered.
+Ratatui renders widgets immediately on each frame instead of keeping a widget
+tree. The Termwright integration observes those render calls in an
+instrumented build.
 
 ## Prepare an instrumented build
 
-Add the annotation SDK and build helper:
+The application and build helper are separate Rust crates. Add each Termwright
+crate to the manifest that uses it. This example assumes sibling `app` and
+`build-tool` crates; create the small build-tool crate first if the project
+does not have one:
 
 ```sh
-cargo add termwright-ratatui termwright-probe-ratatui
+cargo add --manifest-path app/Cargo.toml termwright-ratatui@0.4.1
+cargo add --manifest-path build-tool/Cargo.toml termwright-probe-ratatui@0.4.1
 ```
+
+The application and build helper require Rust 1.88 or newer. The supported
+Ratatui version is 0.30.2. Keep both Termwright crates on the same release as
+the npm `termwright` package.
+
+Semantic instrumentation is supported on macOS and Linux. On Windows, test a
+Ratatui binary through the black-box terminal API.
+
+The build helper is a small Rust program that runs before the TypeScript test
+suite. Its core is:
 
 ```rust
 use termwright_probe_ratatui::launch::{prepare_instrumented_build, PrepareOptions};
@@ -28,26 +43,51 @@ prepared.finish()?;
 assert!(status.success());
 ```
 
-Always call `finish()`. Cargo temporarily changes lockfile resolution while the
-instrumented sources are active; `finish()` restores the prior file. Do not run
-another Cargo command in the workspace concurrently.
+Always call `finish()`. The helper temporarily changes dependency resolution
+and restores it afterward. Do not run another Cargo command in the same
+workspace until it finishes.
 
-## Annotate a custom widget
+The complete
+[Ratatui example build tool](https://github.com/gorce-ai/termwright/tree/main/examples/ratatui-list/build-tool)
+includes its `Cargo.toml`, error handling, and output path. After building,
+launch the binary from a normal Termwright test:
+
+```ts
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'termwright/test';
+
+const binary = fileURLToPath(new URL('../app/target/debug/ratatui-list', import.meta.url));
+
+test('shows releases', async ({ terminal }) => {
+  const app = await terminal.launch({ command: [binary] });
+  await expect(app.getByRole('list')).toBeAttached();
+});
+```
+
+## Give a widget stable meaning
 
 ```rust
+use termwright_ratatui::{Annotate, Role, Semantics};
+
 frame.render_widget(
     DeployWidget::new().annotated(
-        Semantics::new().role(Role::Button).name("Deploy").test_id("deploy")
+        Semantics::new()
+            .role(Role::Button)
+            .name("Deploy")
+            .semantic_key("deploy")
     ),
     area,
 );
 ```
 
-The annotation wrapper adds role, name, test id, relationships, actions, and
-domain state. It does not override geometry or rendered cells.
+A render call exists for one frame. Add a unique `semantic_key` when a locator
+must follow the same application element across frames. The annotation can
+also provide a role, name, relationships, actions, and application state.
 
-Applications that already route `crossterm::Event::Mouse` can expose that same
-production router as authoritative evidence:
+## Pointer input
+
+If the application handles `crossterm::Event::Mouse`, it can register the same
+router with Termwright:
 
 ```rust
 use std::sync::Arc;
@@ -56,18 +96,15 @@ use termwright_ratatui::register_pointer_evidence_provider;
 let _registration = register_pointer_evidence_provider(Arc::new(mouse_router))?;
 ```
 
-The provider reports regions and an optional hit test; it never dispatches an
-event. `locator.click()` still encodes terminal mouse bytes and sends them
-through the PTY. The runnable [Ratatui list example](https://github.com/gorce-ai/termwright/tree/main/examples/ratatui-list)
-uses one router for both evidence and its normal `crossterm` event handler.
+Termwright uses the router to choose a cell, then sends a normal terminal mouse
+event through the PTY. Without a registered router, locator-based clicks fail
+instead of guessing; keyboard input remains available. The
+[Ratatui list example](https://github.com/gorce-ai/termwright/tree/main/examples/ratatui-list)
+shows the complete setup.
 
 ## Supported behavior
 
-Ratatui 0.30.2 is verified on macOS and Linux. Nodes are frame-local unless an
-annotated render call has a unique `semantic_key`; intended rectangles are
-automatic. Display state and paint ownership are unavailable from Ratatui.
-Exact pointer ownership is application-integrated when the production router
-is registered; without one, semantic pointer actions fail deterministically.
-Unsupported dependency graphs are rejected.
-
-See [Framework compatibility](../../reference/compatibility/) for exact versions.
+The integration reports intended widget bounds. Ratatui does not provide
+ancestor clipping or paint ownership, so viewport visibility is unavailable.
+Only the exact crate versions in
+[Framework compatibility](../../reference/compatibility/) are supported.

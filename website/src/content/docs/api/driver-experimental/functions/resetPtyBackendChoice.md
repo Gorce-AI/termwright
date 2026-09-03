@@ -1,6 +1,7 @@
 ---
 title: "Function: resetPtyBackendChoice()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

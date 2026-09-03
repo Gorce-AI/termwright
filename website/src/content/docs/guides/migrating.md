@@ -9,9 +9,10 @@ know Playwright or Cypress but are starting a terminal test suite, see
 
 ## From `ink-testing-library`
 
-Use `mountInk()` as the in-process replacement for `render()`. It supports
-current Ink releases and adds terminal input, focus, resize, semantic locators,
-and retained traces beyond `lastFrame()` string assertions.
+Use `mountInk()` as the in-process replacement for `render()`. It supports Ink
+7.1.1 and adds terminal input, resize, semantic locators, and retained traces
+beyond `lastFrame()` string assertions. Focus is available only when the
+application exposes it.
 
 ```tsx
 // before

@@ -1,6 +1,7 @@
 ---
 title: "Interface: MouseEvent"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

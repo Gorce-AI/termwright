@@ -27,21 +27,13 @@ export function renderRuntimeRequirements(manifest) {
   if (nodeMajors.length === 0 || nodeMajors.some((major) => !Number.isSafeInteger(major))) {
     throw new TypeError('package.json engines.node must name supported caret major lines');
   }
-  const supported = new Set(nodeMajors);
-  const excludedExamples = Array.from(
-    { length: Math.max(...nodeMajors) - Math.min(...nodeMajors) + 2 },
-    (_, index) => Math.min(...nodeMajors) + index,
-  ).filter((major) => !supported.has(major));
-  const supportedText = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(
+  const supportedText = new Intl.ListFormat('en', { style: 'long', type: 'disjunction' }).format(
     nodeMajors.map(String),
-  );
-  const excludedText = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(
-    excludedExamples.map(String),
   );
   return [
     '<!-- Generated from package.json; do not edit this block by hand. -->',
-    `- Node.js must match \`${nodeRange}\`: supported major lines are ${supportedText}; unlisted lines such as ${excludedText} are excluded.`,
-    `- Termwright embeds and certifies exactly Vitest ${vitestVersion}.`,
+    `- Use Node.js ${supportedText}. Other major versions are not supported.`,
+    `- You do not need to install Vitest separately. Termwright includes Vitest ${vitestVersion}.`,
   ].join('\n');
 }
 

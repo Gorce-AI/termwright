@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: ParsedRef"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

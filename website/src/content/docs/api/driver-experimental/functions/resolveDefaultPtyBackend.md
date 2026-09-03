@@ -1,6 +1,7 @@
 ---
 title: "Function: resolveDefaultPtyBackend()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

@@ -12,7 +12,7 @@ you review and save it.
 From the command line:
 
 ```sh
-termwright ui --record --out-file tests/permission.test.ts -- node app.js
+npx termwright ui --record --out-file tests/permission.test.ts -- node app.js
 ```
 
 Or open Specs, choose **New test**, and select **Record test**. Enter the command
@@ -56,7 +56,7 @@ destination untouched.
 Run the saved file immediately:
 
 ```sh
-termwright test tests/permission.test.ts
+npx termwright test -- tests/permission.test.ts
 ```
 
 Then simplify it. Remove incidental interactions, add assertions for the
@@ -69,5 +69,5 @@ should describe the behavior it protects.
 `termwright codegen` is an alias for the recorder-focused workflow:
 
 ```sh
-termwright codegen --out-file tests/permission.test.ts -- node app.js
+npx termwright codegen --out-file tests/permission.test.ts -- node app.js
 ```

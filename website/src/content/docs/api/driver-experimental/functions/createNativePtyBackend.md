@@ -1,6 +1,7 @@
 ---
 title: "Function: createNativePtyBackend()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

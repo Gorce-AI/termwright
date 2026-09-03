@@ -10,16 +10,18 @@ questions, recorded with the session so a replay counts the way the session did.
 
 ```ts
 import { fileURLToPath } from 'node:url';
-import { launchTerminal } from '@termwright/driver';
+import { expect, test } from 'termwright/test';
 
 const appPath = fileURLToPath(new URL('../app.js', import.meta.url));
 
-const terminal = await launchTerminal({
-  command: [process.execPath, appPath],
-  terminalProfile: 'cjk-wide',
-});
+test('renders CJK-wide layout', async ({ terminal }) => {
+  const app = await terminal.launch({
+    command: [process.execPath, appPath],
+    terminalProfile: 'cjk-wide',
+  });
 
-terminal.terminalProfile; // what this session actually used
+  await expect(app).toMatchCellSnapshot();
+});
 ```
 
 ## What a profile switches
@@ -48,11 +50,10 @@ lead. It cannot tell you that a specific terminal is or is not affected.
 
 ## Replay and screenshot consistency
 
-A live session, replay, screenshot, and Runner pane must count characters with
-the same profile. Termwright records the selected profile in
-`meta.terminalProfile` and reuses it when reconstructing evidence.
+A live session, replay, screenshot, and Runner pane count characters with the
+same profile. Termwright records the selected profile in the trace and reuses
+it during replay.
 
 ## Profile differences in Runner
 
-The browser pane and headless driver load the same Termwright-owned provider, so
-replay geometry uses the same profile and grapheme model as the live session.
+Replay uses the same profile and grapheme model as the live session.

@@ -32,7 +32,8 @@ for (const path of await markdownFiles(root)) {
   if (sourcePath === 'index.md') continue;
   const heading = source.match(/^# (.+)$/mu)?.[1]?.replaceAll('\\_', '_');
   if (heading === undefined) throw new Error(`Generated API page has no H1: ${path}`);
-  if (!source.startsWith('---\neditUrl: false\n---\n')) {
+  const frontmatter = source.match(/^---\n([\s\S]*?)\n---\n/u)?.[1];
+  if (frontmatter === undefined || !/^editUrl: false$/mu.test(frontmatter)) {
     throw new Error(`Unexpected generated frontmatter: ${path}`);
   }
   const title = JSON.stringify(heading);
@@ -56,11 +57,5 @@ for (const path of await markdownFiles(root)) {
     /\[([^\]]*\/dist\/[^\]]*)\]\(https:\/\/github\.com\/Gorce-AI\/termwright\/blob\/main\/[^)]*\/dist\/[^)]+\)/gu,
     '$1',
   );
-  await writeFile(
-    path,
-    withValidSourceLinks.replace(
-      '---\neditUrl: false\n---\n',
-      `---\ntitle: ${title}\neditUrl: false\n---\n`,
-    ),
-  );
+  await writeFile(path, withValidSourceLinks.replace(/^---\n/u, `---\ntitle: ${title}\n`));
 }

@@ -1,6 +1,7 @@
 ---
 title: "Interface: LaunchTerminalWithBackendOptions"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

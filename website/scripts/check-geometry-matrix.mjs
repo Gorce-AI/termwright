@@ -68,122 +68,37 @@ function availability(row, id, graph, visiting = new Set()) {
   return result;
 }
 
-const evidenceColumns = [
-  ['Semantic tree', 'semantic-tree'],
-  ['Stable identity', 'stable-identity'],
-  ['Intended geometry', 'intended-geometry'],
-  ['Clipped geometry', 'clipped-geometry'],
-  ['Painted region', 'painted-region'],
-  ['Pointer region', 'pointer-geometry'],
-  ['Hit testing', 'pointer-hit-testing'],
-  ['Focus', 'focus'],
-  ['Scroll', 'scroll'],
-  ['Render order', 'render-order'],
-];
 const publicColumns = [
-  ['Semantic query', 'public.locator.semantic-query'],
-  ['Visible', 'public.condition.visible'],
-  ['Click', 'public.action.click'],
-  ['Hover', 'public.action.hover'],
-  ['Drag', 'public.action.drag'],
-  ['Focus', 'public.action.focus'],
-  ['Activate', 'public.action.activate'],
-  ['Type', 'public.action.type'],
-  ['Fill', 'public.action.fill'],
-  ['Checkpoint', 'public.checkpoint'],
+  ['Role locators', 'public.locator.semantic-query'],
+  ['Viewport visibility', 'public.condition.visible'],
+  ['Click by locator', 'public.action.click'],
+  ['Focus by locator', 'public.action.focus'],
+  ['Type by locator', 'public.action.type'],
 ];
+
+function userFacingAvailability(value) {
+  if (value === 'automatic') return 'Yes';
+  if (value === 'application-integrated') return 'Application setup';
+  return 'No';
+}
+
 export function renderGeometryPage(page, registry, graph) {
-  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
-  const evidenceRows = registry.frameworks.map(
-    (row) =>
-      `| ${row.name} | ${evidenceColumns.map(([, capability]) => sessionAvailability(row, capability)).join(' | ')} |`,
-  );
   const publicRows = registry.frameworks.map(
     (row) =>
-      `| ${row.name} | ${publicColumns.map(([, id]) => availability(row, id, graph)).join(' | ')} |`,
-  );
-  const certificationRows = registry.frameworks.map((row) => {
-    const sources =
-      row.certification.checksumSources.length === 0
-        ? row.certification.strategy === 'native-hook'
-          ? 'native hook'
-          : 'not applicable (capability certification)'
-        : row.certification.checksumSources.map((source) => `\`${source}\``).join('<br>');
-    return `| ${row.name} | ${row.certification.ids.join('<br>')} | ${row.certification.strategy} | ${sources} |`;
-  });
-  const providerRows = registry.frameworks.map((row) => {
-    const integrations = [
-      ...row.capabilityGraph.applicationIntegrated,
-      ...row.capabilityGraph.input.flatMap((entry) =>
-        entry.providerAlternatives.map((alternative) => ({
-          ...alternative,
-          capabilities: [entry.capability],
-        })),
-      ),
-    ];
-    const providerTypes = [...new Set(integrations.map((item) => item.providerType))];
-    const capabilities = [...new Set(integrations.flatMap((item) => item.capabilities))];
-    const sdks = [...new Set(integrations.flatMap((item) => item.sdks))];
-    return `| ${row.name} | ${providerTypes.join(', ') || 'none'} | ${capabilities.join(', ') || 'none'} | ${sdks.map((sdk) => `\`${sdk}\``).join(', ') || 'none'} |`;
-  });
-  const claimRows = registry.frameworks.map(
-    (row) =>
-      `| ${row.name} | ${row.capabilityGraph.claims.map((claim) => `\`${claim.id}\``).join('<br>')} | ${row.capabilityGraph.claims
-        .flatMap((claim) => claim.files)
-        .filter((file, index, files) => files.indexOf(file) === index)
-        .map((file) => `\`${file}\``)
-        .join('<br>')} |`,
-  );
-  const runtimeRows = registry.frameworks.flatMap((row) =>
-    row.capabilityGraph.input.flatMap((input) =>
-      input.runtimePrerequisites.map((prerequisite) => {
-        const remediation = nodeById.get(`runtime.${prerequisite}`)?.remediation;
-        if (remediation === undefined)
-          throw new Error(`missing generated remediation for runtime.${prerequisite}`);
-        return `- **${row.name} — ${input.capability} / ${prerequisite}:** ${remediation.message}`;
-      }),
-    ),
+      `| ${row.name} | ${publicColumns
+        .map(([, id]) => userFacingAvailability(availability(row, id, graph)))
+        .join(' | ')} |`,
   );
 
   const generated = [
     start,
-    '## Framework capability graph',
+    '## Framework support',
     '',
-    'Every value below is generated from the executable capability graph and the exact certification row. `automatic`, `application-integrated`, and `unsupported` describe authoritative evidence sources; runtime prerequisites are separate.',
-    '',
-    `| Framework | ${evidenceColumns.map(([title]) => title).join(' | ')} |`,
-    `| --- | ${evidenceColumns.map(() => '---').join(' | ')} |`,
-    ...evidenceRows,
-    '',
-    '## Derived public surface',
-    '',
-    'Public availability is computed by traversing the same graph used by certification. Diagnostic evidence never unlocks an action.',
+    'This table is generated from the integration registry. “Application setup” links the framework integration to pointer or focus behavior already implemented by the application.',
     '',
     `| Framework | ${publicColumns.map(([title]) => title).join(' | ')} |`,
     `| --- | ${publicColumns.map(() => '---').join(' | ')} |`,
     ...publicRows,
-    '',
-    '## Certification contracts',
-    '',
-    '| Framework | Certification ID | Instrumentation policy | Checksum source of truth |',
-    '| --- | --- | --- | --- |',
-    ...certificationRows,
-    '',
-    '## Application-integrated providers',
-    '',
-    '| Framework | Accepted provider types | Extended session capabilities | SDKs |',
-    '| --- | --- | --- | --- |',
-    ...providerRows,
-    '',
-    '## Executable conformance claims',
-    '',
-    '| Framework | Mandatory claim IDs | Executable files |',
-    '| --- | --- | --- |',
-    ...claimRows,
-    '',
-    '### Runtime prerequisites and generated remediation',
-    '',
-    ...runtimeRows,
     end,
   ].join('\n');
 

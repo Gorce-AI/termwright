@@ -1,5 +1,6 @@
 ---
 title: Semantic protocol
+pagefind: false
 description: Transport, handshake, full snapshots, render markers, validation, and protocol ceilings.
 ---
 

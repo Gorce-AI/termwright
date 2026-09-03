@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: LocatorQuery"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

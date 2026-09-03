@@ -1,6 +1,7 @@
 ---
 title: "Function: normalizeMouseModifiers()"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

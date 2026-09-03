@@ -1,6 +1,7 @@
 ---
 title: "Class: ProcessLifecycleError"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

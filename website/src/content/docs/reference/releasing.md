@@ -1,5 +1,6 @@
 ---
 title: Releases and versioning
+pagefind: false
 description: How Termwright versions packages, publishes registries, and keeps the protocol aligned across languages.
 ---
 

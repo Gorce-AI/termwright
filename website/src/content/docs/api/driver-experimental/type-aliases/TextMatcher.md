@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: TextMatcher"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

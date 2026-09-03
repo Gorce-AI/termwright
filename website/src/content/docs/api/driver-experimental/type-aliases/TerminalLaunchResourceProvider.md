@@ -1,6 +1,7 @@
 ---
 title: "Type Alias: TerminalLaunchResourceProvider"
 editUrl: false
+pagefind: false
 ---
 
 [**@termwright/driver/experimental**](../../)

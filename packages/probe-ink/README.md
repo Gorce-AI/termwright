@@ -1,112 +1,41 @@
 # @termwright/probe-ink
 
-Zero-config semantics for an exact-certified Ink application that imports nothing from
-termwright. The application keeps its normal `import {render} from 'ink'` and
-normal `render(<App />)` call; the launcher adds one preload flag.
+Add semantic locators to an Ink application tested with Termwright.
 
-## Install and launch
+## Install
 
 ```sh
-npm install --save-dev @termwright/probe-ink
+npm install --save-dev termwright @termwright/probe-ink
 ```
 
-Peers: an exact Ink version listed in the compatibility registry, React >= 19.2,
-Node >= 22, or Bun. The Ink version is exact:
-the preload verifies both instrumented upstream modules by SHA-256 before it
-negotiates semantic capabilities.
+Keep `termwright` and `@termwright/probe-ink` on the same release version.
+
+Ink 7.1.1 and React 19.2 or newer are supported. Run the application on Node.js
+22 or 24, or Bun 1.2.15 or newer.
+
+## Launch with the probe
 
 ```ts
+import { fileURLToPath } from 'node:url';
 import { withProbe } from '@termwright/probe-ink';
+import { expect, test } from 'termwright/test';
 
-const { command } = withProbe('node', ['node', 'app.mjs']);
-await launchTerminal({
-  command,
-  env: {
-    TERMWRIGHT_ENDPOINT: endpoint,
-    TERMWRIGHT_TOKEN: token,
-  },
+const appPath = fileURLToPath(new URL('../app.mjs', import.meta.url));
+
+test('shows the approval button', async ({ terminal }) => {
+  const { command } = withProbe('node', [process.execPath, appPath]);
+  const app = await terminal.launch({ command });
+
+  await expect(app.getByRole('button', { name: 'Approve' })).toBeAttached();
 });
 ```
 
-For Bun, pass `withProbe('bun', ['bun', 'app.tsx'])`; the launcher places
-`--preload` before the application entry, where Bun requires it. Node uses
-`--import`. Node receives a `file://` preload URL, including on Windows; Bun
-receives a native absolute path because its Windows preload resolver does not
-load `file://` entries.
+Use `withProbe('bun', ['bun', appPath])` for a Bun application. The preload is
+inactive when the application runs outside a Termwright session.
 
-Early Node 22 releases do not have `module.registerHooks`; the preload detects
-that case and uses `module.register`. It does not change Node's warning policy.
-Pinned Ink itself emits a JSON-import ExperimentalWarning on Node 22.9, with or
-without the probe, and byte parity retains it.
+The probe observes rendered Ink components, text, state, layout, and viewport
+clipping. Ink has no standard pointer router, so locator clicks require extra
+application setup; keyboard tests and semantic assertions do not.
 
-## Dormant and failure behaviour
-
-Without both `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN`, the preload installs
-no loader hook and `ink.render` is untouched. If either Ink artifact does not
-match 7.1.1 exactly, the adapter does not attach or advertise a partial
-contract. An unreachable driver remains isolated from the application. Process
-tests assert byte identity for dormant and faulted runs under Node and Bun.
-
-## What is observed
-
-Every retained Ink host survives into Probe IR:
-
-- `ink-root` becomes `application`;
-- `ink-text` and `ink-virtual-text` become `text`;
-- every unannotated `ink-box` remains a `generic` node with its subtree;
-- retained `aria-role` plus `checked`, `disabled`, `expanded`, `readonly`,
-  `selected`, `busy`, and `multiline` aria-state facts are read directly;
-- host object identity is kept in a `WeakMap`, so it is stable across renders.
-
-An application may optionally import `@termwright/ink` and attach developer
-intent with `useSemantic` or `<Semantic>`. The injected probe consumes that
-process-local weak registry and merges `role`, `name`, `description`, `testId`,
-domain `extended` state, actions, and relationships with the retained tree.
-Developer annotations have annotation provenance; Ink-retained ARIA hints keep
-framework provenance. Physical facts such as text, state, focus, visibility,
-value, and bounds cannot be supplied by the annotation SDK.
-
-Each live update publishes a full snapshot and revision commit. Ink calls
-`onRender` before it writes frame bytes, so the probe freezes the laid-out host
-tree synchronously, then drains the output stream and writes the authenticated
-marker last. A newer render that arrives during drain suppresses the stale
-marker. Instrumented output is byte-identical to vanilla output after those
-markers are removed.
-
-The checksummed renderer hook records Yoga rectangles and the same nested
-overflow intersections used by `render-node-to-output`. A paired output tracker
-maps those relative rectangles into the committed normal or alternate VT
-viewport. It handles terminal wrapping, wide cells, resize, fullscreen scroll,
-and `<Static>` output retained above the live region. Hidden nodes publish
-authoritative absence instead of fabricated zero-sized boxes. Every marker is
-written only after the corresponding output bytes drain.
-
-Ink does not expose pointer ownership. Bounds therefore do not enable click,
-hover, or drag by themselves. Those actions require an application evidence
-provider that publishes revision-bound pointer regions and a native hit test;
-device input still travels through the real PTY.
-
-Ink instrumentation also does not automatically certify terminal input modes.
-Its output shadow sees JavaScript `stream.write` calls, but direct descriptor or
-native writes and inherited descendant output bypass that surface. On ConPTY,
-where the transport hides DEC mouse/focus negotiation, an opaque Ink child
-therefore remains fail-closed. Hidden-mode pointer/focus input requires an
-explicit provider backed by the application's production input-mode state.
-
-## Deliberate limits
-
-Ink's reconciler discards application component names before creating the host
-tree. A source component such as `ApproveButton` therefore cannot be reported:
-`frameworkType` honestly remains `ink-box`, never a guessed component name or
-stack. The same boundary prevents attributing Ink's active focus id to a host.
-Text selection and third-party input values also remain unobservable without a
-widget-library probe or author annotation. Ink retains `required` and
-`multiselectable`, but the current semantic wire has no corresponding state
-fields, so this probe omits them rather than repurposing a different fact.
-
-Ink does not retain `aria-label` on a host element. A role that takes its name
-from content uses rendered text; containers keep an empty name. These limits are
-upstream facts documented in `docs/architecture/audit/ink.md`, not heuristics.
-
-`@termwright/ink` is only the optional annotation SDK. Rendering, observation,
-transport, and revision publication remain owned by this injected probe.
+See the [Ink integration guide](https://gorce-ai.github.io/termwright/adapters/ink/)
+for annotations, mouse setup, tested behavior, and limitations.

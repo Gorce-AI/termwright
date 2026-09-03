@@ -1,12 +1,12 @@
 ---
 title: Write a framework integration
 description: Build and certify a semantic probe for a TUI framework that Termwright does not yet support.
+pagefind: false
 ---
 
 Write an integration when a framework has useful component state that cannot be
 recovered from terminal cells. A probe observes that state inside the
-application process and publishes a semantic snapshot after each rendered
-frame.
+application process and publishes semantic state for each rendered frame.
 
 This is an adapter-author guide. Application tests should start with
 [generic terminal mode](../../adapters/) or an existing integration.
@@ -87,9 +87,11 @@ each terminal cell.
 
 ## Commit a rendered revision
 
-For each rendered frame, publish in this order:
+Publish the first frame as a full snapshot. Later frames can use revision-based
+deltas when the integration knows what changed. For each frame, publish in this
+order:
 
-1. the full semantic snapshot;
+1. a full snapshot or a delta based on the currently committed revision;
 2. `revision-commit`;
 3. the authenticated terminal marker, after all bytes for the frame are flushed.
 
@@ -133,7 +135,7 @@ The integration also needs:
 
 - dormant byte-parity coverage;
 - handshake and hostile-input tests;
-- full snapshot validation before serialization;
+- full snapshot and delta validation before serialization;
 - render/commit/marker ordering tests;
 - disconnect and teardown tests;
 - real framework process tests for each claimed observation;

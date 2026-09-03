@@ -1,110 +1,119 @@
 ---
 title: Run tests in CI
-description: Certify a Termwright run with explicit resources, zero hidden retries, and transactional evidence.
+description: Run Termwright without retries and upload traces and run history when a job fails.
 ---
 
-Termwright runs on macOS >= 13.5, Windows 10 version 1809 / Server 2019 or newer, and
-glibc-based Linux at the Ubuntu 22.04 ABI floor (glibc >= 2.35). Use Node.js 22 or
-newer. Alpine/musl is not supported by the prebuilt PTY dependency.
+Run the same `termwright test` command in CI, with a CI resource profile and no
+retries. Preserve both the run history and trace output when the job fails.
 
 ## GitHub Actions
 
+This example uses npm and Linux. Replace `npm ci` with your package manager's
+frozen-lockfile install when needed.
+
 ```yaml
-name: test
+name: terminal-tests
 
 on:
   push:
   pull_request:
 
-env:
-  TERMWRIGHT_RETRIES: '0'
-  TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
-  TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
-
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      TERMWRIGHT_RETRIES: '0'
+      TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
     steps:
-      - name: Reject workflow reruns
-        shell: bash
-        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9.4.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          cache: npm
+      - run: npm ci
       - run: npx termwright doctor --json
       - run: npx termwright test --resource-profile ci
-        env:
-          CI: 'true'
       - uses: actions/upload-artifact@v4
         if: failure() || cancelled()
         with:
-          name: termwright-runs
-          path: .termwright/runs/
+          name: termwright-failure
+          path: |
+            .termwright/runs/
+            termwright-report/
           include-hidden-files: true
 ```
 
-The native host records the resolved resource profile, exact Vitest/Node
-runtime, RunId, AttemptIds, Git/CI provenance and authoritative journal in each
-committed run. `ci` is an explicit bounded PTY/process envelope; it is not a
-package-wide serialization switch.
+`termwright-report/` contains retained traces.
+`.termwright/runs/` contains the run and attempt history that refers to those
+traces. Keep both if you want the downloaded artifact to appear in Runner's run
+history.
 
-## Retries do not certify determinism
+## Supported CI environments
+
+Use Node.js 22 or 24. Termwright's native PTY packages support:
+
+- glibc 2.35+ Linux on x64 and arm64;
+- macOS 13.5+ on x64 and arm64;
+- Windows 10 1809+ or Server 2019+ on x64 and arm64.
+
+Alpine/musl images are not supported. For container jobs, use a Debian- or
+Ubuntu-based Node image such as `node:22-slim`.
+
+Use `--resource-profile windows-ci` on Windows. Use an operating-system matrix
+when the application itself supports multiple operating systems; a terminal
+profile cannot reproduce platform-specific process and PTY behavior.
+
+## Keep retries disabled
+
+An ordinary CI job should use zero retries. A later passing attempt does not
+erase an earlier failure: Termwright reports the run as flaky and returns a
+non-zero exit code.
+
+You can request retries in a separate diagnostic job:
 
 ```sh
-# Optional diagnostic experiment; a fail-then-pass run is still flaky/nonzero.
 npx termwright test --resource-profile ci -- --retry=2
 ```
 
-Every retry gets a distinct AttemptId and evidence. Certification lanes use
-zero retries. If a diagnostic retry passes after an earlier failure, the host
-classifies the run as `flaky` and exits non-zero; a later pass never erases the
-reliability defect. GitHub Actions has no native yellow success state, so this
-is intentionally a red check with an amber/flaky classification in Termwright's
-report and UI.
+This runs up to three attempts and retains each failed attempt for inspection.
 
-A mixed pass/skip result is amber `passed-with-skips`. It may exit zero only
-when every skip is covered by the exact reviewed applicability policy; a
-missing, ambiguous, or stale required declaration is red. An all-skipped or
-empty lane is always red. This keeps legitimate platform applicability visible
-without letting a missing toolchain or silently skipped suite look green.
-
-For a determinism lane, repeat full lifecycle cycles inside one host rather
-than wrapping the command in a shell loop:
-
-```sh
-TERMWRIGHT_RETRIES=0 npx termwright test --runs 50 --resource-profile ci
-```
-
-Termwright's own certification also has separate bounded lanes for
-multi-terminal pressure, deterministic acquisition/cleanup faults, seeded
-shuffle (the seed is written to the job summary), resource-leak barriers,
-Windows ConPTY lifecycle stress, and a scheduled Node 22/24 soak on all three
-supported operating systems.
-
-## Choose a trace policy
-
-The default `retain-on-failure` policy keeps evidence for failures without
-retaining every successful run. Use `trace: 'on'` when successful CI runs are
-also useful for auditing. Use `trace: 'off'` only when no replay evidence is
-needed.
-
-## Keep the environment deterministic
+## Keep the run reproducible
 
 - Pin the Node and package-manager versions.
-- Use a Debian/Ubuntu-based container rather than Alpine.
-- Set a terminal profile and palette when color or width is asserted.
-- Declare input files through the fixture instead of relying on a repository
-  working directory.
-- Upload `.termwright/runs/` when the job fails or is cancelled so retained
-  failure and incomplete-infrastructure evidence is available without creating
-  an artifact for every green matrix row. GitHub's artifact action ignores
-  dot-directories unless `include-hidden-files: true` is set.
+- Install from the lockfile.
+- Declare test files through `terminal.launch({ files })` instead of relying on
+  files left by an earlier test.
+- Set terminal columns, rows, and profile when layout or character width is part
+  of an assertion.
+- Pass required environment variables explicitly.
+- Keep snapshot updates disabled in the test job.
 
-See [Configuration](../../reference/configuration/) for profiles and
-[Traces and reports](../../tools/traces-reports/) for artifact formats.
+## Use a terminal matrix
+
+Named Termwright profiles can run the same tests with different viewport or
+character-width settings. Operating-system jobs should remain a CI matrix.
+
+```sh
+npx termwright test -- --project compact
+```
+
+See [Configuration](../../reference/configuration/#configure-a-terminal-matrix)
+for profile setup.
+
+## Open a failure from CI
+
+Download the artifact, then open a retained trace directly:
+
+```sh
+npx termwright ui --trace termwright-report/traces/example.twtrace
+```
+
+Or copy both downloaded directories into the project and open **Runs** in
+`termwright ui`.
+
+## Next steps
+
+- [Open traces and reports](../../tools/traces-reports/)
+- [Protect secrets](../../reference/security/)
+- [Supported platforms and limitations](../../reference/limitations/)

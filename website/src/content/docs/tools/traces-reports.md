@@ -1,84 +1,91 @@
 ---
-title: Traces and reports
-description: Retain terminal recordings, replay a run, create a self-contained report, and capture a recorded frame.
+title: Open traces and reports
+description: Replay a failed test, create a self-contained HTML report, and capture a terminal screenshot.
 ---
 
-Traces retain the terminal recording, semantic revisions, test steps, actions,
-assertions, application logs, and crash metadata for one or more sessions.
+A trace records the terminal, test steps, actions, assertions, semantic state,
+application logs, and process failure details for one terminal session. A test
+attempt that launches several terminals can produce several trace archives.
 
-Trace publication is transactional. Termwright writes and fsyncs a staging
-directory, records checksums in `COMMITTED`, and only then atomically publishes
-the `.twtrace` directory. The Runner distinguishes complete, incomplete,
-corrupt, and unsupported-version artifacts instead of attempting a best-effort
-replay. Packaging likewise refuses an uncommitted trace.
-
-## Choose a trace policy
-
-```ts
-configureTermwright({
-  trace: 'retain-on-failure',
-  outputDir: 'termwright-report',
-});
-```
-
-| Policy              | Use when                                               |
-| ------------------- | ------------------------------------------------------ |
-| `retain-on-failure` | Normal local and CI runs. This is the default.         |
-| `on-first-retry`    | Large suites where only the first retry needs a trace. |
-| `on`                | Successful runs must also remain replayable.           |
-| `off`               | Recording is not permitted or needed.                  |
-
-Driver actions and matcher assertions are recorded automatically. Named
-`step()` blocks organize those events. Do not call a second recording API after
-a normal Termwright action.
+By default, Termwright deletes traces for passing tests and retains them for
+failures. This keeps normal runs small while preserving the state needed to
+debug a failure.
 
 ## Replay a trace
 
-```sh
-termwright ui --trace termwright-report/traces/example.twtrace
-```
-
-The Runner opens the retained terminal and evidence. The player seeks across
-terminal frames while steps, crash markers, semantic state, and logs follow the
-same playhead.
-
-## Generate an HTML report
-
-Run tests with `termwright test`; the Native Host owns trace retention and the
-transactional run record. Direct `vitest run` is not a Termwright execution
-mode. A generated report is a self-contained HTML file. It uses the same React
-viewer as the Runner but does not expose live-run, history, or file-system
-actions.
-
-[![A self-contained HTML report showing retained terminal replay and failure evidence.](/termwright/images/runner/html-report.png)](/termwright/images/runner/html-report.png)
-
-Generate a report for one existing archive:
+Open a trace from a local run or a downloaded CI artifact:
 
 ```sh
-termwright report --trace path/to/run.twtrace --out-file report.html
+npx termwright ui --trace path/to/run.twtrace
 ```
+
+Use the player to seek through terminal frames. The selected test step,
+semantic tree, logs, and failure marker follow the same point in time.
+
+## Choose which traces to keep
+
+Configure `trace` with one of these values:
+
+| Value               | Behavior                                                                                            |
+| ------------------- | --------------------------------------------------------------------------------------------------- |
+| `retain-on-failure` | Keep failed attempts; delete passing attempts. This is the default.                                 |
+| `on-first-retry`    | Record retry 1 (the second attempt), not the initial attempt. Without a retry, no trace is written. |
+| `on`                | Keep passing and failing attempts.                                                                  |
+| `off`               | Do not record a trace.                                                                              |
+
+Use `on` temporarily when investigating a behavior that still passes. Use
+`off` when recording is prohibited, accepting that the run cannot be replayed.
+See [Configuration](../../reference/configuration/) for setup.
+
+## Create an HTML report
+
+[![A self-contained HTML report with terminal replay and failure details.](/termwright/images/runner/html-report.png)](/termwright/images/runner/html-report.png)
+
+Convert one trace into a file that can be opened without Termwright:
+
+```sh
+npx termwright report --trace path/to/run.twtrace --out-file report.html
+```
+
+The HTML file includes its viewer and recorded data. Attach it to an issue or CI
+run only after applying your normal artifact access and retention policy.
 
 ## Capture a PNG
 
+Capture the terminal at a time in milliseconds or at a numbered test step:
+
 ```sh
-termwright screenshot --trace path/to/run.twtrace --at 1200 --out-file state.png
-termwright screenshot --trace path/to/run.twtrace --step 3 --scale 2
+npx termwright screenshot --trace path/to/run.twtrace --at 1200 --out-file state.png
+npx termwright screenshot --trace path/to/run.twtrace --step 3 --scale 2
 ```
 
-Without `--at` or `--step`, the command chooses the crash or the end of the last
-step. This avoids capturing an empty final screen after an alternate-screen
-application exits.
+Without `--at` or `--step`, Termwright captures the crash point or the end of
+the last step. This avoids an empty final frame after a full-screen application
+has exited.
 
-## Inspect retries and flaky cases
+## Upload failure artifacts in CI
 
-The manifest and report keep ordered attempts. A case that passes after an
-earlier failure is classified as flaky, and the earlier reasons remain visible.
-See [Run tests in CI](../../guides/ci/) for retry configuration.
+Upload `termwright-report/` and `.termwright/runs/` only when the job fails or
+is cancelled. The first contains traces and any reports explicitly written
+there; the second
+contains run history and links attempts to those traces. With GitHub Actions,
+remember that hidden paths require `include-hidden-files: true`.
 
-## Share artifacts safely
+Runner labels an interrupted or damaged trace as incomplete instead of
+replaying it as if it were a complete recording.
 
-Traces and reports may contain terminal output, semantic names and values,
-application logs, commands, file paths, and error stacks. Treat them as test
-artifacts and apply the same retention and access policy as CI logs.
+## Handle sensitive data
 
-The Runner authentication token is not stored in a trace or report.
+Traces and reports can include terminal text, semantic values, logs, commands,
+paths, and error stacks. Trace redaction handles sensitive input and semantic
+values, registered secrets, and configured patterns. It cannot discover every
+application-specific secret.
+
+Read [Protect secrets](../../reference/security/) before using production-like
+credentials or sharing an artifact.
+
+## Next steps
+
+- [Use the Runner](../runner-ui/)
+- [Debug a failed test](../debugging/)
+- [Run tests in CI](../../guides/ci/)
