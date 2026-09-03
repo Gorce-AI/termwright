@@ -245,6 +245,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(release).toContain('git hash-object "$materializer"');
     expect(release).toContain('git worktree remove "$orchestration"');
     expect(release).toContain('cp "$orchestration/packages/probe-charm/src/launch.test.ts"');
+    expect(release).toContain('cp "$orchestration/packages/pty/src/index.test.ts"');
     expect(release).toContain('Restore the immutable release test tree before packing');
     expect(ci.match(/pnpm --dir packages\/protocol pack/gu)).toHaveLength(
       ci.match(/pnpm --dir packages\/pty pack/gu)?.length ?? 0,

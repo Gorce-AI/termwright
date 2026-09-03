@@ -795,6 +795,7 @@ describe('trusted autonomous coordinator', () => {
       'scripts/native-host-entrypoints.test.mjs',
       'packages/probe-charm/src/launch.test.ts',
       'packages/probe-charm/src/testing/fixture-bubbles/go.sum',
+      'packages/pty/src/index.test.ts',
       'packages/trace/src/reader.test.ts',
       'packages/ui/src/app/docs-screenshots.e2e.ts',
       'packages/ui/src/app/fresh-app.e2e.ts',
