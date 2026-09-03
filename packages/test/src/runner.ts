@@ -931,7 +931,6 @@ function createAttemptEventRecorder(
   journal: WorkerJournal,
   acknowledgementTimeoutMs: number,
 ): AttemptEventRecorder {
-  let pending: Promise<void> = Promise.resolve();
   let sealed = false;
   return Object.freeze({
     record(event: AttemptEventRecord): void {
@@ -947,23 +946,18 @@ function createAttemptEventRecorder(
         },
         payload: event.payload,
       });
-      pending = pending.then(async () => {
-        await journal.client.append(
-          emitted,
-          eventDeadline(
-            context,
-            acknowledgementTimeoutMs,
-            event.phase ?? budgetPhaseOf(context.currentPhase()),
-          ),
-        );
-      });
-      // The finalizer owns the rejection. Attach a handler immediately so a
-      // fast transport failure cannot become a process-level unhandled event.
-      void pending.catch(() => undefined);
+      journal.client.enqueue(
+        emitted,
+        eventDeadline(
+          context,
+          acknowledgementTimeoutMs,
+          event.phase ?? budgetPhaseOf(context.currentPhase()),
+        ),
+      );
     },
     async flush(): Promise<void> {
       sealed = true;
-      await pending;
+      await journal.client.drain();
     },
   });
 }

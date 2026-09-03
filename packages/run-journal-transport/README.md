@@ -25,7 +25,8 @@ const client = await connectRunJournalWorker({
   handshakeDeadline,
 });
 
-await client.append(event, deadline);
+client.enqueue(event, deadline); // synchronous bounded admission for hot paths
+await client.drain(); // lifecycle barrier: every admitted batch was acknowledged
 await client.flush(deadline);
 await client.close();
 await server.close();
@@ -35,6 +36,12 @@ The first frame must authenticate and identify the run and worker. The host
 assigns the event producer identity; a worker cannot choose or reuse it. A newer
 worker epoch invalidates the previous connection, and events whose run,
 producer, epoch, order, or schema disagrees with that binding fail closed.
+
+`enqueue()` either admits immediately or throws before allocating deferred work;
+the queue is bounded by both event count and serialized bytes. Background
+delivery failures are retained and rethrown by `drain()`, `flush()`, or
+`close()`. Use `append()` only when the caller needs acknowledgement for that
+individual event.
 
 Frames are length-prefixed JSON with a 384 KiB ceiling. Tokens are random by
 default and compared in constant time. Append, flush, handshake, and shutdown
