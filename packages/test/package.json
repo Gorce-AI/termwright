@@ -1,6 +1,6 @@
 {
   "name": "@termwright/test",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Termwright's exact-certified Vitest runner, fixtures, matchers and semantic snapshots",
   "license": "MIT",
   "repository": {

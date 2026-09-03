@@ -1,6 +1,6 @@
 {
   "name": "@termwright/probe-tview",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "composable tview probe: one public Attach call plus add-only Go compiler injection, with no upstream mutation",
   "license": "MIT",
   "repository": {

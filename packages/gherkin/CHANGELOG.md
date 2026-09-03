@@ -1,5 +1,13 @@
 # @termwright/gherkin
 
+## 0.5.0
+
+### Patch Changes
+
+- [#144](https://github.com/Gorce-AI/termwright/pull/144) [`e69c346`](https://github.com/Gorce-AI/termwright/commit/e69c3462108c3966d7c5186b03b771335a19f82d) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Physically isolate Termwright's certified Vitest 4 engine from a consumer's Vitest installation, including npm 10 installs alongside Vitest 5. Make `termwright doctor` inspect that embedded engine, and keep Gherkin definitions coupled only to Termwright's public test API.
+- Updated dependencies [[`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e69c346`](https://github.com/Gorce-AI/termwright/commit/e69c3462108c3966d7c5186b03b771335a19f82d), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27)]:
+  - @termwright/test@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes

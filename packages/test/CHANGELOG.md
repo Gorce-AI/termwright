@@ -1,5 +1,34 @@
 # @termwright/test
 
+## 0.5.0
+
+### Minor Changes
+
+- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Make `hostPressure: 'exclusive'` reserve the host's complete weighted capacity, and let already-active attempts acquire fitting continuation resources ahead of blocked new attempts. New attempts remain FIFO, while dynamic terminal acquisition can no longer deadlock behind a waiter that needs the active attempt's resources.
+
+- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace misleading generic owned-process RSS/count fields with capability-qualified whole-tree accounting. Windows sessions now capture cumulative Job Object CPU, memory, process, and I/O counters before disposal; run manifest v8 preserves their native meanings and reports unsupported platforms as unavailable.
+
+- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Remove the public resource-broker Vitest subpath and its optional Vitest peer. Resource-aware declarations now belong exclusively to Termwright's embedded test surface, and adapter conformance uses that same owned engine instead of resolving a consumer Vitest.
+
+- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Remove an unused UI provider facade and rename the Ink probe's required advanced
+  instrumentation entry point so no published subpath pretends an internal API is
+  a supported user contract. Terminal profile options now accept only the two
+  registered behavior profiles and configuration rejects unknown ids eagerly.
+
+- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Bound worker event production before deferred transport work is created. Hot-path events now use synchronous count-and-byte admission and an explicit drain barrier, so a slow or failed journal sink cannot create an unbounded Promise chain or hide authoritative delivery failure.
+
+### Patch Changes
+
+- [#144](https://github.com/Gorce-AI/termwright/pull/144) [`e69c346`](https://github.com/Gorce-AI/termwright/commit/e69c3462108c3966d7c5186b03b771335a19f82d) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Physically isolate Termwright's certified Vitest 4 engine from a consumer's Vitest installation, including npm 10 installs alongside Vitest 5. Make `termwright doctor` inspect that embedded engine, and keep Gherkin definitions coupled only to Termwright's public test API.
+- Updated dependencies [[`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27)]:
+  - @termwright/resource-broker@0.5.0
+  - @termwright/driver@0.5.0
+  - @termwright/ui@0.5.0
+  - @termwright/run-journal-transport@0.5.0
+  - @termwright/trace@0.5.0
+  - @termwright/protocol@0.5.0
+  - @termwright/vt@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes

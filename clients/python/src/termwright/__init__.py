@@ -92,7 +92,7 @@ from .tree import (
 )
 from .validate import ValidationResult, validate_snapshot
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 __all__ = [
     "ABSOLUTE_LIMITS",
