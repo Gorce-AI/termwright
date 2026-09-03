@@ -2290,7 +2290,7 @@
       "path": "packages/termwright-cli/src/doctor.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "const timer = setTimeout(() => reject(new Error('PTY smoke timed out')), 2_000);"
+      "excerpt": "const timer = setTimeout(timeout, DEFAULT_TERMWRIGHT_HOST_TIMEOUTS.startupMs);"
     },
     {
       "path": "packages/termwright-cli/src/test-host-persistence.ts",

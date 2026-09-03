@@ -125,10 +125,8 @@ async function checkPty(): Promise<DoctorCheck> {
         // A cold native host launch is startup work and must use the same
         // documented budget as the host. A separate two-second deadline made
         // doctor report false failures on otherwise-certified Windows runners.
-        const timer = setTimeout(
-          () => reject(new Error('PTY smoke timed out')),
-          DEFAULT_TERMWRIGHT_HOST_TIMEOUTS.startupMs,
-        );
+        const timeout = () => reject(new Error('PTY smoke timed out'));
+        const timer = setTimeout(timeout, DEFAULT_TERMWRIGHT_HOST_TIMEOUTS.startupMs);
         proc.onData((data) => text.push(data));
         proc.onExit((status) => {
           clearTimeout(timer);
