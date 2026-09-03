@@ -1,5 +1,16 @@
 # @termwright/run-journal-transport
 
+## 0.5.0
+
+### Minor Changes
+
+- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Bound worker event production before deferred transport work is created. Hot-path events now use synchronous count-and-byte admission and an explicit drain barrier, so a slow or failed journal sink cannot create an unbounded Promise chain or hide authoritative delivery failure.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/protocol@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes

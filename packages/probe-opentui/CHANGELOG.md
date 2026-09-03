@@ -1,5 +1,15 @@
 # @termwright/probe-opentui
 
+## 0.5.0
+
+### Patch Changes
+
+- Updated dependencies [[`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27)]:
+  - @termwright/pty@0.5.0
+  - @termwright/probe-runtime@0.5.0
+  - @termwright/protocol@0.5.0
+  - @termwright/recognizers@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes

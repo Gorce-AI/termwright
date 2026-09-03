@@ -1,6 +1,6 @@
 {
   "name": "@termwright/probe-charm",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "zero-config Bubble Tea probe: an ephemeral Go workspace redirects the build to an instrumented copy, for both majors",
   "license": "MIT",
   "repository": {

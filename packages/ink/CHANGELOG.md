@@ -1,5 +1,23 @@
 # @termwright/ink
 
+## 0.5.0
+
+### Minor Changes
+
+- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace misleading generic owned-process RSS/count fields with capability-qualified whole-tree accounting. Windows sessions now capture cumulative Job Object CPU, memory, process, and I/O counters before disposal; run manifest v8 preserves their native meanings and reports unsupported platforms as unavailable.
+
+- [#142](https://github.com/Gorce-AI/termwright/pull/142) [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Remove an unused UI provider facade and rename the Ink probe's required advanced
+  instrumentation entry point so no published subpath pretends an internal API is
+  a supported user contract. Terminal profile options now accept only the two
+  registered behavior profiles and configuration rejects unknown ids eagerly.
+
+### Patch Changes
+
+- Updated dependencies [[`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27), [`e59a216`](https://github.com/Gorce-AI/termwright/commit/e59a216c0e105ecd1d6a020f99977caa8ef1ce27)]:
+  - @termwright/driver@0.5.0
+  - @termwright/probe-ink@0.5.0
+  - @termwright/protocol@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes
