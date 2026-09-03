@@ -1,5 +1,18 @@
 # @termwright/resource-broker
 
+## 0.5.0
+
+### Minor Changes
+
+- [#145](https://github.com/Gorce-AI/termwright/pull/145) [`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Make `hostPressure: 'exclusive'` reserve the host's complete weighted capacity, and let already-active attempts acquire fitting continuation resources ahead of blocked new attempts. New attempts remain FIFO, while dynamic terminal acquisition can no longer deadlock behind a waiter that needs the active attempt's resources.
+
+- [#145](https://github.com/Gorce-AI/termwright/pull/145) [`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Remove the public resource-broker Vitest subpath and its optional Vitest peer. Resource-aware declarations now belong exclusively to Termwright's embedded test surface, and adapter conformance uses that same owned engine instead of resolving a consumer Vitest.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/protocol@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # @termwright/ui
 
+## 0.5.0
+
+### Minor Changes
+
+- [#145](https://github.com/Gorce-AI/termwright/pull/145) [`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Remove an unused UI provider facade and rename the Ink probe's required advanced
+  instrumentation entry point so no published subpath pretends an internal API is
+  a supported user contract. Terminal profile options now accept only the two
+  registered behavior profiles and configuration rejects unknown ids eagerly.
+
+### Patch Changes
+
+- Updated dependencies [[`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2), [`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2), [`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2)]:
+  - @termwright/driver@0.5.0
+  - @termwright/run-history@0.5.0
+  - @termwright/trace@0.5.0
+  - @termwright/protocol@0.5.0
+  - @termwright/vt@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes

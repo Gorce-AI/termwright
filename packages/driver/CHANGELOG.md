@@ -1,5 +1,23 @@
 # @termwright/driver
 
+## 0.5.0
+
+### Minor Changes
+
+- [#145](https://github.com/Gorce-AI/termwright/pull/145) [`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Replace misleading generic owned-process RSS/count fields with capability-qualified whole-tree accounting. Windows sessions now capture cumulative Job Object CPU, memory, process, and I/O counters before disposal; run manifest v8 preserves their native meanings and reports unsupported platforms as unavailable.
+
+- [#145](https://github.com/Gorce-AI/termwright/pull/145) [`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Remove an unused UI provider facade and rename the Ink probe's required advanced
+  instrumentation entry point so no published subpath pretends an internal API is
+  a supported user contract. Terminal profile options now accept only the two
+  registered behavior profiles and configuration rejects unknown ids eagerly.
+
+### Patch Changes
+
+- [#145](https://github.com/Gorce-AI/termwright/pull/145) [`5b395b5`](https://github.com/Gorce-AI/termwright/commit/5b395b5c630894ed2f5e47babdd4ae2c032fc9c2) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Keep POSIX shell command tracking authoritative when an interactive shell enables `errexit`, so failed commands still emit their completion boundary and return an exit status instead of timing out. Generic terminal resize receipts no longer misclassify arbitrary later PTY bytes as proof of an application repaint; paired render evidence is reported only when a semantic adapter can prove it.
+- Updated dependencies []:
+  - @termwright/protocol@0.5.0
+  - @termwright/vt@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes
