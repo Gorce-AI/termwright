@@ -1,6 +1,6 @@
 {
   "name": "@termwright/pty",
-  "version": "0.5.0",
+  "version": "0.4.1",
   "description": "Termwright's native PTY backend with authoritative output EOF and owned process trees",
   "license": "MIT",
   "repository": {
