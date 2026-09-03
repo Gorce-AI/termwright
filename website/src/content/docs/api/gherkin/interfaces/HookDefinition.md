@@ -1,5 +1,5 @@
 ---
-title: "Interface: HookDefinition\\<Fixtures\\>"
+title: "Interface: HookDefinition"
 editUrl: false
 ---
 

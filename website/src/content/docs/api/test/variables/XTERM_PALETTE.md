@@ -13,7 +13,7 @@ editUrl: false
 
 > `const` **XTERM\_PALETTE**: [`ColorPalette`](../../interfaces/colorpalette/)
 
-Defined in: [test/src/config.ts:158](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L158)
+Defined in: [test/src/config.ts:159](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L159)
 
 The palette shipped for CI: the xterm defaults, pinned.
 

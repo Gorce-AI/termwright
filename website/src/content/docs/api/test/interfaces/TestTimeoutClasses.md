@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TestTimeoutClasses
 
-Defined in: [test/src/config.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L33)
+Defined in: [test/src/config.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L34)
 
 Timeout classes, extended with the class that governs polling matchers.
 
@@ -25,7 +25,7 @@ Timeout classes, extended with the class that governs polling matchers.
 
 > `readonly` `optional` **action?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:5
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:6
 
 #### Inherited from
 
@@ -37,7 +37,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:5
 
 > `readonly` `optional` **exit?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:9
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:10
 
 #### Inherited from
 
@@ -49,7 +49,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:9
 
 > `readonly` `optional` **expect?**: `number`
 
-Defined in: [test/src/config.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L35)
+Defined in: [test/src/config.ts:36](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L36)
 
 Budget for self-polling matchers (`toBeVisible`, …). Default 5 000 ms.
 
@@ -59,7 +59,7 @@ Budget for self-polling matchers (`toBeVisible`, …). Default 5 000 ms.
 
 > `readonly` `optional` **idle?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:7
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:8
 
 #### Inherited from
 
@@ -71,7 +71,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:7
 
 > `readonly` `optional` **ready?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:8
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:9
 
 #### Inherited from
 
@@ -83,7 +83,7 @@ Defined in: driver/dist/session-CRT9VwFa.d.ts:8
 
 > `readonly` `optional` **text?**: `number`
 
-Defined in: driver/dist/session-CRT9VwFa.d.ts:6
+Defined in: driver/dist/session-Br7\_0b2M.d.ts:7
 
 #### Inherited from
 

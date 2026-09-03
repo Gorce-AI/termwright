@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://gorce-ai.github.io/termwright/sitemap-index.xml

@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: StepDefinitionBody\\<Fixtures\\>"
+title: "Type Alias: StepDefinitionBody"
 editUrl: false
 ---
 

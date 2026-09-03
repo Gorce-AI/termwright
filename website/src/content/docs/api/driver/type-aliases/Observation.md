@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: Observation\\<T\\>"
+title: "Type Alias: Observation"
 editUrl: false
 ---
 

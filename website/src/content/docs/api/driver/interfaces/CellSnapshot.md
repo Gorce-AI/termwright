@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: CellSnapshot
 
-Defined in: [driver/src/api.ts:384](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L384)
+Defined in: [driver/src/api.ts:409](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L409)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **attributes**: [`CellAttributes`](../cellattributes/)
 
-Defined in: [driver/src/api.ts:389](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L389)
+Defined in: [driver/src/api.ts:414](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L414)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:389](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **bg**: [`CellColor`](../../type-aliases/cellcolor/)
 
-Defined in: [driver/src/api.ts:388](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L388)
+Defined in: [driver/src/api.ts:413](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L413)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:388](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **char**: `string`
 
-Defined in: [driver/src/api.ts:385](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L385)
+Defined in: [driver/src/api.ts:410](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L410)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [driver/src/api.ts:385](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **fg**: [`CellColor`](../../type-aliases/cellcolor/)
 
-Defined in: [driver/src/api.ts:387](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L387)
+Defined in: [driver/src/api.ts:412](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L412)
 
 ***
 
@@ -68,7 +68,7 @@ Defined in: [driver/src/api.ts:387](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **link?**: [`CellLink`](../celllink/)
 
-Defined in: [driver/src/api.ts:391](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L391)
+Defined in: [driver/src/api.ts:416](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L416)
 
 The OSC 8 hyperlink covering this cell, when it has one.
 
@@ -78,4 +78,4 @@ The OSC 8 hyperlink covering this cell, when it has one.
 
 > `readonly` **width**: `0` \| `1` \| `2`
 
-Defined in: [driver/src/api.ts:386](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L386)
+Defined in: [driver/src/api.ts:411](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L411)

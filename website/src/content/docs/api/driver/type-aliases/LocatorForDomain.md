@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: LocatorForDomain\\<D\\>"
+title: "Type Alias: LocatorForDomain"
 editUrl: false
 ---
 
@@ -13,7 +13,7 @@ editUrl: false
 
 > **LocatorForDomain**\<`D`\> = `D` *extends* `"semantic"` ? [`SemanticLocator`](../../interfaces/semanticlocator/) : [`ScreenLocator`](../../interfaces/screenlocator/)
 
-Defined in: [driver/src/api.ts:677](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L677)
+Defined in: [driver/src/api.ts:702](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L702)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 

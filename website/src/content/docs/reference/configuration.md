@@ -76,6 +76,12 @@ as a whole.
 | `failOnLogLevel` | `error` | Lowest structured log level that fails a passing test; use `false` to disable |
 | `requiredCapabilities` | `[]` | Semantic capabilities that must be available when a session launches |
 | `profiles` | `{}` | Named groups of overrides |
+| `updateSnapshots` | follows the CLI | Snapshot update policy; normally leave this unset and use `--update` |
+
+`terminalProfile` accepts only `default` and `cjk-wide`. The latter treats East
+Asian Ambiguous characters as wide. Both use the same Unicode 15 extended
+grapheme model; this setting does not select an emulator or an old Unicode
+version.
 
 Session-specific options such as `cwd`, `envMode`, semantic setup, and artifact
 security belong on `terminal.launch()`.

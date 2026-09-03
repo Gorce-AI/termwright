@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: ResourceAwareTestApi\\<T\\>"
+title: "Type Alias: ResourceAwareTestApi"
 editUrl: false
 ---
 
@@ -13,9 +13,7 @@ editUrl: false
 
 > **ResourceAwareTestApi**\<`T`\> = `T` & `object`
 
-Defined in: resource-broker/dist/vitest.d.ts:19
-
-Vitest's Test API with declaration-time atomic resource ownership.
+Defined in: [test/src/provider.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/provider.ts#L21)
 
 ## Type Declaration
 

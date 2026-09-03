@@ -59,7 +59,7 @@ Defined in: [test/src/options.ts:41](https://github.com/Gorce-AI/termwright/blob
 
 ### terminalProfile?
 
-> `readonly` `optional` **terminalProfile?**: `string`
+> `readonly` `optional` **terminalProfile?**: `TerminalProfileId`
 
 Defined in: [test/src/options.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L42)
 

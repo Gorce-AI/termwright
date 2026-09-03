@@ -66,6 +66,7 @@ editUrl: false
 - [MousePoint](interfaces/mousepoint/)
 - [ObservationStamp](interfaces/observationstamp/)
 - [OperationBudget](interfaces/operationbudget/)
+- [OwnedProcessResourceUsage](interfaces/ownedprocessresourceusage/)
 - [PhysicalRegion](interfaces/physicalregion/)
 - [PointerOptions](interfaces/pointeroptions/)
 - [PublicValue](interfaces/publicvalue/)
@@ -126,6 +127,7 @@ editUrl: false
 - [SemanticValueObservation](type-aliases/semanticvalueobservation/)
 - [SessionCapabilityId](type-aliases/sessioncapabilityid/)
 - [SessionEventRecord](type-aliases/sessioneventrecord/)
+- [TerminalProfileId](type-aliases/terminalprofileid/)
 - [TermwrightErrorCode](type-aliases/termwrighterrorcode/)
 
 ## Functions

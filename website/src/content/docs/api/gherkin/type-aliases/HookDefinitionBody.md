@@ -1,5 +1,5 @@
 ---
-title: "Type Alias: HookDefinitionBody\\<Fixtures\\>"
+title: "Type Alias: HookDefinitionBody"
 editUrl: false
 ---
 

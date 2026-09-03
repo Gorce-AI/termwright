@@ -36,7 +36,11 @@ for (const path of await markdownFiles(root)) {
   if (frontmatter === undefined || !/^editUrl: false$/mu.test(frontmatter)) {
     throw new Error(`Unexpected generated frontmatter: ${path}`);
   }
-  const title = JSON.stringify(heading);
+  // Starlight renders frontmatter as HTML. A TypeDoc generic such as `\<T\>`
+  // otherwise becomes an empty HTML element inside `<title>`, leaving search
+  // results and browser tabs without a usable name.
+  const plainTitle = heading.replaceAll(/\\<[^>]*\\>/gu, '').replaceAll('\\', '');
+  const title = JSON.stringify(plainTitle);
   const sourceRoute = routeFor(sourcePath);
   const withRoutes = source.replace(
     /\]\(([^)#]+\.md)(#[^)]+)?\)/gu,

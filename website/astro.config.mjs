@@ -1,5 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import sitemap from '@astrojs/sitemap';
 import starlight from '@astrojs/starlight';
 
 // Deployed to https://gorce-ai.github.io/termwright/ by .github/workflows/docs.yml.
@@ -10,6 +11,7 @@ export default defineConfig({
   base: '/termwright',
   trailingSlash: 'always',
   integrations: [
+    sitemap(),
     starlight({
       title: 'Termwright',
       logo: {

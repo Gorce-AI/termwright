@@ -56,7 +56,7 @@ Defined in: [native-pty-backend.ts:21](https://github.com/Gorce-AI/termwright/bl
 
 > **dispose**(): `void`
 
-Defined in: [native-pty-backend.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L29)
+Defined in: [native-pty-backend.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L30)
 
 #### Returns
 
@@ -68,7 +68,7 @@ Defined in: [native-pty-backend.ts:29](https://github.com/Gorce-AI/termwright/bl
 
 > **onData**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L25)
+Defined in: [native-pty-backend.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L26)
 
 #### Parameters
 
@@ -86,7 +86,7 @@ Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/bl
 
 > **onDrain**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L28)
+Defined in: [native-pty-backend.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L29)
 
 #### Parameters
 
@@ -104,7 +104,7 @@ Defined in: [native-pty-backend.ts:28](https://github.com/Gorce-AI/termwright/bl
 
 > **onError**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L27)
+Defined in: [native-pty-backend.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L28)
 
 #### Parameters
 
@@ -122,7 +122,7 @@ Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/bl
 
 > **onExit**(`listener`): () => `void`
 
-Defined in: [native-pty-backend.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L26)
+Defined in: [native-pty-backend.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L27)
 
 #### Parameters
 
@@ -133,6 +133,18 @@ Defined in: [native-pty-backend.ts:26](https://github.com/Gorce-AI/termwright/bl
 #### Returns
 
 () => `void`
+
+***
+
+### ownedProcessResources()?
+
+> `optional` **ownedProcessResources**(): `OwnedProcessResourceUsage` \| `null`
+
+Defined in: [native-pty-backend.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/native-pty-backend.ts#L25)
+
+#### Returns
+
+`OwnedProcessResourceUsage` \| `null`
 
 ***
 

@@ -12,7 +12,7 @@ pagefind: false
 
 # Interface: PtyBackend
 
-Defined in: [pty.ts:86](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L86)
+Defined in: [pty.ts:88](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L88)
 
 Factory for pseudo-terminals.
 
@@ -22,7 +22,7 @@ Factory for pseudo-terminals.
 
 > `readonly` **name**: `string`
 
-Defined in: [pty.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L87)
+Defined in: [pty.ts:89](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L89)
 
 ## Methods
 
@@ -30,7 +30,7 @@ Defined in: [pty.ts:87](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **spawn**(`options`): [`PtyProcess`](../ptyprocess/)
 
-Defined in: [pty.ts:88](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L88)
+Defined in: [pty.ts:90](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L90)
 
 #### Parameters
 

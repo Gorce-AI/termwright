@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TermwrightConfig
 
-Defined in: [test/src/config.ts:54](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L54)
+Defined in: [test/src/config.ts:55](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L55)
 
 User-facing configuration. Every field has a documented default.
 
@@ -21,7 +21,7 @@ User-facing configuration. Every field has a documented default.
 
 > `readonly` `optional` **columns?**: `number`
 
-Defined in: [test/src/config.ts:56](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L56)
+Defined in: [test/src/config.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L57)
 
 Viewport width in cells. Default 100.
 
@@ -31,7 +31,7 @@ Viewport width in cells. Default 100.
 
 > `readonly` `optional` **command?**: readonly `string`[]
 
-Defined in: [test/src/config.ts:68](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L68)
+Defined in: [test/src/config.ts:69](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L69)
 
 Default command for `terminal.launch()` when the test passes none.
 
@@ -41,7 +41,7 @@ Default command for `terminal.launch()` when the test passes none.
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: [test/src/config.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L72)
+Defined in: [test/src/config.ts:73](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L73)
 
 Extra environment for launched programs. Merged after the palette's.
 
@@ -51,7 +51,7 @@ Extra environment for launched programs. Merged after the palette's.
 
 > `readonly` `optional` **failOnLogLevel?**: `false` \| `"trace"` \| `"debug"` \| `"info"` \| `"warn"` \| `"error"` \| `"fatal"`
 
-Defined in: [test/src/config.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L87)
+Defined in: [test/src/config.ts:88](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L88)
 
 Fail an otherwise passing test when the program logged a record at this
 level or above. Default `'error'`; `false` turns the check off.
@@ -66,7 +66,7 @@ it is a test that did not look.
 
 > `readonly` `optional` **outputDir?**: `string`
 
-Defined in: [test/src/config.ts:64](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L64)
+Defined in: [test/src/config.ts:65](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L65)
 
 Where traces and the HTML report are written. Default `termwright-report`.
 
@@ -76,7 +76,7 @@ Where traces and the HTML report are written. Default `termwright-report`.
 
 > `readonly` `optional` **palette?**: [`ColorPalette`](../colorpalette/)
 
-Defined in: [test/src/config.ts:76](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L76)
+Defined in: [test/src/config.ts:77](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L77)
 
 Deterministic palette; also decorates cell snapshots with color names.
 
@@ -86,7 +86,7 @@ Deterministic palette; also decorates cell snapshots with color names.
 
 > `readonly` `optional` **profiles?**: `Readonly`\<`Record`\<`string`, `Omit`\<`TermwrightConfig`, `"profiles"`\>\>\>
 
-Defined in: [test/src/config.ts:78](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L78)
+Defined in: [test/src/config.ts:79](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L79)
 
 Overrides selected by the `TERMWRIGHT_PROFILE` environment variable.
 
@@ -96,7 +96,7 @@ Overrides selected by the `TERMWRIGHT_PROFILE` environment variable.
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"focus"` \| `"pointer-input"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: [test/src/config.ts:70](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L70)
+Defined in: [test/src/config.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L71)
 
 Capabilities every launched session must negotiate before it is returned.
 
@@ -106,7 +106,7 @@ Capabilities every launched session must negotiate before it is returned.
 
 > `readonly` `optional` **rows?**: `number`
 
-Defined in: [test/src/config.ts:58](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L58)
+Defined in: [test/src/config.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L59)
 
 Viewport height in cells. Default 30.
 
@@ -116,7 +116,7 @@ Viewport height in cells. Default 30.
 
 > `readonly` `optional` **snapshotDir?**: `string`
 
-Defined in: [test/src/config.ts:66](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L66)
+Defined in: [test/src/config.ts:67](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L67)
 
 Snapshot directory, relative to the test file. Default `__snapshots__`.
 
@@ -124,9 +124,9 @@ Snapshot directory, relative to the test file. Default `__snapshots__`.
 
 ### terminalProfile?
 
-> `readonly` `optional` **terminalProfile?**: `string`
+> `readonly` `optional` **terminalProfile?**: `TerminalProfileId`
 
-Defined in: [test/src/config.ts:74](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L74)
+Defined in: [test/src/config.ts:75](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L75)
 
 Character-width and terminal behavior profile used by the emulator.
 
@@ -136,7 +136,7 @@ Character-width and terminal behavior profile used by the emulator.
 
 > `readonly` `optional` **timeouts?**: [`TestTimeoutClasses`](../testtimeoutclasses/)
 
-Defined in: [test/src/config.ts:60](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L60)
+Defined in: [test/src/config.ts:61](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L61)
 
 Timeout classes forwarded to the driver, plus the `expect` class.
 
@@ -146,7 +146,7 @@ Timeout classes forwarded to the driver, plus the `expect` class.
 
 > `readonly` `optional` **trace?**: [`TraceMode`](../../type-aliases/tracemode/)
 
-Defined in: [test/src/config.ts:62](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L62)
+Defined in: [test/src/config.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L63)
 
 Trace collection policy. Default `retain-on-failure`.
 
@@ -156,7 +156,7 @@ Trace collection policy. Default `retain-on-failure`.
 
 > `readonly` `optional` **updateSnapshots?**: [`UpdateSnapshotsMode`](../../type-aliases/updatesnapshotsmode/)
 
-Defined in: [test/src/config.ts:92](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L92)
+Defined in: [test/src/config.ts:93](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L93)
 
 Snapshot policy. Normally left unset: it is derived per run from
 `TERMWRIGHT_UPDATE_SNAPSHOTS` or Vitest's `--update` flag.

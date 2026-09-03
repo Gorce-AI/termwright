@@ -13,7 +13,7 @@ editUrl: false
 
 > **EnvMode** = `"inherit"` \| `"replace"`
 
-Defined in: [driver/src/api.ts:84](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L84)
+Defined in: [driver/src/api.ts:85](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L85)
 
 How the child's environment is built.
 

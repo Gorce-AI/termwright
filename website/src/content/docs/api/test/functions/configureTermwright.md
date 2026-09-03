@@ -13,7 +13,7 @@ editUrl: false
 
 > **configureTermwright**(`config`): [`ResolvedTermwrightConfig`](../../interfaces/resolvedtermwrightconfig/)
 
-Defined in: [test/src/config.ts:392](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L392)
+Defined in: [test/src/config.ts:399](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L399)
 
 Installs the project configuration. Call it from a Vitest `setupFiles`
 module; every fixture and matcher created afterwards observes it.
