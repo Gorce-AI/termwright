@@ -439,15 +439,13 @@ jobs:
           test "$(git hash-object "$materializer")" = \
             "$(git rev-parse "$RELEASE_WORKFLOW_COMMIT:scripts/prepare-go-test-dependencies.mjs")"
           node "$materializer"
-          # The immutable payload predates the hermetic test-only repairs. Use
-          # the exact, release-authorised test inputs while preserving all
+          # The immutable payload predates the hermetic test-only repair. Use
+          # the two exact, release-authorised test inputs while preserving all
           # runtime/package bytes from the Version PR.
           cp "$orchestration/packages/probe-charm/src/launch.test.ts" \
             packages/probe-charm/src/launch.test.ts
           cp "$orchestration/packages/probe-charm/src/testing/fixture-bubbles/go.sum" \
             packages/probe-charm/src/testing/fixture-bubbles/go.sum
-          cp "$orchestration/packages/pty/src/index.test.ts" \
-            packages/pty/src/index.test.ts
           git worktree remove "$orchestration"
           {
             echo 'GOPROXY=off'
@@ -580,8 +578,7 @@ jobs:
           set -euo pipefail
           for file in \
             packages/probe-charm/src/launch.test.ts \
-            packages/probe-charm/src/testing/fixture-bubbles/go.sum \
-            packages/pty/src/index.test.ts; do
+            packages/probe-charm/src/testing/fixture-bubbles/go.sum; do
             git show "$RELEASE_COMMIT:$file" > "$file"
             test "$(git hash-object "$file")" = "$(git rev-parse "$RELEASE_COMMIT:$file")"
           done
