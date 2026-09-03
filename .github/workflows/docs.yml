@@ -87,7 +87,11 @@ jobs:
           path: website/dist
 
   deploy:
-    if: ${{ github.event_name == 'push' }}
+    # Pull requests validate the exact Pages artifact without publishing it.
+    # Both a main push and an explicit operator dispatch are authoritative
+    # deployment requests; the latter is required after trusted automation
+    # merges whose GITHUB_TOKEN cannot trigger another workflow run.
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     needs: build
     runs-on: ubuntu-latest
     # Build validation is safe to parallelize across pull requests. Only the

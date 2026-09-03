@@ -931,7 +931,9 @@ describe('autonomous workflow security', () => {
     expect(docs).toContain('run: pnpm check:generated-docs');
     expect(docs).toContain('pnpm docs:api');
     expect(docs).toContain('git diff --exit-code -- website/src/content/docs/api');
-    expect(docs).toContain("if: ${{ github.event_name == 'push' }}");
+    expect(docs).toContain(
+      "if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}",
+    );
     expect(experimentalDocs.name).toBe('@termwright/driver/experimental');
   });
 
