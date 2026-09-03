@@ -1592,7 +1592,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         rows: size.rows,
         timeMs: this.#now(),
       });
-      if (this.semanticAttached()) {
+      const hasSemanticRenderPairing = this.semanticAttached();
+      if (hasSemanticRenderPairing) {
         // A certified framework frame is the authoritative child consequence.
         // It may pair to the screen revision created by the local resize when
         // the child only changes semantic geometry, so requiring a strictly
@@ -1614,29 +1615,28 @@ class TerminalSession implements TerminalHarness, LocatorContext {
           }
           await this.waitForChange(deadline.at);
         }
-      } else {
-        // Without semantic instrumentation the only child evidence available
-        // is output parsed after Termwright's own local VT resize revision.
-        await this.waitForRender({
-          after: localResizeRevision,
-          timeout: deadline.remaining(),
-        });
       }
       const after = this.checkpoint();
       return Object.freeze({
         requested: Object.freeze({ columns: size.columns, rows: size.rows }),
         before,
         after,
-        pairedRender: Object.freeze({
-          status: 'known',
-          value: after.screenRevision,
-          evidence: Object.freeze({
-            source: 'terminal',
-            method: 'native',
-            strength: 'authoritative',
-            providerId: 'termwright-vt',
-          }),
-        } as const),
+        pairedRender: hasSemanticRenderPairing
+          ? Object.freeze({
+              status: 'known',
+              value: after.screenRevision,
+              evidence: Object.freeze({
+                source: 'terminal',
+                method: 'native',
+                strength: 'authoritative',
+                providerId: 'termwright-vt',
+              }),
+            } as const)
+          : Object.freeze({
+              status: 'unsupported',
+              capability: 'resize-render-pairing',
+              reason: 'not-negotiated',
+            } as const),
       });
     });
   }

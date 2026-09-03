@@ -13,6 +13,6 @@ editUrl: false
 
 > **AnyLocator** = [`SemanticLocator`](../../interfaces/semanticlocator/) \| [`ScreenLocator`](../../interfaces/screenlocator/)
 
-Defined in: driver/dist/session-Br7\_0b2M.d.ts:579
+Defined in: driver/dist/session-DOkKra9W.d.ts:579
 
 Internal/cross-surface union. It exposes only operations valid in both domains.

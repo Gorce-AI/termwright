@@ -743,7 +743,7 @@ export interface ResizeReceipt {
   readonly requested: { readonly columns: number; readonly rows: number };
   readonly before: ObservationStamp;
   readonly after: ObservationStamp;
-  /** Revision that proves the child repainted at the new PTY size. */
+  /** Paired child render revision when a semantic adapter can prove one. */
   readonly pairedRender: Observation<number>;
 }
 
