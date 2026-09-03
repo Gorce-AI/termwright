@@ -18,6 +18,10 @@ class ControlledPty implements PtyProcess {
   readonly signalCalls: PtySignal[] = [];
   readonly writeCalls: Uint8Array[] = [];
   readonly terminalResponseWriteCalls: Uint8Array[] = [];
+  readonly inputOrder: Array<{
+    readonly kind: 'application' | 'terminal-response';
+    readonly data: Uint8Array;
+  }> = [];
   terminateCount = 0;
   readonly #failExitRegistration: boolean;
   readonly #failDispose: boolean;
@@ -31,6 +35,7 @@ class ControlledPty implements PtyProcess {
   readonly #onDispose: (() => void) | undefined;
   readonly #initialData: Uint8Array | undefined;
   readonly #ownedProcessResources: OwnedProcessResourceUsage | null;
+  readonly #dataListeners = new Set<(data: Uint8Array) => void>();
   readonly #exitListeners = new Set<(status: ExitStatus) => void>();
   readonly #writeErrorListeners = new Set<(error: Error) => void>();
 
@@ -68,11 +73,15 @@ class ControlledPty implements PtyProcess {
 
   write(data: Uint8Array): void {
     if (this.#failWrite) throw new Error('write failed');
-    this.writeCalls.push(Uint8Array.from(data));
+    const owned = Uint8Array.from(data);
+    this.writeCalls.push(owned);
+    this.inputOrder.push({ kind: 'application', data: owned });
   }
   writeTerminalResponse(data: Uint8Array): 'application-direct' {
     if (this.#failWrite) throw new Error('write failed');
-    this.terminalResponseWriteCalls.push(Uint8Array.from(data));
+    const owned = Uint8Array.from(data);
+    this.terminalResponseWriteCalls.push(owned);
+    this.inputOrder.push({ kind: 'terminal-response', data: owned });
     return 'application-direct';
   }
   resize(columns: number, rows: number): void {
@@ -94,7 +103,8 @@ class ControlledPty implements PtyProcess {
   }
   onData(cb: (data: Uint8Array) => void): PtyUnsubscribe {
     if (this.#initialData !== undefined) cb(this.#initialData);
-    return () => undefined;
+    this.#dataListeners.add(cb);
+    return () => this.#dataListeners.delete(cb);
   }
   onExit(cb: (status: ExitStatus) => void): PtyUnsubscribe {
     if (this.#failExitRegistration) throw new Error('exit listener registration failed');
@@ -133,6 +143,9 @@ class ControlledPty implements PtyProcess {
   }
   emitExit(): void {
     for (const listener of [...this.#exitListeners]) listener(this.#status);
+  }
+  emitData(data: Uint8Array): void {
+    for (const listener of [...this.#dataListeners]) listener(data);
   }
   emitWriteError(error: Error): void {
     for (const listener of [...this.#writeErrorListeners]) listener(error);
@@ -285,6 +298,32 @@ describe('terminal session resource lifecycle', () => {
     ).toEqual(['\u001b[?2026;2$y']);
     await terminal.close();
     responseSpy.mockRestore();
+  });
+
+  terminalIt('commits pending terminal replies before admitting later user input', async () => {
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const pty = new ControlledPty();
+    const terminal = await launchTerminalWithBackend({
+      command: ['controlled-app'],
+      backend: backendFor(pty, endpoint),
+    });
+
+    // Do not await the PTY output callback: this is the real race between a
+    // query still queued in xterm's parser and an immediately following user
+    // action. DSR is used because its response is deterministic at 1,1.
+    pty.emitData(Buffer.from('\u001b[6n', 'ascii'));
+    await terminal.type('a');
+
+    expect(
+      pty.inputOrder.map(({ kind, data }) => ({
+        kind,
+        data: Buffer.from(data).toString('ascii'),
+      })),
+    ).toEqual([
+      { kind: 'terminal-response', data: '\u001b[1;1R' },
+      { kind: 'application', data: 'a' },
+    ]);
+    await terminal.close();
   });
 
   terminalIt('negotiates the configured semantic frame queue capacity', async () => {

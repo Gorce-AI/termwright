@@ -2184,6 +2184,25 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         this.errorDiagnostics(),
       );
     }
+    // Output parsing can synchronously generate an application-owned terminal
+    // reply (DSR, DECRQM, colour queries, and similar control-plane traffic).
+    // Preserve that causal order before admitting keyboard/mouse input. This
+    // matters on ConPTY in particular: its private response envelope must be
+    // committed to the console input buffer before later user input can be
+    // observed by a ReadConsoleInput application. The caught-up branch keeps
+    // the ordinary input hot path synchronous up to the PTY write.
+    if (!this.#vt.isCaughtUp) {
+      await this.#vt.drain();
+      this.assertOpen();
+      this.#lifecycle.throwIfFailed();
+      const statusAfterDrain = this.#lifecycle.status as ExitStatus | null;
+      if (statusAfterDrain !== null) {
+        throw new ProcessExitedError(
+          `cannot send input: the program exited with code ${String(statusAfterDrain.code)}`,
+          this.errorDiagnostics(),
+        );
+      }
+    }
     // Every real PTY input can change application-owned facts. Provider
     // evidence is revision-bound, so no later semantic action may reuse it
     // until the application publishes a causally newer committed frame. This

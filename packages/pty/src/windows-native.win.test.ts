@@ -135,6 +135,22 @@ function attachHostControlResponder(
   return release;
 }
 
+function waitForExitAndCloseOwnedInput(
+  handle: WindowsPtyHandle,
+  releaseHostControlResponder: () => void,
+): Promise<WindowsPtyExit> {
+  return new Promise((resolve) => {
+    handle.onExit((status) => {
+      // Exit and trailing output can share one native delivery batch. Revoke
+      // the response producer synchronously, then close input after that batch
+      // returns so the still-owned write side cannot keep ConPTY output open.
+      releaseHostControlResponder();
+      queueMicrotask(() => handle.closeInput());
+      resolve(status);
+    });
+  });
+}
+
 function answerStartupHostCursorRequests(
   handle: WindowsPtyHandle,
   output: string,
@@ -328,7 +344,7 @@ async function certifyConsoleMarkerMode(executable: string): Promise<void> {
   });
   const output = collect(handle);
   const releaseHostControlResponder = attachHostControlResponder(handle, output);
-  const exited = new Promise<WindowsPtyExit>((resolve) => handle.onExit(resolve));
+  const exited = waitForExitAndCloseOwnedInput(handle, releaseHostControlResponder);
   try {
     const [status] = await Promise.all([exited, handle.outputEnded]);
 
