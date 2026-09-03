@@ -82,7 +82,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @termwright/trace build
+      - run: pnpm --filter @termwright/trace... build
       - name: Measure bounded steady-state and finalization RSS
         shell: bash
         run: node --expose-gc scripts/certify-trace-streaming.mjs > trace-streaming.json

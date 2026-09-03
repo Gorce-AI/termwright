@@ -828,12 +828,19 @@ describe('autonomous workflow security', () => {
 
   it('certifies bounded trace streaming on the Node 22/24 POSIX matrix', async () => {
     const reliability = await readWorkflow('reliability.yml');
+    const manifest = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    );
     const trace = jobBlock(reliability, 'trace-streaming');
     expect(trace).toContain('os: [ubuntu-latest, macos-latest]');
     expect(trace).toContain("node: ['22', '24']");
+    expect(trace).toContain('pnpm --filter @termwright/trace... build');
     expect(trace).toContain('node --expose-gc scripts/certify-trace-streaming.mjs');
     expect(trace).toContain('if-no-files-found: error');
     expect(trace).toContain('trace-streaming-${{ matrix.os }}-node-${{ matrix.node }}');
+    expect(manifest.scripts['certify:trace-streaming']).toContain(
+      'pnpm --filter @termwright/trace... build',
+    );
   });
 
   it('runs the packed multi-minute Ink resource oracle on every nightly host row', async () => {
