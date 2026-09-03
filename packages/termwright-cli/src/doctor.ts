@@ -1,8 +1,7 @@
-import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createNativePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
-import { CERTIFIED_VITEST_VERSION } from './test-host-engine.js';
+import { CERTIFIED_VITEST_VERSION, installedTermwrightVitestVersion } from './test-host-engine.js';
 import {
   TERMWRIGHT_RESOURCE_PROFILES,
   resolveTermwrightResourceProfile,
@@ -42,9 +41,10 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
   });
 
   try {
-    const require = createRequire(join(cwd, 'package.json'));
-    const manifest = require('vitest/package.json') as { version?: string };
-    const version = manifest.version ?? 'unknown';
+    // The execution engine belongs to Termwright. Resolve from the private
+    // engine module, never from the consumer project where an independent
+    // Vitest major may intentionally coexist.
+    const version = installedTermwrightVitestVersion();
     checks.push({
       name: 'Vitest',
       status: version === CERTIFIED_VITEST_VERSION ? 'pass' : 'fail',
@@ -54,7 +54,7 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
           : `${version}; Termwright requires exactly ${CERTIFIED_VITEST_VERSION}`,
     });
   } catch {
-    checks.push({ name: 'Vitest', status: 'fail', detail: 'not resolvable from this project' });
+    checks.push({ name: 'Vitest', status: 'fail', detail: 'embedded engine is not resolvable' });
   }
 
   checks.push(await checkPty());

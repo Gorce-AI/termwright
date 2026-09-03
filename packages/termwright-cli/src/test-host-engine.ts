@@ -72,7 +72,7 @@ export interface TermwrightRunnerContext {
 export const CERTIFIED_VITEST_VERSION = '4.1.11' as const;
 const TERMWRIGHT_RUNNER_CONTEXT_KEY = 'termwright.runner.context.v3' as const;
 
-export function assertCertifiedVitestRuntime(version = installedVitestVersion()): void {
+export function assertCertifiedVitestRuntime(version = installedTermwrightVitestVersion()): void {
   if (version !== CERTIFIED_VITEST_VERSION) {
     throw new Error(
       `unsupported Vitest runtime ${version}; Termwright is exact-certified for ${CERTIFIED_VITEST_VERSION}`,
@@ -80,7 +80,7 @@ export function assertCertifiedVitestRuntime(version = installedVitestVersion())
   }
 }
 
-function installedVitestVersion(): string {
+export function installedTermwrightVitestVersion(): string {
   const manifest = createRequire(import.meta.url)('vitest/package.json') as {
     readonly version?: unknown;
   };
