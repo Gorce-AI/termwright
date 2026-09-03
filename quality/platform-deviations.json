@@ -121,6 +121,30 @@
           "kills descendants at the unreaped root boundary so they cannot hold the PTY open"
         ]
       ]
+    },
+    {
+      "id": "TW-DEV-POSIX-SHELL-ERREXIT-PROOF",
+      "capability": "POSIX shell errexit semantics",
+      "predicate": "win32",
+      "category": "fundamental-os-difference",
+      "reason": "The executable regression requires /bin/sh and POSIX errexit semantics; Windows command execution is certified independently through PowerShell and ConPTY.",
+      "evidence": "packages/driver/src/shell-integration.test.ts",
+      "issueOrAdr": "packages/driver/src/shell-integration.ts",
+      "removalCondition": "Never while POSIX and PowerShell use distinct command languages; retain the executable proof on Darwin and Linux.",
+      "owner": "termwright-core",
+      "revalidate": "each managed-shell framing change",
+      "tests": [
+        [
+          "packages/driver/src/shell-integration.test.ts",
+          "always closes a failed POSIX command boundary when errexit is active"
+        ]
+      ],
+      "skipPolicyTests": [
+        [
+          "packages/driver/src/shell-integration.test.ts",
+          "always closes a failed POSIX command boundary when errexit is active"
+        ]
+      ]
     }
   ]
 }
