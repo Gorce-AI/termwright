@@ -131,7 +131,7 @@ describe('compatibility registry release metadata', () => {
     );
   });
 
-  it('regenerates the downstream geometry projection from the synchronized registry', () => {
+  it('leaves the public geometry projection unchanged for a version-only release update', () => {
     const registry = JSON.parse(readFileSync('compatibility/registry.json', 'utf8'));
     const ink = registry.frameworks.find(({ id }) => id === 'ink');
     const currentAdapterVersion = ink.probe.packageVersion;
@@ -156,11 +156,9 @@ describe('compatibility registry release metadata', () => {
     });
 
     expect(result.changed).toBe(true);
-    expect(result.geometryChanged).toBe(true);
-    expect(result.renderedGeometryPage).toContain(ink.certification.ids.join('<br>'));
-    for (const oldId of currentCertificationIds) {
-      expect(result.renderedGeometryPage).not.toContain(oldId);
-    }
+    expect(result.geometryChanged).toBe(false);
+    expect(result.renderedGeometryPage).toBe(geometryPage);
+    expect(ink.certification.ids).not.toEqual(currentCertificationIds);
 
     expect(
       synchronizeReleaseDerivedMetadata({
