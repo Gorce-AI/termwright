@@ -20,3 +20,4 @@ playwright-report/
 # must never be committed and mistaken for it.
 packages/pty/build/
 packages/pty-*/termwright_pty.node
+packages/test/vendor/

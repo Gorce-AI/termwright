@@ -10,7 +10,7 @@
 /**
  * Exported on purpose: a bare `export {}` does not survive the declaration
  * bundler, and a `.d.ts` with no imports or exports is a *script*, where
- * `declare module 'vitest'` declares a new ambient module that shadows the real
+ * `declare module '@vitest/runner'` declares a new ambient module that shadows the real
  * one instead of merging into it. A named export keeps the emitted file a
  * module, so the augmentation stays an augmentation.
  */
@@ -98,7 +98,7 @@ export function buildTaskMeta(parts: {
   return Object.keys(meta).length === 0 ? undefined : (meta as TermwrightTaskMeta);
 }
 
-declare module 'vitest' {
+declare module '@vitest/runner' {
   interface TaskMeta {
     termwright?: TermwrightTaskMeta;
   }

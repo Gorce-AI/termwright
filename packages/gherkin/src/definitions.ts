@@ -15,7 +15,7 @@ export interface GherkinScenario {
 /** Termwright's native and project fixtures plus Gherkin's per-scenario state. */
 export type GherkinContext<Fixtures extends object = object> = TermwrightFixtures &
   Fixtures & {
-    readonly expect: (typeof import('vitest'))['expect'];
+    readonly expect: (typeof import('@termwright/test'))['expect'];
     readonly world: GherkinWorld;
     readonly scenario: GherkinScenario;
     /** Registers test-scoped cleanup. Cleanups run in reverse order after `After` hooks. */
