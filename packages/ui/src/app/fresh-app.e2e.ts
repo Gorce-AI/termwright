@@ -10,6 +10,7 @@ import {
   buildFixtureTrace,
   FIXTURE_TREES,
 } from '../test/fixtures/build-trace.js';
+import { buildFixtureTrace as buildWrittenFixtureTrace } from '../__fixtures__/build-trace.js';
 import { writeNativeRunFixture } from '../__fixtures__/native-run.js';
 import { writeInlineReport } from '../inline-report.js';
 import { startUiServer, type UiServer } from '../server.js';
@@ -98,6 +99,106 @@ it('renders a canonical partial-skip verdict as yellow without relying on skippe
 });
 
 describe('fresh React runner', () => {
+  it('seeks exact fractional endpoints and keeps step controls aligned on desktop and small screens', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace({ durationMs: 2_000.5 }));
+    const position = page.getByLabel('Replay position');
+    await position.waitFor();
+    expect(
+      await page.getByRole('button', { name: 'Previous step', exact: true }).isDisabled(),
+    ).toBe(true);
+    await page.getByRole('button', { name: 'Next step', exact: true }).click();
+    expect(await position.inputValue()).toBe('1000');
+    expect(await page.getByRole('button', { name: 'Next step', exact: true }).isDisabled()).toBe(
+      true,
+    );
+    await position.focus();
+    await page.keyboard.press('ArrowLeft');
+    expect(await position.inputValue()).toBe('900');
+    await page.keyboard.press('Shift+ArrowRight');
+    expect(await position.inputValue()).toBe('1900');
+    expect(await position.getAttribute('max')).toBe('2000.5');
+    await page.keyboard.press('End');
+    expect(await position.inputValue()).toBe('2000.5');
+    await page.getByRole('button', { name: 'Previous step', exact: true }).click();
+    expect(await position.inputValue()).toBe('1000');
+    expect(await page.getByRole('button', { name: 'Play replay', exact: true }).count()).toBe(1);
+
+    for (const width of [1440, 1024, 390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      if (width < 1100) await page.getByRole('tab', { name: 'Screen', exact: true }).click();
+      const geometry = await page.evaluate(() => {
+        const range = document.querySelector<HTMLInputElement>('.tw-replay-range')!;
+        const track = range.getBoundingClientRect();
+        const markers = document
+          .querySelector<HTMLElement>('.tw-replay-markers')!
+          .getBoundingClientRect();
+        const controls = document
+          .querySelector<HTMLElement>('.tw-replay-controls')!
+          .getBoundingClientRect();
+        const buttons = [
+          ...document.querySelectorAll<HTMLElement>('.tw-replay-controls button'),
+        ].filter((button) => !button.classList.contains('tw-replay-marker'));
+        return {
+          aligned:
+            Math.abs(markers.left - (track.left + 8)) < 1 &&
+            Math.abs(markers.right - (track.right - 8)) < 1,
+          reachable:
+            controls.bottom <= window.innerHeight &&
+            controls.left >= 0 &&
+            controls.right <= window.innerWidth &&
+            buttons.every((button) => {
+              const rect = button.getBoundingClientRect();
+              return rect.left >= 0 && rect.right <= window.innerWidth;
+            }),
+          overlap: buttons
+            .slice(0, 4)
+            .some(
+              (button) =>
+                button.getBoundingClientRect().right >
+                document.querySelector('.tw-replay-clock')!.getBoundingClientRect().left,
+            ),
+        };
+      });
+      expect(geometry).toEqual({ aligned: true, reachable: true, overlap: false });
+    }
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('keeps the inspector in the hovered moment, restores pinned time and keeps step keyboard focus inside the narrative', async () => {
+    const page = await tracePage(await buildFixtureTrace());
+    await page.locator('.tw-replay-controls').waitFor();
+    await page.getByRole('button', { name: 'Expand inspector', exact: true }).click();
+    const position = page.getByLabel('Replay position');
+    await position.fill('2000');
+    await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 2');
+    const command = page.locator('.tw-command-row').filter({ hasText: 'click' });
+    await command.hover();
+    await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 1');
+    expect(await position.inputValue()).toBe('100');
+    expect(await page.locator('.tw-replay-clock').innerText()).toContain('Preview');
+    await page.locator('.tw-machine-bar').hover();
+    await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 2');
+    expect(await position.inputValue()).toBe('2000');
+    const selectedCase = page.locator('.tw-case[data-selected="true"] .tw-case-button');
+    await selectedCase.click();
+    expect(await selectedCase.getAttribute('aria-expanded')).toBe('false');
+    expect(await position.inputValue()).toBe('2000');
+    await selectedCase.click();
+    expect(await selectedCase.getAttribute('aria-expanded')).toBe('true');
+    expect(await position.inputValue()).toBe('2000');
+    await command.focus();
+    await page.keyboard.press('ArrowDown');
+    expect(
+      await page.evaluate(
+        () => document.activeElement?.closest('.tw-execution-narrative') !== null,
+      ),
+    ).toBe(true);
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('role'))).toBe(
+      'treeitem',
+    );
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('rebuilds Unicode geometry when the selected terminal profile changes', async () => {
     const server = await startUiServer();
     servers.push(server);
@@ -1419,6 +1520,76 @@ describe('fresh React runner', () => {
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
+  it('does not preview another expanded case on the selected recording', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await expect
+      .poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))
+      .toBe('true');
+    const startedAt = Date.now();
+    server.hub.publish({
+      v: 1,
+      type: 'run-start',
+      runId: 'run:two-traces',
+      mode: 'live',
+      startedAt,
+    });
+    for (const id of ['alpha', 'beta']) {
+      const traceRef = await buildFixtureTrace();
+      server.hub.publish({
+        v: 1,
+        type: 'test-start',
+        id,
+        title: id,
+        file: `/tmp/${id}.test.ts`,
+        startedAt,
+      });
+      server.hub.publish({
+        v: 1,
+        type: 'action-start',
+        actionId: `${id}-click`,
+        api: 'click',
+        t: 100,
+        testId: id,
+      });
+      server.hub.publish({
+        v: 1,
+        type: 'test-end',
+        id,
+        status: 'passed',
+        durationMs: 2000,
+        flaky: false,
+        lostLogRecords: 0,
+        traceRef,
+      });
+      await page.locator('.tw-case-button').filter({ hasText: id }).click();
+      await expect
+        .poll(() => page.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity'))
+        .toBe(`replay:${traceRef}`);
+      const selectedCase = page.locator('.tw-case-button').filter({ hasText: id });
+      if ((await selectedCase.getAttribute('aria-expanded')) === 'false')
+        await selectedCase.click();
+    }
+    const position = page.getByLabel('Replay position');
+    await position.fill('2000');
+    const foreignCommand = page
+      .locator('.tw-case')
+      .filter({ has: page.locator('.tw-case-button').filter({ hasText: 'alpha' }) })
+      .locator('.tw-command-row')
+      .filter({ hasText: 'click' });
+    await foreignCommand.hover();
+    expect(await position.inputValue()).toBe('2000');
+    expect(await page.locator('.tw-preview-label').count()).toBe(0);
+    expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
+    await foreignCommand.click();
+    await expect
+      .poll(() => page.locator('.tw-case[data-selected="true"] .tw-case-title strong').innerText())
+      .toBe('alpha');
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('keeps per-case collapse state through live updates and independent selection', async () => {
     const server = await startUiServer();
     servers.push(server);
@@ -1480,6 +1651,9 @@ describe('fresh React runner', () => {
     await alpha.click();
     expect(await alpha.getAttribute('aria-expanded')).toBe('true');
     expect(await beta.getAttribute('aria-expanded')).toBe('true');
+    await beta.click();
+    expect(await beta.getAttribute('aria-expanded')).toBe('true');
+    expect(await alpha.getAttribute('aria-expanded')).toBe('true');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 

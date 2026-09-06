@@ -158,7 +158,7 @@ export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
  * @returns the archive directory.
  */
 export async function buildFixtureTrace(
-  options: { readonly columns?: number; readonly rows?: number } = {},
+  options: { readonly columns?: number; readonly rows?: number; readonly durationMs?: number } = {},
 ): Promise<string> {
   const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-')), 'session.twtrace');
   const session = new Recorded();
@@ -204,8 +204,8 @@ export async function buildFixtureTrace(
   session.publish({ ...(FIXTURE_TREES[1] as SemanticSnapshot), columns, rows });
   step.end('passed');
 
-  session.clock = 2_000;
-  session.emit('exit', { code: 0, signal: null, timeMs: 2_000 });
+  session.clock = options.durationMs ?? 2_000;
+  session.emit('exit', { code: 0, signal: null, timeMs: session.clock });
   await writer.finalize();
   return dir;
 }

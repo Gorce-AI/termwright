@@ -18,6 +18,10 @@ communicated with text and icons as well as color.
   directory or file, or run a runnable case. `R` runs the focused Specs scope;
   `O` opens source for a focused case.
 - Splitters can be resized from the keyboard.
+- On the replay position slider, Left and Right seek by 100 milliseconds; hold
+  Shift to seek by one second. Home and End seek to the recording boundaries.
+  Previous step and Next step pause playback at the chosen step.
+- Arrow navigation within an expanded test's steps stays inside that narrative.
 - Dialogs trap focus, close with Escape, and restore focus to their trigger.
 - Tabs and the semantic tree expose their selected and expanded state.
 

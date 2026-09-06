@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+import { openTrace } from '@termwright/trace';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createRunId,
@@ -6,8 +8,14 @@ import {
   type RunId,
   type RunnerTaskId,
 } from '@termwright/protocol';
-import { UiHub, type DiscoveredTest } from '@termwright/ui';
-import { runUi, waitForInterrupt, type NativeHostHandle, type UiRuntime } from './ui-command.js';
+import { startUiServer, UiHub, type DiscoveredTest } from '@termwright/ui';
+import {
+  runUi,
+  startNativeHost,
+  waitForInterrupt,
+  type NativeHostHandle,
+  type UiRuntime,
+} from './ui-command.js';
 
 function waitUntilAborted(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
@@ -402,3 +410,55 @@ describe('native UI host', () => {
     ]);
   });
 });
+
+it('projects only finalized recordings for each real native attempt, including retries', async () => {
+  let host: NativeHostHandle | undefined;
+  let hub: UiHub | undefined;
+  await runUi(
+    {
+      trace: undefined,
+      record: undefined,
+      outFile: undefined,
+      port: undefined,
+      host: undefined,
+      tags: undefined,
+      watch: false,
+      rest: [
+        '--config',
+        fileURLToPath(new URL('__fixtures__/trace-ui.vitest.config.ts', import.meta.url)),
+        '--reporter=dot',
+      ],
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
+      resourceProfile: 'local',
+    },
+    {
+      startHost: async (request) => (host = await startNativeHost(request)),
+      startUi: async (options) => {
+        const server = await startUiServer(options);
+        hub = server.hub;
+        return server;
+      },
+      waitForInterrupt: waitUntilAborted,
+    },
+    async () => {
+      await host!.discover();
+      await host!.run([]).completed;
+      const ended = hub!.backlog.filter((message) => message.type === 'test-end');
+      expect(ended.map((message) => message.status)).toEqual(['passed', 'failed', 'passed']);
+      const retained = ended.slice(0, 2);
+      for (const message of retained)
+        expect(message).toHaveProperty('traceRef', expect.any(String));
+      expect(new Set(retained.map((message) => message.traceRef)).size).toBe(2);
+      expect(ended[2]).not.toHaveProperty('traceRef');
+      for (const message of retained) {
+        const trace = await openTrace(message.traceRef!);
+        try {
+          expect((await trace.castHeader()).term.cols).toBeGreaterThan(0);
+        } finally {
+          await trace.close();
+        }
+      }
+      return { closed: Promise.resolve(), close: async () => undefined };
+    },
+  );
+}, 30_000);

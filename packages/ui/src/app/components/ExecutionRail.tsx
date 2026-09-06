@@ -200,9 +200,13 @@ export function ExecutionRail(props: ExecutionRailProps) {
                     aria-expanded={expanded}
                     data-execution-id={test.executionId}
                     onClick={() => {
-                      props.onSelectCase(test.executionId);
-                      setExpandedCases((current) => toggled(current, test.executionId));
-                      if (expanded) {
+                      if (!selected) props.onSelectCase(test.executionId);
+                      setExpandedCases((current) =>
+                        selected
+                          ? toggled(current, test.executionId)
+                          : new Set([...current, test.executionId]),
+                      );
+                      if (selected && expanded) {
                         userCollapsedCases.current.add(test.executionId);
                         setFollowing(false);
                       } else {
@@ -318,8 +322,12 @@ export function ExecutionRail(props: ExecutionRailProps) {
                             onToggle={(sectionId) =>
                               setCollapsed((current) => toggled(current, sectionId))
                             }
-                            onPreview={props.onPreviewNode}
-                            onPin={props.onPinNode}
+                            onPreview={selected ? props.onPreviewNode : () => undefined}
+                            onPin={
+                              selected
+                                ? props.onPinNode
+                                : () => props.onSelectCase(test.executionId)
+                            }
                           />
                         ))
                       )}
@@ -968,6 +976,7 @@ function executionProgress(
 }
 
 function moveOptionFocus(event: KeyboardEvent, count: number, selectedIndex: number): void {
+  if (!(event.target as HTMLElement).matches('[role="option"]')) return;
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
   const options = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="option"]')];
   if (options.length === 0) return;

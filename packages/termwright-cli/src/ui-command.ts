@@ -250,6 +250,7 @@ interface ProjectedAttempt {
   readonly startedAt: number;
   readonly monotonicTime: number;
   readonly retry: number;
+  traceRef?: string;
   status?: 'passed' | 'failed' | 'skipped';
 }
 
@@ -355,8 +356,15 @@ class NativeRunProjection {
       });
       return;
     }
-    if (event.type !== 'attempt.finished') return;
     const attempt = this.#attempts.get(attemptId);
+    if (event.type === 'trace.finalized') {
+      const traceRef = payload['traceRef'];
+      if (attempt !== undefined && typeof traceRef === 'string' && traceRef.length > 0) {
+        attempt.traceRef ??= traceRef;
+      }
+      return;
+    }
+    if (event.type !== 'attempt.finished') return;
     const state = payload['state'];
     if (attempt === undefined || (state !== 'passed' && state !== 'failed' && state !== 'skipped'))
       return;
@@ -370,6 +378,7 @@ class NativeRunProjection {
       flaky: state === 'passed' && retry > 0,
       lostLogRecords: 0,
       attempt: retry + 1,
+      ...(attempt.traceRef === undefined ? {} : { traceRef: attempt.traceRef }),
     });
   }
 }

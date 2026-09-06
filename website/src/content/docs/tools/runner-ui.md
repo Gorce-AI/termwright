@@ -43,9 +43,15 @@ Start with the first failed row. The details show the assertion or action,
 source location, observed state, and any earlier retry failures. The terminal,
 semantics, logs, and step list stay attached to the same test attempt.
 
-If the test retained a trace, use the controls under the terminal to seek,
-play, change speed, or jump to an event. All panels follow the same playhead, so
-you see the state that existed when the selected action or assertion ran.
+When a test finishes and retains a trace, its terminal switches from LIVE to
+replay. Use the controls under the terminal to play, change speed, seek, or jump
+to the previous or next step. The timeline shows event markers and time in
+milliseconds.
+
+Hover over a step to preview its recorded terminal and semantic state. The
+**Preview** label distinguishes this temporary view from the selected playhead;
+moving the pointer away restores that position. Click a step to keep its moment
+selected. The terminal, inspector, and logs follow the same moment.
 
 ## Inspect semantic elements
 

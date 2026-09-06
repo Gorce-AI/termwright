@@ -93,6 +93,11 @@ export function RunnerPage({
   const session = selectedSession(state);
   const nodes = nodesForSelected(state);
   const [previewMs, setPreviewMs] = useState<number | null>(null);
+  const [previewState, setPreviewState] = useState<{
+    traceRef: string;
+    timeMs: number;
+    state: TraceStatePayload;
+  } | null>(null);
   const [pinnedNodeId, setPinnedNodeId] = useState<string | null>(null);
   const [hoveredTarget, setHoveredTarget] = useState<TerminalHighlight | null>(null);
   const [pinnedTarget, setPinnedTarget] = useState<TerminalHighlight | null>(null);
@@ -181,6 +186,12 @@ export function RunnerPage({
       writable: false,
     };
   }, [replay, session, shownTimeMs]);
+  const shownTraceState =
+    previewMs === null
+      ? replay?.traceState
+      : previewState?.traceRef === replay?.traceRef && previewState?.timeMs === previewMs
+        ? previewState.state
+        : null;
   const inspectorSession = useMemo<SessionRecord | null>(
     () =>
       replay === null
@@ -188,8 +199,8 @@ export function RunnerPage({
         : {
             runId: state.evidence.kind === 'replay' ? state.evidence.runId : 'replay',
             sessionId: replay.overview.sessionId,
-            columns: replay.traceState?.columns ?? replay.overview.columns,
-            rows: replay.traceState?.rows ?? replay.overview.rows,
+            columns: shownTraceState?.columns ?? replay.overview.columns,
+            rows: shownTraceState?.rows ?? replay.overview.rows,
             terminalProfile: replay.overview.terminalProfile ?? 'default',
             command: replay.overview.command,
             writable: false,
@@ -197,10 +208,10 @@ export function RunnerPage({
             // A replay inspector describes the selected moment. Showing records
             // from later in the archive would leak future evidence into the past.
             logs: replay.logs.records.filter((log) => log.t <= shownTimeMs),
-            revision: replay.traceState?.revision ?? null,
-            snapshot: replay.traceState?.snapshot ?? null,
+            revision: shownTraceState?.revision ?? null,
+            snapshot: shownTraceState?.snapshot ?? null,
           },
-    [replay, session, shownTimeMs, state.evidence],
+    [replay, session, shownTimeMs, shownTraceState, state.evidence],
   );
   const inspectorHidden = inspectorCollapsed;
 
@@ -255,7 +266,11 @@ export function RunnerPage({
     let snapshot: SemanticSnapshot | null = session?.snapshot ?? null;
     if (replay !== null) {
       try {
-        snapshot = (await onTraceStateAt(node.startMs)).snapshot;
+        const traceState = await onTraceStateAt(node.startMs);
+        if (request !== targetRequest.current) return;
+        if (!pinned)
+          setPreviewState({ traceRef: replay.traceRef, timeMs: node.startMs, state: traceState });
+        snapshot = traceState.snapshot;
       } catch {
         snapshot = null;
       }
@@ -563,8 +578,16 @@ export function RunnerPage({
           ) : (
             <ReplayControls
               replay={{ ...replay, timeMs: shownTimeMs }}
-              onPlaying={(playing) => dispatch({ type: 'replay-playing', playing })}
+              previewing={previewMs !== null}
+              onPlaying={(playing) => {
+                setPreviewMs(null);
+                targetRequest.current += 1;
+                setHoveredTarget(null);
+                dispatch({ type: 'replay-playing', playing });
+              }}
               onSeek={(timeMs) => {
+                setPreviewMs(null);
+                targetRequest.current += 1;
                 setHoveredTarget(null);
                 setPinnedTarget(null);
                 setPinnedNodeId(null);
