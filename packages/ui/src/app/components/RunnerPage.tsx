@@ -104,6 +104,27 @@ export function RunnerPage({
   const [railWidth, setRailWidth] = useState(340);
   const [inspectorWidth, setInspectorWidth] = useState(310);
   const [evidenceMaximized, setEvidenceMaximized] = useState(false);
+  const expandTerminalRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const compact = window.matchMedia('(max-width: 1099px)');
+    const reset = () => {
+      if (compact.matches) setEvidenceMaximized(false);
+    };
+    compact.addEventListener('change', reset);
+    return () => compact.removeEventListener('change', reset);
+  }, []);
+  useEffect(() => {
+    if (!evidenceMaximized) return;
+    const restore = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEvidenceMaximized(false);
+      expandTerminalRef.current?.focus();
+    };
+    window.addEventListener('keydown', restore, true);
+    return () => window.removeEventListener('keydown', restore, true);
+  }, [evidenceMaximized]);
   const [stepTitle, setStepTitle] = useState('');
   const workspaceRef = useRef<HTMLDivElement>(null);
   const railDrag = useRef<ResizeGesture | null>(null);
@@ -314,6 +335,7 @@ export function RunnerPage({
       <CompactTabs
         current={state.compactWorkspace}
         onSelect={(workspace) => {
+          setEvidenceMaximized(false);
           if (workspace === 'inspect') updatePreferences({ inspectorCollapsed: false });
           if (workspace === 'steps') updatePreferences({ timelineCollapsed: false });
           dispatch({ type: 'compact-workspace', workspace });
@@ -334,7 +356,18 @@ export function RunnerPage({
           } as CSSProperties
         }
       >
-        {timelineCollapsed ? null : (
+        {timelineCollapsed ? (
+          <button
+            type="button"
+            className="tw-collapsed-pane-tab"
+            data-side="left"
+            aria-label="Show tests and steps"
+            onClick={() => updatePreferences({ timelineCollapsed: false })}
+          >
+            <PanelLeftOpen aria-hidden="true" size={14} />
+            <span>Tests &amp; steps</span>
+          </button>
+        ) : (
           <ExecutionRail
             cases={cases}
             allCaseCount={state.catalog.filter((test) => test.provider !== null).length}
@@ -415,28 +448,6 @@ export function RunnerPage({
               <h2>{selected?.title ?? 'No case selected'}</h2>
             </div>
             <div className="tw-selected-outcome">
-              {timelineCollapsed ? (
-                <button
-                  type="button"
-                  className="tw-evidence-expand"
-                  aria-label="Expand execution timeline"
-                  onClick={() => updatePreferences({ timelineCollapsed: false })}
-                >
-                  <PanelLeftOpen aria-hidden="true" size={14} /> Steps
-                </button>
-              ) : null}
-              {inspectorHidden ? (
-                <Tooltip label="Expand inspector">
-                  <button
-                    type="button"
-                    className="tw-evidence-expand"
-                    aria-label="Expand inspector"
-                    onClick={() => updatePreferences({ inspectorCollapsed: false })}
-                  >
-                    <PanelRightOpen aria-hidden="true" size={14} /> Inspect
-                  </button>
-                </Tooltip>
-              ) : null}
               {selected === null ? null : (
                 <>
                   <StatusBadge status={selected.status} />
@@ -475,19 +486,6 @@ export function RunnerPage({
                   {selected.source.line === undefined ? null : (
                     <span>line {selected.source.line}</span>
                   )}
-                  <button
-                    type="button"
-                    className="tw-evidence-expand"
-                    aria-pressed={evidenceMaximized}
-                    onClick={() => setEvidenceMaximized((value) => !value)}
-                  >
-                    {evidenceMaximized ? (
-                      <Minimize2 aria-hidden="true" size={14} />
-                    ) : (
-                      <Maximize2 aria-hidden="true" size={14} />
-                    )}
-                    {evidenceMaximized ? 'Restore' : 'Maximize'}
-                  </button>
                 </>
               )}
             </div>
@@ -495,6 +493,27 @@ export function RunnerPage({
           <TerminalStage
             {...terminal}
             highlight={hoveredTarget ?? pinnedTarget}
+            toolbarActions={
+              selected === null ? null : (
+                <div className="tw-terminal-layout-control">
+                  <Tooltip label={evidenceMaximized ? 'Restore panels (Esc)' : 'Expand terminal'}>
+                    <button
+                      type="button"
+                      className="tw-inspector-control"
+                      ref={expandTerminalRef}
+                      aria-label={evidenceMaximized ? 'Restore panels' : 'Expand terminal'}
+                      onClick={() => setEvidenceMaximized((value) => !value)}
+                    >
+                      {evidenceMaximized ? (
+                        <Minimize2 aria-hidden="true" size={14} />
+                      ) : (
+                        <Maximize2 aria-hidden="true" size={14} />
+                      )}
+                    </button>
+                  </Tooltip>
+                </div>
+              )
+            }
             {...(session === null
               ? {}
               : { onInput: (data: string) => onInput(session.sessionId, data) })}
@@ -649,7 +668,18 @@ export function RunnerPage({
           </div>
         )}
 
-        {inspectorHidden ? null : (
+        {inspectorHidden ? (
+          <button
+            type="button"
+            className="tw-collapsed-pane-tab"
+            data-side="right"
+            aria-label="Show inspector"
+            onClick={() => updatePreferences({ inspectorCollapsed: false })}
+          >
+            <PanelRightOpen aria-hidden="true" size={14} />
+            <span>Inspector</span>
+          </button>
+        ) : (
           <InspectorPanel
             session={inspectorSession}
             onCollapsed={(collapsed) => updatePreferences({ inspectorCollapsed: collapsed })}

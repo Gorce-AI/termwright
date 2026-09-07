@@ -167,11 +167,11 @@ export function ExecutionRail(props: ExecutionRailProps) {
             </>
           ) : null}
         </div>
-        <Tooltip label="Collapse execution timeline">
+        <Tooltip label="Hide tests and steps">
           <button
             type="button"
             className="tw-pane-collapse"
-            aria-label="Collapse execution timeline"
+            aria-label="Hide tests and steps"
             onClick={props.onCollapse}
           >
             <PanelLeftClose aria-hidden="true" size={14} />

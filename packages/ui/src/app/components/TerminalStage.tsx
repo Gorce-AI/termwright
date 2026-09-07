@@ -1,11 +1,19 @@
 import { applyProfile, resolveProfileId } from '@termwright/vt/unicode';
 import { Terminal } from '@xterm/xterm';
 import { Radio, ScanLine } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import type { PlaybackFrame } from '../../playback.js';
 import type { TerminalHighlight } from '../domain/terminal-highlight.js';
 
 interface TerminalStageProps {
+  readonly toolbarActions?: ReactNode;
   readonly identity: string;
   readonly mode: 'empty' | 'live' | 'replay';
   readonly columns: number;
@@ -260,6 +268,7 @@ export function TerminalStage(props: TerminalStageProps) {
           <button type="button" className="tw-fit-button" onClick={() => fitRef.current()}>
             Fit · {Math.round(scale * 100)}%
           </button>
+          {props.toolbarActions}
         </div>
       </header>
       <div

@@ -104,11 +104,11 @@ export function InspectorPanel({
             ? 'no revision'
             : `revision ${session.revision}`}
         </span>
-        <Tooltip label="Collapse inspector">
+        <Tooltip label="Hide inspector">
           <button
             type="button"
             className="tw-inspector-control"
-            aria-label="Collapse inspector"
+            aria-label="Hide inspector"
             onClick={() => onCollapsed(true)}
           >
             <PanelRightClose aria-hidden="true" size={14} />

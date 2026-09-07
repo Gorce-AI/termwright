@@ -335,7 +335,7 @@ describe('fresh React runner', () => {
   it('keeps the inspector in the hovered moment, restores pinned time and keeps step keyboard focus inside the narrative', async () => {
     const page = await tracePage(await buildFixtureTrace());
     await page.locator('.tw-replay-controls').waitFor();
-    await page.getByRole('button', { name: 'Expand inspector', exact: true }).click();
+    await page.getByRole('button', { name: 'Show inspector', exact: true }).click();
     const position = page.getByLabel('Replay position');
     await position.fill('2000');
     await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 2');
@@ -729,7 +729,7 @@ describe('fresh React runner', () => {
       'OpenTUI · cjk-wide · 100×30 · #2',
     ]);
     expect((await selector.locator('option').allTextContents()).join(' ')).not.toContain('opaque-');
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     await expect
       .poll(() => page.locator('.tw-terminal-viewport').innerText())
       .toContain('SECOND SCREEN');
@@ -774,7 +774,7 @@ describe('fresh React runner', () => {
       node({ id: 'last', parentId: 'root', role: 'button', name: 'Last child' }),
     ];
     session.semantic(snapshot(1, nodes, session.sessionId));
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     const tree = page.getByRole('tree', { name: 'Semantic tree' });
     await expect.poll(() => tree.getByRole('treeitem').count()).toBe(3);
     expect(await tree.locator('[role="treeitem"][tabindex="0"]').count()).toBe(1);
@@ -861,7 +861,7 @@ describe('fresh React runner', () => {
     session.semantic(
       snapshot(7, [node({ id: 'save', role: 'button', name: 'Save' })], session.sessionId),
     );
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     await page.getByRole('tab', { name: 'Semantic' }).click();
     const actionability = page.getByRole('region', { name: 'Live actionability' });
     // The live semantic stream can replace the selected-node projection while
@@ -1136,7 +1136,7 @@ describe('fresh React runner', () => {
     await page.keyboard.press('Escape');
     expect(await page.locator('.tw-terminal-highlight-layer').count()).toBe(0);
 
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     const semanticButton = page.getByRole('treeitem', { name: /Approve/u });
     await semanticButton.hover();
     expect(
@@ -1414,7 +1414,7 @@ describe('fresh React runner', () => {
     await page.screenshot({ path: '/tmp/termwright-fresh-1440-nav-expanded.png', fullPage: false });
     await page.getByRole('button', { name: 'Collapse navigation' }).click();
     expect(await scrollEndIsReachable(page, '.tw-case-list', '.tw-scroll-end')).toBe(true);
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     await expect.poll(() => page.locator('.tw-inspector').isVisible()).toBe(true);
     expect(
       await scrollEndIsReachable(page, '.tw-inspector-body', '.tw-inspector-body > :last-child'),
@@ -1454,9 +1454,37 @@ describe('fresh React runner', () => {
     expect(afterInspectorDrag?.x ?? 0).toBeGreaterThanOrEqual(beforeInspectorDrag.x + 8);
     expect(afterInspectorDrag?.x ?? 0).toBeLessThanOrEqual(beforeInspectorDrag.x + 12);
     await page.screenshot({ path: '/tmp/termwright-fresh-1440-three-pane.png', fullPage: false });
-    await page.getByRole('button', { name: 'Collapse inspector' }).click();
+    await page.getByRole('button', { name: 'Hide inspector' }).click();
 
-    await page.getByRole('button', { name: 'Maximize' }).click();
+    await page.getByRole('button', { name: 'Hide tests and steps' }).click();
+    expect(await page.locator('.tw-evidence-heading button').count()).toBe(0);
+    const leftHandle = page.getByRole('button', { name: 'Show tests and steps' });
+    const rightHandle = page.getByRole('button', { name: 'Show inspector' });
+    expect(await leftHandle.isVisible()).toBe(true);
+    expect(await rightHandle.isVisible()).toBe(true);
+    const edges = await page.evaluate(() => {
+      const workspace = document.querySelector('.tw-workspace')!.getBoundingClientRect();
+      const left = document
+        .querySelector('.tw-collapsed-pane-tab[data-side="left"]')!
+        .getBoundingClientRect();
+      const right = document
+        .querySelector('.tw-collapsed-pane-tab[data-side="right"]')!
+        .getBoundingClientRect();
+      return [Math.abs(left.left - workspace.left), Math.abs(right.right - workspace.right)];
+    });
+    expect(Math.max(...edges)).toBeLessThan(2);
+    await page.getByRole('button', { name: 'Expand terminal' }).click();
+    expect(await leftHandle.isVisible()).toBe(false);
+    expect(await rightHandle.isVisible()).toBe(false);
+    expect(
+      await page
+        .locator('.tw-evidence')
+        .evaluate((e) =>
+          Math.abs(
+            e.getBoundingClientRect().width - e.parentElement!.getBoundingClientRect().width,
+          ),
+        ),
+    ).toBeLessThan(2);
     await expect.poll(() => page.locator('.tw-inspector').isVisible()).toBe(false);
     expect(await page.locator('.tw-replay-controls').isVisible()).toBe(true);
     expect(await page.locator('.tw-terminal-viewport').getAttribute('data-terminal-columns')).toBe(
@@ -1465,7 +1493,16 @@ describe('fresh React runner', () => {
     expect(await page.locator('.tw-terminal-viewport').getAttribute('data-terminal-rows')).toBe(
       metrics.rows,
     );
-    await page.getByRole('button', { name: 'Restore' }).click();
+    await page.keyboard.press('Escape');
+    expect(await leftHandle.isVisible()).toBe(true);
+    expect(await rightHandle.isVisible()).toBe(true);
+    expect(
+      await page
+        .getByRole('button', { name: 'Expand terminal' })
+        .evaluate((e) => e === document.activeElement),
+    ).toBe(true);
+    await leftHandle.click();
+    await page.getByRole('button', { name: 'Expand terminal' }).click();
 
     for (const viewport of [
       { width: 800, height: 800 },
@@ -1473,6 +1510,10 @@ describe('fresh React runner', () => {
     ]) {
       await page.setViewportSize(viewport);
       await expect.poll(() => page.locator('.tw-compact-tabs').isVisible()).toBe(true);
+      expect(await page.getByRole('button', { name: 'Expand terminal' }).isVisible()).toBe(false);
+      await expect
+        .poll(() => page.locator('.tw-workspace').getAttribute('data-evidence-maximized'))
+        .toBe('false');
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
@@ -1694,7 +1735,7 @@ describe('fresh React runner', () => {
     await expect
       .poll(() => page.locator('[data-node-id="action:rerun-session:a-live"]').count())
       .toBe(1);
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     await expect.poll(() => page.locator('.tw-semantic-node-row').count()).toBeGreaterThan(0);
     const liveCommand = page.locator('[data-node-id="action:rerun-session:a-live"]');
     await expect.poll(() => liveCommand.getAttribute('data-status')).toBe('passed');
@@ -2050,7 +2091,7 @@ describe('fresh React runner', () => {
         .getByText('No driver actions were recorded for this case.', { exact: false })
         .count(),
     ).toBe(0);
-    const expandInspector = page.getByRole('button', { name: 'Expand inspector' });
+    const expandInspector = page.getByRole('button', { name: 'Show inspector' });
     if ((await expandInspector.count()) > 0) await expandInspector.click();
     await page.locator('.tw-inspector').waitFor();
     const absentGeometry = await paneWidths(page);

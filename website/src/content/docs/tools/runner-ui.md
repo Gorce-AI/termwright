@@ -129,6 +129,12 @@ npx termwright ui --record --out-file tests/login.test.ts -- node app.js
 Interact with the program, add steps and assertions, then review the generated
 source before saving it. See [Record a test](../recorder/) for the full workflow.
 
+Collapsed panels leave a labelled handle at their edge: **Tests & steps** on the
+left and **Inspector** on the right. Select the handle to reopen that panel.
+The **Expand terminal** icon in the terminal toolbar temporarily hides the side
+panels; **Restore panels** or **Escape** restores the previous layout. Narrow
+screens use the **Steps**, **Screen**, and **Inspect** tabs instead.
+
 ## Change Runner preferences
 
 **Settings** controls the panel layout, replay speed, reduced motion, and source
