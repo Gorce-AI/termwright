@@ -11,7 +11,7 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 45,
-    "deadline-or-scheduler-regression-test": 58,
+    "deadline-or-scheduler-regression-test": 59,
     "deterministic-adversarial-fixture-schedule": 31,
     "display-or-persisted-wall-time-not-correctness-order": 95,
     "explicit-external-file-polling": 4,
@@ -4043,6 +4043,12 @@
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 10));"
+    },
+    {
+      "path": "packages/ui/src/server.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 700));"
     },
     {
       "path": "packages/ui/src/server.test.ts",

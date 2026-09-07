@@ -1224,7 +1224,8 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
 }
 
 /** Directories a source tree has that never contain tests worth listing. */
-const IGNORED_DIRECTORIES = /(^|[/\\])(node_modules|dist|coverage|\.git)([/\\]|$)/;
+const IGNORED_DIRECTORIES =
+  /(^|[/\\])(node_modules|dist|coverage|\.git|\.termwright|[^/\\]+\.twtrace)([/\\]|$)/;
 
 /**
  * Re-lists the project's tests when its files change.
