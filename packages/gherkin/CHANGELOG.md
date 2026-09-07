@@ -1,5 +1,12 @@
 # @termwright/gherkin
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [[`a547d82`](https://github.com/Gorce-AI/termwright/commit/a547d826a5bb71c76eb0a9293e1444acd5fbf9d8)]:
+  - @termwright/test@0.5.1
+
 ## 0.5.0
 
 ### Patch Changes
