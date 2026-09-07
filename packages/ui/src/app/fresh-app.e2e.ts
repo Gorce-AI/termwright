@@ -99,6 +99,160 @@ it('renders a canonical partial-skip verdict as yellow without relying on skippe
 });
 
 describe('fresh React runner', () => {
+  it('keeps test navigation separate from readable steps, filters failures, and jumps to the full error', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await expect
+      .poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))
+      .toBe('true');
+    const startedAt = Date.now();
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:readable', mode: 'live', startedAt });
+    for (const id of ['passing', 'failing']) {
+      server.hub.publish({
+        v: 1,
+        type: 'test-start',
+        id,
+        title: `${id} multiline composer scenario`,
+        file: '/repo/composer.feature',
+        startedAt,
+      });
+      for (let index = 0; index < 12; index++) {
+        const stepId = `step-${index}`;
+        const t = index * 100;
+        const failed = id === 'failing' && index === 11;
+        const gherkin = {
+          keyword: 'Then',
+          text: `the composer preserves line ${index + 1} when the terminal is resized to a narrow viewport`,
+          source: { file: '/repo/composer.feature', line: index + 10, column: 5 },
+        };
+        server.hub.publish({
+          v: 1,
+          type: 'step',
+          testId: id,
+          stepId,
+          title: gherkin.text,
+          phase: 'start',
+          t,
+          gherkin,
+        });
+        server.hub.publish({
+          v: 1,
+          type: 'action',
+          testId: id,
+          stepId,
+          actionId: `${id}-command-${index}`,
+          kind: 'assert',
+          api: 'toHaveValue',
+          t: t + 40,
+          ok: !failed,
+          selector: '#composer',
+          ...(failed
+            ? {
+                error:
+                  'Expected all three lines in the composer.\nReceived only the first line.\n    at composer.steps.ts:84:7',
+              }
+            : {}),
+        });
+        server.hub.publish({
+          v: 1,
+          type: 'step',
+          testId: id,
+          stepId,
+          title: gherkin.text,
+          phase: 'end',
+          t: t + 50,
+          gherkin,
+          ...(failed ? { error: 'Expected all three lines in the composer.' } : {}),
+        });
+      }
+      server.hub.publish({
+        v: 1,
+        type: 'test-end',
+        id,
+        status: id === 'failing' ? 'failed' : 'passed',
+        durationMs: 1200,
+        flaky: false,
+        lostLogRecords: 0,
+        ...(id === 'failing'
+          ? { error: 'Expected all three lines in the composer.\nReceived only the first line.' }
+          : {}),
+      });
+    }
+    const passing = page.locator('.tw-case-button').filter({ hasText: 'passing multiline' });
+    if ((await passing.getAttribute('aria-selected')) !== 'true') await passing.click();
+    await page.getByRole('button', { name: 'Show commands', exact: true }).waitFor();
+    expect(await page.locator('.tw-command-row').count()).toBe(0);
+    expect(await page.locator('.tw-current-step strong').innerText()).toBe('12/12');
+    const longStep = page.locator('.tw-section-row').filter({ hasText: 'preserves line 1 when' });
+    expect(await longStep.locator('strong').evaluate((e) => getComputedStyle(e).whiteSpace)).toBe(
+      'normal',
+    );
+    await longStep.hover();
+    await longStep.click();
+    expect(await page.locator('.tw-command-row').count()).toBe(1);
+    await page.getByRole('button', { name: 'Show commands', exact: true }).click();
+    expect(await page.locator('.tw-command-row').count()).toBe(12);
+    await page.getByRole('button', { name: 'Hide commands', exact: true }).click();
+    expect(await page.locator('.tw-command-row').count()).toBe(0);
+    await longStep.click();
+    const listTop = await page
+      .locator('.tw-case-list')
+      .evaluate((e) => e.getBoundingClientRect().top);
+    await page.locator('.tw-story-scroll').evaluate((e) => {
+      e.scrollTop = e.scrollHeight;
+    });
+    expect(await page.locator('.tw-case-list').evaluate((e) => e.getBoundingClientRect().top)).toBe(
+      listTop,
+    );
+    expect(await page.locator('.tw-case-list [role="tree"]').count()).toBe(0);
+    await page.getByRole('button', { name: 'Failed 1', exact: true }).click();
+    expect(await page.locator('.tw-case-button').count()).toBe(1);
+    await page.locator('.tw-case-button').click();
+    await expect
+      .poll(() => page.locator('.tw-case-failure-summary').innerText())
+      .toContain('Expected all three lines');
+    await expect
+      .poll(() =>
+        page.locator('.tw-case-failure-summary').evaluate((e) => {
+          const box = e.getBoundingClientRect();
+          const area = e.closest('.tw-story-scroll')!.getBoundingClientRect();
+          return box.top >= area.top && box.bottom <= area.bottom;
+        }),
+      )
+      .toBe(true);
+    expect(await page.locator('.tw-command-row').count()).toBe(1);
+    await page.getByRole('button', { name: 'Go to failed step', exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.getAttribute('data-status')))
+      .toBe('failed');
+    const failed = page.locator('.tw-command-row[data-status="failed"]');
+    expect(
+      await failed.evaluate((e) => {
+        const bounds = e.getBoundingClientRect();
+        const area = e.closest('.tw-story-scroll')!.getBoundingClientRect();
+        return bounds.top >= area.top && bounds.bottom <= area.bottom;
+      }),
+    ).toBe(true);
+    await page.locator('.tw-command-failure summary').first().click();
+    expect(await page.locator('.tw-command-failure pre').innerText()).toContain(
+      'composer.steps.ts:84:7',
+    );
+    await page.getByLabel('Find a test in this run').fill('missing');
+    expect(await page.getByText('No matching tests.', { exact: true }).count()).toBe(1);
+    expect(await page.locator('.tw-story-heading h3').innerText()).toContain('failing');
+    await page.getByLabel('Find a test in this run').fill('');
+    await page.getByRole('button', { name: 'Failed 1', exact: true }).click();
+    expect(await page.locator('.tw-case-button').count()).toBe(2);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('tab', { name: 'Steps', exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('seeks exact fractional endpoints and keeps step controls aligned on desktop and small screens', async () => {
     const page = await tracePage(await buildWrittenFixtureTrace({ durationMs: 2_000.5 }));
     const position = page.getByLabel('Replay position');
@@ -181,10 +335,10 @@ describe('fresh React runner', () => {
     expect(await position.inputValue()).toBe('2000');
     const selectedCase = page.locator('.tw-case[data-selected="true"] .tw-case-button');
     await selectedCase.click();
-    expect(await selectedCase.getAttribute('aria-expanded')).toBe('false');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     expect(await position.inputValue()).toBe('2000');
     await selectedCase.click();
-    expect(await selectedCase.getAttribute('aria-expanded')).toBe('true');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     expect(await position.inputValue()).toBe('2000');
     await command.focus();
     await page.keyboard.press('ArrowDown');
@@ -1137,7 +1291,6 @@ describe('fresh React runner', () => {
     });
     const missing = page.locator('.tw-case-button').filter({ hasText: 'missing trace' });
     await missing.waitFor();
-    if ((await missing.getAttribute('aria-expanded')) !== 'true') await missing.click();
     await expect
       .poll(() => page.getByText('Recording unavailable:', { exact: false }).count())
       .toBe(1);
@@ -1568,29 +1721,20 @@ describe('fresh React runner', () => {
       await expect
         .poll(() => page.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity'))
         .toBe(`replay:${traceRef}`);
-      const selectedCase = page.locator('.tw-case-button').filter({ hasText: id });
-      if ((await selectedCase.getAttribute('aria-expanded')) === 'false')
-        await selectedCase.click();
     }
     const position = page.getByLabel('Replay position');
     await position.fill('2000');
-    const foreignCommand = page
-      .locator('.tw-case')
-      .filter({ has: page.locator('.tw-case-button').filter({ hasText: 'alpha' }) })
-      .locator('.tw-command-row')
-      .filter({ hasText: 'click' });
-    await foreignCommand.hover();
+    expect(await page.locator('.tw-case-list .tw-command-row').count()).toBe(0);
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
+    await page.locator('.tw-case-button').filter({ hasText: 'alpha' }).hover();
     expect(await position.inputValue()).toBe('2000');
     expect(await page.locator('.tw-preview-label').count()).toBe(0);
-    expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
-    await foreignCommand.click();
-    await expect
-      .poll(() => page.locator('.tw-case[data-selected="true"] .tw-case-title strong').innerText())
-      .toBe('alpha');
+    await page.locator('.tw-case-button').filter({ hasText: 'alpha' }).click();
+    await expect.poll(() => page.locator('.tw-story-heading h3').innerText()).toBe('alpha');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
-  it('keeps per-case collapse state through live updates and independent selection', async () => {
+  it('keeps selected details open through live updates and repeated selection', async () => {
     const server = await startUiServer();
     servers.push(server);
     const page = await checkedPage();
@@ -1620,9 +1764,9 @@ describe('fresh React runner', () => {
     const beta = page.locator('.tw-case-button').filter({ hasText: 'beta case' });
     await alpha.waitFor();
 
-    expect(await alpha.getAttribute('aria-expanded')).toBe('true');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await alpha.click();
-    expect(await alpha.getAttribute('aria-expanded')).toBe('false');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     server.hub.publish({
       v: 1,
       type: 'action-start',
@@ -1632,12 +1776,8 @@ describe('fresh React runner', () => {
       testId: 'alpha',
     });
 
-    // A collapsed case renders no command rows, so alpha's own update is not
-    // observable while it stays collapsed — waiting on one would wait forever.
-    // Beta is expanded and the stream is ordered, so beta's row is proof that
-    // alpha's update was applied before it, and alpha is still collapsed.
     await beta.click();
-    expect(await beta.getAttribute('aria-expanded')).toBe('true');
+    expect(await page.locator('.tw-story-heading h3').innerText()).toBe('beta case');
     server.hub.publish({
       v: 1,
       type: 'action-start',
@@ -1647,13 +1787,13 @@ describe('fresh React runner', () => {
       testId: 'beta',
     });
     await expect.poll(() => page.locator('.tw-command-row').count()).toBe(1);
-    expect(await alpha.getAttribute('aria-expanded')).toBe('false');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await alpha.click();
-    expect(await alpha.getAttribute('aria-expanded')).toBe('true');
-    expect(await beta.getAttribute('aria-expanded')).toBe('true');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await beta.click();
-    expect(await beta.getAttribute('aria-expanded')).toBe('true');
-    expect(await alpha.getAttribute('aria-expanded')).toBe('true');
+    expect(await page.locator('.tw-story-heading h3').innerText()).toBe('beta case');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -1694,7 +1834,7 @@ describe('fresh React runner', () => {
         .evaluate((element) => getComputedStyle(element).color),
     ).toBe('rgb(103, 183, 209)');
     expect(
-      await runningCase
+      await page
         .locator('.tw-command-row[data-status="running"]')
         .evaluate((element) => getComputedStyle(element).boxShadow),
     ).toContain('rgb(103, 183, 209)');
@@ -1828,11 +1968,7 @@ describe('fresh React runner', () => {
     if ((await actionless.getAttribute('aria-selected')) !== 'true') {
       await actionless.click();
     }
-    if ((await actionless.getAttribute('aria-expanded')) !== 'true') {
-      await actionless.click();
-    }
     expect(await actionless.getAttribute('aria-selected')).toBe('true');
-    expect(await actionless.getAttribute('aria-expanded')).toBe('true');
     await expect
       .poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count())
       .toBe(1);
@@ -2034,6 +2170,7 @@ describe('fresh React runner', () => {
       selector: 'screen',
     });
 
+    await page.getByRole('button', { name: 'Show commands', exact: true }).click();
     await expect.poll(() => page.locator('.tw-command-row').count()).toBe(23);
     expect(await page.locator('.tw-section-row').count()).toBeGreaterThanOrEqual(3);
     expect(await page.locator('.tw-section-row').filter({ hasText: 'Background' }).count()).toBe(1);
@@ -2050,8 +2187,9 @@ describe('fresh React runner', () => {
         .count(),
     ).toBe(1);
     expect(await page.locator('.tw-section-row').filter({ hasText: 'L16' }).count()).toBe(1);
-    expect(await page.getByText('scenario', { exact: true }).count()).toBeGreaterThan(0);
-    expect(await page.getByText('@smoke', { exact: true }).count()).toBeGreaterThan(0);
+    await page.locator('.tw-case-details summary').click();
+    expect(await page.locator('.tw-case-details').innerText()).toContain('scenario');
+    expect(await page.locator('.tw-case-details').innerText()).toContain('@smoke');
     expect(
       (
         await page.locator('.tw-command-row[data-status="running"] .tw-row-status').innerText()
@@ -2069,7 +2207,7 @@ describe('fresh React runner', () => {
       await page.getByRole('button', { name: /Run all|Rerun completes a purchase/u }).count(),
     ).toBe(0);
     await page.setViewportSize({ width: 1440, height: 700 });
-    await page.locator('.tw-case-list').evaluate((scroller) => {
+    await page.locator('.tw-story-scroll').evaluate((scroller) => {
       scroller.scrollTop = 0;
     });
     await page.getByRole('button', { name: 'Scroll to the current running step' }).waitFor();
@@ -2078,7 +2216,7 @@ describe('fresh React runner', () => {
       .poll(() =>
         page.evaluate(() => {
           const scroller = document
-            .querySelector<HTMLElement>('.tw-case-list')
+            .querySelector<HTMLElement>('.tw-story-scroll')
             ?.getBoundingClientRect();
           const current = document
             .querySelector<HTMLElement>('.tw-command-row[data-status="running"]')
@@ -2095,7 +2233,7 @@ describe('fresh React runner', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const visibleRows = await page.evaluate(() => {
       const viewport = document
-        .querySelector<HTMLElement>('.tw-case-list')
+        .querySelector<HTMLElement>('.tw-story-scroll')
         ?.getBoundingClientRect();
       if (viewport === undefined) return 0;
       return [...document.querySelectorAll<HTMLElement>('.tw-section-row, .tw-command-row')].filter(
@@ -2105,12 +2243,12 @@ describe('fresh React runner', () => {
         },
       ).length;
     });
-    expect(visibleRows).toBeGreaterThanOrEqual(14);
+    expect(visibleRows).toBeGreaterThanOrEqual(6);
     const bottom = await page.evaluate(() => {
-      const scroller = document.querySelector<HTMLElement>('.tw-case-list');
+      const scroller = document.querySelector<HTMLElement>('.tw-story-scroll');
       if (scroller === null) return { reachable: false };
       scroller.scrollTop = scroller.scrollHeight;
-      const end = scroller.querySelector<HTMLElement>('.tw-scroll-end')?.getBoundingClientRect();
+      const end = scroller.querySelector<HTMLElement>('.tw-story-end')?.getBoundingClientRect();
       const box = scroller.getBoundingClientRect();
       return { reachable: end !== undefined && end.bottom <= box.bottom + 1 };
     });
@@ -2144,7 +2282,7 @@ describe('fresh React runner', () => {
         durationMs: 220,
       },
     });
-    await expect.poll(() => page.getByText('attempt 3', { exact: true }).count()).toBe(1);
+    await expect.poll(() => page.locator('.tw-attempt-note').innerText()).toContain('Attempt 3');
     await page.getByText('2 earlier attempts failed', { exact: true }).click();
     expect(await page.getByText('first provider failure', { exact: true }).count()).toBe(1);
     expect(await page.locator('.tw-case').count()).toBe(1);

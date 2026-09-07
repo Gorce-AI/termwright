@@ -35,6 +35,15 @@ The execution list shows the active test and its current named step. Select a
 different running test to switch the terminal, semantic inspector, and logs.
 Blue means running; green is reserved for a completed pass.
 
+The test list stays above the selected test's independently scrolling steps.
+Use **Find a test** to search names and files, or **Failed** to narrow the list.
+Selecting the current test again keeps its details and replay position open.
+
+Successful Gherkin steps show their full names with commands folded underneath.
+Expand one step or choose **Show commands** to inspect its calls and assertions.
+Running and failing commands stay visible. **Test details** contains source,
+provider, tags, and attempt information.
+
 ## Inspect a failure
 
 [![A failed assertion beside the retained terminal and replay timeline.](/termwright/images/runner/failure-inspection.png)](/termwright/images/runner/failure-inspection.png)
@@ -42,6 +51,10 @@ Blue means running; green is reserved for a completed pass.
 Start with the first failed row. The details show the assertion or action,
 source location, observed state, and any earlier retry failures. The terminal,
 semantics, logs, and step list stay attached to the same test attempt.
+
+The selected test's failure summary appears above its steps. **Go to failed
+step** opens the relevant command, scrolls it into view, and moves keyboard focus
+there. Expand **Failure details** for the complete command error and stack trace.
 
 When a test finishes and retains a trace, its terminal switches from LIVE to
 replay. Use the controls under the terminal to play, change speed, seek, or jump
