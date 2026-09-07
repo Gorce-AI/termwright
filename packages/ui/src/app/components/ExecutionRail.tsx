@@ -58,6 +58,7 @@ export function ExecutionRail(props: ExecutionRailProps) {
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCase = props.cases[currentIndex];
+  const [closedExecutionId, setClosedExecutionId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [failedOnly, setFailedOnly] = useState(false);
   const visibleCases = props.cases.filter(
@@ -65,6 +66,10 @@ export function ExecutionRail(props: ExecutionRailProps) {
       (!failedOnly || test.status === 'failed') &&
       `${test.title} ${test.source.file}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
+  const fileGroups = new Map<string, ExecutionCase[]>();
+  for (const test of visibleCases)
+    fileGroups.set(test.source.file, [...(fileGroups.get(test.source.file) ?? []), test]);
+  const orderedCases = [...fileGroups.values()].flat();
   const [following, setFollowing] = useState(props.autoFollow);
   const [activeVisible, setActiveVisible] = useState(true);
   const [caseSections, setCaseSections] = useState<
@@ -92,11 +97,12 @@ export function ExecutionRail(props: ExecutionRailProps) {
 
   useEffect(() => setFollowing(props.autoFollow), [props.autoFollow]);
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0 });
-  }, [props.selectedExecutionId]);
-  useEffect(() => {
-    if (selectedCase?.status === 'failed') scrollRef.current?.scrollTo({ top: 0 });
-  }, [selectedCase?.executionId, selectedCase?.status]);
+    const scroller = scrollRef.current;
+    const head = scroller?.querySelector<HTMLElement>(
+      '.tw-case[data-selected="true"] .tw-case-head',
+    );
+    if (scroller && head) scrollWithin(scroller, head);
+  }, [props.selectedExecutionId, selectedCase?.status, closedExecutionId]);
   useEffect(() => {
     const scroller = scrollRef.current;
     if (activeNodeId === undefined || scroller === null) {
@@ -190,13 +196,20 @@ export function ExecutionRail(props: ExecutionRailProps) {
       </div>
       <div
         className="tw-case-list"
-        role="listbox"
+        role="region"
+        ref={scrollRef}
+        onScroll={(event) => {
+          if (activeNodeId === undefined) return;
+          const visible = activeRowVisible(event.currentTarget, activeNodeId);
+          setActiveVisible(visible);
+          if (!visible) setFollowing(false);
+        }}
         aria-label="Cases in this run"
         onKeyDown={(event) => {
           moveOptionFocus(
             event,
-            visibleCases.length,
-            visibleCases.findIndex((test) => test.executionId === props.selectedExecutionId),
+            orderedCases.length,
+            orderedCases.findIndex((test) => test.executionId === props.selectedExecutionId),
           );
         }}
       >
@@ -205,114 +218,118 @@ export function ExecutionRail(props: ExecutionRailProps) {
         ) : visibleCases.length === 0 ? (
           <div className="tw-empty-story">No matching tests.</div>
         ) : (
-          visibleCases.map((test) => {
-            const selected = test.executionId === props.selectedExecutionId;
-            return (
-              <article
-                className="tw-case"
-                data-selected={selected}
-                data-status={test.status}
-                data-scope-mismatch={test.scopeMismatch === true}
-                key={test.executionId}
-                role="none"
-              >
-                <div className="tw-case-head">
-                  <button
-                    type="button"
-                    className="tw-case-button"
-                    role="option"
-                    aria-selected={selected}
-                    data-execution-id={test.executionId}
-                    onClick={() => {
-                      if (!selected) props.onSelectCase(test.executionId);
-                    }}
+          [...fileGroups].map(([file, tests]) => (
+            <section className="tw-case-file" key={file} aria-label={file}>
+              <h3 className="tw-case-file-heading" title={file}>
+                <FileCode2 aria-hidden="true" size={13} />
+                <span>{shortSource(file)}</span>
+                <small>{tests.length}</small>
+              </h3>
+              {tests.map((test) => {
+                const selected = test.executionId === props.selectedExecutionId;
+                const expanded = selected && closedExecutionId !== test.executionId;
+                return (
+                  <article
+                    className="tw-case"
+                    data-selected={selected}
+                    data-expanded={expanded}
+                    data-status={test.status}
+                    data-scope-mismatch={test.scopeMismatch === true}
+                    key={test.executionId}
+                    role="none"
                   >
-                    <StatusBadge status={test.status} compact />
-                    <span className="tw-case-title">
-                      <strong>{leafTitle(test)}</strong>
-                      <small>
-                        <FileCode2 aria-hidden="true" size={11} />
-                        {caseContext(test)}
-                      </small>
-                    </span>
-                    <span className="tw-case-meta">
-                      {formatDuration(test.durationMs)}
-                      {test.scopeMismatch === true ? (
-                        <span
-                          className="tw-case-scope-warning"
-                          aria-label="Execution reported outside requested scope"
-                          title="Execution reported outside requested scope"
-                        >
-                          <AlertCircle aria-hidden="true" size={12} />
-                        </span>
-                      ) : null}
-                    </span>
-                    <ChevronRight aria-hidden="true" size={14} />
-                  </button>
-                  {props.canRun && !props.runBusy ? (
-                    <Tooltip
-                      label={`${test.status === 'queued' ? 'Run' : 'Rerun'} ${test.title}`}
-                      disabledReason="Runner connection is unavailable."
-                    >
+                    <div className="tw-case-head">
                       <button
                         type="button"
-                        className="tw-case-run"
-                        disabled={!props.connected}
-                        aria-label={`${test.status === 'queued' ? 'Run' : 'Rerun'} ${test.title}`}
-                        onClick={() => props.onRun([test.caseKey])}
+                        className="tw-case-button"
+                        aria-current={selected ? 'true' : undefined}
+                        aria-expanded={expanded}
+                        title={test.title}
+                        data-execution-id={test.executionId}
+                        onClick={() => {
+                          if (!selected) {
+                            setClosedExecutionId(null);
+                            props.onSelectCase(test.executionId);
+                          } else {
+                            setClosedExecutionId(expanded ? test.executionId : null);
+                            if (expanded) setFollowing(false);
+                          }
+                        }}
                       >
-                        {test.status === 'queued' ? (
-                          <Play aria-hidden="true" size={12} />
+                        <StatusBadge status={test.status} compact />
+                        <span className="tw-case-title">
+                          <strong>{leafTitle(test)}</strong>
+                        </span>
+                        <span className="tw-case-meta">
+                          {formatDuration(test.durationMs)}
+                          {test.scopeMismatch === true ? (
+                            <span
+                              className="tw-case-scope-warning"
+                              aria-label="Execution reported outside requested scope"
+                              title="Execution reported outside requested scope"
+                            >
+                              <AlertCircle aria-hidden="true" size={12} />
+                            </span>
+                          ) : null}
+                        </span>
+                        {expanded ? (
+                          <ChevronDown aria-hidden="true" size={13} />
                         ) : (
-                          <RotateCcw aria-hidden="true" size={12} />
+                          <ChevronRight aria-hidden="true" size={13} />
                         )}
                       </button>
-                    </Tooltip>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })
+                      {props.canRun && !props.runBusy ? (
+                        <Tooltip
+                          label={`${test.status === 'queued' ? 'Run' : 'Rerun'} ${test.title}`}
+                          disabledReason="Runner connection is unavailable."
+                        >
+                          <button
+                            type="button"
+                            className="tw-case-run"
+                            disabled={!props.connected}
+                            aria-label={`${test.status === 'queued' ? 'Run' : 'Rerun'} ${test.title}`}
+                            onClick={() => props.onRun([test.caseKey])}
+                          >
+                            {test.status === 'queued' ? (
+                              <Play aria-hidden="true" size={12} />
+                            ) : (
+                              <RotateCcw aria-hidden="true" size={12} />
+                            )}
+                          </button>
+                        </Tooltip>
+                      ) : null}
+                    </div>
+                    {expanded ? (
+                      <CaseStory
+                        key={test.executionId}
+                        test={test}
+                        props={props}
+                        collapsed={collapsed}
+                        onToggle={(sectionId, value) =>
+                          setCollapsed((current) => new Map(current).set(sectionId, value))
+                        }
+                        onResetSections={() => setCollapsed(new Map())}
+                        onJumpFailure={(node) => {
+                          setCollapsed(new Map());
+                          props.onPinNode(node);
+                          requestAnimationFrame(() => {
+                            const scroller = scrollRef.current;
+                            const row = scroller === null ? null : activeRow(scroller, node.nodeId);
+                            if (scroller !== null && row !== null) {
+                              row.focus({ preventScroll: true });
+                              scrollWithin(scroller, row);
+                            }
+                          });
+                        }}
+                      />
+                    ) : null}
+                  </article>
+                );
+              })}
+            </section>
+          ))
         )}
         <span className="tw-scroll-end" aria-hidden="true" />
-      </div>
-      <div
-        className="tw-story-scroll"
-        ref={scrollRef}
-        tabIndex={0}
-        aria-label="Selected test details"
-        onScroll={(event) => {
-          if (activeNodeId === undefined) return;
-          const visible = activeRowVisible(event.currentTarget, activeNodeId);
-          setActiveVisible(visible);
-          if (!visible) setFollowing(false);
-        }}
-      >
-        {selectedCase === undefined ? null : (
-          <CaseStory
-            key={selectedCase.executionId}
-            test={selectedCase}
-            props={props}
-            collapsed={collapsed}
-            onToggle={(sectionId, value) =>
-              setCollapsed((current) => new Map(current).set(sectionId, value))
-            }
-            onResetSections={() => setCollapsed(new Map())}
-            onJumpFailure={(node) => {
-              setCollapsed(new Map());
-              props.onPinNode(node);
-              requestAnimationFrame(() => {
-                const scroller = scrollRef.current;
-                const row = scroller === null ? null : activeRow(scroller, node.nodeId);
-                if (scroller !== null && row !== null) {
-                  row.focus({ preventScroll: true });
-                  scrollWithin(scroller, row);
-                }
-              });
-            }}
-          />
-        )}
-        <span className="tw-story-end" aria-hidden="true" />
       </div>
       {activeNodeId === undefined || activeVisible ? null : (
         <button
@@ -320,6 +337,9 @@ export function ExecutionRail(props: ExecutionRailProps) {
           className="tw-current-step-jump"
           aria-label="Scroll to the current running step"
           onClick={() => {
+            setQuery('');
+            setFailedOnly(false);
+            setClosedExecutionId(null);
             setCollapsed(new Map());
             setFollowing(true);
             requestAnimationFrame(() => {
@@ -367,7 +387,6 @@ function CaseStory({
   return (
     <div className="tw-case-story" data-status={test.status}>
       <header className="tw-story-heading">
-        <h3>{leafTitle(test)}</h3>
         {test.attempt > 1 ? (
           <p className="tw-attempt-note">
             {test.flaky ? 'Passed after retry · ' : ''}
@@ -376,10 +395,10 @@ function CaseStory({
         ) : null}
         <details className="tw-case-details">
           <summary>Test details</summary>
-          <p>
-            {shortSource(test.source.file)}
-            {test.source.line === undefined ? '' : `:${test.source.line}`}
-          </p>
+          {test.source.line === undefined ? null : <p>Line {test.source.line}</p>}
+          {test.ancestors.length === 0 ? null : (
+            <p>{test.ancestors.map((item) => item.title).join(' › ')}</p>
+          )}
           <p>
             {test.provider ?? 'termwright'} · {kindName(test.kind)} · Attempt{' '}
             {Math.max(test.attempt, 1)}
@@ -1051,11 +1070,6 @@ function EmptyNarrative({
 function leafTitle(test: ExecutionCase): string {
   return test.title.split(/\s*>\s*/u).at(-1) ?? test.title;
 }
-function caseContext(test: ExecutionCase): string {
-  const context =
-    test.ancestors.map((item) => item.title).join(' · ') || shortSource(test.source.file);
-  return `${context}${test.source.line === undefined ? '' : ` · L${test.source.line}`}`;
-}
 function shortSource(file: string): string {
   return file.split(/[/\\]/).filter(Boolean).slice(-2).join('/');
 }
@@ -1098,9 +1112,9 @@ function executionProgress(
 }
 
 function moveOptionFocus(event: KeyboardEvent, count: number, selectedIndex: number): void {
-  if (!(event.target as HTMLElement).matches('[role="option"]')) return;
+  if (!(event.target as HTMLElement).matches('.tw-case-button')) return;
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-  const options = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="option"]')];
+  const options = [...event.currentTarget.querySelectorAll<HTMLElement>('.tw-case-button')];
   if (options.length === 0) return;
   event.preventDefault();
   const focused = options.indexOf(document.activeElement as HTMLElement);

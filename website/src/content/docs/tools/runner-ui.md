@@ -35,9 +35,12 @@ The execution list shows the active test and its current named step. Select a
 different running test to switch the terminal, semantic inspector, and logs.
 Blue means running; green is reserved for a completed pass.
 
-The test list stays above the selected test's independently scrolling steps.
+Tests are grouped by source file in one scrolling list. Select a test to expand
+its steps directly underneath its row. Collapsed test titles use one line; long
+titles are available in full on hover and when expanded.
 Use **Find a test** to search names and files, or **Failed** to narrow the list.
-Selecting the current test again keeps its details and replay position open.
+Selecting the current test again collapses its details while preserving the
+replay position.
 
 Successful Gherkin steps show their full names with commands folded underneath.
 Expand one step or choose **Show commands** to inspect its calls and assertions.

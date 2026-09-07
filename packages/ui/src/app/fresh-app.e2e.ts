@@ -99,7 +99,7 @@ it('renders a canonical partial-skip verdict as yellow without relying on skippe
 });
 
 describe('fresh React runner', () => {
-  it('keeps test navigation separate from readable steps, filters failures, and jumps to the full error', async () => {
+  it('groups compact tests by file and expands readable steps and errors inside the selected row', async () => {
     const server = await startUiServer();
     servers.push(server);
     const page = await checkedPage();
@@ -180,8 +180,9 @@ describe('fresh React runner', () => {
           : {}),
       });
     }
+    await page.locator('.tw-case[data-status="failed"]').waitFor();
     const passing = page.locator('.tw-case-button').filter({ hasText: 'passing multiline' });
-    if ((await passing.getAttribute('aria-selected')) !== 'true') await passing.click();
+    if ((await passing.getAttribute('aria-current')) !== 'true') await passing.click();
     await page.getByRole('button', { name: 'Show commands', exact: true }).waitFor();
     expect(await page.locator('.tw-command-row').count()).toBe(0);
     expect(await page.locator('.tw-current-step strong').innerText()).toBe('12/12');
@@ -197,16 +198,19 @@ describe('fresh React runner', () => {
     await page.getByRole('button', { name: 'Hide commands', exact: true }).click();
     expect(await page.locator('.tw-command-row').count()).toBe(0);
     await longStep.click();
-    const listTop = await page
-      .locator('.tw-case-list')
-      .evaluate((e) => e.getBoundingClientRect().top);
-    await page.locator('.tw-story-scroll').evaluate((e) => {
-      e.scrollTop = e.scrollHeight;
-    });
-    expect(await page.locator('.tw-case-list').evaluate((e) => e.getBoundingClientRect().top)).toBe(
-      listTop,
-    );
-    expect(await page.locator('.tw-case-list [role="tree"]').count()).toBe(0);
+    expect(await page.locator('.tw-case-file-heading').count()).toBe(1);
+    expect(await page.locator('.tw-case-title small').count()).toBe(0);
+    expect(await page.locator('.tw-story-heading h3').count()).toBe(0);
+    expect(
+      await page.locator('.tw-case[data-expanded="true"] .tw-execution-narrative').count(),
+    ).toBe(1);
+    const collapsedTitle = page.locator('.tw-case[data-expanded="false"] .tw-case-title strong');
+    expect(await collapsedTitle.evaluate((e) => getComputedStyle(e).whiteSpace)).toBe('nowrap');
+    expect(
+      await page
+        .locator('.tw-case[data-expanded="false"] .tw-case-button')
+        .evaluate((e) => e.getBoundingClientRect().height),
+    ).toBeLessThanOrEqual(36);
     await page.getByRole('button', { name: 'Failed 1', exact: true }).click();
     expect(await page.locator('.tw-case-button').count()).toBe(1);
     await page.locator('.tw-case-button').click();
@@ -217,7 +221,7 @@ describe('fresh React runner', () => {
       .poll(() =>
         page.locator('.tw-case-failure-summary').evaluate((e) => {
           const box = e.getBoundingClientRect();
-          const area = e.closest('.tw-story-scroll')!.getBoundingClientRect();
+          const area = e.closest('.tw-case-list')!.getBoundingClientRect();
           return box.top >= area.top && box.bottom <= area.bottom;
         }),
       )
@@ -231,7 +235,7 @@ describe('fresh React runner', () => {
     expect(
       await failed.evaluate((e) => {
         const bounds = e.getBoundingClientRect();
-        const area = e.closest('.tw-story-scroll')!.getBoundingClientRect();
+        const area = e.closest('.tw-case-list')!.getBoundingClientRect();
         return bounds.top >= area.top && bounds.bottom <= area.bottom;
       }),
     ).toBe(true);
@@ -241,7 +245,7 @@ describe('fresh React runner', () => {
     );
     await page.getByLabel('Find a test in this run').fill('missing');
     expect(await page.getByText('No matching tests.', { exact: true }).count()).toBe(1);
-    expect(await page.locator('.tw-story-heading h3').innerText()).toContain('failing');
+    expect(await page.locator('.tw-case-story').count()).toBe(0);
     await page.getByLabel('Find a test in this run').fill('');
     await page.getByRole('button', { name: 'Failed 1', exact: true }).click();
     expect(await page.locator('.tw-case-button').count()).toBe(2);
@@ -335,10 +339,10 @@ describe('fresh React runner', () => {
     expect(await position.inputValue()).toBe('2000');
     const selectedCase = page.locator('.tw-case[data-selected="true"] .tw-case-button');
     await selectedCase.click();
-    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
+    expect(await selectedCase.getAttribute('aria-expanded')).toBe('false');
     expect(await position.inputValue()).toBe('2000');
     await selectedCase.click();
-    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
+    expect(await selectedCase.getAttribute('aria-expanded')).toBe('true');
     expect(await position.inputValue()).toBe('2000');
     await command.focus();
     await page.keyboard.press('ArrowDown');
@@ -1724,17 +1728,19 @@ describe('fresh React runner', () => {
     }
     const position = page.getByLabel('Replay position');
     await position.fill('2000');
-    expect(await page.locator('.tw-case-list .tw-command-row').count()).toBe(0);
+    expect(await page.locator('.tw-case[data-selected="false"] .tw-command-row').count()).toBe(0);
     expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await page.locator('.tw-case-button').filter({ hasText: 'alpha' }).hover();
     expect(await position.inputValue()).toBe('2000');
     expect(await page.locator('.tw-preview-label').count()).toBe(0);
     await page.locator('.tw-case-button').filter({ hasText: 'alpha' }).click();
-    await expect.poll(() => page.locator('.tw-story-heading h3').innerText()).toBe('alpha');
+    await expect
+      .poll(() => page.locator('.tw-case[data-selected="true"] .tw-case-title strong').innerText())
+      .toBe('alpha');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
-  it('keeps selected details open through live updates and repeated selection', async () => {
+  it('keeps a manually collapsed test closed during live updates and expands another selection', async () => {
     const server = await startUiServer();
     servers.push(server);
     const page = await checkedPage();
@@ -1766,7 +1772,7 @@ describe('fresh React runner', () => {
 
     expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await alpha.click();
-    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
+    expect(await alpha.getAttribute('aria-expanded')).toBe('false');
     server.hub.publish({
       v: 1,
       type: 'action-start',
@@ -1777,7 +1783,9 @@ describe('fresh React runner', () => {
     });
 
     await beta.click();
-    expect(await page.locator('.tw-story-heading h3').innerText()).toBe('beta case');
+    expect(
+      await page.locator('.tw-case[data-selected="true"] .tw-case-title strong').innerText(),
+    ).toBe('beta case');
     server.hub.publish({
       v: 1,
       type: 'action-start',
@@ -1787,12 +1795,15 @@ describe('fresh React runner', () => {
       testId: 'beta',
     });
     await expect.poll(() => page.locator('.tw-command-row').count()).toBe(1);
+    expect(await alpha.getAttribute('aria-expanded')).toBe('false');
     expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await alpha.click();
     expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await beta.click();
-    expect(await page.locator('.tw-story-heading h3').innerText()).toBe('beta case');
+    expect(
+      await page.locator('.tw-case[data-selected="true"] .tw-case-title strong').innerText(),
+    ).toBe('beta case');
     expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
@@ -1826,11 +1837,13 @@ describe('fresh React runner', () => {
     const runningCase = page.locator('.tw-case[data-status="running"]');
     await runningCase.waitFor();
     expect(
-      await runningCase.locator('.tw-status[data-status="running"] .lucide-loader-circle').count(),
+      await runningCase
+        .locator('.tw-case-head .tw-status[data-status="running"] .lucide-loader-circle')
+        .count(),
     ).toBe(1);
     expect(
       await runningCase
-        .locator('.tw-status')
+        .locator('.tw-case-head .tw-status')
         .evaluate((element) => getComputedStyle(element).color),
     ).toBe('rgb(103, 183, 209)');
     expect(
@@ -1838,7 +1851,7 @@ describe('fresh React runner', () => {
         .locator('.tw-command-row[data-status="running"]')
         .evaluate((element) => getComputedStyle(element).boxShadow),
     ).toContain('rgb(103, 183, 209)');
-    expect(await runningCase.locator('.lucide-check').count()).toBe(0);
+    expect(await runningCase.locator('.tw-case-head .lucide-check').count()).toBe(0);
 
     server.hub.publish({
       v: 1,
@@ -1874,11 +1887,15 @@ describe('fresh React runner', () => {
     });
     const passedCase = page.locator('.tw-case[data-status="passed"]');
     await passedCase.waitFor();
-    expect(await passedCase.locator('.tw-status[data-status="passed"] .lucide-check').count()).toBe(
-      1,
-    );
     expect(
-      await passedCase.locator('.tw-status').evaluate((element) => getComputedStyle(element).color),
+      await passedCase
+        .locator('.tw-case-head .tw-status[data-status="passed"] .lucide-check')
+        .count(),
+    ).toBe(1);
+    expect(
+      await passedCase
+        .locator('.tw-case-head .tw-status')
+        .evaluate((element) => getComputedStyle(element).color),
     ).toBe('rgb(88, 230, 176)');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
@@ -1965,10 +1982,10 @@ describe('fresh React runner', () => {
     await actionlessCase.waitFor();
     const actionless = actionlessCase.locator('.tw-case-button');
     expect(await actionless.getAttribute('data-execution-id')).toBe(`run:test:${actionlessId}:1`);
-    if ((await actionless.getAttribute('aria-selected')) !== 'true') {
+    if ((await actionless.getAttribute('aria-current')) !== 'true') {
       await actionless.click();
     }
-    expect(await actionless.getAttribute('aria-selected')).toBe('true');
+    expect(await actionless.getAttribute('aria-current')).toBe('true');
     await expect
       .poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count())
       .toBe(1);
@@ -2207,7 +2224,7 @@ describe('fresh React runner', () => {
       await page.getByRole('button', { name: /Run all|Rerun completes a purchase/u }).count(),
     ).toBe(0);
     await page.setViewportSize({ width: 1440, height: 700 });
-    await page.locator('.tw-story-scroll').evaluate((scroller) => {
+    await page.locator('.tw-case-list').evaluate((scroller) => {
       scroller.scrollTop = 0;
     });
     await page.getByRole('button', { name: 'Scroll to the current running step' }).waitFor();
@@ -2216,7 +2233,7 @@ describe('fresh React runner', () => {
       .poll(() =>
         page.evaluate(() => {
           const scroller = document
-            .querySelector<HTMLElement>('.tw-story-scroll')
+            .querySelector<HTMLElement>('.tw-case-list')
             ?.getBoundingClientRect();
           const current = document
             .querySelector<HTMLElement>('.tw-command-row[data-status="running"]')
@@ -2233,7 +2250,7 @@ describe('fresh React runner', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const visibleRows = await page.evaluate(() => {
       const viewport = document
-        .querySelector<HTMLElement>('.tw-story-scroll')
+        .querySelector<HTMLElement>('.tw-case-list')
         ?.getBoundingClientRect();
       if (viewport === undefined) return 0;
       return [...document.querySelectorAll<HTMLElement>('.tw-section-row, .tw-command-row')].filter(
@@ -2245,10 +2262,10 @@ describe('fresh React runner', () => {
     });
     expect(visibleRows).toBeGreaterThanOrEqual(6);
     const bottom = await page.evaluate(() => {
-      const scroller = document.querySelector<HTMLElement>('.tw-story-scroll');
+      const scroller = document.querySelector<HTMLElement>('.tw-case-list');
       if (scroller === null) return { reachable: false };
       scroller.scrollTop = scroller.scrollHeight;
-      const end = scroller.querySelector<HTMLElement>('.tw-story-end')?.getBoundingClientRect();
+      const end = scroller.querySelector<HTMLElement>('.tw-scroll-end')?.getBoundingClientRect();
       const box = scroller.getBoundingClientRect();
       return { reachable: end !== undefined && end.bottom <= box.bottom + 1 };
     });
