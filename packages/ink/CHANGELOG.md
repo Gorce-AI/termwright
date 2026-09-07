@@ -1,5 +1,14 @@
 # @termwright/ink
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/driver@0.5.2
+  - @termwright/probe-ink@0.5.2
+  - @termwright/protocol@0.5.2
+
 ## 0.5.1
 
 ### Patch Changes
