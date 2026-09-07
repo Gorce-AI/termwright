@@ -325,6 +325,11 @@ export function currentAttemptRuntime(): AttemptRuntime {
   return value;
 }
 
+/** Passive observers must remain inert outside a native attempt. */
+export function optionalAttemptRuntime(): AttemptRuntime | undefined {
+  return storage.getStore();
+}
+
 /** Installs the runner-owned journal projection for the active try. */
 export function installAttemptEventRecorder(recorder: AttemptEventRecorder): void {
   const runtime = currentAttemptRuntime();

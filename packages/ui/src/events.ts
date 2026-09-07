@@ -283,6 +283,7 @@ export type ServerMessage =
       readonly type: 'action';
       /** `action` for a driver call, `assert` for an expectation. */
       readonly kind: 'action' | 'assert';
+      readonly targetIssue?: string;
       /** Driver API name, e.g. `locator.click`, or the matcher's name. */
       readonly api: string;
       /** Present for driver actions with a live start edge. */
@@ -755,6 +756,7 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         ...optionalRef(),
         ...optionalText('error'),
         ...(actionPlan === undefined ? {} : { actionPlan }),
+        ...optionalText('targetIssue'),
         ...(actionability === undefined ? {} : { actionability }),
         ...optionalText('stepId'),
       };

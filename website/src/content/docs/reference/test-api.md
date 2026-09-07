@@ -151,6 +151,7 @@ unknown or unsupported result does not pass a positive or negative assertion.
 
 ### Matchers for both locator types
 
+- `toHaveCount(expected, options?)`
 - `toBeAttached()` / `toBeDetached()`
 - `toBeDisplayed()` / `toBeHidden()`
 - `toBeVisible()` / `toBeOffscreen()`
@@ -160,6 +161,12 @@ unknown or unsupported result does not pass a positive or negative assertion.
 - `toHaveSpatialRelation(expected, options?)`
 - `toHaveText(expected)`
 - `toMatchCellSnapshot(expected?, options?)`
+
+`toHaveCount` retries until the locator matches the expected non-negative
+integer. It retains the selector in the Runner and trace. Unlike
+`expect(await locator.count()).toBe(n)`, the matcher keeps the locator's identity,
+so a single resolved element can be highlighted. Zero or multiple matches are
+reported without selecting an arbitrary target.
 
 ### Semantic locator matchers
 

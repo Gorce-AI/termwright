@@ -12,6 +12,8 @@ import {
   type RunResourceTelemetry,
   type RunStartProvenance,
 } from '@termwright/run-history';
+import { buildFixtureTrace } from './__fixtures__/build-trace.js';
+import { writeNativeRunFixture } from './__fixtures__/native-run.js';
 import { readRunHistory, readRunManifest } from './runs.js';
 
 const fixtureTelemetry = (): RunResourceTelemetry => ({
@@ -40,6 +42,34 @@ const fixtureTelemetry = (): RunResourceTelemetry => ({
 });
 
 describe('native run history UI projection', () => {
+  it('recovers finalized recordings from exact attempt identities in existing journals', async () => {
+    const dir = await emptyDir();
+    const first = await buildFixtureTrace();
+    const second = await buildFixtureTrace();
+    const id = await writeNativeRunFixture(dir, {
+      tests: [
+        {
+          title: 'retry recordings',
+          file: '/retry.test.ts',
+          status: 'passed',
+          retries: ['failed', 'passed'],
+          recordings: [[first], [second, '/missing-session.twtrace']],
+        },
+      ],
+    });
+    const result = await readRunManifest(dir, id);
+    if (result.state !== 'complete') throw new Error(JSON.stringify(result));
+    expect(result.tests[0]?.attempts.map((attempt) => attempt.recordings)).toMatchObject([
+      [{ path: first, available: true }],
+      [
+        { path: second, available: true },
+        { path: '/missing-session.twtrace', available: false },
+      ],
+    ]);
+    expect(result.tests[0]?.attempts[0]?.executionId).not.toBe(
+      result.tests[0]?.attempts[1]?.executionId,
+    );
+  });
   it('projects exact specs, attempts, flaky state and captured provenance', async () => {
     const dir = await emptyDir();
     const start = provenance(100);

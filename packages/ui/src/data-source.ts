@@ -45,6 +45,12 @@ export interface ViewerState {
     readonly writable: boolean;
   }[];
   readonly trace: TraceOverview | null;
+  /** Unsaved source retained by this Runner server until saved or explicitly discarded. */
+  readonly recordDraft?: {
+    readonly id: string;
+    readonly source: string;
+    readonly outFile: string | null;
+  } | null;
   readonly record: {
     readonly sessionId: string;
     readonly command: readonly string[];
@@ -67,6 +73,8 @@ export interface DataSourceFeatures {
 export interface DataSource {
   readonly features: DataSourceFeatures;
   state(): Promise<ViewerState>;
+  /** Independent archive context for side-by-side replay, without changing the selected recording. */
+  forTrace?(path: string): DataSource;
   /** The screen and tree at a moment of the recording. */
   traceState(timeMs: number): Promise<TraceStatePayload>;
   traceLogs(query?: LogWindowQuery): Promise<TraceLogs>;

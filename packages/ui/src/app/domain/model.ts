@@ -105,6 +105,7 @@ export interface ReplayState {
   readonly frames: TraceFrames;
   readonly commands: readonly CommandRow[];
   readonly traceState: TraceStatePayload | null;
+  readonly traceStateRequestedMs?: number;
   readonly logs: TraceLogs;
   readonly timeMs: number;
   readonly playing: boolean;

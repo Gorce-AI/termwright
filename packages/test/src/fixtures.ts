@@ -674,6 +674,13 @@ export const test = markTermwrightTestApi(
             if (keep) {
               const archive = await session.writer.finalize();
               scope?.traces.push(archive.dir);
+              currentAttemptEventRecorder().record({
+                eventClass: 'authoritative',
+                type: 'trace.finalized',
+                sessionId: session.runSessionId,
+                phase: 'cleanup',
+                payload: { traceRef: archive.dir },
+              });
               resources = archive.resources;
             } else {
               resources = await session.writer.dispose();

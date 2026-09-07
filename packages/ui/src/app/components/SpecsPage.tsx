@@ -10,8 +10,9 @@ import {
   Play,
   Search,
   Tags,
+  X,
 } from 'lucide-react';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { ExecutionCase, ExecutionStatus } from '../domain/model.js';
 import { usePreferences } from '../preferences.js';
 import { useTreeNavigation } from '../use-tree-navigation.js';
@@ -63,6 +64,17 @@ export function SpecsPage({
   const { preferences, updatePreferences } = usePreferences();
   const [query, setQuery] = useState('');
   const [newTestOpen, setNewTestOpen] = useState(false);
+  const newTestRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!newTestOpen) return;
+    newTestRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !newTestRef.current?.contains(event.target))
+        setNewTestOpen(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [newTestOpen]);
   const canonicalTree = useMemo(() => buildTree(cases, projectRoot), [cases, projectRoot]);
   const filteredTree = useMemo(() => filterTree(canonicalTree, query), [canonicalTree, query]);
   const expanded = useMemo(
@@ -93,6 +105,7 @@ export function SpecsPage({
     onCollapsed: (next) =>
       updatePreferences({ specExpansion: parentKeys.filter((key) => !next.has(key)) }),
   });
+  const matchingTargets = exactTargets(visibleCases(filteredTree));
   const runnable = useMemo(() => cases.filter(runnableCase), [cases]);
   const canStart = canRun && connected && !runBusy;
   const toggle = (key: string) => {
@@ -112,7 +125,37 @@ export function SpecsPage({
         </div>
         <div className="tw-spec-actions">
           {newTest === undefined ? null : (
-            <div className="tw-new-test">
+            <div
+              className="tw-new-test"
+              ref={newTestRef}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setNewTestOpen(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  setNewTestOpen(false);
+                  newTestRef.current?.querySelector<HTMLButtonElement>('[aria-haspopup]')?.focus();
+                }
+                if (newTestOpen && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                  event.preventDefault();
+                  const items = [
+                    ...event.currentTarget.querySelectorAll<HTMLElement>(
+                      '[role="menuitem"]:not([disabled])',
+                    ),
+                  ];
+                  const index = items.indexOf(document.activeElement as HTMLElement);
+                  const next =
+                    event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? items.length - 1
+                        : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) %
+                          items.length;
+                  items[next]?.focus();
+                }
+              }}
+            >
               <button
                 type="button"
                 aria-haspopup="menu"
@@ -141,6 +184,9 @@ export function SpecsPage({
                     disabled={!newTest.canRecord}
                     onClick={() => {
                       setNewTestOpen(false);
+                      newTestRef.current
+                        ?.querySelector<HTMLButtonElement>('[aria-haspopup]')
+                        ?.focus();
                       newTest.onRecord();
                     }}
                   >
@@ -150,12 +196,27 @@ export function SpecsPage({
               ) : null}
             </div>
           )}
+          {forceOpen ? (
+            <Tooltip
+              label={`Run ${matchingTargets.length} matching cases`}
+              disabledReason={runDisabledReason(canRun, connected, runBusy)}
+            >
+              <button
+                type="button"
+                className="tw-primary-button"
+                disabled={!canStart || matchingTargets.length === 0}
+                onClick={() => onRun(matchingTargets)}
+              >
+                <Play aria-hidden="true" size={16} /> Run matching {matchingTargets.length}
+              </button>
+            </Tooltip>
+          ) : null}
           <Tooltip
             label={`Run all ${runnable.length} cases in the current CLI scope`}
             disabledReason={runDisabledReason(canRun, connected, runBusy)}
           >
             <button
-              className="tw-primary-button"
+              className={forceOpen ? 'tw-secondary-button' : 'tw-primary-button'}
               type="button"
               disabled={!canStart || runnable.length === 0}
               onClick={() => onRun([])}
@@ -165,15 +226,32 @@ export function SpecsPage({
           </Tooltip>
         </div>
       </div>
-      <label className="tw-search-box">
-        <Search aria-hidden="true" size={16} />
-        <span className="sr-only">Search specs</span>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder="Search cases, features, tags or files"
-        />
-      </label>
+      <div className="tw-catalog-search">
+        <label className="tw-search-box">
+          <Search aria-hidden="true" size={16} />
+          <span className="sr-only">Search specs</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder="Search cases, features, tags or files"
+          />
+          {forceOpen ? (
+            <button
+              type="button"
+              className="tw-clear-search"
+              aria-label="Clear spec search"
+              onClick={() => setQuery('')}
+            >
+              <X aria-hidden="true" size={14} />
+            </button>
+          ) : null}
+        </label>
+        {forceOpen ? (
+          <p className="tw-filter-count" role="status">
+            {visibleCases(filteredTree).length} of {cases.length} cases match
+          </p>
+        ) : null}
+      </div>
       <div
         className="tw-spec-files"
         role="tree"
@@ -215,7 +293,12 @@ export function SpecsPage({
         {filteredTree.directories.length === 0 && filteredTree.files.length === 0 ? (
           <div className="tw-page-empty">
             <Search aria-hidden="true" />
-            <strong>No matching owned tests</strong>
+            <strong>{forceOpen ? 'No matching tests' : 'No tests discovered yet'}</strong>
+            <p>
+              {forceOpen
+                ? 'Try another name, tag or file, or clear the search.'
+                : 'Open this UI from a project with test files to populate the catalog.'}
+            </p>
           </div>
         ) : null}
       </div>
@@ -793,4 +876,11 @@ function countStatuses(cases: readonly ExecutionCase[]): {
     else values.waiting += 1;
   }
   return values;
+}
+
+function visibleCases(directory: SpecDirectory): readonly ExecutionCase[] {
+  return [
+    ...directory.files.flatMap((file) => file.visibleCases),
+    ...directory.directories.flatMap(visibleCases),
+  ];
 }

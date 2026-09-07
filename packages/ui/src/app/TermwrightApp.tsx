@@ -1,3 +1,5 @@
+import { historyExecution } from './domain/history.js';
+import { copyText } from './clipboard.js';
 import { AlertTriangle, X } from 'lucide-react';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { DataSource, ViewerState } from '../data-source.js';
@@ -52,6 +54,7 @@ export function TermwrightApp({
     busy: false,
   });
   const [recordReview, setRecordReview] = useState({
+    draftId: undefined as string | undefined,
     source: '',
     error: null as string | null,
     busy: false,
@@ -71,6 +74,15 @@ export function TermwrightApp({
             command: commandForForm(viewer.record?.command ?? []),
             outFile: viewer.record?.outFile ?? '',
           }));
+        }
+        if (viewer.recordDraft) {
+          setRecordReview({
+            draftId: viewer.recordDraft.id,
+            source: viewer.recordDraft.source,
+            error: null,
+            busy: false,
+          });
+          setRecordDraft((draft) => ({ ...draft, outFile: viewer.recordDraft!.outFile ?? '' }));
         }
         dispatch({ type: 'boot-ready', viewer });
       },
@@ -154,6 +166,47 @@ export function TermwrightApp({
     window.addEventListener('popstate', restore);
     return () => window.removeEventListener('popstate', restore);
   }, []);
+
+  useEffect(() => {
+    const requested = pendingUrlState.current;
+    if (
+      state.boot !== 'ready' ||
+      requested?.view !== 'runner' ||
+      requested.runId === undefined ||
+      requested.executionId === undefined ||
+      !source.features.history ||
+      [...state.executions, ...state.catalog].some(
+        (test) =>
+          test.executionId === requested.executionId &&
+          (requested.traceRef === undefined || test.traceRef === requested.traceRef),
+      )
+    )
+      return;
+    let active = true;
+    void source
+      .run(requested.runId)
+      .then((run) => {
+        if (!active || run.state !== 'complete') return;
+        for (const test of run.tests)
+          for (const attempt of test.attempts) {
+            if (attempt.executionId !== requested.executionId) continue;
+            const recording = attempt.recordings.find(
+              (recording) =>
+                requested.traceRef === undefined || recording.path === requested.traceRef,
+            );
+            if (recording === undefined) continue;
+            dispatch({
+              type: 'select-history',
+              execution: historyExecution(run, test, attempt, recording),
+            });
+            return;
+          }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [navigationEpoch, source, state.boot, state.executions, state.catalog]);
 
   useEffect(() => {
     const requested = pendingUrlState.current;
@@ -302,7 +355,7 @@ export function TermwrightApp({
         .traceState(replay.timeMs)
         .then((traceState) => {
           if (active && epoch === replayEpoch.current)
-            dispatch({ type: 'replay-state', traceRef, traceState });
+            dispatch({ type: 'replay-state', traceRef, traceState, requestedMs: replay.timeMs });
         })
         .catch(() => undefined);
     }, 50);
@@ -334,7 +387,7 @@ export function TermwrightApp({
   const openSource = (execution: ExecutionCase) => {
     const file = projectFile(state.project?.root ?? '', execution.source.file);
     const location = editorLink(preferences.editor, file, execution.source.line);
-    const copy = navigator.clipboard.writeText(file);
+    const copy = copyText(file);
     if (location === null) {
       void copy
         .then(() => dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` }))
@@ -343,13 +396,21 @@ export function TermwrightApp({
     }
     // URL schemes cannot report whether a local editor accepted them. Copying
     // the exact path first leaves a deterministic fallback without another UI.
-    void copy.catch(() => undefined);
     window.location.href = location;
-    dispatch({
-      type: 'toast',
-      tone: 'info',
-      text: 'Opening source in your configured editor; the path was copied as a fallback.',
-    });
+    void copy.then(
+      () =>
+        dispatch({
+          type: 'toast',
+          tone: 'info',
+          text: 'Opening source in your configured editor; the path was copied as a fallback.',
+        }),
+      () =>
+        dispatch({
+          type: 'toast',
+          tone: 'info',
+          text: `Opening source in your configured editor. Clipboard unavailable: ${file}`,
+        }),
+    );
   };
   const stop = () => {
     if (client === undefined || state.run.status !== 'running') return;
@@ -386,8 +447,8 @@ export function TermwrightApp({
     if (client === undefined || recordReview.busy) return;
     setRecordReview((review) => ({ ...review, busy: true, error: null }));
     try {
-      const { source: generated } = await client.stopRecording();
-      setRecordReview({ source: generated, error: null, busy: false });
+      const { source: generated, draftId } = await client.stopRecording();
+      setRecordReview({ draftId, source: generated, error: null, busy: false });
       setRecordDialog('review');
     } catch (cause) {
       setRecordReview((review) => ({ ...review, busy: false, error: describe(cause) }));
@@ -404,9 +465,10 @@ export function TermwrightApp({
     try {
       const { path } = await client.save(
         recordDraft.outFile === '' ? undefined : recordDraft.outFile,
+        recordReview.draftId,
       );
       setRecordDialog('closed');
-      setRecordReview({ source: '', error: null, busy: false });
+      setRecordReview({ draftId: undefined, source: '', error: null, busy: false });
       dispatch({ type: 'toast', tone: 'success', text: `Saved recorded test to ${path}` });
       dispatch({ type: 'route', route: 'specs' });
     } catch (cause) {
@@ -417,9 +479,9 @@ export function TermwrightApp({
     if (client === undefined || recordReview.busy) return;
     setRecordReview((review) => ({ ...review, busy: true, error: null }));
     try {
-      await client.discardRecording();
+      await client.discardRecording(recordReview.draftId);
       setRecordDialog('closed');
-      setRecordReview({ source: '', error: null, busy: false });
+      setRecordReview({ draftId: undefined, source: '', error: null, busy: false });
       dispatch({ type: 'toast', tone: 'info', text: 'Recording discarded; no file was written.' });
     } catch (cause) {
       setRecordReview((review) => ({ ...review, busy: false, error: describe(cause) }));
@@ -455,6 +517,7 @@ export function TermwrightApp({
   return (
     <AppShell
       project={project}
+      {...(recordReview.source === '' ? {} : { onReviewDraft: () => setRecordDialog('review') })}
       route={state.route}
       connected={state.connected}
       features={source.features}
@@ -570,13 +633,30 @@ export function TermwrightApp({
                       recordDraft.outFile || 'tests/new.test.ts',
                     );
                     const link = editorLink(preferences.editor, file);
-                    void navigator.clipboard.writeText(file).catch(() => undefined);
-                    if (link !== null) window.location.href = link;
-                    else dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` });
+                    const copy = copyText(file);
+                    if (link !== null) {
+                      window.location.href = link;
+                      void copy.catch(() =>
+                        dispatch({
+                          type: 'toast',
+                          tone: 'failure',
+                          text: `Clipboard unavailable: ${file}`,
+                        }),
+                      );
+                    } else
+                      void copy.then(
+                        () => dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` }),
+                        () =>
+                          dispatch({
+                            type: 'toast',
+                            tone: 'failure',
+                            text: `Could not copy ${file}`,
+                          }),
+                      );
                   },
                   onRecord: () => {
                     setRecordDraft((draft) => ({ ...draft, busy: false, error: null }));
-                    setRecordDialog('start');
+                    setRecordDialog(recordReview.source === '' ? 'start' : 'review');
                   },
                 },
               })}
@@ -584,6 +664,18 @@ export function TermwrightApp({
       ) : state.route === 'runs' ? (
         <RunsPage
           source={source}
+          onReplay={(run, test, attempt, recording) => {
+            const execution = historyExecution(run, test, attempt, recording);
+            dispatch({ type: 'select-history', execution });
+            pushUrlState({
+              view: 'runner',
+              runId: run.id,
+              executionId: execution.executionId,
+              traceRef: recording.path,
+              timeMs: 0,
+            });
+            void openReplay(execution);
+          }}
           selectedRunId={selectedRunId}
           onSelectedRunId={(runId) => {
             pushUrlState({ view: 'runs', ...(runId === null ? {} : { runId }) });
@@ -619,6 +711,8 @@ export function TermwrightApp({
       ) : recordDialog === 'review' ? (
         <RecordReviewDialog
           source={recordReview.source}
+          onClose={() => setRecordDialog('closed')}
+          onOutFile={(outFile) => setRecordDraft((draft) => ({ ...draft, outFile }))}
           outFile={recordDraft.outFile}
           error={recordReview.error}
           busy={recordReview.busy}
@@ -626,10 +720,16 @@ export function TermwrightApp({
             void saveRecording();
           }}
           onCopy={() => {
-            void navigator.clipboard
-              .writeText(recordReview.source)
+            void copyText(recordReview.source)
               .then(() =>
                 dispatch({ type: 'toast', tone: 'success', text: 'Generated test copied.' }),
+              )
+              .catch(() =>
+                dispatch({
+                  type: 'toast',
+                  tone: 'failure',
+                  text: 'Clipboard unavailable. Select the generated source to copy it manually.',
+                }),
               );
           }}
           onDiscard={() => {

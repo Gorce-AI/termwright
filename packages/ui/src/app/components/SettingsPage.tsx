@@ -1,3 +1,4 @@
+import { copyText } from '../clipboard.js';
 import {
   Clipboard,
   Gauge,
@@ -6,7 +7,8 @@ import {
   SlidersHorizontal,
   TerminalSquare,
 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useModalFocus } from '../use-modal-focus.js';
 import type { DataSourceFeatures } from '../../data-source.js';
 import { editorChoices } from '../../editor-link.js';
 import type { AppState } from '../domain/model.js';
@@ -33,11 +35,13 @@ export function SettingsPage({
     if (confirmation === 'all') resetAll();
     setConfirmation(null);
   };
-  const copyDiagnostics = () => {
-    void navigator.clipboard
-      .writeText(JSON.stringify(report, null, 2))
-      .then(() => setCopyStatus('copied'))
-      .catch(() => setCopyStatus('failed'));
+  const copyDiagnostics = async () => {
+    try {
+      await copyText(JSON.stringify(report, null, 2));
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('failed');
+    }
   };
 
   return (
@@ -246,35 +250,56 @@ export function SettingsPage({
         </section>
       </div>
       {confirmation === null ? null : (
-        <div
-          className="tw-settings-confirm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reset-title"
-        >
-          <h3 id="reset-title">
-            {confirmation === 'layout' ? 'Reset workspace layout?' : 'Reset every preference?'}
-          </h3>
-          <p>
-            {confirmation === 'layout'
-              ? 'Panel widths and collapsed panes return to defaults. Behaviour and replay preferences stay unchanged.'
-              : 'Layout and behaviour return to the shipped defaults.'}
-          </p>
-          <div>
-            <button
-              type="button"
-              className="tw-secondary-button"
-              onClick={() => setConfirmation(null)}
-            >
-              Cancel
-            </button>
-            <button type="button" className="tw-danger-button" onClick={confirmReset}>
-              Confirm reset
-            </button>
-          </div>
-        </div>
+        <ResetDialog
+          kind={confirmation}
+          onCancel={() => setConfirmation(null)}
+          onConfirm={confirmReset}
+        />
       )}
     </section>
+  );
+}
+
+function ResetDialog({
+  kind,
+  onCancel,
+  onConfirm,
+}: {
+  readonly kind: 'layout' | 'all';
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+}) {
+  const dialog = useRef<HTMLDivElement>(null);
+  const initial = useRef<HTMLButtonElement>(null);
+  useModalFocus(dialog, initial, onCancel, false);
+  return (
+    <div className="tw-dialog-backdrop" role="presentation">
+      <div
+        ref={dialog}
+        className="tw-settings-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-title"
+        aria-describedby="reset-description"
+      >
+        <h3 id="reset-title">
+          {kind === 'layout' ? 'Reset workspace layout?' : 'Reset every preference?'}
+        </h3>
+        <p id="reset-description">
+          {kind === 'layout'
+            ? 'Panel widths and collapsed panes return to defaults. Behaviour and replay preferences stay unchanged.'
+            : 'Layout and behaviour return to the shipped defaults.'}
+        </p>
+        <div>
+          <button ref={initial} type="button" className="tw-secondary-button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="tw-danger-button" onClick={onConfirm}>
+            Confirm reset
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

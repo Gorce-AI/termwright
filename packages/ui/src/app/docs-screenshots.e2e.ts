@@ -290,7 +290,7 @@ async function captureReplayAndSemantics(): Promise<void> {
   await screenshot(page, 'replay-player.png');
 
   await position.fill('0');
-  const expand = page.getByRole('button', { name: 'Expand inspector' });
+  const expand = page.getByRole('button', { name: 'Show inspector' });
   if ((await expand.count()) > 0) await expand.click();
   await page.getByRole('tab', { name: 'Tree' }).click();
   await expect.poll(() => page.locator('.tw-semantic-node-row').count()).toBeGreaterThan(0);

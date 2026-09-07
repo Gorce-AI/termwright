@@ -13,6 +13,7 @@ export interface NativeRunFixtureTest {
   readonly file: string;
   readonly status: 'passed' | 'failed' | 'skipped' | 'incomplete';
   readonly durationMs?: number | null;
+  readonly recordings?: readonly (readonly string[])[];
   readonly retries?: readonly ('failed' | 'passed' | 'skipped' | 'incomplete')[];
 }
 
@@ -149,6 +150,17 @@ export async function writeNativeRunFixture(
     events.push(
       producer.emit({ eventClass: 'authoritative', type: 'attempt.started', identity, payload }),
     );
+    const fixtureTest = options.tests[Number(attempt.nativeTaskId.replace('fixture-', ''))];
+    for (const path of fixtureTest?.recordings?.[attempt.retry] ?? []) {
+      events.push(
+        producer.emit({
+          eventClass: 'authoritative',
+          type: 'trace.finalized',
+          identity: { ...identity, sessionId: createRunId('session') },
+          payload: { traceRef: path },
+        }),
+      );
+    }
     if (attempt.status !== 'incomplete') {
       monotonicTime += attempt.durationMs ?? 0;
       events.push(

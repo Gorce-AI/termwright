@@ -158,7 +158,13 @@ export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
  * @returns the archive directory.
  */
 export async function buildFixtureTrace(
-  options: { readonly columns?: number; readonly rows?: number } = {},
+  options: {
+    readonly columns?: number;
+    readonly rows?: number;
+    readonly durationMs?: number;
+    readonly assertions?: boolean;
+    readonly outcome?: string;
+  } = {},
 ): Promise<string> {
   const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-')), 'session.twtrace');
   const session = new Recorded();
@@ -176,6 +182,26 @@ export async function buildFixtureTrace(
   session.publish({ ...(FIXTURE_TREES[0] as SemanticSnapshot), columns, rows });
   session.clock = 100;
   writer.recordAction({ api: 'locator.click', selector: 'button', ref: 'semantic:b1@1', ok: true });
+  if (options.assertions) {
+    session.clock = 200;
+    writer.recordAssert({ api: 'toBe', ok: true });
+    session.clock = 300;
+    writer.recordAssert({
+      api: 'toBeVisible',
+      selector: 'getByRole("button", { name: "Approve" })',
+      ref: 'semantic:b1@1',
+      ok: true,
+    });
+    session.clock = 400;
+    const emptyStep = writer.addStep('empty list assertion');
+    writer.recordAssert({
+      api: 'toHaveCount(0)',
+      selector: 'getByRole("listitem")',
+      ok: true,
+      targetIssue: 'No elements matched this locator.',
+    });
+    emptyStep.end('passed');
+  }
 
   session.emit('app-log', {
     source: 'file',
@@ -186,7 +212,10 @@ export async function buildFixtureTrace(
 
   session.clock = 1_000;
   const step = writer.addStep('approve');
-  session.emit('output', { data: new TextEncoder().encode('running: ls -la\r\n'), timeMs: 1_000 });
+  session.emit('output', {
+    data: new TextEncoder().encode(`${options.outcome ?? 'running: ls -la'}\r\n`),
+    timeMs: 1_000,
+  });
   session.emit('app-log', {
     source: 'adapter',
     timeMs: 1_050,
@@ -201,11 +230,18 @@ export async function buildFixtureTrace(
   });
 
   session.clock = 1_500;
-  session.publish({ ...(FIXTURE_TREES[1] as SemanticSnapshot), columns, rows });
+  session.publish({
+    ...(FIXTURE_TREES[1] as SemanticSnapshot),
+    columns,
+    rows,
+    ...(options.outcome === undefined
+      ? {}
+      : { nodes: [{ ...FIXTURE_TREES[1]!.nodes[0]!, testId: 'outcome', name: options.outcome }] }),
+  });
   step.end('passed');
 
-  session.clock = 2_000;
-  session.emit('exit', { code: 0, signal: null, timeMs: 2_000 });
+  session.clock = options.durationMs ?? 2_000;
+  session.emit('exit', { code: 0, signal: null, timeMs: session.clock });
   await writer.finalize();
   return dir;
 }

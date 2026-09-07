@@ -10,6 +10,7 @@ import {
   buildFixtureTrace,
   FIXTURE_TREES,
 } from '../test/fixtures/build-trace.js';
+import { buildFixtureTrace as buildWrittenFixtureTrace } from '../__fixtures__/build-trace.js';
 import { writeNativeRunFixture } from '../__fixtures__/native-run.js';
 import { writeInlineReport } from '../inline-report.js';
 import { startUiServer, type UiServer } from '../server.js';
@@ -49,7 +50,7 @@ async function tracePage(trace: string): Promise<Page> {
 async function checkedPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(String(error)));
+  page.on('pageerror', (error) => errors.push(error.stack ?? String(error)));
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
@@ -98,6 +99,274 @@ it('renders a canonical partial-skip verdict as yellow without relying on skippe
 });
 
 describe('fresh React runner', () => {
+  it('groups compact tests by file and expands readable steps and errors inside the selected row', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await expect
+      .poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))
+      .toBe('true');
+    const startedAt = Date.now();
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:readable', mode: 'live', startedAt });
+    for (const id of ['passing', 'failing']) {
+      server.hub.publish({
+        v: 1,
+        type: 'test-start',
+        id,
+        title: `${id} multiline composer scenario`,
+        file: '/repo/composer.feature',
+        startedAt,
+      });
+      for (let index = 0; index < 12; index++) {
+        const stepId = `step-${index}`;
+        const t = index * 100;
+        const failed = id === 'failing' && index === 11;
+        const gherkin = {
+          keyword: 'Then',
+          text: `the composer preserves line ${index + 1} when the terminal is resized to a narrow viewport`,
+          source: { file: '/repo/composer.feature', line: index + 10, column: 5 },
+        };
+        server.hub.publish({
+          v: 1,
+          type: 'step',
+          testId: id,
+          stepId,
+          title: gherkin.text,
+          phase: 'start',
+          t,
+          gherkin,
+        });
+        server.hub.publish({
+          v: 1,
+          type: 'action',
+          testId: id,
+          stepId,
+          actionId: `${id}-command-${index}`,
+          kind: 'assert',
+          api: 'toHaveValue',
+          t: t + 40,
+          ok: !failed,
+          selector: '#composer',
+          ...(failed
+            ? {
+                error:
+                  'Expected all three lines in the composer.\nReceived only the first line.\n    at composer.steps.ts:84:7',
+              }
+            : {}),
+        });
+        server.hub.publish({
+          v: 1,
+          type: 'step',
+          testId: id,
+          stepId,
+          title: gherkin.text,
+          phase: 'end',
+          t: t + 50,
+          gherkin,
+          ...(failed ? { error: 'Expected all three lines in the composer.' } : {}),
+        });
+      }
+      server.hub.publish({
+        v: 1,
+        type: 'test-end',
+        id,
+        status: id === 'failing' ? 'failed' : 'passed',
+        durationMs: 1200,
+        flaky: false,
+        lostLogRecords: 0,
+        ...(id === 'failing'
+          ? { error: 'Expected all three lines in the composer.\nReceived only the first line.' }
+          : {}),
+      });
+    }
+    await page.locator('.tw-case[data-status="failed"]').waitFor();
+    const passing = page.locator('.tw-case-button').filter({ hasText: 'passing multiline' });
+    if ((await passing.getAttribute('aria-current')) !== 'true') await passing.click();
+    await page.getByRole('button', { name: 'Show commands', exact: true }).waitFor();
+    expect(await page.locator('.tw-command-row').count()).toBe(0);
+    expect(await page.locator('.tw-current-step strong').innerText()).toBe('12/12');
+    const longStep = page.locator('.tw-section-row').filter({ hasText: 'preserves line 1 when' });
+    expect(await longStep.locator('strong').evaluate((e) => getComputedStyle(e).whiteSpace)).toBe(
+      'nowrap',
+    );
+    expect(await longStep.evaluate((e) => e.getBoundingClientRect().height)).toBeLessThanOrEqual(
+      30,
+    );
+    expect(await longStep.locator('small').count()).toBe(0);
+    await longStep.hover();
+    await expect
+      .poll(() => page.getByRole('tooltip').innerText())
+      .toContain('composer.feature:10:5 · 1 assertion');
+    await longStep.click();
+    expect(await longStep.locator('strong').evaluate((e) => getComputedStyle(e).whiteSpace)).toBe(
+      'normal',
+    );
+    expect(await page.locator('.tw-command-row').count()).toBe(1);
+    await page.getByRole('button', { name: 'Show commands', exact: true }).click();
+    expect(await page.locator('.tw-command-row').count()).toBe(12);
+    await page.getByRole('button', { name: 'Hide commands', exact: true }).click();
+    expect(await page.locator('.tw-command-row').count()).toBe(0);
+    await longStep.click();
+    expect(await page.locator('.tw-case-file-heading').count()).toBe(1);
+    expect(await page.locator('.tw-case-title small').count()).toBe(0);
+    expect(await page.locator('.tw-story-heading h3').count()).toBe(0);
+    expect(
+      await page.locator('.tw-case[data-expanded="true"] .tw-execution-narrative').count(),
+    ).toBe(1);
+    const collapsedTitle = page.locator('.tw-case[data-expanded="false"] .tw-case-title strong');
+    expect(await collapsedTitle.evaluate((e) => getComputedStyle(e).whiteSpace)).toBe('nowrap');
+    expect(
+      await page
+        .locator('.tw-case[data-expanded="false"] .tw-case-button')
+        .evaluate((e) => e.getBoundingClientRect().height),
+    ).toBeLessThanOrEqual(36);
+    await page.getByRole('button', { name: 'Failed 1', exact: true }).click();
+    expect(await page.locator('.tw-case-button').count()).toBe(1);
+    await page.locator('.tw-case-button').click();
+    await expect
+      .poll(() => page.locator('.tw-case-failure-summary').innerText())
+      .toContain('Expected all three lines');
+    await expect
+      .poll(() =>
+        page.locator('.tw-case-failure-summary').evaluate((e) => {
+          const box = e.getBoundingClientRect();
+          const area = e.closest('.tw-case-list')!.getBoundingClientRect();
+          return box.top >= area.top && box.bottom <= area.bottom;
+        }),
+      )
+      .toBe(true);
+    expect(await page.locator('.tw-command-row').count()).toBe(1);
+    await page.getByRole('button', { name: 'Go to failed step', exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.getAttribute('data-status')))
+      .toBe('failed');
+    const failed = page.locator('.tw-command-row[data-status="failed"]');
+    expect(
+      await failed.evaluate((e) => {
+        const bounds = e.getBoundingClientRect();
+        const area = e.closest('.tw-case-list')!.getBoundingClientRect();
+        return bounds.top >= area.top && bounds.bottom <= area.bottom;
+      }),
+    ).toBe(true);
+    await page.locator('.tw-command-failure summary').first().click();
+    expect(await page.locator('.tw-command-failure pre').innerText()).toContain(
+      'composer.steps.ts:84:7',
+    );
+    await page.getByLabel('Find a test in this run').fill('missing');
+    expect(await page.getByText('No matching tests.', { exact: true }).count()).toBe(1);
+    expect(await page.locator('.tw-case-story').count()).toBe(0);
+    await page.getByLabel('Find a test in this run').fill('');
+    await page.getByRole('button', { name: 'Failed 1', exact: true }).click();
+    expect(await page.locator('.tw-case-button').count()).toBe(2);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('tab', { name: 'Steps', exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('seeks exact fractional endpoints and keeps step controls aligned on desktop and small screens', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace({ durationMs: 2_000.5 }));
+    const position = page.getByLabel('Replay position');
+    await position.waitFor();
+    expect(
+      await page.getByRole('button', { name: 'Previous step', exact: true }).isDisabled(),
+    ).toBe(true);
+    await page.getByRole('button', { name: 'Next step', exact: true }).click();
+    expect(await position.inputValue()).toBe('1000');
+    expect(await page.getByRole('button', { name: 'Next step', exact: true }).isDisabled()).toBe(
+      true,
+    );
+    await position.focus();
+    await page.keyboard.press('ArrowLeft');
+    expect(await position.inputValue()).toBe('900');
+    await page.keyboard.press('Shift+ArrowRight');
+    expect(await position.inputValue()).toBe('1900');
+    expect(await position.getAttribute('max')).toBe('2000.5');
+    await page.keyboard.press('End');
+    expect(await position.inputValue()).toBe('2000.5');
+    await page.getByRole('button', { name: 'Previous step', exact: true }).click();
+    expect(await position.inputValue()).toBe('1000');
+    expect(await page.getByRole('button', { name: 'Play replay', exact: true }).count()).toBe(1);
+
+    for (const width of [1440, 1024, 390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      if (width < 1100) await page.getByRole('tab', { name: 'Screen', exact: true }).click();
+      const geometry = await page.evaluate(() => {
+        const range = document.querySelector<HTMLInputElement>('.tw-replay-range')!;
+        const track = range.getBoundingClientRect();
+        const markers = document
+          .querySelector<HTMLElement>('.tw-replay-markers')!
+          .getBoundingClientRect();
+        const controls = document
+          .querySelector<HTMLElement>('.tw-replay-controls')!
+          .getBoundingClientRect();
+        const buttons = [
+          ...document.querySelectorAll<HTMLElement>('.tw-replay-controls button'),
+        ].filter((button) => !button.classList.contains('tw-replay-marker'));
+        return {
+          aligned:
+            Math.abs(markers.left - (track.left + 8)) < 1 &&
+            Math.abs(markers.right - (track.right - 8)) < 1,
+          reachable:
+            controls.bottom <= window.innerHeight &&
+            controls.left >= 0 &&
+            controls.right <= window.innerWidth &&
+            buttons.every((button) => {
+              const rect = button.getBoundingClientRect();
+              return rect.left >= 0 && rect.right <= window.innerWidth;
+            }),
+          overlap: buttons
+            .slice(0, 4)
+            .some(
+              (button) =>
+                button.getBoundingClientRect().right >
+                document.querySelector('.tw-replay-clock')!.getBoundingClientRect().left,
+            ),
+        };
+      });
+      expect(geometry).toEqual({ aligned: true, reachable: true, overlap: false });
+    }
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('keeps the inspector in the hovered moment, restores pinned time and keeps step keyboard focus inside the narrative', async () => {
+    const page = await tracePage(await buildFixtureTrace());
+    await page.locator('.tw-replay-controls').waitFor();
+    await page.getByRole('button', { name: 'Show inspector', exact: true }).click();
+    const position = page.getByLabel('Replay position');
+    await position.fill('2000');
+    await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 2');
+    const command = page.locator('.tw-command-row').filter({ hasText: 'click' });
+    await command.hover();
+    await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 1');
+    expect(await position.inputValue()).toBe('100');
+    expect(await page.locator('.tw-replay-clock').innerText()).toContain('Preview');
+    await page.locator('.tw-machine-bar').hover();
+    await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 2');
+    expect(await position.inputValue()).toBe('2000');
+    const selectedCase = page.locator('.tw-case[data-selected="true"] .tw-case-button');
+    await selectedCase.click();
+    expect(await selectedCase.getAttribute('aria-expanded')).toBe('false');
+    expect(await position.inputValue()).toBe('2000');
+    await selectedCase.click();
+    expect(await selectedCase.getAttribute('aria-expanded')).toBe('true');
+    expect(await position.inputValue()).toBe('2000');
+    await command.focus();
+    await page.keyboard.press('ArrowDown');
+    expect(
+      await page.evaluate(
+        () => document.activeElement?.closest('.tw-execution-narrative') !== null,
+      ),
+    ).toBe(true);
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('role'))).toBe(
+      'treeitem',
+    );
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('rebuilds Unicode geometry when the selected terminal profile changes', async () => {
     const server = await startUiServer();
     servers.push(server);
@@ -178,6 +447,23 @@ describe('fresh React runner', () => {
     });
     await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');
     await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');
+    // Rebuilding while the previous emulator drains queued output must not
+    // call a disposed renderer, even over repeated profile switches.
+    for (let index = 0; index < 12; index += 1) {
+      const profile = index % 2 === 0 ? 'cjk-wide' : 'default';
+      announce(profile);
+      server.hub.publish({
+        v: 1,
+        type: 'output',
+        sessionId: 'unicode-session',
+        dataB64: Buffer.from('\x1bc│X').toString('base64'),
+        t: 6 + index,
+      });
+      await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe(profile);
+      await expect
+        .poll(() => viewport.getAttribute('data-terminal-cursor-x'))
+        .toBe(profile === 'cjk-wide' ? '3' : '2');
+    }
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -207,7 +493,7 @@ describe('fresh React runner', () => {
       .poll(() => empty.locator('.tw-connection-dot').getAttribute('data-connected'))
       .toBe('true');
     await empty.getByRole('button', { name: 'Specs', exact: true }).click();
-    expect(await empty.getByText('No matching owned tests', { exact: true }).count()).toBe(1);
+    expect(await empty.getByText('No tests discovered yet', { exact: true }).count()).toBe(1);
     expect(await empty.getByText('0 total', { exact: true }).count()).toBe(1);
     expect(await empty.getByRole('button', { name: /Run all 0 cases/u }).isDisabled()).toBe(true);
     expect(
@@ -460,7 +746,7 @@ describe('fresh React runner', () => {
       'OpenTUI · cjk-wide · 100×30 · #2',
     ]);
     expect((await selector.locator('option').allTextContents()).join(' ')).not.toContain('opaque-');
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     await expect
       .poll(() => page.locator('.tw-terminal-viewport').innerText())
       .toContain('SECOND SCREEN');
@@ -505,7 +791,7 @@ describe('fresh React runner', () => {
       node({ id: 'last', parentId: 'root', role: 'button', name: 'Last child' }),
     ];
     session.semantic(snapshot(1, nodes, session.sessionId));
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     const tree = page.getByRole('tree', { name: 'Semantic tree' });
     await expect.poll(() => tree.getByRole('treeitem').count()).toBe(3);
     expect(await tree.locator('[role="treeitem"][tabindex="0"]').count()).toBe(1);
@@ -592,7 +878,7 @@ describe('fresh React runner', () => {
     session.semantic(
       snapshot(7, [node({ id: 'save', role: 'button', name: 'Save' })], session.sessionId),
     );
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     await page.getByRole('tab', { name: 'Semantic' }).click();
     const actionability = page.getByRole('region', { name: 'Live actionability' });
     // The live semantic stream can replace the selected-node projection while
@@ -610,6 +896,341 @@ describe('fresh React runner', () => {
     await expect
       .poll(() => actionability.getByText('revision 12', { exact: true }).count())
       .toBe(4);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('loads, refreshes and searches run history without confusing pending data with an empty list', async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), 'tw-history-audit-'));
+    temporaryDirectories.push(runsDir);
+    const first = await writeNativeRunFixture(runsDir, {
+      tests: [{ title: 'history pass', file: '/history.test.ts', status: 'passed' }],
+    });
+    const server = await startUiServer({ runsDir });
+    servers.push(server);
+    const page = await checkedPage();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(
+      (url) => url.pathname === '/api/runs',
+      async (route) => {
+        await gate;
+        await route.continue();
+      },
+    );
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page.getByText('Loading run history…', { exact: true }).waitFor();
+    expect(await page.getByText('No run history yet', { exact: true }).count()).toBe(0);
+    release();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(first), 'u') }).waitFor();
+    await writeNativeRunFixture(runsDir, {
+      tests: [{ title: 'history fail', file: '/history.test.ts', status: 'failed' }],
+    });
+    await page.getByRole('button', { name: 'Refresh run history' }).click();
+    await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(2);
+    await page.getByLabel('Search run history').fill('failed');
+    await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(1);
+    await page.screenshot({ path: '/tmp/termwright-audit-history-result.png' });
+    await page.getByLabel('Search run history').fill('absent-run');
+    await page.getByText('No matching runs', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Clear history search' }).click();
+    let releaseDetail!: () => void;
+    const detailGate = new Promise<void>((resolve) => {
+      releaseDetail = resolve;
+    });
+    await page.route('**/api/runs/*', async (route) => {
+      await detailGate;
+      await route.continue();
+    });
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(first), 'u') }).click();
+    await page.getByText('Loading run details…', { exact: true }).waitFor();
+    expect(await page.locator('button.tw-run-card').count()).toBe(0);
+    releaseDetail();
+    await page.getByText('history pass', { exact: true }).waitFor();
+    await page.screenshot({ path: '/tmp/termwright-audit-history-detail.png' });
+    await page.getByRole('button', { name: 'All runs' }).click();
+    await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(2);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('runs only matching catalog cases and dismisses the New test menu with keyboard or outside click', async () => {
+    const requests: string[][] = [];
+    const server = await startUiServer({
+      onRun: (targets) => {
+        requests.push([...(targets ?? [])]);
+        return { runId: createRunId('run'), completed: Promise.resolve() };
+      },
+    });
+    servers.push(server);
+    const tests = [
+      ownedDescriptor('/audit/a.test.ts', 'login works'),
+      ownedDescriptor('/audit/a.test.ts', 'logout works'),
+      ownedDescriptor('/audit/b.test.ts', 'login rejected'),
+    ];
+    server.hub.publish({ v: 1, type: 'tests-discovered', tests });
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Specs', exact: true }).click();
+    await page.getByRole('button', { name: 'New test', exact: true }).click();
+    expect(
+      await page
+        .getByRole('menuitem', { name: 'Create file' })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press('Escape');
+    expect(await page.getByRole('menu').count()).toBe(0);
+    expect(
+      await page
+        .getByRole('button', { name: 'New test', exact: true })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.getByRole('button', { name: 'New test', exact: true }).click();
+    await page.getByRole('heading', { name: 'Test catalog' }).click();
+    expect(await page.getByRole('menu').count()).toBe(0);
+    await page.getByLabel('Search specs').fill('missing');
+    expect(await page.getByRole('button', { name: 'Run 0 matching cases' }).isDisabled()).toBe(
+      true,
+    );
+    await page.getByRole('button', { name: 'Clear spec search' }).click();
+    expect(await page.getByLabel('Search specs').inputValue()).toBe('');
+    await page.getByLabel('Search specs').fill('login');
+    await page.getByText('2 of 3 cases match', { exact: true }).waitFor();
+    await page.screenshot({ path: '/tmp/termwright-audit-catalog-matching.png' });
+    const gap = await page.evaluate(
+      () =>
+        document.querySelector('.tw-spec-files')!.getBoundingClientRect().top -
+        document.querySelector('.tw-catalog-search')!.getBoundingClientRect().bottom,
+    );
+    expect(gap).toBeLessThan(20);
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+      false,
+    );
+    await page.screenshot({ path: '/tmp/termwright-audit-catalog-mobile.png' });
+    await page.getByRole('button', { name: 'Run 2 matching cases' }).click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0]).toEqual([tests[0]!.id, tests[2]!.id]);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('reports unavailable clipboard access and confirms successful copying without crashing', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace());
+    await page.getByLabel('Replay position').fill('500');
+    await page.getByRole('button', { name: 'Show inspector' }).click();
+    await page.getByRole('tab', { name: 'Semantic', exact: true }).click();
+    await page.getByRole('button', { name: 'Copy node ref', exact: true }).waitFor();
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }),
+    );
+    await page.getByRole('button', { name: 'Copy node ref', exact: true }).click();
+    await page
+      .locator('.tw-copy-error')
+      .getByText('Clipboard unavailable', { exact: true })
+      .waitFor();
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (value: string) => {
+            Object.assign(window, { __copied: value });
+          },
+        },
+      }),
+    );
+    await page.getByRole('button', { name: 'Copy node ref', exact: true }).click();
+    await page
+      .locator('.tw-copy-status [role="status"]')
+      .filter({ hasText: /^Copied$/u })
+      .waitFor({ state: 'attached' });
+    expect(await page.evaluate(() => (window as unknown as { __copied: string }).__copied)).toBe(
+      'd1',
+    );
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }),
+    );
+    await page.getByRole('button', { name: 'Copy diagnostic report' }).click();
+    await page.getByText('Clipboard unavailable', { exact: true }).waitFor();
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('filters logs by recorded severity and text while keeping unlevelled file messages distinct', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const startedAt = Date.now();
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:logs', mode: 'live', startedAt });
+    server.hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 'logs-case',
+      title: 'logs audit',
+      file: '/logs.test.ts',
+      startedAt,
+      sessionId: 'logs-session',
+    });
+    server.hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 'logs-session',
+      testId: 'logs-case',
+      terminalProfile: 'default',
+      columns: 80,
+      rows: 24,
+    });
+    const logs = [
+      { level: 'info' as const, message: 'Connected' },
+      { level: 'error' as const, message: 'Request failed' },
+      { level: null, message: 'ERROR is just file text' },
+    ];
+    for (const [index, log] of logs.entries())
+      server.hub.publish({
+        v: 1,
+        type: 'app-log',
+        sessionId: 'logs-session',
+        source: log.level === null ? 'file' : 'adapter',
+        t: index,
+        ...log,
+      });
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Show inspector' }).click();
+    await page.getByRole('tab', { name: 'Logs', exact: true }).click();
+    await expect.poll(() => page.locator('.tw-log-list li').count()).toBe(3);
+    await page.getByLabel('Log level').selectOption('error');
+    expect(await page.locator('.tw-log-list p').allTextContents()).toEqual(['Request failed']);
+    await page.screenshot({ path: '/tmp/termwright-audit-log-filter.png' });
+    await page.getByLabel('Search logs').fill('Connected');
+    await page.getByText('No logs match these filters', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Reset log filters' }).click();
+    await page.getByLabel('Log level').selectOption('plain');
+    expect(await page.locator('.tw-log-list p').allTextContents()).toEqual([
+      'ERROR is just file text',
+    ]);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('opens exact historical recordings, restores deep links and compares attempts without mixing their frames', async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), 'tw-replay-history-'));
+    temporaryDirectories.push(runsDir);
+    const failed = await buildWrittenFixtureTrace({ outcome: 'Request rejected' });
+    const passed = await buildWrittenFixtureTrace({ outcome: 'Request approved' });
+    const id = await writeNativeRunFixture(runsDir, {
+      tests: [
+        {
+          title: 'recorded retry',
+          file: '/retry.test.ts',
+          status: 'passed',
+          retries: ['failed', 'passed'],
+          recordings: [[failed], [passed, '/missing-replay.twtrace']],
+        },
+      ],
+    });
+    const server = await startUiServer({ runsDir });
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(id), 'u') }).click();
+    await page.getByRole('button', { name: 'Replay attempt 1 · failed', exact: true }).waitFor();
+    expect(
+      await page
+        .getByRole('button', { name: 'Replay attempt 2 · session 2 · passed', exact: true })
+        .isDisabled(),
+    ).toBe(true);
+    await page.getByRole('button', { name: 'Compare attempts', exact: true }).click();
+    const comparison = page.getByRole('region', { name: 'Attempt comparison' });
+    await comparison.getByText('1 changed, added or removed elements', { exact: true }).waitFor();
+    await expect
+      .poll(() =>
+        comparison
+          .getByRole('region', { name: 'Before recording' })
+          .locator('.xterm-rows')
+          .innerText(),
+      )
+      .toContain('Request rejected');
+    await expect
+      .poll(() =>
+        comparison
+          .getByRole('region', { name: 'After recording' })
+          .locator('.xterm-rows')
+          .innerText(),
+      )
+      .toContain('Request approved');
+    await comparison
+      .getByRole('combobox', { name: 'Align recordings' })
+      .selectOption({ label: 'approve · step end' });
+    expect(await comparison.getByLabel('Before replay position').inputValue()).toBe('1500');
+    expect(await comparison.getByLabel('After replay position').inputValue()).toBe('1500');
+    await comparison.getByText('changed · status · Request approved', { exact: true }).click();
+    await page.screenshot({ path: '/tmp/termwright-comparison-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+      false,
+    );
+    await page.screenshot({ path: '/tmp/termwright-comparison-mobile.png' });
+    await comparison.getByRole('button', { name: 'Close comparison' }).click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Replay attempt 1 · failed', exact: true }).click();
+    await page.getByLabel('Replay position').fill('1800');
+    await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request rejected');
+    const url = new URL(page.url());
+    expect(url.searchParams.get('traceRef')).toBe(failed);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByLabel('Replay position').waitFor();
+    await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request rejected');
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(id), 'u') }).click();
+    await page
+      .getByRole('button', { name: 'Replay attempt 2 · session 1 · passed', exact: true })
+      .click();
+    await page.getByLabel('Replay position').fill('1800');
+    await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request approved');
+    expect(new URL(page.url()).searchParams.get('traceRef')).toBe(passed);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('searches semantic names, roles and refs, keeps ancestors and pins matching elements', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace());
+    await page.getByLabel('Replay position').fill('500');
+    await page.getByRole('button', { name: 'Show inspector' }).click();
+    await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 1');
+    const tree = page.getByRole('tree', { name: 'Semantic tree' });
+    const root = tree.getByRole('treeitem', { name: /dialog Permission/u });
+    await root.focus();
+    await page.keyboard.press('ArrowLeft');
+    const search = page.getByLabel('Search elements');
+    await search.fill('approve');
+    const approve = tree.locator('[role="treeitem"][data-node-id="b1"]');
+    await approve.waitFor();
+    expect(await root.getAttribute('aria-expanded')).toBe('true');
+    await search.press('Enter');
+    await expect.poll(() => approve.getAttribute('aria-selected')).toBe('true');
+    await page
+      .locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"][data-pinned="true"]')
+      .waitFor();
+    await search.fill('semantic:b1@1');
+    await page.getByRole('button', { name: 'Next matching element' }).click();
+    expect(await tree.getByRole('treeitem').count()).toBe(2);
+    await search.fill('not-an-element');
+    await page.getByText('No matching elements', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Next matching element' }).isDisabled()).toBe(
+      true,
+    );
+    await page.getByRole('button', { name: 'Clear element search' }).click();
+    expect(await root.getAttribute('aria-expanded')).toBe('false');
+    await search.fill('not-an-element');
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    const screen = await page.locator('.xterm-screen').boundingBox();
+    if (!screen) throw new Error('Missing screen');
+    await page.mouse.click(
+      screen.x + (screen.width * 4.5) / 80,
+      screen.y + (screen.height * 3.5) / 24,
+    );
+    await page.getByRole('region', { name: 'Selected element details' }).waitFor();
+    await expect.poll(() => search.inputValue()).toBe('');
+    await page.screenshot({ path: '/tmp/termwright-tree-search-picker.png' });
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -656,8 +1277,8 @@ describe('fresh React runner', () => {
     expect(await page.getByText(/retry 0/u).count()).toBe(1);
     expect(await page.getByText(/retry 1/u).count()).toBe(1);
     expect(
-      await page.getByText('Recording not retained in native manifest', { exact: true }).count(),
-    ).toBe(2);
+      await page.getByText('No recordings retained for this run.', { exact: true }).count(),
+    ).toBe(1);
     expect(await page.getByRole('button', { name: 'Replay', exact: true }).count()).toBe(0);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
@@ -743,7 +1364,12 @@ describe('fresh React runner', () => {
     expect(existsSync(saved)).toBe(false);
     expect(await page.evaluate(() => document.activeElement?.textContent)).toContain('Save');
     await page.keyboard.press('Tab');
-    expect(await page.evaluate(() => document.activeElement?.textContent)).toContain('Discard');
+    expect(
+      await page
+        .getByRole('dialog', { name: 'Generated test' })
+        .getByLabel('Save destination')
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
     await page.keyboard.press('Shift+Tab');
     expect(await page.evaluate(() => document.activeElement?.textContent)).toContain('Save');
     await review.getByRole('button', { name: /Save to/u }).click();
@@ -758,6 +1384,14 @@ describe('fresh React runner', () => {
     expect(existsSync(discarded)).toBe(false);
     await page.keyboard.press('Escape');
     await expect.poll(() => page.getByRole('dialog', { name: 'Generated test' }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Review recorded draft' }).waitFor();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Review recorded draft' }).click();
+    await page.getByRole('dialog', { name: 'Generated test' }).waitFor();
+    expect(await page.locator('.tw-generated-source').innerText()).toContain('test(');
+    await page.getByRole('button', { name: 'Discard', exact: true }).click();
+    await expect.poll(() => page.getByRole('dialog', { name: 'Generated test' }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Review recorded draft' }).count()).toBe(0);
     expect(existsSync(discarded)).toBe(false);
     await expect
       .poll(() => page.getByText('Recording discarded; no file was written.').count())
@@ -789,6 +1423,147 @@ describe('fresh React runner', () => {
     expect(
       await page.locator('.tw-toast').filter({ hasText: 'Opening retained recording' }).count(),
     ).toBe(0);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('shows assertions and highlights their retained targets in replay without guessing targets for values or empty locators', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace({ assertions: true }));
+    await page.locator('.tw-replay-controls').waitFor({ timeout: 15_000 });
+    const assertions = page.locator('.tw-command-row[data-kind="assertion"]');
+    expect(await assertions.count()).toBe(3);
+    const target = assertions.filter({ hasText: 'toBeVisible' });
+    await target.hover();
+    await page.locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"]').waitFor();
+    await target.click();
+    await page.locator('.tw-machine-bar').hover();
+    expect(await page.locator('.tw-terminal-highlight[data-pinned="true"]').count()).toBe(1);
+    await page.locator('.tw-section-row').filter({ hasText: 'empty list assertion' }).hover();
+    await page.getByText('No elements matched this locator.', { exact: true }).waitFor();
+    await assertions.filter({ hasText: 'toHaveCount(0)' }).hover();
+    await page.getByText('No elements matched this locator.', { exact: true }).waitFor();
+    expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
+    await assertions.filter({ has: page.locator('strong', { hasText: /^toBe$/u }) }).focus();
+    await page
+      .getByText('This assertion compares values and has no terminal target.', { exact: true })
+      .waitFor();
+    expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('picks a scaled replay element, reveals collapsed ancestors and opens its details on desktop and mobile', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace());
+    await page.locator('.tw-replay-controls').waitFor();
+    // There is no cast frame at 500ms: semantic state must be associated with
+    // the requested moment, not with the timestamp of the last output byte.
+    await page.getByLabel('Replay position').fill('500');
+    await page.getByRole('button', { name: 'Show inspector' }).click();
+    const parent = page
+      .getByRole('tree', { name: 'Semantic tree' })
+      .getByRole('treeitem', { name: /dialog Permission/u });
+    await parent.focus();
+    await page.keyboard.press('ArrowLeft');
+    expect(await parent.getAttribute('aria-expanded')).toBe('false');
+    await page.getByRole('button', { name: 'Hide inspector' }).click();
+    await page.getByRole('button', { name: 'Expand terminal' }).click();
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    const point = async () => {
+      const screen = await page.locator('.xterm-screen').boundingBox();
+      if (screen === null) throw new Error('Missing terminal grid');
+      return { x: screen.x + (screen.width * 4.5) / 80, y: screen.y + (screen.height * 3.5) / 24 };
+    };
+    const target = await point();
+    await page.mouse.move(target.x, target.y);
+    await page.locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"]').waitFor();
+    await page.mouse.click(target.x, target.y);
+    await page.getByRole('region', { name: 'Selected element details' }).waitFor();
+    expect(await page.locator('.tw-terminal-picker').count()).toBe(0);
+    expect(await page.locator('.tw-workspace').getAttribute('data-evidence-maximized')).toBe(
+      'false',
+    );
+    expect(
+      await page.locator('.tw-semantic-tree [data-node-id="b1"]').getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      await page.locator('.tw-semantic-tree [data-node-id="d1"]').getAttribute('aria-expanded'),
+    ).toBe('true');
+    expect(await page.locator('.tw-picked-detail h3').innerText()).toBe('Approve');
+    expect(await page.locator('.tw-picked-detail').innerText()).toContain('BUTTON');
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    const blank = await page.locator('.tw-terminal-picker').boundingBox();
+    if (blank === null) throw new Error('Missing picking overlay');
+    await page.mouse.click(blank.x + 2, blank.y + 2);
+    expect(await page.locator('.tw-terminal-picker').count()).toBe(1);
+    await page.keyboard.press('Escape');
+    expect(await page.locator('.tw-terminal-picker').count()).toBe(0);
+    await page.getByLabel('Replay position').fill('1600');
+    await expect
+      .poll(() => page.getByRole('button', { name: 'Pick element', exact: true }).isDisabled())
+      .toBe(true);
+    expect(await page.locator('.tw-picked-detail').count()).toBe(0);
+    expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('tab', { name: 'Screen', exact: true }).click();
+    await page.getByLabel('Replay position').fill('500');
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await page.getByRole('region', { name: 'Selected element details' }).waitFor();
+    expect(await page.locator('.tw-workspace').getAttribute('data-compact-view')).toBe('inspect');
+    expect(await page.locator('.tw-picked-detail h3').innerText()).toBe('Approve');
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('keeps element inspection separate from writable terminal input', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    const startedAt = Date.now();
+    server.hub.publish({
+      v: 1,
+      type: 'run-start',
+      runId: 'run:pick-live',
+      mode: 'record',
+      startedAt,
+    });
+    server.hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 'pick-live',
+      title: 'inspect live terminal',
+      file: '/live.test.ts',
+      startedAt,
+      sessionId: 'pick-session',
+    });
+    const session = new FakeSession('pick-session');
+    const inputs: string[] = [];
+    server.attach({
+      source: session,
+      write: async (bytes) => {
+        inputs.push(Buffer.from(bytes).toString('utf8'));
+      },
+    });
+    session.semantic({ ...FIXTURE_TREES[0]!, sessionId: session.sessionId });
+    session.output('Ready');
+    await expect
+      .poll(() => page.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity'))
+      .toBe('live:run:pick-live:pick-session');
+    await page.locator('.xterm-helper-textarea').focus();
+    await page.keyboard.type('a');
+    await expect.poll(() => inputs.join('')).toBe('a');
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    await page.keyboard.type('ignored');
+    const screen = await page.locator('.xterm-screen').boundingBox();
+    if (screen === null) throw new Error('Missing terminal grid');
+    await page.mouse.click(
+      screen.x + (screen.width * 4.5) / 80,
+      screen.y + (screen.height * 3.5) / 24,
+    );
+    await page.getByRole('region', { name: 'Selected element details' }).waitFor();
+    expect(inputs.join('')).toBe('a');
+    await page.locator('.xterm-helper-textarea').focus();
+    await page.keyboard.type('b');
+    await expect.poll(() => inputs.join('')).toBe('ab');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -843,7 +1618,7 @@ describe('fresh React runner', () => {
     await page.keyboard.press('Escape');
     expect(await page.locator('.tw-terminal-highlight-layer').count()).toBe(0);
 
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     const semanticButton = page.getByRole('treeitem', { name: /Approve/u });
     await semanticButton.hover();
     expect(
@@ -1036,7 +1811,6 @@ describe('fresh React runner', () => {
     });
     const missing = page.locator('.tw-case-button').filter({ hasText: 'missing trace' });
     await missing.waitFor();
-    if ((await missing.getAttribute('aria-expanded')) !== 'true') await missing.click();
     await expect
       .poll(() => page.getByText('Recording unavailable:', { exact: false }).count())
       .toBe(1);
@@ -1122,7 +1896,7 @@ describe('fresh React runner', () => {
     await page.screenshot({ path: '/tmp/termwright-fresh-1440-nav-expanded.png', fullPage: false });
     await page.getByRole('button', { name: 'Collapse navigation' }).click();
     expect(await scrollEndIsReachable(page, '.tw-case-list', '.tw-scroll-end')).toBe(true);
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     await expect.poll(() => page.locator('.tw-inspector').isVisible()).toBe(true);
     expect(
       await scrollEndIsReachable(page, '.tw-inspector-body', '.tw-inspector-body > :last-child'),
@@ -1162,9 +1936,37 @@ describe('fresh React runner', () => {
     expect(afterInspectorDrag?.x ?? 0).toBeGreaterThanOrEqual(beforeInspectorDrag.x + 8);
     expect(afterInspectorDrag?.x ?? 0).toBeLessThanOrEqual(beforeInspectorDrag.x + 12);
     await page.screenshot({ path: '/tmp/termwright-fresh-1440-three-pane.png', fullPage: false });
-    await page.getByRole('button', { name: 'Collapse inspector' }).click();
+    await page.getByRole('button', { name: 'Hide inspector' }).click();
 
-    await page.getByRole('button', { name: 'Maximize' }).click();
+    await page.getByRole('button', { name: 'Hide tests and steps' }).click();
+    expect(await page.locator('.tw-evidence-heading button').count()).toBe(0);
+    const leftHandle = page.getByRole('button', { name: 'Show tests and steps' });
+    const rightHandle = page.getByRole('button', { name: 'Show inspector' });
+    expect(await leftHandle.isVisible()).toBe(true);
+    expect(await rightHandle.isVisible()).toBe(true);
+    const edges = await page.evaluate(() => {
+      const workspace = document.querySelector('.tw-workspace')!.getBoundingClientRect();
+      const left = document
+        .querySelector('.tw-collapsed-pane-tab[data-side="left"]')!
+        .getBoundingClientRect();
+      const right = document
+        .querySelector('.tw-collapsed-pane-tab[data-side="right"]')!
+        .getBoundingClientRect();
+      return [Math.abs(left.left - workspace.left), Math.abs(right.right - workspace.right)];
+    });
+    expect(Math.max(...edges)).toBeLessThan(2);
+    await page.getByRole('button', { name: 'Expand terminal' }).click();
+    expect(await leftHandle.isVisible()).toBe(false);
+    expect(await rightHandle.isVisible()).toBe(false);
+    expect(
+      await page
+        .locator('.tw-evidence')
+        .evaluate((e) =>
+          Math.abs(
+            e.getBoundingClientRect().width - e.parentElement!.getBoundingClientRect().width,
+          ),
+        ),
+    ).toBeLessThan(2);
     await expect.poll(() => page.locator('.tw-inspector').isVisible()).toBe(false);
     expect(await page.locator('.tw-replay-controls').isVisible()).toBe(true);
     expect(await page.locator('.tw-terminal-viewport').getAttribute('data-terminal-columns')).toBe(
@@ -1173,7 +1975,16 @@ describe('fresh React runner', () => {
     expect(await page.locator('.tw-terminal-viewport').getAttribute('data-terminal-rows')).toBe(
       metrics.rows,
     );
-    await page.getByRole('button', { name: 'Restore' }).click();
+    await page.keyboard.press('Escape');
+    expect(await leftHandle.isVisible()).toBe(true);
+    expect(await rightHandle.isVisible()).toBe(true);
+    expect(
+      await page
+        .getByRole('button', { name: 'Expand terminal' })
+        .evaluate((e) => e === document.activeElement),
+    ).toBe(true);
+    await leftHandle.click();
+    await page.getByRole('button', { name: 'Expand terminal' }).click();
 
     for (const viewport of [
       { width: 800, height: 800 },
@@ -1181,6 +1992,10 @@ describe('fresh React runner', () => {
     ]) {
       await page.setViewportSize(viewport);
       await expect.poll(() => page.locator('.tw-compact-tabs').isVisible()).toBe(true);
+      expect(await page.getByRole('button', { name: 'Expand terminal' }).isVisible()).toBe(false);
+      await expect
+        .poll(() => page.locator('.tw-workspace').getAttribute('data-evidence-maximized'))
+        .toBe('false');
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
@@ -1402,7 +2217,7 @@ describe('fresh React runner', () => {
     await expect
       .poll(() => page.locator('[data-node-id="action:rerun-session:a-live"]').count())
       .toBe(1);
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('button', { name: 'Show inspector' }).click();
     await expect.poll(() => page.locator('.tw-semantic-node-row').count()).toBeGreaterThan(0);
     const liveCommand = page.locator('[data-node-id="action:rerun-session:a-live"]');
     await expect.poll(() => liveCommand.getAttribute('data-status')).toBe('passed');
@@ -1419,7 +2234,70 @@ describe('fresh React runner', () => {
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
-  it('keeps per-case collapse state through live updates and independent selection', async () => {
+  it('does not preview another expanded case on the selected recording', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await expect
+      .poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))
+      .toBe('true');
+    const startedAt = Date.now();
+    server.hub.publish({
+      v: 1,
+      type: 'run-start',
+      runId: 'run:two-traces',
+      mode: 'live',
+      startedAt,
+    });
+    for (const id of ['alpha', 'beta']) {
+      const traceRef = await buildFixtureTrace();
+      server.hub.publish({
+        v: 1,
+        type: 'test-start',
+        id,
+        title: id,
+        file: `/tmp/${id}.test.ts`,
+        startedAt,
+      });
+      server.hub.publish({
+        v: 1,
+        type: 'action-start',
+        actionId: `${id}-click`,
+        api: 'click',
+        t: 100,
+        testId: id,
+      });
+      server.hub.publish({
+        v: 1,
+        type: 'test-end',
+        id,
+        status: 'passed',
+        durationMs: 2000,
+        flaky: false,
+        lostLogRecords: 0,
+        traceRef,
+      });
+      await page.locator('.tw-case-button').filter({ hasText: id }).click();
+      await expect
+        .poll(() => page.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity'))
+        .toBe(`replay:${traceRef}`);
+    }
+    const position = page.getByLabel('Replay position');
+    await position.fill('2000');
+    expect(await page.locator('.tw-case[data-selected="false"] .tw-command-row').count()).toBe(0);
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
+    await page.locator('.tw-case-button').filter({ hasText: 'alpha' }).hover();
+    expect(await position.inputValue()).toBe('2000');
+    expect(await page.locator('.tw-preview-label').count()).toBe(0);
+    await page.locator('.tw-case-button').filter({ hasText: 'alpha' }).click();
+    await expect
+      .poll(() => page.locator('.tw-case[data-selected="true"] .tw-case-title strong').innerText())
+      .toBe('alpha');
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('keeps a manually collapsed test closed during live updates and expands another selection', async () => {
     const server = await startUiServer();
     servers.push(server);
     const page = await checkedPage();
@@ -1449,7 +2327,7 @@ describe('fresh React runner', () => {
     const beta = page.locator('.tw-case-button').filter({ hasText: 'beta case' });
     await alpha.waitFor();
 
-    expect(await alpha.getAttribute('aria-expanded')).toBe('true');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await alpha.click();
     expect(await alpha.getAttribute('aria-expanded')).toBe('false');
     server.hub.publish({
@@ -1461,12 +2339,10 @@ describe('fresh React runner', () => {
       testId: 'alpha',
     });
 
-    // A collapsed case renders no command rows, so alpha's own update is not
-    // observable while it stays collapsed — waiting on one would wait forever.
-    // Beta is expanded and the stream is ordered, so beta's row is proof that
-    // alpha's update was applied before it, and alpha is still collapsed.
     await beta.click();
-    expect(await beta.getAttribute('aria-expanded')).toBe('true');
+    expect(
+      await page.locator('.tw-case[data-selected="true"] .tw-case-title strong').innerText(),
+    ).toBe('beta case');
     server.hub.publish({
       v: 1,
       type: 'action-start',
@@ -1477,9 +2353,15 @@ describe('fresh React runner', () => {
     });
     await expect.poll(() => page.locator('.tw-command-row').count()).toBe(1);
     expect(await alpha.getAttribute('aria-expanded')).toBe('false');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     await alpha.click();
-    expect(await alpha.getAttribute('aria-expanded')).toBe('true');
-    expect(await beta.getAttribute('aria-expanded')).toBe('true');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
+    await beta.click();
+    expect(
+      await page.locator('.tw-case[data-selected="true"] .tw-case-title strong').innerText(),
+    ).toBe('beta case');
+    expect(await page.locator('.tw-execution-narrative').count()).toBe(1);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -1512,19 +2394,21 @@ describe('fresh React runner', () => {
     const runningCase = page.locator('.tw-case[data-status="running"]');
     await runningCase.waitFor();
     expect(
-      await runningCase.locator('.tw-status[data-status="running"] .lucide-loader-circle').count(),
+      await runningCase
+        .locator('.tw-case-head .tw-status[data-status="running"] .lucide-loader-circle')
+        .count(),
     ).toBe(1);
     expect(
       await runningCase
-        .locator('.tw-status')
+        .locator('.tw-case-head .tw-status')
         .evaluate((element) => getComputedStyle(element).color),
     ).toBe('rgb(103, 183, 209)');
     expect(
-      await runningCase
+      await page
         .locator('.tw-command-row[data-status="running"]')
         .evaluate((element) => getComputedStyle(element).boxShadow),
     ).toContain('rgb(103, 183, 209)');
-    expect(await runningCase.locator('.lucide-check').count()).toBe(0);
+    expect(await runningCase.locator('.tw-case-head .lucide-check').count()).toBe(0);
 
     server.hub.publish({
       v: 1,
@@ -1560,11 +2444,15 @@ describe('fresh React runner', () => {
     });
     const passedCase = page.locator('.tw-case[data-status="passed"]');
     await passedCase.waitFor();
-    expect(await passedCase.locator('.tw-status[data-status="passed"] .lucide-check').count()).toBe(
-      1,
-    );
     expect(
-      await passedCase.locator('.tw-status').evaluate((element) => getComputedStyle(element).color),
+      await passedCase
+        .locator('.tw-case-head .tw-status[data-status="passed"] .lucide-check')
+        .count(),
+    ).toBe(1);
+    expect(
+      await passedCase
+        .locator('.tw-case-head .tw-status')
+        .evaluate((element) => getComputedStyle(element).color),
     ).toBe('rgb(88, 230, 176)');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
@@ -1651,14 +2539,10 @@ describe('fresh React runner', () => {
     await actionlessCase.waitFor();
     const actionless = actionlessCase.locator('.tw-case-button');
     expect(await actionless.getAttribute('data-execution-id')).toBe(`run:test:${actionlessId}:1`);
-    if ((await actionless.getAttribute('aria-selected')) !== 'true') {
+    if ((await actionless.getAttribute('aria-current')) !== 'true') {
       await actionless.click();
     }
-    if ((await actionless.getAttribute('aria-expanded')) !== 'true') {
-      await actionless.click();
-    }
-    expect(await actionless.getAttribute('aria-selected')).toBe('true');
-    expect(await actionless.getAttribute('aria-expanded')).toBe('true');
+    expect(await actionless.getAttribute('aria-current')).toBe('true');
     await expect
       .poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count())
       .toBe(1);
@@ -1671,12 +2555,25 @@ describe('fresh React runner', () => {
       )
       .toBe(1);
     expect(await page.locator('.tw-command-row').count()).toBe(0);
+    const actionlessStep = page
+      .locator('.tw-section-row')
+      .filter({ hasText: 'Given the policy already permits the request' });
+    await actionlessStep.hover();
+    await expect
+      .poll(() => page.getByRole('tooltip').innerText())
+      .toContain('No recorded actions or assertions');
+    if ((await actionlessStep.getAttribute('aria-expanded')) === 'false')
+      await actionlessStep.click();
+    expect(await page.getByRole('note').innerText()).toContain(
+      'Older recordings may omit ordinary assertions.',
+    );
+
     expect(
       await page
         .getByText('No driver actions were recorded for this case.', { exact: false })
         .count(),
     ).toBe(0);
-    const expandInspector = page.getByRole('button', { name: 'Expand inspector' });
+    const expandInspector = page.getByRole('button', { name: 'Show inspector' });
     if ((await expandInspector.count()) > 0) await expandInspector.click();
     await page.locator('.tw-inspector').waitFor();
     const absentGeometry = await paneWidths(page);
@@ -1860,6 +2757,7 @@ describe('fresh React runner', () => {
       selector: 'screen',
     });
 
+    await page.getByRole('button', { name: 'Show commands', exact: true }).click();
     await expect.poll(() => page.locator('.tw-command-row').count()).toBe(23);
     expect(await page.locator('.tw-section-row').count()).toBeGreaterThanOrEqual(3);
     expect(await page.locator('.tw-section-row').filter({ hasText: 'Background' }).count()).toBe(1);
@@ -1875,9 +2773,10 @@ describe('fresh React runner', () => {
         .filter({ hasText: 'When I approve the purchase' })
         .count(),
     ).toBe(1);
-    expect(await page.locator('.tw-section-row').filter({ hasText: 'L16' }).count()).toBe(1);
-    expect(await page.getByText('scenario', { exact: true }).count()).toBeGreaterThan(0);
-    expect(await page.getByText('@smoke', { exact: true }).count()).toBeGreaterThan(0);
+    expect(await page.locator('.tw-section-row[aria-label*="line 16"]').count()).toBe(1);
+    await page.locator('.tw-case-details summary').click();
+    expect(await page.locator('.tw-case-details').innerText()).toContain('scenario');
+    expect(await page.locator('.tw-case-details').innerText()).toContain('@smoke');
     expect(
       (
         await page.locator('.tw-command-row[data-status="running"] .tw-row-status').innerText()
@@ -1931,7 +2830,7 @@ describe('fresh React runner', () => {
         },
       ).length;
     });
-    expect(visibleRows).toBeGreaterThanOrEqual(14);
+    expect(visibleRows).toBeGreaterThanOrEqual(6);
     const bottom = await page.evaluate(() => {
       const scroller = document.querySelector<HTMLElement>('.tw-case-list');
       if (scroller === null) return { reachable: false };
@@ -1970,7 +2869,7 @@ describe('fresh React runner', () => {
         durationMs: 220,
       },
     });
-    await expect.poll(() => page.getByText('attempt 3', { exact: true }).count()).toBe(1);
+    await expect.poll(() => page.locator('.tw-attempt-note').innerText()).toContain('Attempt 3');
     await page.getByText('2 earlier attempts failed', { exact: true }).click();
     expect(await page.getByText('first provider failure', { exact: true }).count()).toBe(1);
     expect(await page.locator('.tw-case').count()).toBe(1);
@@ -2271,6 +3170,32 @@ describe('fresh React runner', () => {
     expect(await page.getByLabel('Source editor').inputValue()).toBe('cursor');
     await page.screenshot({ path: '/tmp/termwright-fresh-settings-1440.png', fullPage: false });
 
+    await page.getByRole('button', { name: 'Reset layout' }).click();
+    expect(
+      await page
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press('Shift+Tab');
+    expect(
+      await page
+        .getByRole('button', { name: 'Confirm reset' })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press('Tab');
+    expect(
+      await page
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press('Escape');
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    expect(
+      await page
+        .getByRole('button', { name: 'Reset layout' })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    expect(await page.getByLabel('Timeline density').inputValue()).toBe('comfortable');
     await page.getByRole('button', { name: 'Reset layout' }).click();
     await page.getByRole('button', { name: 'Confirm reset' }).click();
     expect(await page.locator('.tw-shell').getAttribute('data-navigation-expanded')).toBe('false');

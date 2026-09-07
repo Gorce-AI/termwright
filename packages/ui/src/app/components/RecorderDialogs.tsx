@@ -1,5 +1,6 @@
 import { Copy, Save, Trash2, X } from 'lucide-react';
-import { useEffect, useRef, type RefObject } from 'react';
+import { useRef } from 'react';
+import { useModalFocus } from '../use-modal-focus.js';
 import { Tooltip } from './Tooltip.js';
 
 export interface RecorderDraft {
@@ -112,6 +113,8 @@ export function RecordReviewDialog({
   onSave,
   onCopy,
   onDiscard,
+  onClose,
+  onOutFile,
 }: {
   readonly source: string;
   readonly outFile: string;
@@ -120,10 +123,12 @@ export function RecordReviewDialog({
   readonly onSave: () => void;
   readonly onCopy: () => void;
   readonly onDiscard: () => void;
+  readonly onClose: () => void;
+  readonly onOutFile: (path: string) => void;
 }) {
   const dialog = useRef<HTMLElement>(null);
   const initial = useRef<HTMLButtonElement>(null);
-  useModalFocus(dialog, initial, onDiscard, busy);
+  useModalFocus(dialog, initial, onClose, busy);
   return (
     <div className="tw-dialog-backdrop" role="presentation">
       <section
@@ -142,6 +147,18 @@ export function RecordReviewDialog({
             <i /> REC complete
           </span>
         </header>
+        <p>
+          Your draft stays in this Runner server until saved or discarded. You can close this review
+          and return from Draft in navigation, including after reloading the page.
+        </p>
+        <label>
+          Save destination
+          <input
+            value={outFile}
+            disabled={busy}
+            onChange={(event) => onOutFile(event.currentTarget.value)}
+          />
+        </label>
         <pre className="tw-generated-source">
           <code>{source}</code>
         </pre>
@@ -151,6 +168,9 @@ export function RecordReviewDialog({
           </p>
         )}
         <footer>
+          <button type="button" className="tw-secondary-button" disabled={busy} onClick={onClose}>
+            Keep draft
+          </button>
           <button type="button" className="tw-secondary-button" disabled={busy} onClick={onDiscard}>
             <Trash2 aria-hidden="true" size={14} /> Discard
           </button>
@@ -171,56 +191,4 @@ export function RecordReviewDialog({
       </section>
     </div>
   );
-}
-
-const FOCUSABLE =
-  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
-
-/** Keeps keyboard focus inside a recorder decision and restores it afterward. */
-function useModalFocus(
-  container: RefObject<HTMLElement | null>,
-  initial: RefObject<HTMLElement | null>,
-  onEscape: () => void,
-  escapeDisabled: boolean,
-): void {
-  const escape = useRef(onEscape);
-  const disabled = useRef(escapeDisabled);
-  escape.current = onEscape;
-  disabled.current = escapeDisabled;
-
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    initial.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (disabled.current) return;
-        event.preventDefault();
-        escape.current();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const focusable = [
-        ...(container.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []),
-      ].filter((element) => element.getClientRects().length > 0);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable.at(-1);
-      if (first === undefined || last === undefined) return;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      previous?.focus();
-    };
-  }, [container, initial]);
 }

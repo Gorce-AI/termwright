@@ -1,11 +1,17 @@
+import { copyText } from '../clipboard.js';
 import type {
   EffectiveSessionContract,
   SemanticNode,
   SemanticSnapshot,
 } from '@termwright/protocol';
+import { UI_LOG_LEVELS, type AppLogView } from '../../app-log.js';
 import type { UiActionability } from '../../events.js';
 import {
   Braces,
+  Check,
+  ChevronUp,
+  ChevronDown,
+  X,
   Copy,
   FileText,
   MousePointerClick,
@@ -14,7 +20,15 @@ import {
   ShieldCheck,
   Waypoints,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import type { SessionRecord } from '../domain/model.js';
 import { usePreferences, type InspectorTab } from '../preferences.js';
 import { useTreeNavigation } from '../use-tree-navigation.js';
@@ -25,8 +39,16 @@ type RecorderActions = {
   readonly onAssertNode: (nodeId: string) => void;
 };
 
+export interface InspectorSelection {
+  readonly request: number;
+  readonly nodeId: string;
+  readonly sessionId: string;
+  readonly revision: number;
+}
+
 export function InspectorPanel({
   session,
+  selection,
   recorder,
   onCollapsed,
   onPreviewNode,
@@ -34,6 +56,7 @@ export function InspectorPanel({
   onInspectActionability,
 }: {
   readonly session: SessionRecord | null;
+  readonly selection?: InspectorSelection | null;
   readonly onCollapsed: (collapsed: boolean) => void;
   readonly recorder?: RecorderActions;
   readonly onPreviewNode?: (node: SemanticNode | null, snapshot: SemanticSnapshot | null) => void;
@@ -46,7 +69,7 @@ export function InspectorPanel({
   const { preferences, updatePreferences } = usePreferences();
   const tab = preferences.inspectorTab;
   const setTab = (next: InspectorTab) => updatePreferences({ inspectorTab: next });
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [localSelectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [actionability, setActionability] = useState<{
     readonly loading: boolean;
     readonly results?: readonly UiActionability[];
@@ -54,6 +77,18 @@ export function InspectorPanel({
   }>({ loading: false });
   const snapshot = session?.snapshot ?? null;
   const nodes = snapshot?.nodes ?? [];
+  const requestedSelection =
+    selection?.sessionId === snapshot?.sessionId && selection?.revision === snapshot?.revision
+      ? (selection ?? null)
+      : null;
+  const [appliedSelection, setAppliedSelection] = useState<InspectorSelection | null>(null);
+  const pendingSelection = requestedSelection !== null && requestedSelection !== appliedSelection;
+  const selectedNodeId = pendingSelection ? requestedSelection.nodeId : localSelectedNodeId;
+  useEffect(() => {
+    if (!pendingSelection) return;
+    setSelectedNodeId(requestedSelection.nodeId);
+    setAppliedSelection(requestedSelection);
+  }, [pendingSelection, requestedSelection]);
   useEffect(() => {
     if (selectedNodeId !== null && nodes.some((node) => node.id === selectedNodeId)) return;
     setSelectedNodeId(snapshot?.rootIds[0] ?? nodes[0]?.id ?? null);
@@ -104,11 +139,11 @@ export function InspectorPanel({
             ? 'no revision'
             : `revision ${session.revision}`}
         </span>
-        <Tooltip label="Collapse inspector">
+        <Tooltip label="Hide inspector">
           <button
             type="button"
             className="tw-inspector-control"
-            aria-label="Collapse inspector"
+            aria-label="Hide inspector"
             onClick={() => onCollapsed(true)}
           >
             <PanelRightClose aria-hidden="true" size={14} />
@@ -116,7 +151,7 @@ export function InspectorPanel({
         </Tooltip>
       </header>
       <div
-        className="tw-inspector-body"
+        className={`tw-inspector-body${tab === 'tree' && requestedSelection !== null ? ' tw-inspector-picking-result' : ''}`}
         role="tabpanel"
         id={`tw-inspector-panel-${tab}`}
         aria-labelledby={`tw-inspector-tab-${tab}`}
@@ -125,14 +160,34 @@ export function InspectorPanel({
           snapshot === null || nodes.length === 0 ? (
             <InspectorEmpty icon={Waypoints} text="No semantic tree at this moment" />
           ) : (
-            <SemanticTree
-              snapshot={snapshot}
-              selectedNodeId={selectedNodeId}
-              onSelect={setSelectedNodeId}
-              {...(recorder === undefined ? {} : { recorder })}
-              {...(onPreviewNode === undefined ? {} : { onPreviewNode })}
-              {...(onPinNode === undefined ? {} : { onPinNode })}
-            />
+            <>
+              <div className="tw-picked-tree">
+                <SemanticTree
+                  reveal={requestedSelection}
+                  snapshot={snapshot}
+                  selectedNodeId={selectedNodeId}
+                  onSelect={setSelectedNodeId}
+                  {...(recorder === undefined ? {} : { recorder })}
+                  {...(onPreviewNode === undefined ? {} : { onPreviewNode })}
+                  {...(onPinNode === undefined ? {} : { onPinNode })}
+                />
+              </div>
+              {requestedSelection === null || selectedNode === null ? null : (
+                <div
+                  className="tw-picked-detail"
+                  role="region"
+                  aria-label="Selected element details"
+                >
+                  <SemanticDetail
+                    node={selectedNode}
+                    snapshot={snapshot}
+                    actionability={actionability}
+                    showActionability={onInspectActionability !== undefined}
+                    {...(recorder === undefined ? {} : { recorder })}
+                  />
+                </div>
+              )}
+            </>
           )
         ) : tab === 'semantic' ? (
           <>
@@ -144,22 +199,13 @@ export function InspectorPanel({
                 node={selectedNode}
                 snapshot={snapshot}
                 actionability={actionability}
+                showActionability={onInspectActionability !== undefined}
                 {...(recorder === undefined ? {} : { recorder })}
               />
             )}
           </>
-        ) : session === null || session.logs.length === 0 ? (
-          <InspectorEmpty icon={FileText} text="No application logs for this session" />
         ) : (
-          <ol className="tw-log-list">
-            {session.logs.map((log, index) => (
-              <li key={`${log.t}:${log.seq ?? index}`} data-level={log.level ?? 'plain'}>
-                <time>{formatTime(log.t)}</time>
-                <span>{log.level ?? log.source}</span>
-                <p>{log.message}</p>
-              </li>
-            ))}
-          </ol>
+          <LogPanel logs={session?.logs ?? []} />
         )}
       </div>
     </section>
@@ -300,6 +346,7 @@ function ContractSummary({ contract }: { readonly contract: EffectiveSessionCont
 
 function SemanticTree({
   snapshot,
+  reveal,
   selectedNodeId,
   onSelect,
   recorder,
@@ -307,22 +354,92 @@ function SemanticTree({
   onPinNode,
 }: {
   readonly snapshot: SemanticSnapshot;
+  readonly reveal: InspectorSelection | null;
   readonly selectedNodeId: string | null;
   readonly onSelect: (nodeId: string) => void;
   readonly recorder?: RecorderActions;
   readonly onPreviewNode?: (node: SemanticNode | null, snapshot: SemanticSnapshot | null) => void;
   readonly onPinNode?: (node: SemanticNode, snapshot: SemanticSnapshot) => void;
 }) {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const needle = query.trim().toLowerCase();
+  const matches = snapshot.nodes.filter((node) =>
+    [node.role, node.name, node.testId, node.id, `semantic:${node.id}@${snapshot.revision}`].some(
+      (value) => value?.toLowerCase().includes(needle),
+    ),
+  );
+  const matched = new Set(matches.map((node) => node.id));
+  const included = new Set(matched);
+  const parents = new Map(snapshot.nodes.map((node) => [node.id, node.parentId]));
+  if (needle !== '')
+    for (const node of matches) {
+      const visited = new Set<string>();
+      let id = node.parentId;
+      while (id !== undefined && !visited.has(id)) {
+        visited.add(id);
+        included.add(id);
+        id = parents.get(id);
+      }
+    }
+  const cycleMatch = (direction: number, focusTree = false) => {
+    if (matches.length === 0) return;
+    const current = matches.findIndex((node) => node.id === selectedNodeId);
+    const index =
+      current === -1
+        ? direction < 0
+          ? matches.length - 1
+          : 0
+        : (current + direction + matches.length) % matches.length;
+    const node = matches[index]!;
+    onSelect(node.id);
+    onPinNode?.(node, snapshot);
+    const element = [
+      ...(treeRef.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? []),
+    ].find((item) => item.dataset['nodeId'] === node.id);
+    element?.scrollIntoView({ block: 'nearest' });
+    if (focusTree) element?.focus({ preventScroll: true });
+  };
+  // A picker selection reveals its node even if an earlier tree search excluded it.
+  useEffect(() => {
+    if (reveal !== null) setQuery('');
+  }, [reveal]);
+  const [storedCollapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const [revealed, setRevealed] = useState<InspectorSelection | null>(null);
+  const treeRef = useRef<HTMLUListElement>(null);
+  const collapsed = new Set(needle === '' ? storedCollapsed : []);
+  if (reveal !== null && reveal !== revealed) {
+    const ancestors = new Map(snapshot.nodes.map((node) => [node.id, node.parentId]));
+    const visited = new Set<string>();
+    let id = ancestors.get(reveal.nodeId);
+    while (id !== undefined && !visited.has(id)) {
+      visited.add(id);
+      collapsed.delete(id);
+      id = ancestors.get(id);
+    }
+  }
+  useLayoutEffect(() => {
+    if (reveal === null || reveal === revealed || needle !== '') return;
+    setCollapsed(collapsed);
+    setRevealed(reveal);
+    const selected = [
+      ...(treeRef.current?.querySelectorAll<HTMLElement>('[role="treeitem"]') ?? []),
+    ].find((element) => element.dataset['nodeId'] === reveal.nodeId);
+    selected?.focus({ preventScroll: true });
+    selected?.scrollIntoView({ block: 'nearest' });
+  }, [reveal, revealed, needle]);
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const children = new Map<string, SemanticNode[]>();
   for (const node of snapshot.nodes) {
-    if (node.parentId === undefined) continue;
+    if (node.parentId === undefined || (needle !== '' && !included.has(node.id))) continue;
     children.set(node.parentId, [...(children.get(node.parentId) ?? []), node]);
   }
   const roots = snapshot.rootIds
     .map((id) => byId.get(id))
-    .filter((node): node is SemanticNode => node !== undefined);
+    .filter(
+      (node): node is SemanticNode =>
+        node !== undefined && (needle === '' || included.has(node.id)),
+    );
   const rows = useMemo(() => {
     const visible: {
       readonly id: string;
@@ -346,31 +463,96 @@ function SemanticTree({
     selectedId: selectedNodeId,
     collapsed,
     onSelect,
-    onCollapsed: setCollapsed,
+    onCollapsed: needle === '' ? setCollapsed : () => undefined,
   });
   return (
-    <ul
-      className="tw-semantic-tree"
-      role="tree"
-      aria-label="Semantic tree"
-      onKeyDown={navigation.onKeyDown}
-    >
-      {roots.map((node) => (
-        <SemanticTreeNode
-          key={node.id}
-          node={node}
-          snapshot={snapshot}
-          children={children}
-          selectedNodeId={navigation.activeId}
-          onSelect={onSelect}
-          collapsed={collapsed}
-          item={navigation.item}
-          {...(recorder === undefined ? {} : { recorder })}
-          {...(onPreviewNode === undefined ? {} : { onPreviewNode })}
-          {...(onPinNode === undefined ? {} : { onPinNode })}
-        />
-      ))}
-    </ul>
+    <>
+      <div className="tw-tree-search">
+        <label className="tw-search-box">
+          <Search aria-hidden="true" size={13} />
+          <span className="sr-only">Search elements</span>
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder="Role, name, test ID or ref"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setQuery('');
+              }
+              if (event.key === 'Enter' && needle !== '') {
+                event.preventDefault();
+                cycleMatch(event.shiftKey ? -1 : 1);
+              }
+            }}
+          />
+          {query !== '' ? (
+            <button
+              type="button"
+              className="tw-clear-search"
+              aria-label="Clear element search"
+              onClick={() => {
+                setQuery('');
+                searchRef.current?.focus();
+              }}
+            >
+              <X aria-hidden="true" size={13} />
+            </button>
+          ) : null}
+        </label>
+        {needle === '' ? null : (
+          <div className="tw-tree-search-results">
+            <span role="status">
+              {matches.length === 0
+                ? 'No matching elements'
+                : `${matched.has(selectedNodeId ?? '') ? matches.findIndex((node) => node.id === selectedNodeId) + 1 : 0} / ${matches.length} matches`}
+            </span>
+            <button
+              type="button"
+              className="tw-inspector-control"
+              aria-label="Previous matching element"
+              disabled={matches.length === 0}
+              onClick={() => cycleMatch(-1)}
+            >
+              <ChevronUp aria-hidden="true" size={13} />
+            </button>
+            <button
+              type="button"
+              className="tw-inspector-control"
+              aria-label="Next matching element"
+              disabled={matches.length === 0}
+              onClick={() => cycleMatch(1)}
+            >
+              <ChevronDown aria-hidden="true" size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+      <ul
+        className="tw-semantic-tree"
+        ref={treeRef}
+        role="tree"
+        aria-label="Semantic tree"
+        onKeyDown={navigation.onKeyDown}
+      >
+        {roots.map((node) => (
+          <SemanticTreeNode
+            key={node.id}
+            node={node}
+            snapshot={snapshot}
+            children={children}
+            selectedNodeId={navigation.activeId}
+            onSelect={onSelect}
+            collapsed={collapsed}
+            item={navigation.item}
+            {...(recorder === undefined ? {} : { recorder })}
+            {...(onPreviewNode === undefined ? {} : { onPreviewNode })}
+            {...(onPinNode === undefined ? {} : { onPinNode })}
+          />
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -410,6 +592,7 @@ function SemanticTreeNode({
           type="button"
           role="treeitem"
           data-highlight-source="semantic"
+          data-node-id={node.id}
           aria-selected={selectedNodeId === node.id}
           aria-expanded={descendants.length === 0 ? undefined : open}
           aria-owns={descendants.length > 0 && open ? groupId : undefined}
@@ -458,7 +641,9 @@ function SemanticDetail({
   snapshot,
   recorder,
   actionability,
+  showActionability,
 }: {
+  readonly showActionability: boolean;
   readonly node: SemanticNode;
   readonly snapshot: SemanticSnapshot | null;
   readonly recorder?: RecorderActions;
@@ -552,7 +737,7 @@ function SemanticDetail({
           )}
         </div>
       </section>
-      <ActionabilityInspector state={actionability} />
+      {showActionability ? <ActionabilityInspector state={actionability} /> : null}
       {recorder === undefined ? null : (
         <section className="tw-semantic-actions">
           <h4>Recorder</h4>
@@ -720,19 +905,129 @@ function Property({
 }
 
 function CopyButton({ label, value }: { readonly label: string; readonly value: string }) {
+  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  useEffect(() => {
+    setStatus('idle');
+  }, [value]);
+  useEffect(() => {
+    if (status === 'idle') return;
+    const timer = window.setTimeout(() => setStatus('idle'), 2000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+  const copy = async () => {
+    try {
+      await copyText(value);
+      setStatus('copied');
+    } catch {
+      setStatus('failed');
+    }
+  };
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="tw-copy-field"
-        aria-label={label}
-        onClick={() => {
-          void navigator.clipboard.writeText(value);
-        }}
+    <span className="tw-copy-status">
+      <Tooltip
+        label={
+          status === 'copied' ? 'Copied' : status === 'failed' ? 'Clipboard unavailable' : label
+        }
       >
-        <Copy aria-hidden="true" size={12} />
-      </button>
-    </Tooltip>
+        <button type="button" className="tw-copy-field" aria-label={label} onClick={copy}>
+          {status === 'copied' ? (
+            <Check aria-hidden="true" size={12} />
+          ) : status === 'failed' ? (
+            <X aria-hidden="true" size={12} />
+          ) : (
+            <Copy aria-hidden="true" size={12} />
+          )}
+        </button>
+      </Tooltip>
+      <span className={status === 'failed' ? 'tw-copy-error' : 'sr-only'} role="status">
+        {status === 'copied' ? 'Copied' : status === 'failed' ? 'Clipboard unavailable' : ''}
+      </span>
+    </span>
+  );
+}
+
+function LogPanel({ logs }: { readonly logs: readonly AppLogView[] }) {
+  const [query, setQuery] = useState('');
+  const [level, setLevel] = useState('all');
+  const filtered = logs.filter(
+    (log) =>
+      (level === 'all' || (log.level ?? 'plain') === level) &&
+      [log.message, log.logger, log.label]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+  );
+  return (
+    <div className="tw-log-panel">
+      <div className="tw-log-filters">
+        <label className="tw-search-box">
+          <Search aria-hidden="true" size={13} />
+          <span className="sr-only">Search logs</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder="Search logs"
+          />
+          {query !== '' ? (
+            <button
+              className="tw-clear-search"
+              type="button"
+              aria-label="Clear log search"
+              onClick={() => setQuery('')}
+            >
+              <X aria-hidden="true" size={13} />
+            </button>
+          ) : null}
+        </label>
+        <label className="tw-log-level">
+          <span>Level</span>
+          <select
+            aria-label="Log level"
+            value={level}
+            onChange={(event) => setLevel(event.currentTarget.value)}
+          >
+            <option value="all">All levels</option>
+            {UI_LOG_LEVELS.map((value) => (
+              <option value={value} key={value}>
+                {value}
+              </option>
+            ))}
+            <option value="plain">Unleveled</option>
+          </select>
+        </label>
+        <span className="tw-filter-count" role="status">
+          {filtered.length} of {logs.length} logs at this moment
+        </span>
+        {level !== 'all' || query !== '' ? (
+          <button
+            type="button"
+            className="tw-secondary-button"
+            onClick={() => {
+              setLevel('all');
+              setQuery('');
+            }}
+          >
+            Reset log filters
+          </button>
+        ) : null}
+      </div>
+      {logs.length === 0 ? (
+        <InspectorEmpty icon={FileText} text="No application logs for this session" />
+      ) : filtered.length === 0 ? (
+        <InspectorEmpty icon={Search} text="No logs match these filters" />
+      ) : (
+        <ol className="tw-log-list">
+          {filtered.map((log, index) => (
+            <li key={`${log.t}:${log.seq ?? index}`} data-level={log.level ?? 'plain'}>
+              <time>{formatTime(log.t)}</time>
+              <span>{log.level ?? log.source}</span>
+              <p>{log.message}</p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
 

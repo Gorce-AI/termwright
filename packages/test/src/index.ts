@@ -31,9 +31,11 @@
  */
 
 import { registerTermwrightMatchers } from './matchers.js';
+import { registerAssertionRecording } from './assertion-recording.js';
 import type { ExpectStatic } from '@vitest/expect';
 
 registerTermwrightMatchers();
+registerAssertionRecording();
 
 // Vitest's own API, re-exported so a test file has a single import.
 export { afterAll, afterEach, beforeAll, beforeEach, describe, expect, vi } from 'vitest';

@@ -155,6 +155,39 @@ trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
 is. The browser app never imports Vitest and never reads a `.twtrace` itself.
 
+## Finding tests, history and logs
+
+In **Specs**, search by test, file, feature or tag. **Run matching** starts only
+the runnable cases in the filtered results. **Run all**, directory and file
+run controls retain their full scopes. Clear search to restore the remembered
+tree expansion. The **New test** menu supports arrow navigation, Escape and
+clicking outside it.
+
+In **Runs**, search by run ID, commit or result and use **Refresh** to load runs
+completed since the page opened. Loading and request errors have separate states;
+a failed request offers **Try again**. Open a run to replay a retained recording
+from a specific attempt or compare attempts side by side.
+
+In **Logs**, combine text search with the recorded severity. **Unleveled** selects
+file messages without a declared level; a word such as `ERROR` in their text does
+not turn them into structured errors. Filters operate on logs available at the
+current playhead. **Reset log filters** restores all available messages.
+
+## Picking an element on the terminal
+
+Choose **Pick element** in the terminal toolbar to pause replay and inspect the
+screen. Hover highlights the deepest element with recorded visible bounds;
+click selects it, reveals its ancestors in **Tree**, and opens its semantic
+details below the tree. The inspector opens automatically, including in the
+compact layout. Arrow keys preview elements, Enter selects, and Escape cancels.
+Inspection does not send clicks or keystrokes to a live terminal.
+
+Picking uses the semantic snapshot for the displayed moment and its terminal
+grid. Missing bounds and ambiguous overlapping elements are explained rather
+than guessed; overlapping targets use a recorded hit-grid recipient when
+available. A frame without visible bounds cannot be picked. Changing the
+snapshot clears highlights and details belonging to the previous revision.
+
 ## Accessibility
 
 The semantic tree is an ARIA-aligned model, so the UI renders it as ARIA rather
@@ -179,11 +212,11 @@ activating an element selects its node, exactly like clicking it in the tree.
 
 ## Run history
 
-Every run writes a small manifest under `.termwright/runs/<timestamp>/` — its
-counters, its tests, and the path of the archive each test left behind. The
-**Runs** tab lists them newest first; opening one shows its tests, and clicking
-a test replays its archive in place, with the same terminal, command log,
-inspector and timeline as `--trace` gives you.
+Committed native runs retain a manifest and event journal under `.termwright/runs/`.
+The **Runs** tab lists them newest first. Open a run and choose **Replay attempt**
+for a specific test attempt and session. Replay uses the same terminal, command
+log, inspector and timeline as `--trace`. The URL preserves the exact run,
+execution, archive and playhead, including after refreshing the page.
 
 That replay is pinned to the run and test you chose. A watcher can begin another
 run while you inspect it; the live catalogue keeps updating in the background,
@@ -191,10 +224,32 @@ but the historical title, result, scrubber and terminal stay on that archive
 until you navigate back to live work. Replays are contextual to a browser tab,
 so two tabs can inspect different archives without retargeting each other.
 
-Manifests hold paths, not archives: the traces are already where the fixtures
-wrote them, and copying them would double the size of a CI artifact for nothing.
-A test whose archive was not retained says so rather than offering a replay that
-would fail.
+Recording paths come from authoritative `trace.finalized` journal events matched
+to their exact task, execution, attempt and session. This uses the existing
+committed format; no archive is inferred from a test title or directory scan.
+Missing or unreadable archives have disabled replay controls with an explanation.
+Older runs without these events explicitly report that no recording was retained.
+
+Choose **Compare attempts** when two attempts have available recordings. The view
+starts with a failed attempt and the latest passed attempt when available. Align
+both screens at the start, outcome or the end of a common named step; each screen
+also has an independent scrubber. Semantic differences show changed names, states
+and visible bounds, plus added and removed elements. Matching uses unique test
+IDs, then unique role/name ancestry; ambiguous identities are counted and omitted.
+Comparison sources are independent of the main player and other browser tabs.
+
+In **Tree**, use **Search elements** to find roles, names, test IDs or semantic
+refs. Matching ancestors expand temporarily; clearing search restores the prior
+expansion. Enter/Shift+Enter and the match buttons select and highlight matches.
+Picking directly on the terminal clears a conflicting filter to reveal the
+selected element.
+
+After stopping the recorder, **Keep draft** or Escape closes the review without
+discarding its generated source. **Draft** in the navigation reopens it, including
+after refreshing the page. Edit the destination before saving. A draft remains
+in this Runner server’s memory until saved, explicitly discarded or the server
+exits. Starting another recording requires resolving the draft first; an older
+tab cannot save or discard a different, newer draft.
 
 ## Watching a replay
 

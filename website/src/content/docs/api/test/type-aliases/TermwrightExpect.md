@@ -13,6 +13,6 @@ editUrl: false
 
 > **TermwrightExpect** = `ExpectStatic`
 
-Defined in: [test/src/index.ts:41](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/index.ts#L41)
+Defined in: [test/src/index.ts:43](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/index.ts#L43)
 
 The assertion API bound to Termwright's private, exact-certified engine.

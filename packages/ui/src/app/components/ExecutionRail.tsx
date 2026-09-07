@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   Play,
   RotateCcw,
+  Search,
   Square,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
@@ -56,13 +57,39 @@ export function ExecutionRail(props: ExecutionRailProps) {
     (test) => test.executionId === props.selectedExecutionId,
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const selectedCase = props.cases[currentIndex];
+  const [closedExecutionId, setClosedExecutionId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [failedOnly, setFailedOnly] = useState(false);
+  const visibleCases = props.cases.filter(
+    (test) =>
+      (!failedOnly || test.status === 'failed') &&
+      `${test.title} ${test.source.file}`.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+  const fileGroups = new Map<string, ExecutionCase[]>();
+  for (const test of visibleCases)
+    fileGroups.set(test.source.file, [...(fileGroups.get(test.source.file) ?? []), test]);
+  const orderedCases = [...fileGroups.values()].flat();
   const [following, setFollowing] = useState(props.autoFollow);
   const [activeVisible, setActiveVisible] = useState(true);
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
-  const [expandedCases, setExpandedCases] = useState<ReadonlySet<string>>(
-    () => new Set(props.selectedExecutionId === null ? [] : [props.selectedExecutionId]),
-  );
-  const userCollapsedCases = useRef(new Set<string>());
+  const [caseSections, setCaseSections] = useState<
+    ReadonlyMap<string, ReadonlyMap<string, boolean>>
+  >(() => new Map());
+  const collapsed = caseSections.get(props.selectedExecutionId ?? '') ?? new Map<string, boolean>();
+  const setCollapsed = (
+    update:
+      | ReadonlyMap<string, boolean>
+      | ((current: ReadonlyMap<string, boolean>) => ReadonlyMap<string, boolean>),
+  ) => {
+    const id = props.selectedExecutionId;
+    if (id === null) return;
+    setCaseSections((current) =>
+      new Map(current).set(
+        id,
+        typeof update === 'function' ? update(current.get(id) ?? new Map()) : update,
+      ),
+    );
+  };
   const activeNodeId = [...props.nodes].reverse().find((node) => node.status === 'running')?.nodeId;
   const failedTargets = [
     ...new Set(props.cases.filter((test) => test.status === 'failed').map((test) => test.caseKey)),
@@ -70,18 +97,12 @@ export function ExecutionRail(props: ExecutionRailProps) {
 
   useEffect(() => setFollowing(props.autoFollow), [props.autoFollow]);
   useEffect(() => {
-    if (
-      !following ||
-      props.selectedExecutionId === null ||
-      userCollapsedCases.current.has(props.selectedExecutionId)
-    )
-      return;
-    const selected = props.cases.find((test) => test.executionId === props.selectedExecutionId);
-    if (selected?.status !== 'running') return;
-    setExpandedCases((current) =>
-      current.has(selected.executionId) ? current : new Set([...current, selected.executionId]),
+    const scroller = scrollRef.current;
+    const head = scroller?.querySelector<HTMLElement>(
+      '.tw-case[data-selected="true"] .tw-case-head',
     );
-  }, [following, props.cases, props.selectedExecutionId]);
+    if (scroller && head) scrollWithin(scroller, head);
+  }, [props.selectedExecutionId, selectedCase?.status, closedExecutionId]);
   useEffect(() => {
     const scroller = scrollRef.current;
     if (activeNodeId === undefined || scroller === null) {
@@ -101,7 +122,7 @@ export function ExecutionRail(props: ExecutionRailProps) {
     >
       <div className="tw-rail-heading">
         <div>
-          <h2>Steps</h2>
+          <h2>Tests</h2>
         </div>
         <RailCounters cases={props.cases} />
         <div className="tw-rail-actions">
@@ -146,11 +167,11 @@ export function ExecutionRail(props: ExecutionRailProps) {
             </>
           ) : null}
         </div>
-        <Tooltip label="Collapse execution timeline">
+        <Tooltip label="Hide tests and steps">
           <button
             type="button"
             className="tw-pane-collapse"
-            aria-label="Collapse execution timeline"
+            aria-label="Hide tests and steps"
             onClick={props.onCollapse}
           >
             <PanelLeftClose aria-hidden="true" size={14} />
@@ -158,201 +179,155 @@ export function ExecutionRail(props: ExecutionRailProps) {
         </Tooltip>
       </div>
 
+      <div className="tw-case-filter">
+        <label>
+          <Search aria-hidden="true" size={13} />
+          <input
+            type="search"
+            aria-label="Find a test in this run"
+            placeholder="Find a test"
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+        </label>
+        <button type="button" aria-pressed={failedOnly} onClick={() => setFailedOnly(!failedOnly)}>
+          Failed {failedTargets.length}
+        </button>
+      </div>
       <div
         className="tw-case-list"
+        role="region"
         ref={scrollRef}
-        role="listbox"
-        aria-label="Cases in this run"
         onScroll={(event) => {
           if (activeNodeId === undefined) return;
           const visible = activeRowVisible(event.currentTarget, activeNodeId);
           setActiveVisible(visible);
           if (!visible) setFollowing(false);
         }}
+        aria-label="Cases in this run"
         onKeyDown={(event) => {
-          moveOptionFocus(event, props.cases.length, currentIndex);
+          moveOptionFocus(
+            event,
+            orderedCases.length,
+            orderedCases.findIndex((test) => test.executionId === props.selectedExecutionId),
+          );
         }}
       >
         {props.cases.length === 0 ? (
           <EmptyRail />
+        ) : visibleCases.length === 0 ? (
+          <div className="tw-empty-story">No matching tests.</div>
         ) : (
-          props.cases.map((test) => {
-            const selected = test.executionId === props.selectedExecutionId;
-            const expanded = expandedCases.has(test.executionId);
-            const narrative = selected ? props.nodes : test.nodes;
-            const progress = executionProgress(test, narrative);
-            const caseSections = timelineSections(narrative);
-            return (
-              <article
-                className="tw-case"
-                data-selected={selected}
-                data-status={test.status}
-                data-scope-mismatch={test.scopeMismatch === true}
-                key={test.executionId}
-                role="none"
-              >
-                <div className="tw-case-head">
-                  <button
-                    type="button"
-                    className="tw-case-button"
-                    role="option"
-                    aria-selected={selected}
-                    aria-expanded={expanded}
-                    data-execution-id={test.executionId}
-                    onClick={() => {
-                      props.onSelectCase(test.executionId);
-                      setExpandedCases((current) => toggled(current, test.executionId));
-                      if (expanded) {
-                        userCollapsedCases.current.add(test.executionId);
-                        setFollowing(false);
-                      } else {
-                        userCollapsedCases.current.delete(test.executionId);
-                      }
-                    }}
+          [...fileGroups].map(([file, tests]) => (
+            <section className="tw-case-file" key={file} aria-label={file}>
+              <h3 className="tw-case-file-heading" title={file}>
+                <FileCode2 aria-hidden="true" size={13} />
+                <span>{shortSource(file)}</span>
+                <small>{tests.length}</small>
+              </h3>
+              {tests.map((test) => {
+                const selected = test.executionId === props.selectedExecutionId;
+                const expanded = selected && closedExecutionId !== test.executionId;
+                return (
+                  <article
+                    className="tw-case"
+                    data-selected={selected}
+                    data-expanded={expanded}
+                    data-status={test.status}
+                    data-scope-mismatch={test.scopeMismatch === true}
+                    key={test.executionId}
+                    role="none"
                   >
-                    <StatusBadge status={test.status} compact />
-                    <span className="tw-case-title">
-                      <strong>{leafTitle(test)}</strong>
-                      <small>
-                        <FileCode2 aria-hidden="true" size={11} />
-                        {caseContext(test)}
-                      </small>
-                    </span>
-                    <span className="tw-case-meta">
-                      {formatDuration(test.durationMs)}
-                      {test.scopeMismatch === true ? (
-                        <span
-                          className="tw-case-scope-warning"
-                          aria-label="Execution reported outside requested scope"
-                          title="Execution reported outside requested scope"
-                        >
-                          <AlertCircle aria-hidden="true" size={12} />
-                        </span>
-                      ) : null}
-                    </span>
-                    {expanded ? (
-                      <ChevronDown aria-hidden="true" size={14} />
-                    ) : (
-                      <ChevronRight aria-hidden="true" size={14} />
-                    )}
-                  </button>
-                  {props.canRun && !props.runBusy ? (
-                    <Tooltip
-                      label={`${test.status === 'queued' ? 'Run' : 'Rerun'} ${test.title}`}
-                      disabledReason="Runner connection is unavailable."
-                    >
+                    <div className="tw-case-head">
                       <button
                         type="button"
-                        className="tw-case-run"
-                        disabled={!props.connected}
-                        aria-label={`${test.status === 'queued' ? 'Run' : 'Rerun'} ${test.title}`}
-                        onClick={() => props.onRun([test.caseKey])}
+                        className="tw-case-button"
+                        aria-current={selected ? 'true' : undefined}
+                        aria-expanded={expanded}
+                        title={test.title}
+                        data-execution-id={test.executionId}
+                        onClick={() => {
+                          if (!selected) {
+                            setClosedExecutionId(null);
+                            props.onSelectCase(test.executionId);
+                          } else {
+                            setClosedExecutionId(expanded ? test.executionId : null);
+                            if (expanded) setFollowing(false);
+                          }
+                        }}
                       >
-                        {test.status === 'queued' ? (
-                          <Play aria-hidden="true" size={12} />
+                        <StatusBadge status={test.status} compact />
+                        <span className="tw-case-title">
+                          <strong>{leafTitle(test)}</strong>
+                        </span>
+                        <span className="tw-case-meta">
+                          {formatDuration(test.durationMs)}
+                          {test.scopeMismatch === true ? (
+                            <span
+                              className="tw-case-scope-warning"
+                              aria-label="Execution reported outside requested scope"
+                              title="Execution reported outside requested scope"
+                            >
+                              <AlertCircle aria-hidden="true" size={12} />
+                            </span>
+                          ) : null}
+                        </span>
+                        {expanded ? (
+                          <ChevronDown aria-hidden="true" size={13} />
                         ) : (
-                          <RotateCcw aria-hidden="true" size={12} />
+                          <ChevronRight aria-hidden="true" size={13} />
                         )}
                       </button>
-                    </Tooltip>
-                  ) : null}
-                </div>
-
-                {expanded ? (
-                  <div className="tw-case-story">
-                    <div className="tw-case-facts">
-                      <span>{test.provider ?? 'termwright'}</span>
-                      <span>{kindName(test.kind)}</span>
-                      <span>attempt {Math.max(test.attempt, 1)}</span>
-                      <span>{formatDuration(test.durationMs) || 'in progress'}</span>
-                      {test.scopeMismatch === true ? (
-                        <span className="tw-scope-mismatch">
-                          <AlertCircle aria-hidden="true" size={11} /> outside requested scope
-                        </span>
+                      {props.canRun && !props.runBusy ? (
+                        <Tooltip
+                          label={`${test.status === 'queued' ? 'Run' : 'Rerun'} ${test.title}`}
+                          disabledReason="Runner connection is unavailable."
+                        >
+                          <button
+                            type="button"
+                            className="tw-case-run"
+                            disabled={!props.connected}
+                            aria-label={`${test.status === 'queued' ? 'Run' : 'Rerun'} ${test.title}`}
+                            onClick={() => props.onRun([test.caseKey])}
+                          >
+                            {test.status === 'queued' ? (
+                              <Play aria-hidden="true" size={12} />
+                            ) : (
+                              <RotateCcw aria-hidden="true" size={12} />
+                            )}
+                          </button>
+                        </Tooltip>
                       ) : null}
-                      {test.tags.slice(0, 2).map((tag) => (
-                        <span key={tag}>{tag}</span>
-                      ))}
                     </div>
-                    <div className="tw-current-step">
-                      <span>
-                        {progress.current === null ? 'Execution narrative' : progress.current.label}
-                      </span>
-                      <strong>
-                        {progress.completed}/{progress.total || '—'}
-                      </strong>
-                    </div>
-                    <div
-                      className="tw-case-progress"
-                      role="progressbar"
-                      aria-label={`${progress.completed} of ${progress.total} execution items complete`}
-                      aria-valuemin={0}
-                      aria-valuemax={Math.max(progress.total, 1)}
-                      aria-valuenow={progress.completed}
-                    >
-                      <i
-                        style={{
-                          width: `${progress.total === 0 ? 0 : (progress.completed / progress.total) * 100}%`,
+                    {expanded ? (
+                      <CaseStory
+                        key={test.executionId}
+                        test={test}
+                        props={props}
+                        collapsed={collapsed}
+                        onToggle={(sectionId, value) =>
+                          setCollapsed((current) => new Map(current).set(sectionId, value))
+                        }
+                        onResetSections={() => setCollapsed(new Map())}
+                        onJumpFailure={(node) => {
+                          setCollapsed(new Map());
+                          props.onPinNode(node);
+                          requestAnimationFrame(() => {
+                            const scroller = scrollRef.current;
+                            const row = scroller === null ? null : activeRow(scroller, node.nodeId);
+                            if (scroller !== null && row !== null) {
+                              row.focus({ preventScroll: true });
+                              scrollWithin(scroller, row);
+                            }
+                          });
                         }}
                       />
-                    </div>
-                    <div
-                      className="tw-execution-narrative"
-                      role="tree"
-                      aria-label={`${test.title} execution`}
-                      onKeyDown={moveTreeFocus}
-                    >
-                      {narrative.length === 0 ? (
-                        <EmptyNarrative
-                          test={test}
-                          evidence={selected ? props.evidence : { kind: 'empty' }}
-                        />
-                      ) : (
-                        caseSections.map((section) => (
-                          <SectionRow
-                            key={section.sectionId}
-                            section={section}
-                            depth={0}
-                            collapsed={collapsed}
-                            pinnedNodeId={props.pinnedNodeId}
-                            onToggle={(sectionId) =>
-                              setCollapsed((current) => toggled(current, sectionId))
-                            }
-                            onPreview={props.onPreviewNode}
-                            onPin={props.onPinNode}
-                          />
-                        ))
-                      )}
-                    </div>
-                    {test.priorFailures.length === 0 ? null : (
-                      <details className="tw-retry-history">
-                        <summary>
-                          {test.priorFailures.length} earlier{' '}
-                          {test.priorFailures.length === 1 ? 'attempt' : 'attempts'} failed
-                        </summary>
-                        <ol>
-                          {test.priorFailures.map((failure) => (
-                            <li key={failure.attempt}>
-                              <strong>Attempt {failure.attempt}</strong>
-                              <span>
-                                {firstLine(failure.errors[0] ?? 'Failure reason was not retained.')}
-                              </span>
-                              {failure.errors.length < 2 ? null : (
-                                <details>
-                                  <summary>All reasons</summary>
-                                  <pre>{failure.errors.join('\n\n')}</pre>
-                                </details>
-                              )}
-                            </li>
-                          ))}
-                        </ol>
-                      </details>
-                    )}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })
+                    ) : null}
+                  </article>
+                );
+              })}
+            </section>
+          ))
         )}
         <span className="tw-scroll-end" aria-hidden="true" />
       </div>
@@ -362,12 +337,10 @@ export function ExecutionRail(props: ExecutionRailProps) {
           className="tw-current-step-jump"
           aria-label="Scroll to the current running step"
           onClick={() => {
-            if (props.selectedExecutionId !== null) {
-              userCollapsedCases.current.delete(props.selectedExecutionId);
-              setExpandedCases(
-                (current) => new Set([...current, props.selectedExecutionId as string]),
-              );
-            }
+            setQuery('');
+            setFailedOnly(false);
+            setClosedExecutionId(null);
+            setCollapsed(new Map());
             setFollowing(true);
             requestAnimationFrame(() => {
               const scroller = scrollRef.current;
@@ -382,6 +355,170 @@ export function ExecutionRail(props: ExecutionRailProps) {
         </button>
       )}
     </section>
+  );
+}
+
+function CaseStory({
+  test,
+  props,
+  collapsed,
+  onToggle,
+  onJumpFailure,
+  onResetSections,
+}: {
+  readonly test: ExecutionCase;
+  readonly props: ExecutionRailProps;
+  readonly collapsed: ReadonlyMap<string, boolean>;
+  readonly onToggle: (id: string, value: boolean) => void;
+  readonly onJumpFailure: (node: ExecutionNode) => void;
+  readonly onResetSections: () => void;
+}) {
+  const narrative = props.nodes;
+  const progress = executionProgress(test, narrative);
+  const caseSections = timelineSections(narrative);
+  const [showCommands, setShowCommands] = useState(false);
+  const failedNode =
+    narrative.find((node) => node.status === 'failed' && !structural(node)) ??
+    narrative.find((node) => node.status === 'failed');
+  const failure =
+    test.status === 'failed'
+      ? (test.error ?? failedNode?.error ?? 'No error text was retained.')
+      : failedNode?.error;
+  return (
+    <div className="tw-case-story" data-status={test.status}>
+      <header className="tw-story-heading">
+        {test.attempt > 1 ? (
+          <p className="tw-attempt-note">
+            {test.flaky ? 'Passed after retry · ' : ''}
+            <span>Attempt {test.attempt}</span>
+          </p>
+        ) : null}
+        <details className="tw-case-details">
+          <summary>Test details</summary>
+          {test.source.line === undefined ? null : <p>Line {test.source.line}</p>}
+          {test.ancestors.length === 0 ? null : (
+            <p>{test.ancestors.map((item) => item.title).join(' › ')}</p>
+          )}
+          <p>
+            {test.provider ?? 'termwright'} · {kindName(test.kind)} · Attempt{' '}
+            {Math.max(test.attempt, 1)}
+          </p>
+          {test.tags.length === 0 ? null : <p>{test.tags.join(' · ')}</p>}
+          {test.scopeMismatch === true ? (
+            <p className="tw-scope-mismatch">Outside requested scope</p>
+          ) : null}
+        </details>
+      </header>
+      {failure === undefined ? null : (
+        <div className="tw-case-failure-summary" role="alert">
+          <strong>
+            <AlertCircle aria-hidden="true" size={14} /> Test failed
+          </strong>
+          <p>{firstLine(failure)}</p>
+          <details>
+            <summary>Error details</summary>
+            <pre>{failure}</pre>
+          </details>
+          {failedNode === undefined ? null : (
+            <button type="button" onClick={() => onJumpFailure(failedNode)}>
+              Go to failed step <ChevronRight aria-hidden="true" size={12} />
+            </button>
+          )}
+        </div>
+      )}
+      <div className="tw-story-toolbar">
+        <strong>Steps</strong>
+        {narrative.some((node) => node.gherkin !== undefined) ? (
+          <button
+            type="button"
+            aria-pressed={showCommands}
+            onClick={() => {
+              onResetSections();
+              setShowCommands(!showCommands);
+            }}
+          >
+            {showCommands ? 'Hide commands' : 'Show commands'}
+          </button>
+        ) : null}
+      </div>
+      <div className="tw-current-step">
+        <span>
+          {progress.current?.label ??
+            (test.status === 'running'
+              ? 'In progress'
+              : test.status === 'queued'
+                ? 'Waiting'
+                : test.status === 'cancelled'
+                  ? 'Stopped'
+                  : test.status === 'skipped'
+                    ? 'Skipped'
+                    : 'Completed')}
+        </span>
+        <strong>
+          {progress.completed}/{progress.total || '—'}
+        </strong>
+      </div>
+      <div
+        className="tw-case-progress"
+        role="progressbar"
+        aria-label={`${progress.completed} of ${progress.total} execution items complete`}
+        aria-valuemin={0}
+        aria-valuemax={Math.max(progress.total, 1)}
+        aria-valuenow={progress.completed}
+      >
+        <i
+          style={{
+            width: `${progress.total === 0 ? 0 : (progress.completed / progress.total) * 100}%`,
+          }}
+        />
+      </div>
+      <div
+        className="tw-execution-narrative"
+        role="tree"
+        aria-label={`${test.title} execution`}
+        onKeyDown={moveTreeFocus}
+      >
+        {narrative.length === 0 ? (
+          <EmptyNarrative test={test} evidence={props.evidence} />
+        ) : (
+          caseSections.map((section) => (
+            <SectionRow
+              key={section.sectionId}
+              section={section}
+              depth={0}
+              collapsed={collapsed}
+              pinnedNodeId={props.pinnedNodeId}
+              onToggle={onToggle}
+              onPreview={props.onPreviewNode}
+              onPin={props.onPinNode}
+              showCommands={showCommands}
+            />
+          ))
+        )}
+      </div>
+      {test.priorFailures.length === 0 ? null : (
+        <details className="tw-retry-history">
+          <summary>
+            {test.priorFailures.length} earlier{' '}
+            {test.priorFailures.length === 1 ? 'attempt' : 'attempts'} failed
+          </summary>
+          <ol>
+            {test.priorFailures.map((failure) => (
+              <li key={failure.attempt}>
+                <strong>Attempt {failure.attempt}</strong>
+                <span>{firstLine(failure.errors[0] ?? 'Failure reason was not retained.')}</span>
+                {failure.errors.length < 2 ? null : (
+                  <details>
+                    <summary>All reasons</summary>
+                    <pre>{failure.errors.join('\n\n')}</pre>
+                  </details>
+                )}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -433,64 +570,99 @@ function SectionRow({
   onToggle,
   onPreview,
   onPin,
+  showCommands,
 }: {
+  readonly showCommands: boolean;
   readonly section: TimelineSection;
   readonly depth: number;
-  readonly collapsed: ReadonlySet<string>;
+  readonly collapsed: ReadonlyMap<string, boolean>;
   readonly pinnedNodeId: string | null;
-  readonly onToggle: (sectionId: string) => void;
+  readonly onToggle: (sectionId: string, value: boolean) => void;
   readonly onPreview: (node: ExecutionNode | null) => void;
   readonly onPin: (node: ExecutionNode) => void;
 }) {
-  const isCollapsed = collapsed.has(section.sectionId);
-  const commands = commandCount(section.children);
+  const defaultCollapsed =
+    !showCommands &&
+    section.node?.gherkin !== undefined &&
+    section.status === 'passed' &&
+    !sectionTargets(section.children).some(
+      (node) => node.status === 'failed' || node.status === 'running',
+    );
+  const isCollapsed = collapsed.get(section.sectionId) ?? defaultCollapsed;
+  const entries = sectionTargets(section.children);
+  const assertions = entries.filter((node) => node.kind === 'assertion').length;
+  const actions = entries.length - assertions;
   const duration =
     section.endMs === undefined ? '' : formatDuration(Math.max(0, section.endMs - section.startMs));
   const source = section.node?.gherkin?.source;
+  const details = [
+    section.label,
+    ...(source === undefined
+      ? []
+      : [`${shortSource(source.file)}:${source.line}:${source.column}`]),
+    ...(entries.length === 0
+      ? ['No recorded actions or assertions']
+      : [
+          ...(actions === 0 ? [] : [`${actions} ${actions === 1 ? 'action' : 'actions'}`]),
+          ...(assertions === 0
+            ? []
+            : [`${assertions} ${assertions === 1 ? 'assertion' : 'assertions'}`]),
+        ]),
+  ].join(' · ');
   return (
     <div className="tw-timeline-section" role="none" data-depth={depth}>
-      <button
-        type="button"
-        className="tw-section-row"
-        role="treeitem"
-        aria-expanded={!isCollapsed}
-        aria-label={
-          source === undefined
-            ? undefined
-            : `${section.label}, ${shortSource(source.file)}, line ${source.line}, column ${source.column}`
-        }
-        data-kind={section.kind}
-        data-status={section.status}
-        data-node-id={section.node?.nodeId}
-        onPointerEnter={() => onPreview(sectionPreviewTarget(section))}
-        onPointerLeave={() => onPreview(null)}
-        onFocus={() => onPreview(sectionPreviewTarget(section))}
-        onBlur={() => onPreview(null)}
-        onClick={() => {
-          onToggle(section.sectionId);
-          onPin(sectionPreviewTarget(section));
-        }}
-      >
-        {isCollapsed ? (
-          <ChevronRight aria-hidden="true" size={12} />
-        ) : (
-          <ChevronDown aria-hidden="true" size={12} />
-        )}
-        <strong>{section.label}</strong>
-        <span>
-          {source === undefined ? '' : `L${source.line}:C${source.column} · `}
-          {commands} {commands === 1 ? 'command' : 'commands'}
-        </span>
-        <time>{duration}</time>
-      </button>
+      <Tooltip label={details} placement="right">
+        <button
+          type="button"
+          className="tw-section-row"
+          role="treeitem"
+          aria-expanded={!isCollapsed}
+          aria-label={
+            source === undefined
+              ? undefined
+              : `${section.label}, ${shortSource(source.file)}, line ${source.line}, column ${source.column}`
+          }
+          data-kind={section.kind}
+          data-status={section.status}
+          data-node-id={section.node?.nodeId}
+          onPointerEnter={() => onPreview(sectionPreviewTarget(section))}
+          onPointerLeave={() => onPreview(null)}
+          onFocus={() => onPreview(sectionPreviewTarget(section))}
+          onBlur={() => onPreview(null)}
+          onClick={() => {
+            onToggle(section.sectionId, !isCollapsed);
+            onPin(sectionPreviewTarget(section));
+          }}
+        >
+          {isCollapsed ? (
+            <ChevronRight aria-hidden="true" size={12} />
+          ) : (
+            <ChevronDown aria-hidden="true" size={12} />
+          )}
+          <span className="tw-section-copy">
+            <strong>{section.label}</strong>
+          </span>
+          <time>{duration}</time>
+          <StatusBadge status={section.status} compact />
+        </button>
+      </Tooltip>
       {isCollapsed ? null : (
         <div className="tw-section-children" role="group">
+          {section.children.length === 0 &&
+          section.node !== null &&
+          (section.status === 'passed' || section.status === 'failed') ? (
+            <p className="tw-step-recording-note" role="note">
+              No actions or assertions were recorded inside this step. Older recordings may omit
+              ordinary assertions.
+            </p>
+          ) : null}
           {section.children.map((item, index) =>
             isSection(item) ? (
               <SectionRow
                 key={item.sectionId}
                 section={item}
                 depth={depth + 1}
+                showCommands={showCommands}
                 collapsed={collapsed}
                 pinnedNodeId={pinnedNodeId}
                 onToggle={onToggle}
@@ -525,6 +697,7 @@ function sectionPreviewTarget(section: TimelineSection): ExecutionNode {
   const resolved = descendants.filter((node) => node.targetRef !== undefined);
   const refs = new Set(resolved.map((node) => node.targetRef));
   if (refs.size === 1) return resolved.at(-1) as ExecutionNode;
+  if (descendants.length === 1) return descendants[0] as ExecutionNode;
   const basis =
     section.node ??
     ({
@@ -580,11 +753,14 @@ function CommandRow({
         onBlur={() => onPreview(null)}
         onClick={() => onPin(node)}
       >
-        <span className="tw-command-index">{String(index).padStart(2, '0')}</span>
-        <time>{formatClock(node.startMs)}</time>
-        <span className="tw-kind-badge">{kindLabel(node.kind)}</span>
+        <span className="tw-command-index" title={`Command ${index}`}>
+          {String(index).padStart(2, '0')}
+        </span>
         <span className="tw-command-copy">
           <strong>{node.label}</strong>
+          <span className="tw-command-meta">
+            {kindLabel(node.kind).toLowerCase()} · {formatClock(node.startMs)}
+          </span>
           {node.selector === undefined && node.targetRef === undefined ? null : (
             <small>{node.selector ?? node.targetRef}</small>
           )}
@@ -651,7 +827,7 @@ function CommandRow({
       ) : null}
       {node.actionPlan === undefined ? null : (
         <details className="tw-action-plan">
-          <summary>Physical action plan · {node.actionPlan.strategy}</summary>
+          <summary>Input details</summary>
           <dl>
             <dt>contract</dt>
             <dd>{node.actionPlan.contractId}</dd>
@@ -820,23 +996,11 @@ function flattenNodes(items: readonly TimelineItem[]): readonly ExecutionNode[] 
   );
 }
 
-function commandCount(items: readonly TimelineItem[]): number {
-  return items.reduce(
-    (count, item) => count + (isSection(item) ? commandCount(item.children) : 1),
-    0,
-  );
-}
 function structural(node: ExecutionNode): boolean {
   return node.kind === 'step' || node.kind === 'hook' || node.kind === 'body';
 }
 function isSection(item: TimelineItem): item is TimelineSection {
   return 'sectionId' in item;
-}
-function toggled(current: ReadonlySet<string>, value: string): ReadonlySet<string> {
-  const next = new Set(current);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  return next;
 }
 function firstLine(value: string): string {
   return value.split(/\r?\n/u, 1)[0] ?? value;
@@ -923,11 +1087,6 @@ function EmptyNarrative({
 function leafTitle(test: ExecutionCase): string {
   return test.title.split(/\s*>\s*/u).at(-1) ?? test.title;
 }
-function caseContext(test: ExecutionCase): string {
-  const context =
-    test.ancestors.map((item) => item.title).join(' · ') || shortSource(test.source.file);
-  return `${context}${test.source.line === undefined ? '' : ` · L${test.source.line}`}`;
-}
 function shortSource(file: string): string {
   return file.split(/[/\\]/).filter(Boolean).slice(-2).join('/');
 }
@@ -954,7 +1113,9 @@ function executionProgress(
   test: ExecutionCase,
   nodes: readonly ExecutionNode[],
 ): { readonly completed: number; readonly total: number; readonly current: ExecutionNode | null } {
-  const completed = nodes.filter(
+  const steps = nodes.filter((node) => node.kind === 'step');
+  const items = steps.length > 0 ? steps : nodes.filter((node) => !structural(node));
+  const completed = items.filter(
     (node) => node.status === 'passed' || node.status === 'failed',
   ).length;
   const current =
@@ -962,14 +1123,15 @@ function executionProgress(
     null;
   return {
     completed,
-    total: nodes.length,
+    total: items.length,
     current: current ?? (test.status === 'running' ? (nodes.at(-1) ?? null) : null),
   };
 }
 
 function moveOptionFocus(event: KeyboardEvent, count: number, selectedIndex: number): void {
+  if (!(event.target as HTMLElement).matches('.tw-case-button')) return;
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-  const options = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="option"]')];
+  const options = [...event.currentTarget.querySelectorAll<HTMLElement>('.tw-case-button')];
   if (options.length === 0) return;
   event.preventDefault();
   const focused = options.indexOf(document.activeElement as HTMLElement);

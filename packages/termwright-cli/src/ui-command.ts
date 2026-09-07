@@ -250,6 +250,7 @@ interface ProjectedAttempt {
   readonly startedAt: number;
   readonly monotonicTime: number;
   readonly retry: number;
+  traceRef?: string;
   status?: 'passed' | 'failed' | 'skipped';
 }
 
@@ -355,8 +356,43 @@ class NativeRunProjection {
       });
       return;
     }
-    if (event.type !== 'attempt.finished') return;
     const attempt = this.#attempts.get(attemptId);
+    if (event.type === 'assertion.finished') {
+      const api = payload['api'];
+      const ok = payload['ok'];
+      const t = payload['t'];
+      if (typeof api !== 'string' || typeof ok !== 'boolean' || typeof t !== 'number') return;
+      this.#hub.publish({
+        v: 1,
+        type: 'action',
+        kind: 'assert',
+        testId: attemptId,
+        api,
+        ok,
+        t,
+        ...(event.identity.stepId === undefined ? {} : { stepId: event.identity.stepId }),
+        ...(typeof payload['driverSessionId'] !== 'string'
+          ? {}
+          : { sessionId: payload['driverSessionId'] }),
+        ...(typeof payload['selector'] !== 'string' ? {} : { selector: payload['selector'] }),
+        ...(typeof payload['ref'] !== 'string'
+          ? {}
+          : { ref: payload['ref'] as import('@termwright/protocol').LocatorRef }),
+        ...(typeof payload['targetIssue'] !== 'string'
+          ? {}
+          : { targetIssue: payload['targetIssue'] }),
+        ...(typeof payload['error'] !== 'string' ? {} : { error: payload['error'] }),
+      });
+      return;
+    }
+    if (event.type === 'trace.finalized') {
+      const traceRef = payload['traceRef'];
+      if (attempt !== undefined && typeof traceRef === 'string' && traceRef.length > 0) {
+        attempt.traceRef ??= traceRef;
+      }
+      return;
+    }
+    if (event.type !== 'attempt.finished') return;
     const state = payload['state'];
     if (attempt === undefined || (state !== 'passed' && state !== 'failed' && state !== 'skipped'))
       return;
@@ -370,6 +406,7 @@ class NativeRunProjection {
       flaky: state === 'passed' && retry > 0,
       lostLogRecords: 0,
       attempt: retry + 1,
+      ...(attempt.traceRef === undefined ? {} : { traceRef: attempt.traceRef }),
     });
   }
 }

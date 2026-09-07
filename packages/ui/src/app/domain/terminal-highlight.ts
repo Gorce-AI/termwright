@@ -48,7 +48,9 @@ export function highlightExecutionTarget(
     return unresolved(
       node,
       null,
-      'This command did not retain a resolved semantic target.',
+      node.kind === 'assertion' && node.selector === undefined
+        ? 'This assertion compares values and has no terminal target.'
+        : 'This command did not retain a resolved semantic target.',
       pinned,
     );
   }

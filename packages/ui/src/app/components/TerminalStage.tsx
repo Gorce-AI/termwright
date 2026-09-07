@@ -1,11 +1,27 @@
 import { applyProfile, resolveProfileId } from '@termwright/vt/unicode';
 import { Terminal } from '@xterm/xterm';
 import { Radio, ScanLine } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import type { SemanticSnapshot } from '@termwright/protocol';
+import { pickTerminalNode, type TerminalPick } from '../domain/terminal-picking.js';
 import type { PlaybackFrame } from '../../playback.js';
 import type { TerminalHighlight } from '../domain/terminal-highlight.js';
 
 interface TerminalStageProps {
+  readonly toolbarActions?: ReactNode;
+  readonly picking?: {
+    readonly snapshot: SemanticSnapshot | null;
+    preview(result: TerminalPick): void;
+    select(result: TerminalPick): void;
+    cancel(): void;
+  };
   readonly identity: string;
   readonly mode: 'empty' | 'live' | 'replay';
   readonly columns: number;
@@ -41,6 +57,7 @@ export function TerminalStage(props: TerminalStageProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const inputRef = useRef(props.onInput);
+  const keyboardPick = useRef<TerminalPick | null>(null);
   const fitRef = useRef<() => void>(() => undefined);
   const appliedRef = useRef({
     identity: '',
@@ -52,7 +69,7 @@ export function TerminalStage(props: TerminalStageProps) {
   const [scale, setScale] = useState(1);
   const [overlayMetrics, setOverlayMetrics] = useState<OverlayMetrics | null>(null);
 
-  inputRef.current = props.onInput;
+  inputRef.current = props.picking === undefined ? props.onInput : undefined;
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -146,9 +163,10 @@ export function TerminalStage(props: TerminalStageProps) {
       // while that queue is active makes InputHandler read the already-disposed
       // buffer's dimensions. Detach this generation's DOM immediately, then
       // dispose only after the final admitted write has completed. The
-      // microtask keeps disposal outside xterm's own write callback stack.
+      // next animation frame also lets xterm 5's uncancelled viewport reset
+      // callback run before its renderer is disposed.
       surface.replaceChildren();
-      terminal.write('', () => queueMicrotask(() => terminal.dispose()));
+      terminal.write('', () => requestAnimationFrame(() => terminal.dispose()));
     };
   }, [profile.id]);
 
@@ -233,6 +251,35 @@ export function TerminalStage(props: TerminalStageProps) {
     props.writable,
   ]);
 
+  const pickAt = (clientX: number, clientY: number): TerminalPick => {
+    const snapshot = props.picking?.snapshot;
+    if (snapshot === undefined || snapshot === null)
+      return { node: null, reason: 'No semantic tree at this moment.' };
+    const screen = surfaceRef.current?.querySelector('.xterm-screen')?.getBoundingClientRect();
+    if (
+      screen === undefined ||
+      screen.width <= 0 ||
+      screen.height <= 0 ||
+      snapshot.columns !== props.columns ||
+      snapshot.rows !== props.rows
+    )
+      return { node: null, reason: 'The recorded tree does not match this terminal grid.' };
+    return pickTerminalNode(
+      snapshot,
+      ((clientX - screen.left) / screen.width) * props.columns,
+      ((clientY - screen.top) / screen.height) * props.rows,
+    );
+  };
+  useEffect(() => {
+    if (props.picking !== undefined) {
+      terminalRef.current?.blur();
+      hostRef.current?.querySelector<HTMLElement>('.tw-terminal-picker')?.focus();
+    }
+  }, [props.picking !== undefined]);
+  useEffect(() => {
+    keyboardPick.current = null;
+  }, [props.picking?.snapshot]);
+
   return (
     <section ref={machineRef} className="tw-terminal-machine" aria-label="Terminal screen">
       <header className="tw-machine-bar">
@@ -260,6 +307,7 @@ export function TerminalStage(props: TerminalStageProps) {
           <button type="button" className="tw-fit-button" onClick={() => fitRef.current()}>
             Fit · {Math.round(scale * 100)}%
           </button>
+          {props.toolbarActions}
         </div>
       </header>
       <div
@@ -281,6 +329,84 @@ export function TerminalStage(props: TerminalStageProps) {
           columns={props.columns}
           rows={props.rows}
         />
+        {props.picking === undefined ? null : (
+          <div
+            className="tw-terminal-picker"
+            role="button"
+            tabIndex={0}
+            aria-label="Pick a terminal element; arrow keys preview, Enter selects, Escape cancels"
+            data-highlight-source="picker"
+            onPointerMove={(event) => {
+              const result = pickAt(event.clientX, event.clientY);
+              keyboardPick.current = result;
+              props.picking?.preview(result);
+            }}
+            onPointerLeave={() =>
+              props.picking?.preview({
+                node: null,
+                reason:
+                  'Point at an element or use arrow keys. Click or Enter selects; Escape cancels.',
+              })
+            }
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              props.picking?.select(pickAt(event.clientX, event.clientY));
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                props.picking?.cancel();
+                return;
+              }
+              if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Enter'].includes(event.key))
+                return;
+              event.preventDefault();
+              event.stopPropagation();
+              const snapshot = props.picking?.snapshot;
+              if (
+                snapshot == null ||
+                snapshot.columns !== props.columns ||
+                snapshot.rows !== props.rows
+              )
+                return;
+              const nodes =
+                props.picking?.snapshot?.nodes.filter(
+                  (node) =>
+                    node.geometry.visibleRect.status === 'known' &&
+                    node.geometry.visibleRect.value.width > 0 &&
+                    node.geometry.visibleRect.value.height > 0 &&
+                    node.geometry.visibleRect.value.column < props.columns &&
+                    node.geometry.visibleRect.value.row < props.rows &&
+                    node.geometry.visibleRect.value.column + node.geometry.visibleRect.value.width >
+                      0 &&
+                    node.geometry.visibleRect.value.row + node.geometry.visibleRect.value.height >
+                      0 &&
+                    !(node.geometry.displayed.status === 'known' && !node.geometry.displayed.value),
+                ) ?? [];
+              if (nodes.length === 0) return;
+              const index = nodes.findIndex((node) => node.id === keyboardPick.current?.node?.id);
+              const next =
+                event.key === 'Enter'
+                  ? Math.max(index, 0)
+                  : index === -1
+                    ? 0
+                    : (index +
+                        (['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : 1) +
+                        nodes.length) %
+                      nodes.length;
+              const result = { node: nodes[next]! };
+              keyboardPick.current = result;
+              if (event.key === 'Enter') props.picking?.select(result);
+              else props.picking?.preview(result);
+            }}
+          />
+        )}
         {props.mode === 'empty' ? (
           <div className="tw-terminal-empty">
             <ScanLine aria-hidden="true" />

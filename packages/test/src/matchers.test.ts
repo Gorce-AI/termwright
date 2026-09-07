@@ -32,6 +32,7 @@ const evidence = (providerId: string) => ({
 });
 
 interface FakeLocatorState {
+  count?: number;
   visible?: boolean;
   state?: SemanticState | null;
   extended?: SemanticExtendedState | null;
@@ -62,6 +63,9 @@ function fakeLocator(
     }) as const;
   const locator = {
     domain: 'semantic' as const,
+    async count() {
+      return read().count ?? 1;
+    },
     description,
     checkpoint: stamp,
     async waitForCheckpointChange() {
@@ -341,6 +345,23 @@ afterEach(() => {
   resetTermwrightConfig();
   while (directories.length > 0)
     rmSync(directories.pop() as string, { recursive: true, force: true });
+});
+
+describe('toHaveCount', () => {
+  it('supports empty and multiple matches and negation without strict resolution', async () => {
+    await expect(fakeLocator(() => ({ count: 0, resolveError: timeoutError() }))).toHaveCount(0);
+    await expect(fakeLocator(() => ({ count: 3, resolveError: timeoutError() }))).toHaveCount(3);
+    await expect(fakeLocator(() => ({ count: 0 }))).not.toHaveCount(1);
+  });
+
+  it('retries after changes and reports the observed count on failure', async () => {
+    let probes = 0;
+    await expect(fakeLocator(() => ({ count: ++probes < 3 ? 0 : 2 }))).toHaveCount(2);
+    await expect(
+      expect(fakeLocator(() => ({ count: 1 }))).toHaveCount(0, { timeout: 5 }),
+    ).rejects.toThrow(/Expected: 0 matching elements[\s\S]*Received: 1 matching elements/u);
+    await expect(expect(fakeLocator(() => ({}))).toHaveCount(-1)).rejects.toThrow(/non-negative/u);
+  });
 });
 
 describe('toBeVisible', () => {

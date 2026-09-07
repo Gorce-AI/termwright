@@ -96,6 +96,25 @@ describe('greenfield application reducer identities', () => {
     });
     expect(state.evidence.kind).toBe('replay');
     if (state.evidence.kind === 'replay') expect(state.evidence.replay.timeMs).toBe(100);
+    state = appReducer(state, { type: 'replay-time', timeMs: 50 });
+    state = appReducer(state, {
+      type: 'replay-state',
+      traceRef: history.traceRef as string,
+      requestedMs: 50,
+      traceState: { ...emptyTraceState, timeMs: 10 },
+    });
+    if (state.evidence.kind !== 'replay') throw new Error('Expected replay');
+    expect(state.evidence.replay.traceStateRequestedMs).toBe(50);
+    expect(state.evidence.replay.traceState?.timeMs).toBe(10);
+    const accepted = state.evidence.replay;
+    state = appReducer(state, {
+      type: 'replay-state',
+      traceRef: history.traceRef as string,
+      requestedMs: 100,
+      traceState: { ...emptyTraceState, timeMs: 90 },
+    });
+    if (state.evidence.kind !== 'replay') throw new Error('Expected replay');
+    expect(state.evidence.replay).toBe(accepted);
   });
 
   it('hands an explicitly rerun historical case to its new live attempt', () => {

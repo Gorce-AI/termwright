@@ -13,7 +13,7 @@ editUrl: false
 
 > `const` **step**: [`StepRunner`](../../type-aliases/steprunner/)
 
-Defined in: [test/src/fixtures.ts:813](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L813)
+Defined in: [test/src/fixtures.ts:820](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L820)
 
 Runs `body` as a named step: a marker in the recording, a step event in the
 trace, and a labelled section in the HTML report.

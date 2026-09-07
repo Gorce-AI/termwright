@@ -6,6 +6,7 @@ import type {
 } from '@termwright/protocol';
 import { describe, expect, it } from 'vitest';
 import type { ExecutionNode } from './model.js';
+import { pickTerminalNode } from './terminal-picking.js';
 import { highlightExecutionTarget, highlightSemanticNode } from './terminal-highlight.js';
 
 const evidence = () => ({
@@ -160,5 +161,88 @@ describe('terminal highlights', () => {
     );
     expect(result).toMatchObject({ reason: 'This node has no reliable terminal bounds.' });
     expect(result).not.toHaveProperty('bounds');
+  });
+});
+
+describe('picking terminal elements', () => {
+  it('uses half-open visible bounds and rejects out-of-grid coordinates', () => {
+    expect(pickTerminalNode(snapshot, 4, 3).node?.id).toBe('approve');
+    expect(pickTerminalNode(snapshot, 12.99, 3.99).node?.id).toBe('approve');
+    for (const point of [
+      [13, 3],
+      [4, 4],
+      [-1, 3],
+      [80, 3],
+      [NaN, 3],
+    ])
+      expect(pickTerminalNode(snapshot, point[0]!, point[1]!).node).toBeNull();
+  });
+  it('chooses a nested child rather than its enclosing container', () => {
+    const nested = {
+      ...snapshot,
+      nodes: [
+        {
+          ...snapshot.nodes[0]!,
+          id: 'dialog',
+          geometry: visible({ column: 0, row: 0, width: 80, height: 24 }),
+        },
+        { ...snapshot.nodes[0]!, parentId: 'dialog' },
+      ],
+    };
+    expect(pickTerminalNode(nested, 5, 3).node?.id).toBe('approve');
+    expect(pickTerminalNode(nested, 1, 1).node?.id).toBe('dialog');
+  });
+  it('requires recorded ownership to resolve overlapping siblings', () => {
+    const overlapping = {
+      ...snapshot,
+      nodes: [snapshot.nodes[0]!, { ...snapshot.nodes[0]!, id: 'other' }],
+    };
+    expect(pickTerminalNode(overlapping, 5, 3)).toMatchObject({
+      node: null,
+      reason: expect.stringContaining('Overlapping'),
+    });
+    expect(
+      pickTerminalNode(
+        {
+          ...overlapping,
+          hitGrid: {
+            status: 'known',
+            evidence: evidence(),
+            value: {
+              regions: [{ rect: { column: 4, row: 3, width: 9, height: 1 }, recipientId: 'other' }],
+            },
+          },
+        },
+        5,
+        3,
+      ).node?.id,
+    ).toBe('other');
+  });
+  it('does not use hidden or unavailable geometry', () => {
+    expect(
+      pickTerminalNode(
+        { ...snapshot, nodes: [{ ...snapshot.nodes[0]!, geometry: unknown() }] },
+        5,
+        3,
+      ).node,
+    ).toBeNull();
+    expect(
+      pickTerminalNode(
+        {
+          ...snapshot,
+          nodes: [
+            {
+              ...snapshot.nodes[0]!,
+              geometry: {
+                ...snapshot.nodes[0]!.geometry,
+                displayed: { status: 'known', value: false, evidence: evidence() },
+              },
+            },
+          ],
+        },
+        5,
+        3,
+      ).node,
+    ).toBeNull();
   });
 });

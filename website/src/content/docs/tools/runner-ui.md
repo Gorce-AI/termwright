@@ -35,6 +35,39 @@ The execution list shows the active test and its current named step. Select a
 different running test to switch the terminal, semantic inspector, and logs.
 Blue means running; green is reserved for a completed pass.
 
+Tests are grouped by source file in one scrolling list. Select a test to expand
+its steps directly underneath its row. Collapsed test titles use one line; long
+titles are available in full on hover and when expanded.
+Use **Find a test** to search names and files, or **Failed** to narrow the list.
+Selecting the current test again collapses its details while preserving the
+replay position.
+
+Collapsed Gherkin steps use a single line for their name, duration, and status.
+Hover or focus a step for its full name, source location, and separate action and assertion counts.
+Expanding a step reveals its full title and commands underneath.
+Expand one step or choose **Show commands** to inspect its calls and assertions.
+Running and failing commands stay visible. **Test details** contains source,
+provider, tags, and attempt information.
+
+Ordinary `expect(value).toBe(...)` assertions and terminal matchers appear as
+assertion rows, with their outcome, both live and in retained recordings.
+Negated, promise, soft, and polling assertions keep their final result; retries
+inside one matcher do not create extra rows. Older recordings may omit ordinary
+assertions and cannot recover them after the fact.
+
+Hover or focus a locator assertion to preview its retained target; click to pin
+it. Use a locator matcher when you want to retain the connection to the element:
+
+```ts
+await expect(app.getByRole('listitem')).toHaveCount(0);
+await expect(app.getByRole('button', { name: 'Approve' })).toBeVisible();
+```
+
+`expect(await locator.count()).toBe(0)` is also recorded, but its received value
+is a number: it no longer carries the locator. Runner does not guess a selector
+for it. `toHaveCount(0)` retains the selector and explains that no elements match;
+multiple matches are also reported without choosing an arbitrary element.
+
 ## Inspect a failure
 
 [![A failed assertion beside the retained terminal and replay timeline.](/termwright/images/runner/failure-inspection.png)](/termwright/images/runner/failure-inspection.png)
@@ -43,9 +76,19 @@ Start with the first failed row. The details show the assertion or action,
 source location, observed state, and any earlier retry failures. The terminal,
 semantics, logs, and step list stay attached to the same test attempt.
 
-If the test retained a trace, use the controls under the terminal to seek,
-play, change speed, or jump to an event. All panels follow the same playhead, so
-you see the state that existed when the selected action or assertion ran.
+The selected test's failure summary appears above its steps. **Go to failed
+step** opens the relevant command, scrolls it into view, and moves keyboard focus
+there. Expand **Failure details** for the complete command error and stack trace.
+
+When a test finishes and retains a trace, its terminal switches from LIVE to
+replay. Use the controls under the terminal to play, change speed, seek, or jump
+to the previous or next step. The timeline shows event markers and time in
+milliseconds.
+
+Hover over a step to preview its recorded terminal and semantic state. The
+**Preview** label distinguishes this temporary view from the selected playhead;
+moving the pointer away restores that position. Click a step to keep its moment
+selected. The terminal, inspector, and logs follow the same moment.
 
 ## Inspect semantic elements
 
@@ -85,6 +128,12 @@ npx termwright ui --record --out-file tests/login.test.ts -- node app.js
 
 Interact with the program, add steps and assertions, then review the generated
 source before saving it. See [Record a test](../recorder/) for the full workflow.
+
+Collapsed panels leave a labelled handle at their edge: **Tests & steps** on the
+left and **Inspector** on the right. Select the handle to reopen that panel.
+The **Expand terminal** icon in the terminal toolbar temporarily hides the side
+panels; **Restore panels** or **Escape** restores the previous layout. Narrow
+screens use the **Steps**, **Screen**, and **Inspect** tabs instead.
 
 ## Change Runner preferences
 
