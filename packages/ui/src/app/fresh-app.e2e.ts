@@ -188,10 +188,20 @@ describe('fresh React runner', () => {
     expect(await page.locator('.tw-current-step strong').innerText()).toBe('12/12');
     const longStep = page.locator('.tw-section-row').filter({ hasText: 'preserves line 1 when' });
     expect(await longStep.locator('strong').evaluate((e) => getComputedStyle(e).whiteSpace)).toBe(
+      'nowrap',
+    );
+    expect(await longStep.evaluate((e) => e.getBoundingClientRect().height)).toBeLessThanOrEqual(
+      30,
+    );
+    expect(await longStep.locator('small').count()).toBe(0);
+    await longStep.hover();
+    await expect
+      .poll(() => page.getByRole('tooltip').innerText())
+      .toContain('composer.feature:10:5 · 1 assertion');
+    await longStep.click();
+    expect(await longStep.locator('strong').evaluate((e) => getComputedStyle(e).whiteSpace)).toBe(
       'normal',
     );
-    await longStep.hover();
-    await longStep.click();
     expect(await page.locator('.tw-command-row').count()).toBe(1);
     await page.getByRole('button', { name: 'Show commands', exact: true }).click();
     expect(await page.locator('.tw-command-row').count()).toBe(12);
@@ -1048,6 +1058,30 @@ describe('fresh React runner', () => {
     expect(
       await page.locator('.tw-toast').filter({ hasText: 'Opening retained recording' }).count(),
     ).toBe(0);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('shows assertions and highlights their retained targets in replay without guessing targets for values or empty locators', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace({ assertions: true }));
+    await page.locator('.tw-replay-controls').waitFor({ timeout: 15_000 });
+    const assertions = page.locator('.tw-command-row[data-kind="assertion"]');
+    expect(await assertions.count()).toBe(3);
+    const target = assertions.filter({ hasText: 'toBeVisible' });
+    await target.hover();
+    await page.locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"]').waitFor();
+    await target.click();
+    await page.locator('.tw-machine-bar').hover();
+    expect(await page.locator('.tw-terminal-highlight[data-pinned="true"]').count()).toBe(1);
+    await page.locator('.tw-section-row').filter({ hasText: 'empty list assertion' }).hover();
+    await page.getByText('No elements matched this locator.', { exact: true }).waitFor();
+    await assertions.filter({ hasText: 'toHaveCount(0)' }).hover();
+    await page.getByText('No elements matched this locator.', { exact: true }).waitFor();
+    expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
+    await assertions.filter({ has: page.locator('strong', { hasText: /^toBe$/u }) }).focus();
+    await page
+      .getByText('This assertion compares values and has no terminal target.', { exact: true })
+      .waitFor();
+    expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -1998,6 +2032,19 @@ describe('fresh React runner', () => {
       )
       .toBe(1);
     expect(await page.locator('.tw-command-row').count()).toBe(0);
+    const actionlessStep = page
+      .locator('.tw-section-row')
+      .filter({ hasText: 'Given the policy already permits the request' });
+    await actionlessStep.hover();
+    await expect
+      .poll(() => page.getByRole('tooltip').innerText())
+      .toContain('No recorded actions or assertions');
+    if ((await actionlessStep.getAttribute('aria-expanded')) === 'false')
+      await actionlessStep.click();
+    expect(await page.getByRole('note').innerText()).toContain(
+      'Older recordings may omit ordinary assertions.',
+    );
+
     expect(
       await page
         .getByText('No driver actions were recorded for this case.', { exact: false })
@@ -2203,7 +2250,7 @@ describe('fresh React runner', () => {
         .filter({ hasText: 'When I approve the purchase' })
         .count(),
     ).toBe(1);
-    expect(await page.locator('.tw-section-row').filter({ hasText: 'L16' }).count()).toBe(1);
+    expect(await page.locator('.tw-section-row[aria-label*="line 16"]').count()).toBe(1);
     await page.locator('.tw-case-details summary').click();
     expect(await page.locator('.tw-case-details').innerText()).toContain('scenario');
     expect(await page.locator('.tw-case-details').innerText()).toContain('@smoke');

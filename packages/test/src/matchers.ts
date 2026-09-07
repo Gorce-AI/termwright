@@ -90,6 +90,8 @@ export interface SemanticSnapshotMatcherOptions extends PollOptions {
 
 /** The matchers this package adds to `expect`. */
 export interface TermwrightMatchers<R = unknown> {
+  /** Retry until the locator matches exactly this many elements, retaining its selector. */
+  toHaveCount(expected: number, options?: PollOptions): R;
   /** The locator resolves to a node that is on screen and not hidden. */
   toBeVisible(options?: PollOptions): R;
   toBeAttached(options?: PollOptions): R;
@@ -197,6 +199,35 @@ async function conditionProbe(
 
 // ---------------------------------------------------------------------------
 // Locator matchers
+
+async function toHaveCount(
+  this: MatcherState,
+  received: unknown,
+  expected: number,
+  options: PollOptions = {},
+): Promise<MatcherResult> {
+  if (!Number.isSafeInteger(expected) || expected < 0)
+    throw new TypeError('toHaveCount expects a non-negative safe integer');
+  const locator = asLocator(received, 'toHaveCount');
+  let observedCount: number | undefined;
+  return locatorAssertion(this, {
+    matcher: `toHaveCount(${expected})`,
+    locator,
+    options,
+    expected: `${expected} matching elements`,
+    probe: async () => {
+      const count = await locator.count();
+      observedCount = count;
+      return { pass: count === expected, actual: `${count} matching elements` };
+    },
+    targetIssue: () =>
+      observedCount === 0
+        ? 'No elements matched this locator.'
+        : observedCount !== undefined && observedCount > 1
+          ? `${observedCount} elements matched this locator; there is no single target to highlight.`
+          : undefined,
+  });
+}
 
 async function toBeVisible(
   this: MatcherState,
@@ -944,6 +975,7 @@ interface LocatorAssertion {
   readonly expected: string;
   probe(timeout?: number): Promise<Probe>;
   diagnostics?(): string;
+  targetIssue?(): string | undefined;
   readonly eventSource?: {
     revision(): unknown;
     waitForChange(after: unknown, timeout: number): Promise<void>;
@@ -1018,11 +1050,13 @@ async function locatorAssertion(
   // One bounded resolve, used for both the ref the trace stores and the
   // diagnostics a failure prints: the UI needs the ref to light up the target's
   // bounds when someone clicks the row in the command log.
-  const resolution = await resolveTarget(spec.locator);
+  const targetIssue = spec.targetIssue?.();
+  const resolution = targetIssue === undefined ? await resolveTarget(spec.locator) : {};
   recordAssert({
     api: spec.matcher,
     ok: pass !== isNot,
     selector: target,
+    ...(targetIssue === undefined ? {} : { targetIssue }),
     ...(resolution.ref === undefined ? {} : { ref: resolution.ref }),
     ...(resolution.observation === undefined ? {} : { observation: resolution.observation }),
     ...(pass === isNot ? { error: `expected ${spec.expected}, received ${last.actual}` } : {}),
@@ -1444,6 +1478,7 @@ function describeValue(value: unknown): string {
 
 /** The matcher implementations, exported for manual registration. */
 export const termwrightMatchers = {
+  toHaveCount,
   toBeVisible,
   toBeAttached,
   toBeDetached,

@@ -16,6 +16,7 @@ import {
   type StepId,
 } from '@termwright/protocol';
 import type { ResolvedTermwrightConfig } from './config.js';
+import { assertionRecording } from './assertion-context.js';
 import {
   currentAttemptContext,
   currentAttemptEventRecorder,
@@ -28,6 +29,7 @@ export interface AssertRecord {
   readonly api: string;
   readonly selector?: string;
   readonly ref?: LocatorRef;
+  readonly targetIssue?: string;
   readonly ok: boolean;
   readonly error?: string;
   readonly observation?: ObservationStamp;
@@ -85,16 +87,45 @@ export function currentScope(): TermwrightScope | undefined {
 
 /** Records an assertion into every trace the test is recording. */
 export function recordAssert(record: AssertRecord): void {
+  const recording = assertionRecording.getStore();
+  if (recording !== undefined) {
+    if (record.api === recording.api || record.api.startsWith(`${recording.api}(`))
+      recording.record = record;
+    return;
+  }
   const scope = currentScope();
   if (scope === undefined) throw new Error('the current Termwright attempt has no fixture scope');
+  writeAssert(scope, record, currentStepId(scope));
+}
+
+export function writeAssert(scope: TermwrightScope, record: AssertRecord, stepId?: string): void {
+  currentAttemptEventRecorder().record({
+    eventClass: 'authoritative',
+    type: 'assertion.finished',
+    ...(stepId === undefined ? {} : { stepId: stepId as StepId }),
+    payload: {
+      api: record.api,
+      ok: record.ok,
+      t: performance.now(),
+      ...(record.selector === undefined ? {} : { selector: record.selector }),
+      ...(record.ref === undefined ? {} : { ref: record.ref }),
+      ...(record.targetIssue === undefined ? {} : { targetIssue: record.targetIssue }),
+      ...(record.error === undefined ? {} : { error: record.error.slice(0, 16_384) }),
+      ...(record.observation === undefined
+        ? {}
+        : { driverSessionId: record.observation.sessionId }),
+    },
+  });
   for (const writer of scope.writers) {
     writer.recordAssert({
       api: record.api,
       ok: record.ok,
       ...(record.selector === undefined ? {} : { selector: record.selector }),
       ...(record.ref === undefined ? {} : { ref: record.ref }),
+      ...(record.targetIssue === undefined ? {} : { targetIssue: record.targetIssue }),
       ...(record.error === undefined ? {} : { error: record.error }),
       ...(record.observation === undefined ? {} : { observation: record.observation }),
+      ...(stepId === undefined ? {} : { stepId }),
     });
   }
 }

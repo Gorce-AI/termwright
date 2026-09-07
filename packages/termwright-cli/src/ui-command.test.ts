@@ -443,6 +443,20 @@ it('projects only finalized recordings for each real native attempt, including r
     async () => {
       await host!.discover();
       await host!.run([]).completed;
+      const liveAssertions = hub!.backlog
+        .filter((message) => message.type === 'action')
+        .filter((message) => message.kind === 'assert');
+      expect(liveAssertions.map((message) => ({ api: message.api, ok: message.ok }))).toEqual([
+        { api: 'toBe', ok: true },
+        { api: 'toBe', ok: true },
+        { api: 'toHaveCount(0)', ok: true },
+        { api: 'toHaveCount(1)', ok: true },
+        { api: 'toBeVisible', ok: true },
+        { api: 'toHaveCount(2)', ok: true },
+        { api: 'toBe', ok: false },
+      ]);
+      expect(liveAssertions[0]).not.toHaveProperty('sessionId');
+      expect(liveAssertions[0]).toHaveProperty('stepId');
       const ended = hub!.backlog.filter((message) => message.type === 'test-end');
       expect(ended.map((message) => message.status)).toEqual(['passed', 'failed', 'passed']);
       const retained = ended.slice(0, 2);
@@ -454,6 +468,29 @@ it('projects only finalized recordings for each real native attempt, including r
         const trace = await openTrace(message.traceRef!);
         try {
           expect((await trace.castHeader()).term.cols).toBeGreaterThan(0);
+          const events = [];
+          for await (const event of trace.events()) events.push(event);
+          const assertions = events.filter((event) => event.kind === 'assert');
+          if (message.status === 'passed') {
+            expect(assertions.map(({ api, ok }) => ({ api, ok }))).toEqual([
+              { api: 'toBe', ok: true },
+              { api: 'toHaveCount(0)', ok: true },
+              { api: 'toHaveCount(1)', ok: true },
+              { api: 'toBeVisible', ok: true },
+              { api: 'toHaveCount(2)', ok: true },
+            ]);
+            expect(assertions[0]).not.toHaveProperty('selector');
+            expect(assertions[1]).toMatchObject({
+              selector: 'getByRole("listitem")',
+              targetIssue: 'No elements matched this locator.',
+            });
+            expect(assertions[2]?.ref).toMatch(/^semantic:/u);
+            expect(assertions[3]?.ref).toMatch(/^semantic:/u);
+            expect(assertions[4]?.targetIssue).toContain('2 elements matched');
+            expect(assertions.every((event) => typeof event.stepId === 'string')).toBe(true);
+          } else {
+            expect(assertions).toMatchObject([{ api: 'toBe', ok: false }]);
+          }
         } finally {
           await trace.close();
         }

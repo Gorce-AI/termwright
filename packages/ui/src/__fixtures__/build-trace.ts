@@ -158,7 +158,12 @@ export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
  * @returns the archive directory.
  */
 export async function buildFixtureTrace(
-  options: { readonly columns?: number; readonly rows?: number; readonly durationMs?: number } = {},
+  options: {
+    readonly columns?: number;
+    readonly rows?: number;
+    readonly durationMs?: number;
+    readonly assertions?: boolean;
+  } = {},
 ): Promise<string> {
   const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-')), 'session.twtrace');
   const session = new Recorded();
@@ -176,6 +181,26 @@ export async function buildFixtureTrace(
   session.publish({ ...(FIXTURE_TREES[0] as SemanticSnapshot), columns, rows });
   session.clock = 100;
   writer.recordAction({ api: 'locator.click', selector: 'button', ref: 'semantic:b1@1', ok: true });
+  if (options.assertions) {
+    session.clock = 200;
+    writer.recordAssert({ api: 'toBe', ok: true });
+    session.clock = 300;
+    writer.recordAssert({
+      api: 'toBeVisible',
+      selector: 'getByRole("button", { name: "Approve" })',
+      ref: 'semantic:b1@1',
+      ok: true,
+    });
+    session.clock = 400;
+    const emptyStep = writer.addStep('empty list assertion');
+    writer.recordAssert({
+      api: 'toHaveCount(0)',
+      selector: 'getByRole("listitem")',
+      ok: true,
+      targetIssue: 'No elements matched this locator.',
+    });
+    emptyStep.end('passed');
+  }
 
   session.emit('app-log', {
     source: 'file',

@@ -589,51 +589,73 @@ function SectionRow({
       (node) => node.status === 'failed' || node.status === 'running',
     );
   const isCollapsed = collapsed.get(section.sectionId) ?? defaultCollapsed;
-  const commands = commandCount(section.children);
+  const entries = sectionTargets(section.children);
+  const assertions = entries.filter((node) => node.kind === 'assertion').length;
+  const actions = entries.length - assertions;
   const duration =
     section.endMs === undefined ? '' : formatDuration(Math.max(0, section.endMs - section.startMs));
   const source = section.node?.gherkin?.source;
+  const details = [
+    section.label,
+    ...(source === undefined
+      ? []
+      : [`${shortSource(source.file)}:${source.line}:${source.column}`]),
+    ...(entries.length === 0
+      ? ['No recorded actions or assertions']
+      : [
+          ...(actions === 0 ? [] : [`${actions} ${actions === 1 ? 'action' : 'actions'}`]),
+          ...(assertions === 0
+            ? []
+            : [`${assertions} ${assertions === 1 ? 'assertion' : 'assertions'}`]),
+        ]),
+  ].join(' · ');
   return (
     <div className="tw-timeline-section" role="none" data-depth={depth}>
-      <button
-        type="button"
-        className="tw-section-row"
-        role="treeitem"
-        aria-expanded={!isCollapsed}
-        aria-label={
-          source === undefined
-            ? undefined
-            : `${section.label}, ${shortSource(source.file)}, line ${source.line}, column ${source.column}`
-        }
-        data-kind={section.kind}
-        data-status={section.status}
-        data-node-id={section.node?.nodeId}
-        onPointerEnter={() => onPreview(sectionPreviewTarget(section))}
-        onPointerLeave={() => onPreview(null)}
-        onFocus={() => onPreview(sectionPreviewTarget(section))}
-        onBlur={() => onPreview(null)}
-        onClick={() => {
-          onToggle(section.sectionId, !isCollapsed);
-          onPin(sectionPreviewTarget(section));
-        }}
-      >
-        {isCollapsed ? (
-          <ChevronRight aria-hidden="true" size={12} />
-        ) : (
-          <ChevronDown aria-hidden="true" size={12} />
-        )}
-        <span className="tw-section-copy">
-          <strong>{section.label}</strong>
-          <small>
-            {source === undefined ? '' : `L${source.line} · `}
-            {commands === 0 ? '' : `${commands} ${commands === 1 ? 'command' : 'commands'}`}
-          </small>
-        </span>
-        <time>{duration}</time>
-        <StatusBadge status={section.status} compact />
-      </button>
+      <Tooltip label={details} placement="right">
+        <button
+          type="button"
+          className="tw-section-row"
+          role="treeitem"
+          aria-expanded={!isCollapsed}
+          aria-label={
+            source === undefined
+              ? undefined
+              : `${section.label}, ${shortSource(source.file)}, line ${source.line}, column ${source.column}`
+          }
+          data-kind={section.kind}
+          data-status={section.status}
+          data-node-id={section.node?.nodeId}
+          onPointerEnter={() => onPreview(sectionPreviewTarget(section))}
+          onPointerLeave={() => onPreview(null)}
+          onFocus={() => onPreview(sectionPreviewTarget(section))}
+          onBlur={() => onPreview(null)}
+          onClick={() => {
+            onToggle(section.sectionId, !isCollapsed);
+            onPin(sectionPreviewTarget(section));
+          }}
+        >
+          {isCollapsed ? (
+            <ChevronRight aria-hidden="true" size={12} />
+          ) : (
+            <ChevronDown aria-hidden="true" size={12} />
+          )}
+          <span className="tw-section-copy">
+            <strong>{section.label}</strong>
+          </span>
+          <time>{duration}</time>
+          <StatusBadge status={section.status} compact />
+        </button>
+      </Tooltip>
       {isCollapsed ? null : (
         <div className="tw-section-children" role="group">
+          {section.children.length === 0 &&
+          section.node !== null &&
+          (section.status === 'passed' || section.status === 'failed') ? (
+            <p className="tw-step-recording-note" role="note">
+              No actions or assertions were recorded inside this step. Older recordings may omit
+              ordinary assertions.
+            </p>
+          ) : null}
           {section.children.map((item, index) =>
             isSection(item) ? (
               <SectionRow
@@ -675,6 +697,7 @@ function sectionPreviewTarget(section: TimelineSection): ExecutionNode {
   const resolved = descendants.filter((node) => node.targetRef !== undefined);
   const refs = new Set(resolved.map((node) => node.targetRef));
   if (refs.size === 1) return resolved.at(-1) as ExecutionNode;
+  if (descendants.length === 1) return descendants[0] as ExecutionNode;
   const basis =
     section.node ??
     ({
@@ -973,12 +996,6 @@ function flattenNodes(items: readonly TimelineItem[]): readonly ExecutionNode[] 
   );
 }
 
-function commandCount(items: readonly TimelineItem[]): number {
-  return items.reduce(
-    (count, item) => count + (isSection(item) ? commandCount(item.children) : 1),
-    0,
-  );
-}
 function structural(node: ExecutionNode): boolean {
   return node.kind === 'step' || node.kind === 'hook' || node.kind === 'body';
 }

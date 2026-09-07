@@ -106,6 +106,7 @@ function commandNode(row: CommandRow, steps: TraceOverview['steps']): ExecutionN
     ...(row.endT === undefined ? {} : { endMs: row.endT }),
     ...(row.selector === undefined ? {} : { selector: row.selector }),
     ...(row.ref === undefined ? {} : { targetRef: row.ref }),
+    ...(row.targetIssue === undefined ? {} : { targetIssue: row.targetIssue }),
     ...(row.error === undefined ? {} : { error: row.error }),
     ...(row.actionPlan === undefined ? {} : { actionPlan: row.actionPlan }),
     ...(row.actionability === undefined ? {} : { actionability: row.actionability }),

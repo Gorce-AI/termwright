@@ -361,6 +361,8 @@ export interface AssertEvent extends TraceEventBase {
   readonly api: string;
   readonly selector?: string;
   readonly ref?: LocatorRef;
+  /** Explains an absent or non-unique target without guessing a highlight. */
+  readonly targetIssue?: string;
   readonly ok: boolean;
   readonly error?: string;
   /** Exact screen/tree pair used to diagnose this assertion, when available. */

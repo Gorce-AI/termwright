@@ -42,10 +42,31 @@ Use **Find a test** to search names and files, or **Failed** to narrow the list.
 Selecting the current test again collapses its details while preserving the
 replay position.
 
-Successful Gherkin steps show their full names with commands folded underneath.
+Collapsed Gherkin steps use a single line for their name, duration, and status.
+Hover or focus a step for its full name, source location, and separate action and assertion counts.
+Expanding a step reveals its full title and commands underneath.
 Expand one step or choose **Show commands** to inspect its calls and assertions.
 Running and failing commands stay visible. **Test details** contains source,
 provider, tags, and attempt information.
+
+Ordinary `expect(value).toBe(...)` assertions and terminal matchers appear as
+assertion rows, with their outcome, both live and in retained recordings.
+Negated, promise, soft, and polling assertions keep their final result; retries
+inside one matcher do not create extra rows. Older recordings may omit ordinary
+assertions and cannot recover them after the fact.
+
+Hover or focus a locator assertion to preview its retained target; click to pin
+it. Use a locator matcher when you want to retain the connection to the element:
+
+```ts
+await expect(app.getByRole('listitem')).toHaveCount(0);
+await expect(app.getByRole('button', { name: 'Approve' })).toBeVisible();
+```
+
+`expect(await locator.count()).toBe(0)` is also recorded, but its received value
+is a number: it no longer carries the locator. Runner does not guess a selector
+for it. `toHaveCount(0)` retains the selector and explains that no elements match;
+multiple matches are also reported without choosing an arbitrary element.
 
 ## Inspect a failure
 

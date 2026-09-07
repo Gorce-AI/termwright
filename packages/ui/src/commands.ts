@@ -34,6 +34,7 @@ export interface CommandRow {
   readonly selector?: string;
   /** Resolved target, `semantic:n8@42` — the node and the revision it was resolved at. */
   readonly ref?: string;
+  readonly targetIssue?: string;
   /** Absent for steps that never closed, and for inputs. */
   readonly ok?: boolean;
   readonly error?: string;
@@ -133,6 +134,7 @@ export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[
           depth,
           ...optional('selector', text(event['selector'])),
           ...optional('ref', text(event['ref'])),
+          ...optional('targetIssue', text(event['targetIssue'])),
           ...(typeof event['ok'] === 'boolean' ? { ok: event['ok'] } : {}),
           ...optional('error', text(event['error'])),
           ...(actionPlan === undefined ? {} : { actionPlan }),

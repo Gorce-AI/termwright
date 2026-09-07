@@ -702,6 +702,7 @@ function settleAction(
     endMs: message.t,
     ...(message.selector === undefined ? {} : { selector: message.selector }),
     ...(message.ref === undefined ? {} : { targetRef: message.ref }),
+    ...(message.targetIssue === undefined ? {} : { targetIssue: message.targetIssue }),
     ...(message.error === undefined ? {} : { error: message.error }),
     ...(message.actionPlan === undefined ? {} : { actionPlan: message.actionPlan }),
     ...(message.actionability === undefined ? {} : { actionability: message.actionability }),
