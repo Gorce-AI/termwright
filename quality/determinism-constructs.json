@@ -10,14 +10,14 @@
     "platformSkips": "additionally governed by quality/platform-deviations.json"
   },
   "summary": {
-    "bounded-deadline-or-managed-background-task": 43,
+    "bounded-deadline-or-managed-background-task": 45,
     "deadline-or-scheduler-regression-test": 58,
     "deterministic-adversarial-fixture-schedule": 31,
-    "display-or-persisted-wall-time-not-correctness-order": 91,
+    "display-or-persisted-wall-time-not-correctness-order": 95,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 177,
+    "explicit-external-or-ui-source-polling": 212,
     "explicit-test-selection-reviewed-with-platform-registry": 74,
-    "managed-or-diagnostic-background-task": 73,
+    "managed-or-diagnostic-background-task": 76,
     "production-polling-review": 1,
     "production-process-isolation-review": 40,
     "test-observer-or-intentional-background-task": 15,
@@ -2407,6 +2407,30 @@
       "excerpt": "test.skipIf(false)('owned conditional', () => record('owned conditional'));"
     },
     {
+      "path": "packages/test/src/assertion-recording.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll("
+    },
+    {
+      "path": "packages/test/src/assertion-recording.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => ++probes, { interval: 1 }).toBe(3);"
+    },
+    {
+      "path": "packages/test/src/assertion-recording.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => 1, { interval: 1, timeout: 5 }).toBe(2);"
+    },
+    {
+      "path": "packages/test/src/assertion-recording.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "expect.poll(() => ++probes) as unknown as { toTakeOver(): Promise<void> }"
+    },
+    {
       "path": "packages/test/src/composition.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
@@ -2719,16 +2743,34 @@
       "excerpt": "if (Date.now() >= deadline) throw new Error('condition did not become true');"
     },
     {
-      "path": "packages/ui/src/app/components/InspectorPanel.tsx",
+      "path": "packages/ui/src/app/components/AttemptComparison.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void navigator.clipboard.writeText(value);"
+      "excerpt": "void loaded.source"
+    },
+    {
+      "path": "packages/ui/src/app/components/AttemptComparison.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void scoped"
+    },
+    {
+      "path": "packages/ui/src/app/components/AttemptComparison.tsx",
+      "kind": "timer",
+      "classification": "bounded-deadline-or-managed-background-task",
+      "excerpt": "const timer = window.setTimeout(() => {"
     },
     {
       "path": "packages/ui/src/app/components/InspectorPanel.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void onInspectActionability(session.sessionId, selectedNode.id)"
+    },
+    {
+      "path": "packages/ui/src/app/components/InspectorPanel.tsx",
+      "kind": "timer",
+      "classification": "bounded-deadline-or-managed-background-task",
+      "excerpt": "const timer = window.setTimeout(() => setStatus('idle'), 2000);"
     },
     {
       "path": "packages/ui/src/app/components/RunnerPage.tsx",
@@ -2753,12 +2795,6 @@
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void source"
-    },
-    {
-      "path": "packages/ui/src/app/components/SettingsPage.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void navigator.clipboard"
     },
     {
       "path": "packages/ui/src/app/components/TerminalStage.tsx",
@@ -2902,6 +2938,30 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() =>"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() =>"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() =>"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() =>"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => actionability.getByText('revision 12', { exact: true }).count())"
     },
     {
@@ -2944,6 +3004,12 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.evaluate(() => document.activeElement?.getAttribute('data-status')))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => page.evaluate(() => document.activeElement?.getAttribute('placeholder')))"
     },
     {
@@ -2974,7 +3040,7 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count())"
+      "excerpt": ".poll(() => page.getByRole('button', { name: 'Pick element', exact: true }).isDisabled())"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -2987,6 +3053,24 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByRole('tooltip').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.getByRole('tooltip').innerText())"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3017,6 +3101,30 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => page.getByText('Recording unavailable:', { exact: false }).count())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-case-failure-summary').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-case[data-selected=\"true\"] .tw-case-title strong').innerText())"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected'))"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3094,6 +3202,12 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').innerText())"
     },
     {
@@ -3130,6 +3244,12 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-workspace').getAttribute('data-evidence-maximized'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => page.locator('[data-node-id=\"action:rerun-session:a-live\"]').count())"
     },
     {
@@ -3143,6 +3263,12 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => tree.getByRole('treeitem', { name: /Root/u }).getAttribute('aria-expanded'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => viewport.getAttribute('data-terminal-cursor-x'))"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3184,6 +3310,18 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => inputs.join('')).toBe('a');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => inputs.join('')).toBe('ab');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => liveCommand.getAttribute('data-status')).toBe('passed');"
     },
     {
@@ -3208,7 +3346,13 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByText('attempt 3', { exact: true }).count()).toBe(1);"
+      "excerpt": "await expect.poll(() => page.getByRole('dialog', { name: 'Generated test' }).count()).toBe(0);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-attempt-note').innerText()).toContain('Attempt 3');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3250,6 +3394,30 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-log-list li').count()).toBe(3);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 1');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 2');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 2');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-semantic-node-row').count()).toBeGreaterThan(0);"
     },
     {
@@ -3262,7 +3430,55 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request approved');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request rejected');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request rejected');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(1);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(2);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(2);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => requests.length).toBe(1);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => review.innerText()).toContain('submit permission');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => search.inputValue()).toBe('');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3380,6 +3596,12 @@
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe(profile);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "'setInterval(() => undefined, 1_000);',"
@@ -3407,6 +3629,30 @@
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const startedAt = Date.now() - 5_000;"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const startedAt = Date.now();"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const startedAt = Date.now();"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const startedAt = Date.now();"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const startedAt = Date.now();"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3526,7 +3772,25 @@
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void copy.catch(() => undefined);"
+      "excerpt": "void copy.catch(() =>"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void copy.then("
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void copy.then("
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void copyText(recordReview.source)"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
@@ -3538,19 +3802,13 @@
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void navigator.clipboard"
-    },
-    {
-      "path": "packages/ui/src/app/TermwrightApp.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void navigator.clipboard.writeText(file).catch(() => undefined);"
-    },
-    {
-      "path": "packages/ui/src/app/TermwrightApp.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void openReplay(execution, requested.timeMs ?? 0);"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void openReplay(execution);"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
@@ -3581,6 +3839,12 @@
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void saveRecording();"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void source"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",
