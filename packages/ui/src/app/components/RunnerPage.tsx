@@ -6,6 +6,7 @@ import {
   ListPlus,
   Maximize2,
   Minimize2,
+  MousePointer2,
   PanelLeftOpen,
   PanelRightOpen,
   Play,
@@ -39,7 +40,7 @@ import type { TraceStatePayload } from '../../trace-source.js';
 import type { UiActionability } from '../../events.js';
 import { usePreferences } from '../preferences.js';
 import { ExecutionRail } from './ExecutionRail.js';
-import { InspectorPanel } from './InspectorPanel.js';
+import { InspectorPanel, type InspectorSelection } from './InspectorPanel.js';
 import { ReplayControls } from './ReplayControls.js';
 import { StatusBadge } from './StatusBadge.js';
 import { TerminalStage } from './TerminalStage.js';
@@ -92,6 +93,9 @@ export function RunnerPage({
   const selected = selectedCase(state);
   const session = selectedSession(state);
   const nodes = nodesForSelected(state);
+  const [picking, setPicking] = useState(false);
+  const [pickedSelection, setPickedSelection] = useState<InspectorSelection | null>(null);
+  const pickerButtonRef = useRef<HTMLButtonElement>(null);
   const [previewMs, setPreviewMs] = useState<number | null>(null);
   const [previewState, setPreviewState] = useState<{
     traceRef: string;
@@ -116,7 +120,7 @@ export function RunnerPage({
   useEffect(() => {
     if (!evidenceMaximized) return;
     const restore = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || picking) return;
       event.preventDefault();
       event.stopPropagation();
       setEvidenceMaximized(false);
@@ -124,7 +128,7 @@ export function RunnerPage({
     };
     window.addEventListener('keydown', restore, true);
     return () => window.removeEventListener('keydown', restore, true);
-  }, [evidenceMaximized]);
+  }, [evidenceMaximized, picking]);
   const [stepTitle, setStepTitle] = useState('');
   const workspaceRef = useRef<HTMLDivElement>(null);
   const railDrag = useRef<ResizeGesture | null>(null);
@@ -164,6 +168,8 @@ export function RunnerPage({
   useEffect(() => {
     if (previousSelection.current === state.selectedExecutionId) return;
     previousSelection.current = state.selectedExecutionId;
+    setPicking(false);
+    setPickedSelection(null);
     setPreviewMs(null);
     setPinnedNodeId(null);
     setHoveredTarget(null);
@@ -209,7 +215,9 @@ export function RunnerPage({
   }, [replay, session, shownTimeMs]);
   const shownTraceState =
     previewMs === null
-      ? replay?.traceState
+      ? replay?.traceStateRequestedMs === shownTimeMs
+        ? replay.traceState
+        : null
       : previewState?.traceRef === replay?.traceRef && previewState?.timeMs === previewMs
         ? previewState.state
         : null;
@@ -234,6 +242,57 @@ export function RunnerPage({
           },
     [replay, session, shownTimeMs, shownTraceState, state.evidence],
   );
+  const pickSnapshot =
+    replay === null
+      ? (session?.snapshot ?? null)
+      : (
+            previewMs === null
+              ? replay.traceStateRequestedMs === shownTimeMs
+              : previewState?.timeMs === shownTimeMs
+          )
+        ? (shownTraceState?.snapshot ?? null)
+        : null;
+  const pickGridMatches =
+    pickSnapshot?.columns === terminal.columns && pickSnapshot?.rows === terminal.rows;
+  const canPick =
+    pickGridMatches &&
+    pickSnapshot?.nodes.some(
+      (node) =>
+        node.geometry.visibleRect.status === 'known' &&
+        node.geometry.visibleRect.value.width > 0 &&
+        node.geometry.visibleRect.value.height > 0 &&
+        !(node.geometry.displayed.status === 'known' && !node.geometry.displayed.value),
+    ) === true;
+  const cancelPicking = () => {
+    setPicking(false);
+    setHoveredTarget(null);
+    pickerButtonRef.current?.focus();
+  };
+  const previewPick = (result: import('../domain/terminal-picking.js').TerminalPick) => {
+    setHoveredTarget(
+      result.node !== null && pickSnapshot !== null
+        ? highlightSemanticNode(result.node, pickSnapshot, false)
+        : {
+            sourceId: 'picker',
+            targetRef: null,
+            revision: null,
+            role: null,
+            name: null,
+            reason: result.reason ?? 'No semantic tree at this moment.',
+            pinned: false,
+          },
+    );
+  };
+  useEffect(() => {
+    setPicking(false);
+    setPickedSelection(null);
+    setHoveredTarget(null);
+    setPinnedTarget(null);
+    targetRequest.current += 1;
+  }, [terminal.identity]);
+  useEffect(() => {
+    if (picking) setHoveredTarget(null);
+  }, [pickSnapshot]);
   const inspectorHidden = inspectorCollapsed;
 
   useEffect(() => {
@@ -493,25 +552,92 @@ export function RunnerPage({
           <TerminalStage
             {...terminal}
             highlight={hoveredTarget ?? pinnedTarget}
+            {...(!picking
+              ? {}
+              : {
+                  picking: {
+                    snapshot: pickSnapshot,
+                    preview: previewPick,
+                    cancel: cancelPicking,
+                    select: (result: import('../domain/terminal-picking.js').TerminalPick) => {
+                      if (result.node === null || pickSnapshot === null) {
+                        previewPick(result);
+                        return;
+                      }
+                      pinSemanticNode(result.node, pickSnapshot);
+                      setHoveredTarget(null);
+                      setPicking(false);
+                      setEvidenceMaximized(false);
+                      setPickedSelection((previous) => ({
+                        request: (previous?.request ?? 0) + 1,
+                        nodeId: result.node!.id,
+                        sessionId: pickSnapshot.sessionId,
+                        revision: pickSnapshot.revision,
+                      }));
+                      updatePreferences({ inspectorCollapsed: false, inspectorTab: 'tree' });
+                      if (window.matchMedia('(max-width: 1099px)').matches)
+                        dispatch({ type: 'compact-workspace', workspace: 'inspect' });
+                    },
+                  },
+                })}
             toolbarActions={
               selected === null ? null : (
-                <div className="tw-terminal-layout-control">
-                  <Tooltip label={evidenceMaximized ? 'Restore panels (Esc)' : 'Expand terminal'}>
+                <>
+                  <Tooltip
+                    label={picking ? 'Cancel element picker (Esc)' : 'Pick element'}
+                    disabledReason={
+                      pickSnapshot === null
+                        ? 'No semantic tree at this moment.'
+                        : !pickGridMatches
+                          ? 'The recorded tree does not match this terminal grid.'
+                          : 'This frame has no recorded visible element bounds.'
+                    }
+                  >
                     <button
                       type="button"
                       className="tw-inspector-control"
-                      ref={expandTerminalRef}
-                      aria-label={evidenceMaximized ? 'Restore panels' : 'Expand terminal'}
-                      onClick={() => setEvidenceMaximized((value) => !value)}
+                      ref={pickerButtonRef}
+                      aria-label="Pick element"
+                      aria-pressed={picking}
+                      disabled={!picking && !canPick && !replay?.playing}
+                      onClick={() => {
+                        if (picking) {
+                          cancelPicking();
+                          return;
+                        }
+                        if (replay !== null) dispatch({ type: 'replay-playing', playing: false });
+                        targetRequest.current += 1;
+                        setPreviewMs(null);
+                        setPinnedTarget(null);
+                        setPicking(true);
+                        previewPick({
+                          node: null,
+                          reason:
+                            'Point at an element or use arrow keys. Click or Enter selects; Escape cancels.',
+                        });
+                      }}
                     >
-                      {evidenceMaximized ? (
-                        <Minimize2 aria-hidden="true" size={14} />
-                      ) : (
-                        <Maximize2 aria-hidden="true" size={14} />
-                      )}
+                      <MousePointer2 aria-hidden="true" size={14} />
                     </button>
                   </Tooltip>
-                </div>
+                  <div className="tw-terminal-layout-control">
+                    <Tooltip label={evidenceMaximized ? 'Restore panels (Esc)' : 'Expand terminal'}>
+                      <button
+                        type="button"
+                        className="tw-inspector-control"
+                        ref={expandTerminalRef}
+                        aria-label={evidenceMaximized ? 'Restore panels' : 'Expand terminal'}
+                        onClick={() => setEvidenceMaximized((value) => !value)}
+                      >
+                        {evidenceMaximized ? (
+                          <Minimize2 aria-hidden="true" size={14} />
+                        ) : (
+                          <Maximize2 aria-hidden="true" size={14} />
+                        )}
+                      </button>
+                    </Tooltip>
+                  </div>
+                </>
               )
             }
             {...(session === null
@@ -682,6 +808,7 @@ export function RunnerPage({
         ) : (
           <InspectorPanel
             session={inspectorSession}
+            selection={pickedSelection}
             onCollapsed={(collapsed) => updatePreferences({ inspectorCollapsed: collapsed })}
             onPreviewNode={previewSemanticNode}
             onPinNode={pinSemanticNode}

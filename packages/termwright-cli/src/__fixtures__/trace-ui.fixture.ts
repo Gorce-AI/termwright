@@ -8,6 +8,9 @@ configureTermwright({
     process.execPath,
     fileURLToPath(new URL('../../../driver/test-fixtures/semantic-app.mjs', import.meta.url)),
   ],
+  // The semantic fixture publishes geometry for an 80×24 grid.
+  columns: 80,
+  rows: 24,
   outputDir: join(tmpdir(), 'termwright-trace-ui-regression'),
   trace: 'on',
 });

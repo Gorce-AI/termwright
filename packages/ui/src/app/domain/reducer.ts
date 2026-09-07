@@ -48,6 +48,7 @@ export type AppAction =
   | { readonly type: 'replay-time'; readonly timeMs: number }
   | {
       readonly type: 'replay-state';
+      readonly requestedMs?: number;
       readonly traceRef: string;
       readonly traceState: TraceStatePayload;
     }
@@ -152,6 +153,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             frames: action.frames,
             commands: action.commands.commands,
             traceState: action.traceState,
+            traceStateRequestedMs: Math.min(Math.max(action.timeMs, 0), action.overview.durationMs),
             logs: action.logs,
             timeMs: Math.min(Math.max(action.timeMs, 0), action.overview.durationMs),
             playing: false,
@@ -183,7 +185,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return updateReplay(state, (replay) => ({ ...replay, timeMs: action.timeMs }));
     case 'replay-state':
       return updateReplay(state, (replay) =>
-        replay.traceRef === action.traceRef ? { ...replay, traceState: action.traceState } : replay,
+        replay.traceRef === action.traceRef &&
+        (action.requestedMs === undefined || action.requestedMs === replay.timeMs)
+          ? {
+              ...replay,
+              traceState: action.traceState,
+              traceStateRequestedMs: action.requestedMs ?? replay.timeMs,
+            }
+          : replay,
       );
     case 'replay-playing':
       return updateReplay(state, (replay) => ({ ...replay, playing: action.playing }));

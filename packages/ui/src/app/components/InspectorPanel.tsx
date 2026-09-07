@@ -14,7 +14,15 @@ import {
   ShieldCheck,
   Waypoints,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import type { SessionRecord } from '../domain/model.js';
 import { usePreferences, type InspectorTab } from '../preferences.js';
 import { useTreeNavigation } from '../use-tree-navigation.js';
@@ -25,8 +33,16 @@ type RecorderActions = {
   readonly onAssertNode: (nodeId: string) => void;
 };
 
+export interface InspectorSelection {
+  readonly request: number;
+  readonly nodeId: string;
+  readonly sessionId: string;
+  readonly revision: number;
+}
+
 export function InspectorPanel({
   session,
+  selection,
   recorder,
   onCollapsed,
   onPreviewNode,
@@ -34,6 +50,7 @@ export function InspectorPanel({
   onInspectActionability,
 }: {
   readonly session: SessionRecord | null;
+  readonly selection?: InspectorSelection | null;
   readonly onCollapsed: (collapsed: boolean) => void;
   readonly recorder?: RecorderActions;
   readonly onPreviewNode?: (node: SemanticNode | null, snapshot: SemanticSnapshot | null) => void;
@@ -46,7 +63,7 @@ export function InspectorPanel({
   const { preferences, updatePreferences } = usePreferences();
   const tab = preferences.inspectorTab;
   const setTab = (next: InspectorTab) => updatePreferences({ inspectorTab: next });
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [localSelectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [actionability, setActionability] = useState<{
     readonly loading: boolean;
     readonly results?: readonly UiActionability[];
@@ -54,6 +71,18 @@ export function InspectorPanel({
   }>({ loading: false });
   const snapshot = session?.snapshot ?? null;
   const nodes = snapshot?.nodes ?? [];
+  const requestedSelection =
+    selection?.sessionId === snapshot?.sessionId && selection?.revision === snapshot?.revision
+      ? (selection ?? null)
+      : null;
+  const [appliedSelection, setAppliedSelection] = useState<InspectorSelection | null>(null);
+  const pendingSelection = requestedSelection !== null && requestedSelection !== appliedSelection;
+  const selectedNodeId = pendingSelection ? requestedSelection.nodeId : localSelectedNodeId;
+  useEffect(() => {
+    if (!pendingSelection) return;
+    setSelectedNodeId(requestedSelection.nodeId);
+    setAppliedSelection(requestedSelection);
+  }, [pendingSelection, requestedSelection]);
   useEffect(() => {
     if (selectedNodeId !== null && nodes.some((node) => node.id === selectedNodeId)) return;
     setSelectedNodeId(snapshot?.rootIds[0] ?? nodes[0]?.id ?? null);
@@ -116,7 +145,7 @@ export function InspectorPanel({
         </Tooltip>
       </header>
       <div
-        className="tw-inspector-body"
+        className={`tw-inspector-body${tab === 'tree' && requestedSelection !== null ? ' tw-inspector-picking-result' : ''}`}
         role="tabpanel"
         id={`tw-inspector-panel-${tab}`}
         aria-labelledby={`tw-inspector-tab-${tab}`}
@@ -125,14 +154,33 @@ export function InspectorPanel({
           snapshot === null || nodes.length === 0 ? (
             <InspectorEmpty icon={Waypoints} text="No semantic tree at this moment" />
           ) : (
-            <SemanticTree
-              snapshot={snapshot}
-              selectedNodeId={selectedNodeId}
-              onSelect={setSelectedNodeId}
-              {...(recorder === undefined ? {} : { recorder })}
-              {...(onPreviewNode === undefined ? {} : { onPreviewNode })}
-              {...(onPinNode === undefined ? {} : { onPinNode })}
-            />
+            <>
+              <div className="tw-picked-tree">
+                <SemanticTree
+                  reveal={requestedSelection}
+                  snapshot={snapshot}
+                  selectedNodeId={selectedNodeId}
+                  onSelect={setSelectedNodeId}
+                  {...(recorder === undefined ? {} : { recorder })}
+                  {...(onPreviewNode === undefined ? {} : { onPreviewNode })}
+                  {...(onPinNode === undefined ? {} : { onPinNode })}
+                />
+              </div>
+              {requestedSelection === null || selectedNode === null ? null : (
+                <div
+                  className="tw-picked-detail"
+                  role="region"
+                  aria-label="Selected element details"
+                >
+                  <SemanticDetail
+                    node={selectedNode}
+                    snapshot={snapshot}
+                    actionability={actionability}
+                    {...(recorder === undefined ? {} : { recorder })}
+                  />
+                </div>
+              )}
+            </>
           )
         ) : tab === 'semantic' ? (
           <>
@@ -300,6 +348,7 @@ function ContractSummary({ contract }: { readonly contract: EffectiveSessionCont
 
 function SemanticTree({
   snapshot,
+  reveal,
   selectedNodeId,
   onSelect,
   recorder,
@@ -307,13 +356,37 @@ function SemanticTree({
   onPinNode,
 }: {
   readonly snapshot: SemanticSnapshot;
+  readonly reveal: InspectorSelection | null;
   readonly selectedNodeId: string | null;
   readonly onSelect: (nodeId: string) => void;
   readonly recorder?: RecorderActions;
   readonly onPreviewNode?: (node: SemanticNode | null, snapshot: SemanticSnapshot | null) => void;
   readonly onPinNode?: (node: SemanticNode, snapshot: SemanticSnapshot) => void;
 }) {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const [storedCollapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const [revealed, setRevealed] = useState<InspectorSelection | null>(null);
+  const treeRef = useRef<HTMLUListElement>(null);
+  const collapsed = new Set(storedCollapsed);
+  if (reveal !== null && reveal !== revealed) {
+    const ancestors = new Map(snapshot.nodes.map((node) => [node.id, node.parentId]));
+    const visited = new Set<string>();
+    let id = ancestors.get(reveal.nodeId);
+    while (id !== undefined && !visited.has(id)) {
+      visited.add(id);
+      collapsed.delete(id);
+      id = ancestors.get(id);
+    }
+  }
+  useLayoutEffect(() => {
+    if (reveal === null || reveal === revealed) return;
+    setCollapsed(collapsed);
+    setRevealed(reveal);
+    const selected = [
+      ...(treeRef.current?.querySelectorAll<HTMLElement>('[role="treeitem"]') ?? []),
+    ].find((element) => element.dataset['nodeId'] === reveal.nodeId);
+    selected?.focus({ preventScroll: true });
+    selected?.scrollIntoView({ block: 'nearest' });
+  }, [reveal, revealed]);
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const children = new Map<string, SemanticNode[]>();
   for (const node of snapshot.nodes) {
@@ -351,6 +424,7 @@ function SemanticTree({
   return (
     <ul
       className="tw-semantic-tree"
+      ref={treeRef}
       role="tree"
       aria-label="Semantic tree"
       onKeyDown={navigation.onKeyDown}
@@ -410,6 +484,7 @@ function SemanticTreeNode({
           type="button"
           role="treeitem"
           data-highlight-source="semantic"
+          data-node-id={node.id}
           aria-selected={selectedNodeId === node.id}
           aria-expanded={descendants.length === 0 ? undefined : open}
           aria-owns={descendants.length > 0 && open ? groupId : undefined}

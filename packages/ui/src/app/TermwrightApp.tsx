@@ -302,7 +302,7 @@ export function TermwrightApp({
         .traceState(replay.timeMs)
         .then((traceState) => {
           if (active && epoch === replayEpoch.current)
-            dispatch({ type: 'replay-state', traceRef, traceState });
+            dispatch({ type: 'replay-state', traceRef, traceState, requestedMs: replay.timeMs });
         })
         .catch(() => undefined);
     }, 50);

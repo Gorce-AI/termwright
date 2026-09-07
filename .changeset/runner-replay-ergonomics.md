@@ -16,3 +16,7 @@ Keep collapsed step rows on one line, with their source location and action/asse
 Record ordinary Jest-style expectations as assertion rows alongside terminal matchers, in live sessions and retained traces. Preserve negation, promise and soft outcomes, collapse polling into its final result, and retain locator evidence without duplicate rows. Add retrying `toHaveCount`, with an explicit explanation for empty or non-unique matches. Assertion targets can be previewed and pinned; primitive comparisons do not invent selectors. Explain missing evidence in older recordings.
 
 Move collapsed panel handles to their own workspace edges and move terminal expansion into a quiet icon in the terminal toolbar. Keep layout controls separate from the test outcome. Escape restores the previous panel layout; compact screens use their workspace tabs without duplicate layout controls.
+
+Add element picking directly on live and replay terminal screens. Hover highlights recorded semantic bounds; click reveals the element in its tree and opens its details, restoring a hidden inspector on desktop or mobile. Pause playback for selection, support arrows/Enter/Escape, and keep inspection input separate from terminal input. Associate asynchronous tree responses with the requested playhead to reject stale data, including moments between terminal output events.
+
+Drain terminal writes and pending viewport reset callbacks before disposing a replaced emulator, preventing renderer errors during repeated Unicode profile changes.

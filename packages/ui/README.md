@@ -155,6 +155,21 @@ trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
 is. The browser app never imports Vitest and never reads a `.twtrace` itself.
 
+## Picking an element on the terminal
+
+Choose **Pick element** in the terminal toolbar to pause replay and inspect the
+screen. Hover highlights the deepest element with recorded visible bounds;
+click selects it, reveals its ancestors in **Tree**, and opens its semantic
+details below the tree. The inspector opens automatically, including in the
+compact layout. Arrow keys preview elements, Enter selects, and Escape cancels.
+Inspection does not send clicks or keystrokes to a live terminal.
+
+Picking uses the semantic snapshot for the displayed moment and its terminal
+grid. Missing bounds and ambiguous overlapping elements are explained rather
+than guessed; overlapping targets use a recorded hit-grid recipient when
+available. A frame without visible bounds cannot be picked. Changing the
+snapshot clears highlights and details belonging to the previous revision.
+
 ## Accessibility
 
 The semantic tree is an ARIA-aligned model, so the UI renders it as ARIA rather

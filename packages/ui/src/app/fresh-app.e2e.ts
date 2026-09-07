@@ -50,7 +50,7 @@ async function tracePage(trace: string): Promise<Page> {
 async function checkedPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(String(error)));
+  page.on('pageerror', (error) => errors.push(error.stack ?? String(error)));
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
@@ -447,6 +447,23 @@ describe('fresh React runner', () => {
     });
     await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe('default');
     await expect.poll(() => viewport.getAttribute('data-terminal-cursor-x')).toBe('2');
+    // Rebuilding while the previous emulator drains queued output must not
+    // call a disposed renderer, even over repeated profile switches.
+    for (let index = 0; index < 12; index += 1) {
+      const profile = index % 2 === 0 ? 'cjk-wide' : 'default';
+      announce(profile);
+      server.hub.publish({
+        v: 1,
+        type: 'output',
+        sessionId: 'unicode-session',
+        dataB64: Buffer.from('\x1bc│X').toString('base64'),
+        t: 6 + index,
+      });
+      await expect.poll(() => viewport.getAttribute('data-terminal-profile')).toBe(profile);
+      await expect
+        .poll(() => viewport.getAttribute('data-terminal-cursor-x'))
+        .toBe(profile === 'cjk-wide' ? '3' : '2');
+    }
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -1082,6 +1099,120 @@ describe('fresh React runner', () => {
       .getByText('This assertion compares values and has no terminal target.', { exact: true })
       .waitFor();
     expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('picks a scaled replay element, reveals collapsed ancestors and opens its details on desktop and mobile', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace());
+    await page.locator('.tw-replay-controls').waitFor();
+    // There is no cast frame at 500ms: semantic state must be associated with
+    // the requested moment, not with the timestamp of the last output byte.
+    await page.getByLabel('Replay position').fill('500');
+    await page.getByRole('button', { name: 'Show inspector' }).click();
+    const parent = page
+      .getByRole('tree', { name: 'Semantic tree' })
+      .getByRole('treeitem', { name: /dialog Permission/u });
+    await parent.focus();
+    await page.keyboard.press('ArrowLeft');
+    expect(await parent.getAttribute('aria-expanded')).toBe('false');
+    await page.getByRole('button', { name: 'Hide inspector' }).click();
+    await page.getByRole('button', { name: 'Expand terminal' }).click();
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    const point = async () => {
+      const screen = await page.locator('.xterm-screen').boundingBox();
+      if (screen === null) throw new Error('Missing terminal grid');
+      return { x: screen.x + (screen.width * 4.5) / 80, y: screen.y + (screen.height * 3.5) / 24 };
+    };
+    const target = await point();
+    await page.mouse.move(target.x, target.y);
+    await page.locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"]').waitFor();
+    await page.mouse.click(target.x, target.y);
+    await page.getByRole('region', { name: 'Selected element details' }).waitFor();
+    expect(await page.locator('.tw-terminal-picker').count()).toBe(0);
+    expect(await page.locator('.tw-workspace').getAttribute('data-evidence-maximized')).toBe(
+      'false',
+    );
+    expect(
+      await page.locator('.tw-semantic-tree [data-node-id="b1"]').getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      await page.locator('.tw-semantic-tree [data-node-id="d1"]').getAttribute('aria-expanded'),
+    ).toBe('true');
+    expect(await page.locator('.tw-picked-detail h3').innerText()).toBe('Approve');
+    expect(await page.locator('.tw-picked-detail').innerText()).toContain('BUTTON');
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    const blank = await page.locator('.tw-terminal-picker').boundingBox();
+    if (blank === null) throw new Error('Missing picking overlay');
+    await page.mouse.click(blank.x + 2, blank.y + 2);
+    expect(await page.locator('.tw-terminal-picker').count()).toBe(1);
+    await page.keyboard.press('Escape');
+    expect(await page.locator('.tw-terminal-picker').count()).toBe(0);
+    await page.getByLabel('Replay position').fill('1600');
+    await expect
+      .poll(() => page.getByRole('button', { name: 'Pick element', exact: true }).isDisabled())
+      .toBe(true);
+    expect(await page.locator('.tw-picked-detail').count()).toBe(0);
+    expect(await page.locator('.tw-terminal-highlight').count()).toBe(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('tab', { name: 'Screen', exact: true }).click();
+    await page.getByLabel('Replay position').fill('500');
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await page.getByRole('region', { name: 'Selected element details' }).waitFor();
+    expect(await page.locator('.tw-workspace').getAttribute('data-compact-view')).toBe('inspect');
+    expect(await page.locator('.tw-picked-detail h3').innerText()).toBe('Approve');
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('keeps element inspection separate from writable terminal input', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    const startedAt = Date.now();
+    server.hub.publish({
+      v: 1,
+      type: 'run-start',
+      runId: 'run:pick-live',
+      mode: 'record',
+      startedAt,
+    });
+    server.hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 'pick-live',
+      title: 'inspect live terminal',
+      file: '/live.test.ts',
+      startedAt,
+      sessionId: 'pick-session',
+    });
+    const session = new FakeSession('pick-session');
+    const inputs: string[] = [];
+    server.attach({
+      source: session,
+      write: async (bytes) => {
+        inputs.push(Buffer.from(bytes).toString('utf8'));
+      },
+    });
+    session.semantic({ ...FIXTURE_TREES[0]!, sessionId: session.sessionId });
+    session.output('Ready');
+    await page.locator('.tw-terminal-viewport').focus();
+    await page.keyboard.type('a');
+    await expect.poll(() => inputs.join('')).toBe('a');
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    await page.keyboard.type('ignored');
+    const screen = await page.locator('.xterm-screen').boundingBox();
+    if (screen === null) throw new Error('Missing terminal grid');
+    await page.mouse.click(
+      screen.x + (screen.width * 4.5) / 80,
+      screen.y + (screen.height * 3.5) / 24,
+    );
+    await page.getByRole('region', { name: 'Selected element details' }).waitFor();
+    expect(inputs.join('')).toBe('a');
+    await page.locator('.tw-terminal-viewport').focus();
+    await page.keyboard.type('b');
+    await expect.poll(() => inputs.join('')).toBe('ab');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 

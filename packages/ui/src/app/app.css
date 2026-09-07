@@ -3479,3 +3479,29 @@ html[data-motion='reduce'] *::after {
   width: 9px;
   height: 9px;
 }
+
+.tw-terminal-picker {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  cursor: crosshair;
+  touch-action: none;
+  outline: none;
+}
+.tw-terminal-picker:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--tw-accent);
+}
+.tw-inspector-picking-result {
+  display: grid;
+  grid-template-rows: minmax(100px, 40%) minmax(0, 1fr);
+  overflow: hidden;
+}
+.tw-inspector-picking-result > .tw-picked-tree,
+.tw-picked-detail {
+  min-height: 0;
+  overflow: auto;
+}
+.tw-picked-detail {
+  border-top: 1px solid var(--tw-stroke);
+  padding-top: 10px;
+}
