@@ -5,6 +5,8 @@ import {
   GitCommitHorizontal,
   History,
   RefreshCw,
+  Search,
+  X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { DataSource } from '../../data-source.js';
@@ -21,26 +23,48 @@ export function RunsPage({
 }) {
   const [runs, setRuns] = useState<readonly RunSummaryEntry[]>([]);
   const [opened, setOpened] = useState<RunManifest | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);
+  const [query, setQuery] = useState('');
+  const filteredRuns = runs.filter((run) =>
+    [
+      run.id,
+      run.state,
+      ...(run.state === 'complete'
+        ? [run.git?.message, run.git?.commit, run.summary.status]
+        : [healthTitle(run), healthDescription(run)]),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setListError(null);
     void source
       .runs()
       .then((result) => {
         if (active) setRuns(result.runs);
       })
       .catch((cause: unknown) => {
-        if (active) setError(describe(cause));
+        if (active) setListError(describe(cause));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [source]);
+  }, [source, refresh]);
 
   useEffect(() => {
     let active = true;
     setOpened(null);
-    setError(null);
+    setDetailError(null);
     if (selectedRunId === null) {
       return () => {
         active = false;
@@ -51,18 +75,18 @@ export function RunsPage({
       .then((detail) => {
         if (!active) return;
         if (detail.state === 'complete') setOpened(detail);
-        else setError(healthDescription(detail));
+        else setDetailError(healthDescription(detail));
       })
       .catch((cause: unknown) => {
-        if (active) setError(describe(cause));
+        if (active) setDetailError(describe(cause));
       });
     return () => {
       active = false;
     };
-  }, [selectedRunId, source]);
+  }, [selectedRunId, source, refresh]);
 
   const openRun = (id: string) => {
-    setError(null);
+    setDetailError(null);
     onSelectedRunId(id);
     /* Loading is owned by the selectedRunId effect so popstate and clicks use one path. */
   };
@@ -72,19 +96,81 @@ export function RunsPage({
       <div className="tw-page-intro">
         <div>
           <h2>Runs</h2>
-          <p>Native-host results and the health of every retained transaction.</p>
+          <p>Browse previous runs, their results and retry attempts.</p>
         </div>
+        <button
+          type="button"
+          className="tw-secondary-button"
+          disabled={loading}
+          onClick={() => setRefresh((value) => value + 1)}
+          aria-label="Refresh run history"
+        >
+          <RefreshCw aria-hidden="true" size={14} /> Refresh
+        </button>
       </div>
-      {error === null ? null : <p className="tw-inline-error">{error}</p>}
-      {opened === null ? (
+      {selectedRunId === null ? (
+        <div className="tw-history-toolbar">
+          <label className="tw-search-box">
+            <Search aria-hidden="true" size={14} />
+            <span className="sr-only">Search run history</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder="Search run ID, commit or result"
+            />
+            {query !== '' ? (
+              <button
+                type="button"
+                className="tw-clear-search"
+                aria-label="Clear history search"
+                onClick={() => setQuery('')}
+              >
+                <X aria-hidden="true" size={14} />
+              </button>
+            ) : null}
+          </label>
+        </div>
+      ) : (
+        <button type="button" className="tw-back-button" onClick={() => onSelectedRunId(null)}>
+          ← All runs
+        </button>
+      )}
+      {(selectedRunId === null ? listError : detailError) === null ? null : (
+        <div className="tw-inline-error" role="alert">
+          <p>{selectedRunId === null ? listError : detailError}</p>
+          <button
+            type="button"
+            className="tw-secondary-button"
+            onClick={() => setRefresh((value) => value + 1)}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+      {selectedRunId !== null && (opened === null || opened.id !== selectedRunId) ? (
+        detailError === null ? (
+          <p role="status" className="tw-filter-count">
+            Loading run details…
+          </p>
+        ) : null
+      ) : selectedRunId === null ? (
         <div className="tw-run-cards">
-          {runs.length === 0 ? (
+          {loading && runs.length === 0 ? (
+            <p role="status" className="tw-filter-count">
+              Loading run history…
+            </p>
+          ) : listError !== null && runs.length === 0 ? null : filteredRuns.length === 0 ? (
             <div className="tw-page-empty">
               <History aria-hidden="true" />
-              <strong>No run history yet</strong>
+              <strong>{query.trim() !== '' ? 'No matching runs' : 'No run history yet'}</strong>
+              <p>
+                {query.trim() !== ''
+                  ? 'Try another run ID, commit or result.'
+                  : 'Completed test runs will appear here. Refresh after running tests.'}
+              </p>
             </div>
           ) : (
-            runs.map((run) =>
+            filteredRuns.map((run) =>
               run.state === 'complete' ? (
                 <button
                   type="button"
@@ -102,7 +188,8 @@ export function RunsPage({
                         {formatStartedAt(run.startedAt)}
                       </time>
                       <span>
-                        {run.testCount} cases · {format(run.summary.durationMs)}
+                        {run.summary.status.replaceAll('-', ' ')} · {run.testCount}{' '}
+                        {run.testCount === 1 ? 'case' : 'cases'} · {format(run.summary.durationMs)}
                       </span>
                     </small>
                   </span>
@@ -113,9 +200,9 @@ export function RunsPage({
                     </span>
                   )}
                   <span className="tw-history-counts">
-                    <b>{run.summary.passed} passed</b>
-                    <b>{run.summary.failed} failed</b>
-                    <b>{run.summary.skipped} skipped</b>
+                    <b data-status="passed">{run.summary.passed} passed</b>
+                    <b data-status="failed">{run.summary.failed} failed</b>
+                    <b data-status="skipped">{run.summary.skipped} skipped</b>
                   </span>
                   <ArrowRight aria-hidden="true" />
                 </button>
@@ -138,15 +225,13 @@ export function RunsPage({
             )
           )}
         </div>
-      ) : (
+      ) : opened === null ? null : (
         <div className="tw-run-detail">
-          <button type="button" className="tw-back-button" onClick={() => onSelectedRunId(null)}>
-            ← All runs
-          </button>
           <h3>{opened.git?.message ?? opened.id}</h3>
           <time className="tw-run-detail-time" dateTime={new Date(opened.startedAt).toISOString()}>
             {formatStartedAt(opened.startedAt)}
           </time>
+          <p className="tw-filter-count">Recording not retained in native manifest</p>
           <div className="tw-history-tests">
             {opened.tests.map((test) => (
               <article key={test.id} data-status={test.status}>
@@ -180,7 +265,6 @@ export function RunsPage({
                     </details>
                   )}
                 </div>
-                <em>Recording not retained in native manifest</em>
               </article>
             ))}
           </div>

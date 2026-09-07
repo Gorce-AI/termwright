@@ -493,7 +493,7 @@ describe('fresh React runner', () => {
       .poll(() => empty.locator('.tw-connection-dot').getAttribute('data-connected'))
       .toBe('true');
     await empty.getByRole('button', { name: 'Specs', exact: true }).click();
-    expect(await empty.getByText('No matching owned tests', { exact: true }).count()).toBe(1);
+    expect(await empty.getByText('No tests discovered yet', { exact: true }).count()).toBe(1);
     expect(await empty.getByText('0 total', { exact: true }).count()).toBe(1);
     expect(await empty.getByRole('button', { name: /Run all 0 cases/u }).isDisabled()).toBe(true);
     expect(
@@ -899,6 +899,215 @@ describe('fresh React runner', () => {
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
+  it('loads, refreshes and searches run history without confusing pending data with an empty list', async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), 'tw-history-audit-'));
+    temporaryDirectories.push(runsDir);
+    const first = await writeNativeRunFixture(runsDir, {
+      tests: [{ title: 'history pass', file: '/history.test.ts', status: 'passed' }],
+    });
+    const server = await startUiServer({ runsDir });
+    servers.push(server);
+    const page = await checkedPage();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/runs', async (route) => {
+      await gate;
+      await route.continue();
+    });
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page.getByText('Loading run history…', { exact: true }).waitFor();
+    expect(await page.getByText('No run history yet', { exact: true }).count()).toBe(0);
+    release();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(first), 'u') }).waitFor();
+    await writeNativeRunFixture(runsDir, {
+      tests: [{ title: 'history fail', file: '/history.test.ts', status: 'failed' }],
+    });
+    await page.getByRole('button', { name: 'Refresh run history' }).click();
+    await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(2);
+    await page.getByLabel('Search run history').fill('failed');
+    await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(1);
+    await page.screenshot({ path: '/private/tmp/termwright-audit-history-result.png' });
+    await page.getByLabel('Search run history').fill('absent-run');
+    await page.getByText('No matching runs', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Clear history search' }).click();
+    let releaseDetail!: () => void;
+    const detailGate = new Promise<void>((resolve) => {
+      releaseDetail = resolve;
+    });
+    await page.route('**/api/runs/*', async (route) => {
+      await detailGate;
+      await route.continue();
+    });
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(first), 'u') }).click();
+    await page.getByText('Loading run details…', { exact: true }).waitFor();
+    expect(await page.locator('button.tw-run-card').count()).toBe(0);
+    releaseDetail();
+    await page.getByText('history pass', { exact: true }).waitFor();
+    await page.screenshot({ path: '/private/tmp/termwright-audit-history-detail.png' });
+    await page.getByRole('button', { name: 'All runs' }).click();
+    await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(2);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('runs only matching catalog cases and dismisses the New test menu with keyboard or outside click', async () => {
+    const requests: string[][] = [];
+    const server = await startUiServer({
+      onRun: (targets) => {
+        requests.push([...(targets ?? [])]);
+        return { runId: createRunId('run'), completed: Promise.resolve() };
+      },
+    });
+    servers.push(server);
+    const tests = [
+      ownedDescriptor('/audit/a.test.ts', 'login works'),
+      ownedDescriptor('/audit/a.test.ts', 'logout works'),
+      ownedDescriptor('/audit/b.test.ts', 'login rejected'),
+    ];
+    server.hub.publish({ v: 1, type: 'tests-discovered', tests });
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Specs', exact: true }).click();
+    await page.getByRole('button', { name: 'New test', exact: true }).click();
+    expect(
+      await page
+        .getByRole('menuitem', { name: 'Create file' })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press('Escape');
+    expect(await page.getByRole('menu').count()).toBe(0);
+    expect(
+      await page
+        .getByRole('button', { name: 'New test', exact: true })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.getByRole('button', { name: 'New test', exact: true }).click();
+    await page.getByRole('heading', { name: 'Test catalog' }).click();
+    expect(await page.getByRole('menu').count()).toBe(0);
+    await page.getByLabel('Search specs').fill('missing');
+    expect(await page.getByRole('button', { name: 'Run 0 matching cases' }).isDisabled()).toBe(
+      true,
+    );
+    await page.getByRole('button', { name: 'Clear spec search' }).click();
+    expect(await page.getByLabel('Search specs').inputValue()).toBe('');
+    await page.getByLabel('Search specs').fill('login');
+    await page.getByText('2 of 3 cases match', { exact: true }).waitFor();
+    await page.screenshot({ path: '/private/tmp/termwright-audit-catalog-matching.png' });
+    const gap = await page.evaluate(
+      () =>
+        document.querySelector('.tw-spec-files')!.getBoundingClientRect().top -
+        document.querySelector('.tw-catalog-search')!.getBoundingClientRect().bottom,
+    );
+    expect(gap).toBeLessThan(20);
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+      false,
+    );
+    await page.screenshot({ path: '/private/tmp/termwright-audit-catalog-mobile.png' });
+    await page.getByRole('button', { name: 'Run 2 matching cases' }).click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0]).toEqual([tests[0]!.id, tests[2]!.id]);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('reports unavailable clipboard access and confirms successful copying without crashing', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace());
+    await page.getByLabel('Replay position').fill('500');
+    await page.getByRole('button', { name: 'Show inspector' }).click();
+    await page.getByRole('tab', { name: 'Semantic', exact: true }).click();
+    await page.getByRole('button', { name: 'Copy node ref', exact: true }).waitFor();
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }),
+    );
+    await page.getByRole('button', { name: 'Copy node ref', exact: true }).click();
+    await page
+      .locator('.tw-copy-error')
+      .getByText('Clipboard unavailable', { exact: true })
+      .waitFor();
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (value: string) => {
+            Object.assign(window, { __copied: value });
+          },
+        },
+      }),
+    );
+    await page.getByRole('button', { name: 'Copy node ref', exact: true }).click();
+    await page
+      .locator('.tw-copy-status [role="status"]')
+      .filter({ hasText: /^Copied$/u })
+      .waitFor({ state: 'attached' });
+    expect(await page.evaluate(() => (window as unknown as { __copied: string }).__copied)).toBe(
+      'd1',
+    );
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }),
+    );
+    await page.getByRole('button', { name: 'Copy diagnostic report' }).click();
+    await page.getByText('Clipboard unavailable', { exact: true }).waitFor();
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('filters logs by recorded severity and text while keeping unlevelled file messages distinct', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const startedAt = Date.now();
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:logs', mode: 'live', startedAt });
+    server.hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 'logs-case',
+      title: 'logs audit',
+      file: '/logs.test.ts',
+      startedAt,
+      sessionId: 'logs-session',
+    });
+    server.hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 'logs-session',
+      testId: 'logs-case',
+      terminalProfile: 'default',
+      columns: 80,
+      rows: 24,
+    });
+    const logs = [
+      { level: 'info' as const, message: 'Connected' },
+      { level: 'error' as const, message: 'Request failed' },
+      { level: null, message: 'ERROR is just file text' },
+    ];
+    for (const [index, log] of logs.entries())
+      server.hub.publish({
+        v: 1,
+        type: 'app-log',
+        sessionId: 'logs-session',
+        source: log.level === null ? 'file' : 'adapter',
+        t: index,
+        ...log,
+      });
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Show inspector' }).click();
+    await page.getByRole('tab', { name: 'Logs', exact: true }).click();
+    await expect.poll(() => page.locator('.tw-log-list li').count()).toBe(3);
+    await page.getByLabel('Log level').selectOption('error');
+    expect(await page.locator('.tw-log-list p').allTextContents()).toEqual(['Request failed']);
+    await page.screenshot({ path: '/private/tmp/termwright-audit-log-filter.png' });
+    await page.getByLabel('Search logs').fill('Connected');
+    await page.getByText('No logs match these filters', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Reset log filters' }).click();
+    await page.getByLabel('Log level').selectOption('plain');
+    expect(await page.locator('.tw-log-list p').allTextContents()).toEqual([
+      'ERROR is just file text',
+    ]);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('lists canonical native runs with exact attempts and honest recording availability', async () => {
     const runsDir = await mkdtemp(join(tmpdir(), 'tw-fresh-runs-'));
     const startedAt = Date.now() - 5_000;
@@ -943,7 +1152,7 @@ describe('fresh React runner', () => {
     expect(await page.getByText(/retry 1/u).count()).toBe(1);
     expect(
       await page.getByText('Recording not retained in native manifest', { exact: true }).count(),
-    ).toBe(2);
+    ).toBe(1);
     expect(await page.getByRole('button', { name: 'Replay', exact: true }).count()).toBe(0);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
@@ -2819,6 +3028,32 @@ describe('fresh React runner', () => {
     expect(await page.getByLabel('Source editor').inputValue()).toBe('cursor');
     await page.screenshot({ path: '/tmp/termwright-fresh-settings-1440.png', fullPage: false });
 
+    await page.getByRole('button', { name: 'Reset layout' }).click();
+    expect(
+      await page
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press('Shift+Tab');
+    expect(
+      await page
+        .getByRole('button', { name: 'Confirm reset' })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press('Tab');
+    expect(
+      await page
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press('Escape');
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    expect(
+      await page
+        .getByRole('button', { name: 'Reset layout' })
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+    expect(await page.getByLabel('Timeline density').inputValue()).toBe('comfortable');
     await page.getByRole('button', { name: 'Reset layout' }).click();
     await page.getByRole('button', { name: 'Confirm reset' }).click();
     expect(await page.locator('.tw-shell').getAttribute('data-navigation-expanded')).toBe('false');

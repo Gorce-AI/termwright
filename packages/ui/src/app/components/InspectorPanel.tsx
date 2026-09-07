@@ -1,11 +1,15 @@
+import { copyText } from '../clipboard.js';
 import type {
   EffectiveSessionContract,
   SemanticNode,
   SemanticSnapshot,
 } from '@termwright/protocol';
+import { UI_LOG_LEVELS, type AppLogView } from '../../app-log.js';
 import type { UiActionability } from '../../events.js';
 import {
   Braces,
+  Check,
+  X,
   Copy,
   FileText,
   MousePointerClick,
@@ -176,6 +180,7 @@ export function InspectorPanel({
                     node={selectedNode}
                     snapshot={snapshot}
                     actionability={actionability}
+                    showActionability={onInspectActionability !== undefined}
                     {...(recorder === undefined ? {} : { recorder })}
                   />
                 </div>
@@ -192,22 +197,13 @@ export function InspectorPanel({
                 node={selectedNode}
                 snapshot={snapshot}
                 actionability={actionability}
+                showActionability={onInspectActionability !== undefined}
                 {...(recorder === undefined ? {} : { recorder })}
               />
             )}
           </>
-        ) : session === null || session.logs.length === 0 ? (
-          <InspectorEmpty icon={FileText} text="No application logs for this session" />
         ) : (
-          <ol className="tw-log-list">
-            {session.logs.map((log, index) => (
-              <li key={`${log.t}:${log.seq ?? index}`} data-level={log.level ?? 'plain'}>
-                <time>{formatTime(log.t)}</time>
-                <span>{log.level ?? log.source}</span>
-                <p>{log.message}</p>
-              </li>
-            ))}
-          </ol>
+          <LogPanel logs={session?.logs ?? []} />
         )}
       </div>
     </section>
@@ -533,7 +529,9 @@ function SemanticDetail({
   snapshot,
   recorder,
   actionability,
+  showActionability,
 }: {
+  readonly showActionability: boolean;
   readonly node: SemanticNode;
   readonly snapshot: SemanticSnapshot | null;
   readonly recorder?: RecorderActions;
@@ -627,7 +625,7 @@ function SemanticDetail({
           )}
         </div>
       </section>
-      <ActionabilityInspector state={actionability} />
+      {showActionability ? <ActionabilityInspector state={actionability} /> : null}
       {recorder === undefined ? null : (
         <section className="tw-semantic-actions">
           <h4>Recorder</h4>
@@ -795,19 +793,129 @@ function Property({
 }
 
 function CopyButton({ label, value }: { readonly label: string; readonly value: string }) {
+  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  useEffect(() => {
+    setStatus('idle');
+  }, [value]);
+  useEffect(() => {
+    if (status === 'idle') return;
+    const timer = window.setTimeout(() => setStatus('idle'), 2000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+  const copy = async () => {
+    try {
+      await copyText(value);
+      setStatus('copied');
+    } catch {
+      setStatus('failed');
+    }
+  };
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="tw-copy-field"
-        aria-label={label}
-        onClick={() => {
-          void navigator.clipboard.writeText(value);
-        }}
+    <span className="tw-copy-status">
+      <Tooltip
+        label={
+          status === 'copied' ? 'Copied' : status === 'failed' ? 'Clipboard unavailable' : label
+        }
       >
-        <Copy aria-hidden="true" size={12} />
-      </button>
-    </Tooltip>
+        <button type="button" className="tw-copy-field" aria-label={label} onClick={copy}>
+          {status === 'copied' ? (
+            <Check aria-hidden="true" size={12} />
+          ) : status === 'failed' ? (
+            <X aria-hidden="true" size={12} />
+          ) : (
+            <Copy aria-hidden="true" size={12} />
+          )}
+        </button>
+      </Tooltip>
+      <span className={status === 'failed' ? 'tw-copy-error' : 'sr-only'} role="status">
+        {status === 'copied' ? 'Copied' : status === 'failed' ? 'Clipboard unavailable' : ''}
+      </span>
+    </span>
+  );
+}
+
+function LogPanel({ logs }: { readonly logs: readonly AppLogView[] }) {
+  const [query, setQuery] = useState('');
+  const [level, setLevel] = useState('all');
+  const filtered = logs.filter(
+    (log) =>
+      (level === 'all' || (log.level ?? 'plain') === level) &&
+      [log.message, log.logger, log.label]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+  );
+  return (
+    <div className="tw-log-panel">
+      <div className="tw-log-filters">
+        <label className="tw-search-box">
+          <Search aria-hidden="true" size={13} />
+          <span className="sr-only">Search logs</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder="Search logs"
+          />
+          {query !== '' ? (
+            <button
+              className="tw-clear-search"
+              type="button"
+              aria-label="Clear log search"
+              onClick={() => setQuery('')}
+            >
+              <X aria-hidden="true" size={13} />
+            </button>
+          ) : null}
+        </label>
+        <label className="tw-log-level">
+          <span>Level</span>
+          <select
+            aria-label="Log level"
+            value={level}
+            onChange={(event) => setLevel(event.currentTarget.value)}
+          >
+            <option value="all">All levels</option>
+            {UI_LOG_LEVELS.map((value) => (
+              <option value={value} key={value}>
+                {value}
+              </option>
+            ))}
+            <option value="plain">Unleveled</option>
+          </select>
+        </label>
+        <span className="tw-filter-count" role="status">
+          {filtered.length} of {logs.length} logs at this moment
+        </span>
+        {level !== 'all' || query !== '' ? (
+          <button
+            type="button"
+            className="tw-secondary-button"
+            onClick={() => {
+              setLevel('all');
+              setQuery('');
+            }}
+          >
+            Reset log filters
+          </button>
+        ) : null}
+      </div>
+      {logs.length === 0 ? (
+        <InspectorEmpty icon={FileText} text="No application logs for this session" />
+      ) : filtered.length === 0 ? (
+        <InspectorEmpty icon={Search} text="No logs match these filters" />
+      ) : (
+        <ol className="tw-log-list">
+          {filtered.map((log, index) => (
+            <li key={`${log.t}:${log.seq ?? index}`} data-level={log.level ?? 'plain'}>
+              <time>{formatTime(log.t)}</time>
+              <span>{log.level ?? log.source}</span>
+              <p>{log.message}</p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
 

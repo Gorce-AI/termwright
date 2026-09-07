@@ -1,3 +1,4 @@
+import { copyText } from './clipboard.js';
 import { AlertTriangle, X } from 'lucide-react';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { DataSource, ViewerState } from '../data-source.js';
@@ -334,7 +335,7 @@ export function TermwrightApp({
   const openSource = (execution: ExecutionCase) => {
     const file = projectFile(state.project?.root ?? '', execution.source.file);
     const location = editorLink(preferences.editor, file, execution.source.line);
-    const copy = navigator.clipboard.writeText(file);
+    const copy = copyText(file);
     if (location === null) {
       void copy
         .then(() => dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` }))
@@ -343,13 +344,21 @@ export function TermwrightApp({
     }
     // URL schemes cannot report whether a local editor accepted them. Copying
     // the exact path first leaves a deterministic fallback without another UI.
-    void copy.catch(() => undefined);
     window.location.href = location;
-    dispatch({
-      type: 'toast',
-      tone: 'info',
-      text: 'Opening source in your configured editor; the path was copied as a fallback.',
-    });
+    void copy.then(
+      () =>
+        dispatch({
+          type: 'toast',
+          tone: 'info',
+          text: 'Opening source in your configured editor; the path was copied as a fallback.',
+        }),
+      () =>
+        dispatch({
+          type: 'toast',
+          tone: 'info',
+          text: `Opening source in your configured editor. Clipboard unavailable: ${file}`,
+        }),
+    );
   };
   const stop = () => {
     if (client === undefined || state.run.status !== 'running') return;
@@ -570,9 +579,26 @@ export function TermwrightApp({
                       recordDraft.outFile || 'tests/new.test.ts',
                     );
                     const link = editorLink(preferences.editor, file);
-                    void navigator.clipboard.writeText(file).catch(() => undefined);
-                    if (link !== null) window.location.href = link;
-                    else dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` });
+                    const copy = copyText(file);
+                    if (link !== null) {
+                      window.location.href = link;
+                      void copy.catch(() =>
+                        dispatch({
+                          type: 'toast',
+                          tone: 'failure',
+                          text: `Clipboard unavailable: ${file}`,
+                        }),
+                      );
+                    } else
+                      void copy.then(
+                        () => dispatch({ type: 'toast', tone: 'success', text: `Copied ${file}` }),
+                        () =>
+                          dispatch({
+                            type: 'toast',
+                            tone: 'failure',
+                            text: `Could not copy ${file}`,
+                          }),
+                      );
                   },
                   onRecord: () => {
                     setRecordDraft((draft) => ({ ...draft, busy: false, error: null }));
@@ -626,10 +652,16 @@ export function TermwrightApp({
             void saveRecording();
           }}
           onCopy={() => {
-            void navigator.clipboard
-              .writeText(recordReview.source)
+            void copyText(recordReview.source)
               .then(() =>
                 dispatch({ type: 'toast', tone: 'success', text: 'Generated test copied.' }),
+              )
+              .catch(() =>
+                dispatch({
+                  type: 'toast',
+                  tone: 'failure',
+                  text: 'Clipboard unavailable. Select the generated source to copy it manually.',
+                }),
               );
           }}
           onDiscard={() => {

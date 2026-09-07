@@ -20,3 +20,7 @@ Move collapsed panel handles to their own workspace edges and move terminal expa
 Add element picking directly on live and replay terminal screens. Hover highlights recorded semantic bounds; click reveals the element in its tree and opens its details, restoring a hidden inspector on desktop or mobile. Pause playback for selection, support arrows/Enter/Escape, and keep inspection input separate from terminal input. Associate asynchronous tree responses with the requested playhead to reject stale data, including moments between terminal output events.
 
 Drain terminal writes and pending viewport reset callbacks before disposing a replaced emulator, preventing renderer errors during repeated Unicode profile changes.
+
+Improve the remaining Runner workspace workflows: run exact search matches from the catalog, clear searches, and dismiss the New test menu with Escape, outside clicks or keyboard navigation. Distinguish loading, empty and failed history requests; refresh and search retained runs, retain mobile result labels and use consistent outcome colors. Show recording availability once per run.
+
+Add text and explicit severity filters for application logs without inferring severity from plain file messages. Hide live actionability in replay details and report successful or unavailable clipboard writes across inspector fields, diagnostics, source links and generated tests. Share modal focus management with settings confirmations, including Escape cancellation, focus containment and return to the trigger.

@@ -155,6 +155,24 @@ trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
 is. The browser app never imports Vitest and never reads a `.twtrace` itself.
 
+## Finding tests, history and logs
+
+In **Specs**, search by test, file, feature or tag. **Run matching** starts only
+the runnable cases in the filtered results. **Run all**, directory and file
+run controls retain their full scopes. Clear search to restore the remembered
+tree expansion. The **New test** menu supports arrow navigation, Escape and
+clicking outside it.
+
+In **Runs**, search by run ID, commit or result and use **Refresh** to load runs
+completed since the page opened. Loading and request errors have separate states;
+a failed request offers **Try again**. Native manifests currently retain results
+and attempts without a recording reference, so this page does not offer replay.
+
+In **Logs**, combine text search with the recorded severity. **Unleveled** selects
+file messages without a declared level; a word such as `ERROR` in their text does
+not turn them into structured errors. Filters operate on logs available at the
+current playhead. **Reset log filters** restores all available messages.
+
 ## Picking an element on the terminal
 
 Choose **Pick element** in the terminal toolbar to pause replay and inspect the
