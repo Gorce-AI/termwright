@@ -213,8 +213,8 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
     const terminal = await sessions.launch(CONFORMANCE_FIXTURES.inkProbe(), {
       columns: 80,
       rows: 24,
-      semanticNegotiationMs: 5_000,
       probe: 'ink',
+      requiredCapabilities: ['semantic-tree'],
     });
     await terminal.waitForText('Termwright Conformance');
     await terminal.getByTestId('status').resolve();
