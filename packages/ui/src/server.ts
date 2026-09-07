@@ -244,7 +244,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
    * it produced has to outlive it, or "save" after "stop" would have nothing
    * to write. Cleared when it is saved or discarded.
    */
-  let pending: { readonly source: string; readonly outFile: string | undefined } | undefined;
+  let pending:
+    | { readonly id: string; readonly source: string; readonly outFile: string | undefined }
+    | undefined;
 
   /**
    * Starts recording a program.
@@ -306,7 +308,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     recorder = undefined;
     mode = 'live';
     await live.close();
-    pending = { source, outFile: recordOptions?.outFile };
+    pending = { id: live.sessionId, source, outFile: recordOptions?.outFile };
     // No `run-end`: stopping a recording is not a run finishing. A new
     // `run-start`, however, is the authoritative mode transition and replaces
     // the old recording backlog. Without it a tab opened after Stop replayed
@@ -717,6 +719,8 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
             writable: session.write !== undefined,
           })),
           trace: overview ?? null,
+          recordDraft:
+            pending === undefined ? null : { ...pending, outFile: pending.outFile ?? null },
           record:
             recorder === undefined
               ? null
@@ -1065,6 +1069,13 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sendJson(response, 409, { error: 'already recording' });
           return;
         }
+        if (pending !== undefined) {
+          sendJson(response, 409, {
+            error:
+              'An unsaved draft exists. Review, save or discard it before recording another test.',
+          });
+          return;
+        }
         const sessionId = await beginRecording({
           command: command as string[],
           cwd: options.discovery?.cwd ?? process.cwd(),
@@ -1078,16 +1089,30 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sendJson(response, 409, { error: 'not recording' });
           return;
         }
-        sendJson(response, 200, { source: await endRecording() });
+        const source = await endRecording();
+        sendJson(response, 200, { source, draftId: pending?.id });
         return;
       }
       case 'POST /api/record/discard': {
+        const body = await readJsonBody(request);
+        if (body['draftId'] !== undefined && body['draftId'] !== pending?.id) {
+          sendJson(response, 409, {
+            error: 'This draft changed in another tab. Reload to review the current draft.',
+          });
+          return;
+        }
         pending = undefined;
         sendJson(response, 200, { discarded: true });
         return;
       }
       case 'POST /api/record/save': {
         const body = await readJsonBody(request);
+        if (body['draftId'] !== undefined && body['draftId'] !== pending?.id) {
+          sendJson(response, 409, {
+            error: 'This draft changed in another tab. Reload to review the current draft.',
+          });
+          return;
+        }
         const file = body['file'];
         if (file !== undefined && typeof file !== 'string') {
           sendJson(response, 400, { error: 'file must be a string' });

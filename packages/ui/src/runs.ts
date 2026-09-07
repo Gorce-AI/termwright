@@ -8,12 +8,22 @@ import {
   type RunHistoryRecord,
   type RunManifest as NativeRunManifest,
 } from '@termwright/run-history';
+import { openTrace } from '@termwright/trace';
 import { parseRunId, type RunId } from '@termwright/protocol/run-events';
 
 export { RUN_MANIFEST_VERSION } from '@termwright/run-history';
 export const DEFAULT_RUNS_DIR = '.termwright/runs';
 
+export interface RunRecording {
+  readonly path: string;
+  readonly sessionId: string;
+  readonly available: boolean;
+  readonly reason?: string;
+}
+
 export interface RunTestAttempt {
+  readonly executionId: string;
+  readonly recordings: readonly RunRecording[];
   readonly attemptId: string;
   readonly repeat: number;
   readonly retry: number;
@@ -94,7 +104,51 @@ export async function readRunManifest(runsDir: string, id: string): Promise<RunD
   } catch {
     return { state: 'corrupt', id, runId: null, reason: 'invalid canonical RunId' };
   }
-  return projectDetail(await readNativeRunManifest(runsDir, runId));
+  const detail = projectDetail(await readNativeRunManifest(runsDir, runId));
+  if (detail.state !== 'complete') return detail;
+  const unique = new Map(
+    detail.tests.flatMap((test) =>
+      test.attempts.flatMap((attempt) =>
+        attempt.recordings.map((recording) => [recording.path, recording] as const),
+      ),
+    ),
+  );
+  const queue = [...unique.values()];
+  let next = 0;
+  // Avoid exhausting file descriptors when a run retains hundreds of sessions.
+  await Promise.all(
+    Array.from({ length: Math.min(8, queue.length) }, async () => {
+      while (next < queue.length) {
+        const recording = queue[next++]!;
+        try {
+          const reader = await openTrace(recording.path);
+          await reader.close();
+        } catch {
+          unique.set(recording.path, {
+            ...recording,
+            available: false,
+            reason: 'Recording is missing or unreadable. It may have been moved or removed.',
+          });
+        }
+      }
+    }),
+  );
+  return {
+    ...detail,
+    tests: detail.tests.map((test) => ({
+      ...test,
+      attempts: test.attempts.map((attempt) => ({
+        ...attempt,
+        recordings: attempt.recordings.map((recording) => ({
+          ...recording,
+          available: unique.get(recording.path)!.available,
+          ...(unique.get(recording.path)!.reason === undefined
+            ? {}
+            : { reason: unique.get(recording.path)!.reason! }),
+        })),
+      })),
+    })),
+  };
 }
 
 function projectSummary(record: RunHistoryRecord): RunSummaryEntry {
@@ -133,6 +187,7 @@ function projectDetail(record: RunHistoryRecord): RunDetail {
 }
 
 function projectComplete(manifest: NativeRunManifest): RunManifest {
+  const recordingsByAttempt = retainedRecordings(manifest);
   const skippedTasks = new Set(
     manifest.events
       .filter((event) => event.type === 'test.skipped' && event.identity.runnerTaskId !== undefined)
@@ -148,6 +203,8 @@ function projectComplete(manifest: NativeRunManifest): RunManifest {
     const nativeAttempts = attemptsByTask.get(spec.runnerTaskId) ?? [];
     const attempts = nativeAttempts.map((attempt): RunTestAttempt => ({
       attemptId: attempt.attemptId,
+      executionId: attempt.executionId,
+      recordings: [...(recordingsByAttempt.get(attempt.attemptId)?.values() ?? [])],
       repeat: attempt.repeat,
       retry: attempt.retry,
       status: attempt.status,
@@ -200,4 +257,40 @@ function sumDuration(attempts: readonly NativeRunAttempt[]): number | null {
   return durations.some((duration) => duration === null)
     ? null
     : durations.reduce<number>((total, duration) => total + (duration ?? 0), 0);
+}
+
+/** References come from the committed journal, never from titles or directory scans. */
+function retainedRecordings(
+  manifest: NativeRunManifest,
+): ReadonlyMap<string, ReadonlyMap<string, RunRecording>> {
+  const recordings = new Map<string, Map<string, RunRecording>>();
+  const attempts = new Map(manifest.attempts.map((attempt) => [attempt.attemptId, attempt]));
+  for (const event of manifest.events) {
+    const attempt =
+      event.identity.attemptId === undefined ? undefined : attempts.get(event.identity.attemptId);
+    if (
+      attempt === undefined ||
+      event.type !== 'trace.finalized' ||
+      event.eventClass !== 'authoritative' ||
+      event.identity.attemptId !== attempt.attemptId ||
+      event.identity.executionId !== attempt.executionId ||
+      event.identity.runnerTaskId !== attempt.runnerTaskId ||
+      event.identity.sessionId === undefined
+    )
+      continue;
+    const payload = event.payload;
+    if (
+      typeof payload !== 'object' ||
+      payload === null ||
+      !('traceRef' in payload) ||
+      typeof payload.traceRef !== 'string' ||
+      payload.traceRef === ''
+    )
+      continue;
+    const path = payload.traceRef;
+    const retained = recordings.get(attempt.attemptId) ?? new Map<string, RunRecording>();
+    retained.set(path, { path, sessionId: event.identity.sessionId, available: true });
+    recordings.set(attempt.attemptId, retained);
+  }
+  return recordings;
 }

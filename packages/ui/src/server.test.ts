@@ -1509,6 +1509,42 @@ describe('starting a run from the panel', () => {
 });
 
 describe('record mode', () => {
+  it('retains the stopped draft and rejects stale saves, discards and replacement recordings', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-draft-'));
+    tempDirectories.push(directory);
+    const outFile = join(directory, 'saved.test.ts');
+    const harness = new FakeHarness('draft-session');
+    const server = await start({
+      record: {
+        command: ['node', 'agent.js'],
+        outFile,
+        launch: async () => harness.asHarness(),
+      },
+    });
+    const post = (route: string, body: object = {}) =>
+      api(server, `/api/record/${route}`, { method: 'POST', body: JSON.stringify(body) });
+    const stopped = await post('stop');
+    expect(stopped.status).toBe(200);
+    const { source, draftId } = (await stopped.json()) as { source: string; draftId: string };
+    expect(draftId).toBe('draft-session');
+    expect(source).toContain('test(');
+    const draft = async () =>
+      (
+        (await (await api(server, '/api/state')).json()) as {
+          recordDraft?: { id: string; source: string; outFile: string };
+        }
+      ).recordDraft;
+    expect(await draft()).toEqual({ id: draftId, source, outFile });
+    expect((await post('start', { command: ['node', 'agent.js'] })).status).toBe(409);
+    expect((await post('save', { draftId: 'stale' })).status).toBe(409);
+    expect((await post('discard', { draftId: 'stale' })).status).toBe(409);
+    expect(await draft()).toEqual({ id: draftId, source, outFile });
+    await expect(readFile(outFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await post('save', { draftId })).status).toBe(200);
+    expect(await readFile(outFile, 'utf8')).toBe(source);
+    expect(await draft()).toBeNull();
+  });
+
   it('forwards browser input to the child and generates a test', async () => {
     const harness = new FakeHarness('rec');
     const server = await start({

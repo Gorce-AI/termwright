@@ -3611,3 +3611,132 @@ html[data-motion='reduce'] *::after {
     margin-inline: 13px;
   }
 }
+.tw-history-replays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+.tw-history-replays > span {
+  display: grid;
+  gap: 4px;
+}
+.tw-tree-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--tw-panel);
+  padding-bottom: 8px;
+}
+.tw-tree-search .tw-search-box {
+  margin: 0;
+  min-height: 31px;
+  padding-inline: 8px;
+}
+.tw-tree-search-results {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tw-muted);
+  font-size: 10px;
+  margin-top: 5px;
+}
+.tw-tree-search-results > span {
+  flex: 1;
+}
+.tw-draft-link {
+  color: var(--tw-amber);
+}
+.tw-attempt-comparison {
+  border: 1px solid var(--tw-stroke);
+  border-radius: 10px;
+  padding: 16px;
+  margin-block: 12px;
+  min-width: 0;
+}
+.tw-attempt-comparison > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+.tw-attempt-comparison p {
+  color: var(--tw-muted);
+  font-size: 11px;
+}
+.tw-compare-alignment,
+.tw-comparison-screens > section > label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  margin-block: 10px;
+}
+.tw-attempt-comparison select {
+  background: var(--tw-panel);
+  color: var(--tw-copy);
+  border: 1px solid var(--tw-stroke);
+  border-radius: 5px;
+  padding: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.tw-comparison-screens {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.tw-comparison-screens > section {
+  min-width: 0;
+}
+.tw-comparison-stage {
+  height: 360px;
+  display: grid;
+  min-width: 0;
+}
+.tw-comparison-stage > .tw-terminal-machine {
+  grid-row: 1;
+}
+.tw-compare-seek {
+  display: grid;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--tw-muted);
+  margin-block: 10px;
+}
+.tw-compare-seek input {
+  width: 100%;
+}
+.tw-semantic-diff details {
+  border-top: 1px solid var(--tw-stroke);
+  padding: 9px 0;
+  font-size: 11px;
+}
+.tw-semantic-diff details > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.tw-semantic-diff pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--tw-panel);
+  padding: 10px;
+}
+.tw-dialog footer {
+  flex-wrap: wrap;
+}
+@media (max-width: 1099px) {
+  .tw-comparison-screens {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tw-comparison-stage {
+    height: 300px;
+  }
+  .tw-attempt-comparison {
+    padding: 10px;
+  }
+  .tw-compare-alignment {
+    flex-wrap: wrap;
+  }
+}

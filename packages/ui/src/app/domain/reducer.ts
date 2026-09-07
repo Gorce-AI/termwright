@@ -101,7 +101,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const executions = state.executions.some(
         (test) => test.executionId === action.execution.executionId,
       )
-        ? state.executions
+        ? state.executions.map((test) =>
+            test.executionId === action.execution.executionId ? action.execution : test,
+          )
         : [...state.executions, action.execution];
       return {
         ...state,

@@ -912,10 +912,13 @@ describe('fresh React runner', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await page.route('**/api/runs', async (route) => {
-      await gate;
-      await route.continue();
-    });
+    await page.route(
+      (url) => url.pathname === '/api/runs',
+      async (route) => {
+        await gate;
+        await route.continue();
+      },
+    );
     await page.goto(server.url, { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Runs', exact: true }).click();
     await page.getByText('Loading run history…', { exact: true }).waitFor();
@@ -1108,6 +1111,131 @@ describe('fresh React runner', () => {
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
+  it('opens exact historical recordings, restores deep links and compares attempts without mixing their frames', async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), 'tw-replay-history-'));
+    temporaryDirectories.push(runsDir);
+    const failed = await buildWrittenFixtureTrace({ outcome: 'Request rejected' });
+    const passed = await buildWrittenFixtureTrace({ outcome: 'Request approved' });
+    const id = await writeNativeRunFixture(runsDir, {
+      tests: [
+        {
+          title: 'recorded retry',
+          file: '/retry.test.ts',
+          status: 'passed',
+          retries: ['failed', 'passed'],
+          recordings: [[failed], [passed, '/missing-replay.twtrace']],
+        },
+      ],
+    });
+    const server = await startUiServer({ runsDir });
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(id), 'u') }).click();
+    await page.getByRole('button', { name: 'Replay attempt 1 · failed', exact: true }).waitFor();
+    expect(
+      await page
+        .getByRole('button', { name: 'Replay attempt 2 · session 2 · passed', exact: true })
+        .isDisabled(),
+    ).toBe(true);
+    await page.getByRole('button', { name: 'Compare attempts', exact: true }).click();
+    const comparison = page.getByRole('region', { name: 'Attempt comparison' });
+    await comparison.getByText('1 changed, added or removed elements', { exact: true }).waitFor();
+    await expect
+      .poll(() =>
+        comparison
+          .getByRole('region', { name: 'Before recording' })
+          .locator('.xterm-rows')
+          .innerText(),
+      )
+      .toContain('Request rejected');
+    await expect
+      .poll(() =>
+        comparison
+          .getByRole('region', { name: 'After recording' })
+          .locator('.xterm-rows')
+          .innerText(),
+      )
+      .toContain('Request approved');
+    await comparison
+      .getByRole('combobox', { name: 'Align recordings' })
+      .selectOption({ label: 'approve · step end' });
+    expect(await comparison.getByLabel('Before replay position').inputValue()).toBe('1500');
+    expect(await comparison.getByLabel('After replay position').inputValue()).toBe('1500');
+    await comparison.getByText('changed · status · Request approved', { exact: true }).click();
+    await page.screenshot({ path: '/private/tmp/termwright-comparison-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+      false,
+    );
+    await page.screenshot({ path: '/private/tmp/termwright-comparison-mobile.png' });
+    await comparison.getByRole('button', { name: 'Close comparison' }).click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Replay attempt 1 · failed', exact: true }).click();
+    await page.getByLabel('Replay position').fill('1800');
+    await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request rejected');
+    const url = new URL(page.url());
+    expect(url.searchParams.get('traceRef')).toBe(failed);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByLabel('Replay position').waitFor();
+    await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request rejected');
+    await page.getByRole('button', { name: 'Runs', exact: true }).click();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(id), 'u') }).click();
+    await page
+      .getByRole('button', { name: 'Replay attempt 2 · session 1 · passed', exact: true })
+      .click();
+    await page.getByLabel('Replay position').fill('1800');
+    await expect.poll(() => page.locator('.xterm-rows').innerText()).toContain('Request approved');
+    expect(new URL(page.url()).searchParams.get('traceRef')).toBe(passed);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('searches semantic names, roles and refs, keeps ancestors and pins matching elements', async () => {
+    const page = await tracePage(await buildWrittenFixtureTrace());
+    await page.getByLabel('Replay position').fill('500');
+    await page.getByRole('button', { name: 'Show inspector' }).click();
+    const tree = page.getByRole('tree', { name: 'Semantic tree' });
+    const root = tree.getByRole('treeitem', { name: /dialog Permission/u });
+    await root.focus();
+    await page.keyboard.press('ArrowLeft');
+    const search = page.getByLabel('Search elements');
+    await search.fill('approve');
+    await tree.getByRole('treeitem', { name: /button Approve/u }).waitFor();
+    expect(await root.getAttribute('aria-expanded')).toBe('true');
+    await search.press('Enter');
+    await expect
+      .poll(() =>
+        tree.getByRole('treeitem', { name: /button Approve/u }).getAttribute('aria-selected'),
+      )
+      .toBe('true');
+    await page
+      .locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"][data-pinned="true"]')
+      .waitFor();
+    await search.fill('semantic:b1@1');
+    await page.getByRole('button', { name: 'Next matching element' }).click();
+    expect(await tree.getByRole('treeitem').count()).toBe(2);
+    await search.fill('not-an-element');
+    await page.getByText('No matching elements', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Next matching element' }).isDisabled()).toBe(
+      true,
+    );
+    await page.getByRole('button', { name: 'Clear element search' }).click();
+    expect(await root.getAttribute('aria-expanded')).toBe('false');
+    await search.fill('not-an-element');
+    await page.getByRole('button', { name: 'Pick element', exact: true }).click();
+    const screen = await page.locator('.xterm-screen').boundingBox();
+    if (!screen) throw new Error('Missing screen');
+    await page.mouse.click(
+      screen.x + (screen.width * 4.5) / 80,
+      screen.y + (screen.height * 3.5) / 24,
+    );
+    await page.getByRole('region', { name: 'Selected element details' }).waitFor();
+    await expect.poll(() => search.inputValue()).toBe('');
+    await page.screenshot({ path: '/private/tmp/termwright-tree-search-picker.png' });
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
   it('lists canonical native runs with exact attempts and honest recording availability', async () => {
     const runsDir = await mkdtemp(join(tmpdir(), 'tw-fresh-runs-'));
     const startedAt = Date.now() - 5_000;
@@ -1151,7 +1279,7 @@ describe('fresh React runner', () => {
     expect(await page.getByText(/retry 0/u).count()).toBe(1);
     expect(await page.getByText(/retry 1/u).count()).toBe(1);
     expect(
-      await page.getByText('Recording not retained in native manifest', { exact: true }).count(),
+      await page.getByText('No recordings retained for this run.', { exact: true }).count(),
     ).toBe(1);
     expect(await page.getByRole('button', { name: 'Replay', exact: true }).count()).toBe(0);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
@@ -1238,7 +1366,12 @@ describe('fresh React runner', () => {
     expect(existsSync(saved)).toBe(false);
     expect(await page.evaluate(() => document.activeElement?.textContent)).toContain('Save');
     await page.keyboard.press('Tab');
-    expect(await page.evaluate(() => document.activeElement?.textContent)).toContain('Discard');
+    expect(
+      await page
+        .getByRole('dialog', { name: 'Generated test' })
+        .getByLabel('Save destination')
+        .evaluate((element) => element === document.activeElement),
+    ).toBe(true);
     await page.keyboard.press('Shift+Tab');
     expect(await page.evaluate(() => document.activeElement?.textContent)).toContain('Save');
     await review.getByRole('button', { name: /Save to/u }).click();
@@ -1253,6 +1386,14 @@ describe('fresh React runner', () => {
     expect(existsSync(discarded)).toBe(false);
     await page.keyboard.press('Escape');
     await expect.poll(() => page.getByRole('dialog', { name: 'Generated test' }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Review recorded draft' }).waitFor();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Review recorded draft' }).click();
+    await page.getByRole('dialog', { name: 'Generated test' }).waitFor();
+    expect(await page.locator('.tw-generated-source').innerText()).toContain('test(');
+    await page.getByRole('button', { name: 'Discard', exact: true }).click();
+    await expect.poll(() => page.getByRole('dialog', { name: 'Generated test' }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Review recorded draft' }).count()).toBe(0);
     expect(existsSync(discarded)).toBe(false);
     await expect
       .poll(() => page.getByText('Recording discarded; no file was written.').count())

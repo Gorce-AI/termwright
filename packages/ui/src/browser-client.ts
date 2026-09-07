@@ -85,6 +85,12 @@ export class RunnerClient implements DataSource {
     this.#token = token;
   }
 
+  forTrace(path: string): DataSource {
+    const scoped = new RunnerClient(this.#token);
+    scoped.#archivePath = path;
+    return scoped;
+  }
+
   /** Opens the socket and reconnects when the server restarts. */
   connect(
     onMessage: (message: ServerMessage) => void,
@@ -389,13 +395,13 @@ export class RunnerClient implements DataSource {
   }
 
   /** Stops recording and returns the test that was written. */
-  async stopRecording(): Promise<{ source: string }> {
+  async stopRecording(): Promise<{ source: string; draftId?: string }> {
     return this.#post('/api/record/stop', {});
   }
 
   /** Throws away a recording the panel decided not to keep. */
-  async discardRecording(): Promise<{ discarded: boolean }> {
-    return this.#post('/api/record/discard', {});
+  async discardRecording(draftId?: string): Promise<{ discarded: boolean }> {
+    return this.#post('/api/record/discard', draftId === undefined ? {} : { draftId });
   }
 
   async recordAction(
@@ -420,8 +426,11 @@ export class RunnerClient implements DataSource {
     return this.#get('/api/record/events');
   }
 
-  async save(file?: string): Promise<{ path: string; source: string }> {
-    return this.#post('/api/record/save', file === undefined ? {} : { file });
+  async save(file?: string, draftId?: string): Promise<{ path: string; source: string }> {
+    return this.#post('/api/record/save', {
+      ...(file === undefined ? {} : { file }),
+      ...(draftId === undefined ? {} : { draftId }),
+    });
   }
 
   async #get<T>(path: string): Promise<T> {

@@ -9,6 +9,8 @@ import type { UiActionability } from '../../events.js';
 import {
   Braces,
   Check,
+  ChevronUp,
+  ChevronDown,
   X,
   Copy,
   FileText,
@@ -359,10 +361,53 @@ function SemanticTree({
   readonly onPreviewNode?: (node: SemanticNode | null, snapshot: SemanticSnapshot | null) => void;
   readonly onPinNode?: (node: SemanticNode, snapshot: SemanticSnapshot) => void;
 }) {
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const needle = query.trim().toLowerCase();
+  const matches = snapshot.nodes.filter((node) =>
+    [node.role, node.name, node.testId, node.id, `semantic:${node.id}@${snapshot.revision}`].some(
+      (value) => value?.toLowerCase().includes(needle),
+    ),
+  );
+  const matched = new Set(matches.map((node) => node.id));
+  const included = new Set(matched);
+  const parents = new Map(snapshot.nodes.map((node) => [node.id, node.parentId]));
+  if (needle !== '')
+    for (const node of matches) {
+      const visited = new Set<string>();
+      let id = node.parentId;
+      while (id !== undefined && !visited.has(id)) {
+        visited.add(id);
+        included.add(id);
+        id = parents.get(id);
+      }
+    }
+  const cycleMatch = (direction: number, focusTree = false) => {
+    if (matches.length === 0) return;
+    const current = matches.findIndex((node) => node.id === selectedNodeId);
+    const index =
+      current === -1
+        ? direction < 0
+          ? matches.length - 1
+          : 0
+        : (current + direction + matches.length) % matches.length;
+    const node = matches[index]!;
+    onSelect(node.id);
+    onPinNode?.(node, snapshot);
+    const element = [
+      ...(treeRef.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? []),
+    ].find((item) => item.dataset['nodeId'] === node.id);
+    element?.scrollIntoView({ block: 'nearest' });
+    if (focusTree) element?.focus({ preventScroll: true });
+  };
+  // A picker selection reveals its node even if an earlier tree search excluded it.
+  useEffect(() => {
+    if (reveal !== null) setQuery('');
+  }, [reveal]);
   const [storedCollapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const [revealed, setRevealed] = useState<InspectorSelection | null>(null);
   const treeRef = useRef<HTMLUListElement>(null);
-  const collapsed = new Set(storedCollapsed);
+  const collapsed = new Set(needle === '' ? storedCollapsed : []);
   if (reveal !== null && reveal !== revealed) {
     const ancestors = new Map(snapshot.nodes.map((node) => [node.id, node.parentId]));
     const visited = new Set<string>();
@@ -374,7 +419,7 @@ function SemanticTree({
     }
   }
   useLayoutEffect(() => {
-    if (reveal === null || reveal === revealed) return;
+    if (reveal === null || reveal === revealed || needle !== '') return;
     setCollapsed(collapsed);
     setRevealed(reveal);
     const selected = [
@@ -382,16 +427,19 @@ function SemanticTree({
     ].find((element) => element.dataset['nodeId'] === reveal.nodeId);
     selected?.focus({ preventScroll: true });
     selected?.scrollIntoView({ block: 'nearest' });
-  }, [reveal, revealed]);
+  }, [reveal, revealed, needle]);
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const children = new Map<string, SemanticNode[]>();
   for (const node of snapshot.nodes) {
-    if (node.parentId === undefined) continue;
+    if (node.parentId === undefined || (needle !== '' && !included.has(node.id))) continue;
     children.set(node.parentId, [...(children.get(node.parentId) ?? []), node]);
   }
   const roots = snapshot.rootIds
     .map((id) => byId.get(id))
-    .filter((node): node is SemanticNode => node !== undefined);
+    .filter(
+      (node): node is SemanticNode =>
+        node !== undefined && (needle === '' || included.has(node.id)),
+    );
   const rows = useMemo(() => {
     const visible: {
       readonly id: string;
@@ -415,32 +463,96 @@ function SemanticTree({
     selectedId: selectedNodeId,
     collapsed,
     onSelect,
-    onCollapsed: setCollapsed,
+    onCollapsed: needle === '' ? setCollapsed : () => undefined,
   });
   return (
-    <ul
-      className="tw-semantic-tree"
-      ref={treeRef}
-      role="tree"
-      aria-label="Semantic tree"
-      onKeyDown={navigation.onKeyDown}
-    >
-      {roots.map((node) => (
-        <SemanticTreeNode
-          key={node.id}
-          node={node}
-          snapshot={snapshot}
-          children={children}
-          selectedNodeId={navigation.activeId}
-          onSelect={onSelect}
-          collapsed={collapsed}
-          item={navigation.item}
-          {...(recorder === undefined ? {} : { recorder })}
-          {...(onPreviewNode === undefined ? {} : { onPreviewNode })}
-          {...(onPinNode === undefined ? {} : { onPinNode })}
-        />
-      ))}
-    </ul>
+    <>
+      <div className="tw-tree-search">
+        <label className="tw-search-box">
+          <Search aria-hidden="true" size={13} />
+          <span className="sr-only">Search elements</span>
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder="Role, name, test ID or ref"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setQuery('');
+              }
+              if (event.key === 'Enter' && needle !== '') {
+                event.preventDefault();
+                cycleMatch(event.shiftKey ? -1 : 1);
+              }
+            }}
+          />
+          {query !== '' ? (
+            <button
+              type="button"
+              className="tw-clear-search"
+              aria-label="Clear element search"
+              onClick={() => {
+                setQuery('');
+                searchRef.current?.focus();
+              }}
+            >
+              <X aria-hidden="true" size={13} />
+            </button>
+          ) : null}
+        </label>
+        {needle === '' ? null : (
+          <div className="tw-tree-search-results">
+            <span role="status">
+              {matches.length === 0
+                ? 'No matching elements'
+                : `${matched.has(selectedNodeId ?? '') ? matches.findIndex((node) => node.id === selectedNodeId) + 1 : 0} / ${matches.length} matches`}
+            </span>
+            <button
+              type="button"
+              className="tw-inspector-control"
+              aria-label="Previous matching element"
+              disabled={matches.length === 0}
+              onClick={() => cycleMatch(-1)}
+            >
+              <ChevronUp aria-hidden="true" size={13} />
+            </button>
+            <button
+              type="button"
+              className="tw-inspector-control"
+              aria-label="Next matching element"
+              disabled={matches.length === 0}
+              onClick={() => cycleMatch(1)}
+            >
+              <ChevronDown aria-hidden="true" size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+      <ul
+        className="tw-semantic-tree"
+        ref={treeRef}
+        role="tree"
+        aria-label="Semantic tree"
+        onKeyDown={navigation.onKeyDown}
+      >
+        {roots.map((node) => (
+          <SemanticTreeNode
+            key={node.id}
+            node={node}
+            snapshot={snapshot}
+            children={children}
+            selectedNodeId={navigation.activeId}
+            onSelect={onSelect}
+            collapsed={collapsed}
+            item={navigation.item}
+            {...(recorder === undefined ? {} : { recorder })}
+            {...(onPreviewNode === undefined ? {} : { onPreviewNode })}
+            {...(onPinNode === undefined ? {} : { onPinNode })}
+          />
+        ))}
+      </ul>
+    </>
   );
 }
 

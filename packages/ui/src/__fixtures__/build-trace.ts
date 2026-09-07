@@ -163,6 +163,7 @@ export async function buildFixtureTrace(
     readonly rows?: number;
     readonly durationMs?: number;
     readonly assertions?: boolean;
+    readonly outcome?: string;
   } = {},
 ): Promise<string> {
   const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-')), 'session.twtrace');
@@ -211,7 +212,10 @@ export async function buildFixtureTrace(
 
   session.clock = 1_000;
   const step = writer.addStep('approve');
-  session.emit('output', { data: new TextEncoder().encode('running: ls -la\r\n'), timeMs: 1_000 });
+  session.emit('output', {
+    data: new TextEncoder().encode(`${options.outcome ?? 'running: ls -la'}\r\n`),
+    timeMs: 1_000,
+  });
   session.emit('app-log', {
     source: 'adapter',
     timeMs: 1_050,
@@ -226,7 +230,14 @@ export async function buildFixtureTrace(
   });
 
   session.clock = 1_500;
-  session.publish({ ...(FIXTURE_TREES[1] as SemanticSnapshot), columns, rows });
+  session.publish({
+    ...(FIXTURE_TREES[1] as SemanticSnapshot),
+    columns,
+    rows,
+    ...(options.outcome === undefined
+      ? {}
+      : { nodes: [{ ...FIXTURE_TREES[1]!.nodes[0]!, testId: 'outcome', name: options.outcome }] }),
+  });
   step.end('passed');
 
   session.clock = options.durationMs ?? 2_000;

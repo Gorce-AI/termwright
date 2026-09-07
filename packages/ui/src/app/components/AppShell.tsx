@@ -1,5 +1,6 @@
 import {
   Clock3,
+  FilePenLine,
   FlaskConical,
   LayoutDashboard,
   PanelLeftClose,
@@ -15,6 +16,7 @@ import { usePreferences } from '../preferences.js';
 import { Tooltip } from './Tooltip.js';
 
 interface AppShellProps {
+  readonly onReviewDraft?: () => void;
   readonly project: ProjectInfo | null;
   readonly route: AppRoute;
   readonly connected: boolean;
@@ -36,6 +38,7 @@ const navigation: readonly {
 
 export function AppShell({
   project,
+  onReviewDraft,
   route,
   connected,
   features,
@@ -75,6 +78,19 @@ export function AppShell({
               </button>
             </Tooltip>
           ))}
+          {onReviewDraft === undefined ? null : (
+            <Tooltip label="Review recorded draft" placement="right">
+              <button
+                type="button"
+                className="tw-nav-link tw-draft-link"
+                aria-label="Review recorded draft"
+                onClick={onReviewDraft}
+              >
+                <FilePenLine aria-hidden="true" size={18} />
+                <span>Draft</span>
+              </button>
+            </Tooltip>
+          )}
         </nav>
 
         <Tooltip

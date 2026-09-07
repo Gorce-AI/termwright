@@ -113,6 +113,8 @@ export function RecordReviewDialog({
   onSave,
   onCopy,
   onDiscard,
+  onClose,
+  onOutFile,
 }: {
   readonly source: string;
   readonly outFile: string;
@@ -121,10 +123,12 @@ export function RecordReviewDialog({
   readonly onSave: () => void;
   readonly onCopy: () => void;
   readonly onDiscard: () => void;
+  readonly onClose: () => void;
+  readonly onOutFile: (path: string) => void;
 }) {
   const dialog = useRef<HTMLElement>(null);
   const initial = useRef<HTMLButtonElement>(null);
-  useModalFocus(dialog, initial, onDiscard, busy);
+  useModalFocus(dialog, initial, onClose, busy);
   return (
     <div className="tw-dialog-backdrop" role="presentation">
       <section
@@ -143,6 +147,18 @@ export function RecordReviewDialog({
             <i /> REC complete
           </span>
         </header>
+        <p>
+          Your draft stays in this Runner server until saved or discarded. You can close this review
+          and return from Draft in navigation, including after reloading the page.
+        </p>
+        <label>
+          Save destination
+          <input
+            value={outFile}
+            disabled={busy}
+            onChange={(event) => onOutFile(event.currentTarget.value)}
+          />
+        </label>
         <pre className="tw-generated-source">
           <code>{source}</code>
         </pre>
@@ -152,6 +168,9 @@ export function RecordReviewDialog({
           </p>
         )}
         <footer>
+          <button type="button" className="tw-secondary-button" disabled={busy} onClick={onClose}>
+            Keep draft
+          </button>
           <button type="button" className="tw-secondary-button" disabled={busy} onClick={onDiscard}>
             <Trash2 aria-hidden="true" size={14} /> Discard
           </button>

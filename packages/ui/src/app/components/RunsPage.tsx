@@ -10,14 +10,28 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { DataSource } from '../../data-source.js';
-import type { RunManifest, RunSummaryEntry, RunTest } from '../../runs.js';
+import { AttemptComparison } from './AttemptComparison.js';
+import type {
+  RunManifest,
+  RunSummaryEntry,
+  RunTest,
+  RunTestAttempt,
+  RunRecording,
+} from '../../runs.js';
 
 export function RunsPage({
   source,
   selectedRunId,
   onSelectedRunId,
+  onReplay,
 }: {
   readonly source: DataSource;
+  readonly onReplay: (
+    run: RunManifest,
+    test: RunTest,
+    attempt: RunTestAttempt,
+    recording: RunRecording,
+  ) => void;
   readonly selectedRunId: string | null;
   readonly onSelectedRunId: (runId: string | null) => void;
 }) {
@@ -28,6 +42,7 @@ export function RunsPage({
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
   const [query, setQuery] = useState('');
+  const [comparison, setComparison] = useState<RunTest | null>(null);
   const filteredRuns = runs.filter((run) =>
     [
       run.id,
@@ -64,6 +79,7 @@ export function RunsPage({
   useEffect(() => {
     let active = true;
     setOpened(null);
+    setComparison(null);
     setDetailError(null);
     if (selectedRunId === null) {
       return () => {
@@ -231,7 +247,19 @@ export function RunsPage({
           <time className="tw-run-detail-time" dateTime={new Date(opened.startedAt).toISOString()}>
             {formatStartedAt(opened.startedAt)}
           </time>
-          <p className="tw-filter-count">Recording not retained in native manifest</p>
+          {comparison === null ? null : (
+            <AttemptComparison
+              key={comparison.id}
+              source={source}
+              test={comparison}
+              onClose={() => setComparison(null)}
+            />
+          )}
+          {opened.tests.every((test) =>
+            test.attempts.every((attempt) => attempt.recordings.length === 0),
+          ) ? (
+            <p className="tw-filter-count">No recordings retained for this run.</p>
+          ) : null}
           <div className="tw-history-tests">
             {opened.tests.map((test) => (
               <article key={test.id} data-status={test.status}>
@@ -246,6 +274,39 @@ export function RunsPage({
                       <RefreshCw aria-hidden="true" size={12} /> Passed after a retry
                     </span>
                   ) : null}
+                  <div className="tw-history-replays">
+                    {test.attempts.map((attempt, index) =>
+                      attempt.recordings.map((recording, session) => (
+                        <span key={`${attempt.attemptId}:${recording.path}`}>
+                          <button
+                            type="button"
+                            className="tw-secondary-button"
+                            disabled={!recording.available}
+                            title={recording.reason}
+                            onClick={() => onReplay(opened, test, attempt, recording)}
+                          >
+                            Replay attempt {index + 1}
+                            {attempt.recordings.length > 1
+                              ? ` · session ${session + 1}`
+                              : ''} · {attempt.status}
+                          </button>
+                          {recording.available ? null : <small>{recording.reason}</small>}
+                        </span>
+                      )),
+                    )}
+                    {source.forTrace !== undefined &&
+                    test.attempts.filter((attempt) =>
+                      attempt.recordings.some((recording) => recording.available),
+                    ).length >= 2 ? (
+                      <button
+                        type="button"
+                        className="tw-secondary-button"
+                        onClick={() => setComparison(test)}
+                      >
+                        Compare attempts
+                      </button>
+                    ) : null}
+                  </div>
                   {test.attempts.length < 2 ? null : (
                     <details className="tw-history-attempts">
                       <summary>{test.attempts.length} exact attempts</summary>
@@ -259,6 +320,9 @@ export function RunsPage({
                               {attempt.status} · {formatNullable(attempt.durationMs)} ·{' '}
                               {attempt.attemptId}
                             </span>
+                            {attempt.recordings.length === 0 ? (
+                              <small>No recording retained for this attempt.</small>
+                            ) : null}
                           </li>
                         ))}
                       </ol>
