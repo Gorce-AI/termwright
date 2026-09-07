@@ -15,7 +15,7 @@
     "deterministic-adversarial-fixture-schedule": 31,
     "display-or-persisted-wall-time-not-correctness-order": 95,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 212,
+    "explicit-external-or-ui-source-polling": 214,
     "explicit-test-selection-reviewed-with-platform-registry": 74,
     "managed-or-diagnostic-background-task": 76,
     "production-polling-review": 1,
@@ -2956,12 +2956,6 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": ".poll(() =>"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => actionability.getByText('revision 12', { exact: true }).count())"
     },
     {
@@ -3208,6 +3202,12 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity'))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => page.locator('.tw-terminal-viewport').innerText())"
     },
     {
@@ -3287,6 +3287,12 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => Number(await position.inputValue()))"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => approve.getAttribute('aria-selected')).toBe('true');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
@@ -3395,6 +3401,12 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-log-list li').count()).toBe(3);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 1');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",

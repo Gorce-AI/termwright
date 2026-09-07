@@ -13,7 +13,7 @@ editUrl: false
 
 > **TermwrightTestAPI** = *typeof* [`test`](../../variables/test/) & `object`
 
-Defined in: [test/src/fixtures.ts:816](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L816)
+Defined in: [test/src/fixtures.ts:823](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L823)
 
 `test` plus the static `step` helper.
 

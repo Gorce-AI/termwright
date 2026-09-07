@@ -932,7 +932,7 @@ describe('fresh React runner', () => {
     await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(2);
     await page.getByLabel('Search run history').fill('failed');
     await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(1);
-    await page.screenshot({ path: '/private/tmp/termwright-audit-history-result.png' });
+    await page.screenshot({ path: '/tmp/termwright-audit-history-result.png' });
     await page.getByLabel('Search run history').fill('absent-run');
     await page.getByText('No matching runs', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Clear history search' }).click();
@@ -949,7 +949,7 @@ describe('fresh React runner', () => {
     expect(await page.locator('button.tw-run-card').count()).toBe(0);
     releaseDetail();
     await page.getByText('history pass', { exact: true }).waitFor();
-    await page.screenshot({ path: '/private/tmp/termwright-audit-history-detail.png' });
+    await page.screenshot({ path: '/tmp/termwright-audit-history-detail.png' });
     await page.getByRole('button', { name: 'All runs' }).click();
     await expect.poll(() => page.locator('button.tw-run-card').count()).toBe(2);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
@@ -997,7 +997,7 @@ describe('fresh React runner', () => {
     expect(await page.getByLabel('Search specs').inputValue()).toBe('');
     await page.getByLabel('Search specs').fill('login');
     await page.getByText('2 of 3 cases match', { exact: true }).waitFor();
-    await page.screenshot({ path: '/private/tmp/termwright-audit-catalog-matching.png' });
+    await page.screenshot({ path: '/tmp/termwright-audit-catalog-matching.png' });
     const gap = await page.evaluate(
       () =>
         document.querySelector('.tw-spec-files')!.getBoundingClientRect().top -
@@ -1008,7 +1008,7 @@ describe('fresh React runner', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
       false,
     );
-    await page.screenshot({ path: '/private/tmp/termwright-audit-catalog-mobile.png' });
+    await page.screenshot({ path: '/tmp/termwright-audit-catalog-mobile.png' });
     await page.getByRole('button', { name: 'Run 2 matching cases' }).click();
     await expect.poll(() => requests.length).toBe(1);
     expect(requests[0]).toEqual([tests[0]!.id, tests[2]!.id]);
@@ -1100,7 +1100,7 @@ describe('fresh React runner', () => {
     await expect.poll(() => page.locator('.tw-log-list li').count()).toBe(3);
     await page.getByLabel('Log level').selectOption('error');
     expect(await page.locator('.tw-log-list p').allTextContents()).toEqual(['Request failed']);
-    await page.screenshot({ path: '/private/tmp/termwright-audit-log-filter.png' });
+    await page.screenshot({ path: '/tmp/termwright-audit-log-filter.png' });
     await page.getByLabel('Search logs').fill('Connected');
     await page.getByText('No logs match these filters', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Reset log filters' }).click();
@@ -1164,12 +1164,12 @@ describe('fresh React runner', () => {
     expect(await comparison.getByLabel('Before replay position').inputValue()).toBe('1500');
     expect(await comparison.getByLabel('After replay position').inputValue()).toBe('1500');
     await comparison.getByText('changed · status · Request approved', { exact: true }).click();
-    await page.screenshot({ path: '/private/tmp/termwright-comparison-desktop.png' });
+    await page.screenshot({ path: '/tmp/termwright-comparison-desktop.png' });
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
       false,
     );
-    await page.screenshot({ path: '/private/tmp/termwright-comparison-mobile.png' });
+    await page.screenshot({ path: '/tmp/termwright-comparison-mobile.png' });
     await comparison.getByRole('button', { name: 'Close comparison' }).click();
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('button', { name: 'Replay attempt 1 · failed', exact: true }).click();
@@ -1195,20 +1195,18 @@ describe('fresh React runner', () => {
     const page = await tracePage(await buildWrittenFixtureTrace());
     await page.getByLabel('Replay position').fill('500');
     await page.getByRole('button', { name: 'Show inspector' }).click();
+    await expect.poll(() => page.locator('.tw-revision').innerText()).toBe('revision 1');
     const tree = page.getByRole('tree', { name: 'Semantic tree' });
     const root = tree.getByRole('treeitem', { name: /dialog Permission/u });
     await root.focus();
     await page.keyboard.press('ArrowLeft');
     const search = page.getByLabel('Search elements');
     await search.fill('approve');
-    await tree.getByRole('treeitem', { name: /button Approve/u }).waitFor();
+    const approve = tree.locator('[role="treeitem"][data-node-id="b1"]');
+    await approve.waitFor();
     expect(await root.getAttribute('aria-expanded')).toBe('true');
     await search.press('Enter');
-    await expect
-      .poll(() =>
-        tree.getByRole('treeitem', { name: /button Approve/u }).getAttribute('aria-selected'),
-      )
-      .toBe('true');
+    await expect.poll(() => approve.getAttribute('aria-selected')).toBe('true');
     await page
       .locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"][data-pinned="true"]')
       .waitFor();
@@ -1232,7 +1230,7 @@ describe('fresh React runner', () => {
     );
     await page.getByRole('region', { name: 'Selected element details' }).waitFor();
     await expect.poll(() => search.inputValue()).toBe('');
-    await page.screenshot({ path: '/private/tmp/termwright-tree-search-picker.png' });
+    await page.screenshot({ path: '/tmp/termwright-tree-search-picker.png' });
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -1547,7 +1545,10 @@ describe('fresh React runner', () => {
     });
     session.semantic({ ...FIXTURE_TREES[0]!, sessionId: session.sessionId });
     session.output('Ready');
-    await page.locator('.tw-terminal-viewport').focus();
+    await expect
+      .poll(() => page.locator('.tw-terminal-viewport').getAttribute('data-terminal-identity'))
+      .toBe('live:run:pick-live:pick-session');
+    await page.locator('.xterm-helper-textarea').focus();
     await page.keyboard.type('a');
     await expect.poll(() => inputs.join('')).toBe('a');
     await page.getByRole('button', { name: 'Pick element', exact: true }).click();
@@ -1560,7 +1561,7 @@ describe('fresh React runner', () => {
     );
     await page.getByRole('region', { name: 'Selected element details' }).waitFor();
     expect(inputs.join('')).toBe('a');
-    await page.locator('.tw-terminal-viewport').focus();
+    await page.locator('.xterm-helper-textarea').focus();
     await page.keyboard.type('b');
     await expect.poll(() => inputs.join('')).toBe('ab');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);

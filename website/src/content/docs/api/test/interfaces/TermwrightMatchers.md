@@ -27,7 +27,7 @@ The matchers this package adds to `expect`.
 
 > **toBeAttached**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:95](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L95)
+Defined in: [test/src/matchers.ts:97](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L97)
 
 #### Parameters
 
@@ -45,7 +45,7 @@ Defined in: [test/src/matchers.ts:95](https://github.com/Gorce-AI/termwright/blo
 
 > **toBeChecked**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:114](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L114)
+Defined in: [test/src/matchers.ts:116](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L116)
 
 #### Parameters
 
@@ -63,7 +63,7 @@ Defined in: [test/src/matchers.ts:114](https://github.com/Gorce-AI/termwright/bl
 
 > **toBeDetached**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:96](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L96)
+Defined in: [test/src/matchers.ts:98](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L98)
 
 #### Parameters
 
@@ -81,7 +81,7 @@ Defined in: [test/src/matchers.ts:96](https://github.com/Gorce-AI/termwright/blo
 
 > **toBeDisabled**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:113](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L113)
+Defined in: [test/src/matchers.ts:115](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L115)
 
 #### Parameters
 
@@ -99,7 +99,7 @@ Defined in: [test/src/matchers.ts:113](https://github.com/Gorce-AI/termwright/bl
 
 > **toBeDisplayed**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:97](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L97)
+Defined in: [test/src/matchers.ts:99](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L99)
 
 #### Parameters
 
@@ -117,7 +117,7 @@ Defined in: [test/src/matchers.ts:97](https://github.com/Gorce-AI/termwright/blo
 
 > **toBeEnabled**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:112](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L112)
+Defined in: [test/src/matchers.ts:114](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L114)
 
 #### Parameters
 
@@ -135,7 +135,7 @@ Defined in: [test/src/matchers.ts:112](https://github.com/Gorce-AI/termwright/bl
 
 > **toBeExpanded**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:116](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L116)
+Defined in: [test/src/matchers.ts:118](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L118)
 
 #### Parameters
 
@@ -153,7 +153,7 @@ Defined in: [test/src/matchers.ts:116](https://github.com/Gorce-AI/termwright/bl
 
 > **toBeFocused**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:111](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L111)
+Defined in: [test/src/matchers.ts:113](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L113)
 
 The locator resolves to the node carrying `state.focused`.
 
@@ -173,7 +173,7 @@ The locator resolves to the node carrying `state.focused`.
 
 > **toBeHidden**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:98](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L98)
+Defined in: [test/src/matchers.ts:100](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L100)
 
 #### Parameters
 
@@ -191,7 +191,7 @@ Defined in: [test/src/matchers.ts:98](https://github.com/Gorce-AI/termwright/blo
 
 > **toBeInViewport**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:100](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L100)
+Defined in: [test/src/matchers.ts:102](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L102)
 
 #### Parameters
 
@@ -209,7 +209,7 @@ Defined in: [test/src/matchers.ts:100](https://github.com/Gorce-AI/termwright/bl
 
 > **toBeOffscreen**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:99](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L99)
+Defined in: [test/src/matchers.ts:101](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L101)
 
 #### Parameters
 
@@ -227,7 +227,7 @@ Defined in: [test/src/matchers.ts:99](https://github.com/Gorce-AI/termwright/blo
 
 > **toBeSelected**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:115](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L115)
+Defined in: [test/src/matchers.ts:117](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L117)
 
 #### Parameters
 
@@ -245,7 +245,7 @@ Defined in: [test/src/matchers.ts:115](https://github.com/Gorce-AI/termwright/bl
 
 > **toBeVisible**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:94](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L94)
+Defined in: [test/src/matchers.ts:96](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L96)
 
 The locator resolves to a node that is on screen and not hidden.
 
@@ -265,7 +265,7 @@ The locator resolves to a node that is on screen and not hidden.
 
 > **toHaveBounds**(`expected`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:102](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L102)
+Defined in: [test/src/matchers.ts:104](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L104)
 
 #### Parameters
 
@@ -283,11 +283,35 @@ Defined in: [test/src/matchers.ts:102](https://github.com/Gorce-AI/termwright/bl
 
 ***
 
+### toHaveCount()
+
+> **toHaveCount**(`expected`, `options?`): `R`
+
+Defined in: [test/src/matchers.ts:94](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L94)
+
+Retry until the locator matches exactly this many elements, retaining its selector.
+
+#### Parameters
+
+##### expected
+
+`number`
+
+##### options?
+
+[`PollOptions`](../polloptions/)
+
+#### Returns
+
+`R`
+
+***
+
 ### toHaveExtendedState()
 
 > **toHaveExtendedState**(`expected`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:121](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L121)
+Defined in: [test/src/matchers.ts:123](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L123)
 
 Every listed application-domain key deep-equals the expected JSON value.
 
@@ -311,7 +335,7 @@ Every listed application-domain key deep-equals the expected JSON value.
 
 > **toHaveLogged**(`query`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:129](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L129)
+Defined in: [test/src/matchers.ts:131](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L131)
 
 The program logged an entry matching the query.
 
@@ -335,7 +359,7 @@ The program logged an entry matching the query.
 
 > **toHaveSpatialRelation**(`expected`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:106](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L106)
+Defined in: [test/src/matchers.ts:108](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L108)
 
 #### Parameters
 
@@ -357,7 +381,7 @@ Defined in: [test/src/matchers.ts:106](https://github.com/Gorce-AI/termwright/bl
 
 > **toHaveState**(`expected`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:119](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L119)
+Defined in: [test/src/matchers.ts:121](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L121)
 
 Every listed state key holds; unlisted keys are not constrained.
 
@@ -381,7 +405,7 @@ Every listed state key holds; unlisted keys are not constrained.
 
 > **toHaveText**(`expected`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:123](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L123)
+Defined in: [test/src/matchers.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L125)
 
 Accessible text of a locator, or the visible grid of a terminal.
 
@@ -405,7 +429,7 @@ Accessible text of a locator, or the visible grid of a terminal.
 
 > **toHaveValue**(`expected`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:117](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L117)
+Defined in: [test/src/matchers.ts:119](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L119)
 
 #### Parameters
 
@@ -427,7 +451,7 @@ Defined in: [test/src/matchers.ts:117](https://github.com/Gorce-AI/termwright/bl
 
 > **toMatchCellSnapshot**(`expected?`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L125)
+Defined in: [test/src/matchers.ts:127](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L127)
 
 Framed rendering of the visible grid, inline or from `__snapshots__`.
 
@@ -451,7 +475,7 @@ Framed rendering of the visible grid, inline or from `__snapshots__`.
 
 > **toMatchSemanticSnapshot**(`expected?`, `options?`): `R`
 
-Defined in: [test/src/matchers.ts:127](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L127)
+Defined in: [test/src/matchers.ts:129](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L129)
 
 Semantic tree as YAML, matched partially (`/CONTRACTS.md` §YAML).
 
@@ -475,7 +499,7 @@ Semantic tree as YAML, matched partially (`/CONTRACTS.md` §YAML).
 
 > **toReceivePointerEvents**(`options?`): `R`
 
-Defined in: [test/src/matchers.ts:101](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L101)
+Defined in: [test/src/matchers.ts:103](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L103)
 
 #### Parameters
 
