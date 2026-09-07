@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { WebSocket } from 'ws';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeNativeRunFixture } from './__fixtures__/native-run.js';
@@ -793,6 +793,40 @@ describe('live mode', () => {
       tests: [],
     });
     viewer.close();
+  });
+
+  it('ignores Termwright run and trace artifacts while watching nearby source files', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-discovery-artifacts-'));
+    tempDirectories.push(directory);
+    const output = join(directory, 'custom-output');
+    const trace = join(output, 'retained.twtrace');
+    const runtime = join(directory, '.termwright');
+    const source = join(output, 'sibling.ts');
+    await Promise.all([mkdir(trace, { recursive: true }), mkdir(runtime, { recursive: true })]);
+    await writeFile(source, 'export const sibling = 1;\n', 'utf8');
+
+    let discoveries = 0;
+    await start({
+      discovery: {
+        cwd: directory,
+        watch: true,
+        run: async () => {
+          discoveries += 1;
+          return '[]';
+        },
+      },
+    });
+    await waitUntil(() => discoveries === 1, 'the initial artifact catalogue');
+
+    await Promise.all([
+      writeFile(join(trace, 'generated.ts'), 'trace artifact\n', 'utf8'),
+      writeFile(join(runtime, 'generated.ts'), 'run artifact\n', 'utf8'),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(discoveries).toBe(1);
+
+    await writeFile(source, 'export const sibling = 2;\n', 'utf8');
+    await waitUntil(() => discoveries === 2, 'the neighbouring source refresh');
   });
 
   it('does not let a slower stale discovery overwrite a newer feature listing', async () => {
