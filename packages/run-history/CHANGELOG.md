@@ -1,5 +1,12 @@
 # @termwright/run-history
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/protocol@0.5.2
+
 ## 0.5.1
 
 ### Patch Changes
