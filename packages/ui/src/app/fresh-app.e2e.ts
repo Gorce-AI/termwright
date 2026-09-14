@@ -8,6 +8,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import {
   buildCrashedFixtureTrace,
   buildFixtureTrace,
+  buildResizeFixtureTrace,
   FIXTURE_TREES,
 } from '../test/fixtures/build-trace.js';
 import { buildFixtureTrace as buildWrittenFixtureTrace } from '../__fixtures__/build-trace.js';
@@ -1108,6 +1109,31 @@ describe('fresh React runner', () => {
     expect(await page.locator('.tw-log-list p').allTextContents()).toEqual([
       'ERROR is just file text',
     ]);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('renders the same resized terminal after incremental playback and a direct seek', async () => {
+    const trace = await buildResizeFixtureTrace();
+    const page = await tracePage(trace);
+    const position = page.getByLabel('Replay position');
+    const terminal = page.locator('.tw-terminal-viewport');
+    const rows = page.locator('.xterm-rows');
+
+    await position.fill('300');
+    await position.fill('450');
+    await position.fill('600');
+    await expect.poll(() => rows.innerText()).toContain('RESIZED 40 COLUMN VIEW');
+    const incremental = await rows.innerText();
+    expect(await terminal.getAttribute('data-terminal-columns')).toBe('40');
+    expect(await terminal.getAttribute('data-terminal-rows')).toBe('8');
+
+    await position.fill('0');
+    await expect.poll(() => terminal.getAttribute('data-terminal-columns')).toBe('80');
+    await position.fill('600');
+    await expect.poll(() => rows.innerText()).toContain('RESIZED 40 COLUMN VIEW');
+    expect(await rows.innerText()).toBe(incremental);
+    expect(await terminal.getAttribute('data-terminal-columns')).toBe('40');
+    expect(await terminal.getAttribute('data-terminal-rows')).toBe('8');
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 

@@ -67,6 +67,10 @@ export function TerminalStage(props: TerminalStageProps) {
     generation: 0,
   });
   const [scale, setScale] = useState(1);
+  const [grid, setGrid] = useState(() => ({
+    columns: Math.max(props.columns, 1),
+    rows: Math.max(props.rows, 1),
+  }));
   const [overlayMetrics, setOverlayMetrics] = useState<OverlayMetrics | null>(null);
 
   inputRef.current = props.picking === undefined ? props.onInput : undefined;
@@ -177,67 +181,101 @@ export function TerminalStage(props: TerminalStageProps) {
     terminal.options.cursorBlink = props.writable;
     const targetColumns = Math.max(props.columns, 1);
     const targetRows = Math.max(props.rows, 1);
-    // xterm serialises writes, but resize() is synchronous. Apply the retained
-    // grid before queuing reset/frames so Fit can never measure the 80x24
-    // placeholder while a 60x10 replay is already selected.
-    if (terminal.cols !== targetColumns || terminal.rows !== targetRows) {
-      terminal.resize(targetColumns, targetRows);
-    }
     const applied = appliedRef.current;
-    const reset = applied.identity !== props.identity;
-    if (reset) {
-      applied.identity = props.identity;
-      applied.live = 0;
-      applied.replayCursor = 0;
-      applied.replayTime = 0;
-      applied.generation += 1;
-      const generation = applied.generation;
-      terminal.write('', () => {
-        if (generation !== appliedRef.current.generation || terminalRef.current !== terminal)
-          return;
+    applied.generation += 1;
+    const generation = applied.generation;
+    const active = () =>
+      generation === appliedRef.current.generation && terminalRef.current === terminal;
+    const updateGrid = () => {
+      const next = { columns: terminal.cols, rows: terminal.rows };
+      host.dataset['terminalColumns'] = String(next.columns);
+      host.dataset['terminalRows'] = String(next.rows);
+      setGrid((current) =>
+        current.columns === next.columns && current.rows === next.rows ? current : next,
+      );
+    };
+    const finish = () => {
+      if (!active()) return;
+      host.dataset['terminalCursorX'] = String(terminal.buffer.active.cursorX);
+      updateGrid();
+      requestAnimationFrame(() => fitRef.current());
+    };
+
+    // xterm parses write() asynchronously while resize() is synchronous. Start
+    // each update behind a write barrier, then apply every output and resize in
+    // recording order. This also lets rapid hover previews cancel stale work
+    // without leaving a half-applied frame batch as the committed state.
+    terminal.write('', () => {
+      if (!active()) return;
+      const reset = () => {
         terminal.reset();
         terminal.clear();
         terminal.resize(targetColumns, targetRows);
-      });
-    }
-    if (props.mode === 'live') {
-      if (props.liveChunks.length < applied.live) {
-        terminal.reset();
-        terminal.clear();
+        updateGrid();
+        applied.identity = props.identity;
         applied.live = 0;
-      }
-      for (let index = applied.live; index < props.liveChunks.length; index += 1) {
-        const chunk = props.liveChunks[index];
-        if (chunk !== undefined) terminal.write(decode(chunk));
-      }
-      applied.live = props.liveChunks.length;
-    } else if (props.mode === 'replay') {
-      if (props.replayTimeMs < applied.replayTime) {
-        applied.generation += 1;
-        const generation = applied.generation;
-        terminal.write('', () => {
-          if (generation !== appliedRef.current.generation || terminalRef.current !== terminal)
-            return;
-          terminal.reset();
-          terminal.clear();
-          terminal.resize(targetColumns, targetRows);
-        });
         applied.replayCursor = 0;
+        applied.replayTime = 0;
+      };
+
+      if (props.mode === 'replay') {
+        const lastAppliedTime =
+          applied.replayCursor === 0
+            ? -Infinity
+            : (props.replayFrames[applied.replayCursor - 1]?.t ?? -Infinity);
+        if (applied.identity !== props.identity || props.replayTimeMs < lastAppliedTime) reset();
+
+        const applyNext = () => {
+          if (!active()) return;
+          const frame = props.replayFrames[applied.replayCursor];
+          if (frame === undefined || frame.t > props.replayTimeMs) {
+            applied.replayTime = props.replayTimeMs;
+            finish();
+            return;
+          }
+          if (frame.kind === 'resize' && frame.columns !== undefined && frame.rows !== undefined) {
+            terminal.resize(frame.columns, frame.rows);
+            applied.replayCursor += 1;
+            updateGrid();
+            applyNext();
+            return;
+          }
+          if (frame.kind === 'output' && frame.dataB64 !== undefined) {
+            terminal.write(decode(frame.dataB64), () => {
+              if (terminalRef.current !== terminal) return;
+              applied.replayCursor += 1;
+              if (!active()) return;
+              applyNext();
+            });
+            return;
+          }
+          applied.replayCursor += 1;
+          applyNext();
+        };
+        applyNext();
+        return;
       }
-      let cursor = applied.replayCursor;
-      while (cursor < props.replayFrames.length) {
-        const frame = props.replayFrames[cursor];
-        if (frame === undefined || frame.t > props.replayTimeMs) break;
-        applyFrame(terminal, frame);
-        cursor += 1;
+
+      if (applied.identity !== props.identity || props.liveChunks.length < applied.live) reset();
+      if (terminal.cols !== targetColumns || terminal.rows !== targetRows) {
+        terminal.resize(targetColumns, targetRows);
+        updateGrid();
       }
-      applied.replayCursor = cursor;
-      applied.replayTime = props.replayTimeMs;
-    }
-    terminal.write('', () => {
-      if (terminalRef.current !== terminal) return;
-      host.dataset['terminalCursorX'] = String(terminal.buffer.active.cursorX);
-      requestAnimationFrame(() => fitRef.current());
+      const applyNext = () => {
+        if (!active()) return;
+        const chunk = props.liveChunks[applied.live];
+        if (chunk === undefined) {
+          finish();
+          return;
+        }
+        terminal.write(decode(chunk), () => {
+          if (terminalRef.current !== terminal) return;
+          applied.live += 1;
+          if (!active()) return;
+          applyNext();
+        });
+      };
+      applyNext();
     });
   }, [
     props.columns,
@@ -260,14 +298,14 @@ export function TerminalStage(props: TerminalStageProps) {
       screen === undefined ||
       screen.width <= 0 ||
       screen.height <= 0 ||
-      snapshot.columns !== props.columns ||
-      snapshot.rows !== props.rows
+      snapshot.columns !== grid.columns ||
+      snapshot.rows !== grid.rows
     )
       return { node: null, reason: 'The recorded tree does not match this terminal grid.' };
     return pickTerminalNode(
       snapshot,
-      ((clientX - screen.left) / screen.width) * props.columns,
-      ((clientY - screen.top) / screen.height) * props.rows,
+      ((clientX - screen.left) / screen.width) * grid.columns,
+      ((clientY - screen.top) / screen.height) * grid.rows,
     );
   };
   useEffect(() => {
@@ -301,7 +339,7 @@ export function TerminalStage(props: TerminalStageProps) {
         </div>
         <div className="tw-machine-facts">
           <span>
-            {props.columns} × {props.rows}
+            {grid.columns} × {grid.rows}
           </span>
           <span>{props.profile}</span>
           <button type="button" className="tw-fit-button" onClick={() => fitRef.current()}>
@@ -313,8 +351,8 @@ export function TerminalStage(props: TerminalStageProps) {
       <div
         className="tw-terminal-viewport"
         ref={hostRef}
-        data-terminal-columns={props.columns}
-        data-terminal-rows={props.rows}
+        data-terminal-columns={grid.columns}
+        data-terminal-rows={grid.rows}
         data-terminal-identity={props.identity}
         data-terminal-profile={profile.id}
         tabIndex={props.writable ? 0 : -1}
@@ -326,8 +364,8 @@ export function TerminalStage(props: TerminalStageProps) {
         <TerminalHighlightOverlay
           highlight={props.highlight}
           metrics={overlayMetrics}
-          columns={props.columns}
-          rows={props.rows}
+          columns={grid.columns}
+          rows={grid.rows}
         />
         {props.picking === undefined ? null : (
           <div
@@ -371,8 +409,8 @@ export function TerminalStage(props: TerminalStageProps) {
               const snapshot = props.picking?.snapshot;
               if (
                 snapshot == null ||
-                snapshot.columns !== props.columns ||
-                snapshot.rows !== props.rows
+                snapshot.columns !== grid.columns ||
+                snapshot.rows !== grid.rows
               )
                 return;
               const nodes =
@@ -381,8 +419,8 @@ export function TerminalStage(props: TerminalStageProps) {
                     node.geometry.visibleRect.status === 'known' &&
                     node.geometry.visibleRect.value.width > 0 &&
                     node.geometry.visibleRect.value.height > 0 &&
-                    node.geometry.visibleRect.value.column < props.columns &&
-                    node.geometry.visibleRect.value.row < props.rows &&
+                    node.geometry.visibleRect.value.column < grid.columns &&
+                    node.geometry.visibleRect.value.row < grid.rows &&
                     node.geometry.visibleRect.value.column + node.geometry.visibleRect.value.width >
                       0 &&
                     node.geometry.visibleRect.value.row + node.geometry.visibleRect.value.height >
@@ -491,12 +529,4 @@ function TerminalHighlightOverlay({
 function decode(value: string): Uint8Array {
   const binary = atob(value);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function applyFrame(terminal: Terminal, frame: PlaybackFrame): void {
-  if (frame.kind === 'resize' && frame.columns !== undefined && frame.rows !== undefined) {
-    terminal.resize(frame.columns, frame.rows);
-  } else if (frame.kind === 'output' && frame.dataB64 !== undefined) {
-    terminal.write(decode(frame.dataB64));
-  }
 }

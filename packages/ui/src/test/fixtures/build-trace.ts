@@ -126,6 +126,27 @@ export async function buildFixtureTrace(
   return dir;
 }
 
+/** A replay fixture whose output crosses a terminal resize mid-recording. */
+export async function buildResizeFixtureTrace(): Promise<string> {
+  const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-resize-')), 'session.twtrace');
+  await cp(join(ARCHIVES, 'complete'), dir, { recursive: true });
+  const cast = [
+    JSON.stringify({
+      version: 3,
+      term: { cols: 80, rows: 24 },
+      timestamp: 1_788_261_215,
+      command: 'node agent.js',
+    }),
+    JSON.stringify([0, 'o', '\u001b[2J\u001b[HINITIAL 80 COLUMN VIEW']),
+    JSON.stringify([0.4, 'r', '40x8']),
+    JSON.stringify([0.1, 'o', '\u001b[2J\u001b[HRESIZED 40 COLUMN VIEW']),
+    JSON.stringify([1.5, 'x', '0']),
+  ];
+  await writeFile(join(dir, 'session.cast'), `${cast.join('\n')}\n`, 'utf8');
+  await refreshCommit(dir);
+  return dir;
+}
+
 /**
  * Writes an archive of a session that died on its own: output, a tree, then a
  * `crash` event followed by the exit — the order the driver emits them in, so
