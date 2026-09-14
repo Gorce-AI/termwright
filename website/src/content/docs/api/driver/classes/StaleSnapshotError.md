@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: StaleSnapshotError
 
-Defined in: [driver/src/errors.ts:73](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L73)
+Defined in: [driver/src/errors.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L87)
 
 A revision-bound locator ref was used after its observation was superseded or evicted.
 
@@ -25,7 +25,7 @@ A revision-bound locator ref was used after its observation was superseded or ev
 
 > **new StaleSnapshotError**(`message`, `diagnostics`): `StaleSnapshotError`
 
-Defined in: [driver/src/errors.ts:74](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L74)
+Defined in: [driver/src/errors.ts:88](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L88)
 
 #### Parameters
 

@@ -13,4 +13,4 @@ editUrl: false
 
 > **ActionKind** = `"click"` \| `"double-click"` \| `"hover"` \| `"drag"` \| `"focus"` \| `"activate"` \| `"press"` \| `"type"` \| `"paste"` \| `"fill"` \| `"check"` \| `"uncheck"` \| `"wheel"` \| `"shell-command"` \| `"resize"`
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:169
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:169

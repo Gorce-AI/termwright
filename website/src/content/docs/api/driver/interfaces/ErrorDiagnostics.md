@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ErrorDiagnostics
 
-Defined in: [driver/src/api.ts:1176](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1176)
+Defined in: [driver/src/api.ts:1218](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1218)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,51 @@ await terminal.close();
 
 > `readonly` `optional` **candidates?**: readonly [`ResolvedTarget`](../resolvedtarget/)\<[`LocatorDomain`](../../type-aliases/locatordomain/)\>[]
 
-Defined in: [driver/src/api.ts:1179](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1179)
+Defined in: [driver/src/api.ts:1221](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1221)
+
+***
+
+### lastObserved?
+
+> `readonly` `optional` **lastObserved?**: `string`
+
+Defined in: [driver/src/api.ts:1224](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1224)
+
+Bounded rendering of the final value seen by a retrying wait.
+
+***
+
+### observation?
+
+> `readonly` `optional` **observation?**: `object`
+
+Defined in: [driver/src/api.ts:1226](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1226)
+
+Exact reason a terminal/semantic observation has not committed yet.
+
+#### openFrameRevisions
+
+> `readonly` **openFrameRevisions**: readonly `number`[]
+
+#### pendingMarkerRevisions
+
+> `readonly` **pendingMarkerRevisions**: readonly `number`[]
+
+#### pendingTreeRevisions
+
+> `readonly` **pendingTreeRevisions**: readonly `number`[]
+
+#### providerEvidenceInvalidAfterRevision
+
+> `readonly` **providerEvidenceInvalidAfterRevision**: `number` \| `null`
+
+#### publishedRevision
+
+> `readonly` **publishedRevision**: `number` \| `null`
+
+#### state
+
+> `readonly` **state**: `"parser-in-flight"` \| `"semantic-frame-open"` \| `"pairing-pending"`
 
 ***
 
@@ -44,7 +88,7 @@ Defined in: [driver/src/api.ts:1179](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **screenExcerpt?**: `string`
 
-Defined in: [driver/src/api.ts:1177](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1177)
+Defined in: [driver/src/api.ts:1219](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1219)
 
 ***
 
@@ -52,7 +96,7 @@ Defined in: [driver/src/api.ts:1177](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` **semanticTree**: `boolean`
 
-Defined in: [driver/src/api.ts:1178](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1178)
+Defined in: [driver/src/api.ts:1220](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1220)
 
 ***
 
@@ -60,4 +104,4 @@ Defined in: [driver/src/api.ts:1178](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **suggestion?**: `string`
 
-Defined in: [driver/src/api.ts:1180](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1180)
+Defined in: [driver/src/api.ts:1222](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1222)

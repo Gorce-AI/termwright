@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: HookDefinition\<Fixtures\>
 
-Defined in: [definitions.ts:62](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L62)
+Defined in: [definitions.ts:66](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L66)
 
 ## Type Parameters
 
@@ -25,7 +25,7 @@ Defined in: [definitions.ts:62](https://github.com/Gorce-AI/termwright/blob/main
 
 > `readonly` **body**: [`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:66](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L66)
+Defined in: [definitions.ts:70](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L70)
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: [definitions.ts:66](https://github.com/Gorce-AI/termwright/blob/main
 
 > `readonly` **options**: [`HookDefinitionOptions`](../hookdefinitionoptions/)
 
-Defined in: [definitions.ts:65](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L65)
+Defined in: [definitions.ts:69](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L69)
 
 ***
 
@@ -41,7 +41,7 @@ Defined in: [definitions.ts:65](https://github.com/Gorce-AI/termwright/blob/main
 
 > `readonly` **phase**: `"before"` \| `"after"`
 
-Defined in: [definitions.ts:64](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L64)
+Defined in: [definitions.ts:68](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L68)
 
 ***
 
@@ -49,4 +49,4 @@ Defined in: [definitions.ts:64](https://github.com/Gorce-AI/termwright/blob/main
 
 > `readonly` **type**: `"hook"`
 
-Defined in: [definitions.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L63)
+Defined in: [definitions.ts:67](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L67)

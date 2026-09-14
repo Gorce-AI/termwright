@@ -30,6 +30,7 @@ import type {
 } from '@termwright/protocol';
 import { DEFAULT_LIMITS } from '@termwright/protocol';
 import { annotationForRenderable } from './annotations.js';
+import { isReadOnlyTextNode } from './attach.js';
 
 /**
  * The shape this module reads off a Renderable.
@@ -146,7 +147,10 @@ function stateOf(
   // `value` first, then the edit buffer's plain text: an InputRenderable has
   // both, and `value` is the one the application set.
   if (typeof node.value === 'string') state['value'] = node.value;
-  else if (typeof node.plainText === 'string') state['value'] = node.plainText;
+  else if (typeof node.plainText === 'string') {
+    state['value'] = node.plainText;
+    if (isReadOnlyTextNode(node)) state['valueSensitivity'] = 'public';
+  }
 
   if (typeof node.getSelectedIndex === 'function') {
     const index = node.getSelectedIndex();

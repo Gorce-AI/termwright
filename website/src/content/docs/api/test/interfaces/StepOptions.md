@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: StepOptions
 
-Defined in: [test/src/fixtures.ts:113](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L113)
+Defined in: [test/src/fixtures.ts:120](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L120)
 
 Runs a titled step; it becomes a marker in the recording and a trace event.
 
@@ -21,6 +21,6 @@ Runs a titled step; it becomes a marker in the recording and a trace event.
 
 > `readonly` `optional` **gherkin?**: `GherkinStepMetadata`
 
-Defined in: [test/src/fixtures.ts:115](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L115)
+Defined in: [test/src/fixtures.ts:122](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L122)
 
 Authored identity for a physical Gherkin step.

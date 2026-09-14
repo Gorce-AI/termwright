@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: Keyboard
 
-Defined in: [driver/src/api.ts:293](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L293)
+Defined in: [driver/src/api.ts:328](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L328)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > **paste**(`text`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:296](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L296)
+Defined in: [driver/src/api.ts:331](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L331)
 
 #### Parameters
 
@@ -54,7 +54,7 @@ Defined in: [driver/src/api.ts:296](https://github.com/Gorce-AI/termwright/blob/
 
 > **press**(`keys`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:294](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L294)
+Defined in: [driver/src/api.ts:329](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L329)
 
 #### Parameters
 
@@ -72,7 +72,7 @@ Defined in: [driver/src/api.ts:294](https://github.com/Gorce-AI/termwright/blob/
 
 > **type**(`text`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:295](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L295)
+Defined in: [driver/src/api.ts:330](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L330)
 
 #### Parameters
 

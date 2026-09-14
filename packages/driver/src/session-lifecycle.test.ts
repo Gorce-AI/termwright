@@ -739,6 +739,7 @@ describe('terminal session resource lifecycle', () => {
           () => terminal.settled(),
           () => terminal.waitForCheckpointChange({ after: checkpoint }),
           () => terminal.waitForCommittedObservation(),
+          () => terminal.waitUntil(({ screen }) => screen.text(), { until: () => false }),
           () => terminal.waitForShellPrompt(),
         ];
         for (const wait of liveWaits) await expect(wait()).rejects.toBe(retainedFailure);
@@ -807,6 +808,66 @@ describe('terminal session resource lifecycle', () => {
     } finally {
       restoreProvider();
       vi.useRealTimers();
+    }
+  });
+
+  terminalIt(
+    'waitUntil rechecks at race-free observation boundaries and returns the last value',
+    async () => {
+      const pty = new ControlledPty({ initialData: Buffer.from('loading', 'utf8') });
+      const endpoint: { value: string | undefined } = { value: undefined };
+      const terminal = await launchTerminalWithBackend({
+        command: ['controlled-app'],
+        backend: backendFor(pty, endpoint),
+        timeouts: { action: 500 },
+      });
+      try {
+        let reads = 0;
+        const ready = terminal.waitUntil(
+          async ({ screen, checkpoint }) => {
+            reads += 1;
+            return Promise.resolve({ text: screen.text(), sequence: checkpoint.sequence });
+          },
+          {
+            until: async ({ text }) => Promise.resolve(text.includes('ready')),
+            description: 'ready screen',
+          },
+        );
+
+        await Promise.resolve();
+        pty.emitData(Buffer.from('\rready', 'utf8'));
+
+        await expect(ready).resolves.toMatchObject({ text: expect.stringContaining('ready') });
+        expect(reads).toBeGreaterThanOrEqual(1);
+      } finally {
+        await terminal.close();
+      }
+    },
+  );
+
+  terminalIt('waitUntil reports its final observed value on timeout', async () => {
+    const endpoint: { value: string | undefined } = { value: undefined };
+    const terminal = await launchTerminalWithBackend({
+      command: ['controlled-app'],
+      backend: backendFor(
+        new ControlledPty({ initialData: Buffer.from('loading', 'utf8') }),
+        endpoint,
+      ),
+      timeouts: { action: 20 },
+    });
+    try {
+      await expect(
+        terminal.waitUntil(({ screen }) => screen.text(), {
+          until: (text) => text.includes('ready'),
+          description: 'ready screen',
+        }),
+      ).rejects.toMatchObject({
+        code: 'timeout',
+        message: expect.stringContaining('ready screen'),
+        diagnostics: { lastObserved: expect.stringContaining('loading') },
+      });
+    } finally {
+      await terminal.close();
     }
   });
 

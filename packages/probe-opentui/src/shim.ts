@@ -118,7 +118,12 @@ const __termwright_wrapped = async function createCliRenderer(config) {
     throw error;
   }
   try {
-    globalThis.__termwright_onRenderer?.(renderer, __termwright_certification, effective);
+    globalThis.__termwright_onRenderer?.(
+      renderer,
+      __termwright_certification,
+      effective,
+      __termwright_original.TextRenderable?.prototype,
+    );
   } catch {
     // The probe is never allowed to break the application it observes.
   }

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ScrollbackApi
 
-Defined in: [driver/src/api.ts:512](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L512)
+Defined in: [driver/src/api.ts:549](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L549)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **length**: `number`
 
-Defined in: [driver/src/api.ts:513](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L513)
+Defined in: [driver/src/api.ts:550](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L550)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:513](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **retainedFloor**: `number`
 
-Defined in: [driver/src/api.ts:514](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L514)
+Defined in: [driver/src/api.ts:551](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L551)
 
 ## Methods
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:514](https://github.com/Gorce-AI/termwright/blob/
 
 > **move**(`opts`): `void`
 
-Defined in: [driver/src/api.ts:515](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L515)
+Defined in: [driver/src/api.ts:552](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L552)
 
 #### Parameters
 
@@ -72,7 +72,7 @@ Defined in: [driver/src/api.ts:515](https://github.com/Gorce-AI/termwright/blob/
 
 > **position**(): `number`
 
-Defined in: [driver/src/api.ts:516](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L516)
+Defined in: [driver/src/api.ts:553](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L553)
 
 #### Returns
 
@@ -84,7 +84,7 @@ Defined in: [driver/src/api.ts:516](https://github.com/Gorce-AI/termwright/blob/
 
 > **search**(`text`): readonly `object`[]
 
-Defined in: [driver/src/api.ts:518](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L518)
+Defined in: [driver/src/api.ts:555](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L555)
 
 #### Parameters
 
@@ -102,7 +102,7 @@ readonly `object`[]
 
 > **text**(`opts?`): `string`
 
-Defined in: [driver/src/api.ts:517](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L517)
+Defined in: [driver/src/api.ts:554](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L554)
 
 #### Parameters
 

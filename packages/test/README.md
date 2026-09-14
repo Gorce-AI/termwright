@@ -95,13 +95,31 @@ fails — its `.twtrace` archive is kept for the report.
 | ------------ | ------------------------------------------------------------------------------------------------------ |
 | `terminal`   | `launch(options)` for as many sessions as the test needs, all closed on teardown; `sessions`; `tmpdir` |
 | `step`       | `step(title, body)` — a marker in the recording, a step in the trace and a section in the report       |
-| `termwright` | the resolved config, the test's private `tmpdir`, the traces kept for it                               |
+| `termwright` | config, private `tmpdir`, traces, timeout-safe `resources`, and owned `sidecars`                       |
 
 Each test gets a fresh temporary directory (the default `cwd`) and a minimal
 environment: only `PATH`, `HOME` and friends are inherited, so a stray variable
 on a laptop cannot change what CI sees. `test.step()` works too; the `step`
 fixture is the form to prefer under `test.concurrent`, since it is bound to its
 own test rather than to the most recently started one.
+
+Resource acquisition is registered before its asynchronous factory starts.
+This means a timeout cannot strand a server that finishes starting while test
+teardown is already running:
+
+```ts
+test('uses an API fixture', async ({ termwright }) => {
+  const server = await termwright.sidecars.launch({
+    command: [process.execPath, 'test/fixtures/api.js'],
+    ready: { output: 'listening on', stream: 'stdout' },
+  });
+  // server.stdout(), server.stderr(), server.pid
+});
+```
+
+`termwright.resources.defer()`, `.use()`, `.acquire()` and `.child()` cover
+non-process resources. They run once in LIFO order, receive the native timeout
+through `resources.signal`, and aggregate cleanup failures.
 
 ### Skipping when there is no PTY
 
@@ -195,7 +213,7 @@ refused rather than written.
 ## Matchers
 
 All of them are asynchronous — `await expect(...)` — and the locator ones poll
-until the `expect` timeout class runs out.
+at committed observation boundaries until the `expect` timeout class runs out.
 
 | Matcher                                              | Subject                                                                    |
 | ---------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -241,7 +259,7 @@ await expect(app.getByTestId('deploy-row')).toHaveExtendedState({
 
 The assertion is not decoration here: it is the wait that lets the program
 handle the first key before the second arrives, and it costs nothing extra
-because the matcher polls anyway. Several chords in one `press()` are for
+because the matcher already waits on committed revisions. Several chords in one `press()` are for
 sequences the program consumes as a unit, like `'Control+K Control+F'`.
 
 A failure reads like the driver's own errors: what was expected, what was
@@ -262,6 +280,22 @@ screen:
   Permission required
      Approve    [Reject]
 ```
+
+For a domain calculation that is not a built-in matcher, `waitUntil()` applies
+the same race-free revision loop and retains the last value for diagnostics:
+
+```ts
+const request = await app.waitUntil(
+  ({ semanticTree }) => semanticTree?.nodes.find((node) => node.testId === 'request')?.extended,
+  { until: (state) => state?.status === 'accepted', description: 'accepted request' },
+);
+```
+
+Keyboard-only TUIs can expose their real focus ring without a custom sleep
+loop: `await app.focusByTraversal(app.getByTestId('accept'), { next: 'ArrowDown' })`.
+Semantic convenience actions also accept `via: 'keyboard' | 'pointer' | 'auto'`.
+When an application enables kitty's progressive keyboard protocol, Termwright
+answers its query and encodes subsequent key presses from the active flags.
 
 ## Semantic YAML snapshots
 

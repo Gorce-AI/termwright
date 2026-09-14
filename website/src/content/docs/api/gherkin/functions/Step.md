@@ -13,7 +13,7 @@ editUrl: false
 
 > **Step**\<`Fixtures`\>(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L125)
+Defined in: [definitions.ts:129](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L129)
 
 Declares a keyword-neutral definition.
 

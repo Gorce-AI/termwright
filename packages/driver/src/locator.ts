@@ -1360,10 +1360,10 @@ export class LocatorImpl {
     });
   }
 
-  async focus(opts?: WaitOptions): Promise<ActionReceipt> {
+  async focus(opts?: import('./api.js').SemanticActionOptions): Promise<ActionReceipt> {
     return this.#act('focus', async (record, actionId) => {
       const { receipt, target, retry } = await this.#plannedKeyboard(
-        { kind: 'focus', selector: this.description },
+        { kind: 'focus', selector: this.description, via: opts?.via ?? 'auto' },
         '',
         opts,
         record,
@@ -1382,10 +1382,10 @@ export class LocatorImpl {
     });
   }
 
-  async activate(opts?: WaitOptions): Promise<ActionReceipt> {
+  async activate(opts?: import('./api.js').SemanticActionOptions): Promise<ActionReceipt> {
     return this.#act('activate', async (record, actionId) => {
       const { receipt } = await this.#plannedKeyboard(
-        { kind: 'activate', selector: this.description },
+        { kind: 'activate', selector: this.description, via: opts?.via ?? 'auto' },
         '',
         opts,
         record,
@@ -1395,19 +1395,26 @@ export class LocatorImpl {
     });
   }
 
-  async check(opts?: WaitOptions): Promise<ActionReceipt> {
+  async check(opts?: import('./api.js').SemanticActionOptions): Promise<ActionReceipt> {
     return this.#checkedAction(true, opts);
   }
 
-  async uncheck(opts?: WaitOptions): Promise<ActionReceipt> {
+  async uncheck(opts?: import('./api.js').SemanticActionOptions): Promise<ActionReceipt> {
     return this.#checkedAction(false, opts);
   }
 
-  async #checkedAction(value: boolean, opts?: WaitOptions): Promise<ActionReceipt> {
+  async #checkedAction(
+    value: boolean,
+    opts?: import('./api.js').SemanticActionOptions,
+  ): Promise<ActionReceipt> {
     const api = value ? 'check' : 'uncheck';
     return this.#act(api, async (record, actionId) => {
       const { receipt, target, retry } = await this.#plannedKeyboard(
-        { kind: value ? 'check' : 'uncheck', selector: this.description },
+        {
+          kind: value ? 'check' : 'uncheck',
+          selector: this.description,
+          via: opts?.via ?? 'auto',
+        },
         '',
         opts,
         record,

@@ -324,6 +324,29 @@ describe('VtScreen', () => {
     expect(modes.focusReporting).toBe('on');
   });
 
+  it('implements buffer-local kitty keyboard flag stacks and query replies', async () => {
+    const screen = createVt();
+    const responses: TerminalResponse[] = [];
+    screen.onResponse((response) => responses.push(response));
+
+    await screen.write('\x1b[?u\x1b[>1u\x1b[?u');
+    expect(screen.modes().kittyKeyboardFlags).toBe(1);
+
+    await screen.write('\x1b[?1049h\x1b[?u\x1b[>9u\x1b[=2;2u\x1b[?u');
+    expect(screen.modes().kittyKeyboardFlags).toBe(11);
+
+    await screen.write('\x1b[?1049l\x1b[?u\x1b[<u\x1b[?u');
+    expect(screen.modes().kittyKeyboardFlags).toBe(0);
+    expect(responses.filter(({ kind }) => kind === 'keyboard-protocol')).toEqual([
+      { data: '\x1b[?0u', kind: 'keyboard-protocol' },
+      { data: '\x1b[?1u', kind: 'keyboard-protocol' },
+      { data: '\x1b[?0u', kind: 'keyboard-protocol' },
+      { data: '\x1b[?11u', kind: 'keyboard-protocol' },
+      { data: '\x1b[?1u', kind: 'keyboard-protocol' },
+      { data: '\x1b[?0u', kind: 'keyboard-protocol' },
+    ]);
+  });
+
   it('reports focus reporting as unknown where the reading belongs to the host', async () => {
     // An embedding declared this reading unobservable, so a definite value
     // would describe its host rather than the program.

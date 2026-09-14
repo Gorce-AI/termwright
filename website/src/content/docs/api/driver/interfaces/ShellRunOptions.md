@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ShellRunOptions
 
-Defined in: [driver/src/api.ts:378](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L378)
+Defined in: [driver/src/api.ts:413](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L413)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -40,7 +40,7 @@ await terminal.close();
 
 > `readonly` `optional` **maxOutputBytes?**: `number`
 
-Defined in: [driver/src/api.ts:380](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L380)
+Defined in: [driver/src/api.ts:415](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L415)
 
 Maximum captured bytes between OSC 133 C and D. Defaults to 8 MiB.
 
@@ -50,7 +50,7 @@ Maximum captured bytes between OSC 133 C and D. Defaults to 8 MiB.
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [driver/src/api.ts:561](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L561)
+Defined in: [driver/src/api.ts:598](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L598)
 
 #### Inherited from
 

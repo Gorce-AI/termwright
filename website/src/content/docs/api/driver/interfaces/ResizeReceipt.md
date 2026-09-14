@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ResizeReceipt
 
-Defined in: [driver/src/api.ts:742](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L742)
+Defined in: [driver/src/api.ts:784](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L784)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **after**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: [driver/src/api.ts:745](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L745)
+Defined in: [driver/src/api.ts:787](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L787)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:745](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **before**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: [driver/src/api.ts:744](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L744)
+Defined in: [driver/src/api.ts:786](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L786)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:744](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **pairedRender**: [`Observation`](../../type-aliases/observation/)\<`number`\>
 
-Defined in: [driver/src/api.ts:747](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L747)
+Defined in: [driver/src/api.ts:789](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L789)
 
 Paired child render revision when a semantic adapter can prove one.
 
@@ -62,7 +62,7 @@ Paired child render revision when a semantic adapter can prove one.
 
 > `readonly` **requested**: `object`
 
-Defined in: [driver/src/api.ts:743](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L743)
+Defined in: [driver/src/api.ts:785](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L785)
 
 #### columns
 

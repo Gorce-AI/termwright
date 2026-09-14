@@ -11,6 +11,8 @@ import { parse as parseTagExpression } from '@cucumber/tag-expressions';
 import { SourceMapGenerator, type RawSourceMap } from 'source-map-js';
 import { convertPathToPattern, glob } from 'tinyglobby';
 import type { HmrContext, Plugin, ResolvedConfig } from 'vite';
+import type { TermwrightTestResources } from '@termwright/test';
+import type { GherkinScenario } from './definitions.js';
 
 const TRANSFORM_MARKER = '/* @termwright/gherkin transformed */';
 
@@ -30,6 +32,7 @@ export type GherkinReservedFixtureName =
   | 'expect'
   | 'world'
   | 'scenario'
+  | 'resources'
   | 'defer'
   | 'use'
   | 'task'
@@ -63,6 +66,13 @@ export interface GherkinPluginOptions<Fixtures extends object = Record<string, u
   >[];
   /** Cucumber tag expression selecting Scenario and Outline cases. */
   readonly tags?: string;
+  /** Maps authored scenario metadata/tags to native timeout and admission resources. */
+  readonly scenario?: (scenario: GherkinScenario) => GherkinScenarioOptions | undefined;
+}
+
+export interface GherkinScenarioOptions {
+  readonly timeout?: number;
+  readonly resources?: TermwrightTestResources;
 }
 
 export interface GeneratedGherkinImports {
@@ -136,6 +146,7 @@ export interface TransformFeatureInput {
   readonly generatedImports?: GeneratedGherkinImports;
   readonly fixtureNames?: readonly string[];
   readonly tags?: string;
+  readonly scenario?: (scenario: GherkinScenario) => GherkinScenarioOptions | undefined;
 }
 
 const RESERVED_CONTEXT_NAMES = new Set([
@@ -146,6 +157,7 @@ const RESERVED_CONTEXT_NAMES = new Set([
   'expect',
   'world',
   'scenario',
+  'resources',
   'defer',
   'use',
   'task',
@@ -518,6 +530,22 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
         ? `${pickle.name} [line ${scenarioLine}]`
         : pickle.name;
     scenarioLines.push(scenarioLine);
+    const metadata: GherkinScenario = {
+      feature: feature.name,
+      name: pickle.name,
+      uri: sourceName,
+      line: scenarioLine,
+      tags: pickle.tags.map((tag) => tag.name),
+    };
+    const scenarioOptions = input.scenario?.(metadata);
+    if (
+      scenarioOptions?.timeout !== undefined &&
+      (!Number.isFinite(scenarioOptions.timeout) || scenarioOptions.timeout <= 0)
+    ) {
+      throw new TypeError(
+        `Gherkin scenario timeout for ${JSON.stringify(pickle.name)} must be a positive finite number`,
+      );
+    }
     const declarationMeta = {
       meta: {
         termwright: {
@@ -530,25 +558,24 @@ export function transformFeature(input: TransformFeatureInput): TransformFeature
           tags: pickle.tags.map((tag) => tag.name),
         },
       },
+      ...(scenarioOptions?.timeout === undefined ? {} : { timeout: scenarioOptions.timeout }),
     };
     const fixtureBindings = [
+      'signal',
       'termwrightOptions',
       'termwright',
       'terminal',
       'step',
       ...customFixtures,
     ];
+    const declaration =
+      scenarioOptions?.resources === undefined
+        ? 'test'
+        : `test.resources(${JSON.stringify(scenarioOptions.resources)})`;
     emit(
-      `test(${JSON.stringify(testName)}, ${JSON.stringify(declarationMeta)}, async ({ ${fixtureBindings.join(', ')} }) => {`,
+      `${declaration}(${JSON.stringify(testName)}, ${JSON.stringify(declarationMeta)}, async ({ ${fixtureBindings.join(', ')} }) => {`,
       scenarioLine,
     );
-    const metadata = {
-      feature: feature.name,
-      name: pickle.name,
-      uri: sourceName,
-      line: scenarioLine,
-      tags: pickle.tags.map((tag) => tag.name),
-    };
     emit(
       `const __context = __createContext({ termwrightOptions, termwright, terminal, step, ${customFixtures.map((name) => `${name}, `).join('')}expect, world: {}, scenario: ${JSON.stringify(metadata)} });`,
     );
@@ -634,6 +661,7 @@ export function gherkinPlugin<Fixtures extends object = Record<string, unknown>>
           ? {}
           : { generatedImports: options.generatedImports }),
         ...(options.fixtureNames === undefined ? {} : { fixtureNames: options.fixtureNames }),
+        ...(options.scenario === undefined ? {} : { scenario: options.scenario }),
         // The command line composes with the project's filter rather than
         // replacing it, and it arrives by environment because the transform
         // runs inside the runner's workers rather than in the process that

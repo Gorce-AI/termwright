@@ -32,6 +32,23 @@ Depending on the integration, Termwright may click the control or use a
 supported keyboard action. It does not guess a Tab sequence. The action fails
 before sending input if the integration cannot identify a valid strategy.
 
+Select the input family when the interaction itself matters:
+
+```ts
+await save.activate({ via: 'keyboard' });
+await app.getByRole('checkbox', { name: 'Publish' }).check({ via: 'pointer' });
+```
+
+Use `focusByTraversal()` for applications whose public focus contract is Tab
+navigation but whose controls have no direct focus recipe:
+
+```ts
+await app.focusByTraversal(app.getByRole('textbox', { name: 'Search' }));
+```
+
+Termwright sends one navigation key, waits for the next committed semantic
+revision, and checks focus again. `next: 'Shift+Tab'` traverses backwards.
+
 ## Press keys
 
 ```ts

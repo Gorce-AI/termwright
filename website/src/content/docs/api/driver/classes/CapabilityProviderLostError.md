@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: CapabilityProviderLostError
 
-Defined in: [driver/src/errors.ts:147](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L147)
+Defined in: [driver/src/errors.ts:161](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L161)
 
 Base class for every error the driver throws. Carries a stable [code](../termwrighterror/#code)
 plus Playwright-grade [diagnostics](../termwrighterror/#diagnostics) (what was observed, which
@@ -27,7 +27,7 @@ candidates existed, and a suggestion).
 
 > **new CapabilityProviderLostError**(`message`, `diagnostics`): `CapabilityProviderLostError`
 
-Defined in: [driver/src/errors.ts:148](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L148)
+Defined in: [driver/src/errors.ts:162](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L162)
 
 #### Parameters
 

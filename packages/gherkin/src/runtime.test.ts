@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, test, vi } from 'vitest';
+import { createResourceScope } from '@termwright/test';
 import {
   After,
   Before,
@@ -16,6 +17,7 @@ import {
 
 function context(): { value: GherkinContext; titles: string[] } {
   const titles: string[] = [];
+  const resources = createResourceScope();
   const value = {
     world: {},
     scenario: { feature: 'Feature', name: 'Scenario', uri: 'feature.feature', line: 2, tags: [] },
@@ -23,6 +25,7 @@ function context(): { value: GherkinContext; titles: string[] } {
       titles.push(title);
       return body();
     },
+    termwright: { resources },
   } as unknown as GherkinContext;
   return { value, titles };
 }
@@ -220,6 +223,24 @@ describe('feature-local runtime', () => {
     ).rejects.toThrow('scenario failed');
 
     expect(after).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  test('lets the native test scope clean a scenario whose body never reaches dispose', async () => {
+    const controller = new AbortController();
+    const parent = createResourceScope({ signal: controller.signal });
+    const close = vi.fn();
+    const base = context().value;
+    const managed = createGherkinContext({
+      ...base,
+      termwright: { ...base.termwright, resources: parent },
+    });
+    managed.use({ close });
+
+    controller.abort(new Error('scenario timed out'));
+    await parent.close();
+
+    expect(managed.signal.aborted).toBe(true);
     expect(close).toHaveBeenCalledOnce();
   });
 

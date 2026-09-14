@@ -386,6 +386,24 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
     await terminal.waitForText('KEY:1b 5b 41');
   });
 
+  it('answers and follows the kitty progressive keyboard protocol end to end', async () => {
+    const terminal = await launch('appkeys-app.mjs', {
+      env: { ...environment(), TERMWRIGHT_FIXTURE_KITTY: '1' },
+    });
+    await terminal.waitForText('KITTY ON');
+    await terminal.waitUntil(({ screen }) => screen.modes.kittyKeyboardFlags, {
+      until: (flags) => flags === 1,
+      description: 'kitty keyboard mode 1',
+    });
+
+    await terminal.press('Control+Shift+R');
+
+    await terminal.waitForText('GOT:1b 5b 31 31 34 3b 36 75');
+    expect(terminal.diagnostics().some(({ detail }) => detail.includes('keyboard-protocol'))).toBe(
+      true,
+    );
+  });
+
   it('refuses a click when the child never enabled mouse tracking', async () => {
     // Pins the known-off branch: echo-app enables nothing, and the flag keeps
     // the mode observable so the verdict is 'none' rather than the 'unknown' a
@@ -640,6 +658,16 @@ describe.skipIf(!ptyAvailable())('crash reports', { timeout: 20_000 }, () => {
     expect(report?.lastSemanticTree?.revision).toBe(1);
     expect(report?.lastSemanticTree?.nodes.map((node) => node.name)).toContain('Approve');
     expect(report?.diagnosticsTail.some((entry) => entry.code === 'adapter-attached')).toBe(true);
+  });
+
+  it('treats top-level test ids as literal data instead of selector syntax', async () => {
+    const testId = 'permission:7:approve.with#punctuation';
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { TERMWRIGHT_FIXTURE_APPROVE_TEST_ID: testId },
+    });
+
+    expect((await terminal.getByTestId(testId).resolve()).name).toBe('Approve');
   });
 
   resourceAwareIt.resources({ terminals: 3, traceWriters: 0 })(
@@ -2561,6 +2589,21 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     const receipt = await terminal.getByTestId('approve').activate();
     expect(receipt.plan.strategy).toBe('authoritative-activate');
     await terminal.waitForText('ACTIVATED approve');
+  });
+
+  it('traverses the application focus ring without timer polling', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { TERMWRIGHT_FIXTURE_MOUSE_MODE: '0' },
+    });
+    await terminal.waitForText('Permission required');
+    await waitForPairedSemanticRevision(terminal, 1);
+
+    const reject = terminal.getByTestId('reject');
+    await terminal.focusByTraversal(reject);
+
+    expect(await reject.semanticState()).toMatchObject({ focused: true });
+    expect(await terminal.getByTestId('approve').semanticState()).toMatchObject({ focused: false });
   });
 
   it('focuses and fills through an application production-strategy provider without pointer support', async () => {

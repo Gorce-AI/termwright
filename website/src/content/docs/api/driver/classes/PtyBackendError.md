@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: PtyBackendError
 
-Defined in: [driver/src/errors.ts:65](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L65)
+Defined in: [driver/src/errors.ts:79](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L79)
 
 The certified PTY backend accepted work and later reported a fatal failure.
 
@@ -25,7 +25,7 @@ The certified PTY backend accepted work and later reported a fatal failure.
 
 > **new PtyBackendError**(`message`, `diagnostics`, `options?`): `PtyBackendError`
 
-Defined in: [driver/src/errors.ts:66](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L66)
+Defined in: [driver/src/errors.ts:80](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L80)
 
 #### Parameters
 

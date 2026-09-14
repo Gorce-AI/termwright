@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionIntent
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:170
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:170
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:170
 
 > `readonly` **kind**: [`ActionKind`](../../type-aliases/actionkind/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:171
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:171
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:171
 
 > `readonly` `optional` **selector?**: `string`
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:172
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:172
 
 ***
 
@@ -35,4 +35,14 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:172
 
 > `readonly` `optional` **targetRef?**: [`LocatorRef`](../../type-aliases/locatorref/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:173
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:173
+
+***
+
+### via?
+
+> `readonly` `optional` **via?**: `"auto"` \| `"keyboard"` \| `"pointer"`
+
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:175
+
+Caller-selected physical input family for semantic convenience actions.

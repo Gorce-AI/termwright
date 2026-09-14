@@ -13,4 +13,4 @@ editUrl: false
 
 > **ScreenCondition** = `ScreenLeafCondition` \| \{ `condition`: `ScreenCondition`; `kind`: `"not"`; \} \| \{ `conditions`: readonly `ScreenCondition`[]; `kind`: `"all"` \| `"any"`; \}
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:144
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:144

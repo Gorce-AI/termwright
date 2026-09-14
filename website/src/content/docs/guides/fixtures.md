@@ -36,6 +36,29 @@ The custom fixture is typed alongside `terminal`, `step`, and the other
 Termwright fixtures. Teardown runs inside-out, so the terminal session remains
 available while the custom fixture finishes its cleanup.
 
+## Own resources and sidecar processes
+
+Every test receives an abort-aware `resources` scope. Register cleanup as soon
+as a resource is created; Termwright runs it once in reverse order on success,
+failure, or timeout:
+
+```ts
+test('uses a disposable server', async ({ resources, termwright }) => {
+  const database = resources.use(await openDatabase());
+  const server = await termwright.sidecars.launch({
+    command: [process.execPath, 'server.js'],
+    ready: /listening on/,
+  });
+
+  // database and server remain alive for the test and are always closed.
+});
+```
+
+Use `resources.acquire((signal) => createResource(signal))` when setup can
+outlive a test timeout. A late result is still disposed. Sidecars retain bounded
+stdout and stderr tails for readiness failures and terminate their complete
+process tree during teardown.
+
 ## Apply options to a file or suite
 
 Use `test.override()` to change launch defaults for a file or nested `describe`:

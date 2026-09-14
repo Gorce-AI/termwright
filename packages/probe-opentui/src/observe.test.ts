@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { validateProbeFrame, DEFAULT_LIMITS } from '@termwright/protocol';
 import { describeRenderable } from '@termwright/opentui';
 import { observeTree, type ObservableNode } from './observe.js';
+import { onRendererCreated, RENDERER_HOOK } from './attach.js';
 
 /** Minimal stand-in for a Renderable; only what the observer reads. */
 function node(name: string, num: number, extra: Partial<ObservableNode> = {}): ObservableNode {
@@ -244,6 +245,47 @@ describe('state', () => {
 
     expect(frame.objects[1]?.state?.value).toBe('draft text');
     expect(frame.objects[1]?.unobservable).not.toContain('value');
+  });
+
+  it('marks only exact certified TextRenderable plain text as public', () => {
+    class TextRenderable {
+      readonly num = 2;
+      readonly visible = true;
+      readonly screenX = 0;
+      readonly screenY = 0;
+      readonly width = 10;
+      readonly height = 1;
+      readonly plainText = 'public output';
+      getChildren(): readonly ObservableNode[] {
+        return [];
+      }
+    }
+    class TextSubclass extends TextRenderable {}
+    const release = onRendererCreated(() => undefined);
+    try {
+      const hook = (globalThis as Record<string, unknown>)[RENDERER_HOOK] as (
+        renderer: object,
+        certification: { version: string; source: 'builtin' },
+        config: Record<string, unknown>,
+        prototype: object,
+      ) => void;
+      hook({}, { version: '0.5.3', source: 'builtin' }, {}, TextRenderable.prototype);
+      const trusted = new TextRenderable() as unknown as ObservableNode;
+      const subclass = new TextSubclass() as unknown as ObservableNode;
+      const editable = node('TextareaRenderable', 4, { plainText: 'draft' });
+      const root = node('RootRenderable', 1, { getChildren: () => [trusted, subclass, editable] });
+
+      const values = observeTree(root, { frame: 1 })
+        .frame.objects.slice(1)
+        .map((object) => object.state);
+      expect(values[0]).toMatchObject({ value: 'public output', valueSensitivity: 'public' });
+      expect(values[1]).toMatchObject({ value: 'public output' });
+      expect(values[1]).not.toHaveProperty('valueSensitivity');
+      expect(values[2]).toMatchObject({ value: 'draft' });
+      expect(values[2]).not.toHaveProperty('valueSensitivity');
+    } finally {
+      release();
+    }
   });
 
   it('reports what the framework has no concept of as unobservable', () => {

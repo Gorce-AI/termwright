@@ -94,6 +94,20 @@ wait. Use `waitForQuiet()` only when an operation depends on the whole screen no
 longer changing, such as a coordinate-based click or a snapshot after an
 animation.
 
+For an application-specific condition, use `waitUntil()` instead of a timer or
+polling loop:
+
+```ts
+const result = await app.waitUntil(async ({ semanticTree }) => readQueueState(semanticTree), {
+  until: (state) => state.pending === 0 && state.saved > 0,
+  description: 'the save queue to drain',
+});
+```
+
+The observer runs once per committed terminal or semantic revision. On timeout,
+the error includes the last observed value and any tree/frame evidence still
+waiting to pair.
+
 ## Check layout
 
 ```ts

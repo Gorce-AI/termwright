@@ -12,9 +12,9 @@ pagefind: false
 
 # Function: encodeText()
 
-> **encodeText**(`text`): `Uint8Array`
+> **encodeText**(`text`, `modes?`): `Uint8Array`
 
-Defined in: [keys.ts:200](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L200)
+Defined in: [keys.ts:285](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L285)
 
 Encodes literal text as typed input: `\n` becomes carriage return, which is
 what a terminal delivers when the Enter key is pressed.
@@ -24,6 +24,10 @@ what a terminal delivers when the Enter key is pressed.
 ### text
 
 `string`
+
+### modes?
+
+[`KeyEncodingModes`](../../interfaces/keyencodingmodes/)
 
 ## Returns
 

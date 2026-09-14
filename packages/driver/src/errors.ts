@@ -50,6 +50,20 @@ export class TermwrightError extends Error {
     if (this.diagnostics.screenExcerpt !== undefined) {
       parts.push(`screen:\n${this.diagnostics.screenExcerpt}`);
     }
+    if (this.diagnostics.lastObserved !== undefined) {
+      parts.push(`last observed: ${this.diagnostics.lastObserved}`);
+    }
+    if (this.diagnostics.observation !== undefined) {
+      const pending = this.diagnostics.observation;
+      parts.push(
+        `observation: ${pending.state}; open frames [${pending.openFrameRevisions.join(', ')}]; ` +
+          `trees awaiting markers [${pending.pendingTreeRevisions.join(', ')}]; ` +
+          `markers awaiting trees [${pending.pendingMarkerRevisions.join(', ')}]` +
+          (pending.providerEvidenceInvalidAfterRevision === null
+            ? ''
+            : `; provider evidence invalid after revision ${pending.providerEvidenceInvalidAfterRevision}`),
+      );
+    }
     return parts.join('\n');
   }
 }

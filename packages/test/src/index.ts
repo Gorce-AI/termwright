@@ -109,6 +109,23 @@ export { ptyAvailable, ptyUnavailableReason, type PtyUnavailableReason } from '.
 export { type LaunchOverrides, type TermwrightOptions } from './options.js';
 
 export {
+  createResourceScope,
+  ResourceScopeClosedError,
+  type DisposableResource,
+  type ResourceScope,
+  type ResourceScopeOptions,
+} from './resource-scope.js';
+
+export {
+  launchSidecar,
+  type LaunchSidecarOptions,
+  type SidecarLauncher,
+  type SidecarOutput,
+  type SidecarProcess,
+  type SidecarReadiness,
+} from './sidecar.js';
+
+export {
   seedDirectory,
   type SeedFile,
   type SeedFiles,

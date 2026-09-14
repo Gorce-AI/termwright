@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: BoundsExpectation
 
-Defined in: [driver/src/api.ts:750](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L750)
+Defined in: [driver/src/api.ts:792](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L792)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **column?**: `number`
 
-Defined in: [driver/src/api.ts:752](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L752)
+Defined in: [driver/src/api.ts:794](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L794)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:752](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **height?**: `number`
 
-Defined in: [driver/src/api.ts:754](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L754)
+Defined in: [driver/src/api.ts:796](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L796)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:754](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **row?**: `number`
 
-Defined in: [driver/src/api.ts:751](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L751)
+Defined in: [driver/src/api.ts:793](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L793)
 
 ***
 
@@ -60,4 +60,4 @@ Defined in: [driver/src/api.ts:751](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **width?**: `number`
 
-Defined in: [driver/src/api.ts:753](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L753)
+Defined in: [driver/src/api.ts:795](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L795)

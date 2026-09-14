@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ScreenTextLocatorOptions
 
-Defined in: [driver/src/api.ts:552](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L552)
+Defined in: [driver/src/api.ts:589](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L589)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -40,7 +40,7 @@ await terminal.close();
 
 > `readonly` `optional` **attributes?**: `Partial`\<[`CellAttributes`](../cellattributes/)\>
 
-Defined in: [driver/src/api.ts:557](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L557)
+Defined in: [driver/src/api.ts:594](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L594)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [driver/src/api.ts:557](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **bg?**: `string`
 
-Defined in: [driver/src/api.ts:556](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L556)
+Defined in: [driver/src/api.ts:593](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L593)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: [driver/src/api.ts:556](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **exact?**: `boolean`
 
-Defined in: [driver/src/api.ts:549](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L549)
+Defined in: [driver/src/api.ts:586](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L586)
 
 #### Inherited from
 
@@ -68,7 +68,7 @@ Defined in: [driver/src/api.ts:549](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **fg?**: `string`
 
-Defined in: [driver/src/api.ts:555](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L555)
+Defined in: [driver/src/api.ts:592](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L592)
 
 Style predicates evaluated against terminal cells.
 
@@ -78,4 +78,4 @@ Style predicates evaluated against terminal cells.
 
 > `readonly` `optional` **occurrence?**: `number`
 
-Defined in: [driver/src/api.ts:553](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L553)
+Defined in: [driver/src/api.ts:590](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L590)

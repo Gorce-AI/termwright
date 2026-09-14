@@ -54,6 +54,7 @@ editUrl: false
 - [ErrorDiagnostics](interfaces/errordiagnostics/)
 - [EvidenceProvenance](interfaces/evidenceprovenance/)
 - [ExitStatus](interfaces/exitstatus/)
+- [FocusTraversalOptions](interfaces/focustraversaloptions/)
 - [Keyboard](interfaces/keyboard/)
 - [LaunchOptions](interfaces/launchoptions/)
 - [LaunchTerminalOptions](interfaces/launchterminaloptions/)
@@ -80,6 +81,7 @@ editUrl: false
 - [ScreenTextLocatorOptions](interfaces/screentextlocatoroptions/)
 - [ScrollbackApi](interfaces/scrollbackapi/)
 - [SelectionApi](interfaces/selectionapi/)
+- [SemanticActionOptions](interfaces/semanticactionoptions/)
 - [SemanticLocator](interfaces/semanticlocator/)
 - [SemanticLocatorFilterOptions](interfaces/semanticlocatorfilteroptions/)
 - [SensitiveValue](interfaces/sensitivevalue/)
@@ -95,12 +97,14 @@ editUrl: false
 - [SpatialRelationExpectation](interfaces/spatialrelationexpectation/)
 - [TerminalHarness](interfaces/terminalharness/)
 - [TerminalModes](interfaces/terminalmodes/)
+- [TerminalObservation](interfaces/terminalobservation/)
 - [TerminalState](interfaces/terminalstate/)
 - [TerminalStateSnapshot](interfaces/terminalstatesnapshot/)
 - [TerminalWindow](interfaces/terminalwindow/)
 - [TextLocatorOptions](interfaces/textlocatoroptions/)
 - [TimeoutClasses](interfaces/timeoutclasses/)
 - [WaitOptions](interfaces/waitoptions/)
+- [WaitUntilOptions](interfaces/waituntiloptions/)
 
 ## Type Aliases
 

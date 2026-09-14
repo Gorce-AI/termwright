@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: HistoryTruncatedError
 
-Defined in: [driver/src/errors.ts:185](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L185)
+Defined in: [driver/src/errors.ts:199](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L199)
 
 Scrollback data was requested below the retained floor.
 
@@ -25,7 +25,7 @@ Scrollback data was requested below the retained floor.
 
 > **new HistoryTruncatedError**(`message`, `diagnostics`): `HistoryTruncatedError`
 
-Defined in: [driver/src/errors.ts:186](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L186)
+Defined in: [driver/src/errors.ts:200](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L200)
 
 #### Parameters
 

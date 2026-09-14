@@ -92,6 +92,7 @@ function context(
       bracketedPaste: false,
       applicationCursorKeys: false,
       applicationKeypad: false,
+      kittyKeyboardFlags: 0,
       focusReporting: 'off',
       synchronizedOutput: false,
     }),
@@ -220,6 +221,43 @@ describe('ActionPlanner keyboard strategies', () => {
       requirements: plan.requirements,
     });
     expect(plan.operations).toEqual([{ device: 'keyboard', kind: 'press', value: 'Enter' }]);
+  });
+
+  it('honours an explicit pointer strategy even when a keyboard recipe exists', () => {
+    const planner = new ActionPlanner(context());
+    const plan = planner.planKeyboard(
+      'pointer-activate',
+      { kind: 'activate', targetRef: target.ref, via: 'pointer' },
+      target,
+    );
+
+    expect(plan.strategy).toBe('authoritative-pointer-activate');
+    expect(plan.operations.every(({ device }) => device === 'mouse')).toBe(true);
+  });
+
+  it('fails explicitly when keyboard was requested but no recipe exists', () => {
+    const planner = new ActionPlanner(context({ inputRecipes: [] }));
+
+    expect(() =>
+      planner.planKeyboard(
+        'keyboard-activate',
+        { kind: 'activate', targetRef: target.ref, via: 'keyboard' },
+        target,
+      ),
+    ).toThrow(/no authoritative keyboard activate recipe/u);
+  });
+
+  it('can force pointer focus instead of silently preferring a keyboard recipe', () => {
+    const unfocusedTarget = { ...target, state: { focused: false } };
+    const planner = new ActionPlanner(context({ state: { focused: false } }));
+    const plan = planner.planKeyboard(
+      'pointer-focus',
+      { kind: 'focus', targetRef: target.ref, via: 'pointer' },
+      unfocusedTarget,
+    );
+
+    expect(plan.strategy).toBe('authoritative-pointer-focus');
+    expect(plan.operations.every(({ device }) => device === 'mouse')).toBe(true);
   });
 
   it('never turns descriptive actions into guessed Enter or Ctrl+A bindings', () => {
@@ -598,6 +636,7 @@ describe('ActionPlanner runtime input requirements', () => {
             bracketedPaste: false,
             applicationCursorKeys: false,
             applicationKeypad: false,
+            kittyKeyboardFlags: 0,
             focusReporting: 'off',
             synchronizedOutput: false,
           }),

@@ -102,7 +102,7 @@ describe('subpath entry points', () => {
 
     expect(result.code).toContain('from "./fixtures.js"');
     expect(result.code).toContain(
-      'async ({ termwrightOptions, termwright, terminal, step, app }) =>',
+      'async ({ signal, termwrightOptions, termwright, terminal, step, app }) =>',
     );
   });
 
