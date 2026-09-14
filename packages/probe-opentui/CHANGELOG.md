@@ -1,5 +1,18 @@
 # @termwright/probe-opentui
 
+## 0.5.3
+
+### Patch Changes
+
+- [#161](https://github.com/Gorce-AI/termwright/pull/161) [`602f073`](https://github.com/Gorce-AI/termwright/commit/602f0736e202e6a946520b6a2a9b2705b448ad6e) Thanks [@termwright-automation-writer](https://github.com/apps/termwright-automation-writer)! - Certify upstream framework releases: opentui@0.5.11.
+
+- [#160](https://github.com/Gorce-AI/termwright/pull/160) [`b5acff2`](https://github.com/Gorce-AI/termwright/commit/b5acff24a384cb37df4b46a8bfdd3a3753a20c57) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Support OpenTUI 0.5.11 bundled renderable class names and wait for semantic geometry to adopt requested terminal dimensions before `resize()` completes.
+- Updated dependencies [[`b5acff2`](https://github.com/Gorce-AI/termwright/commit/b5acff24a384cb37df4b46a8bfdd3a3753a20c57)]:
+  - @termwright/recognizers@0.5.3
+  - @termwright/probe-runtime@0.5.3
+  - @termwright/protocol@0.5.3
+  - @termwright/pty@0.5.3
+
 ## 0.5.2
 
 ### Patch Changes

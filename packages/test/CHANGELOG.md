@@ -1,5 +1,18 @@
 # @termwright/test
 
+## 0.5.3
+
+### Patch Changes
+
+- Updated dependencies [[`b5acff2`](https://github.com/Gorce-AI/termwright/commit/b5acff24a384cb37df4b46a8bfdd3a3753a20c57), [`2e8bc5b`](https://github.com/Gorce-AI/termwright/commit/2e8bc5bb0430fc9838e246b5b133ffa1d4c63160)]:
+  - @termwright/driver@0.5.3
+  - @termwright/ui@0.5.3
+  - @termwright/trace@0.5.3
+  - @termwright/protocol@0.5.3
+  - @termwright/resource-broker@0.5.3
+  - @termwright/run-journal-transport@0.5.3
+  - @termwright/vt@0.5.3
+
 ## 0.5.2
 
 ### Patch Changes

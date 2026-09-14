@@ -1,5 +1,13 @@
 # @termwright/recognizers
 
+## 0.5.3
+
+### Patch Changes
+
+- [#160](https://github.com/Gorce-AI/termwright/pull/160) [`b5acff2`](https://github.com/Gorce-AI/termwright/commit/b5acff24a384cb37df4b46a8bfdd3a3753a20c57) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Support OpenTUI 0.5.11 bundled renderable class names and wait for semantic geometry to adopt requested terminal dimensions before `resize()` completes.
+- Updated dependencies []:
+  - @termwright/protocol@0.5.3
+
 ## 0.5.2
 
 ### Patch Changes
