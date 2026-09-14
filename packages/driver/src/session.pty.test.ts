@@ -1816,6 +1816,30 @@ describe.skipIf(!ptyAvailable())('a probe-backed session', { timeout: 20_000 }, 
 });
 
 describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout: 20_000 }, () => {
+  it('waits until semantic geometry adopts the resized terminal dimensions', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { TERMWRIGHT_FIXTURE_DELAYED_RESIZE_DIMENSIONS: '1' },
+    });
+    await waitForPairedSemanticRevision(terminal, 1);
+    const observed: Array<{ revision: number; columns: number; rows: number }> = [];
+    terminal.events.on('semantic-revision', ({ revision, snapshot }) => {
+      observed.push({ revision, columns: snapshot.columns, rows: snapshot.rows });
+    });
+
+    const receipt = await terminal.resize({ columns: 50, rows: 12 });
+
+    expect(observed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ columns: 60, rows: 10 }),
+        expect.objectContaining({ columns: 50, rows: 12 }),
+      ]),
+    );
+    expect(receipt.after.semanticRevision).toBe(
+      observed.findLast(({ columns, rows }) => columns === 50 && rows === 12)?.revision,
+    );
+  });
+
   it('does not report hidden or detached before the first semantic revision commits', async () => {
     const terminal = await launch('semantic-app.mjs', {
       semanticNegotiationMs: 5_000,

@@ -59,6 +59,7 @@ const staleProviderEvidence = process.env['TERMWRIGHT_FIXTURE_STALE_PROVIDER'] =
 const providerActionRecipes = process.env['TERMWRIGHT_FIXTURE_PROVIDER_ACTION_RECIPES'] === '1';
 const providerFocusState = process.env['TERMWRIGHT_FIXTURE_PROVIDER_FOCUS_STATE'] === '1';
 const unicodeGeometry = process.env['TERMWRIGHT_FIXTURE_UNICODE_GEOMETRY'];
+const delayedResizeDimensions = process.env['TERMWRIGHT_FIXTURE_DELAYED_RESIZE_DIMENSIONS'] === '1';
 
 const approvePrefix =
   unicodeGeometry === 'emoji' ? '  👨‍👩‍👧' : unicodeGeometry === 'devanagari' ? '  किं' : '  ';
@@ -85,6 +86,7 @@ let logBudget = null;
 const probeMode = process.env['TERMWRIGHT_FIXTURE_PROBE'];
 let typed = '';
 const focusOrder = ['approve', 'reject', 'name'];
+let semanticDimensions = { columns: process.stdout.columns, rows: process.stdout.rows };
 
 function focusRecipe(target) {
   if (focused === target) return [];
@@ -213,8 +215,8 @@ function tree() {
   return {
     sessionId,
     revision,
-    columns: 80,
-    rows: 24,
+    columns: semanticDimensions.columns,
+    rows: semanticDimensions.rows,
     cursor: { row: 0, column: 0, visible: false },
     rootIds: ['n1'],
     nodes: [
@@ -657,7 +659,19 @@ function publish() {
 // A real TUI repaints after its PTY changes size. Keep the fixture honest:
 // resize() must observe the frame caused by resize itself, never a late frame
 // from whichever input happened to precede it in the test.
-process.stdout.on('resize', publish);
+process.stdout.on('resize', () => {
+  if (!delayedResizeDimensions) {
+    semanticDimensions = { columns: process.stdout.columns, rows: process.stdout.rows };
+    publish();
+    return;
+  }
+  // Reproduce a framework which commits one stale retained-tree layout before
+  // its next layout pass observes SIGWINCH. resize() must not return at this
+  // first revision merely because it is newer and paired to the resized VT.
+  publish();
+  semanticDimensions = { columns: process.stdout.columns, rows: process.stdout.rows };
+  publish();
+});
 
 function decodeFrames(buffer, onMessage) {
   let rest = buffer;

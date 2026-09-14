@@ -19,7 +19,7 @@
     "explicit-test-selection-reviewed-with-platform-registry": 74,
     "managed-or-diagnostic-background-task": 76,
     "production-polling-review": 1,
-    "production-process-isolation-review": 40,
+    "production-process-isolation-review": 41,
     "test-observer-or-intentional-background-task": 15,
     "test-process-isolation-review": 39
   },
@@ -1475,6 +1475,12 @@
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
       "excerpt": "const coverApproveCenter = process.env['TERMWRIGHT_FIXTURE_COVER_APPROVE_CENTER'] === '1';"
+    },
+    {
+      "path": "packages/driver/test-fixtures/semantic-app.mjs",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "const delayedResizeDimensions = process.env['TERMWRIGHT_FIXTURE_DELAYED_RESIZE_DIMENSIONS'] === '1';"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
