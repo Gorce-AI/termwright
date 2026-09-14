@@ -13,7 +13,7 @@ editUrl: false
 
 > **composeTagExpressions**(`configured`, `requested`): `string` \| `undefined`
 
-Defined in: [plugin.ts:448](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L448)
+Defined in: [plugin.ts:456](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L456)
 
 Combines the project's tag filter with the one a command line asked for.
 

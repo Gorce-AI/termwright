@@ -11,7 +11,6 @@ import { parse as parseTagExpression } from '@cucumber/tag-expressions';
 import { SourceMapGenerator, type RawSourceMap } from 'source-map-js';
 import { convertPathToPattern, glob } from 'tinyglobby';
 import type { HmrContext, Plugin, ResolvedConfig } from 'vite';
-import type { TermwrightTestResources } from '@termwright/test';
 import type { GherkinScenario } from './definitions.js';
 
 const TRANSFORM_MARKER = '/* @termwright/gherkin transformed */';
@@ -70,9 +69,18 @@ export interface GherkinPluginOptions<Fixtures extends object = Record<string, u
   readonly scenario?: (scenario: GherkinScenario) => GherkinScenarioOptions | undefined;
 }
 
+/** Resource admission requirements forwarded to the native Termwright test case. */
+export interface GherkinScenarioResources {
+  readonly terminals?: number;
+  readonly traceWriters?: number;
+  readonly nativeHost?: 'shared' | 'exclusive';
+  readonly hostPressure?: 'exclusive';
+  readonly load?: 'light' | 'normal' | 'heavy' | 'exclusive';
+}
+
 export interface GherkinScenarioOptions {
   readonly timeout?: number;
-  readonly resources?: TermwrightTestResources;
+  readonly resources?: GherkinScenarioResources;
 }
 
 export interface GeneratedGherkinImports {

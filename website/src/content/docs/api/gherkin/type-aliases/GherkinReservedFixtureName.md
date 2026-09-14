@@ -13,6 +13,6 @@ editUrl: false
 
 > **GherkinReservedFixtureName** = `"termwrightOptions"` \| `"termwright"` \| `"terminal"` \| `"step"` \| `"expect"` \| `"world"` \| `"scenario"` \| `"resources"` \| `"defer"` \| `"use"` \| `"task"` \| `"signal"` \| `"skip"` \| `"annotate"` \| `"onTestFailed"` \| `"onTestFinished"`
 
-Defined in: [plugin.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L27)
+Defined in: [plugin.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L26)
 
 Fixture names supplied by the Gherkin bridge or the native Termwright/Vitest context.

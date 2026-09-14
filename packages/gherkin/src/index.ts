@@ -41,5 +41,6 @@ export {
   type GeneratedGherkinImports,
   type GherkinPluginOptions,
   type GherkinScenarioOptions,
+  type GherkinScenarioResources,
   type GherkinReservedFixtureName,
 } from './plugin.js';

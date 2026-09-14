@@ -11,15 +11,15 @@ editUrl: false
 
 # Interface: GherkinScenarioOptions
 
-Defined in: [plugin.ts:73](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L73)
+Defined in: [plugin.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L81)
 
 ## Properties
 
 ### resources?
 
-> `readonly` `optional` **resources?**: `TermwrightTestResources`
+> `readonly` `optional` **resources?**: [`GherkinScenarioResources`](../gherkinscenarioresources/)
 
-Defined in: [plugin.ts:75](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L75)
+Defined in: [plugin.ts:83](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L83)
 
 ***
 
@@ -27,4 +27,4 @@ Defined in: [plugin.ts:75](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [plugin.ts:74](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L74)
+Defined in: [plugin.ts:82](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L82)

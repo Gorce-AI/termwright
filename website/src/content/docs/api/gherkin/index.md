@@ -21,6 +21,7 @@ ordinary `.test.ts` files are discovered.
 - [GherkinPluginOptions](interfaces/gherkinpluginoptions/)
 - [GherkinScenario](interfaces/gherkinscenario/)
 - [GherkinScenarioOptions](interfaces/gherkinscenariooptions/)
+- [GherkinScenarioResources](interfaces/gherkinscenarioresources/)
 - [HookDefinition](interfaces/hookdefinition/)
 - [HookDefinitionOptions](interfaces/hookdefinitionoptions/)
 - [ParameterTypeDefinition](interfaces/parametertypedefinition/)
