@@ -1600,16 +1600,19 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         // later VT revision would reject a real causal frame.
         for (;;) {
           const checkpoint = this.checkpoint();
+          const paired = this.#pairing.published;
           if (
             checkpoint.semanticRevision !== null &&
             checkpoint.semanticRevision > (before.semanticRevision ?? -1) &&
             checkpoint.pairedScreenRevision !== null &&
-            checkpoint.pairedScreenRevision >= localResizeRevision
+            checkpoint.pairedScreenRevision >= localResizeRevision &&
+            paired?.snapshot.columns === size.columns &&
+            paired.snapshot.rows === size.rows
           )
             break;
           if (deadline.expired()) {
             throw new TimeoutError(
-              'the child repainted after resize but did not publish its paired semantic frame',
+              `the child repainted after resize but did not publish a paired semantic frame at ${size.columns}x${size.rows}`,
               this.errorDiagnostics(),
             );
           }

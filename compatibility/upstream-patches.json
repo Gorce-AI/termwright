@@ -19,7 +19,7 @@
       "ecosystem": "npm",
       "registry": "npm",
       "package": "@opentui/core",
-      "certificationRevision": 2,
+      "certificationRevision": 3,
       "minimumVersion": "0.5.3",
       "mode": "hook",
       "hookStrategy": "runtime",

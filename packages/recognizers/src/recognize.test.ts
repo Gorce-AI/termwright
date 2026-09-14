@@ -51,6 +51,20 @@ describe('role resolution, in the normative order', () => {
     expect(snapshot.nodes.map((node) => node.role)).toEqual(['application', 'textbox', 'text']);
   });
 
+  it('maps numeric class aliases emitted by bundled OpenTUI builds', () => {
+    const snapshot = recognize(
+      frameOf(
+        object({ num: 1, frameworkType: 'RootRenderable2' }),
+        object({ num: 2, frameworkType: 'TextRenderable2', parent: '1', text: 'Bundled label' }),
+        object({ num: 3, frameworkType: 'ReportRenderable2', parent: '1' }),
+      ),
+      context,
+    );
+
+    expect(snapshot.nodes.map((node) => node.role)).toEqual(['application', 'text', 'generic']);
+    expect(snapshot.nodes[1]?.name).toBe('Bundled label');
+  });
+
   it('keeps an unrecognised widget as generic rather than dropping it', () => {
     // This is what D1 exists for: an application's own subclass survives with
     // its bounds, text and children, findable by what the framework called it.

@@ -41,7 +41,20 @@ const ROLE_BY_CLASS: Readonly<Record<string, SemanticRole>> = Object.freeze({
  * `SliderRenderable` and every application subclass land there on purpose.
  */
 export function roleForOpenTuiClass(frameworkType: string): SemanticRole | undefined {
-  return Object.hasOwn(ROLE_BY_CLASS, frameworkType) ? ROLE_BY_CLASS[frameworkType] : undefined;
+  const direct = Object.hasOwn(ROLE_BY_CLASS, frameworkType)
+    ? ROLE_BY_CLASS[frameworkType]
+    : undefined;
+  if (direct !== undefined) return direct;
+
+  // Bun can append a numeric disambiguator when two copies of an upstream
+  // class name land in one bundle. OpenTUI 0.5.11 exposes its retained tree as
+  // RootRenderable2/TextRenderable2 for that reason. Only strip the suffix
+  // when the resulting name is one of the explicitly audited framework
+  // classes; an application class such as ReportRenderable2 must stay generic.
+  const bundledBase = frameworkType.match(/^(.*Renderable)\d+$/)?.[1];
+  return bundledBase !== undefined && Object.hasOwn(ROLE_BY_CLASS, bundledBase)
+    ? ROLE_BY_CLASS[bundledBase]
+    : undefined;
 }
 
 /**
@@ -52,5 +65,5 @@ export function roleForOpenTuiClass(frameworkType: string): SemanticRole | undef
  * because the second is the case `generic` was designed for.
  */
 export function isOpenTuiClass(frameworkType: string): boolean {
-  return frameworkType.endsWith('Renderable');
+  return /Renderable\d*$/.test(frameworkType);
 }
