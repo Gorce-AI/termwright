@@ -15,7 +15,7 @@
     "deterministic-adversarial-fixture-schedule": 31,
     "display-or-persisted-wall-time-not-correctness-order": 95,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 214,
+    "explicit-external-or-ui-source-polling": 217,
     "explicit-test-selection-reviewed-with-platform-registry": 74,
     "managed-or-diagnostic-background-task": 76,
     "production-polling-review": 1,
@@ -3490,6 +3490,18 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => rows.innerText()).toContain('RESIZED 40 COLUMN VIEW');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => rows.innerText()).toContain('RESIZED 40 COLUMN VIEW');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => search.inputValue()).toBe('');"
     },
     {
@@ -3521,6 +3533,12 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => stop.isEnabled()).toBe(true);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => terminal.getAttribute('data-terminal-columns')).toBe('80');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
