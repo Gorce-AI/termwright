@@ -127,12 +127,13 @@ stderr. stdio has no TTL: there, EOF on the pipe is the signal.
 | `terminal.capabilities` | What this session supports: whether a semantic tree is published, which adapter publishes it, and the terminal geometry. Call it before relying on role-based targeting. |
 | `terminal.snapshot` | One typed view of the terminal: compact semantic refs, visible text, cursor, terminal modes and scroll position. variant "full" writes the complete dump (text, ANSI, HTML, semantic tree) to disk and returns only refs plus the file path. The returned revision is the cursor for terminal.capture_since. |
 | `terminal.capture_since` | Incremental view: the screen rows that differ and the semantic subtrees that were added, removed or updated in the latest committed semantic tree since the given cursor. A screen change alone does not imply a future semantic commit; wait for an explicit semantic state when the caller requires one. The cursor must be a revision this server handed out earlier (snapshot or capture_since); older cursors fail with history-truncated. |
-| `terminal.query` | Resolves a target to refs without acting on it. Use it to check how many nodes a locator matches before clicking, or to turn a role/name into a ref. |
+| `terminal.query` | Queries the current state without acting or waiting for a match. Zero matches return immediately. Use terminal.wait_for to await appearance, then query to inspect matches. |
 | `terminal.checkpoint` | Returns the atomic session/contract/screen/semantic identity used by revision-safe actions and waits. |
 | `terminal.actionability` | Runs the same ActionPlanner used by execution, but sends no input. Reports every authoritative requirement and the chosen strategy or typed rejection. |
-| `terminal.click` | Sends a real click mouse report through the pseudo-terminal. Fails closed with input-mode-disabled when the required tracking mode or encoding is disabled or unobservable. |
-| `terminal.double_click` | Sends a real double-click mouse report through the pseudo-terminal. Fails closed with input-mode-disabled when the required tracking mode or encoding is disabled or unobservable. |
-| `terminal.hover` | Sends a real motion mouse report through the pseudo-terminal. Fails closed with input-mode-disabled when the required tracking mode or encoding is disabled or unobservable. |
+| `terminal.click` | Sends a real click mouse report through the pseudo-terminal. Success confirms delivery of input, not completion of the application operation; use terminal.wait_for for its resulting state. Fails closed with input-mode-disabled when required tracking or encoding is disabled or unobservable. |
+| `terminal.double_click` | Sends a real double-click mouse report through the pseudo-terminal. Success confirms delivery of input, not completion of the application operation; use terminal.wait_for for its resulting state. Fails closed with input-mode-disabled when required tracking or encoding is disabled or unobservable. |
+| `terminal.hover` | Sends a real motion mouse report through the pseudo-terminal. Success confirms delivery of input, not completion of the application operation; use terminal.wait_for for its resulting state. Fails closed with input-mode-disabled when required tracking or encoding is disabled or unobservable. |
+| `terminal.click_at` | Sends a physical mouse click at a viewport cell without claiming that a semantic control receives it. Useful for composite controls whose visible child owns the hit cell; a child may stop event propagation. Success confirms input delivery only, so verify the application result with terminal.wait_for. |
 | `terminal.press` | Sends key chords as real bytes, honouring the modes the program enabled (application cursor keys, keypad). Examples: "Enter", "Escape", "Control+K Control+U". With a target, the node must already be focused. |
 | `terminal.type` | Types text as individual keystrokes (not a paste). With a target, the node must already be focused; use terminal.fill for focus + replacement. |
 | `terminal.fill` | Ensures the semantic control receives focus through the real input path, selects its current value, and types the replacement. |
@@ -145,10 +146,10 @@ stderr. stdio has no TTL: there, EOF on the pipe is the signal.
 | `terminal.resize` | Resizes the pseudo-terminal; the child sees a real SIGWINCH. |
 | `terminal.signal` | Sends INT, TERM, KILL or HUP to the child. Destructive by design: terminal.close cleans up without signalling. |
 | `terminal.scrollback` | Emulator-side history: read a line range, search it, or move the viewport. The child sees nothing — no input is sent. |
-| `terminal.select_cells` | Selects a rectangle in the emulator (like a mouse selection). No input is sent. |
-| `terminal.copy_selection` | Returns the text of the current selection and optionally clears it. |
+| `terminal.select_cells` | Selects cells in Termwright's emulator only. No mouse input reaches the application, so this cannot test application selection or Ctrl+C. Use terminal.drag followed by terminal.press and terminal.wait_for to test that flow. |
+| `terminal.copy_selection` | Returns text selected in Termwright's emulator by terminal.select_cells; this does not invoke the application's copy behavior. |
 | `terminal.wait_for` | Revision-driven waits — never a sleep. "text"/"title" wait for content, locator states use the driver's canonical Conditions, "quiet" explicitly waits for heuristic silence, "render" for a render after a given revision, "exit" for the child to exit. |
-| `terminal.close` | Bounded physical cleanup: hangs up the pseudo-terminal and forgets the handle. Send signals explicitly with terminal.signal if the child must be killed first. |
+| `terminal.close` | Bounded physical cleanup: hangs up the pseudo-terminal, finalizes an optional recording, and forgets the handle. Send signals explicitly with terminal.signal if the child must be killed first. |
 
 ### Trace tools
 

@@ -22,6 +22,7 @@ const CONTRACT_TOOLS = [
   'terminal.click',
   'terminal.double_click',
   'terminal.hover',
+  'terminal.click_at',
   'terminal.press',
   'terminal.type',
   'terminal.fill',

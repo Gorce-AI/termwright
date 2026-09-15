@@ -16,10 +16,10 @@
     "display-or-persisted-wall-time-not-correctness-order": 95,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 217,
-    "explicit-test-selection-reviewed-with-platform-registry": 74,
+    "explicit-test-selection-reviewed-with-platform-registry": 75,
     "managed-or-diagnostic-background-task": 79,
     "production-polling-review": 1,
-    "production-process-isolation-review": 42,
+    "production-process-isolation-review": 43,
     "test-observer-or-intentional-background-task": 16,
     "test-process-isolation-review": 39
   },
@@ -1744,6 +1744,12 @@
       "path": "packages/mcp/src/server.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "describe.skipIf("
+    },
+    {
+      "path": "packages/mcp/src/server.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout: 30_000 }, () => {"
     },
     {
@@ -1961,6 +1967,12 @@
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "const timer = setTimeout(() => {"
+    },
+    {
+      "path": "packages/probe-opentui/src/testing/nested-button-app.ts",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "...(process.env['STOP_CHILD'] === '1' ? { onMouseDown: (event) => event.stopPropagation() } : {}),"
     },
     {
       "path": "packages/probe-opentui/src/testing/runtime-conformance-app.ts",

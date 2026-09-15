@@ -267,7 +267,7 @@ aggregate verdict.
 format + visible text; `full` variant writes to disk and returns refs),
 `terminal.capture_since {cursor}` (changed rows + changed semantic subtrees),
 `terminal.query {selector|role/name}`, `terminal.checkpoint`, `terminal.actionability`,
-`terminal.click`, `terminal.double_click`, `terminal.hover`, `terminal.press`,
+`terminal.click`, `terminal.double_click`, `terminal.hover`, `terminal.click_at`, `terminal.press`,
 `terminal.type`, `terminal.fill`, `terminal.check`, `terminal.uncheck`, `terminal.paste`, `terminal.write_raw`,
 `terminal.drag`, `terminal.wheel`, `terminal.resize`, `terminal.signal`,
 `terminal.scrollback`, `terminal.select_cells`, `terminal.copy_selection`,

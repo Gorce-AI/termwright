@@ -126,6 +126,7 @@ function compactFor(
     readonly maxNodes?: number;
     readonly maxRows?: number;
     readonly includeText?: boolean;
+    readonly rootRef?: string;
   } = {},
 ): string {
   const screen = entry.harness.screen();
@@ -256,6 +257,15 @@ const launch = defineTool({
     rows: z.number().int().min(1).max(1000).optional().describe('default 30'),
     scrollbackLines: z.number().int().min(0).max(100_000).optional(),
     semanticNegotiationMs: z.number().int().min(0).max(60_000).optional(),
+    record: z
+      .boolean()
+      .optional()
+      .describe(
+        'record this manual MCP session as a bounded .twtrace under server storage; ' +
+          'default false. Command arguments, sensitive semantic values and typed input are withheld or redacted, but unmarked ' +
+          'secrets printed by the program may still appear in terminal output. ' +
+          'terminal.close returns the durable path',
+      ),
     logs: z
       .array(
         z.object({
@@ -396,6 +406,10 @@ const snapshot = defineTool({
     terminal: terminalId,
     variant: z.enum(['compact', 'full']).optional().describe('default "compact"'),
     maxNodes: z.number().int().min(1).max(5_000).optional(),
+    rootRef: z
+      .string()
+      .optional()
+      .describe('show only this current semantic ref and its descendants in compact output'),
     maxRows: z.number().int().min(1).max(10_000).optional(),
     includeText: z.boolean().optional().describe('include the visible grid text (default true)'),
     screenshot: z
@@ -437,8 +451,22 @@ const snapshot = defineTool({
     const screen = entry.harness.screen();
     const semantic = entry.harness.semanticTree();
     const full = args.variant === 'full';
+    if (args.rootRef !== undefined) {
+      const parsed = /^semantic:([^@\s]+)@(\d+)$/u.exec(args.rootRef);
+      if (
+        semantic === null ||
+        parsed === null ||
+        Number(parsed[2]) !== semantic.revision ||
+        !semantic.nodes.some((node) => node.id === parsed[1])
+      )
+        throw usageError(
+          'rootRef must identify a node in the current semantic tree',
+          'take a fresh terminal.snapshot or terminal.query and use one of its refs',
+        );
+    }
     const compact = compactFor(entry, state.rows, {
       ...(args.maxNodes === undefined ? {} : { maxNodes: args.maxNodes }),
+      ...(args.rootRef === undefined ? {} : { rootRef: args.rootRef }),
       ...(args.maxRows === undefined ? {} : { maxRows: args.maxRows }),
       includeText: full ? false : args.includeText !== false,
     });
@@ -599,12 +627,11 @@ const query = defineTool({
   name: 'terminal.query',
   title: 'Find matching nodes',
   description:
-    'Resolves a target to refs without acting on it. Use it to check how many nodes a locator ' +
-    'matches before clicking, or to turn a role/name into a ref.',
+    'Queries the current state without acting or waiting for a match. Zero matches return immediately. ' +
+    'Use terminal.wait_for to await appearance, then query to inspect matches.',
   inputSchema: {
     terminal: terminalId,
     ...targetShape,
-    timeout: timeoutMs.optional(),
     limit: z.number().int().min(1).max(100).optional().describe('default 20'),
   },
   outputSchema: {
@@ -638,7 +665,7 @@ const query = defineTool({
       bounds?: { row: number; column: number; width: number; height: number };
     }[] = [];
     for (let index = 0; index < Math.min(count, limit); index += 1) {
-      const target = await locator.nth(index).resolve(optionalTimeout(args.timeout));
+      const target = await locator.nth(index).resolve();
       matches.push({
         ref: target.ref,
         revision: target.revision,
@@ -674,7 +701,8 @@ function pointerTool(
     title: hover ? 'Hover a target' : double ? 'Double-click a target' : 'Click a target',
     description:
       `Sends a real ${hover ? 'motion' : double ? 'double-click' : 'click'} mouse report through the pseudo-terminal. ` +
-      'Fails closed with input-mode-disabled when the required tracking mode or encoding is disabled or unobservable.',
+      'Success confirms delivery of input, not completion of the application operation; use terminal.wait_for for its resulting state. ' +
+      'Fails closed with input-mode-disabled when required tracking or encoding is disabled or unobservable.',
     inputSchema: {
       terminal: terminalId,
       ...targetShape,
@@ -964,6 +992,33 @@ const writeRaw = defineTool({
   },
 });
 
+const clickAt = defineTool({
+  name: 'terminal.click_at',
+  title: 'Click a terminal cell',
+  description:
+    'Sends a physical mouse click at a viewport cell without claiming that a semantic control receives it. ' +
+    'Useful for composite controls whose visible child owns the hit cell; a child may stop event propagation. ' +
+    'Success confirms input delivery only, so verify the application result with terminal.wait_for.',
+  inputSchema: {
+    terminal: terminalId,
+    point: cellPosition,
+    button: z.enum(['left', 'middle', 'right']).optional(),
+    clickCount: z.union([z.literal(1), z.literal(2)]).optional(),
+    modifiers: mouseModifiersSchema,
+  },
+  outputSchema: receiptFields,
+  handler: async (context, args) => {
+    const entry = context.terminals.get(args.terminal);
+    await entry.harness.mouse.click({
+      ...args.point,
+      ...(args.button === undefined ? {} : { button: args.button }),
+      ...(args.clickCount === undefined ? {} : { clickCount: args.clickCount }),
+      ...(args.modifiers === undefined ? {} : { modifiers: args.modifiers }),
+    });
+    return { text: `clicked cell (${args.point.row},${args.point.column})`, data: receipt(entry) };
+  },
+});
+
 const drag = defineTool({
   name: 'terminal.drag',
   title: 'Drag',
@@ -1136,7 +1191,8 @@ const scrollback = defineTool({
 const selectCells = defineTool({
   name: 'terminal.select_cells',
   title: 'Select a cell range',
-  description: 'Selects a rectangle in the emulator (like a mouse selection). No input is sent.',
+  description:
+    "Selects cells in Termwright's emulator only. No mouse input reaches the application, so this cannot test application selection or Ctrl+C. Use terminal.drag followed by terminal.press and terminal.wait_for to test that flow.",
   inputSchema: { terminal: terminalId, start: cellPosition, end: cellPosition },
   outputSchema: receiptFields,
   handler: async (context, args) => {
@@ -1152,7 +1208,8 @@ const selectCells = defineTool({
 const copySelection = defineTool({
   name: 'terminal.copy_selection',
   title: 'Copy the selection',
-  description: 'Returns the text of the current selection and optionally clears it.',
+  description:
+    "Returns text selected in Termwright's emulator by terminal.select_cells; this does not invoke the application's copy behavior.",
   inputSchema: { terminal: terminalId, clear: z.boolean().optional() },
   outputSchema: { terminal: z.string(), text: z.string() },
   annotations: { readOnlyHint: true },
@@ -1274,16 +1331,26 @@ const close = defineTool({
   name: 'terminal.close',
   title: 'Close a terminal',
   description:
-    'Bounded physical cleanup: hangs up the pseudo-terminal and forgets the handle. Send signals ' +
-    'explicitly with terminal.signal if the child must be killed first.',
+    'Bounded physical cleanup: hangs up the pseudo-terminal, finalizes an optional recording, ' +
+    'and forgets the handle. Send signals explicitly with terminal.signal if the child must be killed first.',
   inputSchema: { terminal: terminalId },
-  outputSchema: { ok: z.literal(true), terminal: z.string(), exit: exitSchema.nullable() },
+  outputSchema: {
+    ok: z.literal(true),
+    terminal: z.string(),
+    exit: exitSchema.nullable(),
+    tracePath: z.string().optional(),
+  },
   annotations: { idempotentHint: true },
   handler: async (context, args) => {
     const entry = await context.terminals.close(args.terminal);
     return {
-      text: `closed ${entry.id}`,
-      data: { ok: true as const, terminal: entry.id, exit: entry.exit },
+      text: `closed ${entry.id}${entry.tracePath === undefined ? '' : `; trace: ${entry.tracePath}`}`,
+      data: {
+        ok: true as const,
+        terminal: entry.id,
+        exit: entry.exit,
+        ...(entry.tracePath === undefined ? {} : { tracePath: entry.tracePath }),
+      },
     };
   },
 });
@@ -1300,6 +1367,7 @@ export const TERMINAL_TOOLS: readonly ToolDefinition[] = Object.freeze([
   pointerTool('terminal.click'),
   pointerTool('terminal.double_click'),
   pointerTool('terminal.hover'),
+  clickAt,
   press,
   type,
   fill,

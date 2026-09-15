@@ -165,6 +165,71 @@ describe('the compact snapshot format', () => {
     expect(compact).toContain('... 2 more rows');
   });
 
+  it('keeps the active modal and focused control when background nodes exceed the budget', () => {
+    const background = Array.from({ length: 30 }, (_, index) => ({
+      id: `bg${index}`,
+      role: 'text' as const,
+      name: `Background ${index}`,
+      geometry: geometry({ row: index % 20, column: 0, width: 20, height: 1 }),
+    }));
+    const semantic: SemanticSnapshot = {
+      ...permissionDialog,
+      nodes: [
+        ...background,
+        { ...permissionDialog.nodes[0]!, id: 'modal' },
+        { ...permissionDialog.nodes[1]!, id: 'focus', parentId: 'modal' },
+      ],
+      rootIds: [...background.map((node) => node.id), 'modal'],
+    };
+    const compact = formatCompactSnapshot({
+      terminal: 't1',
+      columns: 100,
+      rows: 30,
+      revision: 42,
+      semantic,
+      text: [],
+      maxNodes: 18,
+    });
+    expect(compact).toContain('dialog "Permission" ref=semantic:modal@42');
+    expect(compact).toContain('button "Approve" ref=semantic:focus@42');
+    expect(compact).not.toContain('Background 29');
+  });
+
+  it('shows only a selected subtree when rootRef is supplied', () => {
+    const semantic: SemanticSnapshot = {
+      ...permissionDialog,
+      nodes: [
+        { ...permissionDialog.nodes[0]!, id: 'background', role: 'text', name: 'Background' },
+        ...permissionDialog.nodes,
+      ],
+      rootIds: ['background', 'n7'],
+    };
+    const compact = formatCompactSnapshot({
+      terminal: 't1',
+      columns: 100,
+      rows: 30,
+      revision: 42,
+      semantic,
+      text: [],
+      rootRef: 'semantic:n7@42',
+    });
+    expect(compact).toContain('ref=semantic:n7@42');
+    expect(compact).toContain('ref=semantic:n8@42');
+    expect(compact).not.toContain('Background');
+    expect(compact).not.toContain('more nodes');
+    const childView = formatCompactSnapshot({
+      terminal: 't1',
+      columns: 100,
+      rows: 30,
+      revision: 42,
+      semantic,
+      text: [],
+      rootRef: 'semantic:n8@42',
+    });
+    expect(childView).toMatch(/^button "Approve" ref=semantic:n8@42/mu);
+    expect(childView).not.toContain('Permission');
+  });
+
   it('omits the visible text for the full variant, which writes it to disk instead', () => {
     const compact = formatCompactSnapshot({
       terminal: 't1',
