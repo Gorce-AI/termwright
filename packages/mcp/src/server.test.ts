@@ -7,12 +7,15 @@
  * missing prebuild); set `TERMWRIGHT_SKIP_PTY=1` to skip them explicitly.
  */
 import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { it as resourceAwareIt } from '@termwright/test-provider-internal';
 import { nativePtyAvailable } from '@termwright/driver/experimental';
+import { openTrace } from '@termwright/trace';
+import { bunTestCapability } from '../../../scripts/test-support/bun-runtime.mjs';
 import { Client, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveInMemory } from './server.js';
 import type { RunningServer } from './server.js';
@@ -24,6 +27,7 @@ const FIXTURES = join(
   'driver',
   'test-fixtures',
 );
+const OPENTUI_FIXTURES = join(dirname(dirname(FIXTURES)), 'probe-opentui');
 
 function ptyAvailable(): boolean {
   return nativePtyAvailable();
@@ -224,6 +228,105 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     const closed = await call('terminal.close', { terminal });
     expect(closed.isError, closed.text).toBe(false);
     expect(closed.data['ok']).toBe(true);
+  });
+
+  it('records a manual MCP session and returns a replayable path on close', async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'termwright-mcp-record-'));
+    try {
+      const { call } = await connectSession(storageDir);
+      const launched = await call('terminal.launch', {
+        command: [process.execPath, join(FIXTURES, 'semantic-app.mjs')],
+        columns: 60,
+        rows: 10,
+        record: true,
+      });
+      expect(launched.isError, launched.text).toBe(false);
+      const terminal = launched.data['terminal'] as string;
+      await call('terminal.wait_for', { terminal, wait: 'text', text: 'Permission required' });
+      const clicked = await call('terminal.click', { terminal, testId: 'reject' });
+      expect(clicked.isError, clicked.text).toBe(false);
+      await call('terminal.wait_for', { terminal, wait: 'text', text: 'CLICKED reject' });
+      const closed = await call('terminal.close', { terminal });
+      expect(closed.isError, closed.text).toBe(false);
+      const path = closed.data['tracePath'];
+      expect(path).toBe(join(storageDir, 'in-memory', terminal, 'session.twtrace'));
+      const trace = await openTrace(path as string);
+      try {
+        expect(trace.meta.command).toEqual(['<command withheld>']);
+        expect((await trace.stateAt(1_000_000)).castPrefix).toContain('CLICKED reject');
+      } finally {
+        await trace.close();
+      }
+    } finally {
+      await rm(storageDir, { recursive: true, force: true });
+    }
+  });
+
+  it('sends a physical click at a cell and waits separately for the application result', async () => {
+    const { call } = await connectSession();
+    const terminal = await launchSemantic(call);
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'Permission required' });
+    const clicked = await call('terminal.click_at', {
+      terminal,
+      point: { row: 1, column: 14 },
+    });
+    expect(clicked.isError, clicked.text).toBe(false);
+    const result = await call('terminal.wait_for', {
+      terminal,
+      wait: 'text',
+      text: 'CLICKED reject',
+    });
+    expect(result.isError, result.text).toBe(false);
+  });
+
+  describe.skipIf(
+    !bunTestCapability(() => spawnSync('bun', ['--version'], { timeout: 5_000 }).status === 0),
+  )('composite OpenTUI controls', () => {
+    for (const stopChild of [false, true]) {
+      it(`keeps semantic click fail-closed when a child ${stopChild ? 'stops' : 'allows'} propagation`, async () => {
+        const { call } = await connectSession();
+        const launched = await call('terminal.launch', {
+          command: [
+            'bun',
+            '--preload',
+            join(OPENTUI_FIXTURES, 'dist', 'bun-preload.js'),
+            join(OPENTUI_FIXTURES, 'src', 'testing', 'nested-button-app.ts'),
+          ],
+          columns: 40,
+          rows: 10,
+          semanticNegotiationMs: 1_500,
+          env: { STOP_CHILD: stopChild ? '1' : '0' },
+        });
+        expect(launched.isError, launched.text).toBe(false);
+        const terminal = launched.data['terminal'] as string;
+        const visible = await call('terminal.wait_for', {
+          terminal,
+          wait: 'visible',
+          testId: 'nested-button',
+        });
+        expect(visible.isError, visible.text).toBe(false);
+        const semanticClick = await call('terminal.click', { terminal, testId: 'nested-button' });
+        expect(semanticClick.isError).toBe(true);
+        expect(semanticClick.text).toContain('no unoccluded pointer cell');
+        const physicalClick = await call('terminal.click_at', {
+          terminal,
+          point: { row: 0, column: 1 },
+        });
+        expect(physicalClick.isError, physicalClick.text).toBe(false);
+        if (!stopChild) {
+          const clicked = await call('terminal.wait_for', {
+            terminal,
+            wait: 'text',
+            text: 'parent clicked',
+          });
+          expect(clicked.isError, clicked.text).toBe(false);
+        } else {
+          const snapshot = await call('terminal.snapshot', { terminal });
+          expect(snapshot.text).toContain('idle');
+          expect(snapshot.text).not.toContain('parent clicked');
+        }
+      });
+    }
   });
 
   it('targets by role and by testId, and reports candidates when a locator is ambiguous', async () => {

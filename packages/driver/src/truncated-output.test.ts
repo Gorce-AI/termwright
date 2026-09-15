@@ -76,6 +76,9 @@ describe('an output producer that stopped without ending', () => {
     );
   });
 
+  // This uses the same full session shutdown path as a real terminal. On a
+  // saturated Windows clean-room worker that path can be delayed by unrelated
+  // native-host work; the assertion is about the diagnostic, not a 5s budget.
   it('stays quiet when the source really ended', async () => {
     const terminal = await launchTerminalWithBackend({
       command: ['app'],
@@ -83,5 +86,5 @@ describe('an output producer that stopped without ending', () => {
     });
     await terminal.close();
     expect(terminal.diagnostics().map((entry) => entry.code)).not.toContain('truncated-output');
-  });
+  }, 15_000);
 });

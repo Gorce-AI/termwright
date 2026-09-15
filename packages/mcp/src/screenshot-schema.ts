@@ -18,6 +18,20 @@ export const screenshotSchema = z.object({
     .boolean()
     .describe('false when a character had no embedded outline and fell back to a font'),
   fallbackCharacters: z.array(z.string()),
+  redactions: z
+    .array(
+      z.object({
+        rect: z.object({
+          row: z.number().int(),
+          column: z.number().int(),
+          width: z.number().int(),
+          height: z.number().int(),
+        }),
+        nodeId: z.string(),
+        reason: z.literal('sensitive-value'),
+      }),
+    )
+    .describe('exact masked cell runs and their semantic source; secret values are never included'),
 });
 
 /** Projects an image into {@link screenshotSchema}, without the bytes. */
@@ -28,5 +42,9 @@ export function describeImage(image: ScreenshotImage): z.output<typeof screensho
     mimeType: image.mimeType,
     selfContained: image.selfContained,
     fallbackCharacters: [...image.fallbackCharacters],
+    redactions: image.redactions.map((redaction) => ({
+      ...redaction,
+      rect: { ...redaction.rect },
+    })),
   };
 }

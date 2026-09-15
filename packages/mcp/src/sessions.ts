@@ -20,6 +20,8 @@ import type {
   TerminalHarness,
 } from '@termwright/driver';
 import { DEFAULT_LIMITS } from '@termwright/protocol';
+import { createTraceWriter } from '@termwright/trace';
+import type { TraceWriter } from '@termwright/trace';
 import { McpError, noSessionError, usageError } from './errors.js';
 import { LogBuffer } from './logs.js';
 import { definedOnly } from './objects.js';
@@ -70,6 +72,8 @@ export interface TerminalEntry {
   history: RevisionRecord[];
   /** The application's own log, buffered for `terminal.capture_since`. */
   readonly logs: LogBuffer;
+  readonly writer?: TraceWriter;
+  tracePath?: string;
 }
 
 /** Options for {@link TerminalStore}. */
@@ -99,6 +103,8 @@ export interface LaunchRequest {
   readonly timeouts?: Loose<NonNullable<LaunchOptions['timeouts']>> | undefined;
   /** Log files to follow for the lifetime of the session. */
   readonly logs?: readonly Loose<AppLogSource>[] | undefined;
+  /** Record a bounded, redacted trace under this MCP session's storage directory. */
+  readonly record?: boolean | undefined;
 }
 
 /** The terminals of a single MCP session, plus their capture history. */
@@ -174,6 +180,28 @@ export class TerminalStore {
     const harness = await launchTerminal(options);
     this.#counter += 1;
     const id = `t${this.#counter}`;
+    let writer: TraceWriter | undefined;
+    try {
+      if (request.record === true) {
+        writer = createTraceWriter(harness, {
+          dir: join(this.#directory, id, 'session.twtrace'),
+          // argv can carry access tokens or personal paths. The live launch
+          // response never echoes it, and neither should an opt-in archive.
+          command: ['<command withheld>'],
+          columns: harness.screen().columns,
+          rows: harness.screen().rows,
+          artifactSecurity: { mode: 'redacted' },
+          maxOutputBytes: 16 * 1024 * 1024,
+          maxPendingBytes: 4 * 1024 * 1024,
+          maxPendingRecords: 4_096,
+          maxLogEntries: 5_000,
+          recordInput: false,
+        });
+      }
+    } catch (error) {
+      await harness.close();
+      throw error;
+    }
     const entry: TerminalEntry = {
       id,
       harness,
@@ -183,6 +211,7 @@ export class TerminalStore {
       closed: false,
       history: [],
       logs: new LogBuffer(),
+      ...(writer === undefined ? {} : { writer }),
     };
     // Subscribe from the source journal rather than racing a live listener
     // against a separate snapshot. A bounded-prefix loss advances the cursor,
@@ -282,6 +311,10 @@ export class TerminalStore {
   async close(id: string): Promise<TerminalEntry> {
     const entry = this.get(id);
     await entry.harness.close();
+    if (entry.writer !== undefined) {
+      const archive = await entry.writer.finalize();
+      entry.tracePath = archive.dir;
+    }
     entry.closed = true;
     this.#terminals.delete(id);
     return entry;
@@ -295,6 +328,7 @@ export class TerminalStore {
       entries.map(async (entry) => {
         try {
           await entry.harness.close();
+          await entry.writer?.finalize();
           entry.closed = true;
           this.#terminals.delete(entry.id);
         } catch (error) {
