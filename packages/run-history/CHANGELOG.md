@@ -1,5 +1,12 @@
 # @termwright/run-history
 
+## 0.6.0
+
+### Patch Changes
+
+- Updated dependencies [[`454a662`](https://github.com/Gorce-AI/termwright/commit/454a6625619565f23b48b5e1af345e06c4f55a00)]:
+  - @termwright/protocol@0.6.0
+
 ## 0.5.3
 
 ### Patch Changes
