@@ -66,6 +66,7 @@ try {
         "test.resources({ terminals: 1, traceWriters: 1 })('drives a packed Unicode TUI', async ({ terminal }) => {",
         '  const app = await terminal.launch({ command: [process.execPath, program] });',
         "  await app.waitForText('Unicode: 👨‍👩‍👧‍👦 देवनागरी 界');",
+        "  await app.waitForText('[Approve]');",
         "  expect(app.screen().text()).toContain('[Approve]');",
         "  await app.press('Enter');",
         "  await expect(app).toHaveText('approved');",
