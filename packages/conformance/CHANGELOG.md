@@ -1,5 +1,15 @@
 # @termwright/conformance
 
+## 0.7.0
+
+### Patch Changes
+
+- [#170](https://github.com/Gorce-AI/termwright/pull/170) [`4e34a7f`](https://github.com/Gorce-AI/termwright/commit/4e34a7f7cd714603072a302e1d8fe38efe0d120d) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Wait for a real quiet output interval before comparing dormant adapter renders.
+- Updated dependencies []:
+  - @termwright/driver@0.7.0
+  - @termwright/protocol@0.7.0
+  - @termwright/test@0.7.0
+
 ## 0.6.0
 
 ### Patch Changes

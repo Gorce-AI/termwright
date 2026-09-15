@@ -1,6 +1,6 @@
 {
   "name": "@termwright/driver",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "termwright driver: PTY + VT sessions, locators, actions, waits",
   "license": "MIT",
   "repository": {

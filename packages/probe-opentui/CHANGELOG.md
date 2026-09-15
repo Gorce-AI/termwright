@@ -1,5 +1,15 @@
 # @termwright/probe-opentui
 
+## 0.7.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/probe-runtime@0.7.0
+  - @termwright/protocol@0.7.0
+  - @termwright/pty@0.7.0
+  - @termwright/recognizers@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes
