@@ -16,6 +16,7 @@ const SS3 = `${ESC}O`;
 export interface KeyEncodingModes {
   readonly applicationCursorKeys: boolean;
   readonly applicationKeypad: boolean;
+  readonly kittyKeyboardFlags?: number;
 }
 
 interface Modifiers {
@@ -70,6 +71,32 @@ const LITERAL_KEYS: Readonly<Record<string, string>> = Object.freeze({
   space: ' ',
 });
 
+/** Named functional-key code points assigned by the Kitty keyboard protocol. */
+const KITTY_FUNCTIONAL_KEYS: Readonly<Record<string, number>> = Object.freeze({
+  insert: 57_348,
+  delete: 57_349,
+  arrowleft: 57_350,
+  arrowright: 57_351,
+  arrowup: 57_352,
+  arrowdown: 57_353,
+  pageup: 57_354,
+  pagedown: 57_355,
+  home: 57_356,
+  end: 57_357,
+  f1: 57_364,
+  f2: 57_365,
+  f3: 57_366,
+  f4: 57_367,
+  f5: 57_368,
+  f6: 57_369,
+  f7: 57_370,
+  f8: 57_371,
+  f9: 57_372,
+  f10: 57_373,
+  f11: 57_374,
+  f12: 57_375,
+});
+
 const MODIFIER_ALIASES: Readonly<Record<string, keyof Modifiers>> = Object.freeze({
   control: 'ctrl',
   ctrl: 'ctrl',
@@ -84,6 +111,61 @@ const MODIFIER_ALIASES: Readonly<Record<string, keyof Modifiers>> = Object.freez
 
 function modifierParameter(mods: Modifiers): number {
   return 1 + (mods.shift ? 1 : 0) + (mods.alt || mods.meta ? 2 : 0) + (mods.ctrl ? 4 : 0);
+}
+
+function kittyModifierParameter(mods: Modifiers): number {
+  return 1 + (mods.shift ? 1 : 0) + (mods.alt ? 2 : 0) + (mods.ctrl ? 4 : 0) + (mods.meta ? 8 : 0);
+}
+
+function kittyKey(
+  key: string,
+  mods: Modifiers,
+  flags: number,
+  textCodepoint?: number,
+): string | undefined {
+  const lower = key.toLowerCase();
+  const literal = LITERAL_KEYS[lower];
+  const reportAll = (flags & 8) !== 0;
+  const disambiguate = (flags & 1) !== 0 || reportAll;
+  const ambiguousModified = mods.ctrl || mods.alt || mods.meta;
+  const protectedLegacy =
+    lower === 'enter' || lower === 'return' || lower === 'tab' || lower === 'backspace';
+  if (!reportAll && protectedLegacy) return undefined;
+  if (!reportAll && KITTY_FUNCTIONAL_KEYS[lower] !== undefined) return undefined;
+  if (
+    !reportAll &&
+    !(disambiguate && (ambiguousModified || lower === 'escape' || lower === 'esc'))
+  ) {
+    // ctrl+shift has no lossless legacy representation, even before an app
+    // opts into progressive enhancements.
+    if (!(mods.ctrl && mods.shift && [...key].length === 1)) return undefined;
+  }
+  const code =
+    lower === 'enter' || lower === 'return'
+      ? 13
+      : lower === 'tab'
+        ? 9
+        : lower === 'backspace'
+          ? 127
+          : lower === 'escape' || lower === 'esc'
+            ? 27
+            : reportAll && KITTY_FUNCTIONAL_KEYS[lower] !== undefined
+              ? KITTY_FUNCTIONAL_KEYS[lower]
+              : literal !== undefined
+                ? literal.codePointAt(0)
+                : [...key].length === 1
+                  ? key.toLowerCase().codePointAt(0)
+                  : undefined;
+  if (code === undefined) return undefined;
+  const shiftedCode =
+    (flags & 4) !== 0 && mods.shift
+      ? (textCodepoint ?? ([...key].length === 1 ? key.codePointAt(0) : undefined))
+      : undefined;
+  const codeParameter =
+    shiftedCode !== undefined && shiftedCode !== code ? `${code}:${shiftedCode}` : String(code);
+  const modifier = kittyModifierParameter(mods);
+  const associated = (flags & 16) !== 0 && textCodepoint !== undefined ? `;${textCodepoint}` : '';
+  return `${CSI}${codeParameter}${modifier === 1 && associated === '' ? '' : `;${modifier}`}${associated}u`;
 }
 
 function unsupported(key: string, detail: string): never {
@@ -144,6 +226,9 @@ function encodeChord(chord: string, modes: KeyEncodingModes): string {
   const param = modifierParameter(mods);
   const modified = param !== 1;
 
+  const progressive = kittyKey(key, mods, modes.kittyKeyboardFlags ?? 0);
+  if (progressive !== undefined) return progressive;
+
   const cursorFinal = CURSOR_KEYS[lower];
   if (cursorFinal !== undefined) {
     if (modified) return `${CSI}1;${param}${cursorFinal}`;
@@ -197,8 +282,30 @@ export function encodeKeys(keys: string, modes: KeyEncodingModes): Uint8Array {
  * Encodes literal text as typed input: `\n` becomes carriage return, which is
  * what a terminal delivers when the Enter key is pressed.
  */
-export function encodeText(text: string): Uint8Array {
-  return new TextEncoder().encode(text.replace(/\r\n|\n/gu, '\r'));
+export function encodeText(text: string, modes?: KeyEncodingModes): Uint8Array {
+  const flags = modes?.kittyKeyboardFlags ?? 0;
+  if ((flags & 8) === 0) return new TextEncoder().encode(text.replace(/\r\n|\n/gu, '\r'));
+  const encoded: string[] = [];
+  for (const character of text.replace(/\r\n|\n/gu, '\r')) {
+    if (character === '\r') {
+      encoded.push(
+        kittyKey('Enter', { shift: false, alt: false, ctrl: false, meta: false }, flags)!,
+      );
+      continue;
+    }
+    const lower = character.toLocaleLowerCase();
+    const shifted = lower !== character && [...lower].length === 1;
+    const key = shifted ? lower : character;
+    encoded.push(
+      kittyKey(
+        key,
+        { shift: shifted, alt: false, ctrl: false, meta: false },
+        flags,
+        character.codePointAt(0),
+      )!,
+    );
+  }
+  return new TextEncoder().encode(encoded.join(''));
 }
 
 /** Bracketed-paste wrapper (`CSI 200~ … CSI 201~`), used only when the child enabled it. */

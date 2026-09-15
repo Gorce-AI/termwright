@@ -103,6 +103,8 @@ export interface ActionIntent {
   readonly kind: ActionKind;
   readonly selector?: string;
   readonly targetRef?: LocatorRef;
+  /** Caller-selected physical input family for semantic convenience actions. */
+  readonly via?: 'auto' | 'keyboard' | 'pointer';
 }
 
 export type ExecutableDeviceOperation =

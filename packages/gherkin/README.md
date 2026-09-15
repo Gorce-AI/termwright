@@ -45,8 +45,23 @@ export default defineSteps(
 The first callback argument contains the native Termwright fixtures
 (`terminal`, `termwright`, `termwrightOptions`, and `step`), Vitest `expect`, a
 fresh mutable `world` for the Scenario/Outline row, and physical Scenario
-metadata. Captures follow it. A DocString or DataTable, when present, is the
+metadata. It also exposes scenario-owned `resources`, its timeout `signal`, and
+the `defer`/`use` shortcuts. Captures follow it. A DocString or DataTable, when present, is the
 last argument.
+
+Tags can map directly to native scheduler admission and timeout policy during
+collection, without wrapping `test` in a project proxy:
+
+```ts
+gherkinPlugin({
+  scenario: ({ tags }) => ({
+    timeout: tags.includes('@slow') ? 30_000 : 5_000,
+    resources: tags.includes('@exclusive')
+      ? { terminals: 2, hostPressure: 'exclusive' }
+      : { terminals: 1 },
+  }),
+});
+```
 
 ### Project fixtures
 

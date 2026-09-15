@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PointerOptions
 
-Defined in: [driver/src/api.ts:762](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L762)
+Defined in: [driver/src/api.ts:804](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L804)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -40,7 +40,7 @@ await terminal.close();
 
 > `readonly` `optional` **button?**: `"left"` \| `"middle"` \| `"right"`
 
-Defined in: [driver/src/api.ts:763](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L763)
+Defined in: [driver/src/api.ts:805](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L805)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [driver/src/api.ts:763](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **modifiers?**: readonly [`MouseModifier`](../../type-aliases/mousemodifier/)[]
 
-Defined in: [driver/src/api.ts:307](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L307)
+Defined in: [driver/src/api.ts:342](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L342)
 
 #### Inherited from
 
@@ -60,7 +60,7 @@ Defined in: [driver/src/api.ts:307](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **position?**: `object`
 
-Defined in: [driver/src/api.ts:764](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L764)
+Defined in: [driver/src/api.ts:806](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L806)
 
 #### columnOffset
 
@@ -76,7 +76,7 @@ Defined in: [driver/src/api.ts:764](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [driver/src/api.ts:561](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L561)
+Defined in: [driver/src/api.ts:598](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L598)
 
 #### Inherited from
 

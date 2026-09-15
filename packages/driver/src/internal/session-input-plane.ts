@@ -14,6 +14,10 @@ export class SessionInputEvidenceBarrier {
     return this.#invalidAfterRevision !== null;
   }
 
+  get invalidAfterRevision(): number | null {
+    return this.#invalidAfterRevision;
+  }
+
   noteInput(hasProviders: boolean, currentRevision: number): void {
     if (!hasProviders) return;
     this.#invalidAfterRevision = currentRevision;

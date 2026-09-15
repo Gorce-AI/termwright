@@ -13,7 +13,7 @@ editUrl: false
 
 > **GherkinContext**\<`Fixtures`\> = `TermwrightFixtures` & `Fixtures` & `object`
 
-Defined in: [definitions.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L16)
+Defined in: [definitions.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L21)
 
 Termwright's native and project fixtures plus Gherkin's per-scenario state.
 
@@ -39,9 +39,21 @@ Registers test-scoped cleanup. Cleanups run in reverse order after `After` hooks
 
 > `readonly` **expect**: `TermwrightExpect`
 
+### resources
+
+> `readonly` **resources**: `ResourceScope`
+
+Scenario-owned resources. A child of the enclosing test scope.
+
 ### scenario
 
 > `readonly` **scenario**: [`GherkinScenario`](../../interfaces/gherkinscenario/)
+
+### signal
+
+> `readonly` **signal**: `AbortSignal`
+
+Scenario cancellation, aborted by the native test timeout.
 
 ### use
 
@@ -53,7 +65,7 @@ Registers a closeable/disposable resource and returns it unchanged.
 
 ##### T
 
-`T` *extends* [`GherkinResource`](../../interfaces/gherkinresource/)
+`T` *extends* [`GherkinResource`](../gherkinresource/)
 
 #### Parameters
 

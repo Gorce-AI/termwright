@@ -66,6 +66,13 @@ import {
 import { currentAttemptContext, currentAttemptEventRecorder } from './attempt-context.js';
 import { buildTaskMeta, type TermwrightAttemptFailure } from './task-meta.js';
 import { markTermwrightTestApi } from './provider.js';
+import { createResourceScope, type ResourceScope } from './resource-scope.js';
+import {
+  launchSidecar,
+  type LaunchSidecarOptions,
+  type SidecarLauncher,
+  type SidecarProcess,
+} from './sidecar.js';
 
 /** What a test may override when launching a program. */
 export interface LaunchFixtureOptions extends Omit<LaunchOptions, 'command' | 'operationBudget'> {
@@ -123,6 +130,10 @@ export type StepRunner = <T>(
 /** Test-scoped services that do not depend on a running terminal. */
 export interface TermwrightScopeFixture {
   readonly config: ResolvedTermwrightConfig;
+  /** Test-owned cleanup, automatically aborted and drained on timeout. */
+  readonly resources: ResourceScope;
+  /** Background processes owned by this test's timeout-safe resource scope. */
+  readonly sidecars: SidecarLauncher;
   /** Private directory for this test; created on first access, removed after. */
   readonly tmpdir: string;
   /** Trace archives kept for this test, filled in during teardown. */
@@ -221,7 +232,7 @@ export const test = markTermwrightTestApi(
     termwrightOptions: {},
 
     termwright: [
-      async ({ task, annotate, onTestFailed }, use) => {
+      async ({ task, annotate, onTestFailed, signal }, use) => {
         // `expect` cannot be named in the destructuring pattern. Vitest 4 derives
         // fixture dependencies from that pattern and validates them against its
         // built-ins — task, signal, onTestFailed, onTestFinished, skip, annotate
@@ -273,8 +284,15 @@ export const test = markTermwrightTestApi(
         });
         const obsolete = sweepObsoleteSnapshots(task.file, config, updateFlagOf(expect));
         let directory: string | undefined;
+        const resources = createResourceScope({ signal });
         const fixture: TermwrightScopeFixture = {
           config,
+          resources,
+          sidecars: Object.freeze({
+            launch(options: LaunchSidecarOptions): Promise<SidecarProcess> {
+              return resources.acquire((signal) => launchSidecar(options, { signal }));
+            },
+          }),
           get tmpdir(): string {
             // Resolved, because on Windows os.tmpdir() hands back the 8.3 short
             // form ("C:\\Users\\RUNNER~1\\...") while any program launched into this
@@ -292,10 +310,21 @@ export const test = markTermwrightTestApi(
           step: (title, body, options) => runStep(title, body, scope, annotate, options),
         };
         const exit = enterScope(scope);
+        let bodyFailure: unknown;
         try {
           await use(fixture);
+        } catch (error) {
+          bodyFailure = error;
         } finally {
           attemptContext.budget.mark('cleanup');
+          try {
+            await resources.close();
+          } catch (error) {
+            bodyFailure =
+              bodyFailure === undefined
+                ? error
+                : new AggregateError([bodyFailure, error], 'test body and resource cleanup failed');
+          }
           exit();
           if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
           // Merged, not replaced: the `terminal` fixture tears down first and has
@@ -304,6 +333,7 @@ export const test = markTermwrightTestApi(
           if (added !== undefined)
             task.meta.termwright = { ...(task.meta.termwright ?? {}), ...added };
         }
+        if (bodyFailure !== undefined) throw bodyFailure;
       },
       { auto: true },
     ],

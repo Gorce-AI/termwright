@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: TimeoutError
 
-Defined in: [driver/src/errors.ts:58](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L58)
+Defined in: [driver/src/errors.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L72)
 
 A bounded wait (locator resolution, text/render/idle/exit wait) ran out.
 
@@ -25,7 +25,7 @@ A bounded wait (locator resolution, text/render/idle/exit wait) ran out.
 
 > **new TimeoutError**(`message`, `diagnostics`): `TimeoutError`
 
-Defined in: [driver/src/errors.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L59)
+Defined in: [driver/src/errors.ts:73](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L73)
 
 #### Parameters
 

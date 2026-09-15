@@ -17,6 +17,7 @@ import type {
   EnvMode,
   SessionDiagnostic,
   ExitStatus,
+  FocusTraversalOptions,
   ErrorDiagnostics,
   LaunchOptions,
   LocatorRef,
@@ -34,6 +35,7 @@ import type {
   SelectionApi,
   SessionEvents,
   TerminalHarness,
+  TerminalObservation,
   TerminalModes,
   TerminalState,
   TerminalWindow,
@@ -42,6 +44,7 @@ import type {
   TimeoutClasses,
   OperationBudget,
   WaitOptions,
+  WaitUntilOptions,
 } from './api.js';
 import type {
   ActionIntent,
@@ -148,6 +151,7 @@ import {
   parseSelector,
   refQuery,
   roleQuery,
+  testIdQuery,
   textMatcher,
   textQuery,
   type StylePredicates,
@@ -1050,6 +1054,99 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     }
   }
 
+  async waitUntil<T>(
+    observe: (observation: TerminalObservation) => T | Promise<T>,
+    options: WaitUntilOptions<T>,
+  ): Promise<T> {
+    if (typeof observe !== 'function')
+      throw new TypeError('waitUntil() needs an observer function');
+    if (typeof options?.until !== 'function') {
+      throw new TypeError('waitUntil() needs an until predicate');
+    }
+    const deadline = Deadline.after(
+      this.operationTimeout(options.timeout ?? this.timeouts.action, 'waitUntil'),
+    );
+    await this.settled({ timeout: deadline.remaining() });
+    let lastValue: T | undefined;
+    let hasValue = false;
+    let lastFailure: unknown;
+    for (;;) {
+      await this.waitForCommittedObservation({ timeout: deadline.remaining() });
+      const arm = this.armChange(deadline.at);
+      this.#assertAlive('waitUntil');
+      try {
+        const observation: TerminalObservation = Object.freeze({
+          checkpoint: this.checkpoint(),
+          screen: this.screen(),
+          semanticTree: this.semanticTree(),
+        });
+        lastValue = await observe(observation);
+        hasValue = true;
+        lastFailure = undefined;
+        if (await options.until(lastValue)) {
+          arm.cancel();
+          return lastValue;
+        }
+      } catch (error) {
+        lastFailure = error;
+      }
+      if (deadline.expired()) {
+        arm.cancel();
+        const description = options.description ?? 'user condition';
+        throw new TimeoutError(
+          `waitUntil() did not satisfy ${description}` +
+            (lastFailure instanceof Error ? `; last check failed: ${lastFailure.message}` : ''),
+          this.errorDiagnostics({
+            ...(hasValue ? { lastObserved: renderObserved(lastValue) } : {}),
+          }),
+        );
+      }
+      await arm.wait();
+    }
+  }
+
+  async focusByTraversal(
+    target: SemanticLocator,
+    options: FocusTraversalOptions = {},
+  ): Promise<void> {
+    const next = options.next ?? 'Tab';
+    if (typeof next !== 'string' || next.trim() === '') {
+      throw new TypeError('focusByTraversal() needs a non-empty next key');
+    }
+    await this.settled(options.timeout === undefined ? {} : { timeout: options.timeout });
+    const targetStamp = target.checkpoint();
+    if (targetStamp.sessionId !== this.sessionId) {
+      throw new TypeError('focusByTraversal() target belongs to a different terminal session');
+    }
+    const focusable =
+      this.semanticTree()?.nodes.filter((node) => typeof node.state?.focused === 'boolean')
+        .length ?? 0;
+    const maxSteps = options.maxSteps ?? Math.max(1, focusable);
+    if (!Number.isSafeInteger(maxSteps) || maxSteps < 1) {
+      throw new TypeError('focusByTraversal() maxSteps must be a positive safe integer');
+    }
+    const deadline = Deadline.after(
+      this.operationTimeout(options.timeout ?? this.timeouts.action, 'focusByTraversal'),
+    );
+
+    for (let step = 0; step <= maxSteps; step += 1) {
+      if ((await target.semanticState())?.focused === true) return;
+      if (step === maxSteps) break;
+      const previous = focusedSemanticNode(this.semanticTree());
+      await this.press(next);
+      await this.waitUntil(({ semanticTree }) => focusedSemanticNode(semanticTree), {
+        until: (focused) => focused !== previous,
+        description: `focus to move from ${previous ?? 'no semantic node'}`,
+        timeout: deadline.remaining(),
+      });
+    }
+    const resolved = await target.resolve({ timeout: Math.max(0, deadline.remaining()) });
+    throw new TimeoutError(
+      `focusByTraversal() could not reach ${target.description} within ${maxSteps} steps`,
+      this.errorDiagnostics({ candidates: [resolved] }),
+    );
+  }
+
   screen(): ScreenSnapshot {
     this.assertOpen();
     return captureScreen(this.#vt);
@@ -1255,7 +1352,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   getByTestId(testId: string): SemanticLocator {
-    return new LocatorImpl(this, parseSelector(`#${testId}`)) as unknown as SemanticLocator;
+    return new LocatorImpl(this, testIdQuery(testId)) as unknown as SemanticLocator;
   }
 
   locator(selector: string): SemanticLocator {
@@ -1936,7 +2033,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
             ? encodeKeys(executableText(operation.value), modes)
             : operation.kind === 'paste'
               ? encodePaste(executableText(operation.value), modes.bracketedPaste)
-              : encodeText(executableText(operation.value));
+              : encodeText(executableText(operation.value), modes);
         return Object.freeze({
           operation,
           bytes,
@@ -2354,9 +2451,23 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics {
+    const observationState = this.actionObservationState();
+    const pairing = this.#pairing.pendingState();
     return {
       semanticTree: this.#attachment !== null,
       screenExcerpt: screenExcerpt(this.#vt),
+      ...(observationState === 'settled'
+        ? {}
+        : {
+            observation: {
+              state: observationState,
+              openFrameRevisions: pairing.openFrameRevisions,
+              pendingTreeRevisions: pairing.pendingTreeRevisions,
+              pendingMarkerRevisions: pairing.pendingMarkerRevisions,
+              publishedRevision: pairing.publishedRevision,
+              providerEvidenceInvalidAfterRevision: this.#inputEvidence.invalidAfterRevision,
+            },
+          }),
       ...extra,
     };
   }
@@ -3170,6 +3281,20 @@ const WINDOWS_ENV_KEYS = [
 ] as const;
 
 /** The allowlist for the platform the driver is running on. */
+function renderObserved(value: unknown): string {
+  let rendered: string;
+  try {
+    rendered = JSON.stringify(value) ?? String(value);
+  } catch {
+    rendered = String(value);
+  }
+  return rendered.slice(0, 2_000);
+}
+
+function focusedSemanticNode(snapshot: SemanticSnapshot | null): string | null {
+  return snapshot?.nodes.find((node) => node.state?.focused === true)?.id ?? null;
+}
+
 function safeEnvKeys(): readonly string[] {
   return process.platform === 'win32' ? WINDOWS_ENV_KEYS : POSIX_ENV_KEYS;
 }

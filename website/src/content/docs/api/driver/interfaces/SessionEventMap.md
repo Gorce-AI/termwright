@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SessionEventMap
 
-Defined in: [driver/src/api.ts:1093](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1093)
+Defined in: [driver/src/api.ts:1135](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1135)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > **action**: [`ActionEvent`](../actionevent/)
 
-Defined in: [driver/src/api.ts:1117](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1117)
+Defined in: [driver/src/api.ts:1159](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1159)
 
 One harness or locator action, reported after it finished.
 
@@ -46,7 +46,7 @@ One harness or locator action, reported after it finished.
 
 > **action-start**: [`ActionStartedEvent`](../actionstartedevent/)
 
-Defined in: [driver/src/api.ts:1119](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1119)
+Defined in: [driver/src/api.ts:1161](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1161)
 
 One harness or locator action, reported immediately before it begins.
 
@@ -56,7 +56,7 @@ One harness or locator action, reported immediately before it begins.
 
 > **app-log**: [`AppLogEvent`](../applogevent/)
 
-Defined in: [driver/src/api.ts:1115](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1115)
+Defined in: [driver/src/api.ts:1157](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1157)
 
 A line or record from the application own log.
 
@@ -66,7 +66,7 @@ A line or record from the application own log.
 
 > **crash**: [`CrashReport`](../crashreport/)
 
-Defined in: [driver/src/api.ts:1124](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1124)
+Defined in: [driver/src/api.ts:1166](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1166)
 
 The child died unexpectedly. Emitted before `exit`, so a listener reacting
 to the exit can already read [TerminalHarness.crashReport](../terminalharness/#crashreport).
@@ -77,7 +77,7 @@ to the exit can already read [TerminalHarness.crashReport](../terminalharness/#c
 
 > **diagnostic**: [`SessionDiagnostic`](../sessiondiagnostic/)
 
-Defined in: [driver/src/api.ts:1095](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1095)
+Defined in: [driver/src/api.ts:1137](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1137)
 
 ***
 
@@ -85,7 +85,7 @@ Defined in: [driver/src/api.ts:1095](https://github.com/Gorce-AI/termwright/blob
 
 > **exit**: [`ExitStatus`](../exitstatus/) & `object`
 
-Defined in: [driver/src/api.ts:1113](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1113)
+Defined in: [driver/src/api.ts:1155](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1155)
 
 #### Type Declaration
 
@@ -99,7 +99,7 @@ Defined in: [driver/src/api.ts:1113](https://github.com/Gorce-AI/termwright/blob
 
 > **input**: `object`
 
-Defined in: [driver/src/api.ts:1096](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1096)
+Defined in: [driver/src/api.ts:1138](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1138)
 
 #### data
 
@@ -119,7 +119,7 @@ Defined in: [driver/src/api.ts:1096](https://github.com/Gorce-AI/termwright/blob
 
 > **output**: `object`
 
-Defined in: [driver/src/api.ts:1094](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1094)
+Defined in: [driver/src/api.ts:1136](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1136)
 
 #### data
 
@@ -135,7 +135,7 @@ Defined in: [driver/src/api.ts:1094](https://github.com/Gorce-AI/termwright/blob
 
 > **resize**: `object`
 
-Defined in: [driver/src/api.ts:1101](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1101)
+Defined in: [driver/src/api.ts:1143](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1143)
 
 #### columns
 
@@ -155,7 +155,7 @@ Defined in: [driver/src/api.ts:1101](https://github.com/Gorce-AI/termwright/blob
 
 > **screen-revision**: `object`
 
-Defined in: [driver/src/api.ts:1106](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1106)
+Defined in: [driver/src/api.ts:1148](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1148)
 
 #### revision
 
@@ -171,7 +171,7 @@ Defined in: [driver/src/api.ts:1106](https://github.com/Gorce-AI/termwright/blob
 
 > **semantic-revision**: `object`
 
-Defined in: [driver/src/api.ts:1107](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1107)
+Defined in: [driver/src/api.ts:1149](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1149)
 
 #### revision
 

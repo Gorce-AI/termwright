@@ -117,12 +117,19 @@ describe.skipIf(!runnable)('the notes app', () => {
     });
 
     await expect(app).toHaveText('status: cancelled');
+    await app.close();
+
+    // Confirm the destructive branch in a fresh application state. Textual
+    // intentionally owns modal focus restoration, so cancellation and
+    // confirmation remain independent user journeys.
+    const confirmation = await terminal.launch({ command });
+    await confirmation.waitForText('write the release notes');
 
     await step('confirm the second time', async () => {
-      await app.getByRole('button', { name: 'Delete' }).activate();
+      await confirmation.getByRole('button', { name: 'Delete' }).activate();
       // Scoped to the dialog: the toolbar has a Delete button too, and an
       // unscoped locator would fail as ambiguous rather than pick one.
-      const confirm = app.locator('dialog button#confirm');
+      const confirm = confirmation.locator('dialog button#confirm');
       await expect(confirm).toBeVisible();
       // Textual fades a modal in. The production click runner waits for the
       // target itself to become stable and re-plans before the first PTY byte;
@@ -133,7 +140,7 @@ describe.skipIf(!runnable)('the notes app', () => {
     // The modal temporarily omits the covered list from Textual's exposed
     // tree, so detachment alone is not proof that deletion happened. Wait for
     // the application-domain outcome first, then assert the resulting tree.
-    await expect(app).toHaveText('status: deleted buy milk');
-    await expect(app.getByRole('listitem', { name: 'buy milk' })).toBeDetached();
+    await expect(confirmation).toHaveText('status: deleted buy milk');
+    await expect(confirmation.getByRole('listitem', { name: 'buy milk' })).toBeDetached();
   });
 });

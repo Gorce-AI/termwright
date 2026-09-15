@@ -8,8 +8,13 @@
  * is harmless depends on what the terminal does with the bytes we write back,
  * and only the child can say what it actually received.
  */
-process.stdout.write('\x1b[?1h\x1b=');
-process.stdout.write('APPKEYS ON\r\n');
+if (process.env['TERMWRIGHT_FIXTURE_KITTY'] === '1') {
+  process.stdout.write('\x1b[?u\x1b[>1u');
+  process.stdout.write('KITTY ON\r\n');
+} else {
+  process.stdout.write('\x1b[?1h\x1b=');
+  process.stdout.write('APPKEYS ON\r\n');
+}
 
 process.stdin.setRawMode?.(true);
 process.stdin.resume();

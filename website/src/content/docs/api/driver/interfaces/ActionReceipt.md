@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionReceipt
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:230
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:232
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:230
 
 > `readonly` **after**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:234
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:236
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:234
 
 > `readonly` **before**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:233
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:235
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:233
 
 > `readonly` **executed**: readonly [`RecordedDeviceOperation`](../../type-aliases/recordeddeviceoperation/)[]
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:235
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:237
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:235
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:231
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:233
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:231
 
 > `readonly` **outcome**: `"completed"` \| `"partial"` \| `"failed"`
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:236
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:238
 
 ***
 
@@ -59,4 +59,4 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:236
 
 > `readonly` **plan**: [`ActionPlan`](../actionplan/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:232
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:234

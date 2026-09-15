@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: MouseModifierOptions
 
-Defined in: [driver/src/api.ts:306](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L306)
+Defined in: [driver/src/api.ts:341](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L341)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -42,4 +42,4 @@ await terminal.close();
 
 > `readonly` `optional` **modifiers?**: readonly [`MouseModifier`](../../type-aliases/mousemodifier/)[]
 
-Defined in: [driver/src/api.ts:307](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L307)
+Defined in: [driver/src/api.ts:342](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L342)

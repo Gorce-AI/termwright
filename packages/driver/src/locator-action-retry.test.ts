@@ -143,6 +143,7 @@ function fixture(initial: 'disabled' | 'covered' | 'ready') {
         bracketedPaste: false,
         applicationCursorKeys: false,
         applicationKeypad: false,
+        kittyKeyboardFlags: 0,
         focusReporting: 'off',
         synchronizedOutput: false,
       }),

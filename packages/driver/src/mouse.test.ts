@@ -14,6 +14,7 @@ function modes(overrides: Partial<TerminalModes> = {}): TerminalModes {
     bracketedPaste: false,
     applicationCursorKeys: false,
     applicationKeypad: false,
+    kittyKeyboardFlags: 0,
     focusReporting: 'off',
     synchronizedOutput: false,
     ...overrides,

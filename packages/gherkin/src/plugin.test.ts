@@ -200,11 +200,47 @@ describe('transformFeature', () => {
 
     expect(result.code).toContain('from "./fixtures.js"');
     expect(result.code).toContain(
-      'async ({ termwrightOptions, termwright, terminal, step, app, account }) =>',
+      'async ({ signal, termwrightOptions, termwright, terminal, step, app, account }) =>',
     );
     expect(result.code).toContain(
       '{ termwrightOptions, termwright, terminal, step, app, account, expect, world: {}, scenario:',
     );
+  });
+
+  test('maps scenario tags to native timeout and resource admission at transform time', () => {
+    const result = transformFeature({
+      source: [
+        'Feature: resources',
+        '',
+        '  @exclusive @slow',
+        '  Scenario: owns a server',
+        '    Given a value',
+      ].join('\n'),
+      uri: '/tmp/resources.feature',
+      glue: [],
+      scenario: ({ tags }) => ({
+        timeout: tags.includes('@slow') ? 30_000 : 5_000,
+        resources: tags.includes('@exclusive')
+          ? { terminals: 2, hostPressure: 'exclusive' }
+          : { terminals: 1 },
+      }),
+    });
+
+    expect(result.code).toContain(
+      'test.resources({"terminals":2,"hostPressure":"exclusive"})("owns a server"',
+    );
+    expect(result.code).toContain('"timeout":30000');
+  });
+
+  test('rejects an invalid mapped scenario timeout during collection', () => {
+    expect(() =>
+      transformFeature({
+        source: 'Feature: resources\n\n  Scenario: invalid\n    Given a value\n',
+        uri: '/tmp/resources.feature',
+        glue: [],
+        scenario: () => ({ timeout: Number.POSITIVE_INFINITY }),
+      }),
+    ).toThrow(/positive finite number/u);
   });
 
   test.each([

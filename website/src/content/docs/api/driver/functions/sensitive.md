@@ -13,7 +13,7 @@ editUrl: false
 
 > **sensitive**(`value`): [`SensitiveValue`](../../interfaces/sensitivevalue/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:53
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:53
 
 ## Parameters
 

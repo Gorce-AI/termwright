@@ -169,6 +169,27 @@ export interface OwnedProcessResourceUsage {
   readonly totalTerminatedProcesses: number;
 }
 
+/** Screen and semantic state captured from one committed observation boundary. */
+export interface TerminalObservation {
+  readonly checkpoint: ObservationStamp;
+  readonly screen: ScreenSnapshot;
+  readonly semanticTree: SemanticSnapshot | null;
+}
+
+export interface WaitUntilOptions<T> extends WaitOptions {
+  /** The wait completes when this returns true for the newly observed value. */
+  readonly until: (value: T) => boolean | Promise<boolean>;
+  /** Names the condition in timeout diagnostics. */
+  readonly description?: string;
+}
+
+export interface FocusTraversalOptions extends WaitOptions {
+  /** Physical key that advances the application's focus ring. Defaults to Tab. */
+  readonly next?: string;
+  /** Hard bound. Defaults to the number of nodes exposing semantic focus state. */
+  readonly maxSteps?: number;
+}
+
 export interface TerminalHarness {
   readonly sessionId: string;
   /** Resolved policy inherited by traces, reports and other artifact sinks. */
@@ -203,6 +224,20 @@ export interface TerminalHarness {
    * driver, and it is not a quiet/global-idle heuristic.
    */
   waitForCommittedObservation(opts?: WaitOptions): Promise<ObservationStamp>;
+  /**
+   * Re-evaluates user state only at committed terminal observation boundaries.
+   * The check is armed before each read, so a change cannot land between the
+   * predicate and its subscription. The last value is retained on timeout.
+   */
+  waitUntil<T>(
+    observe: (observation: TerminalObservation) => T | Promise<T>,
+    options: WaitUntilOptions<T>,
+  ): Promise<T>;
+  /**
+   * Reaches a semantic target through the application's real keyboard focus
+   * ring. Every key is followed by a committed focus change before continuing.
+   */
+  focusByTraversal(target: SemanticLocator, options?: FocusTraversalOptions): Promise<void>;
   /**
    * Waits for the one frozen Effective Session Contract and, for a semantic
    * session, for the first paired tree. There is no provisional capability API.
@@ -481,6 +516,8 @@ export interface TerminalModes {
   readonly bracketedPaste: boolean;
   readonly applicationCursorKeys: boolean;
   readonly applicationKeypad: boolean;
+  /** Active kitty progressive keyboard-enhancement flags for the current buffer. */
+  readonly kittyKeyboardFlags: number;
   /**
    * Whether the child asked for focus in/out reports, or `'unknown'`.
    *
@@ -559,6 +596,11 @@ export interface ScreenTextLocatorOptions extends TextLocatorOptions {
 
 export interface WaitOptions {
   readonly timeout?: number;
+}
+
+export interface SemanticActionOptions extends WaitOptions {
+  /** `auto` prefers a certified keyboard recipe, then uses verified pointer input. */
+  readonly via?: 'auto' | 'keyboard' | 'pointer';
 }
 
 export interface LocatorDragOptions extends WaitOptions, MouseModifierOptions {
@@ -655,7 +697,7 @@ export interface SemanticLocator extends LocatorBase<'semantic'> {
       | 'fill'
       | 'check'
       | 'uncheck',
-    opts?: PointerOptions & { readonly value?: string },
+    opts?: PointerOptions & SemanticActionOptions & { readonly value?: string },
   ): Promise<ActionabilityExplanation>;
   press(keys: string, opts?: WaitOptions): Promise<ActionReceipt>;
   type(
@@ -666,10 +708,10 @@ export interface SemanticLocator extends LocatorBase<'semantic'> {
     text: import('@termwright/protocol').ExecutableValue,
     opts?: WaitOptions,
   ): Promise<ActionReceipt>;
-  focus(opts?: WaitOptions): Promise<ActionReceipt>;
-  activate(opts?: WaitOptions): Promise<ActionReceipt>;
-  check(opts?: WaitOptions): Promise<ActionReceipt>;
-  uncheck(opts?: WaitOptions): Promise<ActionReceipt>;
+  focus(opts?: SemanticActionOptions): Promise<ActionReceipt>;
+  activate(opts?: SemanticActionOptions): Promise<ActionReceipt>;
+  check(opts?: SemanticActionOptions): Promise<ActionReceipt>;
+  uncheck(opts?: SemanticActionOptions): Promise<ActionReceipt>;
   semanticValue(): Promise<import('@termwright/protocol').SemanticValueObservation>;
   /** Production application viewport state, never emulator scrollback position. */
   semanticScroll(): Promise<
@@ -1178,4 +1220,15 @@ export interface ErrorDiagnostics {
   readonly semanticTree: boolean;
   readonly candidates?: readonly ResolvedTarget[];
   readonly suggestion?: string;
+  /** Bounded rendering of the final value seen by a retrying wait. */
+  readonly lastObserved?: string;
+  /** Exact reason a terminal/semantic observation has not committed yet. */
+  readonly observation?: {
+    readonly state: 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
+    readonly openFrameRevisions: readonly number[];
+    readonly pendingTreeRevisions: readonly number[];
+    readonly pendingMarkerRevisions: readonly number[];
+    readonly publishedRevision: number | null;
+    readonly providerEvidenceInvalidAfterRevision: number | null;
+  };
 }

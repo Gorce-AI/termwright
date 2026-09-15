@@ -319,6 +319,39 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
     }
   }
 
+  /**
+   * Only byte sequences emitted by the driver's named control-key encoder are
+   * safe to exclude from echo-secret tracking. A `key` event may also contain
+   * printable input, while arbitrary CSI, paste and raw input stay fail-closed.
+   */
+  function isControlKeyInput(value: string): boolean {
+    let remainder = value;
+    const legacy =
+      /^(?:\x1b(?:\[(?:[ABCDHFZ]|1;[2-8][ABCDHFPQRS]|(?:2|3|5|6|15|17|18|19|20|21|23|24)(?:;[2-8])?~)|O[ABCDHFPQRS])|[\x00-\x1f\x7f]+)/u;
+    const kitty = /^\x1b\[(\d+)(?::\d+(?::\d+)?)?(?:;(\d+)(?::[123])?)?(?:;[\d:]+)?u/u;
+    while (remainder !== '') {
+      const kittyMatch = kitty.exec(remainder);
+      if (kittyMatch !== null) {
+        const code = Number(kittyMatch[1]);
+        const modifier = Number(kittyMatch[2] ?? 1) - 1;
+        const isControl =
+          code === 9 ||
+          code === 13 ||
+          code === 27 ||
+          code === 127 ||
+          (code >= 57_344 && code <= 63_743) ||
+          (modifier & 4) !== 0;
+        if (!isControl) return false;
+        remainder = remainder.slice(kittyMatch[0].length);
+        continue;
+      }
+      const legacyMatch = legacy.exec(remainder);
+      if (legacyMatch === null) return false;
+      remainder = remainder.slice(legacyMatch[0].length);
+    }
+    return value !== '';
+  }
+
   function inHiddenWindow(wall: number): boolean {
     return hideStart !== null && wall >= hideStart;
   }
@@ -346,7 +379,9 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         const wall = driverTime(timeMs);
         if (artifactSecurity.mode === 'redacted' && kind !== 'mouse') {
           const candidate = new TextDecoder('utf-8', { fatal: false }).decode(data);
-          if (candidate !== '') sanitizer.register(candidate);
+          if (candidate !== '' && !(kind === 'key' && isControlKeyInput(candidate))) {
+            sanitizer.register(candidate);
+          }
         }
         pushEvent(
           artifactSecurity.mode === 'raw'

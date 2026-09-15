@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: InputModeDisabledError
 
-Defined in: [driver/src/errors.ts:141](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L141)
+Defined in: [driver/src/errors.ts:155](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L155)
 
 The physical device exists, but the application has not enabled the required terminal mode.
 
@@ -25,7 +25,7 @@ The physical device exists, but the application has not enabled the required ter
 
 > **new InputModeDisabledError**(`message`, `diagnostics`): `InputModeDisabledError`
 
-Defined in: [driver/src/errors.ts:142](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L142)
+Defined in: [driver/src/errors.ts:156](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L156)
 
 #### Parameters
 

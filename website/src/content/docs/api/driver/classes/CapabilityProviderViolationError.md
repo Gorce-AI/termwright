@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: CapabilityProviderViolationError
 
-Defined in: [driver/src/errors.ts:153](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L153)
+Defined in: [driver/src/errors.ts:167](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L167)
 
 Base class for every error the driver throws. Carries a stable [code](../termwrighterror/#code)
 plus Playwright-grade [diagnostics](../termwrighterror/#diagnostics) (what was observed, which
@@ -27,7 +27,7 @@ candidates existed, and a suggestion).
 
 > **new CapabilityProviderViolationError**(`message`, `diagnostics`): `CapabilityProviderViolationError`
 
-Defined in: [driver/src/errors.ts:154](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L154)
+Defined in: [driver/src/errors.ts:168](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L168)
 
 #### Parameters
 

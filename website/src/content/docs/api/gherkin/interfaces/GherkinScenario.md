@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: GherkinScenario
 
-Defined in: [definitions.ts:7](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L7)
+Defined in: [definitions.ts:12](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L12)
 
 Source identity of the native Vitest case currently being executed.
 
@@ -21,7 +21,7 @@ Source identity of the native Vitest case currently being executed.
 
 > `readonly` **feature**: `string`
 
-Defined in: [definitions.ts:8](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L8)
+Defined in: [definitions.ts:13](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L13)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [definitions.ts:8](https://github.com/Gorce-AI/termwright/blob/main/
 
 > `readonly` **line**: `number`
 
-Defined in: [definitions.ts:11](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L11)
+Defined in: [definitions.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L16)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [definitions.ts:11](https://github.com/Gorce-AI/termwright/blob/main
 
 > `readonly` **name**: `string`
 
-Defined in: [definitions.ts:9](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L9)
+Defined in: [definitions.ts:14](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L14)
 
 ***
 
@@ -45,7 +45,7 @@ Defined in: [definitions.ts:9](https://github.com/Gorce-AI/termwright/blob/main/
 
 > `readonly` **tags**: readonly `string`[]
 
-Defined in: [definitions.ts:12](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L12)
+Defined in: [definitions.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L17)
 
 ***
 
@@ -53,4 +53,4 @@ Defined in: [definitions.ts:12](https://github.com/Gorce-AI/termwright/blob/main
 
 > `readonly` **uri**: `string`
 
-Defined in: [definitions.ts:10](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L10)
+Defined in: [definitions.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L15)

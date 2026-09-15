@@ -69,6 +69,7 @@ export function fakeScreen(
       applicationKeypad: false,
       focusReporting: 'off',
       synchronizedOutput: false,
+      kittyKeyboardFlags: 0,
     },
     text: () => Array.from({ length: rows }, (_, row) => line(row)).join('\n'),
     line,

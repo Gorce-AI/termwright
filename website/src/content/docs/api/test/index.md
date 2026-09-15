@@ -38,6 +38,10 @@ test('asks before running a command', async ({ terminal }) => {
 });
 ```
 
+## Classes
+
+- [ResourceScopeClosedError](classes/resourcescopeclosederror/)
+
 ## Interfaces
 
 - [AttachFixtureOptions](interfaces/attachfixtureoptions/)
@@ -45,8 +49,10 @@ test('asks before running a command', async ({ terminal }) => {
 - [CellSnapshotMatcherOptions](interfaces/cellsnapshotmatcheroptions/)
 - [CellSnapshotOptions](interfaces/cellsnapshotoptions/)
 - [ColorPalette](interfaces/colorpalette/)
+- [DisposableResource](interfaces/disposableresource/)
 - [LaunchFixtureOptions](interfaces/launchfixtureoptions/)
 - [LaunchOverrides](interfaces/launchoverrides/)
+- [LaunchSidecarOptions](interfaces/launchsidecaroptions/)
 - [LogCollection](interfaces/logcollection/)
 - [LogQuery](interfaces/logquery/)
 - [LogSource](interfaces/logsource/)
@@ -54,12 +60,18 @@ test('asks before running a command', async ({ terminal }) => {
 - [PollOptions](interfaces/polloptions/)
 - [PtyUnavailableReason](interfaces/ptyunavailablereason/)
 - [ResolvedTermwrightConfig](interfaces/resolvedtermwrightconfig/)
+- [ResourceScope](interfaces/resourcescope/)
+- [ResourceScopeOptions](interfaces/resourcescopeoptions/)
 - [ScreenLocator](interfaces/screenlocator/)
 - [SeedOptions](interfaces/seedoptions/)
 - [SeedTemplate](interfaces/seedtemplate/)
 - [SemanticLocator](interfaces/semanticlocator/)
 - [SemanticSnapshotMatcherOptions](interfaces/semanticsnapshotmatcheroptions/)
 - [SerializeOptions](interfaces/serializeoptions/)
+- [SidecarExit](interfaces/sidecarexit/)
+- [SidecarLauncher](interfaces/sidecarlauncher/)
+- [SidecarOutput](interfaces/sidecaroutput/)
+- [SidecarProcess](interfaces/sidecarprocess/)
 - [StepOptions](interfaces/stepoptions/)
 - [TerminalFactory](interfaces/terminalfactory/)
 - [TerminalHarness](interfaces/terminalharness/)
@@ -80,6 +92,7 @@ test('asks before running a command', async ({ terminal }) => {
 - [ResourceAwareTestApi](type-aliases/resourceawaretestapi/)
 - [SeedFile](type-aliases/seedfile/)
 - [SeedFiles](type-aliases/seedfiles/)
+- [SidecarReadiness](type-aliases/sidecarreadiness/)
 - [StateSelection](type-aliases/stateselection/)
 - [StepRunner](type-aliases/steprunner/)
 - [TermwrightExpect](type-aliases/termwrightexpect/)
@@ -99,8 +112,10 @@ test('asks before running a command', async ({ terminal }) => {
 
 - [collectLogs](functions/collectlogs/)
 - [configureTermwright](functions/configuretermwright/)
+- [createResourceScope](functions/createresourcescope/)
 - [defineTermwrightConfig](functions/definetermwrightconfig/)
 - [getTermwrightConfig](functions/gettermwrightconfig/)
+- [launchSidecar](functions/launchsidecar/)
 - [ptyAvailable](functions/ptyavailable/)
 - [ptyUnavailableReason](functions/ptyunavailablereason/)
 - [registerTermwrightMatchers](functions/registertermwrightmatchers/)

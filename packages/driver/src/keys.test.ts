@@ -3,6 +3,21 @@ import { encodeFocus, encodeKeys, encodePaste, encodeText } from './keys.js';
 
 const NORMAL = { applicationCursorKeys: false, applicationKeypad: false };
 const APPLICATION = { applicationCursorKeys: true, applicationKeypad: false };
+const KITTY_DISAMBIGUATE = {
+  applicationCursorKeys: false,
+  applicationKeypad: false,
+  kittyKeyboardFlags: 1,
+};
+const KITTY_ALL_WITH_TEXT = {
+  applicationCursorKeys: false,
+  applicationKeypad: false,
+  kittyKeyboardFlags: 25,
+};
+const KITTY_ALL_ALTERNATE = {
+  applicationCursorKeys: false,
+  applicationKeypad: false,
+  kittyKeyboardFlags: 13,
+};
 
 function text(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
@@ -23,6 +38,14 @@ describe('encodeKeys', () => {
     expect(text(encodeKeys('Control+c', NORMAL))).toBe('\x03');
     expect(text(encodeKeys('Control+[', NORMAL))).toBe('\x1b');
     expect(text(encodeKeys('Control+Space', NORMAL))).toBe('\x00');
+  });
+
+  it('uses lossless CSI-u input when the application enables kitty disambiguation', () => {
+    expect(text(encodeKeys('Control+C', KITTY_DISAMBIGUATE))).toBe('\x1b[99;5u');
+    expect(text(encodeKeys('Control+Shift+R', NORMAL))).toBe('\x1b[114;6u');
+    expect(text(encodeKeys('Alt+[', KITTY_DISAMBIGUATE))).toBe('\x1b[91;3u');
+    expect(text(encodeKeys('Escape', KITTY_DISAMBIGUATE))).toBe('\x1b[27u');
+    expect(text(encodeKeys('Enter', KITTY_DISAMBIGUATE))).toBe('\r');
   });
 
   it('encodes alt as an ESC prefix and shift as upper case', () => {
@@ -52,6 +75,13 @@ describe('encodeKeys', () => {
     expect(text(encodeKeys('Shift+F1', NORMAL))).toBe('\x1b[1;2P');
   });
 
+  it('uses Kitty functional codes and alternate shifted keys when all keys are reported', () => {
+    expect(text(encodeKeys('ArrowUp Shift+F1', KITTY_ALL_ALTERNATE))).toBe(
+      '\x1b[57352u\x1b[57364;2u',
+    );
+    expect(text(encodeKeys('Shift+A', KITTY_ALL_ALTERNATE))).toBe('\x1b[97:65;2u');
+  });
+
   it('encodes a sequence of chords in order', () => {
     expect(text(encodeKeys('Control+K Control+U', NORMAL))).toBe('\x0b\x15');
   });
@@ -70,6 +100,12 @@ describe('encodeText', () => {
 
   it('passes Unicode through unchanged', () => {
     expect(text(encodeText('zażółć 😀'))).toBe('zażółć 😀');
+  });
+
+  it('reports all typed keys with associated text when requested', () => {
+    expect(text(encodeText('Aa\n', KITTY_ALL_WITH_TEXT))).toBe(
+      '\x1b[97;2;65u\x1b[97;1;97u\x1b[13u',
+    );
   });
 });
 

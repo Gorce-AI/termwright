@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalStateSnapshot
 
-Defined in: [driver/src/api.ts:350](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L350)
+Defined in: [driver/src/api.ts:385](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L385)
 
 One authoritative snapshot of terminal-emulator state.
 
@@ -21,7 +21,7 @@ One authoritative snapshot of terminal-emulator state.
 
 > `readonly` **bellCount**: `number`
 
-Defined in: [driver/src/api.ts:356](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L356)
+Defined in: [driver/src/api.ts:391](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L391)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [driver/src/api.ts:356](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **buffer**: `"normal"` \| `"alternate"`
 
-Defined in: [driver/src/api.ts:353](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L353)
+Defined in: [driver/src/api.ts:388](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L388)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [driver/src/api.ts:353](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **cursor**: `CursorInfo`
 
-Defined in: [driver/src/api.ts:355](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L355)
+Defined in: [driver/src/api.ts:390](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L390)
 
 ***
 
@@ -45,7 +45,7 @@ Defined in: [driver/src/api.ts:355](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **dimensions**: `object`
 
-Defined in: [driver/src/api.ts:352](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L352)
+Defined in: [driver/src/api.ts:387](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L387)
 
 #### columns
 
@@ -61,7 +61,7 @@ Defined in: [driver/src/api.ts:352](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **modes**: [`TerminalModes`](../terminalmodes/)
 
-Defined in: [driver/src/api.ts:357](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L357)
+Defined in: [driver/src/api.ts:392](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L392)
 
 ***
 
@@ -69,7 +69,7 @@ Defined in: [driver/src/api.ts:357](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **screenRevision**: `number`
 
-Defined in: [driver/src/api.ts:351](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L351)
+Defined in: [driver/src/api.ts:386](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L386)
 
 ***
 
@@ -77,4 +77,4 @@ Defined in: [driver/src/api.ts:351](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **title**: `string`
 
-Defined in: [driver/src/api.ts:354](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L354)
+Defined in: [driver/src/api.ts:389](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L389)

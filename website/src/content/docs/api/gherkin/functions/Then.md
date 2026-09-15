@@ -13,7 +13,7 @@ editUrl: false
 
 > **Then**\<`Fixtures`\>(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:117](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L117)
+Defined in: [definitions.ts:121](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L121)
 
 Declares a Then definition without registering process-global state.
 

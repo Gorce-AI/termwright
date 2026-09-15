@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalFactory
 
-Defined in: [test/src/fixtures.ts:134](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L134)
+Defined in: [test/src/fixtures.ts:145](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L145)
 
 Launches terminals that close themselves when the test ends.
 
@@ -21,7 +21,7 @@ Launches terminals that close themselves when the test ends.
 
 > `readonly` **logs**: [`LogCollection`](../logcollection/)
 
-Defined in: [test/src/fixtures.ts:151](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L151)
+Defined in: [test/src/fixtures.ts:162](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L162)
 
 Everything the programs of this test logged, oldest first.
 
@@ -31,7 +31,7 @@ Everything the programs of this test logged, oldest first.
 
 > `readonly` **sessions**: readonly [`TerminalHarness`](../terminalharness/)[]
 
-Defined in: [test/src/fixtures.ts:147](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L147)
+Defined in: [test/src/fixtures.ts:158](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L158)
 
 Sessions launched by this test, in launch order.
 
@@ -41,7 +41,7 @@ Sessions launched by this test, in launch order.
 
 > `readonly` **tmpdir**: `string`
 
-Defined in: [test/src/fixtures.ts:149](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L149)
+Defined in: [test/src/fixtures.ts:160](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L160)
 
 The test's private working directory.
 
@@ -51,7 +51,7 @@ The test's private working directory.
 
 > **attach**\<`T`\>(`harness`, `options?`): `Promise`\<`T`\>
 
-Defined in: [test/src/fixtures.ts:145](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L145)
+Defined in: [test/src/fixtures.ts:156](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L156)
 
 Adopts an existing harness for this test.
 
@@ -85,7 +85,7 @@ helper that returns the shared `TerminalHarness` contract.
 
 > **failOnLogLevel**(`level`): `void`
 
-Defined in: [test/src/fixtures.ts:158](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L158)
+Defined in: [test/src/fixtures.ts:169](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L169)
 
 Overrides [TermwrightConfig.failOnLogLevel](../termwrightconfig/#failonloglevel) for this test.
 
@@ -108,7 +108,7 @@ that *expects* an error path to be exercised.
 
 > **launch**(`options?`): `Promise`\<[`TerminalHarness`](../terminalharness/)\>
 
-Defined in: [test/src/fixtures.ts:135](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L135)
+Defined in: [test/src/fixtures.ts:146](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L146)
 
 #### Parameters
 
@@ -126,7 +126,7 @@ Defined in: [test/src/fixtures.ts:135](https://github.com/Gorce-AI/termwright/bl
 
 > **openShell**(`options?`): `Promise`\<[`TerminalHarness`](../terminalharness/)\>
 
-Defined in: [test/src/fixtures.ts:137](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L137)
+Defined in: [test/src/fixtures.ts:148](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L148)
 
 Opens an interactive shell with exact command boundaries.
 

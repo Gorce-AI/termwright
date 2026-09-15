@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: HookDefinitionOptions
 
-Defined in: [definitions.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L57)
+Defined in: [definitions.ts:61](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L61)
 
 ## Properties
 
@@ -19,6 +19,6 @@ Defined in: [definitions.ts:57](https://github.com/Gorce-AI/termwright/blob/main
 
 > `readonly` `optional` **tags?**: `string`
 
-Defined in: [definitions.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L59)
+Defined in: [definitions.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L63)
 
 Cucumber tag expression selecting scenarios for this hook.

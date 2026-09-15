@@ -61,24 +61,26 @@ scheduling.
 
 The session exposes terminal-level input and observation:
 
-| Method                                | Result                                                                                             |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `press(key)`                          | Send a key or chord.                                                                               |
-| `type(text)`                          | Type text through terminal input.                                                                  |
-| `paste(text)`                         | Send a paste operation.                                                                            |
-| `resize({columns, rows})`             | Resize the terminal and return a resize receipt.                                                   |
-| `waitForText(text, options?)`         | Wait until the terminal contains text.                                                             |
-| `screen()`                            | Take a screen snapshot; use `.text()`, `.line()`, or `.cell()`.                                    |
-| `terminalState.snapshot()`            | Read cursor, title, bell, buffer, dimensions, and terminal modes.                                  |
-| `keyboard.press/type/paste`           | Use the one physical keyboard device directly.                                                     |
-| `mouse.move/down/up/click/wheel/drag` | Use viewport coordinates, optional Shift/Alt/Control modifiers, and the one physical mouse device. |
-| `checkpoint()`                        | Capture the current terminal and semantic state together.                                          |
-| `waitForCheckpointChange({after})`    | Wait until either part of that state changes.                                                      |
-| `getByRole(role, options?)`           | Locate by semantic role and accessible name.                                                       |
-| `getByLabel(text, options?)`          | Locate a semantic control through its label relationship.                                          |
-| `getByText(text, options?)`           | Locate semantic text.                                                                              |
-| `getByScreenText(text, options?)`     | Locate text in the physical terminal grid, with optional occurrence and cell-style filters.        |
-| `getByTestId(id)`                     | Locate an application-defined semantic test id.                                                    |
+| Method                                | Result                                                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `press(key)`                          | Send a key or chord.                                                                                 |
+| `type(text)`                          | Type text through terminal input.                                                                    |
+| `paste(text)`                         | Send a paste operation.                                                                              |
+| `resize({columns, rows})`             | Resize the terminal and return a resize receipt.                                                     |
+| `waitForText(text, options?)`         | Wait until the terminal contains text.                                                               |
+| `waitUntil(observe, options)`         | Re-evaluate an application observation after committed revisions until its predicate succeeds.       |
+| `screen()`                            | Take a screen snapshot; use `.text()`, `.line()`, or `.cell()`.                                      |
+| `terminalState.snapshot()`            | Read cursor, title, bell, buffer, dimensions, and terminal modes.                                    |
+| `keyboard.press/type/paste`           | Use the one physical keyboard device directly.                                                       |
+| `mouse.move/down/up/click/wheel/drag` | Use viewport coordinates, optional Shift/Alt/Control modifiers, and the one physical mouse device.   |
+| `checkpoint()`                        | Capture the current terminal and semantic state together.                                            |
+| `waitForCheckpointChange({after})`    | Wait until either part of that state changes.                                                        |
+| `focusByTraversal(locator, options?)` | Move through the application's focus ring with Tab (or `options.next`) until the locator is focused. |
+| `getByRole(role, options?)`           | Locate by semantic role and accessible name.                                                         |
+| `getByLabel(text, options?)`          | Locate a semantic control through its label relationship.                                            |
+| `getByText(text, options?)`           | Locate semantic text.                                                                                |
+| `getByScreenText(text, options?)`     | Locate text in the physical terminal grid, with optional occurrence and cell-style filters.          |
+| `getByTestId(id)`                     | Locate an application-defined semantic test id.                                                      |
 
 ### `session.shell`
 
@@ -112,15 +114,15 @@ can perform pointer actions when their target is known.
 Semantic locators additionally provide actions based on application roles and
 state:
 
-| Semantic locator only   | Behavior                                                                   |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `press(key)`            | Send a key to the located control.                                         |
-| `type(text)`            | Type into the located control.                                             |
-| `activate()`            | Activate a focused control or one with a known pointer target.             |
-| `fill(text)`            | Focus through a known input strategy, then enter text.                     |
-| `focus()`               | Focus the control through a known input strategy.                          |
-| `check()` / `uncheck()` | Drive input and verify the resulting checked state.                        |
-| `actionability(action)` | Also explain focus, activation, keyboard, fill, and checked-state actions. |
+| Semantic locator only               | Behavior                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------------- |
+| `press(key)`                        | Send a key to the located control.                                         |
+| `type(text)`                        | Type into the located control.                                             |
+| `activate({via?})`                  | Activate with the automatic, keyboard, or pointer strategy.                |
+| `fill(text)`                        | Focus through a known input strategy, then enter text.                     |
+| `focus({via?})`                     | Focus with the automatic, keyboard, or pointer strategy.                   |
+| `check({via?})` / `uncheck({via?})` | Drive the selected input strategy and verify checked state.                |
+| `actionability(action)`             | Also explain focus, activation, keyboard, fill, and checked-state actions. |
 
 If an integration cannot identify a target, or the application has not enabled
 the required terminal input mode, the action fails with the reason. Termwright

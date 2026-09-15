@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ConditionResult
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:151
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:151
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:151
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:153
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:153
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:153
 
 > `readonly` **condition**: [`Condition`](../../type-aliases/condition/)
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:152
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:152
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:152
 
 > `readonly` **observation**: [`Observation`](../../type-aliases/observation/)\<`boolean`\>
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:154
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:154
 
 ***
 
@@ -43,4 +43,4 @@ Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:154
 
 > `readonly` **verdict**: `"satisfied"` \| `"unsatisfied"` \| `"inconclusive"`
 
-Defined in: protocol/dist/action-model-C3MoitRQ.d.ts:155
+Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:155

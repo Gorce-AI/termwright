@@ -10,7 +10,6 @@ import { parse as parseTagExpression, type Node as TagExpression } from '@cucumb
 import type {
   GherkinContext,
   GherkinDefinitions,
-  GherkinResource,
   GherkinStepArgument,
   ParameterTypeDefinition,
   StepDefinition,
@@ -213,43 +212,22 @@ type ManagedGherkinContext<Fixtures extends object = object> = GherkinContext<Fi
   dispose(): Promise<void>;
 };
 
-function resourceCleanup(resource: GherkinResource): () => unknown | Promise<unknown> {
-  if (resource[Symbol.asyncDispose] !== undefined) return () => resource[Symbol.asyncDispose]!();
-  if (resource[Symbol.dispose] !== undefined) return () => resource[Symbol.dispose]!();
-  if (resource.close !== undefined) return () => resource.close!();
-  if (resource.dispose !== undefined) return () => resource.dispose!();
-  throw new TypeError(
-    'Gherkin context.use() needs a close(), dispose(), Symbol.dispose, or Symbol.asyncDispose resource',
-  );
-}
-
 /** Adds scenario-scoped resource management without process-global hooks. */
 export function createGherkinContext<Fixtures extends object = object>(
-  base: Omit<GherkinContext<Fixtures>, 'defer' | 'use'>,
+  base: Omit<GherkinContext<Fixtures>, 'defer' | 'use' | 'resources' | 'signal'>,
 ): ManagedGherkinContext<Fixtures> {
-  const cleanups: (() => unknown | Promise<unknown>)[] = [];
+  const resources = base.termwright.resources.child();
   return Object.assign(base, {
+    resources,
+    signal: resources.signal,
     defer(cleanup: () => unknown | Promise<unknown>): void {
-      if (typeof cleanup !== 'function')
-        throw new TypeError('Gherkin context.defer() needs a function');
-      cleanups.push(cleanup);
+      resources.defer(cleanup);
     },
-    use<T extends GherkinResource>(resource: T): T {
-      cleanups.push(resourceCleanup(resource));
-      return resource;
+    use<T extends import('@termwright/test').DisposableResource>(resource: T): T {
+      return resources.use(resource);
     },
     async dispose(): Promise<void> {
-      const errors: unknown[] = [];
-      for (const cleanup of cleanups.reverse()) {
-        try {
-          await cleanup();
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-      if (errors.length === 1) throw errors[0];
-      if (errors.length > 1)
-        throw new AggregateError(errors, 'Multiple Gherkin scenario cleanups failed');
+      await resources.close();
     },
   }) as ManagedGherkinContext<Fixtures>;
 }

@@ -13,7 +13,7 @@ editUrl: false
 
 > **When**\<`Fixtures`\>(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:109](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L109)
+Defined in: [definitions.ts:113](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L113)
 
 Declares a When definition without registering process-global state.
 

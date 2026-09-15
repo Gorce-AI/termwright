@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: MousePoint
 
-Defined in: [driver/src/api.ts:299](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L299)
+Defined in: [driver/src/api.ts:334](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L334)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **column**: `number`
 
-Defined in: [driver/src/api.ts:301](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L301)
+Defined in: [driver/src/api.ts:336](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L336)
 
 ***
 
@@ -44,4 +44,4 @@ Defined in: [driver/src/api.ts:301](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **row**: `number`
 
-Defined in: [driver/src/api.ts:300](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L300)
+Defined in: [driver/src/api.ts:335](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L335)

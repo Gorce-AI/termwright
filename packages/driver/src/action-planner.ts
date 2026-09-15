@@ -653,11 +653,17 @@ export class ActionPlanner {
     const checkpoint = this.#ctx.checkpoint();
     this.#lastCheckpoint = checkpoint;
     const diagnostics = this.#ctx.errorDiagnostics({ candidates: [target] });
-    this.#requireCapability(
-      'keyboard-input',
-      `${intent.kind} requires physical keyboard input`,
-      diagnostics,
-    );
+    const via = intent.via ?? 'auto';
+    if (via !== 'auto' && via !== 'keyboard' && via !== 'pointer') {
+      throw new TypeError(`unsupported semantic action input strategy ${JSON.stringify(via)}`);
+    }
+    if (via !== 'pointer') {
+      this.#requireCapability(
+        'keyboard-input',
+        `${intent.kind} requires physical keyboard input`,
+        diagnostics,
+      );
+    }
     if (!target.semantic) {
       throw new CapabilityUnavailableError(
         `${intent.kind} requires an authoritative focused semantic target`,
@@ -808,9 +814,10 @@ export class ActionPlanner {
           operations: Object.freeze([]),
         });
       }
-      const recipe = contractSupports(this.#ctx.contract(), 'action-strategies')
-        ? this.#recipeOperations(node, 'focus', undefined, diagnostics, false)
-        : null;
+      const recipe =
+        via !== 'pointer' && contractSupports(this.#ctx.contract(), 'action-strategies')
+          ? this.#recipeOperations(node, 'focus', undefined, diagnostics, false)
+          : null;
       if (recipe !== null) {
         if (recipe.requiresFocus)
           throw new CapabilityUnavailableError(
@@ -826,6 +833,12 @@ export class ActionPlanner {
           strategy: 'authoritative-keyboard-focus',
           operations: recipe.operations,
         });
+      }
+      if (via === 'keyboard') {
+        throw new CapabilityUnavailableError(
+          'target has no authoritative keyboard focus recipe',
+          diagnostics,
+        );
       }
       const pointer = this.planPointer(actionId, { kind: 'focus', targetRef: target.ref }, target);
       return Object.freeze({
@@ -875,7 +888,7 @@ export class ActionPlanner {
           operations: Object.freeze([]),
         });
       }
-      if (contractSupports(this.#ctx.contract(), 'action-strategies')) {
+      if (via !== 'pointer' && contractSupports(this.#ctx.contract(), 'action-strategies')) {
         const action = desired === undefined ? 'activate' : 'toggle';
         const recipe = this.#recipeOperations(node, action, undefined, diagnostics, false);
         if (recipe !== null) {
@@ -883,7 +896,7 @@ export class ActionPlanner {
             recipe.requiresFocus && focused !== true
               ? this.#planKeyboard(
                   actionId,
-                  { kind: 'focus', targetRef: target.ref },
+                  { kind: 'focus', targetRef: target.ref, via: 'keyboard' },
                   target,
                   undefined,
                 )
@@ -907,6 +920,12 @@ export class ActionPlanner {
             operations,
           });
         }
+      }
+      if (via === 'keyboard') {
+        throw new CapabilityUnavailableError(
+          `target has no authoritative keyboard ${desired === undefined ? 'activate' : 'toggle'} recipe`,
+          diagnostics,
+        );
       }
       const pointer = this.planPointer(
         actionId,

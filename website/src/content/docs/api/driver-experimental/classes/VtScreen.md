@@ -12,7 +12,7 @@ pagefind: false
 
 # Class: VtScreen
 
-Defined in: [vt.ts:160](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L160)
+Defined in: [vt.ts:165](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L165)
 
 A headless terminal with a serialized write queue and a monotonically
 increasing screen revision. One instance per session.
@@ -23,7 +23,7 @@ increasing screen revision. One instance per session.
 
 > **new VtScreen**(`options`): `VtScreen`
 
-Defined in: [vt.ts:206](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L206)
+Defined in: [vt.ts:215](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L215)
 
 #### Parameters
 
@@ -41,7 +41,7 @@ Defined in: [vt.ts:206](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > `readonly` **profile**: `TerminalProfile`
 
-Defined in: [vt.ts:163](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L163)
+Defined in: [vt.ts:168](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L168)
 
 The profile this emulator counts characters with.
 
@@ -51,7 +51,7 @@ The profile this emulator counts characters with.
 
 > `readonly` **terminal**: `Terminal`
 
-Defined in: [vt.ts:161](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L161)
+Defined in: [vt.ts:166](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L166)
 
 ## Accessors
 
@@ -61,7 +61,7 @@ Defined in: [vt.ts:161](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **get** **columns**(): `number`
 
-Defined in: [vt.ts:261](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L261)
+Defined in: [vt.ts:270](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L270)
 
 ##### Returns
 
@@ -75,7 +75,7 @@ Defined in: [vt.ts:261](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **get** **hasPendingWrite**(): `boolean`
 
-Defined in: [vt.ts:242](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L242)
+Defined in: [vt.ts:251](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L251)
 
 True from enqueue until the callback of the final queued VT write.
 
@@ -91,7 +91,7 @@ True from enqueue until the callback of the final queued VT write.
 
 > **get** **isCaughtUp**(): `boolean`
 
-Defined in: [vt.ts:247](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L247)
+Defined in: [vt.ts:256](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L256)
 
 Whether every VT write enqueued so far has reached its parse callback.
 
@@ -107,7 +107,7 @@ Whether every VT write enqueued so far has reached its parse callback.
 
 > **get** **retainedFloor**(): `number`
 
-Defined in: [vt.ts:257](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L257)
+Defined in: [vt.ts:266](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L266)
 
 Number of scrollback lines evicted since the session started.
 
@@ -123,7 +123,7 @@ Number of scrollback lines evicted since the session started.
 
 > **get** **revision**(): `number`
 
-Defined in: [vt.ts:237](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L237)
+Defined in: [vt.ts:246](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L246)
 
 Current screen revision; incremented once per observable VT state change.
 
@@ -139,7 +139,7 @@ Current screen revision; incremented once per observable VT state change.
 
 > **get** **rows**(): `number`
 
-Defined in: [vt.ts:265](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L265)
+Defined in: [vt.ts:274](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L274)
 
 ##### Returns
 
@@ -153,7 +153,7 @@ Defined in: [vt.ts:265](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **get** **title**(): `string`
 
-Defined in: [vt.ts:252](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L252)
+Defined in: [vt.ts:261](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L261)
 
 Window title as last set by OSC 0/2.
 
@@ -167,7 +167,7 @@ Window title as last set by OSC 0/2.
 
 > **activeBuffer**(): `"normal"` \| `"alternate"`
 
-Defined in: [vt.ts:372](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L372)
+Defined in: [vt.ts:382](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L382)
 
 Which xterm buffer currently backs the visible viewport.
 
@@ -181,7 +181,7 @@ Which xterm buffer currently backs the visible viewport.
 
 > **allLines**(): `string`[]
 
-Defined in: [vt.ts:315](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L315)
+Defined in: [vt.ts:324](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L324)
 
 Every retained line, scrollback first, as text.
 
@@ -195,7 +195,7 @@ Every retained line, scrollback first, as text.
 
 > **cursor**(): `CursorInfo`
 
-Defined in: [vt.ts:361](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L361)
+Defined in: [vt.ts:371](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L371)
 
 Cursor position (viewport-relative), visibility and shape.
 
@@ -209,7 +209,7 @@ Cursor position (viewport-relative), visibility and shape.
 
 > **dispose**(): `void`
 
-Defined in: [vt.ts:471](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L471)
+Defined in: [vt.ts:481](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L481)
 
 #### Returns
 
@@ -221,7 +221,7 @@ Defined in: [vt.ts:471](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **drain**(): `Promise`\<`void`\>
 
-Defined in: [vt.ts:310](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L310)
+Defined in: [vt.ts:319](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L319)
 
 Resolves once every write issued so far has been parsed. A child's dying
 output — a stack trace, a panic — is usually still in flight when the pty
@@ -238,7 +238,7 @@ drain first or it reads a screen from before the crash.
 
 > **modes**(): `TerminalModes`
 
-Defined in: [vt.ts:342](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L342)
+Defined in: [vt.ts:351](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L351)
 
 Input-relevant modes, merged from `Terminal.modes` and our own tracking.
 
@@ -259,7 +259,7 @@ including mouse, focus, bracketed-paste and alternate-screen modes.
 
 > **onMarker**(`cb`): `Unsubscribe`
 
-Defined in: [vt.ts:455](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L455)
+Defined in: [vt.ts:465](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L465)
 
 #### Parameters
 
@@ -277,7 +277,7 @@ Defined in: [vt.ts:455](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **onResponse**(`cb`): `Unsubscribe`
 
-Defined in: [vt.ts:466](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L466)
+Defined in: [vt.ts:476](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L476)
 
 Receives terminal protocol replies which the session must return to the child.
 
@@ -297,7 +297,7 @@ Receives terminal protocol replies which the session must return to the child.
 
 > **onRevision**(`cb`): `Unsubscribe`
 
-Defined in: [vt.ts:398](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L398)
+Defined in: [vt.ts:408](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L408)
 
 #### Parameters
 
@@ -315,7 +315,7 @@ Defined in: [vt.ts:398](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **onTitle**(`cb`): `Unsubscribe`
 
-Defined in: [vt.ts:460](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L460)
+Defined in: [vt.ts:470](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L470)
 
 #### Parameters
 
@@ -333,7 +333,7 @@ Defined in: [vt.ts:460](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **regionChangeSince**(`revision`, `spans`): `RegionChange`
 
-Defined in: [vt.ts:427](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L427)
+Defined in: [vt.ts:437](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L437)
 
 Why a region is not usable at a past revision, or that it is.
 
@@ -364,7 +364,7 @@ readonly `object`[]
 
 > **regionUnchangedSince**(`revision`, `spans`): `boolean`
 
-Defined in: [vt.ts:410](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L410)
+Defined in: [vt.ts:420](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L420)
 
 Whether every cell in `spans` survived unchanged since `revision`.
 Returns false when a resize/buffer/scroll changed the coordinate system.
@@ -392,7 +392,7 @@ readonly `object`[]
 
 > **resize**(`columns`, `rows`): `void`
 
-Defined in: [vt.ts:325](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L325)
+Defined in: [vt.ts:334](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L334)
 
 Resizes the emulator grid (the PTY is resized separately by the session).
 
@@ -416,7 +416,7 @@ Resizes the emulator grid (the PTY is resized separately by the session).
 
 > **serializeAnsi**(`scrollback?`): `string`
 
-Defined in: [vt.ts:389](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L389)
+Defined in: [vt.ts:399](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L399)
 
 ANSI serialization of the visible grid (addon-serialize).
 
@@ -436,7 +436,7 @@ ANSI serialization of the visible grid (addon-serialize).
 
 > **serializeHtml**(`scrollback?`): `string`
 
-Defined in: [vt.ts:394](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L394)
+Defined in: [vt.ts:404](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L404)
 
 HTML serialization of the visible grid (addon-serialize).
 
@@ -456,7 +456,7 @@ HTML serialization of the visible grid (addon-serialize).
 
 > **shellIntegration**(): `ShellIntegration`
 
-Defined in: [vt.ts:377](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L377)
+Defined in: [vt.ts:387](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L387)
 
 Prompt state as reported by OSC 133, if the program reports it at all.
 
@@ -470,7 +470,7 @@ Prompt state as reported by OSC 133, if the program reports it at all.
 
 > **write**(`data`): `Promise`\<`void`\>
 
-Defined in: [vt.ts:273](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L273)
+Defined in: [vt.ts:282](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/vt.ts#L282)
 
 Feeds bytes to the emulator and resolves once they have been parsed and the
 resulting revision published. Writes are serialized in call order.

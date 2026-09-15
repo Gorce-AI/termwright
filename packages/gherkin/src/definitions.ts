@@ -1,4 +1,9 @@
-import type { TermwrightExpect, TermwrightFixtures } from '@termwright/test';
+import type {
+  DisposableResource,
+  ResourceScope,
+  TermwrightExpect,
+  TermwrightFixtures,
+} from '@termwright/test';
 
 /** The mutable state shared by every step in one Scenario or Outline row. */
 export type GherkinWorld = Record<string, unknown>;
@@ -18,18 +23,17 @@ export type GherkinContext<Fixtures extends object = object> = TermwrightFixture
     readonly expect: TermwrightExpect;
     readonly world: GherkinWorld;
     readonly scenario: GherkinScenario;
+    /** Scenario cancellation, aborted by the native test timeout. */
+    readonly signal: AbortSignal;
+    /** Scenario-owned resources. A child of the enclosing test scope. */
+    readonly resources: ResourceScope;
     /** Registers test-scoped cleanup. Cleanups run in reverse order after `After` hooks. */
     readonly defer: (cleanup: () => unknown | Promise<unknown>) => void;
     /** Registers a closeable/disposable resource and returns it unchanged. */
     readonly use: <T extends GherkinResource>(resource: T) => T;
   };
 
-export interface GherkinResource {
-  close?: () => unknown | Promise<unknown>;
-  dispose?: () => unknown | Promise<unknown>;
-  [Symbol.dispose]?: () => unknown;
-  [Symbol.asyncDispose]?: () => unknown | Promise<unknown>;
-}
+export type GherkinResource = DisposableResource;
 
 /** A DocString or DataTable attached to a Gherkin step. */
 export type GherkinStepArgument = string | readonly (readonly string[])[];

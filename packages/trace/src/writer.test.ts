@@ -72,6 +72,49 @@ describe('trace staging names', () => {
 });
 
 describe('createTraceWriter', () => {
+  it('does not register driver control-key encodings as output secrets', async () => {
+    const dir = await workspace();
+    const session = new FakeSession('control-keys');
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    const ansi = '\u001b[2J\u001b[1;1H\u001b[31mvisible\u001b[0m\r\n';
+
+    for (const key of [
+      '\r',
+      '\u001b',
+      '\u001b[A',
+      '\u001b[1;2P',
+      '\u001b[15;5~',
+      '\u001bOA',
+      '\u001b[99;5u',
+      '\u001b[57352u',
+      '\u001b\u001b[A\r',
+    ])
+      session.input(key, 'key');
+    session.output(ansi);
+    await writer.finalize();
+
+    expect((await readCast(dir)).events.map((event) => event.data).join('')).toBe(ansi);
+  });
+
+  it('keeps printable key input and unknown CSI fail-closed', async () => {
+    const dir = await workspace();
+    const session = new FakeSession('key-secrets');
+    const writer = createTraceWriter(session, { dir, now: session.now });
+
+    session.input('typed-secret', 'key');
+    session.input('\u001b[27;5;97~', 'key');
+    session.input('\u001b[97;2u', 'key');
+    session.output('\u001b[32mtyped-secret / \u001b[27;5;97~ / \u001b[97;2u\u001b[0m\r\n');
+    await writer.finalize();
+
+    const output = (await readCast(dir)).events.map((event) => event.data).join('');
+    expect(output).not.toContain('typed-secret');
+    expect(output).not.toContain('\u001b[27;5;97~');
+    expect(output).not.toContain('\u001b[97;2u');
+    expect(output).toContain('\u001b[32m');
+    expect(output).toContain('\u001b[0m');
+  });
+
   it('keeps a configured canary out of every temporary and final trace stream', async () => {
     const root = await workspace();
     const dir = join(root, 'redacted-canary.twtrace');

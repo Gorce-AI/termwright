@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: SessionClosedError
 
-Defined in: [driver/src/errors.ts:213](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L213)
+Defined in: [driver/src/errors.ts:227](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L227)
 
 The harness was closed; no further observation or input is possible.
 
@@ -25,7 +25,7 @@ The harness was closed; no further observation or input is possible.
 
 > **new SessionClosedError**(`message`, `diagnostics`): `SessionClosedError`
 
-Defined in: [driver/src/errors.ts:214](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L214)
+Defined in: [driver/src/errors.ts:228](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L228)
 
 #### Parameters
 

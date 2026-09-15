@@ -14,7 +14,7 @@ pagefind: false
 
 > **encodeKeys**(`keys`, `modes`): `Uint8Array`
 
-Defined in: [keys.ts:189](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L189)
+Defined in: [keys.ts:274](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L274)
 
 Encodes a key description into the bytes a terminal would send.
 

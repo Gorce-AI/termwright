@@ -12,7 +12,7 @@ pagefind: false
 
 # Interface: LaunchTerminalWithBackendOptions
 
-Defined in: [session.ts:221](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L221)
+Defined in: [session.ts:225](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L225)
 
 Low-level integration options exported only from `@termwright/driver/experimental`.
 
@@ -40,7 +40,7 @@ One policy for every artifact boundary. Defaults to secure `redacted`.
 
 > `readonly` **backend**: [`PtyBackend`](../ptybackend/)
 
-Defined in: [session.ts:222](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L222)
+Defined in: [session.ts:226](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L226)
 
 ***
 
@@ -141,7 +141,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **modesObservable?**: `boolean`
 
-Defined in: [session.ts:217](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L217)
+Defined in: [session.ts:221](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L221)
 
 Whether the child's input-mode requests are observable. Defaults to true
 for every certified backend, including pinned passthrough ConPTY. Set false

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalHarness
 
-Defined in: [driver/src/api.ts:172](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L172)
+Defined in: [driver/src/api.ts:193](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L193)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **artifactSecurity**: `ResolvedArtifactSecurityPolicy`
 
-Defined in: [driver/src/api.ts:175](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L175)
+Defined in: [driver/src/api.ts:196](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L196)
 
 Resolved policy inherited by traces, reports and other artifact sinks.
 
@@ -46,7 +46,7 @@ Resolved policy inherited by traces, reports and other artifact sinks.
 
 > `readonly` **events**: [`SessionEvents`](../sessionevents/)
 
-Defined in: [driver/src/api.ts:259](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L259)
+Defined in: [driver/src/api.ts:294](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L294)
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: [driver/src/api.ts:259](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **exit**: `Promise`\<[`ExitStatus`](../exitstatus/)\>
 
-Defined in: [driver/src/api.ts:290](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L290)
+Defined in: [driver/src/api.ts:325](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L325)
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: [driver/src/api.ts:290](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **keyboard**: [`Keyboard`](../keyboard/)
 
-Defined in: [driver/src/api.ts:181](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L181)
+Defined in: [driver/src/api.ts:202](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L202)
 
 One physical keyboard implementation. Convenience methods delegate here.
 
@@ -72,7 +72,7 @@ One physical keyboard implementation. Convenience methods delegate here.
 
 > `readonly` **mouse**: [`Mouse`](../mouse/)
 
-Defined in: [driver/src/api.ts:183](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L183)
+Defined in: [driver/src/api.ts:204](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L204)
 
 One physical mouse implementation. Locator actions delegate here after planning.
 
@@ -82,7 +82,7 @@ One physical mouse implementation. Locator actions delegate here after planning.
 
 > `readonly` **scrollback**: [`ScrollbackApi`](../scrollbackapi/)
 
-Defined in: [driver/src/api.ts:255](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L255)
+Defined in: [driver/src/api.ts:290](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L290)
 
 ***
 
@@ -90,7 +90,7 @@ Defined in: [driver/src/api.ts:255](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **selection**: [`SelectionApi`](../selectionapi/)
 
-Defined in: [driver/src/api.ts:256](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L256)
+Defined in: [driver/src/api.ts:291](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L291)
 
 ***
 
@@ -98,7 +98,7 @@ Defined in: [driver/src/api.ts:256](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **sessionId**: `string`
 
-Defined in: [driver/src/api.ts:173](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L173)
+Defined in: [driver/src/api.ts:194](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L194)
 
 ***
 
@@ -106,7 +106,7 @@ Defined in: [driver/src/api.ts:173](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **shell**: [`ShellApi`](../shellapi/)
 
-Defined in: [driver/src/api.ts:179](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L179)
+Defined in: [driver/src/api.ts:200](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L200)
 
 Shell command boundaries and prompt state when the child emits OSC 133.
 
@@ -116,7 +116,7 @@ Shell command boundaries and prompt state when the child emits OSC 133.
 
 > `readonly` **terminalProfile**: [`TerminalProfileId`](../../type-aliases/terminalprofileid/)
 
-Defined in: [driver/src/api.ts:177](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L177)
+Defined in: [driver/src/api.ts:198](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L198)
 
 Immutable terminal profile used to decode the very first PTY byte.
 
@@ -126,7 +126,7 @@ Immutable terminal profile used to decode the very first PTY byte.
 
 > `readonly` **terminalState**: [`TerminalState`](../terminalstate/)
 
-Defined in: [driver/src/api.ts:187](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L187)
+Defined in: [driver/src/api.ts:208](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L208)
 
 Emulator facts captured together at the current screen revision.
 
@@ -136,7 +136,7 @@ Emulator facts captured together at the current screen revision.
 
 > `readonly` **window**: [`TerminalWindow`](../terminalwindow/)
 
-Defined in: [driver/src/api.ts:185](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L185)
+Defined in: [driver/src/api.ts:206](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L206)
 
 Terminal-window focus reports, distinct from semantic element focus.
 
@@ -146,7 +146,7 @@ Terminal-window focus reports, distinct from semantic element focus.
 
 > **appLogs**(): readonly [`AppLogEvent`](../applogevent/)[]
 
-Defined in: [driver/src/api.ts:273](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L273)
+Defined in: [driver/src/api.ts:308](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L308)
 
 Bounded, oldest-first application-log history, including entries emitted
 while `launchTerminal()` was still starting. Consumers should subscribe to
@@ -162,7 +162,7 @@ readonly [`AppLogEvent`](../applogevent/)[]
 
 > `optional` **bindOperationBudget**(`budget`): `void`
 
-Defined in: [driver/src/api.ts:189](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L189)
+Defined in: [driver/src/api.ts:210](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L210)
 
 Binds one attempt-wide budget before any user operation starts.
 
@@ -182,7 +182,7 @@ Binds one attempt-wide budget before any user operation starts.
 
 > **cell**(`pos`): [`CellSnapshot`](../cellsnapshot/)
 
-Defined in: [driver/src/api.ts:213](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L213)
+Defined in: [driver/src/api.ts:248](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L248)
 
 #### Parameters
 
@@ -206,7 +206,7 @@ Defined in: [driver/src/api.ts:213](https://github.com/Gorce-AI/termwright/blob/
 
 > **checkpoint**(): [`ObservationStamp`](../observationstamp/)
 
-Defined in: [driver/src/api.ts:194](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L194)
+Defined in: [driver/src/api.ts:215](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L215)
 
 Atomic identity of the currently committed terminal/semantic observation.
 
@@ -220,7 +220,7 @@ Atomic identity of the currently committed terminal/semantic observation.
 
 > **close**(): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:289](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L289)
+Defined in: [driver/src/api.ts:324](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L324)
 
 Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
@@ -234,7 +234,7 @@ Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
 > **contract**(): [`EffectiveSessionContract`](../effectivesessioncontract/) \| `null`
 
-Defined in: [driver/src/api.ts:192](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L192)
+Defined in: [driver/src/api.ts:213](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L213)
 
 Frozen negotiated contract, or null until negotiation has completed.
 
@@ -248,7 +248,7 @@ Frozen negotiated contract, or null until negotiation has completed.
 
 > **crashReport**(): [`CrashReport`](../crashreport/) \| `null`
 
-Defined in: [driver/src/api.ts:280](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L280)
+Defined in: [driver/src/api.ts:315](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L315)
 
 What the session knew when the program died unexpectedly, or `null` — for a
 live session, a clean exit, or one the harness asked for via `close()` or
@@ -264,7 +264,7 @@ live session, a clean exit, or one the harness asked for via `close()` or
 
 > **diagnostics**(): readonly [`SessionDiagnostic`](../sessiondiagnostic/)[]
 
-Defined in: [driver/src/api.ts:266](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L266)
+Defined in: [driver/src/api.ts:301](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L301)
 
 Bounded, oldest-first log of what the session decided behind the scenes:
 dropped or superseded revisions, unverified markers, adapter negotiation,
@@ -276,11 +276,36 @@ readonly [`SessionDiagnostic`](../sessiondiagnostic/)[]
 
 ***
 
+### focusByTraversal()
+
+> **focusByTraversal**(`target`, `options?`): `Promise`\<`void`\>
+
+Defined in: [driver/src/api.ts:240](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L240)
+
+Reaches a semantic target through the application's real keyboard focus
+ring. Every key is followed by a committed focus change before continuing.
+
+#### Parameters
+
+##### target
+
+[`SemanticLocator`](../semanticlocator/)
+
+##### options?
+
+[`FocusTraversalOptions`](../focustraversaloptions/)
+
+#### Returns
+
+`Promise`\<`void`\>
+
+***
+
 ### getByLabel()
 
 > **getByLabel**(`text`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: [driver/src/api.ts:217](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L217)
+Defined in: [driver/src/api.ts:252](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L252)
 
 #### Parameters
 
@@ -304,7 +329,7 @@ Defined in: [driver/src/api.ts:217](https://github.com/Gorce-AI/termwright/blob/
 
 > **getByRole**(`role`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: [driver/src/api.ts:216](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L216)
+Defined in: [driver/src/api.ts:251](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L251)
 
 #### Parameters
 
@@ -326,7 +351,7 @@ Defined in: [driver/src/api.ts:216](https://github.com/Gorce-AI/termwright/blob/
 
 > **getByScreenText**(`text`, `opts?`): [`ScreenLocator`](../screenlocator/)
 
-Defined in: [driver/src/api.ts:221](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L221)
+Defined in: [driver/src/api.ts:256](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L256)
 
 Physical terminal-grid text, optionally narrowed by occurrence or style.
 
@@ -350,7 +375,7 @@ Physical terminal-grid text, optionally narrowed by occurrence or style.
 
 > **getByTestId**(`testId`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: [driver/src/api.ts:222](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L222)
+Defined in: [driver/src/api.ts:257](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L257)
 
 #### Parameters
 
@@ -368,7 +393,7 @@ Defined in: [driver/src/api.ts:222](https://github.com/Gorce-AI/termwright/blob/
 
 > **getByText**(`text`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: [driver/src/api.ts:219](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L219)
+Defined in: [driver/src/api.ts:254](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L254)
 
 Semantic text only. Never falls back to the terminal grid.
 
@@ -392,7 +417,7 @@ Semantic text only. Never falls back to the terminal grid.
 
 > **locator**(`selector`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: [driver/src/api.ts:224](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L224)
+Defined in: [driver/src/api.ts:259](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L259)
 
 Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'.
 
@@ -414,7 +439,7 @@ Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'.
 
 > **locatorForRef**(`ref`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: [driver/src/api.ts:231](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L231)
+Defined in: [driver/src/api.ts:266](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L266)
 
 Rebuilds a locator from a ref returned by a resolved target.
 (`'semantic:n8@42'` for a semantic node, `'screen:r,c,w,h@7'` for a grid match).
@@ -435,7 +460,7 @@ superseded raises `stale-snapshot`.
 
 > **locatorForRef**(`ref`): [`ScreenLocator`](../screenlocator/)
 
-Defined in: [driver/src/api.ts:232](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L232)
+Defined in: [driver/src/api.ts:267](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L267)
 
 ##### Parameters
 
@@ -451,7 +476,7 @@ Defined in: [driver/src/api.ts:232](https://github.com/Gorce-AI/termwright/blob/
 
 > **locatorForRef**(`ref`): [`SemanticLocator`](../semanticlocator/) \| [`ScreenLocator`](../screenlocator/)
 
-Defined in: [driver/src/api.ts:233](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L233)
+Defined in: [driver/src/api.ts:268](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L268)
 
 ##### Parameters
 
@@ -469,7 +494,7 @@ Defined in: [driver/src/api.ts:233](https://github.com/Gorce-AI/termwright/blob/
 
 > **ownedProcessResources**(): [`OwnedProcessResourceUsage`](../ownedprocessresourceusage/) \| `null`
 
-Defined in: [driver/src/api.ts:286](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L286)
+Defined in: [driver/src/api.ts:321](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L321)
 
 Native whole-tree accounting captured immediately before PTY disposal.
 Returns `null` when the backend cannot make an authoritative claim.
@@ -484,7 +509,7 @@ Returns `null` when the backend cannot make an authoritative claim.
 
 > **paste**(`text`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:238](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L238)
+Defined in: [driver/src/api.ts:273](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L273)
 
 #### Parameters
 
@@ -502,7 +527,7 @@ Defined in: [driver/src/api.ts:238](https://github.com/Gorce-AI/termwright/blob/
 
 > **press**(`keys`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:236](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L236)
+Defined in: [driver/src/api.ts:271](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L271)
 
 #### Parameters
 
@@ -520,7 +545,7 @@ Defined in: [driver/src/api.ts:236](https://github.com/Gorce-AI/termwright/blob/
 
 > **resize**(`size`): `Promise`\<[`ResizeReceipt`](../resizereceipt/)\>
 
-Defined in: [driver/src/api.ts:240](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L240)
+Defined in: [driver/src/api.ts:275](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L275)
 
 #### Parameters
 
@@ -544,7 +569,7 @@ Defined in: [driver/src/api.ts:240](https://github.com/Gorce-AI/termwright/blob/
 
 > **screen**(): [`ScreenSnapshot`](../screensnapshot/)
 
-Defined in: [driver/src/api.ts:211](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L211)
+Defined in: [driver/src/api.ts:246](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L246)
 
 #### Returns
 
@@ -556,7 +581,7 @@ Defined in: [driver/src/api.ts:211](https://github.com/Gorce-AI/termwright/blob/
 
 > **semanticTree**(): `SemanticSnapshot` \| `null`
 
-Defined in: [driver/src/api.ts:212](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L212)
+Defined in: [driver/src/api.ts:247](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L247)
 
 #### Returns
 
@@ -568,7 +593,7 @@ Defined in: [driver/src/api.ts:212](https://github.com/Gorce-AI/termwright/blob/
 
 > **settled**(`opts?`): `Promise`\<[`EffectiveSessionContract`](../effectivesessioncontract/)\>
 
-Defined in: [driver/src/api.ts:210](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L210)
+Defined in: [driver/src/api.ts:245](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L245)
 
 Waits for the one frozen Effective Session Contract and, for a semantic
 session, for the first paired tree. There is no provisional capability API.
@@ -589,7 +614,7 @@ session, for the first paired tree. There is no provisional capability API.
 
 > **signal**(`sig`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:241](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L241)
+Defined in: [driver/src/api.ts:276](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L276)
 
 #### Parameters
 
@@ -607,7 +632,7 @@ Defined in: [driver/src/api.ts:241](https://github.com/Gorce-AI/termwright/blob/
 
 > **title**(): `string`
 
-Defined in: [driver/src/api.ts:251](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L251)
+Defined in: [driver/src/api.ts:286](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L286)
 
 #### Returns
 
@@ -619,7 +644,7 @@ Defined in: [driver/src/api.ts:251](https://github.com/Gorce-AI/termwright/blob/
 
 > **type**(`text`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:237](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L237)
+Defined in: [driver/src/api.ts:272](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L272)
 
 #### Parameters
 
@@ -637,7 +662,7 @@ Defined in: [driver/src/api.ts:237](https://github.com/Gorce-AI/termwright/blob/
 
 > **waitForCheckpointChange**(`options`): `Promise`\<[`ObservationStamp`](../observationstamp/)\>
 
-Defined in: [driver/src/api.ts:196](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L196)
+Defined in: [driver/src/api.ts:217](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L217)
 
 Wait until a committed observation newer than `after` is available.
 
@@ -657,7 +682,7 @@ Wait until a committed observation newer than `after` is available.
 
 > **waitForCommittedObservation**(`opts?`): `Promise`\<[`ObservationStamp`](../observationstamp/)\>
 
-Defined in: [driver/src/api.ts:205](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L205)
+Defined in: [driver/src/api.ts:226](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L226)
 
 Waits until currently observable parser work, semantic frame pairing and
 provider-evidence invalidation have committed. This cannot predict a
@@ -680,7 +705,7 @@ driver, and it is not a quiet/global-idle heuristic.
 
 > **waitForExit**(`opts?`): `Promise`\<[`ExitStatus`](../exitstatus/)\>
 
-Defined in: [driver/src/api.ts:250](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L250)
+Defined in: [driver/src/api.ts:285](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L285)
 
 #### Parameters
 
@@ -698,7 +723,7 @@ Defined in: [driver/src/api.ts:250](https://github.com/Gorce-AI/termwright/blob/
 
 > **waitForQuiet**(`opts?`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:247](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L247)
+Defined in: [driver/src/api.ts:282](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L282)
 
 Heuristic only: waits for a stated interval with no screen or semantic change.
 
@@ -718,7 +743,7 @@ Heuristic only: waits for a stated interval with no screen or semantic change.
 
 > **waitForRender**(`opts`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:245](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L245)
+Defined in: [driver/src/api.ts:280](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L280)
 
 #### Parameters
 
@@ -736,7 +761,7 @@ Defined in: [driver/src/api.ts:245](https://github.com/Gorce-AI/termwright/blob/
 
 > **waitForShellPrompt**(`opts?`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:249](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L249)
+Defined in: [driver/src/api.ts:284](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L284)
 
 Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
@@ -756,7 +781,7 @@ Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
 > **waitForText**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:244](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L244)
+Defined in: [driver/src/api.ts:279](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L279)
 
 #### Parameters
 
@@ -778,7 +803,7 @@ Defined in: [driver/src/api.ts:244](https://github.com/Gorce-AI/termwright/blob/
 
 > **waitForTitle**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:252](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L252)
+Defined in: [driver/src/api.ts:287](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L287)
 
 #### Parameters
 
@@ -796,11 +821,43 @@ Defined in: [driver/src/api.ts:252](https://github.com/Gorce-AI/termwright/blob/
 
 ***
 
+### waitUntil()
+
+> **waitUntil**\<`T`\>(`observe`, `options`): `Promise`\<`T`\>
+
+Defined in: [driver/src/api.ts:232](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L232)
+
+Re-evaluates user state only at committed terminal observation boundaries.
+The check is armed before each read, so a change cannot land between the
+predicate and its subscription. The last value is retained on timeout.
+
+#### Type Parameters
+
+##### T
+
+`T`
+
+#### Parameters
+
+##### observe
+
+(`observation`) => `T` \| `Promise`\<`T`\>
+
+##### options
+
+[`WaitUntilOptions`](../waituntiloptions/)\<`T`\>
+
+#### Returns
+
+`Promise`\<`T`\>
+
+***
+
 ### write()
 
 > **write**(`bytes`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:239](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L239)
+Defined in: [driver/src/api.ts:274](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L274)
 
 #### Parameters
 

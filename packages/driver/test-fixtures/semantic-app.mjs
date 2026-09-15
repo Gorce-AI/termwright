@@ -60,6 +60,7 @@ const providerActionRecipes = process.env['TERMWRIGHT_FIXTURE_PROVIDER_ACTION_RE
 const providerFocusState = process.env['TERMWRIGHT_FIXTURE_PROVIDER_FOCUS_STATE'] === '1';
 const unicodeGeometry = process.env['TERMWRIGHT_FIXTURE_UNICODE_GEOMETRY'];
 const delayedResizeDimensions = process.env['TERMWRIGHT_FIXTURE_DELAYED_RESIZE_DIMENSIONS'] === '1';
+const approveTestId = process.env['TERMWRIGHT_FIXTURE_APPROVE_TEST_ID'] ?? 'approve';
 
 const approvePrefix =
   unicodeGeometry === 'emoji' ? '  👨‍👩‍👧' : unicodeGeometry === 'devanagari' ? '  किं' : '  ';
@@ -232,7 +233,7 @@ function tree() {
         parentId: 'n1',
         role: 'button',
         name: 'Approve',
-        testId: 'approve',
+        testId: approveTestId,
         bounds: { row: 1, column: approveColumn, width: 9, height: 1 },
         state: {
           ...(!providerFocusState ? { focused: focused === 'approve' } : {}),

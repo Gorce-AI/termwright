@@ -19,8 +19,9 @@ ordinary `.test.ts` files are discovered.
 
 - [GeneratedGherkinImports](interfaces/generatedgherkinimports/)
 - [GherkinPluginOptions](interfaces/gherkinpluginoptions/)
-- [GherkinResource](interfaces/gherkinresource/)
 - [GherkinScenario](interfaces/gherkinscenario/)
+- [GherkinScenarioOptions](interfaces/gherkinscenariooptions/)
+- [GherkinScenarioResources](interfaces/gherkinscenarioresources/)
 - [HookDefinition](interfaces/hookdefinition/)
 - [HookDefinitionOptions](interfaces/hookdefinitionoptions/)
 - [ParameterTypeDefinition](interfaces/parametertypedefinition/)
@@ -33,6 +34,7 @@ ordinary `.test.ts` files are discovered.
 - [GherkinDefinition](type-aliases/gherkindefinition/)
 - [GherkinDefinitions](type-aliases/gherkindefinitions/)
 - [GherkinReservedFixtureName](type-aliases/gherkinreservedfixturename/)
+- [GherkinResource](type-aliases/gherkinresource/)
 - [GherkinStepArgument](type-aliases/gherkinstepargument/)
 - [GherkinWorld](type-aliases/gherkinworld/)
 - [HookDefinitionBody](type-aliases/hookdefinitionbody/)

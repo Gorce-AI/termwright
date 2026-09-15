@@ -19,6 +19,7 @@ import type {
   CellSnapshot,
   CrashReport,
   ExitStatus,
+  FocusTraversalOptions,
   LocatorRef,
   SemanticLocator,
   SemanticLocatorRef,
@@ -38,11 +39,13 @@ import type {
   SessionDiagnostic,
   SessionEvents,
   TerminalHarness,
+  TerminalObservation,
   TerminalProfileId,
   TerminalState,
   TerminalWindow,
   TextLocatorOptions,
   WaitOptions,
+  WaitUntilOptions,
 } from '@termwright/driver';
 import type {
   ResolvedArtifactSecurityPolicy,
@@ -125,6 +128,17 @@ export abstract class ForwardingHarness implements TerminalHarness {
 
   waitForCommittedObservation(options?: WaitOptions): Promise<ObservationStamp> {
     return this.session.waitForCommittedObservation(options);
+  }
+
+  waitUntil<T>(
+    observe: (observation: TerminalObservation) => T | Promise<T>,
+    options: WaitUntilOptions<T>,
+  ): Promise<T> {
+    return this.session.waitUntil(observe, options);
+  }
+
+  focusByTraversal(target: SemanticLocator, options?: FocusTraversalOptions): Promise<void> {
+    return this.session.focusByTraversal(target, options);
   }
 
   bindOperationBudget(budget: OperationBudget): void {

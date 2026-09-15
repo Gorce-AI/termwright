@@ -25,6 +25,15 @@ export interface PairedRevision {
   readonly screenRevision: number | null;
 }
 
+/** Exact halves retained by the frame/tree pairing barrier. */
+export interface PairingPendingState {
+  readonly markerEnabled: boolean;
+  readonly openFrameRevisions: readonly number[];
+  readonly pendingTreeRevisions: readonly number[];
+  readonly pendingMarkerRevisions: readonly number[];
+  readonly publishedRevision: number | null;
+}
+
 /** Construction options for {@link RevisionPairing}. */
 export interface PairingOptions {
   readonly maxPending: number;
@@ -161,6 +170,17 @@ export class RevisionPairing {
   /** True while a probe has a frame open. */
   get hasOpenFrame(): boolean {
     return this.#openFrames.size > 0;
+  }
+
+  /** A frozen diagnostic view; it does not expose or mutate pairing entries. */
+  pendingState(): PairingPendingState {
+    return Object.freeze({
+      markerEnabled: this.#markerEnabled,
+      openFrameRevisions: Object.freeze([...this.#openFrames].sort((a, b) => a - b)),
+      pendingTreeRevisions: Object.freeze([...this.#snapshots.keys()].sort((a, b) => a - b)),
+      pendingMarkerRevisions: Object.freeze([...this.#markers.keys()].sort((a, b) => a - b)),
+      publishedRevision: this.#published?.snapshot.revision ?? null,
+    });
   }
 
   /**

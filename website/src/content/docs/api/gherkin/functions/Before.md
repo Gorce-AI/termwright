@@ -15,7 +15,7 @@ editUrl: false
 
 > **Before**\<`Fixtures`\>(`body`): [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:133](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L133)
+Defined in: [definitions.ts:137](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L137)
 
 Runs before each matching Scenario or Outline row selected by this glue scope.
 
@@ -39,7 +39,7 @@ Runs before each matching Scenario or Outline row selected by this glue scope.
 
 > **Before**\<`Fixtures`\>(`options`, `body`): [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:136](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L136)
+Defined in: [definitions.ts:140](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L140)
 
 Runs before each matching Scenario or Outline row selected by this glue scope.
 

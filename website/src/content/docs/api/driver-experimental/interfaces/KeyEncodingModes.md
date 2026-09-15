@@ -31,3 +31,11 @@ Defined in: [keys.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packag
 > `readonly` **applicationKeypad**: `boolean`
 
 Defined in: [keys.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L18)
+
+***
+
+### kittyKeyboardFlags?
+
+> `readonly` `optional` **kittyKeyboardFlags?**: `number`
+
+Defined in: [keys.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L19)

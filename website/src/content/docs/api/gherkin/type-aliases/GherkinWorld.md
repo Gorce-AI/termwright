@@ -13,6 +13,6 @@ editUrl: false
 
 > **GherkinWorld** = `Record`\<`string`, `unknown`\>
 
-Defined in: [definitions.ts:4](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L4)
+Defined in: [definitions.ts:9](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L9)
 
 The mutable state shared by every step in one Scenario or Outline row.

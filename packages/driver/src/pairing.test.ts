@@ -61,10 +61,20 @@ describe('RevisionPairing', () => {
     pairing.offerSnapshot(snapshot(1));
     expect(published).toHaveLength(0);
     expect(pairing.hasPendingRender).toBe(true);
+    expect(pairing.pendingState()).toMatchObject({
+      pendingTreeRevisions: [1],
+      pendingMarkerRevisions: [],
+      publishedRevision: null,
+    });
     pairing.offerMarker(1, 7);
     expect(published).toHaveLength(1);
     expect(published[0]?.screenRevision).toBe(7);
     expect(pairing.hasPendingRender).toBe(false);
+    expect(pairing.pendingState()).toMatchObject({
+      pendingTreeRevisions: [],
+      pendingMarkerRevisions: [],
+      publishedRevision: 1,
+    });
 
     pairing.offerMarker(2, 9);
     expect(published).toHaveLength(1);

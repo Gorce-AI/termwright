@@ -14,6 +14,7 @@ describe('terminal modes', () => {
     applicationKeypad: false,
     focusReporting: 'off',
     synchronizedOutput: false,
+    kittyKeyboardFlags: 0,
   };
 
   it('accepts an unobservable mouse mode from an explicit embedding contract', () => {

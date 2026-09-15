@@ -13,7 +13,7 @@ editUrl: false
 
 > **Given**\<`Fixtures`\>(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>
 
-Defined in: [definitions.ts:101](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L101)
+Defined in: [definitions.ts:105](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L105)
 
 Declares a Given definition without registering process-global state.
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: ProcessExitedError
 
-Defined in: [driver/src/errors.ts:206](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L206)
+Defined in: [driver/src/errors.ts:220](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L220)
 
 The child process exited before the awaited condition could be satisfied.
 
@@ -25,7 +25,7 @@ The child process exited before the awaited condition could be satisfied.
 
 > **new ProcessExitedError**(`message`, `diagnostics`): `ProcessExitedError`
 
-Defined in: [driver/src/errors.ts:207](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L207)
+Defined in: [driver/src/errors.ts:221](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L221)
 
 #### Parameters
 

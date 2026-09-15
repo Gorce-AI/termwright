@@ -109,6 +109,21 @@ Before({ tags: '@component and not @slow' }, async (context) => {
 });
 ```
 
+Map Scenario tags to native timeout and scheduler resources in the Vite plugin:
+
+```ts
+gherkinPlugin({
+  scenario: ({ tags }) => ({
+    timeout: tags.includes('@slow') ? 60_000 : 15_000,
+    resources: tags.includes('@serial') ? { hostPressure: 'exclusive' } : undefined,
+  }),
+});
+```
+
+Step and hook contexts also expose `signal` and `resources`. Their cleanup is
+owned by the native test attempt, so it still runs when Vitest interrupts a
+Scenario at its timeout.
+
 ## Pass project fixtures into steps
 
 For an explicit plugin configuration, export a project-owned extended test

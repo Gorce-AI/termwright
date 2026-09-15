@@ -22,6 +22,14 @@ export const OUTPUT_SINK_HOOK = '__termwright_isOpenTuiOutputSink';
 /** Minimal shape the probe needs; the real type lives in `@opentui/core`. */
 export type ObservedRenderer = object;
 
+/** Prototypes supplied by the certified framework module, never by the app. */
+const readOnlyTextPrototypes = new WeakSet<object>();
+
+/** Whether this exact object is a framework-owned, immutable text renderable. */
+export function isReadOnlyTextNode(value: object): boolean {
+  return readOnlyTextPrototypes.has(Object.getPrototypeOf(value));
+}
+
 export interface ObservedRuntimeCertification {
   readonly version: string;
   readonly source: 'builtin' | 'candidate';
@@ -52,13 +60,23 @@ export function onRendererCreated(
     renderer: ObservedRenderer,
     certification: ObservedRuntimeCertification,
     effectiveConfig: Record<string, unknown>,
+    readOnlyTextPrototype?: object,
   ) => void,
 ): () => void {
   const scope = globalThis as Record<string, unknown>;
   const previous = scope[RENDERER_HOOK];
-  scope[RENDERER_HOOK] = handler;
+  const registered = (
+    renderer: ObservedRenderer,
+    certification: ObservedRuntimeCertification,
+    effectiveConfig: Record<string, unknown>,
+    readOnlyTextPrototype?: object,
+  ): void => {
+    if (readOnlyTextPrototype !== undefined) readOnlyTextPrototypes.add(readOnlyTextPrototype);
+    handler(renderer, certification, effectiveConfig, readOnlyTextPrototype);
+  };
+  scope[RENDERER_HOOK] = registered;
   return () => {
-    if (scope[RENDERER_HOOK] === handler) scope[RENDERER_HOOK] = previous;
+    if (scope[RENDERER_HOOK] === registered) scope[RENDERER_HOOK] = previous;
   };
 }
 

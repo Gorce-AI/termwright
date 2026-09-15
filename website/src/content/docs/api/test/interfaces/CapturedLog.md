@@ -25,7 +25,7 @@ One log entry, tagged with the session that produced it.
 
 > `readonly` `optional` **label?**: `string`
 
-Defined in: driver/dist/session-DOkKra9W.d.ts:794
+Defined in: driver/dist/session-Bg0dDZp-.d.ts:829
 
 #### Inherited from
 
@@ -37,7 +37,7 @@ Defined in: driver/dist/session-DOkKra9W.d.ts:794
 
 > `readonly` `optional` **line?**: `string`
 
-Defined in: driver/dist/session-DOkKra9W.d.ts:801
+Defined in: driver/dist/session-Bg0dDZp-.d.ts:836
 
 Raw line, for a followed file. Truncated lines end with an ellipsis.
 
@@ -51,7 +51,7 @@ Raw line, for a followed file. Truncated lines end with an ellipsis.
 
 > `readonly` `optional` **path?**: `string`
 
-Defined in: driver/dist/session-DOkKra9W.d.ts:799
+Defined in: driver/dist/session-Bg0dDZp-.d.ts:834
 
 Path of the followed file, for `source: 'file'`. A label can be short and
 shared between sources; the path is what a reader opens.
@@ -66,7 +66,7 @@ shared between sources; the path is what a reader opens.
 
 > `readonly` `optional` **record?**: `LogRecord`
 
-Defined in: driver/dist/session-DOkKra9W.d.ts:803
+Defined in: driver/dist/session-Bg0dDZp-.d.ts:838
 
 Structured record, for an adapter that negotiated the logs capability.
 
@@ -88,7 +88,7 @@ Defined in: [test/src/logs.ts:16](https://github.com/Gorce-AI/termwright/blob/ma
 
 > `readonly` **source**: `"file"` \| `"adapter"`
 
-Defined in: driver/dist/session-DOkKra9W.d.ts:793
+Defined in: driver/dist/session-Bg0dDZp-.d.ts:828
 
 #### Inherited from
 
@@ -100,7 +100,7 @@ Defined in: driver/dist/session-DOkKra9W.d.ts:793
 
 > `readonly` **timeMs**: `number`
 
-Defined in: driver/dist/session-DOkKra9W.d.ts:812
+Defined in: driver/dist/session-Bg0dDZp-.d.ts:847
 
 Milliseconds since session start, on the same clock as every other event.
 
