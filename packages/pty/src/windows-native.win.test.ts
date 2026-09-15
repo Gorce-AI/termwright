@@ -452,8 +452,11 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
       expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
 
+      // The fixture compiles its C# Console API probe before emitting this
+      // marker. Cold hosted Windows workers occasionally need longer than the
+      // ordinary interaction budget; this remains a bounded diagnostic wait.
       expect(
-        await waitForMarker(handle, output, /RESIZE-READY/u, 10_000),
+        await waitForMarker(handle, output, /RESIZE-READY/u, 30_000),
         output.text(),
       ).toBeDefined();
       expect(handle.resize(120, 40)).toBe(true);

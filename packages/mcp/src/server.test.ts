@@ -294,7 +294,10 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
           ],
           columns: 40,
           rows: 10,
-          semanticNegotiationMs: 1_500,
+          // The fixture starts Bun, OpenTUI and the preload probe. Match the
+          // established semantic negotiation budget so a cold Windows worker
+          // cannot turn a real semantic test into an uninstrumented session.
+          semanticNegotiationMs: 5_000,
           env: { STOP_CHILD: stopChild ? '1' : '0' },
         });
         expect(launched.isError, launched.text).toBe(false);
@@ -322,7 +325,7 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
           expect(clicked.isError, clicked.text).toBe(false);
         } else {
           const snapshot = await call('terminal.snapshot', { terminal });
-          expect(snapshot.text).toContain('idle');
+          expect(snapshot.text).toContain('ready');
           expect(snapshot.text).not.toContain('parent clicked');
         }
       });
