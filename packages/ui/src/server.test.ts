@@ -1676,8 +1676,8 @@ describe('record mode', () => {
       source: string;
     };
     expect(body.selector.expression).toBe("app.getByRole('button', { name: 'Approve' })");
-    expect(body.source).toContain('type input withheld by recorder policy (2 bytes)');
-    expect(body.source).not.toContain("'ls'");
+    expect(body.source).toContain("await app.type('ls');");
+    expect(body.source).not.toContain('type input withheld by recorder policy');
     expect(body.source).toContain("await app.press('Enter');");
     expect(body.source).toContain("await app.getByRole('button', { name: 'Approve' }).click();");
     viewer.close();

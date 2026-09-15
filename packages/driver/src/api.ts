@@ -131,7 +131,7 @@ export interface LaunchOptions {
   readonly timeouts?: TimeoutClasses;
   readonly operationBudget?: OperationBudget;
   readonly recording?: RecordingOptions;
-  /** One policy for every artifact boundary. Defaults to secure `redacted`. */
+  /** One policy for every artifact boundary. Defaults to unredacted `raw`; opt into `redacted` when artifacts leave the project. */
   readonly artifactSecurity?: import('@termwright/protocol').ArtifactSecurityPolicy;
   /**
    * Termwright-managed modes instrument an interactive shell with exact

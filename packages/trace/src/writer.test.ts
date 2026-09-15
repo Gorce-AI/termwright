@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { FakeSession, node, snapshot } from './__fixtures__/fake-session.js';
 import { parseCast } from './cast.js';
 import { openTrace } from './reader.js';
+import { generateHtmlReport } from './report.js';
 import { TRACE_FILES, type TraceEvent } from './types.js';
 import { createTraceWriter, traceStagingPrefix } from './writer.js';
 import { createRunId } from '@termwright/protocol';
@@ -75,7 +76,11 @@ describe('createTraceWriter', () => {
   it('does not register driver control-key encodings as output secrets', async () => {
     const dir = await workspace();
     const session = new FakeSession('control-keys');
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      artifactSecurity: { mode: 'redacted' },
+    });
     const ansi = '\u001b[2J\u001b[1;1H\u001b[31mvisible\u001b[0m\r\n';
 
     for (const key of [
@@ -99,7 +104,11 @@ describe('createTraceWriter', () => {
   it('keeps printable key input and unknown CSI fail-closed', async () => {
     const dir = await workspace();
     const session = new FakeSession('key-secrets');
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      artifactSecurity: { mode: 'redacted' },
+    });
 
     session.input('typed-secret', 'key');
     session.input('\u001b[27;5;97~', 'key');
@@ -253,11 +262,59 @@ describe('createTraceWriter', () => {
     }
   });
 
-  it('does not persist a sensitive semantic sentinel under the secure default', async () => {
+  it('redacts application text without corrupting semantic protocol enums', async () => {
+    const dir = await workspace();
+    const session = new FakeSession('redaction-integrity');
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      artifactSecurity: { mode: 'redacted' },
+    });
+
+    session.input('work', 'paste');
+    session.semantic(
+      snapshot(1, [node({ id: 'status', role: 'text', name: 'framework', p: 'framework' })]),
+    );
+    await writer.finalize();
+
+    const semanticArtifact = await readFile(join(dir, TRACE_FILES.semantics), 'utf8');
+    expect(semanticArtifact).toContain('"p":"framework"');
+    // `name` is application text and may be redacted. `p` is a protocol enum
+    // and must never be changed, or the reader rejects the entire trace.
+    expect(semanticArtifact).toContain('"name":"frame████"');
+
+    const trace = await openTrace(dir);
+    try {
+      const records = [];
+      for await (const record of trace.semantics()) records.push(record);
+      expect(records[0]?.snapshot.nodes[0]?.p).toBe('framework');
+    } finally {
+      await trace.close();
+    }
+    const report = await generateHtmlReport({
+      outFile: join(dir, 'report.html'),
+      embedPlayer: false,
+      results: [
+        {
+          id: 'redaction-integrity',
+          title: 'redaction integrity',
+          status: 'passed',
+          tracePath: dir,
+        },
+      ],
+    });
+    expect(report.html).toContain('redaction integrity');
+  });
+
+  it('does not persist a sensitive semantic sentinel when redaction is enabled', async () => {
     const secret = 'TW_SENTINEL_semantic_61b987';
     const dir = await workspace();
     const session = new FakeSession('secret-session');
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, {
+      dir,
+      now: session.now,
+      artifactSecurity: { mode: 'redacted' },
+    });
     session.input(secret, 'key');
     session.semantic(
       snapshot(

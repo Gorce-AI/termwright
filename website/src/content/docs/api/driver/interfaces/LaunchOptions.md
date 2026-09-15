@@ -42,7 +42,7 @@ await terminal.close();
 
 Defined in: [driver/src/api.ts:135](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L135)
 
-One policy for every artifact boundary. Defaults to secure `redacted`.
+One policy for every artifact boundary. Defaults to unredacted `raw`; opt into `redacted` when artifacts leave the project.
 
 ***
 

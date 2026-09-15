@@ -1406,8 +1406,8 @@ describe('fresh React runner', () => {
     await expect.poll(() => existsSync(saved)).toBe(true);
     const generated = await readFile(saved, 'utf8');
     expect(generated).toContain('submit permission');
-    expect(generated).toContain('type input withheld by recorder policy');
-    expect(generated).not.toContain('hello');
+    expect(generated).toContain("await app.type('hello');");
+    expect(generated).not.toContain('type input withheld by recorder policy');
     expect(generated).toContain('await expect(app).toMatchSemanticSnapshot();');
 
     await record(discarded);

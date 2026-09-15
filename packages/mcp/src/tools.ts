@@ -258,12 +258,11 @@ const launch = defineTool({
     scrollbackLines: z.number().int().min(0).max(100_000).optional(),
     semanticNegotiationMs: z.number().int().min(0).max(60_000).optional(),
     record: z
-      .boolean()
+      .union([z.boolean(), z.object({ redact: z.boolean().optional() })])
       .optional()
       .describe(
-        'record this manual MCP session as a bounded .twtrace under server storage; ' +
-          'default false. Command arguments, sensitive semantic values and typed input are withheld or redacted, but unmarked ' +
-          'secrets printed by the program may still appear in terminal output. ' +
+        'record this manual MCP session as a bounded .twtrace under server storage; default false. `true` preserves terminal output, semantic values and input. ' +
+          '`{ redact: true }` enables redaction for an artifact that may leave the project. Command arguments are always withheld. ' +
           'terminal.close returns the durable path',
       ),
     logs: z

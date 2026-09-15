@@ -4,8 +4,12 @@ import type { SemanticSnapshot } from './tree.js';
 export const ARTIFACT_VALUE_POLICIES = ['none', 'redacted', 'raw'] as const;
 export type ArtifactValuePolicy = (typeof ARTIFACT_VALUE_POLICIES)[number];
 
-/** Secure default. Recording raw input must always be an explicit choice. */
-export const DEFAULT_ARTIFACT_VALUE_POLICY: ArtifactValuePolicy = 'redacted';
+/**
+ * Test traces preserve their values unless a project explicitly enables
+ * redaction. Artifact sharing is a project policy, not an implicit mutation of
+ * the data under test.
+ */
+export const DEFAULT_ARTIFACT_VALUE_POLICY: ArtifactValuePolicy = 'raw';
 
 export interface ArtifactRedactionPattern {
   readonly pattern: RegExp;
@@ -32,7 +36,7 @@ export interface ResolvedArtifactSecurityPolicy {
 }
 
 export const DEFAULT_ARTIFACT_SECURITY_POLICY: ResolvedArtifactSecurityPolicy = Object.freeze({
-  mode: 'redacted',
+  mode: 'raw',
   secrets: Object.freeze([]),
   patterns: Object.freeze([]),
   maxTerminalPendingBytes: 256 * 1024,
