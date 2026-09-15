@@ -17,7 +17,9 @@ const status = new TextRenderable(renderer, {
   height: 1,
 });
 button.add(child);
+let waitingForInteraction = true;
 button.onMouseDown = () => {
+  waitingForInteraction = false;
   status.content = 'parent clicked';
 };
 describeRenderable(button, {
@@ -33,7 +35,7 @@ renderer.start();
 // small live status update so it always has a post-attachment frame to publish.
 let heartbeat = 0;
 const heartbeatTimer = setInterval(() => {
-  if (!status.content.startsWith('ready')) return;
+  if (!waitingForInteraction) return;
   heartbeat += 1;
   status.content = `ready ${heartbeat}`;
 }, 100);
