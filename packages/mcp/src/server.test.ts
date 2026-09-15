@@ -325,7 +325,7 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
           expect(clicked.isError, clicked.text).toBe(false);
         } else {
           const snapshot = await call('terminal.snapshot', { terminal });
-          expect(snapshot.text).toContain('idle');
+          expect(snapshot.text).toContain('ready');
           expect(snapshot.text).not.toContain('parent clicked');
         }
       });

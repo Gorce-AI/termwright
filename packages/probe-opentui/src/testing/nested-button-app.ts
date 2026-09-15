@@ -12,7 +12,7 @@ const child = new TextRenderable(renderer, {
 });
 const status = new TextRenderable(renderer, {
   id: 'nested-status',
-  content: 'idle',
+  content: 'ready 0',
   width: 24,
   height: 1,
 });
@@ -29,10 +29,18 @@ describeRenderable(button, {
 renderer.root.add(button);
 renderer.root.add(status);
 renderer.start();
+// The preload can attach after the first static render on a cold host. Keep a
+// small live status update so it always has a post-attachment frame to publish.
+let heartbeat = 0;
+const heartbeatTimer = setInterval(() => {
+  heartbeat += 1;
+  status.content = `ready ${heartbeat}`;
+}, 100);
 // A CLI renderer alone does not keep Bun alive on every host. The PTY closes
 // this fixture as soon as its assertion completes; this is only a backstop for
 // an interrupted test process.
 setTimeout(() => {
+  clearInterval(heartbeatTimer);
   renderer.destroy();
   process.exit(0);
 }, 30_000);
