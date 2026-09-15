@@ -37,7 +37,8 @@ describe('sidecars', () => {
 
   it('distinguishes a natural exit from owner-requested shutdown', async () => {
     const sidecar = await launchSidecar({
-      command: [process.execPath, '-e', 'setTimeout(() => process.exit(7), 50)'],
+      command: [process.execPath, '-e', "process.stdout.write('READY', () => process.exit(7))"],
+      ready: { output: 'READY', stream: 'stdout' },
     });
 
     await expect(sidecar.exit).resolves.toEqual({ reason: 'exited', code: 7, signal: null });
