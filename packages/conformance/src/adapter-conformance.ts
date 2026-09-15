@@ -196,15 +196,13 @@ function writeConventionSummary(
  */
 async function settle(probe: AdapterProbe, quietMs = 250, budgetMs = 5_000): Promise<void> {
   const deadline = performance.now() + budgetMs;
-  let seen = -1;
   for (;;) {
-    const length = probe.observe().stdout.length;
-    if (length === seen) return;
-    seen = length;
-    if (performance.now() >= deadline) return;
+    const before = probe.observe().stdout.length;
     await new Promise((resolve) => {
       setTimeout(resolve, quietMs);
     });
+    if (probe.observe().stdout.length === before) return;
+    if (performance.now() >= deadline) return;
   }
 }
 
