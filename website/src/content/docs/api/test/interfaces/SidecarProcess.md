@@ -17,9 +17,12 @@ Defined in: [test/src/sidecar.ts:29](https://github.com/Gorce-AI/termwright/blob
 
 ### exit
 
-> `readonly` **exit**: `Promise`\<\{ `code`: `number` \| `null`; `signal`: `Signals` \| `null`; \}\>
+> `readonly` **exit**: `Promise`\<[`SidecarExit`](../sidecarexit/)\>
 
-Defined in: [test/src/sidecar.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L31)
+Defined in: [test/src/sidecar.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L35)
+
+Authoritative process termination. `reason` is portable; `code` and
+`signal` preserve the platform's raw child-process result.
 
 ***
 
@@ -35,7 +38,7 @@ Defined in: [test/src/sidecar.ts:30](https://github.com/Gorce-AI/termwright/blob
 
 > **close**(): `Promise`\<`void`\>
 
-Defined in: [test/src/sidecar.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L34)
+Defined in: [test/src/sidecar.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L38)
 
 #### Returns
 
@@ -47,7 +50,7 @@ Defined in: [test/src/sidecar.ts:34](https://github.com/Gorce-AI/termwright/blob
 
 > **stderr**(): `string`
 
-Defined in: [test/src/sidecar.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L33)
+Defined in: [test/src/sidecar.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L37)
 
 #### Returns
 
@@ -59,7 +62,7 @@ Defined in: [test/src/sidecar.ts:33](https://github.com/Gorce-AI/termwright/blob
 
 > **stdout**(): `string`
 
-Defined in: [test/src/sidecar.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L32)
+Defined in: [test/src/sidecar.ts:36](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L36)
 
 #### Returns
 

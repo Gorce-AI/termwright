@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SidecarLauncher
 
-Defined in: [test/src/sidecar.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L37)
+Defined in: [test/src/sidecar.ts:47](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L47)
 
 ## Methods
 
@@ -19,7 +19,7 @@ Defined in: [test/src/sidecar.ts:37](https://github.com/Gorce-AI/termwright/blob
 
 > **launch**(`options`): `Promise`\<[`SidecarProcess`](../sidecarprocess/)\>
 
-Defined in: [test/src/sidecar.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L38)
+Defined in: [test/src/sidecar.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L48)
 
 #### Parameters
 

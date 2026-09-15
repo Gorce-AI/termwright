@@ -13,7 +13,7 @@ editUrl: false
 
 > **launchSidecar**(`options`, `context?`): `Promise`\<[`SidecarProcess`](../../interfaces/sidecarprocess/)\>
 
-Defined in: [test/src/sidecar.ts:115](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L115)
+Defined in: [test/src/sidecar.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/sidecar.ts#L125)
 
 Launches one owned background process and waits for output-defined readiness.
 

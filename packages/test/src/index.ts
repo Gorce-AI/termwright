@@ -120,6 +120,7 @@ export {
   launchSidecar,
   type LaunchSidecarOptions,
   type SidecarLauncher,
+  type SidecarExit,
   type SidecarOutput,
   type SidecarProcess,
   type SidecarReadiness,

@@ -68,6 +68,7 @@ test('asks before running a command', async ({ terminal }) => {
 - [SemanticLocator](interfaces/semanticlocator/)
 - [SemanticSnapshotMatcherOptions](interfaces/semanticsnapshotmatcheroptions/)
 - [SerializeOptions](interfaces/serializeoptions/)
+- [SidecarExit](interfaces/sidecarexit/)
 - [SidecarLauncher](interfaces/sidecarlauncher/)
 - [SidecarOutput](interfaces/sidecaroutput/)
 - [SidecarProcess](interfaces/sidecarprocess/)

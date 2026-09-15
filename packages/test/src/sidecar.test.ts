@@ -17,7 +17,7 @@ describe('sidecars', () => {
     expect(sidecar.pid).toBeGreaterThan(0);
     expect(sidecar.stdout()).toContain('READY');
     await sidecar.close();
-    await expect(sidecar.exit).resolves.toMatchObject({ code: null });
+    await expect(sidecar.exit).resolves.toMatchObject({ reason: 'closed' });
     await sidecar.close();
   });
 
@@ -33,6 +33,15 @@ describe('sidecars', () => {
         readyTimeout: 1_000,
       }),
     ).rejects.toThrow(/exited before readiness[\s\S]*cannot bind/u);
+  });
+
+  it('distinguishes a natural exit from owner-requested shutdown', async () => {
+    const sidecar = await launchSidecar({
+      command: [process.execPath, '-e', 'setTimeout(() => process.exit(7), 50)'],
+    });
+
+    await expect(sidecar.exit).resolves.toEqual({ reason: 'exited', code: 7, signal: null });
+    await sidecar.close();
   });
 
   it('aborts startup through the fixture signal and does not leave a child running', async () => {

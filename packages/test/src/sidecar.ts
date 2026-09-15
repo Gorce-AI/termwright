@@ -28,10 +28,20 @@ export interface LaunchSidecarOptions {
 
 export interface SidecarProcess {
   readonly pid: number;
-  readonly exit: Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>;
+  /**
+   * Authoritative process termination. `reason` is portable; `code` and
+   * `signal` preserve the platform's raw child-process result.
+   */
+  readonly exit: Promise<SidecarExit>;
   stdout(): string;
   stderr(): string;
   close(): Promise<void>;
+}
+
+export interface SidecarExit {
+  readonly reason: 'exited' | 'closed' | 'spawn-error';
+  readonly code: number | null;
+  readonly signal: NodeJS.Signals | null;
 }
 
 export interface SidecarLauncher {
@@ -133,19 +143,20 @@ export async function launchSidecar(
   let stdout = '';
   let stderr = '';
   let closePromise: Promise<void> | undefined;
-  let resolveExit!: (status: { code: number | null; signal: NodeJS.Signals | null }) => void;
-  const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+  let closeRequested = false;
+  let resolveExit!: (status: SidecarExit) => void;
+  const exit = new Promise<SidecarExit>((resolve) => {
     resolveExit = resolve;
   });
   let exited = false;
   child.once('exit', (code, signal) => {
     exited = true;
-    resolveExit({ code, signal });
+    resolveExit({ reason: closeRequested ? 'closed' : 'exited', code, signal });
   });
   child.once('error', () => {
     if (exited) return;
     exited = true;
-    resolveExit({ code: null, signal: null });
+    resolveExit({ reason: 'spawn-error', code: null, signal: null });
   });
 
   const sidecar: SidecarProcess = Object.freeze({
@@ -158,6 +169,7 @@ export async function launchSidecar(
     stderr: () => stderr,
     close(): Promise<void> {
       closePromise ??= (async () => {
+        closeRequested = true;
         if (process.platform === 'win32') {
           await killWindowsTree(child);
           await exit;
