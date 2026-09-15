@@ -103,8 +103,11 @@ export interface LaunchRequest {
   readonly timeouts?: Loose<NonNullable<LaunchOptions['timeouts']>> | undefined;
   /** Log files to follow for the lifetime of the session. */
   readonly logs?: readonly Loose<AppLogSource>[] | undefined;
-  /** Record a bounded, redacted trace under this MCP session's storage directory. */
-  readonly record?: boolean | undefined;
+  /**
+   * Record a bounded trace under this MCP session's storage directory. `true`
+   * preserves values; `{ redact: true }` enables trace redaction.
+   */
+  readonly record?: boolean | { readonly redact?: boolean | undefined } | undefined;
 }
 
 /** The terminals of a single MCP session, plus their capture history. */
@@ -182,7 +185,8 @@ export class TerminalStore {
     const id = `t${this.#counter}`;
     let writer: TraceWriter | undefined;
     try {
-      if (request.record === true) {
+      if (request.record !== undefined && request.record !== false) {
+        const redact = typeof request.record === 'object' && request.record.redact === true;
         writer = createTraceWriter(harness, {
           dir: join(this.#directory, id, 'session.twtrace'),
           // argv can carry access tokens or personal paths. The live launch
@@ -190,7 +194,7 @@ export class TerminalStore {
           command: ['<command withheld>'],
           columns: harness.screen().columns,
           rows: harness.screen().rows,
-          artifactSecurity: { mode: 'redacted' },
+          ...(redact ? { artifactSecurity: { mode: 'redacted' as const } } : {}),
           maxOutputBytes: 16 * 1024 * 1024,
           maxPendingBytes: 4 * 1024 * 1024,
           maxPendingRecords: 4_096,

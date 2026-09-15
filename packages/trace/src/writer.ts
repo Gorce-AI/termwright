@@ -81,7 +81,7 @@ export interface TraceWriterOptions {
    * only available when `artifactSecurity.mode` is explicitly `raw`.
    */
   readonly recordInput?: boolean;
-  /** One policy for every trace persistence channel. Defaults to redacted. */
+  /** One policy for every trace persistence channel. Defaults to unredacted `raw`. */
   readonly artifactSecurity?: ArtifactSecurityPolicy;
   /**
    * Byte ceiling for buffered output. On overflow the writer stops recording
@@ -434,7 +434,10 @@ export function createTraceWriter(session: TraceSource, options: TraceWriterOpti
         }
         registerSemanticSecrets(snapshot);
         const t = driverTime(timeMs);
-        const projected = sanitizeJson(
+        // The projection already withholds sensitive values. Only redact
+        // application-facing strings afterwards: protocol fields such as
+        // evidence.source are enums and must remain byte-for-byte valid.
+        const projected = sanitizeSemanticSnapshot(
           projectSemanticSnapshotForArtifact(snapshot, artifactSecurity.mode),
           sanitizer,
         );
@@ -853,4 +856,37 @@ function sanitizeJson<T>(value: T, sanitizer: TerminalSanitizer): T {
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [key, sanitizeJson(item, sanitizer)]),
   ) as T;
+}
+
+/**
+ * Redacts text owned by the application without walking protocol records.
+ *
+ * A generic JSON pass corrupts enum-valued fields when an input happens to be
+ * a substring of one (for example `work` in `framework`). Keep this boundary
+ * deliberately narrow: semantic names/descriptions and `extended` are the
+ * only application-owned text persisted in a semantic record.
+ */
+function sanitizeSemanticSnapshot(
+  snapshot: SemanticSnapshot,
+  sanitizer: TerminalSanitizer,
+): SemanticSnapshot {
+  return {
+    ...snapshot,
+    nodes: snapshot.nodes.map((node) => ({
+      ...node,
+      name: sanitizer.sanitizeComplete(node.name),
+      ...(node.description === undefined
+        ? {}
+        : { description: sanitizer.sanitizeComplete(node.description) }),
+      ...(node.extended === undefined ? {} : { extended: sanitizeJson(node.extended, sanitizer) }),
+      ...(node.value?.status !== 'known'
+        ? {}
+        : {
+            value: {
+              ...node.value,
+              value: sanitizer.sanitizeComplete(node.value.value),
+            },
+          }),
+    })),
+  };
 }

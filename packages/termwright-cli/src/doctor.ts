@@ -24,7 +24,7 @@ export interface DoctorReport {
     readonly profiles: typeof TERMWRIGHT_RESOURCE_PROFILES;
     readonly semantics: 'explicit-session-contract';
     readonly flakyPolicy: 'fail';
-    readonly artifactSecurity: { readonly mode: 'redacted' };
+    readonly artifactSecurity: { readonly mode: 'raw' };
     readonly hostTimeouts: typeof DEFAULT_TERMWRIGHT_HOST_TIMEOUTS;
   };
 }
@@ -99,7 +99,7 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
       profiles: TERMWRIGHT_RESOURCE_PROFILES,
       semantics: 'explicit-session-contract',
       flakyPolicy: 'fail',
-      artifactSecurity: Object.freeze({ mode: 'redacted' }),
+      artifactSecurity: Object.freeze({ mode: 'raw' }),
       hostTimeouts: DEFAULT_TERMWRIGHT_HOST_TIMEOUTS,
     }),
   });

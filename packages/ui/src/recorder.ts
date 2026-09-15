@@ -41,7 +41,7 @@ export interface RecorderOptions {
   readonly testName?: string;
   /** Where {@link RecorderSession.save} writes by default. */
   readonly outFile?: string;
-  /** Input captured into generated source. Defaults to secure `redacted`. */
+  /** Input captured into generated source. Defaults to unredacted `raw`; opt into `redacted` for shareable artifacts. */
   readonly artifactSecurity?: ArtifactSecurityPolicy;
   /** Injectable launcher, so tests can record against a fake harness. */
   readonly launch?: (options: LaunchOptions) => Promise<TerminalHarness>;
