@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
+const GO_DOWNLOAD_ATTEMPTS = 3;
+const TRANSIENT_GO_DOWNLOAD_FAILURE =
+  /(?:INTERNAL_ERROR|stream error|connection reset|unexpected EOF|TLS handshake timeout|timeout awaiting response|temporary failure|server misbehaving|status code 5\d\d)/iu;
 const root = process.env.TERMWRIGHT_REPOSITORY_ROOT
   ? resolve(process.env.TERMWRIGHT_REPOSITORY_ROOT)
   : join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -53,6 +56,35 @@ export const BUBBLES_PACKAGE_PROBES = Object.freeze({
   ],
 });
 
+export function isTransientGoDownloadFailure(error) {
+  return TRANSIENT_GO_DOWNLOAD_FAILURE.test(
+    `${error instanceof Error ? error.message : String(error)}\n${error?.stderr ?? ''}`,
+  );
+}
+
+export async function runGoDownload(
+  arguments_,
+  options,
+  runtime = {
+    execute: run,
+    wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  },
+) {
+  for (let attempt = 1; attempt <= GO_DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      return await runtime.execute('go', ['mod', 'download', ...arguments_], options);
+    } catch (error) {
+      if (attempt === GO_DOWNLOAD_ATTEMPTS || !isTransientGoDownloadFailure(error)) throw error;
+      const delay = attempt * 500;
+      console.warn(
+        `Transient Go module download failure; retrying attempt ${attempt + 1}/${GO_DOWNLOAD_ATTEMPTS} after ${delay} ms`,
+      );
+      await runtime.wait(delay);
+    }
+  }
+  throw new Error('unreachable Go module download retry state');
+}
+
 async function digest(path) {
   return createHash('sha256')
     .update(await readFile(path))
@@ -84,7 +116,7 @@ async function materializeModuleGraph(cwd, environment) {
   if (modules.length > 0) {
     // An explicit version query materialises both the archive and go.mod even
     // for versions which lose MVS selection but remain observable graph edges.
-    await run('go', ['mod', 'download', ...modules], { cwd, env: environment });
+    await runGoDownload(modules, { cwd, env: environment });
   }
 }
 
@@ -103,7 +135,7 @@ async function downloadGraph(moduleDirectory, environment) {
     GOWORK: 'off',
   };
   try {
-    await run('go', ['mod', 'download', 'all'], {
+    await runGoDownload(['all'], {
       cwd,
       env: hermeticEnvironment,
     });
@@ -150,7 +182,7 @@ async function downloadExtraModules(environment) {
         GOTOOLCHAIN: environment.GOTOOLCHAIN ?? 'local',
         GOWORK: 'off',
       };
-      const downloaded = await run('go', ['mod', 'download', '-json', module], {
+      const downloaded = await runGoDownload(['-json', module], {
         cwd: scratch,
         env: { ...hermeticEnvironment, GOFLAGS: '' },
       });
@@ -161,7 +193,7 @@ async function downloadExtraModules(environment) {
       const mainModule = join(scratch, 'upstream');
       await cp(upstream.Dir, mainModule, { recursive: true });
       await makeWritable(mainModule);
-      await run('go', ['mod', 'download', 'all'], {
+      await runGoDownload(['all'], {
         cwd: mainModule,
         env: { ...hermeticEnvironment, GOFLAGS: '' },
       });

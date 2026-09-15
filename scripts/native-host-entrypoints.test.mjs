@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { execPath } from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { certifiedProjectShards, projectSelectorArguments } from './ci-project-shards.mjs';
 
 async function collectVitestConfigs(directory, output) {
@@ -240,6 +240,28 @@ describe('the native host is the only Termwright test entrypoint', () => {
         'charm.land/bubbles/v2/table',
       ],
     });
+    const transientFailure = Object.assign(new Error('go mod download failed'), {
+      stderr: 'reading https://sum.golang.org/tile: stream error: INTERNAL_ERROR',
+    });
+    const execute = vi
+      .fn()
+      .mockRejectedValueOnce(transientFailure)
+      .mockResolvedValue({ stdout: 'downloaded' });
+    const wait = vi.fn().mockResolvedValue(undefined);
+    await expect(
+      goPreflight.runGoDownload(['all'], { cwd: '/tmp/module' }, { execute, wait }),
+    ).resolves.toEqual({ stdout: 'downloaded' });
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledWith(500);
+
+    const checksumFailure = Object.assign(new Error('go mod download failed'), {
+      stderr: 'verifying module: checksum mismatch',
+    });
+    const rejectChecksum = vi.fn().mockRejectedValue(checksumFailure);
+    await expect(
+      goPreflight.runGoDownload(['all'], { cwd: '/tmp/module' }, { execute: rejectChecksum, wait }),
+    ).rejects.toBe(checksumFailure);
+    expect(rejectChecksum).toHaveBeenCalledTimes(1);
     expect(release).toMatch(/^env:\n {2}TERMWRIGHT_RETRIES: '0'$/mu);
     expect(release).toContain('git worktree add --detach "$orchestration"');
     expect(release).toContain('git hash-object "$materializer"');
