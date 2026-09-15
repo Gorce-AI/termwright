@@ -1,5 +1,13 @@
 # @termwright/probe-tview
 
+## 0.7.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/probe-go@0.7.0
+  - @termwright/protocol@0.7.0
+
 ## 0.6.0
 
 ### Patch Changes

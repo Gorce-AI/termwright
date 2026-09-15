@@ -1,5 +1,19 @@
 # @termwright/mcp
 
+## 0.7.0
+
+### Minor Changes
+
+- [#167](https://github.com/Gorce-AI/termwright/pull/167) [`2a88141`](https://github.com/Gorce-AI/termwright/commit/2a881417adfde7da4f76a1ad8baabdd1ecd0992d) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Record manual MCP terminal sessions as bounded redacted traces, return the replay path on close, prioritize active modal and focused controls in compact snapshots, and support subtree snapshots. Correct screenshot redaction when public modal text covers a sensitive field, expose exact redaction metadata, add physical cell clicks for composite controls, and clarify query, action, and emulator selection semantics for agents.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/driver@0.7.0
+  - @termwright/protocol@0.7.0
+  - @termwright/screenshot@0.7.0
+  - @termwright/trace@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes
