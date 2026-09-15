@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { VtScreen } from './vt.js';
 import { captureCell, captureRows, captureScreen, captureText } from './screen.js';
 
@@ -80,34 +80,22 @@ describe('direct cell reads', () => {
 });
 
 describe('direct cell reads stay a fast path', () => {
-  it('is an order of magnitude cheaper than materialising the screen', async () => {
-    // A ratchet, not a benchmark. The measured gap on a 200x50 terminal is
-    // roughly 1350 us against 0.5 us per call, and 10 KB of heap against 0.7
-    // KB; asserting a factor of ten against a factor of nearly three thousand
-    // leaves room for any machine CI runs on while still failing loudly if
-    // cell() is ever routed back through captureScreen.
-    const vt = new VtScreen({ columns: 200, rows: 50, scrollbackLines: 500 });
-    const line = '\u001b[38;5;208mabcdefghij\u001b[0m 家族 text ';
-    await vt.write(Buffer.from(Array.from({ length: 50 }, () => line).join('\r\n'), 'utf8'));
-    await vt.drain();
+  it('reads exactly the requested cell', async () => {
+    const vt = await paint('first row\r\nsecond row\r\n');
+    const buffer = vt.terminal.buffer.active;
+    const line = buffer.getLine(buffer.viewportY);
+    if (line === undefined) throw new Error('painted viewport has no first line');
+    const cell = line.getCell(0);
+    if (cell === undefined) throw new Error('painted viewport has no first cell');
+    const readBold = vi.spyOn(Object.getPrototypeOf(cell) as typeof cell, 'isBold');
+    readBold.mockClear();
 
-    const iterations = 200;
-    for (let index = 0; index < 50; index += 1) {
-      captureScreen(vt).cell(25, 10);
-      captureCell(vt, 25, 10);
-    }
+    captureCell(vt, 1, 3);
 
-    const screenStart = performance.now();
-    for (let index = 0; index < iterations; index += 1) captureScreen(vt).cell(25, 10);
-    const screenMs = performance.now() - screenStart;
-
-    const directStart = performance.now();
-    for (let index = 0; index < iterations; index += 1) captureCell(vt, 25, 10);
-    const directMs = performance.now() - directStart;
-
-    expect(directMs * 10).toBeLessThan(screenMs);
+    expect(readBold).toHaveBeenCalledOnce();
+    readBold.mockRestore();
     vt.dispose();
-  }, 60_000);
+  });
 });
 
 /**
@@ -153,39 +141,20 @@ describe('text-only capture', () => {
 });
 
 describe('text-only capture stays a fast path', () => {
-  it('is an order of magnitude cheaper than building every cell', async () => {
-    // Measured at roughly 1407 us against 20.5 us per call on a 200x50
-    // terminal. The heap difference is smaller — the joined string is most of
-    // it — but the time is paid on every polling iteration of every wait, so
-    // that is the number worth guarding. Ten against a measured sixty-eight
-    // leaves room for any CI machine while still catching a return to
-    // captureRows.
-    const vt = new VtScreen({ columns: 200, rows: 50, scrollbackLines: 500 });
-    const esc = String.fromCharCode(27);
-    const line = `${esc}[38;5;208mabcdefghij${esc}[0m 家族 text `;
-    await vt.write(Buffer.from(Array.from({ length: 50 }, () => line).join('\r\n'), 'utf8'));
-    await vt.drain();
+  it('does not materialise cells', async () => {
+    const vt = await paint('first row\r\nsecond row\r\n');
+    const buffer = vt.terminal.buffer.active;
+    const line = buffer.getLine(buffer.viewportY);
+    if (line === undefined) throw new Error('painted viewport has no first line');
+    const cell = line.getCell(0);
+    if (cell === undefined) throw new Error('painted viewport has no first cell');
+    const readBold = vi.spyOn(Object.getPrototypeOf(cell) as typeof cell, 'isBold');
+    readBold.mockClear();
 
-    const iterations = 200;
-    for (let index = 0; index < 50; index += 1) {
-      captureRows(vt)
-        .map((row) => row.text)
-        .join('\n');
-      captureText(vt);
-    }
+    captureText(vt);
 
-    const rowsStart = performance.now();
-    for (let index = 0; index < iterations; index += 1)
-      captureRows(vt)
-        .map((row) => row.text)
-        .join('\n');
-    const rowsMs = performance.now() - rowsStart;
-
-    const textStart = performance.now();
-    for (let index = 0; index < iterations; index += 1) captureText(vt);
-    const textMs = performance.now() - textStart;
-
-    expect(textMs * 10).toBeLessThan(rowsMs);
+    expect(readBold).not.toHaveBeenCalled();
+    readBold.mockRestore();
     vt.dispose();
-  }, 60_000);
+  });
 });
