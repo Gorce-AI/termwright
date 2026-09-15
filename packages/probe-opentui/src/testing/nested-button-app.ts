@@ -33,6 +33,7 @@ renderer.start();
 // small live status update so it always has a post-attachment frame to publish.
 let heartbeat = 0;
 const heartbeatTimer = setInterval(() => {
+  if (!status.content.startsWith('ready')) return;
   heartbeat += 1;
   status.content = `ready ${heartbeat}`;
 }, 100);
