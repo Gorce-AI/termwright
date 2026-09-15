@@ -583,7 +583,9 @@ describe.skipIf(!ptyAvailable())(
 
 describe.skipIf(!ptyAvailable())('crash reports', { timeout: 20_000 }, () => {
   it('captures the stack trace of a program that threw', async () => {
-    const terminal = await launch('crash-app.mjs');
+    const terminal = await launch('crash-app.mjs', {
+      artifactSecurity: { mode: 'redacted' },
+    });
     await terminal.waitForText('CRASH APP READY');
 
     const crashes: unknown[] = [];
@@ -693,7 +695,9 @@ describe.skipIf(!ptyAvailable())('crash reports', { timeout: 20_000 }, () => {
   );
 
   it('remembers a paste by size only', async () => {
-    const terminal = await launch('crash-app.mjs');
+    const terminal = await launch('crash-app.mjs', {
+      artifactSecurity: { mode: 'redacted' },
+    });
     await terminal.waitForText('CRASH APP READY');
 
     // The payload avoids the fixture's command keys: it reads every code point
@@ -766,9 +770,11 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
     expect(actions.every((event) => event.timeMs > 0)).toBe(true);
   });
 
-  it('executes a sensitive value through the PTY without publishing it in the receipt', async () => {
+  it('withholds a sensitive value from the receipt when redaction is enabled', async () => {
     const secret = 'TW_SENTINEL_receipt_99a18';
-    const terminal = await launch('echo-app.mjs');
+    const terminal = await launch('echo-app.mjs', {
+      artifactSecurity: { mode: 'redacted' },
+    });
     await terminal.waitForText('READY');
     const actions: ActionEvent[] = [];
     terminal.events.on('action', (event) => actions.push(event));
