@@ -1,5 +1,21 @@
 # @termwright/driver
 
+## 0.6.0
+
+### Minor Changes
+
+- [#163](https://github.com/Gorce-AI/termwright/pull/163) [`454a662`](https://github.com/Gorce-AI/termwright/commit/454a6625619565f23b48b5e1af345e06c4f55a00) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Add revision-driven `waitUntil` and focus traversal, explicit keyboard or pointer action routing, and Kitty progressive keyboard support. Timeout errors now explain pending observation evidence and include the last observed value.
+
+  Add abort-aware, exactly-once fixture resource scopes and managed sidecar processes. Gherkin scenarios can map tags to timeouts and resources, and receive the same scoped lifecycle.
+
+  Keep literal test IDs intact, stop treating named control keys as trace secrets, and expose OpenTUI text only when the concrete renderer prototype proves it is read-only.
+
+### Patch Changes
+
+- Updated dependencies [[`454a662`](https://github.com/Gorce-AI/termwright/commit/454a6625619565f23b48b5e1af345e06c4f55a00)]:
+  - @termwright/protocol@0.6.0
+  - @termwright/vt@0.6.0
+
 ## 0.5.3
 
 ### Patch Changes
