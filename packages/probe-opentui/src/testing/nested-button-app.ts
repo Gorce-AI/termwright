@@ -29,3 +29,10 @@ describeRenderable(button, {
 renderer.root.add(button);
 renderer.root.add(status);
 renderer.start();
+// A CLI renderer alone does not keep Bun alive on every host. The PTY closes
+// this fixture as soon as its assertion completes; this is only a backstop for
+// an interrupted test process.
+setTimeout(() => {
+  renderer.destroy();
+  process.exit(0);
+}, 30_000);
