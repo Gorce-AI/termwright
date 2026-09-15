@@ -38,6 +38,7 @@ const heartbeatTimer = setInterval(() => {
   if (!waitingForInteraction) return;
   heartbeat += 1;
   status.content = `ready ${heartbeat}`;
+  renderer.requestRender();
 }, 100);
 // A CLI renderer alone does not keep Bun alive on every host. The PTY closes
 // this fixture as soon as its assertion completes; this is only a backstop for
