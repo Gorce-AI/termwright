@@ -428,10 +428,19 @@ export class AdapterProbe {
       }
     }
     if (this.#debugFile !== null) {
-      try {
-        await rm(this.#debugFile, { force: true });
-      } catch (error) {
-        failures.push(error);
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await rm(this.#debugFile, { force: true });
+          break;
+        } catch (error) {
+          // A child that has exited can leave its Python debug file briefly
+          // locked on Windows while the final handle is being released.
+          if ((error as NodeJS.ErrnoException).code !== 'EBUSY' || attempt === 2) {
+            failures.push(error);
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+        }
       }
     }
     this.#notifyChange();
