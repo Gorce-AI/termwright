@@ -131,7 +131,15 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(source).toContain(
       'resizeSession.onData((data) => resizeOutput.push(Buffer.from(data)));',
     );
-    expect(source).toContain('const releaseResizeResponder = resizeSession.onData(() => {');
+    expect(source).toContain(
+      'const releaseResizeResponder = resizeSession.onData(scheduleResizeResponses);',
+    );
+    expect(source).toContain('queueMicrotask(answerResizeQueries);');
+    expect(source.indexOf('queueMicrotask(answerResizeQueries);')).toBeLessThan(
+      source.indexOf(
+        'const releaseResizeResponder = resizeSession.onData(scheduleResizeResponses);',
+      ),
+    );
     expect(source).toContain('closeOwnedInputAfterExit(resizeSession, releaseResizeResponder);');
     expect(source).toContain("await waitForText(fragmented, 'FRAGMENTED-READY');");
     expect(source).toContain("'--force-node-api-uncaught-exceptions-policy=true', certifierPath");

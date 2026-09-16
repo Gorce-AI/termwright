@@ -373,31 +373,36 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
         });
         expect(launched.isError, launched.text).toBe(false);
         const terminal = launched.data['terminal'] as string;
-        const visible = await call('terminal.wait_for', {
-          terminal,
-          wait: 'visible',
-          testId: 'nested-button',
-        });
-        expect(visible.isError, visible.text).toBe(false);
-        const semanticClick = await call('terminal.click', { terminal, testId: 'nested-button' });
-        expect(semanticClick.isError).toBe(true);
-        expect(semanticClick.text).toContain('no unoccluded pointer cell');
-        const physicalClick = await call('terminal.click_at', {
-          terminal,
-          point: { row: 0, column: 1 },
-        });
-        expect(physicalClick.isError, physicalClick.text).toBe(false);
-        if (!stopChild) {
-          const clicked = await call('terminal.wait_for', {
+        try {
+          const visible = await call('terminal.wait_for', {
             terminal,
-            wait: 'text',
-            text: 'parent clicked',
+            wait: 'visible',
+            testId: 'nested-button',
           });
-          expect(clicked.isError, clicked.text).toBe(false);
-        } else {
-          const snapshot = await call('terminal.snapshot', { terminal });
-          expect(snapshot.text).toContain('ready');
-          expect(snapshot.text).not.toContain('parent clicked');
+          expect(visible.isError, visible.text).toBe(false);
+          const semanticClick = await call('terminal.click', { terminal, testId: 'nested-button' });
+          expect(semanticClick.isError).toBe(true);
+          expect(semanticClick.text).toContain('no unoccluded pointer cell');
+          const physicalClick = await call('terminal.click_at', {
+            terminal,
+            point: { row: 0, column: 1 },
+          });
+          expect(physicalClick.isError, physicalClick.text).toBe(false);
+          if (!stopChild) {
+            const clicked = await call('terminal.wait_for', {
+              terminal,
+              wait: 'text',
+              text: 'parent clicked',
+            });
+            expect(clicked.isError, clicked.text).toBe(false);
+          } else {
+            const snapshot = await call('terminal.snapshot', { terminal });
+            expect(snapshot.text).toContain('ready');
+            expect(snapshot.text).not.toContain('parent clicked');
+          }
+        } finally {
+          const closed = await call('terminal.close', { terminal });
+          expect(closed.isError, closed.text).toBe(false);
         }
       });
     }

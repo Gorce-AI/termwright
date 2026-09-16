@@ -34,17 +34,12 @@ renderer.start();
 // The preload can attach after the first static render on a cold host. Keep a
 // small live status update so it always has a post-attachment frame to publish.
 let heartbeat = 0;
-const heartbeatTimer = setInterval(() => {
+setInterval(() => {
   if (!waitingForInteraction) return;
   heartbeat += 1;
   status.content = `ready ${heartbeat}`;
   renderer.requestRender();
 }, 100);
-// A CLI renderer alone does not keep Bun alive on every host. The PTY closes
-// this fixture as soon as its assertion completes; this is only a backstop for
-// an interrupted test process.
-setTimeout(() => {
-  clearInterval(heartbeatTimer);
-  renderer.destroy();
-  process.exit(0);
-}, 30_000);
+// The owning PTY closes this fixture after the assertion. Keep the live probe
+// available until that causal boundary instead of giving it an independent
+// wall-clock lifetime which can expire while a loaded CI worker is launching.
