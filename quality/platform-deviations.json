@@ -93,7 +93,7 @@
         ],
         [
           "packages/pty/src/index.test.ts",
-          "delivers a megabyte tail and its sentinel before authoritative EOF"
+          "delivers a complete native output batch and its tail before authoritative EOF"
         ],
         ["packages/pty/src/index.test.ts", "writes exact bytes through the owned master"],
         [
