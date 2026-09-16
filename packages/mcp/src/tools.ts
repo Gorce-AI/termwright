@@ -87,9 +87,12 @@ function optionalTimeout(timeout: number | undefined): { timeout?: number } {
  * so an unrelated spinner cannot block a snapshot of an already committed
  * frame.
  */
-async function settleSemantics(entry: TerminalEntry): Promise<void> {
-  const deadline = performance.now() + FIRST_TREE_SETTLE_MS;
-  const contract = await entry.harness.settled({ timeout: FIRST_TREE_SETTLE_MS });
+async function settleSemantics(
+  entry: TerminalEntry,
+  firstTreeSettleMs = FIRST_TREE_SETTLE_MS,
+): Promise<void> {
+  const deadline = performance.now() + firstTreeSettleMs;
+  const contract = await entry.harness.settled({ timeout: firstTreeSettleMs });
   if (contract.capabilities['semantic-tree'].status !== 'supported') return;
   await entry.harness.waitForCommittedObservation({
     timeout: Math.max(0, deadline - performance.now()),
@@ -301,7 +304,10 @@ const launch = defineTool({
   annotations: { openWorldHint: true },
   handler: async (context, args) => {
     const entry = await context.terminals.launch(args);
-    await settleSemantics(entry);
+    // An explicit semantic discovery budget also bounds the attached probe's
+    // first publication. Do not accept that budget in terminal.launch and then
+    // replace it with MCP's shorter default while producing the response.
+    await settleSemantics(entry, args.semanticNegotiationMs ?? FIRST_TREE_SETTLE_MS);
     const contract = await entry.harness.settled();
     const screen = entry.harness.screen();
     const state = capture(context, entry);
