@@ -28,6 +28,7 @@ import { definedOnly } from './objects.js';
 import type { Loose } from './objects.js';
 import type { SemanticSnapshot } from './model.js';
 import { TraceStore } from './traces.js';
+import { WatchStore } from './watchers.js';
 
 /**
  * Ceilings for the MCP layer. The session counts come from
@@ -352,6 +353,7 @@ export class TerminalStore {
 export interface SessionStores {
   readonly terminals: TerminalStore;
   readonly traces: TraceStore;
+  readonly watchers: WatchStore;
 }
 
 /** Builds the stores for a session key. */
@@ -359,17 +361,20 @@ export function createSessionStores(options: {
   readonly sessionKey: string;
   readonly storageDir?: string | undefined;
 }): SessionStores {
+  const terminals = new TerminalStore({
+    sessionKey: options.sessionKey,
+    ...(options.storageDir === undefined ? {} : { storageDir: options.storageDir }),
+  });
   return {
-    terminals: new TerminalStore({
-      sessionKey: options.sessionKey,
-      ...(options.storageDir === undefined ? {} : { storageDir: options.storageDir }),
-    }),
+    terminals,
     traces: new TraceStore(),
+    watchers: new WatchStore(),
   };
 }
 
 /** Closes both stores of a session. */
 export async function closeSessionStores(stores: SessionStores): Promise<void> {
+  stores.watchers.close();
   const results = await Promise.allSettled([stores.terminals.closeAll(), stores.traces.closeAll()]);
   const failures = results.flatMap((result) =>
     result.status === 'rejected' ? [result.reason] : [],

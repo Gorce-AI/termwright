@@ -17,6 +17,7 @@ import { STATE_NAMES } from './schemas.js';
 import { MCP_LIMITS } from './sessions.js';
 import { TOOLS } from './registry.js';
 import { AGENT_CONTEXT_VERSION, SERVER_NAME, SERVER_VERSION } from './version.js';
+import { WATCH_LIMITS } from './watchers.js';
 
 /** JSON Schema for one tool's input or output. */
 export type JsonSchema = Record<string, unknown>;
@@ -138,7 +139,7 @@ export function buildAgentContext(): AgentContext {
       errorKinds: ERROR_KINDS,
     },
     exitCodes: { ...EXIT_CODES },
-    limits: { ...MCP_LIMITS },
+    limits: { ...MCP_LIMITS, ...WATCH_LIMITS },
     conventions: [...CONVENTIONS],
   };
 }
@@ -150,6 +151,8 @@ export function buildUsage(): string {
     '',
     'serve',
     '  termwright-mcp                     serve over stdio (what an MCP host spawns)',
+    '  termwright-mcp --monitor           serve stdio and open the local read-only monitor',
+    '  termwright-mcp --monitor --no-open print the monitor URL without opening a browser',
     '  termwright-mcp --http --port 7333 --show-auth-token  authenticated Streamable HTTP on loopback',
     '  remote bind additionally requires: --host HOST --allow-non-loopback',
     '  termwright-mcp agent-context       versioned JSON: tools, params, enums, exit codes',

@@ -8,9 +8,14 @@
 import type { ToolDefinition } from './tool-kit.js';
 import { TERMINAL_TOOLS } from './tools.js';
 import { TRACE_TOOLS } from './trace-tools.js';
+import { WATCH_TOOLS } from './watch-tools.js';
 
 /** Every tool this server exposes. */
-export const TOOLS: readonly ToolDefinition[] = Object.freeze([...TERMINAL_TOOLS, ...TRACE_TOOLS]);
+export const TOOLS: readonly ToolDefinition[] = Object.freeze([
+  ...TERMINAL_TOOLS,
+  ...WATCH_TOOLS,
+  ...TRACE_TOOLS,
+]);
 
 /** Convenience lookup used by the server and by tests. */
 export function toolByName(name: string): ToolDefinition | undefined {

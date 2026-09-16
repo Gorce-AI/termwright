@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticLocator
 
-Defined in: [driver/src/api.ts:661](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L661)
+Defined in: [driver/src/api.ts:667](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L667)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -40,7 +40,7 @@ await terminal.close();
 
 > `readonly` **description**: `string`
 
-Defined in: [driver/src/api.ts:625](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L625)
+Defined in: [driver/src/api.ts:631](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L631)
 
 Human-readable form of the query, as it appears in error messages.
 
@@ -54,7 +54,7 @@ Human-readable form of the query, as it appears in error messages.
 
 > `readonly` **domain**: `"semantic"`
 
-Defined in: [driver/src/api.ts:623](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L623)
+Defined in: [driver/src/api.ts:629](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L629)
 
 #### Inherited from
 
@@ -66,7 +66,7 @@ Defined in: [driver/src/api.ts:623](https://github.com/Gorce-AI/termwright/blob/
 
 > **actionability**(`action`, `opts?`): `Promise`\<[`ActionabilityExplanation`](../actionabilityexplanation/)\>
 
-Defined in: [driver/src/api.ts:688](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L688)
+Defined in: [driver/src/api.ts:694](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L694)
 
 #### Parameters
 
@@ -88,7 +88,7 @@ Defined in: [driver/src/api.ts:688](https://github.com/Gorce-AI/termwright/blob/
 
 > **activate**(`opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:712](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L712)
+Defined in: [driver/src/api.ts:718](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L718)
 
 #### Parameters
 
@@ -106,7 +106,7 @@ Defined in: [driver/src/api.ts:712](https://github.com/Gorce-AI/termwright/blob/
 
 > **and**(`other`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:629](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L629)
+Defined in: [driver/src/api.ts:635](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L635)
 
 #### Parameters
 
@@ -128,7 +128,7 @@ Defined in: [driver/src/api.ts:629](https://github.com/Gorce-AI/termwright/blob/
 
 > **cellSnapshot**(`opts?`): `Promise`\<[`LocatorCellSnapshot`](../locatorcellsnapshot/)\>
 
-Defined in: [driver/src/api.ts:656](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L656)
+Defined in: [driver/src/api.ts:662](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L662)
 
 Atomic cells inside this locator's qualified rectangle.
 
@@ -152,7 +152,7 @@ Atomic cells inside this locator's qualified rectangle.
 
 > **check**(`opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:713](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L713)
+Defined in: [driver/src/api.ts:719](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L719)
 
 #### Parameters
 
@@ -170,7 +170,7 @@ Defined in: [driver/src/api.ts:713](https://github.com/Gorce-AI/termwright/blob/
 
 > **checkpoint**(): [`ObservationStamp`](../observationstamp/)
 
-Defined in: [driver/src/api.ts:636](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L636)
+Defined in: [driver/src/api.ts:642](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L642)
 
 Current committed observation used to arm race-free custom waits.
 
@@ -188,7 +188,7 @@ Current committed observation used to arm race-free custom waits.
 
 > **click**(`opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:643](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L643)
+Defined in: [driver/src/api.ts:649](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L649)
 
 #### Parameters
 
@@ -210,7 +210,7 @@ Defined in: [driver/src/api.ts:643](https://github.com/Gorce-AI/termwright/blob/
 
 > **count**(): `Promise`\<`number`\>
 
-Defined in: [driver/src/api.ts:634](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L634)
+Defined in: [driver/src/api.ts:640](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L640)
 
 #### Returns
 
@@ -226,7 +226,7 @@ Defined in: [driver/src/api.ts:634](https://github.com/Gorce-AI/termwright/blob/
 
 > **doubleClick**(`opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:644](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L644)
+Defined in: [driver/src/api.ts:650](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L650)
 
 #### Parameters
 
@@ -248,7 +248,7 @@ Defined in: [driver/src/api.ts:644](https://github.com/Gorce-AI/termwright/blob/
 
 > **dragTo**(`target`, `opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:646](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L646)
+Defined in: [driver/src/api.ts:652](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L652)
 
 #### Parameters
 
@@ -274,7 +274,7 @@ Defined in: [driver/src/api.ts:646](https://github.com/Gorce-AI/termwright/blob/
 
 > **evaluateCondition**(`condition`, `opts?`): `Promise`\<[`ConditionResult`](../conditionresult/)\>
 
-Defined in: [driver/src/api.ts:687](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L687)
+Defined in: [driver/src/api.ts:693](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L693)
 
 #### Parameters
 
@@ -296,7 +296,7 @@ Defined in: [driver/src/api.ts:687](https://github.com/Gorce-AI/termwright/blob/
 
 > **extendedState**(): `Promise`\<`SemanticExtendedObject` \| `null`\>
 
-Defined in: [driver/src/api.ts:725](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L725)
+Defined in: [driver/src/api.ts:731](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L731)
 
 #### Returns
 
@@ -308,7 +308,7 @@ Defined in: [driver/src/api.ts:725](https://github.com/Gorce-AI/termwright/blob/
 
 > **fill**(`text`, `opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:707](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L707)
+Defined in: [driver/src/api.ts:713](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L713)
 
 #### Parameters
 
@@ -330,7 +330,7 @@ Defined in: [driver/src/api.ts:707](https://github.com/Gorce-AI/termwright/blob/
 
 > **filter**(`options`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:668](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L668)
+Defined in: [driver/src/api.ts:674](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L674)
 
 #### Parameters
 
@@ -348,7 +348,7 @@ Defined in: [driver/src/api.ts:668](https://github.com/Gorce-AI/termwright/blob/
 
 > **first**(): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:626](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L626)
+Defined in: [driver/src/api.ts:632](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L632)
 
 #### Returns
 
@@ -364,7 +364,7 @@ Defined in: [driver/src/api.ts:626](https://github.com/Gorce-AI/termwright/blob/
 
 > **focus**(`opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:711](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L711)
+Defined in: [driver/src/api.ts:717](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L717)
 
 #### Parameters
 
@@ -382,7 +382,7 @@ Defined in: [driver/src/api.ts:711](https://github.com/Gorce-AI/termwright/blob/
 
 > **geometry**(): `Promise`\<`LocatorGeometry`\>
 
-Defined in: [driver/src/api.ts:650](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L650)
+Defined in: [driver/src/api.ts:656](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L656)
 
 Atomic, evidence-qualified geometry. Never invents a rectangle.
 
@@ -400,7 +400,7 @@ Atomic, evidence-qualified geometry. Never invents a rectangle.
 
 > **getByLabel**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:664](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L664)
+Defined in: [driver/src/api.ts:670](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L670)
 
 #### Parameters
 
@@ -424,7 +424,7 @@ Defined in: [driver/src/api.ts:664](https://github.com/Gorce-AI/termwright/blob/
 
 > **getByRole**(`role`, `opts?`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:663](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L663)
+Defined in: [driver/src/api.ts:669](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L669)
 
 #### Parameters
 
@@ -446,7 +446,7 @@ Defined in: [driver/src/api.ts:663](https://github.com/Gorce-AI/termwright/blob/
 
 > **getByTestId**(`testId`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:666](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L666)
+Defined in: [driver/src/api.ts:672](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L672)
 
 #### Parameters
 
@@ -464,7 +464,7 @@ Defined in: [driver/src/api.ts:666](https://github.com/Gorce-AI/termwright/blob/
 
 > **getByText**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:665](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L665)
+Defined in: [driver/src/api.ts:671](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L671)
 
 #### Parameters
 
@@ -486,7 +486,7 @@ Defined in: [driver/src/api.ts:665](https://github.com/Gorce-AI/termwright/blob/
 
 > **hitTest**(`opts?`): `Promise`\<`PointerHitTest`\>
 
-Defined in: [driver/src/api.ts:654](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L654)
+Defined in: [driver/src/api.ts:660](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L660)
 
 Whether pointer input at the chosen cell reaches this exact target.
 
@@ -520,7 +520,7 @@ Whether pointer input at the chosen cell reaches this exact target.
 
 > **hover**(`opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:645](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L645)
+Defined in: [driver/src/api.ts:651](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L651)
 
 #### Parameters
 
@@ -542,7 +542,7 @@ Defined in: [driver/src/api.ts:645](https://github.com/Gorce-AI/termwright/blob/
 
 > **last**(): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:627](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L627)
+Defined in: [driver/src/api.ts:633](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L633)
 
 #### Returns
 
@@ -558,7 +558,7 @@ Defined in: [driver/src/api.ts:627](https://github.com/Gorce-AI/termwright/blob/
 
 > **locator**(`selector`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:667](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L667)
+Defined in: [driver/src/api.ts:673](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L673)
 
 #### Parameters
 
@@ -576,7 +576,7 @@ Defined in: [driver/src/api.ts:667](https://github.com/Gorce-AI/termwright/blob/
 
 > **nth**(`index`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:628](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L628)
+Defined in: [driver/src/api.ts:634](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L634)
 
 #### Parameters
 
@@ -598,7 +598,7 @@ Defined in: [driver/src/api.ts:628](https://github.com/Gorce-AI/termwright/blob/
 
 > **or**(`other`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:630](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L630)
+Defined in: [driver/src/api.ts:636](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L636)
 
 #### Parameters
 
@@ -620,7 +620,7 @@ Defined in: [driver/src/api.ts:630](https://github.com/Gorce-AI/termwright/blob/
 
 > **paintedRegion**(): `Promise`\<[`Observation`](../../type-aliases/observation/)\<`SemanticPaintedRegion`\>\>
 
-Defined in: [driver/src/api.ts:721](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L721)
+Defined in: [driver/src/api.ts:727](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L727)
 
 Exact cells painted by this semantic recipient, never inferred from layout.
 
@@ -634,7 +634,7 @@ Exact cells painted by this semantic recipient, never inferred from layout.
 
 > **press**(`keys`, `opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:702](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L702)
+Defined in: [driver/src/api.ts:708](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L708)
 
 #### Parameters
 
@@ -656,7 +656,7 @@ Defined in: [driver/src/api.ts:702](https://github.com/Gorce-AI/termwright/blob/
 
 > **resolve**(`opts?`): `Promise`\<[`ResolvedTarget`](../resolvedtarget/)\<`"semantic"`\>\>
 
-Defined in: [driver/src/api.ts:633](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L633)
+Defined in: [driver/src/api.ts:639](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L639)
 
 #### Parameters
 
@@ -678,7 +678,7 @@ Defined in: [driver/src/api.ts:633](https://github.com/Gorce-AI/termwright/blob/
 
 > **semanticScroll**(): `Promise`\<[`Observation`](../../type-aliases/observation/)\<`SemanticScrollState`\>\>
 
-Defined in: [driver/src/api.ts:717](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L717)
+Defined in: [driver/src/api.ts:723](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L723)
 
 Production application viewport state, never emulator scrollback position.
 
@@ -692,7 +692,7 @@ Production application viewport state, never emulator scrollback position.
 
 > **semanticState**(): `Promise`\<`SemanticState` \| `null`\>
 
-Defined in: [driver/src/api.ts:724](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L724)
+Defined in: [driver/src/api.ts:730](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L730)
 
 #### Returns
 
@@ -704,7 +704,7 @@ Defined in: [driver/src/api.ts:724](https://github.com/Gorce-AI/termwright/blob/
 
 > **semanticValue**(): `Promise`\<[`SemanticValueObservation`](../../type-aliases/semanticvalueobservation/)\>
 
-Defined in: [driver/src/api.ts:715](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L715)
+Defined in: [driver/src/api.ts:721](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L721)
 
 #### Returns
 
@@ -716,7 +716,7 @@ Defined in: [driver/src/api.ts:715](https://github.com/Gorce-AI/termwright/blob/
 
 > **textContent**(): `Promise`\<`string`\>
 
-Defined in: [driver/src/api.ts:657](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L657)
+Defined in: [driver/src/api.ts:663](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L663)
 
 #### Returns
 
@@ -732,7 +732,7 @@ Defined in: [driver/src/api.ts:657](https://github.com/Gorce-AI/termwright/blob/
 
 > **type**(`text`, `opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:703](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L703)
+Defined in: [driver/src/api.ts:709](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L709)
 
 #### Parameters
 
@@ -754,7 +754,7 @@ Defined in: [driver/src/api.ts:703](https://github.com/Gorce-AI/termwright/blob/
 
 > **uncheck**(`opts?`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:714](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L714)
+Defined in: [driver/src/api.ts:720](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L720)
 
 #### Parameters
 
@@ -772,7 +772,7 @@ Defined in: [driver/src/api.ts:714](https://github.com/Gorce-AI/termwright/blob/
 
 > **visibility**(): `Promise`\<`LocatorVisibility`\>
 
-Defined in: [driver/src/api.ts:652](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L652)
+Defined in: [driver/src/api.ts:658](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L658)
 
 Attached/displayed/viewport facts without collapsing unknown to false.
 
@@ -790,13 +790,13 @@ Attached/displayed/viewport facts without collapsing unknown to false.
 
 > **waitFor**(`opts?`): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:669](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L669)
+Defined in: [driver/src/api.ts:675](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L675)
 
 #### Parameters
 
 ##### opts?
 
-`object` & [`WaitOptions`](../waitoptions/)
+`object` & [`AbortableWaitOptions`](../abortablewaitoptions/)
 
 #### Returns
 
@@ -808,7 +808,7 @@ Defined in: [driver/src/api.ts:669](https://github.com/Gorce-AI/termwright/blob/
 
 > **waitForCheckpointChange**(`options`): `Promise`\<[`ObservationStamp`](../observationstamp/)\>
 
-Defined in: [driver/src/api.ts:638](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L638)
+Defined in: [driver/src/api.ts:644](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L644)
 
 Waits for a newer committed observation without a check/subscribe gap.
 
@@ -832,7 +832,7 @@ Waits for a newer committed observation without a check/subscribe gap.
 
 > **wheel**(`opts`): `Promise`\<[`ActionReceipt`](../actionreceipt/)\>
 
-Defined in: [driver/src/api.ts:647](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L647)
+Defined in: [driver/src/api.ts:653](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L653)
 
 #### Parameters
 
@@ -854,7 +854,7 @@ Defined in: [driver/src/api.ts:647](https://github.com/Gorce-AI/termwright/blob/
 
 > **within**(`parent`): `SemanticLocator`
 
-Defined in: [driver/src/api.ts:662](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L662)
+Defined in: [driver/src/api.ts:668](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L668)
 
 #### Parameters
 

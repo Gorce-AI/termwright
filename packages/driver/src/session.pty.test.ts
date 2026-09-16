@@ -487,6 +487,21 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
     expect((error as TermwrightError).code).toBe('timeout');
     expect((error as TermwrightError).diagnostics.screenExcerpt).toContain('READY');
   });
+
+  it('cancels an event-driven wait without closing the terminal', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForText('READY');
+    const controller = new AbortController();
+    const wait = terminal.waitForText('never printed', {
+      timeout: 10_000,
+      signal: controller.signal,
+    });
+    controller.abort(new DOMException('test cancelled the wait', 'AbortError'));
+    await expect(wait).rejects.toMatchObject({ name: 'AbortError' });
+
+    await terminal.press('a');
+    await terminal.waitForText('KEY:61');
+  });
 });
 
 describe.skipIf(!ptyAvailable())(

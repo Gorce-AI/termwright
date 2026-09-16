@@ -76,7 +76,7 @@ Defined in: [driver/src/api.ts:432](https://github.com/Gorce-AI/termwright/blob/
 
 ##### options?
 
-[`WaitOptions`](../waitoptions/)
+[`AbortableWaitOptions`](../abortablewaitoptions/)
 
 #### Returns
 

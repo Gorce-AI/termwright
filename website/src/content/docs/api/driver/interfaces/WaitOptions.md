@@ -38,6 +38,7 @@ await terminal.close();
 - [`LocatorWheelOptions`](../locatorwheeloptions/)
 - [`PointerOptions`](../pointeroptions/)
 - [`ShellRunOptions`](../shellrunoptions/)
+- [`AbortableWaitOptions`](../abortablewaitoptions/)
 - [`WaitUntilOptions`](../waituntiloptions/)
 
 ## Properties

@@ -13,6 +13,6 @@ editUrl: false
 
 > **SessionEventRecord** = `{ [E in keyof SessionEventMap]: Readonly<{ payload: SessionEventMap[E]; sequence: number; type: E }> }`\[keyof [`SessionEventMap`](../../interfaces/sessioneventmap/)\]
 
-Defined in: [driver/src/api.ts:1170](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1170)
+Defined in: [driver/src/api.ts:1176](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1176)
 
 One globally ordered record retained by the bounded session journal.

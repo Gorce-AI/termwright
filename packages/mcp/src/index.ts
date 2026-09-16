@@ -65,6 +65,9 @@ export { createTermwrightMcpServer, serveHttp, serveInMemory, serveStdio } from 
 export type { HttpServeOptions, HttpServerHandle, RunningServer, ServeOptions } from './server.js';
 export type { HttpRateLimitOptions } from './http-security.js';
 
+export { startMonitor } from './monitor.js';
+export type { MonitorHandle, MonitorOptions } from './monitor.js';
+
 export {
   MCP_LIMITS,
   SessionRegistry,
@@ -84,8 +87,12 @@ export type {
 export { TOOLS, toolByName } from './registry.js';
 export { TERMINAL_TOOLS } from './tools.js';
 export { TRACE_TOOLS } from './trace-tools.js';
+export { WATCH_TOOLS } from './watch-tools.js';
 export { defineTool } from './tool-kit.js';
 export type { ToolContext, ToolDefinition, ToolOutcome } from './tool-kit.js';
+
+export { WATCH_LIMITS, WatchStore } from './watchers.js';
+export type { WatchOutcome } from './watchers.js';
 
 export { SCREENSHOT_LIMITS, renderScreenshot } from './screenshots.js';
 export type { ScreenshotImage, ScreenshotRequest } from './screenshots.js';

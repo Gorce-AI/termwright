@@ -12,11 +12,13 @@ import type { ToolAnnotations } from './sdk-facade.js';
 import type { TerminalStore } from './sessions.js';
 import type { ScreenshotImage } from './screenshots.js';
 import type { TraceStore } from './traces.js';
+import type { WatchStore } from './watchers.js';
 
 /** What a tool handler is given besides its arguments: the session's stores. */
 export interface ToolContext {
   readonly terminals: TerminalStore;
   readonly traces: TraceStore;
+  readonly watchers: WatchStore;
 }
 
 /** A handler's result: the text block an agent reads, plus the structured data. */
@@ -46,6 +48,7 @@ export interface ToolDefinition {
   readonly handler: (
     context: ToolContext,
     args: never,
+    signal?: AbortSignal,
   ) => Promise<ToolOutcome<Record<string, unknown>>>;
 }
 
@@ -62,6 +65,7 @@ export function defineTool<
   readonly handler: (
     context: ToolContext,
     args: z.output<z.ZodObject<I>>,
+    signal?: AbortSignal,
   ) => Promise<ToolOutcome<z.output<z.ZodObject<O>>>>;
 }): ToolDefinition {
   return {

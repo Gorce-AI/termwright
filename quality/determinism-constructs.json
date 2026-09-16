@@ -10,14 +10,14 @@
     "platformSkips": "additionally governed by quality/platform-deviations.json"
   },
   "summary": {
-    "bounded-deadline-or-managed-background-task": 48,
+    "bounded-deadline-or-managed-background-task": 49,
     "deadline-or-scheduler-regression-test": 63,
     "deterministic-adversarial-fixture-schedule": 33,
     "display-or-persisted-wall-time-not-correctness-order": 95,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 217,
     "explicit-test-selection-reviewed-with-platform-registry": 75,
-    "managed-or-diagnostic-background-task": 82,
+    "managed-or-diagnostic-background-task": 83,
     "production-polling-review": 1,
     "production-process-isolation-review": 43,
     "test-observer-or-intentional-background-task": 16,
@@ -1747,6 +1747,12 @@
       "excerpt": "* process.on('SIGINT', () => void running.close());"
     },
     {
+      "path": "packages/mcp/src/monitor.ts",
+      "kind": "timer",
+      "classification": "bounded-deadline-or-managed-background-task",
+      "excerpt": "const timer = setInterval(() => {"
+    },
+    {
       "path": "packages/mcp/src/server.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
@@ -1823,6 +1829,12 @@
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "this.#sweeper = setTimeout(() => {"
+    },
+    {
+      "path": "packages/mcp/src/watchers.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void operation(controller.signal).then("
     },
     {
       "path": "packages/probe-charm/src/detect.test.ts",

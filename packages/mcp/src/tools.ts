@@ -87,9 +87,12 @@ function optionalTimeout(timeout: number | undefined): { timeout?: number } {
  * so an unrelated spinner cannot block a snapshot of an already committed
  * frame.
  */
-async function settleSemantics(entry: TerminalEntry): Promise<void> {
-  const deadline = performance.now() + FIRST_TREE_SETTLE_MS;
-  const contract = await entry.harness.settled({ timeout: FIRST_TREE_SETTLE_MS });
+async function settleSemantics(
+  entry: TerminalEntry,
+  firstTreeSettleMs = FIRST_TREE_SETTLE_MS,
+): Promise<void> {
+  const deadline = performance.now() + firstTreeSettleMs;
+  const contract = await entry.harness.settled({ timeout: firstTreeSettleMs });
   if (contract.capabilities['semantic-tree'].status !== 'supported') return;
   await entry.harness.waitForCommittedObservation({
     timeout: Math.max(0, deadline - performance.now()),
@@ -301,7 +304,10 @@ const launch = defineTool({
   annotations: { openWorldHint: true },
   handler: async (context, args) => {
     const entry = await context.terminals.launch(args);
-    await settleSemantics(entry);
+    // An explicit semantic discovery budget also bounds the attached probe's
+    // first publication. Do not accept that budget in terminal.launch and then
+    // replace it with MCP's shorter default while producing the response.
+    await settleSemantics(entry, args.semanticNegotiationMs ?? FIRST_TREE_SETTLE_MS);
     const contract = await entry.harness.settled();
     const screen = entry.harness.screen();
     const state = capture(context, entry);
@@ -1220,6 +1226,92 @@ const copySelection = defineTool({
   },
 });
 
+export const WAIT_KINDS = [
+  'text',
+  'title',
+  'visible',
+  'hidden',
+  'attached',
+  'detached',
+  'displayed',
+  'offscreen',
+  'focused',
+  'enabled',
+  'disabled',
+  'checked',
+  'selected',
+  'expanded',
+  'collapsed',
+  'quiet',
+  'shell-prompt',
+  'render',
+  'exit',
+] as const;
+
+export const waitInputSchema = {
+  terminal: terminalId,
+  wait: z.enum(WAIT_KINDS),
+  text: z.string().optional().describe('for wait="text"; "/pattern/flags" is a regular expression'),
+  title: z.string().optional().describe('for wait="title"'),
+  ...targetShapeWithoutText,
+  quietMs: z.number().int().min(0).optional().describe('for wait="quiet"'),
+  after: z.number().int().min(0).optional().describe('for wait="render": the revision to beat'),
+  timeout: timeoutMs.optional(),
+};
+
+export type WaitRequest = z.output<z.ZodObject<typeof waitInputSchema>>;
+
+export async function waitForCondition(
+  entry: TerminalEntry,
+  args: WaitRequest,
+  signal?: AbortSignal,
+): Promise<{ readonly exit?: { readonly code: number | null; readonly signal: string | null } }> {
+  const timeout = { ...optionalTimeout(args.timeout), ...(signal === undefined ? {} : { signal }) };
+  switch (args.wait) {
+    case 'text':
+      if (args.text === undefined) throw usageError('wait="text" needs text');
+      await entry.harness.waitForText(textOrRegExp(args.text), timeout);
+      break;
+    case 'title':
+      if (args.title === undefined) throw usageError('wait="title" needs title');
+      await entry.harness.waitForTitle(textOrRegExp(args.title), timeout);
+      break;
+    case 'visible':
+    case 'hidden':
+    case 'attached':
+    case 'detached':
+    case 'displayed':
+    case 'offscreen':
+      await locatorFor(entry, args).waitFor({ state: args.wait, ...timeout });
+      break;
+    case 'focused':
+    case 'enabled':
+    case 'disabled':
+    case 'checked':
+    case 'selected':
+    case 'expanded':
+    case 'collapsed':
+      await semanticLocatorFor(entry, args).waitFor({ state: args.wait, ...timeout });
+      break;
+    case 'quiet':
+      await entry.harness.waitForQuiet({
+        ...(args.quietMs === undefined ? {} : { quietMs: args.quietMs }),
+        ...timeout,
+      });
+      break;
+    case 'shell-prompt':
+      await entry.harness.waitForShellPrompt(timeout);
+      break;
+    case 'render':
+      if (args.after === undefined) throw usageError('wait="render" needs after');
+      await entry.harness.waitForRender({ after: args.after, ...timeout });
+      break;
+    case 'exit':
+      return { exit: await entry.harness.waitForExit(timeout) };
+  }
+  return {};
+}
+
 const waitFor = defineTool({
   name: 'terminal.wait_for',
   title: 'Wait for a condition',
@@ -1227,100 +1319,20 @@ const waitFor = defineTool({
     'Revision-driven waits — never a sleep. "text"/"title" wait for content, locator states use ' +
     'the driver\'s canonical Conditions, "quiet" explicitly waits for heuristic silence, ' +
     '"render" for a render after a given revision, "exit" for the child to exit.',
-  inputSchema: {
-    terminal: terminalId,
-    wait: z.enum([
-      'text',
-      'title',
-      'visible',
-      'hidden',
-      'attached',
-      'detached',
-      'displayed',
-      'offscreen',
-      'focused',
-      'enabled',
-      'disabled',
-      'checked',
-      'selected',
-      'expanded',
-      'collapsed',
-      'quiet',
-      'shell-prompt',
-      'render',
-      'exit',
-    ]),
-    text: z
-      .string()
-      .optional()
-      .describe('for wait="text"; "/pattern/flags" is a regular expression'),
-    title: z.string().optional().describe('for wait="title"'),
-    ...targetShapeWithoutText,
-    quietMs: z.number().int().min(0).optional().describe('for wait="quiet"'),
-    after: z.number().int().min(0).optional().describe('for wait="render": the revision to beat'),
-    timeout: timeoutMs.optional(),
-  },
+  inputSchema: waitInputSchema,
   outputSchema: {
     ...receiptFields,
     wait: z.string(),
     exit: exitSchema.optional(),
   },
-  handler: async (context, args) => {
+  handler: async (context, args, signal) => {
     const entry = context.terminals.get(args.terminal);
-    const timeout = optionalTimeout(args.timeout);
-    switch (args.wait) {
-      case 'text': {
-        if (args.text === undefined) throw usageError('wait="text" needs text');
-        await entry.harness.waitForText(textOrRegExp(args.text), timeout);
-        break;
-      }
-      case 'title': {
-        if (args.title === undefined) throw usageError('wait="title" needs title');
-        await entry.harness.waitForTitle(textOrRegExp(args.title), timeout);
-        break;
-      }
-      case 'visible':
-      case 'hidden':
-      case 'attached':
-      case 'detached':
-      case 'displayed':
-      case 'offscreen': {
-        await locatorFor(entry, args).waitFor({ state: args.wait, ...timeout });
-        break;
-      }
-      case 'focused':
-      case 'enabled':
-      case 'disabled':
-      case 'checked':
-      case 'selected':
-      case 'expanded':
-      case 'collapsed': {
-        await semanticLocatorFor(entry, args).waitFor({ state: args.wait, ...timeout });
-        break;
-      }
-      case 'quiet': {
-        await entry.harness.waitForQuiet({
-          ...(args.quietMs === undefined ? {} : { quietMs: args.quietMs }),
-          ...timeout,
-        });
-        break;
-      }
-      case 'shell-prompt': {
-        await entry.harness.waitForShellPrompt(timeout);
-        break;
-      }
-      case 'render': {
-        if (args.after === undefined) throw usageError('wait="render" needs after');
-        await entry.harness.waitForRender({ after: args.after, ...timeout });
-        break;
-      }
-      case 'exit': {
-        const status = await entry.harness.waitForExit(timeout);
-        return {
-          text: `exited code=${String(status.code)} signal=${String(status.signal)}`,
-          data: { ...receipt(entry), wait: args.wait, exit: status },
-        };
-      }
+    const result = await waitForCondition(entry, args, signal);
+    if (result.exit !== undefined) {
+      return {
+        text: `exited code=${String(result.exit.code)} signal=${String(result.exit.signal)}`,
+        data: { ...receipt(entry), wait: args.wait, exit: result.exit },
+      };
     }
     return { text: `wait ${args.wait} satisfied`, data: { ...receipt(entry), wait: args.wait } };
   },
@@ -1341,6 +1353,7 @@ const close = defineTool({
   },
   annotations: { idempotentHint: true },
   handler: async (context, args) => {
+    context.watchers.cancelTerminal(args.terminal);
     const entry = await context.terminals.close(args.terminal);
     return {
       text: `closed ${entry.id}${entry.tracePath === undefined ? '' : `; trace: ${entry.tracePath}`}`,

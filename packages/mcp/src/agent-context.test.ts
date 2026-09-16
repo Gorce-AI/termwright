@@ -9,6 +9,7 @@ import { httpStartupMessages, parseArgs, runCli } from './cli.js';
 import { TOOLS } from './registry.js';
 import { TERMINAL_TOOLS } from './tools.js';
 import { TRACE_TOOLS } from './trace-tools.js';
+import { WATCH_TOOLS } from './watch-tools.js';
 
 /** The live-terminal tool names CONTRACTS.md §MCP requires. */
 const CONTRACT_TOOLS = [
@@ -43,9 +44,10 @@ const CONTRACT_TOOLS = [
 
 /** The replay tools, added for agent-driven failure analysis (task #17). */
 const REPLAY_TOOLS = ['trace.open', 'trace.overview', 'trace.frame_at', 'trace.diff'];
+const WATCHER_TOOLS = ['watch.start', 'watch.wait', 'watch.cancel'];
 
 /** Everything the server registers, in registration order. */
-const ALL_TOOLS = [...CONTRACT_TOOLS, ...REPLAY_TOOLS];
+const ALL_TOOLS = [...CONTRACT_TOOLS, ...WATCHER_TOOLS, ...REPLAY_TOOLS];
 
 describe('the tool surface', () => {
   it('covers exactly the live tools CONTRACTS.md §MCP lists', () => {
@@ -53,6 +55,7 @@ describe('the tool surface', () => {
   });
 
   it('adds the replay tools after them, without disturbing the contract order', () => {
+    expect(WATCH_TOOLS.map((tool) => tool.name)).toEqual(WATCHER_TOOLS);
     expect(TRACE_TOOLS.map((tool) => tool.name)).toEqual(REPLAY_TOOLS);
     expect(TOOLS.map((tool) => tool.name)).toEqual(ALL_TOOLS);
   });
@@ -148,6 +151,16 @@ describe('the CLI', () => {
   it('validates --port', async () => {
     const sink = collect();
     expect(await runCli(['--http', '--port', 'nope'], sink.io)).toBe(EXIT_CODES.usage);
+  });
+
+  it('parses the local monitor without exposing it on the MCP HTTP listener', () => {
+    expect(parseArgs(['--monitor', '--monitor-port', '7444', '--no-open'])).toMatchObject({
+      monitor: true,
+      monitorPort: 7444,
+      openMonitor: false,
+      http: false,
+    });
+    expect(() => parseArgs(['--http', '--monitor'])).toThrow(/stdio/u);
   });
 
   it('hides the HTTP bearer unless disclosure is explicitly requested', () => {

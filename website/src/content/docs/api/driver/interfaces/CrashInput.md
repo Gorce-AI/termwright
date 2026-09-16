@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: CrashInput
 
-Defined in: [driver/src/api.ts:1008](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1008)
+Defined in: [driver/src/api.ts:1014](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1014)
 
 One remembered input, as it appears in a [CrashReport](../crashreport/).
 
@@ -21,7 +21,7 @@ One remembered input, as it appears in a [CrashReport](../crashreport/).
 
 > `readonly` **bytes**: `number`
 
-Defined in: [driver/src/api.ts:1011](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1011)
+Defined in: [driver/src/api.ts:1017](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1017)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [driver/src/api.ts:1011](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` **kind**: `"key"` \| `"mouse"` \| `"paste"` \| `"raw"`
 
-Defined in: [driver/src/api.ts:1010](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1010)
+Defined in: [driver/src/api.ts:1016](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1016)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [driver/src/api.ts:1010](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **preview?**: `string`
 
-Defined in: [driver/src/api.ts:1016](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1016)
+Defined in: [driver/src/api.ts:1022](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1022)
 
 Escaped, truncated preview of what was sent. Omitted for pastes, which
 routinely carry secrets — their size is reported instead.
@@ -48,4 +48,4 @@ routinely carry secrets — their size is reported instead.
 
 > `readonly` **timeMs**: `number`
 
-Defined in: [driver/src/api.ts:1009](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1009)
+Defined in: [driver/src/api.ts:1015](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1015)
