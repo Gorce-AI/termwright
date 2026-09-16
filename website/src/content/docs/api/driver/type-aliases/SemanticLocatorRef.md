@@ -13,4 +13,4 @@ editUrl: false
 
 > **SemanticLocatorRef** = `` `semantic:${string}@${number}` ``
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:61
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:65

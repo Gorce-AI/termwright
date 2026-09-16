@@ -162,9 +162,10 @@ before the append spool. Source-side redaction remains useful defense in depth,
 but is no longer the persistence boundary.
 
 Semantic values and input/action payloads use `artifactSecurity.mode`:
-`redacted` (the secure default), `none`, or explicit `raw`. Sensitive semantic
-values are stored as typed `withheld` observations. Executable keyboard values
-never enter an `ActionReceipt`; receipts contain recorded projections only.
+`raw` is the default, while `redacted` and `none` are explicit choices. Enable
+`redacted` before producing artifacts that leave the project; sensitive semantic
+values are then stored as typed `withheld` observations. Executable keyboard
+values never enter an `ActionReceipt`; receipts contain recorded projections only.
 
 ## When the program dies on its own
 
@@ -179,8 +180,8 @@ if (trace.meta.crash !== undefined) {
 ```
 
 Crash tails, diagnostics and input previews pass the same policy as the live
-streams. `redacted` matches registered secrets across output chunks and ANSI
-style controls; `raw` is the only mode that stores them verbatim.
+streams. `raw` stores them verbatim by default. `redacted` matches registered
+secrets across output chunks and ANSI style controls when explicitly enabled.
 
 ## The report
 

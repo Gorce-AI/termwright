@@ -13,7 +13,7 @@ editUrl: false
 
 > **publicValue**(`value`): [`PublicValue`](../../interfaces/publicvalue/)
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:54
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:58
 
 ## Parameters
 

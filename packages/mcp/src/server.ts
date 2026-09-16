@@ -98,6 +98,37 @@ function errorResult(error: unknown): CallToolResult {
   };
 }
 
+/**
+ * A disconnected MCP client must never retain the server's request dispatcher.
+ * The underlying operation is allowed to finish its own cleanup, but its late
+ * settlement is observed so it cannot become an unhandled rejection.
+ */
+function settleUntilAborted<T>(operation: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) return operation;
+  if (signal.aborted) {
+    void operation.catch(() => undefined);
+    return Promise.reject(signal.reason ?? new DOMException('MCP request aborted', 'AbortError'));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => {
+      signal.removeEventListener('abort', abort);
+      void operation.catch(() => undefined);
+      reject(signal.reason ?? new DOMException('MCP request aborted', 'AbortError'));
+    };
+    signal.addEventListener('abort', abort, { once: true });
+    void operation.then(
+      (value) => {
+        signal.removeEventListener('abort', abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', abort);
+        reject(error);
+      },
+    );
+  });
+}
+
 /** Registers every tool from {@link TOOLS} on a fresh `McpServer`. */
 export function createTermwrightMcpServer(stores: SessionStores): McpServer {
   const server = new McpServer(
@@ -116,9 +147,11 @@ export function createTermwrightMcpServer(stores: SessionStores): McpServer {
         outputSchema: tool.outputSchema,
         annotations: tool.annotations,
       },
-      async (args: unknown): Promise<CallToolResult> => {
+      async (args: unknown, extra): Promise<CallToolResult> => {
         try {
-          return successResult(await tool.handler(context, args as never));
+          return successResult(
+            await settleUntilAborted(tool.handler(context, args as never), extra.signal),
+          );
         } catch (error) {
           return errorResult(withCrashContext(context, args, error));
         }

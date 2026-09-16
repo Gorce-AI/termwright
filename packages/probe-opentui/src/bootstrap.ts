@@ -154,17 +154,20 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
         } else {
           state.channel = channel;
           // A renderer may have painted its only requested frame while the
-          // handshake was in flight. Ask for one fresh committed frame rather
-          // than publishing a stale pending observation.
-          try {
-            (observedRenderer as ObservableRenderer & { requestRender(): void }).requestRender();
-          } catch (error) {
-            abort(
-              new Error(
-                `OpenTUI requestRender failed: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-            );
-          }
+          // handshake was in flight. Do this after the current native frame
+          // completes: an immediate request can be coalesced into that frame
+          // on Windows and leave the new channel with no publication.
+          setImmediate(() => {
+            try {
+              (observedRenderer as ObservableRenderer & { requestRender(): void }).requestRender();
+            } catch (error) {
+              abort(
+                new Error(
+                  `OpenTUI requestRender failed: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+              );
+            }
+          });
         }
       })
       .catch(() => undefined);

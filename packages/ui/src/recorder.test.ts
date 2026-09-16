@@ -95,11 +95,12 @@ function enableAuthoritativePointer(harness: FakeHarness, target = 'b1'): void {
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
 describe('recorder', () => {
-  it('withholds a typed sentinel from events and generated source by default', async () => {
+  it('withholds a typed sentinel when redaction is explicitly enabled', async () => {
     const secret = 'TW_SENTINEL_recorder_f4a6';
     const harness = new FakeHarness('secure-rec');
     const recorder = await startRecorder({
       command: ['node', 'agent.js'],
+      artifactSecurity: { mode: 'redacted' },
       launch: async () => harness.asHarness(),
     });
     await recorder.handleInput(encode(secret));

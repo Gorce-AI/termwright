@@ -329,7 +329,7 @@ describe('attachSession', () => {
     });
   });
 
-  it('withholds sensitive semantic values before Runner publication', () => {
+  it('preserves sensitive semantic values before Runner publication by default', () => {
     const secret = 'TW_SENTINEL_runner_4fe0';
     const hub = new UiHub();
     const session = new FakeSession('s1');
@@ -355,8 +355,8 @@ describe('attachSession', () => {
       ]),
     );
     const published = JSON.stringify(hub.backlog);
-    expect(published).not.toContain(secret);
-    expect(published).toContain('withheld');
+    expect(published).toContain(secret);
+    expect(published).not.toContain('withheld');
   });
   it('announces the session before anything it produces', () => {
     const hub = new UiHub();

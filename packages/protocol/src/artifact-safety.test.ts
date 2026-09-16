@@ -35,9 +35,9 @@ const unknownGeometry = () => ({
 });
 
 describe('artifact-safe device operations', () => {
-  it('uses a redacted secure default', () => {
-    expect(DEFAULT_ARTIFACT_VALUE_POLICY).toBe('redacted');
-    expect(resolveArtifactSecurityPolicy(undefined).mode).toBe('redacted');
+  it('preserves values by default and makes redaction opt-in', () => {
+    expect(DEFAULT_ARTIFACT_VALUE_POLICY).toBe('raw');
+    expect(resolveArtifactSecurityPolicy(undefined).mode).toBe('raw');
   });
 
   it('owns and bounds configured secret matchers', () => {
@@ -235,7 +235,7 @@ describe('artifact-safe device operations', () => {
       },
     };
 
-    const redacted = projectSemanticSnapshotForArtifact(snapshot);
+    const redacted = projectSemanticSnapshotForArtifact(snapshot, 'redacted');
     expect(redacted.nodes[0]?.value).toEqual({
       status: 'withheld',
       reason: 'artifact-policy',

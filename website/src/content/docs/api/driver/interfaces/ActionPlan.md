@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionPlan
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:209
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:213
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:209
 
 > `readonly` **actionId**: `string`
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:210
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:214
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:210
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:213
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:217
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:213
 
 > `readonly` **contractId**: `string`
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:211
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:215
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:211
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:212
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:216
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:212
 
 > `readonly` **operations**: readonly [`RecordedDeviceOperation`](../../type-aliases/recordeddeviceoperation/)[]
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:217
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:221
 
 ***
 
@@ -59,7 +59,7 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:217
 
 > `readonly` `optional` **physicalRegion?**: [`PhysicalRegion`](../physicalregion/)
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:216
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:220
 
 ***
 
@@ -67,7 +67,7 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:216
 
 > `readonly` **requirements**: readonly [`ConditionResult`](../conditionresult/)[]
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:214
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:218
 
 ***
 
@@ -75,7 +75,7 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:214
 
 > `readonly` **strategy**: `string`
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:215
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:219
 
 ***
 
@@ -83,4 +83,4 @@ Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:215
 
 > `readonly` **valuePolicy**: `"raw"` \| `"none"` \| `"redacted"`
 
-Defined in: protocol/dist/action-model-hL2zNsq0.d.ts:218
+Defined in: protocol/dist/action-model-D8xraJAt.d.ts:222
