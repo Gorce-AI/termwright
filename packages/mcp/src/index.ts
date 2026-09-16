@@ -65,8 +65,8 @@ export { createTermwrightMcpServer, serveHttp, serveInMemory, serveStdio } from 
 export type { HttpServeOptions, HttpServerHandle, RunningServer, ServeOptions } from './server.js';
 export type { HttpRateLimitOptions } from './http-security.js';
 
-export { startMonitor } from './monitor.js';
-export type { MonitorHandle, MonitorOptions } from './monitor.js';
+export { createMonitorLifecycle, startMonitor } from './monitor.js';
+export type { MonitorHandle, MonitorLifecycle, MonitorOptions } from './monitor.js';
 
 export {
   MCP_LIMITS,

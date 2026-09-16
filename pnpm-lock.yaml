@@ -287,7 +287,6 @@ importers:
       '@termwright/test-provider-internal':
         specifier: workspace:*
         version: link:../test-provider-internal
-
   packages/evidence-provider:
     dependencies:
       '@termwright/protocol':
@@ -405,6 +404,9 @@ importers:
       '@termwright/test-provider-internal':
         specifier: workspace:*
         version: link:../test-provider-internal
+      playwright:
+        specifier: ^1.50.0
+        version: 1.62.1
 
   packages/opentui:
     dependencies:
