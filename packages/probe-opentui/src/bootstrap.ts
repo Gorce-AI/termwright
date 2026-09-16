@@ -153,10 +153,12 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
           );
         } else {
           state.channel = channel;
-          // A renderer may have painted its only requested frame while the
-          // handshake was in flight. Ask for one fresh committed frame rather
-          // than publishing a stale pending observation.
+          // A renderer may have committed its first frame while the handshake
+          // was in flight. Publish that certified frame directly: relying only
+          // on requestRender() loses the tree when a backend coalesces the
+          // follow-up render (observed on Windows).
           try {
+            state.session?.capture();
             (observedRenderer as ObservableRenderer & { requestRender(): void }).requestRender();
           } catch (error) {
             abort(
