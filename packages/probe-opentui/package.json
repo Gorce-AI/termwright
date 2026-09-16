@@ -1,6 +1,6 @@
 {
   "name": "@termwright/probe-opentui",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "zero-config OpenTUI probe: module interception plus Probe IR observation, with no import in the application",
   "license": "MIT",
   "repository": {
