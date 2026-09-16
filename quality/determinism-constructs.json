@@ -12,7 +12,7 @@
   "summary": {
     "bounded-deadline-or-managed-background-task": 49,
     "deadline-or-scheduler-regression-test": 63,
-    "deterministic-adversarial-fixture-schedule": 33,
+    "deterministic-adversarial-fixture-schedule": 32,
     "display-or-persisted-wall-time-not-correctness-order": 95,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 217,
@@ -2014,13 +2014,7 @@
       "path": "packages/probe-opentui/src/testing/nested-button-app.ts",
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "const heartbeatTimer = setInterval(() => {"
-    },
-    {
-      "path": "packages/probe-opentui/src/testing/nested-button-app.ts",
-      "kind": "timer",
-      "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "setTimeout(() => {"
+      "excerpt": "setInterval(() => {"
     },
     {
       "path": "packages/probe-opentui/src/testing/runtime-conformance-app.ts",
