@@ -81,6 +81,7 @@ export type {
   TerminalModes,
   TermwrightErrorCode,
   TextLocatorOptions,
+  AbortableWaitOptions,
   WaitUntilOptions,
   TimeoutClasses,
   WaitOptions,

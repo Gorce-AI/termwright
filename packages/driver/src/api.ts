@@ -276,15 +276,15 @@ export interface TerminalHarness {
   signal(sig: 'INT' | 'TERM' | 'KILL' | 'HUP'): Promise<void>;
 
   // Waits (revision/event based; never sleeps)
-  waitForText(text: string | RegExp, opts?: WaitOptions): Promise<void>;
-  waitForRender(opts: { after: number } & WaitOptions): Promise<void>;
+  waitForText(text: string | RegExp, opts?: AbortableWaitOptions): Promise<void>;
+  waitForRender(opts: { after: number } & AbortableWaitOptions): Promise<void>;
   /** Heuristic only: waits for a stated interval with no screen or semantic change. */
-  waitForQuiet(opts?: { quietMs?: number } & WaitOptions): Promise<void>;
+  waitForQuiet(opts?: { quietMs?: number } & AbortableWaitOptions): Promise<void>;
   /** Authoritative: waits for an OSC 133 prompt marker from shell integration. */
-  waitForShellPrompt(opts?: WaitOptions): Promise<void>;
-  waitForExit(opts?: WaitOptions): Promise<ExitStatus>;
+  waitForShellPrompt(opts?: AbortableWaitOptions): Promise<void>;
+  waitForExit(opts?: AbortableWaitOptions): Promise<ExitStatus>;
   title(): string;
-  waitForTitle(text: string | RegExp, opts?: WaitOptions): Promise<void>;
+  waitForTitle(text: string | RegExp, opts?: AbortableWaitOptions): Promise<void>;
 
   // Emulator-side (no child input)
   readonly scrollback: ScrollbackApi;
@@ -429,7 +429,7 @@ export interface ShellCommandResult {
 
 export interface ShellApi {
   status(): ShellStatus;
-  waitForPrompt(options?: WaitOptions): Promise<void>;
+  waitForPrompt(options?: AbortableWaitOptions): Promise<void>;
   run(command: string, options?: ShellRunOptions): Promise<ShellCommandResult>;
 }
 
@@ -598,6 +598,12 @@ export interface WaitOptions {
   readonly timeout?: number;
 }
 
+/** Options for event-driven waits that can be detached by a transport. */
+export interface AbortableWaitOptions extends WaitOptions {
+  /** Cancels this wait without closing the terminal or consuming a later revision. */
+  readonly signal?: AbortSignal;
+}
+
 export interface SemanticActionOptions extends WaitOptions {
   /** `auto` prefers a certified keyboard recipe, then uses verified pointer input. */
   readonly via?: 'auto' | 'keyboard' | 'pointer';
@@ -682,7 +688,7 @@ export interface SemanticLocator extends LocatorBase<'semantic'> {
         | 'selected'
         | 'expanded'
         | 'collapsed';
-    } & WaitOptions,
+    } & AbortableWaitOptions,
   ): Promise<void>;
   evaluateCondition(condition: Condition, opts?: WaitOptions): Promise<ConditionResult>;
   actionability(
@@ -732,7 +738,7 @@ export interface ScreenLocator extends LocatorBase<'screen'> {
   waitFor(
     opts?: {
       state?: 'visible' | 'hidden' | 'attached' | 'detached' | 'displayed' | 'offscreen';
-    } & WaitOptions,
+    } & AbortableWaitOptions,
   ): Promise<void>;
   evaluateCondition(condition: ScreenCondition, opts?: WaitOptions): Promise<ConditionResult>;
   actionability(

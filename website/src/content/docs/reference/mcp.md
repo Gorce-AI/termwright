@@ -43,6 +43,14 @@ trace APIs. Every tool declares input and output schemas and returns
 | `terminal.wait_for` | Revision-driven waits — never a sleep. "text"/"title" wait for content, locator states use the driver's canonical Conditions, "quiet" explicitly waits for heuristic silence, "render" for a render after a given revision, "exit" for the child to exit. |
 | `terminal.close` | Bounded physical cleanup: hangs up the pseudo-terminal, finalizes an optional recording, and forgets the handle. Send signals explicitly with terminal.signal if the child must be killed first. |
 
+### Durable watcher tools
+
+| Tool | Purpose |
+| --- | --- |
+| `watch.start` | Starts a revision-driven wait owned by the MCP session. It keeps running when the initiating request ends; use watch.wait to receive its buffered result. |
+| `watch.wait` | Waits for the next buffered result. Cancelling or timing out this MCP request leaves the watcher alive; call watch.wait again with the same id. |
+| `watch.cancel` | Cancels and forgets a session-owned watcher. |
+
 ### Trace tools
 
 | Tool | Purpose |

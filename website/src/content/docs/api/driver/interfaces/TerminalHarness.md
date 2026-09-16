@@ -711,7 +711,7 @@ Defined in: [driver/src/api.ts:285](https://github.com/Gorce-AI/termwright/blob/
 
 ##### opts?
 
-[`WaitOptions`](../waitoptions/)
+[`AbortableWaitOptions`](../abortablewaitoptions/)
 
 #### Returns
 
@@ -731,7 +731,7 @@ Heuristic only: waits for a stated interval with no screen or semantic change.
 
 ##### opts?
 
-`object` & [`WaitOptions`](../waitoptions/)
+`object` & [`AbortableWaitOptions`](../abortablewaitoptions/)
 
 #### Returns
 
@@ -749,7 +749,7 @@ Defined in: [driver/src/api.ts:280](https://github.com/Gorce-AI/termwright/blob/
 
 ##### opts
 
-`object` & [`WaitOptions`](../waitoptions/)
+`object` & [`AbortableWaitOptions`](../abortablewaitoptions/)
 
 #### Returns
 
@@ -769,7 +769,7 @@ Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
 ##### opts?
 
-[`WaitOptions`](../waitoptions/)
+[`AbortableWaitOptions`](../abortablewaitoptions/)
 
 #### Returns
 
@@ -791,7 +791,7 @@ Defined in: [driver/src/api.ts:279](https://github.com/Gorce-AI/termwright/blob/
 
 ##### opts?
 
-[`WaitOptions`](../waitoptions/)
+[`AbortableWaitOptions`](../abortablewaitoptions/)
 
 #### Returns
 
@@ -813,7 +813,7 @@ Defined in: [driver/src/api.ts:287](https://github.com/Gorce-AI/termwright/blob/
 
 ##### opts?
 
-[`WaitOptions`](../waitoptions/)
+[`AbortableWaitOptions`](../abortablewaitoptions/)
 
 #### Returns
 

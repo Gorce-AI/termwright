@@ -50,6 +50,7 @@ import type {
   TextLocatorOptions,
   TerminalModes,
   TimeoutClasses,
+  AbortableWaitOptions,
   WaitOptions,
 } from './api.js';
 import {
@@ -134,7 +135,7 @@ export interface LocatorContext {
   /** True only when semantic bounds address absolute terminal cells. */
   semanticBoundsAreAbsolute(): boolean;
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
-  waitForChange(deadline: number): Promise<void>;
+  waitForChange(deadline: number, signal?: AbortSignal): Promise<void>;
   armChange?(deadline: number): { wait(): Promise<void>; cancel(): void };
   /** Reports the exact causal boundary an action is waiting to cross. */
   actionObservationWait?(
@@ -634,7 +635,7 @@ export class LocatorImpl {
         | 'selected'
         | 'expanded'
         | 'collapsed';
-    } & WaitOptions,
+    } & AbortableWaitOptions,
   ): Promise<void> {
     this.#ctx.assertOpen();
     const wanted = opts?.state ?? 'visible';
@@ -644,7 +645,7 @@ export class LocatorImpl {
         `waitFor(${opts?.state ?? 'visible'})`,
       ),
     );
-    await this.#awaitNegotiation(deadline, `waitFor(${wanted})`);
+    await this.#awaitNegotiation(deadline, `waitFor(${wanted})`, opts?.signal);
     for (;;) {
       this.#ctx.assertOpen();
       const matches = await this.#tryEvaluate(deadline.at);
@@ -667,7 +668,7 @@ export class LocatorImpl {
           this.#ctx.errorDiagnostics({ candidates: matches.slice(0, MAX_CANDIDATES) }),
         );
       }
-      await this.#ctx.waitForChange(deadline.at);
+      await this.#ctx.waitForChange(deadline.at, opts?.signal);
     }
   }
 
@@ -1044,7 +1045,11 @@ export class LocatorImpl {
     return this.#select(matches);
   }
 
-  async #awaitNegotiation(deadline: Deadline, operation: string): Promise<void> {
+  async #awaitNegotiation(
+    deadline: Deadline,
+    operation: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     if (!this.#ctx.negotiationPending()) return;
     const settled = this.#ctx.negotiationSettled().then(() => true);
     for (;;) {
@@ -1059,7 +1064,7 @@ export class LocatorImpl {
       }
       const completed = await Promise.race([
         settled,
-        this.#ctx.waitForChange(deadline.at).then(() => false),
+        this.#ctx.waitForChange(deadline.at, signal).then(() => false),
       ]);
       if (deadline.expired()) {
         throw new TimeoutError(

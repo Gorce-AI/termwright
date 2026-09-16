@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ResolvedTarget\<D\>
 
-Defined in: [driver/src/api.ts:812](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L812)
+Defined in: [driver/src/api.ts:818](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L818)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -42,7 +42,7 @@ await terminal.close();
 
 > `readonly` `optional` **frameworkType?**: `string`
 
-Defined in: [driver/src/api.ts:846](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L846)
+Defined in: [driver/src/api.ts:852](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L852)
 
 The framework's own name for the widget, when the node carries one.
 
@@ -56,7 +56,7 @@ node is worth having: without it an unrecognised widget says only
 
 > `readonly` **identity**: `"stable"` \| `"frame-local"`
 
-Defined in: [driver/src/api.ts:838](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L838)
+Defined in: [driver/src/api.ts:844](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L844)
 
 Whether a resolved target's `ref` means anything after this revision.
 
@@ -75,7 +75,7 @@ asserting about a widget it never selected.
 
 > `readonly` `optional` **name?**: `string`
 
-Defined in: [driver/src/api.ts:825](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L825)
+Defined in: [driver/src/api.ts:831](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L831)
 
 ***
 
@@ -83,7 +83,7 @@ Defined in: [driver/src/api.ts:825](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **occlusion?**: `"known"` \| `"unknown"`
 
-Defined in: [driver/src/api.ts:857](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L857)
+Defined in: [driver/src/api.ts:863](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L863)
 
 Whether the producer could tell what covers these cells.
 
@@ -98,7 +98,7 @@ be on top of it. Pointer actions refuse on anything but `'known'`.
 
 > `readonly` `optional` **provenance?**: `"application"` \| `"annotation"` \| `"recognizer"` \| `"framework"` \| `"correlation"` \| `"heuristic"`
 
-Defined in: [driver/src/api.ts:848](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L848)
+Defined in: [driver/src/api.ts:854](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L854)
 
 Where this node's facts came from, when the producer reported it.
 
@@ -108,7 +108,7 @@ Where this node's facts came from, when the producer reported it.
 
 > `readonly` **rect**: `Rect` \| `null`
 
-Defined in: [driver/src/api.ts:823](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L823)
+Defined in: [driver/src/api.ts:829](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L829)
 
 Rectangle used by the resolution/action pipeline. A semantic target only
 exposes an evidence-qualified visible rectangle here; intended geometry is
@@ -121,7 +121,7 @@ never promoted to pointer ownership. Use the locator's `geometry()`,
 
 > `readonly` **ref**: `D` *extends* `"semantic"` ? `` `semantic:${string}@${number}` `` : `` `screen:${number},${number},${number},${number}@${number}` ``
 
-Defined in: [driver/src/api.ts:814](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L814)
+Defined in: [driver/src/api.ts:820](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L820)
 
 Explicitly domain-tagged, revision-bound identity.
 
@@ -131,7 +131,7 @@ Explicitly domain-tagged, revision-bound identity.
 
 > `readonly` **revision**: `number`
 
-Defined in: [driver/src/api.ts:815](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L815)
+Defined in: [driver/src/api.ts:821](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L821)
 
 ***
 
@@ -139,7 +139,7 @@ Defined in: [driver/src/api.ts:815](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **role?**: `"application"` \| `"region"` \| `"dialog"` \| `"alert"` \| `"status"` \| `"list"` \| `"listitem"` \| `"menu"` \| `"menuitem"` \| `"button"` \| `"checkbox"` \| `"radio"` \| `"tab"` \| `"textbox"` \| `"heading"` \| `"text"` \| `"progressbar"` \| `"separator"` \| `"scrollbar"` \| `"table"` \| `"row"` \| `"cell"` \| `"generic"`
 
-Defined in: [driver/src/api.ts:824](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L824)
+Defined in: [driver/src/api.ts:830](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L830)
 
 ***
 
@@ -147,4 +147,4 @@ Defined in: [driver/src/api.ts:824](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **semantic**: `boolean`
 
-Defined in: [driver/src/api.ts:816](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L816)
+Defined in: [driver/src/api.ts:822](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L822)

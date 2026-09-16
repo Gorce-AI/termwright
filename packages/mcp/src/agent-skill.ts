@@ -57,6 +57,7 @@ export function renderMcpToolSurfaceMarkdown(): string {
   const context = buildAgentContext();
   const sections = [
     ['Live terminal tools', context.tools.filter((tool) => tool.name.startsWith('terminal.'))],
+    ['Durable watcher tools', context.tools.filter((tool) => tool.name.startsWith('watch.'))],
     ['Trace tools', context.tools.filter((tool) => tool.name.startsWith('trace.'))],
   ] as const;
 

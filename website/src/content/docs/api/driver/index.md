@@ -35,6 +35,7 @@ editUrl: false
 
 ## Interfaces
 
+- [AbortableWaitOptions](interfaces/abortablewaitoptions/)
 - [ActionabilityExplanation](interfaces/actionabilityexplanation/)
 - [ActionEvent](interfaces/actionevent/)
 - [ActionIntent](interfaces/actionintent/)

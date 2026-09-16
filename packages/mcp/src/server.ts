@@ -32,6 +32,7 @@ import type { SessionStores } from './sessions.js';
 import { TOOLS } from './registry.js';
 import type { ToolContext, ToolOutcome } from './tool-kit.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
+import { startMonitor, type MonitorOptions } from './monitor.js';
 
 /** Server-level instructions shown to hosts that surface them. */
 const INSTRUCTIONS =
@@ -135,7 +136,11 @@ export function createTermwrightMcpServer(stores: SessionStores): McpServer {
     { name: SERVER_NAME, version: SERVER_VERSION },
     { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
   );
-  const context: ToolContext = { terminals: stores.terminals, traces: stores.traces };
+  const context: ToolContext = {
+    terminals: stores.terminals,
+    traces: stores.traces,
+    watchers: stores.watchers,
+  };
 
   for (const tool of TOOLS) {
     server.registerTool(
@@ -150,7 +155,10 @@ export function createTermwrightMcpServer(stores: SessionStores): McpServer {
       async (args: unknown, extra): Promise<CallToolResult> => {
         try {
           return successResult(
-            await settleUntilAborted(tool.handler(context, args as never), extra.signal),
+            await settleUntilAborted(
+              tool.handler(context, args as never, extra.signal),
+              extra.signal,
+            ),
           );
         } catch (error) {
           return errorResult(withCrashContext(context, args, error));
@@ -165,6 +173,7 @@ export function createTermwrightMcpServer(stores: SessionStores): McpServer {
 export interface RunningServer {
   readonly server: McpServer;
   readonly stores: SessionStores;
+  readonly monitorUrl?: string;
   close(): Promise<void>;
 }
 
@@ -173,6 +182,8 @@ export interface ServeOptions {
   /** Root for `variant: "full"` snapshot dumps. */
   readonly storageDir?: string;
   readonly maxSessions?: number;
+  /** Optional local read-only browser monitor. Primarily intended for stdio MCP. */
+  readonly monitor?: boolean | MonitorOptions;
 }
 
 /** Connects a server to a transport and returns its lifecycle handle. */
@@ -206,7 +217,33 @@ async function connect(stores: SessionStores, transport: Transport): Promise<Run
 /** Serves the tools over stdio — the transport an MCP host spawns. */
 export async function serveStdio(options: ServeOptions = {}): Promise<RunningServer> {
   const stores = createSessionStores({ sessionKey: 'stdio', storageDir: options.storageDir });
-  return connect(stores, new StdioServerTransport());
+  const running = await connect(stores, new StdioServerTransport());
+  if (options.monitor === undefined || options.monitor === false) return running;
+  let monitor: Awaited<ReturnType<typeof startMonitor>>;
+  try {
+    monitor = await startMonitor(stores, options.monitor === true ? {} : options.monitor);
+  } catch (error) {
+    const cleanup = await Promise.allSettled([running.close()]);
+    const failures = cleanup.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0) {
+      throw new AggregateError([error, ...failures], 'MCP monitor startup and rollback failed');
+    }
+    throw error;
+  }
+  return {
+    ...running,
+    monitorUrl: monitor.url,
+    close: async () => {
+      const results = await Promise.allSettled([monitor.close(), running.close()]);
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError(failures, 'MCP server and monitor failed to close cleanly');
+    },
+  };
 }
 
 /**

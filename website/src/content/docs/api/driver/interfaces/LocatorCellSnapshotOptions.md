@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LocatorCellSnapshotOptions
 
-Defined in: [driver/src/api.ts:762](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L762)
+Defined in: [driver/src/api.ts:768](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L768)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **box?**: `"visible"` \| `"intended"`
 
-Defined in: [driver/src/api.ts:763](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L763)
+Defined in: [driver/src/api.ts:769](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L769)
 
 ***
 
@@ -44,4 +44,4 @@ Defined in: [driver/src/api.ts:763](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **padding?**: `number` \| \{ `bottom?`: `number`; `left?`: `number`; `right?`: `number`; `top?`: `number`; \}
 
-Defined in: [driver/src/api.ts:764](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L764)
+Defined in: [driver/src/api.ts:770](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L770)

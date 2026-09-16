@@ -10,6 +10,7 @@ import type { TerminalProfileId } from '@termwright/vt';
 import type {
   ActionEvent,
   AppLogEvent,
+  AbortableWaitOptions,
   AppLogSource,
   CellSnapshot,
   CrashReport,
@@ -1197,7 +1198,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
   }
 
-  async #waitForShellPrompt(opts?: WaitOptions): Promise<void> {
+  async #waitForShellPrompt(opts?: AbortableWaitOptions): Promise<void> {
     this.assertOpen();
     const timeout = this.operationTimeout(
       opts?.timeout ?? this.timeouts.ready,
@@ -1223,7 +1224,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
           this.errorDiagnostics(),
         );
       }
-      await this.waitForChange(deadline.cap(READY_QUIET_MS));
+      await this.waitForChange(deadline.cap(READY_QUIET_MS), opts?.signal);
     }
   }
 
@@ -1744,7 +1745,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // -------------------------------------------------------------------------
   // Waits
 
-  async waitForText(text: string | RegExp, opts?: WaitOptions): Promise<void> {
+  async waitForText(text: string | RegExp, opts?: AbortableWaitOptions): Promise<void> {
     const matcher = textMatcher(text, false);
     const deadline = Deadline.after(
       this.operationTimeout(opts?.timeout ?? this.timeouts.text, 'waitForText'),
@@ -1770,11 +1771,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         );
       }
       this.#assertAlive('waitForText');
-      await this.waitForChange(deadline.at);
+      await this.waitForChange(deadline.at, opts?.signal);
     }
   }
 
-  async waitForRender(opts: { after: number } & WaitOptions): Promise<void> {
+  async waitForRender(opts: { after: number } & AbortableWaitOptions): Promise<void> {
     this.#lifecycle.throwIfFailed();
     const deadline = Deadline.after(
       this.operationTimeout(opts.timeout ?? this.timeouts.action, 'waitForRender'),
@@ -1788,11 +1789,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         );
       }
       this.#assertAlive('waitForRender');
-      await this.waitForChange(deadline.at);
+      await this.waitForChange(deadline.at, opts.signal);
     }
   }
 
-  async waitForQuiet(opts?: { quietMs?: number } & WaitOptions): Promise<void> {
+  async waitForQuiet(opts?: { quietMs?: number } & AbortableWaitOptions): Promise<void> {
     this.#lifecycle.throwIfFailed();
     const quiet = opts?.quietMs ?? IDLE_QUIET_MS;
     if (!Number.isFinite(quiet) || quiet < 0)
@@ -1804,7 +1805,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       this.#lifecycle.throwIfFailed();
       const before = this.#vt.revision;
       const semanticBefore = this.#pairing.revision;
-      await this.waitForChange(deadline.cap(quiet));
+      await this.waitForChange(deadline.cap(quiet), opts?.signal);
       this.#lifecycle.throwIfFailed();
       const unchanged = this.#vt.revision === before && this.#pairing.revision === semanticBefore;
       if (unchanged && !this.#pairing.hasBlockingRender) return;
@@ -1820,12 +1821,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     }
   }
 
-  async waitForShellPrompt(opts?: WaitOptions): Promise<void> {
+  async waitForShellPrompt(opts?: AbortableWaitOptions): Promise<void> {
     await this.#waitForShellPrompt(opts);
     this.#diagnostic('ready-shell-integration', 'the shell published an OSC 133 prompt marker');
   }
 
-  async waitForExit(opts?: WaitOptions): Promise<ExitStatus> {
+  async waitForExit(opts?: AbortableWaitOptions): Promise<ExitStatus> {
     if (this.#lifecycle.status !== null) return this.#lifecycle.status;
     const deadline = Deadline.after(
       this.operationTimeout(opts?.timeout ?? this.timeouts.exit, 'waitForExit'),
@@ -1849,7 +1850,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#lifecycle.exit;
   }
 
-  async waitForTitle(text: string | RegExp, opts?: WaitOptions): Promise<void> {
+  async waitForTitle(text: string | RegExp, opts?: AbortableWaitOptions): Promise<void> {
     const matcher = textMatcher(text, false);
     const deadline = Deadline.after(
       this.operationTimeout(opts?.timeout ?? this.timeouts.text, 'waitForTitle'),
@@ -1869,7 +1870,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         );
       }
       this.#assertAlive('waitForTitle');
-      await this.waitForChange(deadline.at);
+      await this.waitForChange(deadline.at, opts?.signal);
     }
   }
 
@@ -2232,8 +2233,19 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
   }
 
-  waitForChange(deadline: number): Promise<void> {
-    return this.armChange(deadline).wait();
+  async waitForChange(deadline: number, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    const arm = this.armChange(deadline);
+    const abort = (): void => arm.cancel();
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      // Abort may have raced the initial check and listener registration.
+      signal?.throwIfAborted();
+      await arm.wait();
+      signal?.throwIfAborted();
+    } finally {
+      signal?.removeEventListener('abort', abort);
+    }
   }
 
   armChange(deadline: number): { wait(): Promise<void>; cancel(): void } {

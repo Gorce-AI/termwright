@@ -34,6 +34,9 @@ export interface ParsedArgs {
   readonly host: string | undefined;
   readonly allowNonLoopback: boolean;
   readonly showAuthToken: boolean;
+  readonly monitor: boolean;
+  readonly monitorPort: number | undefined;
+  readonly openMonitor: boolean;
   /** Destination directory for `skill`; without it the package goes to stdout. */
   readonly out: string | undefined;
 }
@@ -46,6 +49,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let host: string | undefined;
   let allowNonLoopback = false;
   let showAuthToken = false;
+  let monitor = false;
+  let monitorPort: number | undefined;
+  let openMonitor = true;
   let out: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -76,6 +82,22 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case '--show-auth-token':
         showAuthToken = true;
+        break;
+      case '--monitor':
+        monitor = true;
+        break;
+      case '--monitor-port': {
+        const value = Number(argv[index + 1]);
+        if (!Number.isInteger(value) || value < 0 || value > 65_535) {
+          throw usageError('--monitor-port needs an integer between 0 and 65535');
+        }
+        monitor = true;
+        monitorPort = value;
+        index += 1;
+        break;
+      }
+      case '--no-open':
+        openMonitor = false;
         break;
       case '--out':
         out = argv[index + 1];
@@ -110,7 +132,22 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         );
     }
   }
-  return { command, json, http, port, host, allowNonLoopback, showAuthToken, out };
+  if (http && monitor) {
+    throw usageError('--monitor currently accompanies stdio MCP; omit --http');
+  }
+  return {
+    command,
+    json,
+    http,
+    port,
+    host,
+    allowNonLoopback,
+    showAuthToken,
+    monitor,
+    monitorPort,
+    openMonitor,
+    out,
+  };
 }
 
 /** Startup lines are pure so the secret-disclosure policy is regression tested without opening a server. */
@@ -177,7 +214,19 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
           });
           return EXIT_CODES.ok;
         }
-        const running = await serveStdio();
+        const running = await serveStdio({
+          ...(args.monitor
+            ? {
+                monitor: {
+                  ...(args.monitorPort === undefined ? {} : { port: args.monitorPort }),
+                  openBrowser: args.openMonitor,
+                },
+              }
+            : {}),
+        });
+        if (running.monitorUrl !== undefined) {
+          io.err(`${SERVER_NAME} monitor: ${running.monitorUrl}`);
+        }
         await new Promise<void>((resolve) => {
           const shutdown = (): void => {
             void running.close().then(resolve, resolve);

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticActionOptions
 
-Defined in: [driver/src/api.ts:601](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L601)
+Defined in: [driver/src/api.ts:607](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L607)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -52,6 +52,6 @@ Defined in: [driver/src/api.ts:598](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **via?**: `"auto"` \| `"keyboard"` \| `"pointer"`
 
-Defined in: [driver/src/api.ts:603](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L603)
+Defined in: [driver/src/api.ts:609](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L609)
 
 `auto` prefers a certified keyboard recipe, then uses verified pointer input.

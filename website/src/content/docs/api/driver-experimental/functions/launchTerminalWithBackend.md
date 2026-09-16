@@ -14,7 +14,7 @@ pagefind: false
 
 > **launchTerminalWithBackend**(`options`): `Promise`\<`TerminalHarness`\>
 
-Defined in: [session.ts:274](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L274)
+Defined in: [session.ts:275](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L275)
 
 Launches through an explicitly owned PTY backend for framework integrations.
 

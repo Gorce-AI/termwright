@@ -54,6 +54,7 @@ const running: RunningServer[] = [];
 /** A connected client talking to a fresh server, with its own session store. */
 async function connectSession(storageDir?: string): Promise<{
   call: (name: string, args?: Record<string, unknown>) => Promise<ToolResult>;
+  client: Client;
 }> {
   const server = await serveInMemory(storageDir === undefined ? {} : { storageDir });
   running.push(server);
@@ -61,6 +62,7 @@ async function connectSession(storageDir?: string): Promise<{
   await connectClient(client, server.clientTransport);
 
   return {
+    client,
     call: async (name, args = {}): Promise<ToolResult> => {
       const result = (await client.callTool({ name, arguments: args })) as {
         isError?: boolean;
@@ -228,6 +230,34 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     const closed = await call('terminal.close', { terminal });
     expect(closed.isError, closed.text).toBe(false);
     expect(closed.data['ok']).toBe(true);
+  });
+
+  it('buffers a durable watcher result after its first MCP receiver is cancelled', async () => {
+    const { call, client } = await connectSession();
+    const terminal = await launchSemantic(call);
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'Permission required' });
+    const started = await call('watch.start', {
+      terminal,
+      wait: 'text',
+      text: 'CLICKED reject',
+    });
+    expect(started.isError, started.text).toBe(false);
+    const watchId = started.data['watchId'] as string;
+
+    const controller = new AbortController();
+    const firstReceiver = client.callTool(
+      { name: 'watch.wait', arguments: { watchId } },
+      undefined,
+      { signal: controller.signal },
+    );
+    controller.abort();
+    await expect(firstReceiver).rejects.toThrow(/AbortError/u);
+
+    const clicked = await call('terminal.click', { terminal, testId: 'reject' });
+    expect(clicked.isError, clicked.text).toBe(false);
+    const received = await call('watch.wait', { watchId });
+    expect(received.isError, received.text).toBe(false);
+    expect(received.data).toMatchObject({ watchId, terminal, status: 'matched' });
   });
 
   it('records a manual MCP session and returns a replayable path on close', async () => {

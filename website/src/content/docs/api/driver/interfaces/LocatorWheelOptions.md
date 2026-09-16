@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LocatorWheelOptions
 
-Defined in: [driver/src/api.ts:613](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L613)
+Defined in: [driver/src/api.ts:619](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L619)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -40,7 +40,7 @@ await terminal.close();
 
 > `readonly` `optional` **deltaX?**: `number`
 
-Defined in: [driver/src/api.ts:619](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L619)
+Defined in: [driver/src/api.ts:625](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L625)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [driver/src/api.ts:619](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **deltaY?**: `number`
 
-Defined in: [driver/src/api.ts:618](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L618)
+Defined in: [driver/src/api.ts:624](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L624)
 
 ***
 
@@ -68,7 +68,7 @@ Defined in: [driver/src/api.ts:342](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **position?**: `object`
 
-Defined in: [driver/src/api.ts:614](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L614)
+Defined in: [driver/src/api.ts:620](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L620)
 
 #### columnOffset
 

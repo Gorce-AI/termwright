@@ -67,6 +67,48 @@ already-satisfied condition proves no new commit. Screen-only output and the
 prefix of a future semantic frame are intentionally indistinguishable until the
 probe publishes a causal signal.
 
+For a condition that may outlive the MCP transport's per-request timeout, start
+a session-owned watcher. It uses the same canonical conditions and revision
+notifications as `terminal.wait_for`; it does not poll snapshots. Cancelling a
+`watch.wait` request only detaches that receiver. The watcher continues and
+buffers its result until another `watch.wait` receives it or `watch.cancel`,
+`terminal.close`, or session shutdown removes it.
+
+```jsonc
+// watch.start -> { "watchId": "w1", "startRevision": 42 }
+{ "terminal": "t1", "wait": "text", "text": "Import complete" }
+// watch.wait  { "watchId": "w1" }
+// watch.cancel{ "watchId": "w1" }
+```
+
+## Local MCP Monitor
+
+Add `--monitor` to the stdio MCP command to open a small, read-only browser
+view alongside an agent session:
+
+```jsonc
+{
+  "mcpServers": {
+    "termwright": {
+      "command": "termwright-mcp",
+      "args": ["--monitor"]
+    }
+  }
+}
+```
+
+The monitor shows every live terminal, its current cell screen, process and
+recording status, durable watchers, and the semantic tree. Hovering or selecting
+a semantic node outlines its known bounds on the terminal and shows its role,
+state, value, actions, test id, and geometry. Updates stream over a local SSE
+connection. This is an observer for following an agent's work; the full UI
+remains the place for test runs and trace replay.
+
+The listener binds to `127.0.0.1` and uses a fresh random capability path.
+`--monitor --no-open` prints the URL to stderr without launching a browser;
+`--monitor-port N` selects a fixed local port. Closing the MCP session closes
+the monitor and its live connections.
+
 Streamable HTTP, for hosts that connect over a socket:
 
 ```sh
@@ -150,6 +192,14 @@ stderr. stdio has no TTL: there, EOF on the pipe is the signal.
 | `terminal.copy_selection` | Returns text selected in Termwright's emulator by terminal.select_cells; this does not invoke the application's copy behavior. |
 | `terminal.wait_for` | Revision-driven waits — never a sleep. "text"/"title" wait for content, locator states use the driver's canonical Conditions, "quiet" explicitly waits for heuristic silence, "render" for a render after a given revision, "exit" for the child to exit. |
 | `terminal.close` | Bounded physical cleanup: hangs up the pseudo-terminal, finalizes an optional recording, and forgets the handle. Send signals explicitly with terminal.signal if the child must be killed first. |
+
+### Durable watcher tools
+
+| Tool | Purpose |
+| --- | --- |
+| `watch.start` | Starts a revision-driven wait owned by the MCP session. It keeps running when the initiating request ends; use watch.wait to receive its buffered result. |
+| `watch.wait` | Waits for the next buffered result. Cancelling or timing out this MCP request leaves the watcher alive; call watch.wait again with the same id. |
+| `watch.cancel` | Cancels and forgets a session-owned watcher. |
 
 ### Trace tools
 
@@ -312,6 +362,8 @@ session token appears in any result or log.
 
 ```sh
 termwright-mcp                 # serve over stdio
+termwright-mcp --monitor       # stdio plus a local live terminal/semantics monitor
+termwright-mcp --monitor --no-open # print the capability URL without opening a browser
 termwright-mcp --http --port N # serve Streamable HTTP on /mcp
 termwright-mcp agent-context   # versioned JSON: every tool, param, enum, exit code
 termwright-mcp usage           # one-screen cheat sheet
