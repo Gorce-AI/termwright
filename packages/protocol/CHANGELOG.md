@@ -1,5 +1,11 @@
 # @termwright/protocol
 
+## 0.7.1
+
+### Patch Changes
+
+- [#171](https://github.com/Gorce-AI/termwright/pull/171) [`98e5463`](https://github.com/Gorce-AI/termwright/commit/98e5463686ae15bf0cea32fb020e9d3ba3e7edaa) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Preserve test values by default and make artifact redaction an explicit opt-in. Trace redaction now redacts application text without changing protocol fields, so inputs such as `work` cannot corrupt enum values such as `framework`. MCP manual recording accepts `record: { redact: true }` when a shareable redacted trace is needed.
+
 ## 0.7.0
 
 ## 0.6.0

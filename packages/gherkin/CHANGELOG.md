@@ -1,5 +1,12 @@
 # @termwright/gherkin
 
+## 0.7.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/test@0.7.1
+
 ## 0.7.0
 
 ### Patch Changes
