@@ -103,6 +103,47 @@ afterEach(async () => {
 
 describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout: 30_000 }, () => {
   const it = resourceAwareIt.resources({ terminals: 1, traceWriters: 0 });
+  it('binds the monitor lifetime to the first launch and last close', async () => {
+    const started: string[] = [];
+    const server = await serveInMemory({
+      monitor: { openBrowser: false, onStarted: (url) => started.push(url) },
+    });
+    running.push(server);
+    const client = new Client({ name: 'termwright-monitor-test', version: '0.0.0' });
+    await connectClient(client, server.clientTransport);
+
+    expect(server.monitorUrl).toBeUndefined();
+    expect(started).toEqual([]);
+
+    const launched = await client.callTool({
+      name: 'terminal.launch',
+      arguments: {
+        command: [process.execPath, join(FIXTURES, 'semantic-app.mjs')],
+        columns: 60,
+        rows: 10,
+      },
+    });
+    expect(launched.isError).not.toBe(true);
+    const terminal = (launched.structuredContent as Record<string, unknown>)['terminal'] as string;
+    expect(server.monitorUrl).toBe(started[0]);
+    const monitorUrl = server.monitorUrl;
+    if (monitorUrl === undefined) throw new Error('monitor did not start after terminal.launch');
+    const state = (await (await fetch(new URL('state', monitorUrl))).json()) as {
+      terminals: { id: string; text: string }[];
+    };
+    expect(state.terminals).toEqual([
+      expect.objectContaining({
+        id: terminal,
+        text: expect.stringContaining('Permission required'),
+      }),
+    ]);
+
+    const closed = await client.callTool({ name: 'terminal.close', arguments: { terminal } });
+    expect(closed.isError).not.toBe(true);
+    expect(server.monitorUrl).toBeUndefined();
+    await expect(fetch(monitorUrl)).rejects.toThrow();
+  });
+
   it('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {
     const { call } = await connectSession();
     const terminal = await launchSemantic(call);

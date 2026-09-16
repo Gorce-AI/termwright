@@ -44,6 +44,31 @@ dialog "Permission" ref=semantic:n7@42
 Programs without semantics remain operable through text, keyboard input, and
 screen capture. The server does not infer roles from terminal text.
 
+## Watch the agent in a browser
+
+Add `--monitor` to the stdio server command when you want to follow the agent's
+live terminal and semantic tree:
+
+```jsonc
+{
+  "mcpServers": {
+    "termwright": { "command": "termwright-mcp", "args": ["--monitor"] },
+  },
+}
+```
+
+Starting the MCP server does not open an empty window. The first successful
+`terminal.launch` starts a dedicated browser app with an isolated temporary
+profile. Styled cells, colours, cursor position, and semantic state update
+live. Automatic sizing keeps the real cell size when it fits and scales the
+complete grid down when necessary, with the active percentage visible in the
+controls. You can zoom manually, restore automatic sizing, or enter fullscreen
+with only the terminal visible. Closing the final terminal stops the monitor
+server, closes its browser process, and removes its profile.
+
+Use `--monitor --no-open` to print the capability URL when the first terminal
+launches without opening a browser automatically.
+
 ## Interact with the terminal
 
 Prefer references or semantic locators when available:

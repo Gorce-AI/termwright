@@ -84,7 +84,7 @@ buffers its result until another `watch.wait` receives it or `watch.cancel`,
 ## Local MCP Monitor
 
 Add `--monitor` to the stdio MCP command to open a small, read-only browser
-view alongside an agent session:
+view when the agent launches its first terminal:
 
 ```jsonc
 {
@@ -97,17 +97,30 @@ view alongside an agent session:
 }
 ```
 
-The monitor shows every live terminal, its current cell screen, process and
+MCP startup itself does not open an empty window. The monitor follows the
+terminal lifecycle: it starts with the first `terminal.launch`, supports tabs
+while several terminals are live, and closes after the last `terminal.close`.
+
+The monitor shows every live terminal, its styled cell screen, cursor, process and
 recording status, durable watchers, and the semantic tree. Hovering or selecting
 a semantic node outlines its known bounds on the terminal and shows its role,
 state, value, actions, test id, and geometry. Updates stream over a local SSE
 connection. This is an observer for following an agent's work; the full UI
 remains the place for test runs and trace replay.
 
+The terminal grid preserves ANSI palette and RGB colours, text attributes, and
+cursor position. It scales the complete grid to the available panel instead of
+introducing a second terminal scrollbar, but never enlarges it beyond its real
+cell size automatically. The scale indicator explains when fitting is active;
+the controls allow manual zoom, reset to automatic sizing, and fullscreen of
+the terminal alone. Termwright starts a dedicated local Chromium or Firefox app
+process with an isolated temporary profile, then closes that process and
+removes the profile after the last terminal closes.
+
 The listener binds to `127.0.0.1` and uses a fresh random capability path.
-`--monitor --no-open` prints the URL to stderr without launching a browser;
-`--monitor-port N` selects a fixed local port. Closing the MCP session closes
-the monitor and its live connections.
+`--monitor --no-open` prints the URL to stderr when the first terminal launches
+without launching a browser; `--monitor-port N` selects a fixed local port.
+Closing the MCP session also closes the monitor and its live connections.
 
 Streamable HTTP, for hosts that connect over a socket:
 
@@ -362,8 +375,8 @@ session token appears in any result or log.
 
 ```sh
 termwright-mcp                 # serve over stdio
-termwright-mcp --monitor       # stdio plus a local live terminal/semantics monitor
-termwright-mcp --monitor --no-open # print the capability URL without opening a browser
+termwright-mcp --monitor       # open the live monitor with the first terminal
+termwright-mcp --monitor --no-open # print its URL when the first terminal launches
 termwright-mcp --http --port N # serve Streamable HTTP on /mcp
 termwright-mcp agent-context   # versioned JSON: every tool, param, enum, exit code
 termwright-mcp usage           # one-screen cheat sheet

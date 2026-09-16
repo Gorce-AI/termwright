@@ -27,7 +27,8 @@
   "scripts": {
     "build": "tsup src/index.ts src/bin.ts src/docs.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm --dir ../.. test -- -- --run packages/mcp"
+    "test": "pnpm --dir ../.. test -- -- --run packages/mcp",
+    "test:browser": "pnpm --dir ../.. test -- -- --config packages/mcp/vitest.browser.config.ts"
   },
   "dependencies": {
     "@termwright/driver": "workspace:*",
@@ -38,6 +39,7 @@
     "@termwright/trace": "workspace:*"
   },
   "devDependencies": {
-    "@termwright/test-provider-internal": "workspace:*"
+    "@termwright/test-provider-internal": "workspace:*",
+    "playwright": "^1.50.0"
   }
 }

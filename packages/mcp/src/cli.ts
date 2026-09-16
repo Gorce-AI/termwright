@@ -220,13 +220,15 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
                 monitor: {
                   ...(args.monitorPort === undefined ? {} : { port: args.monitorPort }),
                   openBrowser: args.openMonitor,
+                  onStarted: (url: string) => io.err(`${SERVER_NAME} monitor: ${url}`),
+                  onError: (error: unknown) =>
+                    io.err(
+                      `${SERVER_NAME} monitor failed: ${error instanceof Error ? error.message : String(error)}`,
+                    ),
                 },
               }
             : {}),
         });
-        if (running.monitorUrl !== undefined) {
-          io.err(`${SERVER_NAME} monitor: ${running.monitorUrl}`);
-        }
         await new Promise<void>((resolve) => {
           const shutdown = (): void => {
             void running.close().then(resolve, resolve);

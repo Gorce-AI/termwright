@@ -32,7 +32,7 @@ import type { SessionStores } from './sessions.js';
 import { TOOLS } from './registry.js';
 import type { ToolContext, ToolOutcome } from './tool-kit.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
-import { startMonitor, type MonitorOptions } from './monitor.js';
+import { createMonitorLifecycle, type MonitorOptions } from './monitor.js';
 
 /** Server-level instructions shown to hosts that surface them. */
 const INSTRUCTIONS =
@@ -131,7 +131,14 @@ function settleUntilAborted<T>(operation: Promise<T>, signal: AbortSignal | unde
 }
 
 /** Registers every tool from {@link TOOLS} on a fresh `McpServer`. */
-export function createTermwrightMcpServer(stores: SessionStores): McpServer {
+interface ToolLifecycle {
+  afterSuccess?(tool: string): Promise<void> | void;
+}
+
+export function createTermwrightMcpServer(
+  stores: SessionStores,
+  lifecycle: ToolLifecycle = {},
+): McpServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
@@ -154,12 +161,12 @@ export function createTermwrightMcpServer(stores: SessionStores): McpServer {
       },
       async (args: unknown, extra): Promise<CallToolResult> => {
         try {
-          return successResult(
-            await settleUntilAborted(
-              tool.handler(context, args as never, extra.signal),
-              extra.signal,
-            ),
-          );
+          const operation = (async () => {
+            const outcome = await tool.handler(context, args as never, extra.signal);
+            await lifecycle.afterSuccess?.(tool.name);
+            return outcome;
+          })();
+          return successResult(await settleUntilAborted(operation, extra.signal));
         } catch (error) {
           return errorResult(withCrashContext(context, args, error));
         }
@@ -173,7 +180,7 @@ export function createTermwrightMcpServer(stores: SessionStores): McpServer {
 export interface RunningServer {
   readonly server: McpServer;
   readonly stores: SessionStores;
-  readonly monitorUrl?: string;
+  readonly monitorUrl: string | undefined;
   close(): Promise<void>;
 }
 
@@ -187,8 +194,12 @@ export interface ServeOptions {
 }
 
 /** Connects a server to a transport and returns its lifecycle handle. */
-async function connect(stores: SessionStores, transport: Transport): Promise<RunningServer> {
-  const server = createTermwrightMcpServer(stores);
+async function connect(
+  stores: SessionStores,
+  transport: Transport,
+  lifecycle: ToolLifecycle = {},
+): Promise<RunningServer> {
+  const server = createTermwrightMcpServer(stores, lifecycle);
   try {
     await connectTransport(server, transport);
   } catch (error) {
@@ -203,6 +214,7 @@ async function connect(stores: SessionStores, transport: Transport): Promise<Run
   return {
     server,
     stores,
+    monitorUrl: undefined,
     close: async (): Promise<void> => {
       const results = await Promise.allSettled([closeSessionStores(stores), server.close()]);
       const failures = results.flatMap((result) =>
@@ -217,13 +229,26 @@ async function connect(stores: SessionStores, transport: Transport): Promise<Run
 /** Serves the tools over stdio — the transport an MCP host spawns. */
 export async function serveStdio(options: ServeOptions = {}): Promise<RunningServer> {
   const stores = createSessionStores({ sessionKey: 'stdio', storageDir: options.storageDir });
-  const running = await connect(stores, new StdioServerTransport());
-  if (options.monitor === undefined || options.monitor === false) return running;
-  let monitor: Awaited<ReturnType<typeof startMonitor>>;
+  return connectWithOptionalMonitor(stores, new StdioServerTransport(), options.monitor);
+}
+
+async function connectWithOptionalMonitor(
+  stores: SessionStores,
+  transport: Transport,
+  options: ServeOptions['monitor'],
+): Promise<RunningServer> {
+  if (options === undefined || options === false) return connect(stores, transport);
+  const monitor = createMonitorLifecycle(stores, options === true ? {} : options);
+  let running: RunningServer;
   try {
-    monitor = await startMonitor(stores, options.monitor === true ? {} : options.monitor);
+    running = await connect(stores, transport, {
+      afterSuccess: async (tool) => {
+        if (tool === 'terminal.launch') await monitor.terminalLaunched();
+        if (tool === 'terminal.close') await monitor.terminalClosed();
+      },
+    });
   } catch (error) {
-    const cleanup = await Promise.allSettled([running.close()]);
+    const cleanup = await Promise.allSettled([monitor.close(), closeSessionStores(stores)]);
     const failures = cleanup.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     );
@@ -234,7 +259,9 @@ export async function serveStdio(options: ServeOptions = {}): Promise<RunningSer
   }
   return {
     ...running,
-    monitorUrl: monitor.url,
+    get monitorUrl() {
+      return monitor.url;
+    },
     close: async () => {
       const results = await Promise.allSettled([monitor.close(), running.close()]);
       const failures = results.flatMap((result) =>
@@ -258,8 +285,16 @@ export async function serveInMemory(
     sessionKey: options.sessionKey ?? 'in-memory',
     storageDir: options.storageDir,
   });
-  const running = await connect(stores, serverTransport);
-  return { ...running, clientTransport };
+  const running = await connectWithOptionalMonitor(stores, serverTransport, options.monitor);
+  return {
+    server: running.server,
+    stores: running.stores,
+    get monitorUrl() {
+      return running.monitorUrl;
+    },
+    close: () => running.close(),
+    clientTransport,
+  };
 }
 
 /** A listening Streamable HTTP server. */
