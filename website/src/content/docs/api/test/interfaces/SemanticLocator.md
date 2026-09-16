@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticLocator
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:572
+Defined in: driver/dist/session-EtumZrfM.d.ts:575
 
 ## Extends
 
@@ -23,7 +23,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:572
 
 > `readonly` **description**: `string`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:541
+Defined in: driver/dist/session-EtumZrfM.d.ts:544
 
 Human-readable form of the query, as it appears in error messages.
 
@@ -37,7 +37,7 @@ Human-readable form of the query, as it appears in error messages.
 
 > `readonly` **domain**: `"semantic"`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:539
+Defined in: driver/dist/session-EtumZrfM.d.ts:542
 
 #### Inherited from
 
@@ -49,7 +49,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:539
 
 > **actionability**(`action`, `opts?`): `Promise`\<`ActionabilityExplanation`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:586
+Defined in: driver/dist/session-EtumZrfM.d.ts:589
 
 #### Parameters
 
@@ -71,7 +71,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:586
 
 > **activate**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:593
+Defined in: driver/dist/session-EtumZrfM.d.ts:596
 
 #### Parameters
 
@@ -89,7 +89,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:593
 
 > **and**(`other`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:545
+Defined in: driver/dist/session-EtumZrfM.d.ts:548
 
 #### Parameters
 
@@ -111,7 +111,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:545
 
 > **cellSnapshot**(`opts?`): `Promise`\<`LocatorCellSnapshot`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:569
+Defined in: driver/dist/session-EtumZrfM.d.ts:572
 
 Atomic cells inside this locator's qualified rectangle.
 
@@ -135,7 +135,7 @@ Atomic cells inside this locator's qualified rectangle.
 
 > **check**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:594
+Defined in: driver/dist/session-EtumZrfM.d.ts:597
 
 #### Parameters
 
@@ -153,7 +153,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:594
 
 > **checkpoint**(): `ObservationStamp`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:550
+Defined in: driver/dist/session-EtumZrfM.d.ts:553
 
 Current committed observation used to arm race-free custom waits.
 
@@ -171,7 +171,7 @@ Current committed observation used to arm race-free custom waits.
 
 > **click**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:555
+Defined in: driver/dist/session-EtumZrfM.d.ts:558
 
 #### Parameters
 
@@ -193,7 +193,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:555
 
 > **count**(): `Promise`\<`number`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:548
+Defined in: driver/dist/session-EtumZrfM.d.ts:551
 
 #### Returns
 
@@ -209,7 +209,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:548
 
 > **doubleClick**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:556
+Defined in: driver/dist/session-EtumZrfM.d.ts:559
 
 #### Parameters
 
@@ -231,7 +231,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:556
 
 > **dragTo**(`target`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:558
+Defined in: driver/dist/session-EtumZrfM.d.ts:561
 
 #### Parameters
 
@@ -257,7 +257,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:558
 
 > **evaluateCondition**(`condition`, `opts?`): `Promise`\<`ConditionResult`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:585
+Defined in: driver/dist/session-EtumZrfM.d.ts:588
 
 #### Parameters
 
@@ -279,7 +279,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:585
 
 > **extendedState**(): `Promise`\<`SemanticExtendedObject` \| `null`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:602
+Defined in: driver/dist/session-EtumZrfM.d.ts:605
 
 #### Returns
 
@@ -291,7 +291,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:602
 
 > **fill**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:591
+Defined in: driver/dist/session-EtumZrfM.d.ts:594
 
 #### Parameters
 
@@ -313,7 +313,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:591
 
 > **filter**(`options`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:581
+Defined in: driver/dist/session-EtumZrfM.d.ts:584
 
 #### Parameters
 
@@ -331,7 +331,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:581
 
 > **first**(): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:542
+Defined in: driver/dist/session-EtumZrfM.d.ts:545
 
 #### Returns
 
@@ -347,7 +347,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:542
 
 > **focus**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:592
+Defined in: driver/dist/session-EtumZrfM.d.ts:595
 
 #### Parameters
 
@@ -365,7 +365,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:592
 
 > **geometry**(): `Promise`\<`LocatorGeometry`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:561
+Defined in: driver/dist/session-EtumZrfM.d.ts:564
 
 Atomic, evidence-qualified geometry. Never invents a rectangle.
 
@@ -383,7 +383,7 @@ Atomic, evidence-qualified geometry. Never invents a rectangle.
 
 > **getByLabel**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:575
+Defined in: driver/dist/session-EtumZrfM.d.ts:578
 
 #### Parameters
 
@@ -407,7 +407,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:575
 
 > **getByRole**(`role`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:574
+Defined in: driver/dist/session-EtumZrfM.d.ts:577
 
 #### Parameters
 
@@ -429,7 +429,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:574
 
 > **getByTestId**(`testId`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:579
+Defined in: driver/dist/session-EtumZrfM.d.ts:582
 
 #### Parameters
 
@@ -447,7 +447,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:579
 
 > **getByText**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:578
+Defined in: driver/dist/session-EtumZrfM.d.ts:581
 
 #### Parameters
 
@@ -469,7 +469,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:578
 
 > **hitTest**(`opts?`): `Promise`\<`PointerHitTest`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:565
+Defined in: driver/dist/session-EtumZrfM.d.ts:568
 
 Whether pointer input at the chosen cell reaches this exact target.
 
@@ -503,7 +503,7 @@ Whether pointer input at the chosen cell reaches this exact target.
 
 > **hover**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:557
+Defined in: driver/dist/session-EtumZrfM.d.ts:560
 
 #### Parameters
 
@@ -525,7 +525,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:557
 
 > **last**(): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:543
+Defined in: driver/dist/session-EtumZrfM.d.ts:546
 
 #### Returns
 
@@ -541,7 +541,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:543
 
 > **locator**(`selector`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:580
+Defined in: driver/dist/session-EtumZrfM.d.ts:583
 
 #### Parameters
 
@@ -559,7 +559,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:580
 
 > **nth**(`index`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:544
+Defined in: driver/dist/session-EtumZrfM.d.ts:547
 
 #### Parameters
 
@@ -581,7 +581,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:544
 
 > **or**(`other`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:546
+Defined in: driver/dist/session-EtumZrfM.d.ts:549
 
 #### Parameters
 
@@ -603,7 +603,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:546
 
 > **paintedRegion**(): `Promise`\<`Observation`\<`SemanticPaintedRegion`\>\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:600
+Defined in: driver/dist/session-EtumZrfM.d.ts:603
 
 Exact cells painted by this semantic recipient, never inferred from layout.
 
@@ -617,7 +617,7 @@ Exact cells painted by this semantic recipient, never inferred from layout.
 
 > **press**(`keys`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:589
+Defined in: driver/dist/session-EtumZrfM.d.ts:592
 
 #### Parameters
 
@@ -639,7 +639,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:589
 
 > **resolve**(`opts?`): `Promise`\<`ResolvedTarget`\<`"semantic"`\>\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:547
+Defined in: driver/dist/session-EtumZrfM.d.ts:550
 
 #### Parameters
 
@@ -661,7 +661,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:547
 
 > **semanticScroll**(): `Promise`\<`Observation`\<`SemanticScrollState`\>\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:598
+Defined in: driver/dist/session-EtumZrfM.d.ts:601
 
 Production application viewport state, never emulator scrollback position.
 
@@ -675,7 +675,7 @@ Production application viewport state, never emulator scrollback position.
 
 > **semanticState**(): `Promise`\<`SemanticState` \| `null`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:601
+Defined in: driver/dist/session-EtumZrfM.d.ts:604
 
 #### Returns
 
@@ -687,7 +687,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:601
 
 > **semanticValue**(): `Promise`\<`SemanticValueObservation`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:596
+Defined in: driver/dist/session-EtumZrfM.d.ts:599
 
 #### Returns
 
@@ -699,7 +699,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:596
 
 > **textContent**(): `Promise`\<`string`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:570
+Defined in: driver/dist/session-EtumZrfM.d.ts:573
 
 #### Returns
 
@@ -715,7 +715,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:570
 
 > **type**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:590
+Defined in: driver/dist/session-EtumZrfM.d.ts:593
 
 #### Parameters
 
@@ -737,7 +737,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:590
 
 > **uncheck**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:595
+Defined in: driver/dist/session-EtumZrfM.d.ts:598
 
 #### Parameters
 
@@ -755,7 +755,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:595
 
 > **visibility**(): `Promise`\<`LocatorVisibility`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:563
+Defined in: driver/dist/session-EtumZrfM.d.ts:566
 
 Attached/displayed/viewport facts without collapsing unknown to false.
 
@@ -773,13 +773,13 @@ Attached/displayed/viewport facts without collapsing unknown to false.
 
 > **waitFor**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:582
+Defined in: driver/dist/session-EtumZrfM.d.ts:585
 
 #### Parameters
 
 ##### opts?
 
-`object` & `WaitOptions`
+`object` & `AbortableWaitOptions`
 
 #### Returns
 
@@ -791,7 +791,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:582
 
 > **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:552
+Defined in: driver/dist/session-EtumZrfM.d.ts:555
 
 Waits for a newer committed observation without a check/subscribe gap.
 
@@ -815,7 +815,7 @@ Waits for a newer committed observation without a check/subscribe gap.
 
 > **wheel**(`opts`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:559
+Defined in: driver/dist/session-EtumZrfM.d.ts:562
 
 #### Parameters
 
@@ -837,7 +837,7 @@ Defined in: driver/dist/session-CCJl8fFV.d.ts:559
 
 > **within**(`parent`): `SemanticLocator`
 
-Defined in: driver/dist/session-CCJl8fFV.d.ts:573
+Defined in: driver/dist/session-EtumZrfM.d.ts:576
 
 #### Parameters
 
