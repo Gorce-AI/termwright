@@ -1,4 +1,12 @@
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -83,6 +91,21 @@ function diagnosticTail(output: string): string {
 
 function node(script: string): readonly string[] {
   return [process.execPath, '-e', script];
+}
+
+function observableResizeFixture(): string {
+  const name = 'termwright_conpty_observable_resize_fixture.exe';
+  const candidates = [
+    fileURLToPath(new URL(`../../pty-win32-${process.arch}/${name}`, import.meta.url)),
+    fileURLToPath(new URL(`../build/Release/${name}`, import.meta.url)),
+  ];
+  const fixture = candidates.find((candidate) => existsSync(candidate));
+  if (fixture === undefined) {
+    throw new Error(
+      `precompiled observable-resize fixture is absent; tried ${candidates.join(', ')}`,
+    );
+  }
+  return fixture;
 }
 
 const HOST_CURSOR_REQUEST = /\x1b\]8488;(twh-cpr-v1:q:[0-9a-f]{32})\x07/gu;
@@ -419,20 +442,9 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
   });
 
   it('routes addressed host cursor RPC separately from atomic application replies', async () => {
-    const fixture = fileURLToPath(
-      new URL('../../../scripts/fixtures/conpty-observable-resize.ps1', import.meta.url),
-    );
+    const fixture = observableResizeFixture();
     const handle = spawnWindowsPty({
-      command: [
-        'powershell.exe',
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        fixture,
-      ],
+      command: [fixture],
       env: environment(),
       columns: 80,
       rows: 24,
@@ -452,9 +464,6 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       expect(await waitForMarker(handle, output, /\x1b\[c/u, 10_000), output.text()).toBeDefined();
       expect(handle.writeTerminalResponse(Buffer.from('\x1b[?1;2c', 'ascii'))).toBe('host-control');
 
-      // The fixture compiles its C# Console API probe before emitting this
-      // marker. Cold hosted Windows workers occasionally need longer than the
-      // ordinary interaction budget; this remains a bounded diagnostic wait.
       expect(
         await waitForMarker(handle, output, /RESIZE-READY/u, 30_000),
         output.text(),

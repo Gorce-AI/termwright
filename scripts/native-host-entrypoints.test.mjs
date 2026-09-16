@@ -135,6 +135,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'const releaseResizeResponder = resizeSession.onData(answerResizeQueries);',
     );
     expect(source).not.toContain('queueMicrotask(answerResizeQueries);');
+    expect(source).toContain('command: [process.env.TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE]');
+    expect(source).toContain("'termwright_conpty_observable_resize_fixture.exe'");
+    expect(source).not.toContain("'conpty-observable-resize.ps1'");
     expect(source).toContain('closeOwnedInputAfterExit(resizeSession, releaseResizeResponder);');
     expect(source).toContain("await waitForText(fragmented, 'FRAGMENTED-READY');");
     expect(source).toContain("'--force-node-api-uncaught-exceptions-policy=true', certifierPath");
@@ -552,6 +555,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
       'node-gyp rebuild --target="$node_version" --arch=${{ inputs.architecture }}',
     );
     expect(ptyPrebuildAction).toContain('--nodedir="$node_root"');
+    expect(ptyPrebuildAction).toContain(
+      'cp packages/pty/build/Release/termwright_conpty_observable_resize_fixture.exe',
+    );
     expectCommandBefore(
       ptyPrebuildAction,
       'pnpm --filter @termwright/protocol build',

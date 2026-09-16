@@ -20,7 +20,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { argv, execPath, exit, platform, arch } from 'node:process';
@@ -42,9 +42,15 @@ const consoleMarkerFixturePath = fileURLToPath(
 const consoleMarkerScriptPath = fileURLToPath(
   new URL('./fixtures/conpty-console-marker.mjs', import.meta.url),
 );
-const observableResizeFixturePath = fileURLToPath(
-  new URL('./fixtures/conpty-observable-resize.ps1', import.meta.url),
-);
+const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const observableResizeFixtureName = 'termwright_conpty_observable_resize_fixture.exe';
+const observableResizeFixturePath =
+  platform === 'win32'
+    ? [
+        join(repositoryRoot, `packages/pty-win32-${arch}`, observableResizeFixtureName),
+        join(repositoryRoot, 'packages/pty/build/Release', observableResizeFixtureName),
+      ].find((candidate) => existsSync(candidate))
+    : undefined;
 const probe = `
 	const { createServer } = await import('node:net');
 	const { spawnSync } = await import('node:child_process');
@@ -392,8 +398,11 @@ if (process.platform === 'win32') {
   // child, is the causal acknowledgement. The terminal replies and lone key
   // below use their dedicated transports; no timing window is a barrier.
   console.log('[pty-cert] observable-resize-win32');
+  if (!process.env.TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE) {
+    throw new Error('the precompiled observable-resize fixture is absent');
+  }
   const resizeSession = pty.spawnPty({
-    command: ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', process.env.TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE],
+    command: [process.env.TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE],
     env: environment,
     columns: 80,
     rows: 24,
@@ -843,6 +852,10 @@ if (installDirectory === undefined) {
   console.error('usage: check-installed-pty.mjs <install-dir> [--verdict <path>]');
   exit(1);
 }
+if (platform === 'win32' && observableResizeFixturePath === undefined) {
+  console.error(`missing ${observableResizeFixtureName}; build or download the PTY prebuild first`);
+  exit(1);
+}
 if (verdictFlag >= 0 && verdictPath === undefined) {
   console.error('--verdict requires an output path');
   exit(1);
@@ -873,7 +886,9 @@ const result = spawnSync(
         installDirectory,
         'termwright console marker.mjs',
       ),
-      TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath,
+      ...(observableResizeFixturePath === undefined
+        ? {}
+        : { TERMWRIGHT_CONPTY_OBSERVABLE_RESIZE_FIXTURE: observableResizeFixturePath }),
     },
     // Certification stage markers must remain visible while the child runs. A
     // buffered pipe hid the exact causal boundary whenever a runner watchdog

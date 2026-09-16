@@ -25,6 +25,24 @@
         }],
         ["OS==\"linux\"", { "libraries": ["-lutil"] }]
       ]
+    },
+    {
+      "target_name": "termwright_conpty_observable_resize_fixture",
+      "conditions": [
+        ["OS==\"win\"", {
+          "type": "executable",
+          "sources": ["../../scripts/fixtures/conpty-observable-resize.cc"],
+          "defines": ["UNICODE", "_UNICODE"],
+          "msvs_settings": {
+            "VCCLCompilerTool": {
+              "ExceptionHandling": 1,
+              "AdditionalOptions": ["/std:c++17"]
+            }
+          }
+        }, {
+          "type": "none"
+        }]
+      ]
     }
   ]
 }
