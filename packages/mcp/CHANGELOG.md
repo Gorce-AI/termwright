@@ -1,5 +1,19 @@
 # @termwright/mcp
 
+## 0.7.3
+
+### Patch Changes
+
+- [#175](https://github.com/Gorce-AI/termwright/pull/175) [`ea57684`](https://github.com/Gorce-AI/termwright/commit/ea5768429a3fd2d6b0e0d7433b58a4e7f0ebce70) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Open the MCP browser monitor with the first terminal and close its owned browser
+  process after the last terminal closes. Preserve styled terminal cells, cursor
+  state, live multi-terminal switching, and fit the complete grid into the monitor
+  viewport with fullscreen and manual zoom controls.
+- Updated dependencies []:
+  - @termwright/driver@0.7.3
+  - @termwright/protocol@0.7.3
+  - @termwright/screenshot@0.7.3
+  - @termwright/trace@0.7.3
+
 ## 0.7.2
 
 ### Patch Changes

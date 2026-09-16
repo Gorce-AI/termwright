@@ -1,5 +1,17 @@
 # @termwright/probe-ink
 
+## 0.7.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/evidence-provider@0.7.3
+  - @termwright/probe-runtime@0.7.3
+  - @termwright/protocol@0.7.3
+  - @termwright/pty@0.7.3
+  - @termwright/recognizers@0.7.3
+  - @termwright/vt@0.7.3
+
 ## 0.7.2
 
 ### Patch Changes

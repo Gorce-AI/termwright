@@ -1,5 +1,12 @@
 # @termwright/resource-broker
 
+## 0.7.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/protocol@0.7.3
+
 ## 0.7.2
 
 ### Patch Changes

@@ -27,7 +27,7 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:d03cbd9f86b764e1047069a87c0d3b9bfd6fcfe897d282fed70fe4463f75c303"
+      "sha256": "sha256:ace0661c18ead2fbfd271e2f21938cb67a1c17b2889585081dadc7f359af81fb"
     },
     {
       "path": "termwright_marker_other.go",

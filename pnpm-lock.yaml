@@ -287,6 +287,7 @@ importers:
       '@termwright/test-provider-internal':
         specifier: workspace:*
         version: link:../test-provider-internal
+
   packages/evidence-provider:
     dependencies:
       '@termwright/protocol':
