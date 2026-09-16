@@ -17,7 +17,7 @@
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 217,
     "explicit-test-selection-reviewed-with-platform-registry": 75,
-    "managed-or-diagnostic-background-task": 79,
+    "managed-or-diagnostic-background-task": 82,
     "production-polling-review": 1,
     "production-process-isolation-review": 43,
     "test-observer-or-intentional-background-task": 16,
@@ -1781,6 +1781,24 @@
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "const log = options.log ?? ((message: string): void => void process.stderr.write(`${message}\\n`));"
+    },
+    {
+      "path": "packages/mcp/src/server.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void operation.catch(() => undefined);"
+    },
+    {
+      "path": "packages/mcp/src/server.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void operation.catch(() => undefined);"
+    },
+    {
+      "path": "packages/mcp/src/server.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void operation.then("
     },
     {
       "path": "packages/mcp/src/server.ts",
