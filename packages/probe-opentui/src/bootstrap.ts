@@ -153,20 +153,21 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
           );
         } else {
           state.channel = channel;
-          // A renderer may have committed its first frame while the handshake
-          // was in flight. Publish that certified frame directly: relying only
-          // on requestRender() loses the tree when a backend coalesces the
-          // follow-up render (observed on Windows).
-          try {
-            state.session?.capture();
-            (observedRenderer as ObservableRenderer & { requestRender(): void }).requestRender();
-          } catch (error) {
-            abort(
-              new Error(
-                `OpenTUI requestRender failed: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-            );
-          }
+          // A renderer may have painted its only requested frame while the
+          // handshake was in flight. Do this after the current native frame
+          // completes: an immediate request can be coalesced into that frame
+          // on Windows and leave the new channel with no publication.
+          setImmediate(() => {
+            try {
+              (observedRenderer as ObservableRenderer & { requestRender(): void }).requestRender();
+            } catch (error) {
+              abort(
+                new Error(
+                  `OpenTUI requestRender failed: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+              );
+            }
+          });
         }
       })
       .catch(() => undefined);
