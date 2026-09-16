@@ -1231,11 +1231,11 @@ describe('fresh React runner', () => {
     const approve = tree.locator('[role="treeitem"][data-node-id="b1"]');
     await approve.waitFor();
     expect(await root.getAttribute('aria-expanded')).toBe('true');
-    // Chromium can still be finishing the tree layout after the search change.
-    // Focus the controlled input explicitly before exercising its Enter handler.
-    await search.focus();
+    // Send Enter through the controlled input itself. A page-level keyboard
+    // event can race focus transfer while Chromium finishes the filtered tree
+    // layout and silently target the previously focused tree item.
     expect(await search.inputValue()).toBe('approve');
-    await page.keyboard.press('Enter');
+    await search.press('Enter');
     await expect.poll(() => approve.getAttribute('aria-selected')).toBe('true');
     await page
       .locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"][data-pinned="true"]')
