@@ -411,7 +411,9 @@ if (process.platform === 'win32') {
   let escapeSent = false;
   let responseFailure;
   let resizeStage = 'startup-handshake';
-  const releaseResizeResponder = resizeSession.onData(() => {
+  let resizeResponseQueued = false;
+  const answerResizeQueries = () => {
+    resizeResponseQueued = false;
     const observed = resizing.text();
     try {
       for (const match of observed.matchAll(/\x1b\]8488;(twh-cpr-v1:q:([0-9a-f]{32}))\x07/g)) {
@@ -465,7 +467,21 @@ if (process.platform === 'win32') {
       responseFailure ??= error;
       resizeSession.dispose();
     }
-  });
+  };
+  // Native data delivery is an observation boundary, not an input re-entry
+  // point. In particular, an x64 Node process hosted by Windows ARM64 can
+  // deliver OpenConsole's startup DA1 before the emulated callback frame has
+  // fully unwound. Enqueuing its reply from that same frame admits the bytes,
+  // but OpenConsole never observes them. The production driver already parses
+  // terminal output asynchronously; make the packed-artifact certifier use
+  // the same causal boundary instead of relying on callback timing.
+  const scheduleResizeResponses = () => {
+    if (resizeResponseQueued) return;
+    resizeResponseQueued = true;
+    queueMicrotask(answerResizeQueries);
+  };
+  const releaseResizeResponder = resizeSession.onData(scheduleResizeResponses);
+  scheduleResizeResponses();
   closeOwnedInputAfterExit(resizeSession, releaseResizeResponder);
   const resizeWatchdog = startDiagnosticWatchdog(resizing, () => resizeStage);
   try {
