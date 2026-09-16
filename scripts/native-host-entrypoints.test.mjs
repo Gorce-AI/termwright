@@ -340,6 +340,11 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(ciJobs['pty-native-build-arm64']).toContain(
       'node scripts/check-prebuild.mjs win32 arm64',
     );
+    for (const jobId of ['pty-native-build-x64', 'pty-native-build-arm64']) {
+      expect(ciJobs[jobId]).toContain(
+        'cp packages/pty/build/Release/termwright_conpty_observable_resize_fixture.exe',
+      );
+    }
     const x64Consumers = {
       'pty-native': 'packages/pty/build/Release',
       'pty-native-x64-on-arm64': 'packages/pty-win32-x64',
@@ -522,6 +527,12 @@ describe('the native host is the only Termwright test entrypoint', () => {
     );
     expect(reliabilityJobs['pty-native-build-x64']).toContain(
       'node scripts/check-prebuild.mjs win32 x64',
+    );
+    expect(reliabilityJobs['pty-native-build-x64']).toContain(
+      'cp packages/pty/build/Release/termwright_conpty_observable_resize_fixture.exe',
+    );
+    expect(upstreamJobs['pty-native-build-x64']).toContain(
+      'cp packages/pty/build/Release/termwright_conpty_observable_resize_fixture.exe',
     );
     expect(reliabilityJobs['nightly-soak-windows']).toContain(
       'node scripts/check-prebuild.mjs win32 x64',
