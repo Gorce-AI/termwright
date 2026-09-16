@@ -1,5 +1,24 @@
 # termwright
 
+## 0.7.2
+
+### Patch Changes
+
+- Updated dependencies [[`3d3e8d5`](https://github.com/Gorce-AI/termwright/commit/3d3e8d53634ac6a529d9f00ca6c1a3f44db824b3)]:
+  - @termwright/driver@0.7.2
+  - @termwright/mcp@0.7.2
+  - @termwright/ink@0.7.2
+  - @termwright/screenshot@0.7.2
+  - @termwright/test@0.7.2
+  - @termwright/trace@0.7.2
+  - @termwright/ui@0.7.2
+  - @termwright/gherkin@0.7.2
+  - @termwright/desktop-host@0.7.2
+  - @termwright/protocol@0.7.2
+  - @termwright/resource-broker@0.7.2
+  - @termwright/run-history@0.7.2
+  - @termwright/run-journal-transport@0.7.2
+
 ## 0.7.1
 
 ### Patch Changes

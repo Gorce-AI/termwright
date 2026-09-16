@@ -1,5 +1,13 @@
 # @termwright/screenshot
 
+## 0.7.2
+
+### Patch Changes
+
+- Updated dependencies [[`3d3e8d5`](https://github.com/Gorce-AI/termwright/commit/3d3e8d53634ac6a529d9f00ca6c1a3f44db824b3)]:
+  - @termwright/driver@0.7.2
+  - @termwright/protocol@0.7.2
+
 ## 0.7.1
 
 ### Patch Changes
