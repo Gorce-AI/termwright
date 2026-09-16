@@ -1008,7 +1008,7 @@ jobs:
         shell: bash
         run: |
           for package in ui mcp; do
-            if ! PACKAGE="$package" node -e 'process.exit(require(`./packages/${process.env.PACKAGE}/package.json`).scripts?.["test:browser"] ? 0 : 1)'; then
+            if ! node -e 'process.exit(require("./packages/" + process.argv[1] + "/package.json").scripts?.["test:browser"] ? 0 : 1)' "$package"; then
               echo "::error::packages/$package has no test:browser script — this lane cannot verify anything."
               exit 1
             fi
