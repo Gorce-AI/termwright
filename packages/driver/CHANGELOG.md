@@ -1,5 +1,15 @@
 # @termwright/driver
 
+## 0.7.2
+
+### Patch Changes
+
+- [#173](https://github.com/Gorce-AI/termwright/pull/173) [`3d3e8d5`](https://github.com/Gorce-AI/termwright/commit/3d3e8d53634ac6a529d9f00ca6c1a3f44db824b3) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Add abortable driver waits, durable revision-driven MCP watchers, and a local
+  browser monitor for live terminal screens, semantic trees, and watcher state.
+- Updated dependencies []:
+  - @termwright/protocol@0.7.2
+  - @termwright/vt@0.7.2
+
 ## 0.7.1
 
 ### Patch Changes
