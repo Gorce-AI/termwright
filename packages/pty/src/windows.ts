@@ -12,6 +12,7 @@
  */
 
 import { createRequire } from 'node:module';
+import { NativeTurnWriteQueue } from './native-turn-write-queue.js';
 import { NativeWriteDrainEpoch } from './write-drain-epoch.js';
 import {
   ConPtyControlPlaneNormalizer,
@@ -419,6 +420,19 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
     writeEpoch.admit(bytes, (admitted) => session.write(admitted));
   };
 
+  // A terminal response is caused by output delivered through a Node-API
+  // callback. Node drains microtasks before returning from that callback, so
+  // queueMicrotask would still write reentrantly into the native transport.
+  // The next libuv check phase is the causal boundary at which the observation
+  // callback has definitely unwound. Keep the queue bounded and ordered while
+  // retaining the public route result synchronously.
+  const terminalResponseWrites = new NativeTurnWriteQueue(
+    (data) => write(data),
+    (failure) => {
+      for (const listener of [...errorListeners]) listener(failure);
+    },
+  );
+
   const session = new binding.ConPtySession(
     {
       commandLine: buildCommandLine(options.command),
@@ -506,14 +520,16 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
     closeInput(): void {
       if (disposed || inputClosed) return;
       inputClosed = true;
+      terminalResponseWrites.close();
       session.closeInput();
     },
     writeApplicationInput(data, kind): void {
       write(encodeConPtyApplicationInput(data, kind));
     },
     writeTerminalResponse(data: Uint8Array): ConPtyTerminalResponseRoute {
+      if (disposed || inputClosed) throw new Error('ConPTY input is closed');
       const route = terminalResponseRouter.route(data);
-      write(terminalResponseTransport.encode(route, data));
+      terminalResponseWrites.enqueue(terminalResponseTransport.encode(route, data));
       return route;
     },
     resize(columns: number, rows: number): boolean {
@@ -551,6 +567,7 @@ export function spawnWindowsPty(options: WindowsPtySpawnOptions): WindowsPtyHand
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      terminalResponseWrites.close();
       session.dispose();
       // Disposal is not evidence of EOF. It unblocks anyone waiting only so a
       // teardown cannot hang; whether the stream truly ended is recorded by

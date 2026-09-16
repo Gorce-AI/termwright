@@ -81,8 +81,11 @@ uses private `OSC 8488` requests and responses carrying a
 random 128-bit request token. Only a response for the matching live token can
 complete the host query, and that host-control response is written raw and
 consumed without reaching the application. Startup DA1 remains a separately
-identified raw host-control reply. No primer, timeout, retry, quiet window, or
-capture-state guess proves cursor synchronization. After the parser has seen
+identified raw host-control reply. The backend admits every emulator reply to
+an ordered, bounded queue and writes it in the next libuv turn. A Node-API data
+callback and all of its microtasks have therefore returned before native input
+is touched. No primer, timeout, retry, quiet window, or capture-state guess
+proves cursor synchronization. After the parser has seen
 Win32 Input Mode, a lone raw `ESC` would remain a possible sequence prefix; the
 application-input seam therefore sends the physical Escape key as an explicit
 Win32 record while leaving raw, mouse, paste, and compound key bytes unchanged.

@@ -168,9 +168,13 @@ describe.skipIf(process.platform === 'win32')('the Termwright-owned POSIX PTY', 
   });
 
   nativeOutputPressureIt(
-    'delivers a megabyte tail and its sentinel before authoritative EOF',
+    'delivers a complete native output batch and its tail before authoritative EOF',
     async (context) => {
-      const payloadBytes = 1024 * 1024;
+      // The reader publishes at this exact 256 KiB boundary. The separate
+      // `pnpm check:pty` certification owns the 1 MiB throughput workload;
+      // keeping that benchmark under Vitest's unit-test callback made runner
+      // load, rather than the EOF contract, decide whether this test passed.
+      const payloadBytes = 256 * 1024;
       const session = ownSession(
         context,
         collect(
