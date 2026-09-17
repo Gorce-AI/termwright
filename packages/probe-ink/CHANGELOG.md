@@ -1,5 +1,17 @@
 # @termwright/probe-ink
 
+## 0.7.4
+
+### Patch Changes
+
+- Updated dependencies [[`af0cdf5`](https://github.com/Gorce-AI/termwright/commit/af0cdf5612ca051551f53fec8fac9b1ea979a427), [`eb5e72d`](https://github.com/Gorce-AI/termwright/commit/eb5e72d930a9a254f5b870993251ab3a29da9f27), [`389c4de`](https://github.com/Gorce-AI/termwright/commit/389c4de2a6706a2869955295d53c95f00ac63c46)]:
+  - @termwright/pty@0.7.4
+  - @termwright/evidence-provider@0.7.4
+  - @termwright/probe-runtime@0.7.4
+  - @termwright/protocol@0.7.4
+  - @termwright/recognizers@0.7.4
+  - @termwright/vt@0.7.4
+
 ## 0.7.3
 
 ### Patch Changes

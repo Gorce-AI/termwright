@@ -1,5 +1,14 @@
 # @termwright/conformance
 
+## 0.7.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/driver@0.7.4
+  - @termwright/test@0.7.4
+  - @termwright/protocol@0.7.4
+
 ## 0.7.3
 
 ### Patch Changes

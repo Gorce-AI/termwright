@@ -180,7 +180,7 @@ async function ensurePackagedHost(main: string): Promise<string> {
     JSON.stringify({
       name: 'termwright-desktop-host-runtime',
       productName: 'Termwright',
-      version: '0.7.3',
+      version: '0.7.4',
       main: 'main.js',
     }),
   );

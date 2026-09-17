@@ -1,6 +1,6 @@
 {
   "name": "@termwright/resource-broker",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Node-only authoritative resource scheduling and worker transport for Termwright",
   "license": "MIT",
   "repository": {
