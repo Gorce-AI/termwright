@@ -43,6 +43,10 @@ runs:
         set -euo pipefail
         cp packages/pty/build/Release/termwright_pty.node \
           "packages/pty-${{ inputs.platform }}-${{ inputs.architecture }}/termwright_pty.node"
+        if [[ "${{ inputs.platform }}" == "win32" ]]; then
+          cp packages/pty/build/Release/termwright_conpty_observable_resize_fixture.exe \
+            "packages/pty-${{ inputs.platform }}-${{ inputs.architecture }}/termwright_conpty_observable_resize_fixture.exe"
+        fi
         node scripts/check-prebuild.mjs "${{ inputs.platform }}" "${{ inputs.architecture }}"
     - name: Exercise the exact packed native bundle
       shell: bash
