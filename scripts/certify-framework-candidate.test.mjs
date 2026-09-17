@@ -17,6 +17,7 @@ import {
   candidateToolchainBlock,
   certificationPlatform,
   deriveHookInstrumentationProfile,
+  exactNpmClosureOverrides,
   installedDependencyFrom,
   isSupportedCompileCapabilityCandidate,
   packageContentDigestForEntries,
@@ -150,6 +151,50 @@ async function npmClosureFixture() {
 }
 
 describe('framework candidate evidence binding', () => {
+  it('pins each discovered npm edge without collapsing divergent transitive versions', () => {
+    const candidate = {
+      id: 'root@1.0.0',
+      package: '@example/root',
+      version: '1.0.0',
+      source: {
+        closureComplete: true,
+        dependencyRoots: [
+          {
+            name: 'first',
+            packageName: 'first',
+            version: '2.0.0',
+          },
+          {
+            name: 'alias',
+            packageName: '@example/actual',
+            version: '3.0.0',
+          },
+        ],
+        dependencyClosure: [
+          {
+            name: 'first',
+            version: '2.0.0',
+            dependencies: [{ name: 'shared', packageName: 'shared', version: '1.6.0' }],
+          },
+          {
+            name: '@example/actual',
+            version: '3.0.0',
+            dependencies: [{ name: 'shared', packageName: 'shared', version: '1.7.0' }],
+          },
+          { name: 'shared', version: '1.6.0', dependencies: [] },
+          { name: 'shared', version: '1.7.0', dependencies: [] },
+        ],
+      },
+    };
+
+    expect(exactNpmClosureOverrides(candidate)).toEqual({
+      '@example/root@1.0.0>first': '2.0.0',
+      '@example/root@1.0.0>alias': 'npm:@example/actual@3.0.0',
+      'first@2.0.0>shared': '1.6.0',
+      '@example/actual@3.0.0>shared': '1.7.0',
+    });
+  });
+
   it('binds and verifies the repository-owned Go client in one toolchain transaction', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-go-client-replace-'));
     const client = join(directory, 'client');
