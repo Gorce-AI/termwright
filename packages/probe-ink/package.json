@@ -1,6 +1,6 @@
 {
   "name": "@termwright/probe-ink",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Ink application instrumentation for Termwright end-to-end semantic tests",
   "license": "MIT",
   "repository": {

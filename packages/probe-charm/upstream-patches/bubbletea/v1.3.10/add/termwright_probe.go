@@ -41,7 +41,7 @@ import (
 
 const (
 	probeName        = "termwright-probe-charm"
-	probeVersion     = "0.7.4"
+	probeVersion     = "0.7.5"
 	frameworkVersion = "v1.3.10"
 )
 

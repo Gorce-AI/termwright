@@ -1,5 +1,15 @@
 # @termwright/trace
 
+## 0.7.5
+
+### Patch Changes
+
+- [#181](https://github.com/Gorce-AI/termwright/pull/181) [`b4dbadf`](https://github.com/Gorce-AI/termwright/commit/b4dbadfeae74a818c8b7cd6cc16cbd310b276241) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Accept recorder-produced multi-kilobyte input events in reports. Make recorded MCP terminal cleanup idempotent across retries and server restarts, keep untargeted `terminal.type` on the current focus, and add `probe: "opentui"` launch injection for Bun and Node applications.
+- Updated dependencies []:
+  - @termwright/driver@0.7.5
+  - @termwright/protocol@0.7.5
+  - @termwright/vt@0.7.5
+
 ## 0.7.4
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @termwright/driver
 
+## 0.7.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/protocol@0.7.5
+  - @termwright/vt@0.7.5
+
 ## 0.7.4
 
 ### Patch Changes

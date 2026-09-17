@@ -1,5 +1,7 @@
 # @termwright/pty-linux-arm64
 
+## 0.7.5
+
 ## 0.7.4
 
 ## 0.7.3
