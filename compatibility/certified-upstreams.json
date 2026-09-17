@@ -166,13 +166,13 @@
     ],
     "opentui": [
       {
-        "candidateDigest": "sha256:a5f82f656f3e5fc7cf3018513376bea84e14aef6b06e9f560fa0f5fb2724b9bb",
+        "candidateDigest": "sha256:1aabccfa1f07fd8d0b3ea2cfc7ebc2d3182716edba947aa090671db8cc1f361f",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-13T20:08:19.757Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:c087a4ac571410d4766c7278912428a3fbbaa13a019022661b91526be93c5f86",
+          "closureDigest": "sha256:68ff22918d08e8fa2ee766bd8f215ad41bd781fd38f713eaaa917ddd6a689eae",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -411,17 +411,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==",
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
               "name": "get-east-asian-width",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "216900f91df11a8b2c198c3e1d93d6c035a776b9",
-              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.6.0.tgz",
-              "tarballSha256": "4451f58e2f5a4ef27ae8b4ba25b64be97d3a8413dc8614a4321a10d418eee6d7",
-              "version": "1.6.0"
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
             },
             {
               "dependencies": [],
@@ -453,7 +453,7 @@
                   "packageName": "get-east-asian-width",
                   "requested": "^1.0.0",
                   "type": "dependency",
-                  "version": "1.6.0"
+                  "version": "1.7.0"
                 },
                 {
                   "name": "strip-ansi",
@@ -699,13 +699,13 @@
         "version": "0.5.3"
       },
       {
-        "candidateDigest": "sha256:2e67739e1c8ae02a171f25b2c1bde8a3216284a2fcc4c0f3556639b966f324ae",
+        "candidateDigest": "sha256:160262b218cead2f2e36c7ea8c4fe5ec7bc26e1341877a6a303ac3742eff11f3",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-18T11:37:26.322Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:17e02a8f716b7a778ae75da4c053e27ab29132538677142b7542af74fbf29352",
+          "closureDigest": "sha256:98ded995e93d64b3d74a866066ef4286d1fdb66ab982ab5669c797756198970a",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -944,17 +944,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==",
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
               "name": "get-east-asian-width",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "216900f91df11a8b2c198c3e1d93d6c035a776b9",
-              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.6.0.tgz",
-              "tarballSha256": "4451f58e2f5a4ef27ae8b4ba25b64be97d3a8413dc8614a4321a10d418eee6d7",
-              "version": "1.6.0"
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
             },
             {
               "dependencies": [],
@@ -986,7 +986,7 @@
                   "packageName": "get-east-asian-width",
                   "requested": "^1.0.0",
                   "type": "dependency",
-                  "version": "1.6.0"
+                  "version": "1.7.0"
                 },
                 {
                   "name": "strip-ansi",
@@ -1232,13 +1232,13 @@
         "version": "0.5.4"
       },
       {
-        "candidateDigest": "sha256:039a20935f18c89714842d2dad76a40f16bf38e4b3b1a6c062bf83fcdde98d3a",
+        "candidateDigest": "sha256:a8d95e0fcd89fbf05075e66f00d36dc0d53ea5fef3f530e68563f6929d6436b7",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-20T21:19:47.507Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:5a891a12ce6118043ee0352e60758791ca88c67e6d744955e29d5ad391982da0",
+          "closureDigest": "sha256:cb68f51b9e0ad17cb049dfda272cf68af321f5656335aac1e310f284d90d0bac",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -1477,17 +1477,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==",
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
               "name": "get-east-asian-width",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "216900f91df11a8b2c198c3e1d93d6c035a776b9",
-              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.6.0.tgz",
-              "tarballSha256": "4451f58e2f5a4ef27ae8b4ba25b64be97d3a8413dc8614a4321a10d418eee6d7",
-              "version": "1.6.0"
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
             },
             {
               "dependencies": [],
@@ -1519,7 +1519,7 @@
                   "packageName": "get-east-asian-width",
                   "requested": "^1.0.0",
                   "type": "dependency",
-                  "version": "1.6.0"
+                  "version": "1.7.0"
                 },
                 {
                   "name": "strip-ansi",
@@ -1765,13 +1765,13 @@
         "version": "0.5.6"
       },
       {
-        "candidateDigest": "sha256:30f04879bdbd3698e3ea55c93b17d3c1e0752117704d60f5dd8397ccd8c684e6",
+        "candidateDigest": "sha256:d15bf490b16054ae66e90916b0b28f337a743491bcfa5ba94c0597b48b9b54d1",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-23T06:46:25.034Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:45b17ea1fa40f6fad85cfded6bff63434c70c1317be2f23a115402cdbf043419",
+          "closureDigest": "sha256:159f9cf8a92f5869e82de1712d298e88ecdb1b2e301c7d8ae1a6f9e6b2f9d2a1",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -2010,17 +2010,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==",
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
               "name": "get-east-asian-width",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "216900f91df11a8b2c198c3e1d93d6c035a776b9",
-              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.6.0.tgz",
-              "tarballSha256": "4451f58e2f5a4ef27ae8b4ba25b64be97d3a8413dc8614a4321a10d418eee6d7",
-              "version": "1.6.0"
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
             },
             {
               "dependencies": [],
@@ -2052,7 +2052,7 @@
                   "packageName": "get-east-asian-width",
                   "requested": "^1.0.0",
                   "type": "dependency",
-                  "version": "1.6.0"
+                  "version": "1.7.0"
                 },
                 {
                   "name": "strip-ansi",
@@ -2298,13 +2298,13 @@
         "version": "0.5.7"
       },
       {
-        "candidateDigest": "sha256:444fc56e16d7aec3ad60bff96e7f08579f652884df42c57be49c3de93e5d2fc0",
+        "candidateDigest": "sha256:f0b7796582147374c1e1e99fb74c707db8e150827112110ecbd2decf9ea14fef",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-24T13:11:27.268Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:13769cab56df71198c10819cebf8e57e9a76346c58866b5485bec0136925f692",
+          "closureDigest": "sha256:23964288b7d9a3503d2220fc6344804616ee5eccc1358df3f7943d25f5bb221c",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -2543,17 +2543,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==",
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
               "name": "get-east-asian-width",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "216900f91df11a8b2c198c3e1d93d6c035a776b9",
-              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.6.0.tgz",
-              "tarballSha256": "4451f58e2f5a4ef27ae8b4ba25b64be97d3a8413dc8614a4321a10d418eee6d7",
-              "version": "1.6.0"
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
             },
             {
               "dependencies": [],
@@ -2585,7 +2585,7 @@
                   "packageName": "get-east-asian-width",
                   "requested": "^1.0.0",
                   "type": "dependency",
-                  "version": "1.6.0"
+                  "version": "1.7.0"
                 },
                 {
                   "name": "strip-ansi",
@@ -2831,13 +2831,13 @@
         "version": "0.5.8"
       },
       {
-        "candidateDigest": "sha256:9ae88f846a7a1ce5f962189c344d134833211c6de48baea4b083124f9ab1e141",
+        "candidateDigest": "sha256:d752561867232d8084e2ce61cc0af2d468a2e2fa848758d7c094296f41909cd0",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-27T23:19:08.178Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:d7aa13636aca7f35e83486be232c32fec9fc754d6255ef7a9a4fa7b5c07cee18",
+          "closureDigest": "sha256:a3a495cdc506b740f83d882875f28e82212a3413cef4208d3c544a144f05c560",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -3076,17 +3076,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==",
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
               "name": "get-east-asian-width",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "216900f91df11a8b2c198c3e1d93d6c035a776b9",
-              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.6.0.tgz",
-              "tarballSha256": "4451f58e2f5a4ef27ae8b4ba25b64be97d3a8413dc8614a4321a10d418eee6d7",
-              "version": "1.6.0"
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
             },
             {
               "dependencies": [],
@@ -3118,7 +3118,7 @@
                   "packageName": "get-east-asian-width",
                   "requested": "^1.0.0",
                   "type": "dependency",
-                  "version": "1.6.0"
+                  "version": "1.7.0"
                 },
                 {
                   "name": "strip-ansi",
@@ -3364,13 +3364,13 @@
         "version": "0.5.9"
       },
       {
-        "candidateDigest": "sha256:a904ddfdf7e4b9b1b494474e9e0dc6412e9c2f9ec77af18fe8e883f8e6532ce0",
+        "candidateDigest": "sha256:f6aacda84360be42babb54a268e05b0bf3d26c04dcfc4ec0b5c7c52fb81eeb28",
         "patchManifestDigest": null,
         "publishedAt": "2026-09-01T16:09:06.497Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:e2424090d3336ede2449d188ce13620311d83b9778cd29dbf36ed0e2f8c5f596",
+          "closureDigest": "sha256:90f3fc135178b6e1e683f823bd7b862e1c2f098515135bc2c9a98917567552f0",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -3609,17 +3609,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==",
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
               "name": "get-east-asian-width",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "216900f91df11a8b2c198c3e1d93d6c035a776b9",
-              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.6.0.tgz",
-              "tarballSha256": "4451f58e2f5a4ef27ae8b4ba25b64be97d3a8413dc8614a4321a10d418eee6d7",
-              "version": "1.6.0"
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
             },
             {
               "dependencies": [],
@@ -3651,7 +3651,7 @@
                   "packageName": "get-east-asian-width",
                   "requested": "^1.0.0",
                   "type": "dependency",
-                  "version": "1.6.0"
+                  "version": "1.7.0"
                 },
                 {
                   "name": "strip-ansi",
@@ -3897,13 +3897,13 @@
         "version": "0.5.10"
       },
       {
-        "candidateDigest": "sha256:5892cc757d0a1f3eaba434c95821a98e26d1b2245988b33242f9424fce3918f9",
+        "candidateDigest": "sha256:a26297a2912f6ae315836fb11b4faadc832cb8541e9ae1013d1fb7087715bf55",
         "patchManifestDigest": null,
         "publishedAt": "2026-09-07T11:01:48.464Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:6ced7ede02fa488d5857f4e48492aef5422b45e3a25a527d7e4864b48a92f70b",
+          "closureDigest": "sha256:45240ca9a7061f0d46ad5858145480859f030d09d05aba2a70792342a0f0ddc7",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -4142,17 +4142,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==",
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
               "name": "get-east-asian-width",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "216900f91df11a8b2c198c3e1d93d6c035a776b9",
-              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.6.0.tgz",
-              "tarballSha256": "4451f58e2f5a4ef27ae8b4ba25b64be97d3a8413dc8614a4321a10d418eee6d7",
-              "version": "1.6.0"
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
             },
             {
               "dependencies": [],
@@ -4184,7 +4184,7 @@
                   "packageName": "get-east-asian-width",
                   "requested": "^1.0.0",
                   "type": "dependency",
-                  "version": "1.6.0"
+                  "version": "1.7.0"
                 },
                 {
                   "name": "strip-ansi",
