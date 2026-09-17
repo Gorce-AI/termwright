@@ -6,7 +6,7 @@
  * They skip themselves where no pseudo-terminal can be opened (sandboxed CI,
  * missing prebuild); set `TERMWRIGHT_SKIP_PTY=1` to skip them explicitly.
  */
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -320,9 +320,10 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
       const closed = await call('terminal.close', { terminal });
       expect(closed.isError, closed.text).toBe(false);
       const path = closed.data['tracePath'];
-      expect(path).toMatch(
-        new RegExp(`^${storageDir}/in-memory/${terminal}-[^/]+/session\\.twtrace$`, 'u'),
-      );
+      const recordingDir = dirname(path as string);
+      expect(dirname(recordingDir)).toBe(join(storageDir, 'in-memory'));
+      expect(basename(recordingDir).startsWith(`${terminal}-`)).toBe(true);
+      expect(path).toBe(join(recordingDir, 'session.twtrace'));
       const closedAgain = await call('terminal.close', { terminal });
       expect(closedAgain.isError, closedAgain.text).toBe(false);
       expect(closedAgain.data['tracePath']).toBe(path);
