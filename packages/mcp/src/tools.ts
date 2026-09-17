@@ -260,6 +260,13 @@ const launch = defineTool({
     rows: z.number().int().min(1).max(1000).optional().describe('default 30'),
     scrollbackLines: z.number().int().min(0).max(100_000).optional(),
     semanticNegotiationMs: z.number().int().min(0).max(60_000).optional(),
+    probe: z
+      .enum(['opentui'])
+      .optional()
+      .describe(
+        'explicitly instrument a Bun or Node application with the matching framework probe; ' +
+          'for OpenTUI use "opentui" instead of constructing a --preload/--import path',
+      ),
     record: z
       .union([z.boolean(), z.object({ redact: z.boolean().optional() })])
       .optional()
@@ -786,14 +793,15 @@ const type = defineTool({
   outputSchema: { ...receiptFields, ref: z.string().optional() },
   handler: async (context, args) => {
     const entry = context.terminals.get(args.terminal);
-    if (hasTarget(args)) {
-      const locator = semanticLocatorFor(entry, args);
+    const { text, ...targetInput } = args;
+    if (hasTarget(targetInput)) {
+      const locator = semanticLocatorFor(entry, targetInput);
       const target = await locator.resolve(optionalTimeout(args.timeout));
-      await locator.type(args.text, optionalTimeout(args.timeout));
+      await locator.type(text, optionalTimeout(args.timeout));
       return { text: `typed into ref=${target.ref}`, data: { ...receipt(entry), ref: target.ref } };
     }
-    await entry.harness.type(args.text);
-    return { text: `typed ${args.text.length} characters`, data: receipt(entry) };
+    await entry.harness.type(text);
+    return { text: `typed ${text.length} characters`, data: receipt(entry) };
   },
 });
 
@@ -811,9 +819,10 @@ const fill = defineTool({
   outputSchema: { ...receiptFields, ref: z.string(), action: plannedActionSchema },
   handler: async (context, args) => {
     const entry = context.terminals.get(args.terminal);
-    const locator = semanticLocatorFor(entry, args);
+    const { text, ...targetInput } = args;
+    const locator = semanticLocatorFor(entry, targetInput);
     const target = await locator.resolve(optionalTimeout(args.timeout));
-    const action = await locator.fill(args.text, optionalTimeout(args.timeout));
+    const action = await locator.fill(text, optionalTimeout(args.timeout));
     return {
       text: `filled ref=${target.ref}`,
       data: { ...receipt(entry), ref: target.ref, action: plannedAction(action) },

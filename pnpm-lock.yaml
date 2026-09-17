@@ -389,6 +389,9 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
+      '@termwright/probe-opentui':
+        specifier: workspace:*
+        version: link:../probe-opentui
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol

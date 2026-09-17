@@ -6,7 +6,7 @@
  * They skip themselves where no pseudo-terminal can be opened (sandboxed CI,
  * missing prebuild); set `TERMWRIGHT_SKIP_PTY=1` to skip them explicitly.
  */
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -320,7 +320,13 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
       const closed = await call('terminal.close', { terminal });
       expect(closed.isError, closed.text).toBe(false);
       const path = closed.data['tracePath'];
-      expect(path).toBe(join(storageDir, 'in-memory', terminal, 'session.twtrace'));
+      const recordingDir = dirname(path as string);
+      expect(dirname(recordingDir)).toBe(join(storageDir, 'in-memory'));
+      expect(basename(recordingDir).startsWith(`${terminal}-`)).toBe(true);
+      expect(path).toBe(join(recordingDir, 'session.twtrace'));
+      const closedAgain = await call('terminal.close', { terminal });
+      expect(closedAgain.isError, closedAgain.text).toBe(false);
+      expect(closedAgain.data['tracePath']).toBe(path);
       const trace = await openTrace(path as string);
       try {
         expect(trace.meta.command).toEqual(['<command withheld>']);
@@ -328,9 +334,41 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
       } finally {
         await trace.close();
       }
+
+      // A new MCP process/session starts its handles at t1 again. Its archive
+      // must not collide with the committed t1 recording left on disk.
+      const restarted = await connectSession(storageDir);
+      const relaunched = await restarted.call('terminal.launch', {
+        command: [process.execPath, '-e', "process.stdout.write('done\\n')"],
+        record: true,
+      });
+      expect(relaunched.isError, relaunched.text).toBe(false);
+      const restartedTerminal = relaunched.data['terminal'] as string;
+      await restarted.call('terminal.wait_for', { terminal: restartedTerminal, wait: 'exit' });
+      const reclosed = await restarted.call('terminal.close', { terminal: restartedTerminal });
+      expect(reclosed.isError, reclosed.text).toBe(false);
+      expect(reclosed.data['tracePath']).not.toBe(path);
+      const restartedTrace = await openTrace(reclosed.data['tracePath'] as string);
+      await restartedTrace.close();
     } finally {
       await rm(storageDir, { recursive: true, force: true });
     }
+  });
+
+  it('types into current focus without requiring a semantic tree', async () => {
+    const { call } = await connectSession();
+    const launched = await call('terminal.launch', {
+      command: [process.execPath, join(FIXTURES, 'echo-app.mjs')],
+    });
+    expect(launched.isError, launched.text).toBe(false);
+    expect(launched.data['semanticTree']).toBe('unavailable');
+    const terminal = launched.data['terminal'] as string;
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'READY' });
+
+    const typed = await call('terminal.type', { terminal, text: 'x' });
+    expect(typed.isError, typed.text).toBe(false);
+    const echoed = await call('terminal.wait_for', { terminal, wait: 'text', text: 'KEY:78' });
+    expect(echoed.isError, echoed.text).toBe(false);
   });
 
   it('sends a physical click at a cell and waits separately for the application result', async () => {
@@ -357,12 +395,8 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
       it(`keeps semantic click fail-closed when a child ${stopChild ? 'stops' : 'allows'} propagation`, async () => {
         const { call } = await connectSession();
         const launched = await call('terminal.launch', {
-          command: [
-            'bun',
-            '--preload',
-            join(OPENTUI_FIXTURES, 'dist', 'bun-preload.js'),
-            join(OPENTUI_FIXTURES, 'src', 'testing', 'nested-button-app.ts'),
-          ],
+          command: ['bun', join(OPENTUI_FIXTURES, 'src', 'testing', 'nested-button-app.ts')],
+          probe: 'opentui',
           columns: 40,
           rows: 10,
           // The fixture starts Bun, OpenTUI and the preload probe. Match the

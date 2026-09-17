@@ -8,9 +8,10 @@
  * transports interchangeable and keeps the per-session limits enforceable in one
  * place.
  */
+import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { launchTerminal } from '@termwright/driver';
 import type {
   AppLogSource,
@@ -20,6 +21,7 @@ import type {
   TerminalHarness,
 } from '@termwright/driver';
 import { DEFAULT_LIMITS } from '@termwright/protocol';
+import { withProbe as withOpenTuiProbe } from '@termwright/probe-opentui';
 import { createTraceWriter } from '@termwright/trace';
 import type { TraceWriter } from '@termwright/trace';
 import { McpError, noSessionError, usageError } from './errors.js';
@@ -44,6 +46,8 @@ export const MCP_LIMITS = Object.freeze({
   maxHistory: 16,
   /** Argument ceiling for a launch command line. */
   maxCommandParts: 64,
+  /** Recently completed handles retained for idempotent terminal.close retries. */
+  maxClosedTerminals: 128,
 });
 
 /** A snapshot the server handed out, kept so a later cursor can diff against it. */
@@ -75,6 +79,8 @@ export interface TerminalEntry {
   readonly logs: LogBuffer;
   readonly writer?: TraceWriter;
   tracePath?: string;
+  /** One shared transaction for concurrent close/finalize callers. */
+  closePromise?: Promise<TerminalEntry>;
 }
 
 /** Options for {@link TerminalStore}. */
@@ -101,6 +107,8 @@ export interface LaunchRequest {
   readonly rows?: number | undefined;
   readonly scrollbackLines?: number | undefined;
   readonly semanticNegotiationMs?: number | undefined;
+  /** Explicit framework instrumentation managed by the MCP server. */
+  readonly probe?: 'opentui' | undefined;
   readonly timeouts?: Loose<NonNullable<LaunchOptions['timeouts']>> | undefined;
   /** Log files to follow for the lifetime of the session. */
   readonly logs?: readonly Loose<AppLogSource>[] | undefined;
@@ -118,6 +126,8 @@ export class TerminalStore {
   readonly #maxTerminals: number;
   readonly #now: () => number;
   readonly #terminals = new Map<string, TerminalEntry>();
+  /** Completed close results make the advertised idempotent close contract true. */
+  readonly #closed = new Map<string, TerminalEntry>();
   #counter = 0;
 
   constructor(options: TerminalStoreOptions) {
@@ -149,8 +159,9 @@ export class TerminalStore {
       );
     }
 
+    const command = instrumentCommand(request.command, request.probe);
     const options: LaunchOptions = {
-      command: [...request.command],
+      command,
       // Environment policy belongs to the driver: 'replace' (its default) keeps
       // the operator's secrets out of the child, 'inherit' is opt-in.
       ...(request.env === undefined ? {} : { env: request.env }),
@@ -189,7 +200,10 @@ export class TerminalStore {
       if (request.record !== undefined && request.record !== false) {
         const redact = typeof request.record === 'object' && request.record.redact === true;
         writer = createTraceWriter(harness, {
-          dir: join(this.#directory, id, 'session.twtrace'),
+          // A server restart begins again at t1. A unique run directory keeps
+          // a previous committed recording immutable and prevents a later
+          // close from looking like a second finalization of the same target.
+          dir: join(this.#directory, `${id}-${randomUUID()}`, 'session.twtrace'),
           // argv can carry access tokens or personal paths. The live launch
           // response never echoes it, and neither should an opt-in archive.
           command: ['<command withheld>'],
@@ -314,15 +328,30 @@ export class TerminalStore {
 
   /** Closes one terminal and forgets it. Idempotent. */
   async close(id: string): Promise<TerminalEntry> {
+    const completed = this.#closed.get(id);
+    if (completed !== undefined) return completed;
     const entry = this.get(id);
-    await entry.harness.close();
-    if (entry.writer !== undefined) {
-      const archive = await entry.writer.finalize();
-      entry.tracePath = archive.dir;
-    }
-    entry.closed = true;
-    this.#terminals.delete(id);
-    return entry;
+    if (entry.closePromise !== undefined) return entry.closePromise;
+    entry.closePromise = (async () => {
+      await entry.harness.close();
+      if (entry.writer !== undefined) {
+        const archive = await entry.writer.finalize();
+        entry.tracePath = archive.dir;
+      }
+      entry.closed = true;
+      this.#terminals.delete(id);
+      this.#closed.set(id, entry);
+      while (this.#closed.size > MCP_LIMITS.maxClosedTerminals) {
+        const oldest = this.#closed.keys().next().value as string | undefined;
+        if (oldest === undefined) break;
+        this.#closed.delete(oldest);
+      }
+      return entry;
+    })().catch((error: unknown) => {
+      delete entry.closePromise;
+      throw error;
+    });
+    return entry.closePromise;
   }
 
   /** Closes every terminal; failures are swallowed so shutdown always completes. */
@@ -332,10 +361,7 @@ export class TerminalStore {
     await Promise.all(
       entries.map(async (entry) => {
         try {
-          await entry.harness.close();
-          await entry.writer?.finalize();
-          entry.closed = true;
-          this.#terminals.delete(entry.id);
+          await this.close(entry.id);
         } catch (error) {
           failures.push(error);
         }
@@ -344,6 +370,23 @@ export class TerminalStore {
     if (failures.length > 0)
       throw new AggregateError(failures, 'one or more MCP terminals failed to close');
   }
+}
+
+function instrumentCommand(
+  command: readonly string[],
+  probe: LaunchRequest['probe'],
+): readonly string[] {
+  if (probe === undefined) return [...command];
+  const executable = basename(command[0] ?? '')
+    .toLowerCase()
+    .replace(/\.exe$/u, '');
+  if (executable !== 'bun' && executable !== 'node') {
+    throw usageError(
+      `probe ${JSON.stringify(probe)} needs a Bun or Node command; got ${JSON.stringify(command[0])}`,
+      'start the application with bun or node, or inject the framework probe in command yourself',
+    );
+  }
+  return withOpenTuiProbe(executable, command).command;
 }
 
 /**

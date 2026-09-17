@@ -54,6 +54,24 @@ async function recordFailingRun(dir: string): Promise<void> {
 }
 
 describe('generateHtmlReport', () => {
+  it('renders a committed trace containing a multi-kilobyte paste', async () => {
+    const root = await workspace();
+    const traceDir = join(root, 'large-paste.twtrace');
+    const session = new FakeSession('large-paste');
+    const writer = createTraceWriter(session, { dir: traceDir, now: session.now });
+    session.input('x'.repeat(5_550), 'paste');
+    session.output('accepted');
+    await writer.finalize();
+
+    await expect(
+      generateHtmlReport({
+        outFile: join(root, 'report.html'),
+        embedPlayer: false,
+        results: [{ id: 'large', title: 'large paste', status: 'passed', tracePath: traceDir }],
+      }),
+    ).resolves.toMatchObject({ passed: 1, failed: 0 });
+  });
+
   it('writes a self-contained document with the run summary', async () => {
     const root = await workspace();
     const outFile = join(root, 'report', 'index.html');

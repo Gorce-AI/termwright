@@ -59,6 +59,33 @@ async function recordSample(dir: string): Promise<void> {
 }
 
 describe('openTrace', () => {
+  it('accepts a canonical multi-kilobyte input event emitted by the writer', async () => {
+    const root = await workspace();
+    const dir = join(root, 'large-input.twtrace');
+    const session = new FakeSession('large-input');
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    const input = 'x'.repeat(5_550);
+
+    session.input(input, 'paste');
+    await writer.finalize();
+
+    const trace = await openTrace(dir);
+    try {
+      const events = [];
+      for await (const event of trace.events()) events.push(event);
+      expect(events).toEqual([
+        expect.objectContaining({
+          kind: 'input',
+          inputKind: 'paste',
+          dataB64: Buffer.from(input).toString('base64'),
+          recording: 'raw',
+        }),
+      ]);
+    } finally {
+      await trace.close();
+    }
+  });
+
   it('classifies complete, incomplete, corrupt, and unsupported artifacts', async () => {
     const root = await workspace();
     const baseDir = join(root, 'base.twtrace');

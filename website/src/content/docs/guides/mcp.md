@@ -33,6 +33,16 @@ Start with `terminal.launch`, then request `terminal.snapshot`:
 { "command": ["node", "/workspace/app.js"], "columns": 100, "rows": 30 }
 ```
 
+For an OpenTUI application, let MCP attach the installed probe instead of
+constructing a runtime-specific preload path:
+
+```jsonc
+{ "command": ["bun", "src/app.ts"], "probe": "opentui" }
+```
+
+The command must start with Bun or Node. Termwright selects `--preload` or
+`--import` and resolves its own matching probe entry point.
+
 The snapshot contains the terminal screen and, when an integration is active,
 a compact semantic tree with stable node references:
 

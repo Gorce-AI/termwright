@@ -60,6 +60,13 @@ visible text:
 // terminal.close        { "terminal": "t1" }
 ```
 
+OpenTUI applications can request explicit probe injection without resolving a
+preload path themselves:
+
+```jsonc
+{ "command": ["bun", "src/app.ts"], "probe": "opentui" }
+```
+
 The text wait proves the PTY output. When the next operation requires a semantic
 result, wait for that explicit state (`focused`, `checked`, `selected`, …)
 before capturing. The condition must represent a change from the baseline; an
