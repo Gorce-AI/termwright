@@ -374,6 +374,65 @@ export async function verifyInstalledNpmClosure(
   };
 }
 
+/**
+ * Force pnpm to materialize the exact graph captured during discovery.
+ *
+ * `--lockfile=false` prevents a repository lockfile from selecting stale
+ * versions, but pnpm may still reuse any already-installed version satisfying
+ * a transitive range. Parent-qualified overrides preserve legitimate multiple
+ * versions of the same package while binding every recorded edge.
+ */
+export function exactNpmClosureOverrides(candidate) {
+  if (candidate.source?.closureComplete !== true)
+    throw new Error(`${candidate.id}: candidate closure is incomplete`);
+  const overrides = {};
+  const addEdges = (parentName, parentVersion, edges) => {
+    for (const edge of edges) {
+      const selector = `${parentName}@${parentVersion}>${edge.name}`;
+      const value =
+        edge.packageName === edge.name ? edge.version : `npm:${edge.packageName}@${edge.version}`;
+      if (overrides[selector] !== undefined && overrides[selector] !== value) {
+        throw new Error(`${candidate.id}: conflicting exact override for ${selector}`);
+      }
+      overrides[selector] = value;
+    }
+  };
+  addEdges(candidate.package, candidate.version, candidate.source.dependencyRoots);
+  for (const node of candidate.source.dependencyClosure) {
+    addEdges(node.name, node.version, node.dependencies);
+  }
+  return overrides;
+}
+
+async function installExactNpmCandidate(candidate, probe, archive, environment) {
+  const manifestPath = join(root, 'package.json');
+  const originalManifest = await readFile(manifestPath);
+  const manifest = JSON.parse(originalManifest.toString('utf8'));
+  manifest.pnpm ??= {};
+  manifest.pnpm.overrides = {
+    ...(manifest.pnpm.overrides ?? {}),
+    ...exactNpmClosureOverrides(candidate),
+  };
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  try {
+    await runPnpm(
+      [
+        '--filter',
+        probe,
+        'add',
+        '--save-dev',
+        '--save-exact',
+        '--lockfile=false',
+        '--ignore-scripts',
+        archive,
+      ],
+      environment,
+    );
+  } finally {
+    await writeFile(manifestPath, originalManifest);
+  }
+}
+
 export async function deriveHookInstrumentationProfile(candidate, archiveBytes, sourceRevision) {
   if (candidate.frameworkId !== 'ink' || candidate.hookStrategy !== 'exact-source')
     throw new Error(`${candidate.id}: no deterministic exact-source hook profile generator`);
@@ -962,19 +1021,7 @@ async function main(argv) {
             else process.env[key] = value;
           }
         }
-        await runPnpm(
-          [
-            '--filter',
-            probe,
-            'add',
-            '--save-dev',
-            '--save-exact',
-            '--lockfile=false',
-            '--ignore-scripts',
-            archive,
-          ],
-          certificationEnv,
-        );
+        await installExactNpmCandidate(candidate, probe, archive, certificationEnv);
         if (candidate.monitorDependencyClosure === true) {
           await verifyInstalledNpmClosure(
             candidate,
