@@ -759,7 +759,7 @@ async function* validateEvents(
     if (event.kind === 'input') {
       const input = event as unknown as Record<string, unknown>;
       if (input['recording'] === 'raw') {
-        boundedString(input['dataB64'], lineNumber, 'input.dataB64');
+        canonicalBase64(input['dataB64'], lineNumber, 'input.dataB64');
         if (input['withheldReason'] !== undefined)
           throw invalidEvent(lineNumber, 'raw input also has a withheld marker');
       } else if (input['recording'] === 'withheld') {
@@ -1093,6 +1093,26 @@ function object(value: unknown, line: number, path: string): Record<string, unkn
 function boundedString(value: unknown, line: number, path: string): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2_048)
     throw invalidEvent(line, `${path} is invalid`);
+  return value;
+}
+
+/**
+ * Input bytes are payload, not metadata. They may legitimately be much larger
+ * than names, selectors and diagnostic messages, so the metadata string limit
+ * must never be applied to them. The archive boundary already provides the
+ * resource ceiling; this check only verifies that the payload is canonical
+ * base64 rather than accepting Buffer's deliberately permissive decoder.
+ */
+function canonicalBase64(value: unknown, line: number, path: string): string {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length % 4 !== 0 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value) ||
+    Buffer.from(value, 'base64').toString('base64') !== value
+  ) {
+    throw invalidEvent(line, `${path} is invalid`);
+  }
   return value;
 }
 
