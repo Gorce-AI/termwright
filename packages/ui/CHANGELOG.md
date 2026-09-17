@@ -1,5 +1,16 @@
 # @termwright/ui
 
+## 0.7.5
+
+### Patch Changes
+
+- Updated dependencies [[`b4dbadf`](https://github.com/Gorce-AI/termwright/commit/b4dbadfeae74a818c8b7cd6cc16cbd310b276241)]:
+  - @termwright/trace@0.7.5
+  - @termwright/driver@0.7.5
+  - @termwright/protocol@0.7.5
+  - @termwright/run-history@0.7.5
+  - @termwright/vt@0.7.5
+
 ## 0.7.4
 
 ### Patch Changes
