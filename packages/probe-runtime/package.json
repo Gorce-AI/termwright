@@ -1,6 +1,6 @@
 {
   "name": "@termwright/probe-runtime",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "shared fail-closed transport for zero-config JavaScript probes",
   "license": "MIT",
   "repository": {

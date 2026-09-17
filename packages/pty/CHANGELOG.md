@@ -1,5 +1,17 @@
 # @termwright/pty
 
+## 0.7.4
+
+### Patch Changes
+
+- [#177](https://github.com/Gorce-AI/termwright/pull/177) [`af0cdf5`](https://github.com/Gorce-AI/termwright/commit/af0cdf5612ca051551f53fec8fac9b1ea979a427) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Defer packed-artifact terminal replies until native output delivery has unwound, fixing Windows x64 certification under ARM64 emulation.
+
+- [#179](https://github.com/Gorce-AI/termwright/pull/179) [`eb5e72d`](https://github.com/Gorce-AI/termwright/commit/eb5e72d930a9a254f5b870993251ab3a29da9f27) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Defer Windows terminal responses until the native output callback has fully returned to libuv. Responses remain ordered and memory-bounded, and asynchronous native rejection is reported through the PTY error channel. This fixes intermittent startup handshake stalls under x64 Node emulation on Windows ARM64.
+
+- [#180](https://github.com/Gorce-AI/termwright/pull/180) [`389c4de`](https://github.com/Gorce-AI/termwright/commit/389c4de2a6706a2869955295d53c95f00ac63c46) Thanks [@SarukMyskam](https://github.com/SarukMyskam)! - Build the Win32 observable-resize certification fixture ahead of the measured ConPTY session. This removes runtime C# compilation from the startup handshake proof and makes x64-on-ARM64 certification depend only on terminal events.
+- Updated dependencies []:
+  - @termwright/protocol@0.7.4
+
 ## 0.7.3
 
 ### Patch Changes
