@@ -1,5 +1,18 @@
 # @termwright/test
 
+## 0.7.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/driver@0.7.6
+  - @termwright/protocol@0.7.6
+  - @termwright/resource-broker@0.7.6
+  - @termwright/run-journal-transport@0.7.6
+  - @termwright/trace@0.7.6
+  - @termwright/ui@0.7.6
+  - @termwright/vt@0.7.6
+
 ## 0.7.5
 
 ### Patch Changes
