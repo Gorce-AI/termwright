@@ -5,11 +5,11 @@ the shared vectors that keep them honest.
 
 | Directory                       | Package                                            | What it covers                                             |
 | ------------------------------- | -------------------------------------------------- | ---------------------------------------------------------- |
-| [`python/`](python)             | `termwright` 0.7.5 (PyPI)                          | protocol client + automatic Textual probe + annotation SDK |
-| [`go/`](go)                     | `github.com/gorce-ai/termwright/clients/go` v0.7.5 | protocol client + Go annotation SDK                        |
-| [`rust/`](rust)                 | `termwright-protocol` 0.7.5 (crates.io)            | protocol client                                            |
-| [`rust-probe/`](rust-probe)     | `termwright-probe-ratatui` 0.7.5                   | exact-version Ratatui build probe                          |
-| [`rust-ratatui/`](rust-ratatui) | `termwright-ratatui` 0.7.5                         | author-intent SDK for custom Ratatui widgets               |
+| [`python/`](python)             | `termwright` 0.7.6 (PyPI)                          | protocol client + automatic Textual probe + annotation SDK |
+| [`go/`](go)                     | `github.com/gorce-ai/termwright/clients/go` v0.7.6 | protocol client + Go annotation SDK                        |
+| [`rust/`](rust)                 | `termwright-protocol` 0.7.6 (crates.io)            | protocol client                                            |
+| [`rust-probe/`](rust-probe)     | `termwright-probe-ratatui` 0.7.6                   | exact-version Ratatui build probe                          |
+| [`rust-ratatui/`](rust-ratatui) | `termwright-ratatui` 0.7.6                         | author-intent SDK for custom Ratatui widgets               |
 | [`test-vectors/`](test-vectors) | —                                                  | cross-language conformance fixtures                        |
 
 The normative implementation is the TypeScript package `@termwright/protocol`

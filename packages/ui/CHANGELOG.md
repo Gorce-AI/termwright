@@ -1,5 +1,16 @@
 # @termwright/ui
 
+## 0.7.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/driver@0.7.6
+  - @termwright/protocol@0.7.6
+  - @termwright/run-history@0.7.6
+  - @termwright/trace@0.7.6
+  - @termwright/vt@0.7.6
+
 ## 0.7.5
 
 ### Patch Changes

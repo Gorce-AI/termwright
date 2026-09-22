@@ -1,5 +1,16 @@
 # @termwright/mcp
 
+## 0.7.6
+
+### Patch Changes
+
+- Updated dependencies [[`3cd5fbd`](https://github.com/Gorce-AI/termwright/commit/3cd5fbdaddb760cd830b354bfd0bc2aa00d5dac3)]:
+  - @termwright/probe-opentui@0.7.6
+  - @termwright/driver@0.7.6
+  - @termwright/protocol@0.7.6
+  - @termwright/screenshot@0.7.6
+  - @termwright/trace@0.7.6
+
 ## 0.7.5
 
 ### Patch Changes
