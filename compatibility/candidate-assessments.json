@@ -1,4 +1,22 @@
 {
   "schemaVersion": 1,
-  "streams": {}
+  "streams": {
+    "bubbletea-v2": [
+      {
+        "candidateDigest": "sha256:3dd35c41d1f785b8a20de1511a7b8082ff440c7f977c1a97ce9bf3023b2137dc",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:QOatcnhOjYIfxzUSTz6raF7Ex4R/rIuHa3SnBdCCpMc=",
+          "proxy": "https://proxy.golang.org",
+          "requiredGoVersion": "1.26.0",
+          "sum": "h1:oolvo20VBpI0PfqE7iFjkZ1bx0WpmXGfnKz5Yldjq5o=",
+          "toolchainSupported": false,
+          "zipSha256": "a6f3e3ec997b59bda0efbd9139cf3e5e6ec0f561e6b17fae31e35791ba869d64"
+        },
+        "state": "red",
+        "version": "v2.0.10"
+      }
+    ]
+  }
 }
