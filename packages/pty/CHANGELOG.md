@@ -1,5 +1,12 @@
 # @termwright/pty
 
+## 0.7.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/protocol@0.7.7
+
 ## 0.7.6
 
 ### Patch Changes

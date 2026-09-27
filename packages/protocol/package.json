@@ -1,6 +1,6 @@
 {
   "name": "@termwright/protocol",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "termwright semantic protocol: schemas, limits, roles, framing, handshake",
   "license": "MIT",
   "repository": {

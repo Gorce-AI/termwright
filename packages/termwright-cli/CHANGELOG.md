@@ -1,5 +1,24 @@
 # termwright
 
+## 0.7.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/mcp@0.7.7
+  - @termwright/desktop-host@0.7.7
+  - @termwright/driver@0.7.7
+  - @termwright/gherkin@0.7.7
+  - @termwright/ink@0.7.7
+  - @termwright/protocol@0.7.7
+  - @termwright/resource-broker@0.7.7
+  - @termwright/run-history@0.7.7
+  - @termwright/run-journal-transport@0.7.7
+  - @termwright/screenshot@0.7.7
+  - @termwright/test@0.7.7
+  - @termwright/trace@0.7.7
+  - @termwright/ui@0.7.7
+
 ## 0.7.6
 
 ### Patch Changes
