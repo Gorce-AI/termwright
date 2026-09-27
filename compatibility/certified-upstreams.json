@@ -166,13 +166,13 @@
     ],
     "opentui": [
       {
-        "candidateDigest": "sha256:1aabccfa1f07fd8d0b3ea2cfc7ebc2d3182716edba947aa090671db8cc1f361f",
+        "candidateDigest": "sha256:d23c2a0f03749c1c6359f7245bb0ada7d47b03b443a4c75bb1e46f415e779e78",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-13T20:08:19.757Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:68ff22918d08e8fa2ee766bd8f215ad41bd781fd38f713eaaa917ddd6a689eae",
+          "closureDigest": "sha256:34324783749b46e9ecb5d109026956edfd325773ee5899265ed3dd68def8f46d",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -346,17 +346,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -484,7 +484,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -507,7 +507,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
@@ -699,13 +699,13 @@
         "version": "0.5.3"
       },
       {
-        "candidateDigest": "sha256:160262b218cead2f2e36c7ea8c4fe5ec7bc26e1341877a6a303ac3742eff11f3",
+        "candidateDigest": "sha256:bac550bfdbdadcce673c5b4bda064151c5c8f03e386b70b6b807f8f7197c0932",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-18T11:37:26.322Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:98ded995e93d64b3d74a866066ef4286d1fdb66ab982ab5669c797756198970a",
+          "closureDigest": "sha256:638270a00692dec238b934213399555d0e24fd6178e8961d4e235b94c2fb1eac",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -879,17 +879,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -1017,7 +1017,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -1040,7 +1040,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
@@ -1232,13 +1232,13 @@
         "version": "0.5.4"
       },
       {
-        "candidateDigest": "sha256:a8d95e0fcd89fbf05075e66f00d36dc0d53ea5fef3f530e68563f6929d6436b7",
+        "candidateDigest": "sha256:f2d8cf33969f16c2d728a1aef91b75e6921c856cce23c2e3874608d533cfdd45",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-20T21:19:47.507Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:cb68f51b9e0ad17cb049dfda272cf68af321f5656335aac1e310f284d90d0bac",
+          "closureDigest": "sha256:0fbb94aac6e46881c698ff3bcbacea6484c090ff4458daf6f031701ef4e8f091",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -1412,17 +1412,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -1550,7 +1550,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -1573,7 +1573,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
@@ -1765,13 +1765,13 @@
         "version": "0.5.6"
       },
       {
-        "candidateDigest": "sha256:d15bf490b16054ae66e90916b0b28f337a743491bcfa5ba94c0597b48b9b54d1",
+        "candidateDigest": "sha256:db6aeb1b127b610902323840ef6602a0594ecbc7a7688bb5184be89e57c44fe1",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-23T06:46:25.034Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:159f9cf8a92f5869e82de1712d298e88ecdb1b2e301c7d8ae1a6f9e6b2f9d2a1",
+          "closureDigest": "sha256:fc2fd5b20d1d883787ebacd5cc661b97e005f350847a33c8a8cf25b5fc3ca2f6",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -1945,17 +1945,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -2083,7 +2083,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -2106,7 +2106,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
@@ -2298,13 +2298,13 @@
         "version": "0.5.7"
       },
       {
-        "candidateDigest": "sha256:f0b7796582147374c1e1e99fb74c707db8e150827112110ecbd2decf9ea14fef",
+        "candidateDigest": "sha256:221e3493141b93b8ec71066a9056dd94d08e52004746027a609fe33151e0a212",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-24T13:11:27.268Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:23964288b7d9a3503d2220fc6344804616ee5eccc1358df3f7943d25f5bb221c",
+          "closureDigest": "sha256:f00879c61ad138b7050448ca4ee1f469e0397254bbfd5cfd9a3b7b5efa4b3f55",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -2478,17 +2478,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -2616,7 +2616,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -2639,7 +2639,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
@@ -2831,13 +2831,13 @@
         "version": "0.5.8"
       },
       {
-        "candidateDigest": "sha256:d752561867232d8084e2ce61cc0af2d468a2e2fa848758d7c094296f41909cd0",
+        "candidateDigest": "sha256:66e566d7b07bdbce73dccb4b69529d9e97ee0512534edd5e7ae41c655cfb87f3",
         "patchManifestDigest": null,
         "publishedAt": "2026-08-27T23:19:08.178Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:a3a495cdc506b740f83d882875f28e82212a3413cef4208d3c544a144f05c560",
+          "closureDigest": "sha256:4f9588055d1ae6bf508df9344189d7351b321ef35ca3c0356db9583c55950965",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -3011,17 +3011,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -3149,7 +3149,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -3172,7 +3172,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
@@ -3364,13 +3364,13 @@
         "version": "0.5.9"
       },
       {
-        "candidateDigest": "sha256:f6aacda84360be42babb54a268e05b0bf3d26c04dcfc4ec0b5c7c52fb81eeb28",
+        "candidateDigest": "sha256:7c540f2a08ea9066575c512bb5d588385ce49f64fb7875bf97b465cc6531b2f4",
         "patchManifestDigest": null,
         "publishedAt": "2026-09-01T16:09:06.497Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:90f3fc135178b6e1e683f823bd7b862e1c2f098515135bc2c9a98917567552f0",
+          "closureDigest": "sha256:ab6907a42f68ddfdf7bb6c4c578d869268e08e9f5f0b9fd95d87b1e51f98ed3e",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -3544,17 +3544,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -3682,7 +3682,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -3705,7 +3705,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
@@ -3897,13 +3897,13 @@
         "version": "0.5.10"
       },
       {
-        "candidateDigest": "sha256:a26297a2912f6ae315836fb11b4faadc832cb8541e9ae1013d1fb7087715bf55",
+        "candidateDigest": "sha256:024d3fd23e8b6f91f9786c9de05bdc144703b2beb06f3738d09480a3d32bf5ea",
         "patchManifestDigest": null,
         "publishedAt": "2026-09-07T11:01:48.464Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:45240ca9a7061f0d46ad5858145480859f030d09d05aba2a70792342a0f0ddc7",
+          "closureDigest": "sha256:a47f378d13d1cff716f9aeb925ea1dc7896cbeae9905a3e3b846e4639c842199",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -4077,17 +4077,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -4215,7 +4215,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -4238,7 +4238,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
@@ -4430,13 +4430,13 @@
         "version": "0.5.11"
       },
       {
-        "candidateDigest": "sha256:01ddecff70f2d837fb8fe4dc09c5f2a71fca45edb28335d3ba33d285e4971845",
+        "candidateDigest": "sha256:96727831355f557c73b4d69a22533b950dfe2289a7d059ee4d90768c36fce8a0",
         "patchManifestDigest": null,
         "publishedAt": "2026-09-22T08:20:59.486Z",
         "source": {
           "bundledDependencies": [],
           "closureComplete": true,
-          "closureDigest": "sha256:31ed24ad62e770b14b18169e082db19a662f82e44e007a0dc0f2b108a9365b6b",
+          "closureDigest": "sha256:fc34ddc4c84161afd6d4dafd9a5ffae2415f7254f434f88b7d3c3da1032e8401",
           "cpu": [],
           "dependencies": {
             "bun-ffi-structs": "0.3.1",
@@ -4610,17 +4610,17 @@
             },
             {
               "dependencies": [],
-              "integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
               "name": "ansi-regex",
               "platform": {
                 "cpu": [],
                 "libc": [],
                 "os": []
               },
-              "shasum": "247c8e7b70a1a43b10ce14c0226fcbf58e8815d5",
-              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
-              "tarballSha256": "a370c58847035217626014ac6fce094a1420fdf0d033a68c2cf8fab77e1c6789",
-              "version": "6.3.0"
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
             },
             {
               "dependencies": [
@@ -4748,7 +4748,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.0.1",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
@@ -4771,7 +4771,7 @@
                   "packageName": "ansi-regex",
                   "requested": "^6.2.2",
                   "type": "dependency",
-                  "version": "6.3.0"
+                  "version": "6.4.0"
                 }
               ],
               "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
