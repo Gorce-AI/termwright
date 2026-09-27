@@ -1,5 +1,16 @@
 # @termwright/probe-opentui
 
+## 0.7.7
+
+### Patch Changes
+
+- [#189](https://github.com/Gorce-AI/termwright/pull/189) [`71c0d58`](https://github.com/Gorce-AI/termwright/commit/71c0d585fbba103a347ebef5870142f66917a417) Thanks [@termwright-automation-writer](https://github.com/apps/termwright-automation-writer)! - Certify upstream framework releases: opentui@0.5.10, opentui@0.5.11, opentui@0.5.12, opentui@0.5.3, opentui@0.5.4, opentui@0.5.6, opentui@0.5.7, opentui@0.5.8, opentui@0.5.9.
+- Updated dependencies []:
+  - @termwright/probe-runtime@0.7.7
+  - @termwright/protocol@0.7.7
+  - @termwright/pty@0.7.7
+  - @termwright/recognizers@0.7.7
+
 ## 0.7.6
 
 ### Patch Changes

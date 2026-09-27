@@ -1,5 +1,13 @@
 # @termwright/probe-runtime
 
+## 0.7.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @termwright/evidence-provider@0.7.7
+  - @termwright/protocol@0.7.7
+
 ## 0.7.6
 
 ### Patch Changes
