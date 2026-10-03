@@ -435,6 +435,26 @@
               "version": "0.5.12"
             }
           ]
+        },
+        {
+          "id": "opentui-0.5.13",
+          "frameworkVersion": "0.5.13",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.13"
+            }
+          ]
+        },
+        {
+          "id": "opentui-0.5.14",
+          "frameworkVersion": "0.5.14",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.14"
+            }
+          ]
         }
       ],
       "upstreamTruth": {
