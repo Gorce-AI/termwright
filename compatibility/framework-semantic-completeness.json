@@ -435,6 +435,56 @@
               "version": "0.5.12"
             }
           ]
+        },
+        {
+          "id": "opentui-0.5.13",
+          "frameworkVersion": "0.5.13",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.13"
+            }
+          ]
+        },
+        {
+          "id": "opentui-0.5.14",
+          "frameworkVersion": "0.5.14",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.14"
+            }
+          ]
+        },
+        {
+          "id": "opentui-0.5.15",
+          "frameworkVersion": "0.5.15",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.15"
+            }
+          ]
+        },
+        {
+          "id": "opentui-0.5.16",
+          "frameworkVersion": "0.5.16",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.16"
+            }
+          ]
+        },
+        {
+          "id": "opentui-0.5.17",
+          "frameworkVersion": "0.5.17",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.17"
+            }
+          ]
         }
       ],
       "upstreamTruth": {

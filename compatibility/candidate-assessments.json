@@ -16,6 +16,83 @@
         },
         "state": "red",
         "version": "v2.0.10"
+      },
+      {
+        "candidateDigest": "sha256:220d0073871942a435ac95f3aca128a0983ec317a698779897a101419bd8c170",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:xWHeyxIX9/wiFU2kgPW04ojOZyTzrWf+8lGjUCaftiU=",
+          "proxy": "https://proxy.golang.org",
+          "requiredGoVersion": "1.26.0",
+          "sum": "h1:A9fj9h5LFrvQhQHFNggp8K8rvY6CUfgn9dMbb6p2HIw=",
+          "toolchainSupported": false,
+          "zipSha256": "d9d17cf9b480bc63a3b4c5fc463569d4874e8ab1f8d40db55dda3efa3033fed4"
+        },
+        "state": "red",
+        "version": "v2.1.0"
+      }
+    ],
+    "ink": [
+      {
+        "candidateDigest": "sha256:874bcc29becf0858aeef586697d1e6e8befa593c333c5bfefff1f1725f9e2d06",
+        "certificationRevision": 2,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:76327b91e14236c871d87b5d723cc0da2f5da6bf6523c968958123516e4bfdd8",
+          "cpu": [],
+          "dependencies": {
+            "@alcalzone/ansi-tokenize": "^0.3.1",
+            "ansi-escapes": "^7.3.0",
+            "ansi-styles": "^7.0.0",
+            "auto-bind": "^5.0.1",
+            "chalk": "^6.0.1",
+            "cli-boxes": "^4.0.1",
+            "cli-cursor": "^4.0.0",
+            "cli-truncate": "^6.0.0",
+            "code-excerpt": "^4.0.0",
+            "es-toolkit": "^1.52.0",
+            "indent-string": "^5.0.0",
+            "is-in-ci": "^2.0.0",
+            "patch-console": "^2.0.0",
+            "quick-lru": "^7.3.0",
+            "react-reconciler": "^0.34.0",
+            "signal-exit": "^3.0.7",
+            "stack-utils": "^2.0.6",
+            "string-width": "^8.3.0",
+            "terminal-size": "^4.0.1",
+            "type-fest": "^5.10.0",
+            "widest-line": "^6.0.0",
+            "wrap-ansi": "^10.0.2",
+            "yoga-layout": "~3.2.1"
+          },
+          "dependencyClosure": [],
+          "dependencyRoots": [],
+          "integrity": "sha512-M2aFwZOqmkFxCwedy6xrP4E+DGoK57iahAFnfTqNyOyJ54O7DZzu027z/NI8EGy44Sw9O9BcbTF4QEUS2GHAtg==",
+          "libc": [],
+          "optionalDependencies": {},
+          "os": [],
+          "peerDependencies": {
+            "@types/react": ">=19.3.0",
+            "react": ">=19.3.0",
+            "react-devtools-core": ">=6.1.2"
+          },
+          "peerDependenciesMeta": {
+            "@types/react": {
+              "optional": true
+            },
+            "react-devtools-core": {
+              "optional": true
+            }
+          },
+          "registry": "https://registry.npmjs.org",
+          "shasum": "7023d1e0022c44b54ecab3ac91e306fa00129e9b",
+          "tarball": "https://registry.npmjs.org/ink/-/ink-8.0.0.tgz",
+          "tarballSha256": "ae5b6a49541d7ea2d882a2c281b1b1c43e588b67b8143b89f0baab2b5587d85a"
+        },
+        "state": "red",
+        "version": "8.0.0"
       }
     ]
   }
