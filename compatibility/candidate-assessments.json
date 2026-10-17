@@ -16,6 +16,3624 @@
         },
         "state": "red",
         "version": "v2.0.10"
+      },
+      {
+        "candidateDigest": "sha256:220d0073871942a435ac95f3aca128a0983ec317a698779897a101419bd8c170",
+        "certificationRevision": 2,
+        "source": {
+          "checksumDatabase": "sum.golang.org",
+          "goModSum": "h1:xWHeyxIX9/wiFU2kgPW04ojOZyTzrWf+8lGjUCaftiU=",
+          "proxy": "https://proxy.golang.org",
+          "requiredGoVersion": "1.26.0",
+          "sum": "h1:A9fj9h5LFrvQhQHFNggp8K8rvY6CUfgn9dMbb6p2HIw=",
+          "toolchainSupported": false,
+          "zipSha256": "d9d17cf9b480bc63a3b4c5fc463569d4874e8ab1f8d40db55dda3efa3033fed4"
+        },
+        "state": "red",
+        "version": "v2.1.0"
+      }
+    ],
+    "ink": [
+      {
+        "candidateDigest": "sha256:874bcc29becf0858aeef586697d1e6e8befa593c333c5bfefff1f1725f9e2d06",
+        "certificationRevision": 2,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:76327b91e14236c871d87b5d723cc0da2f5da6bf6523c968958123516e4bfdd8",
+          "cpu": [],
+          "dependencies": {
+            "@alcalzone/ansi-tokenize": "^0.3.1",
+            "ansi-escapes": "^7.3.0",
+            "ansi-styles": "^7.0.0",
+            "auto-bind": "^5.0.1",
+            "chalk": "^6.0.1",
+            "cli-boxes": "^4.0.1",
+            "cli-cursor": "^4.0.0",
+            "cli-truncate": "^6.0.0",
+            "code-excerpt": "^4.0.0",
+            "es-toolkit": "^1.52.0",
+            "indent-string": "^5.0.0",
+            "is-in-ci": "^2.0.0",
+            "patch-console": "^2.0.0",
+            "quick-lru": "^7.3.0",
+            "react-reconciler": "^0.34.0",
+            "signal-exit": "^3.0.7",
+            "stack-utils": "^2.0.6",
+            "string-width": "^8.3.0",
+            "terminal-size": "^4.0.1",
+            "type-fest": "^5.10.0",
+            "widest-line": "^6.0.0",
+            "wrap-ansi": "^10.0.2",
+            "yoga-layout": "~3.2.1"
+          },
+          "dependencyClosure": [],
+          "dependencyRoots": [],
+          "integrity": "sha512-M2aFwZOqmkFxCwedy6xrP4E+DGoK57iahAFnfTqNyOyJ54O7DZzu027z/NI8EGy44Sw9O9BcbTF4QEUS2GHAtg==",
+          "libc": [],
+          "optionalDependencies": {},
+          "os": [],
+          "peerDependencies": {
+            "@types/react": ">=19.3.0",
+            "react": ">=19.3.0",
+            "react-devtools-core": ">=6.1.2"
+          },
+          "peerDependenciesMeta": {
+            "@types/react": {
+              "optional": true
+            },
+            "react-devtools-core": {
+              "optional": true
+            }
+          },
+          "registry": "https://registry.npmjs.org",
+          "shasum": "7023d1e0022c44b54ecab3ac91e306fa00129e9b",
+          "tarball": "https://registry.npmjs.org/ink/-/ink-8.0.0.tgz",
+          "tarballSha256": "ae5b6a49541d7ea2d882a2c281b1b1c43e588b67b8143b89f0baab2b5587d85a"
+        },
+        "state": "red",
+        "version": "8.0.0"
+      }
+    ],
+    "opentui": [
+      {
+        "candidateDigest": "sha256:7f043bc0b859b5531719603b92ffe9571f757cfad21635e9aacdcd1c56faabaf",
+        "certificationRevision": 3,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:d2400699ce78c50b7cdb91a6d5b2acc16755b24502f930f66edb5288ba99fb33",
+          "cpu": [],
+          "dependencies": {
+            "bun-ffi-structs": "0.3.1",
+            "diff": "9.0.0",
+            "marked": "17.0.1",
+            "string-width": "7.2.0",
+            "strip-ansi": "7.1.2"
+          },
+          "dependencyClosure": [
+            {
+              "dependencies": [],
+              "integrity": "sha512-goKEmysr/DzbJDQCfUaYPsNU1Ztt3+pUb2eLV/aUmmOSlnkOytI7R1Z7qNtiy8bkbc56XySAuUO9Jjp3egX2Bw==",
+              "name": "@opentui/core-darwin-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "74f6a7e8fd5d0029f461c3583716b9ede836da6e",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.6.0.tgz",
+              "tarballSha256": "3a8dcf96115443a7cf856db7c6eb8218d76196c59bccbef5a150fa2074b277d7",
+              "version": "0.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-ibJtq2xSY1Wg4QXIZeenZCOfQUZ5JqOA4El6IlulMA/k8rXozbq7ce2Dhll2yi1Hc96YGJnnBLAILNPlcav0ZA==",
+              "name": "@opentui/core-darwin-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "0fd006363c6cbc9ad0df8c6b379db94c2810b174",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-x64/-/core-darwin-x64-0.6.0.tgz",
+              "tarballSha256": "aa58b9818db4027077d05cd71b9c8336a5f6ce461ebd411c98d953485fd74063",
+              "version": "0.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jit5wD0SvSzZI1g9CA+kDOmK2fYV2/HpuKym//tjA/jLkHP8S8x4oOiIHJxPb1NMK5kJiz/ZNED3JNyEebwlOg==",
+              "name": "@opentui/core-linux-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "3b8b5162e10405424631f9f8e0d0528bd173dcdf",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64/-/core-linux-arm64-0.6.0.tgz",
+              "tarballSha256": "7258c1013a49fc90629bac7f9bba5bfa73fbaa34afab8df20c18ef8d93e57490",
+              "version": "0.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-mnW7H+3eRIwTtPw+O/2tGdqL87hnyMnYHlm+3b9rjxfryRJezjC4Jc9Clo0glYvKPFlYsTf04ebqtY+uZgXByA==",
+              "name": "@opentui/core-linux-arm64-musl",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "d67fb962d8273a17f03cdff2b76c2fc0084c9d60",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64-musl/-/core-linux-arm64-musl-0.6.0.tgz",
+              "tarballSha256": "196875dcb2e0a9210acec610b279ce836256b9e869eb5123df07e8114908886c",
+              "version": "0.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-o2Tke2p/FIMmGT2C2hioDs8GCrPUixGdao4yxK/0aiqdNkMlXkznylRsX7puVGl36atXsMo6HlHpItA/PevOfQ==",
+              "name": "@opentui/core-linux-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "c392fb5302da096844a11b99269ef6e3a831eb3e",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64/-/core-linux-x64-0.6.0.tgz",
+              "tarballSha256": "d2b70530ce6231b7b9e655010c55ed3b052399fa9b91561aa6a9583ff801f2af",
+              "version": "0.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-+q+J5bMq6+VytAMqVtat2mFb0tCS71ZtmClKI4h25u1qs2to1UDrbY+6f7nUcXcyCETz8GsGKvaIC9utKS4wWw==",
+              "name": "@opentui/core-linux-x64-musl",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "3b222507dd7de9c1cb81013aa899d46fd5936246",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64-musl/-/core-linux-x64-musl-0.6.0.tgz",
+              "tarballSha256": "5e44c6543a4e0a6404acf66b9973b2dcd39cf2c0ec22bea7040da4344aca1250",
+              "version": "0.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-fSO0esnwfn2n2l5AdMS+JpCXDqdLxtVeZkNftouI6mHrlojZig7zxibVKDmHoV+PiJKARSNymZmuTD5DQBfp8g==",
+              "name": "@opentui/core-win32-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "53f552e9d9a7eb0ac2202b6207389f2525b26a46",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-arm64/-/core-win32-arm64-0.6.0.tgz",
+              "tarballSha256": "6ea4bc756c121d2d4f3493fd4713d55f778b20bbabe48827014e68b311472dbe",
+              "version": "0.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-J9KwN5kr8npZWYzmqPtILUBnYyprs/T5PHcDUabJmReVS/VSScG7NtjB+ezylWMQlz8EaKFpBXa/9PKIag1Hew==",
+              "name": "@opentui/core-win32-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "5ac712ca86b681e9cace88be6fa2e0f8420e0b43",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-x64/-/core-win32-x64-0.6.0.tgz",
+              "tarballSha256": "f96d0ae13b6034de27a35b47cad49deb435c80b852b03b6e11c3dfa454f6dd39",
+              "version": "0.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==",
+              "name": "@types/emscripten",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "0d852a4c29fc2c035ed9232f00135717f1a920f1",
+              "tarball": "https://registry.npmjs.org/@types/emscripten/-/emscripten-1.41.6.tgz",
+              "tarballSha256": "2a8a74381f2d0e134ed01b2dddab92ec90897c2268e131f35aabadb9b37b1174",
+              "version": "1.41.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
+              "name": "ansi-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "typescript",
+                  "optionalPeer": false,
+                  "packageName": "typescript",
+                  "requested": "^5",
+                  "type": "peer",
+                  "version": "5.9.3"
+                }
+              ],
+              "integrity": "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ==",
+              "name": "bun-ffi-structs",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "8af2f351a51310a8673dbe60c30dbad11d78a6ec",
+              "tarball": "https://registry.npmjs.org/bun-ffi-structs/-/bun-ffi-structs-0.3.1.tgz",
+              "tarballSha256": "bfe8c37f6d3ed44e930bc3ee7f4e784324583dd9f753d7dafdd0e493a37c8350",
+              "version": "0.3.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+              "name": "diff",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "297c31cd7c280f13dfe335791ec2063bd4a73a6f",
+              "tarball": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+              "tarballSha256": "b898bf23c95594607576e25ddd4013f1d51ed0e862aaf0732815830c87b3b58f",
+              "version": "9.0.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+              "name": "emoji-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "bf3d6e8f7f8fd22a65d9703475bc0147357a6b0d",
+              "tarball": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+              "tarballSha256": "9f40e54c0586f30882ece0ee0d22654394b89321e89cb55e8faf12ed8ccff981",
+              "version": "10.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
+              "name": "get-east-asian-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==",
+              "name": "marked",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "9db34197ac145e5929572ee49ef701e37ee9b2e6",
+              "tarball": "https://registry.npmjs.org/marked/-/marked-17.0.1.tgz",
+              "tarballSha256": "d09bc4067748b71af131a261550193cfefba014f67971f3890f2269293f5a60b",
+              "version": "17.0.1"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "emoji-regex",
+                  "optionalPeer": false,
+                  "packageName": "emoji-regex",
+                  "requested": "^10.3.0",
+                  "type": "dependency",
+                  "version": "10.6.0"
+                },
+                {
+                  "name": "get-east-asian-width",
+                  "optionalPeer": false,
+                  "packageName": "get-east-asian-width",
+                  "requested": "^1.0.0",
+                  "type": "dependency",
+                  "version": "1.7.0"
+                },
+                {
+                  "name": "strip-ansi",
+                  "optionalPeer": false,
+                  "packageName": "strip-ansi",
+                  "requested": "^7.1.0",
+                  "type": "dependency",
+                  "version": "7.2.0"
+                }
+              ],
+              "integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+              "name": "string-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b5bb8e2165ce275d4d43476dd2700ad9091db6dc",
+              "tarball": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+              "tarballSha256": "3e90901a98cadef6986fe2953e6d181f49730d81c7855776a6337fef93bbf1f3",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "ansi-regex",
+                  "optionalPeer": false,
+                  "packageName": "ansi-regex",
+                  "requested": "^6.0.1",
+                  "type": "dependency",
+                  "version": "6.4.0"
+                }
+              ],
+              "integrity": "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA==",
+              "name": "strip-ansi",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "132875abde678c7ea8d691533f2e7e22bb744dba",
+              "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.1.2.tgz",
+              "tarballSha256": "d7987d06817e5abb594fe84c8b2530dcf1ba180ff0ecafaf001e9f6f96dbaf78",
+              "version": "7.1.2"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "ansi-regex",
+                  "optionalPeer": false,
+                  "packageName": "ansi-regex",
+                  "requested": "^6.2.2",
+                  "type": "dependency",
+                  "version": "6.4.0"
+                }
+              ],
+              "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+              "name": "strip-ansi",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "d22a269522836a627af8d04b5c3fd2c7fa3e32e3",
+              "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+              "tarballSha256": "2fa01de86a5022ef32773abbc4e84a53a1c5d31f5a5cbf03ed2575f10408543f",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+              "name": "typescript",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "5b4f59e15310ab17a216f5d6cf53ee476ede670f",
+              "tarball": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+              "tarballSha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+              "version": "5.9.3"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "@types/emscripten",
+                  "optionalPeer": true,
+                  "packageName": "@types/emscripten",
+                  "requested": "^1.40.0",
+                  "type": "peer",
+                  "version": "1.41.6"
+                }
+              ],
+              "integrity": "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA==",
+              "name": "web-tree-sitter",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b21f1df7aaa87ad235b4c3d07005168349496706",
+              "tarball": "https://registry.npmjs.org/web-tree-sitter/-/web-tree-sitter-0.25.10.tgz",
+              "tarballSha256": "6636457aca5e6945fb73671362ae19c9c4e513bb516a53d58c4a2b4d12533e0f",
+              "version": "0.25.10"
+            }
+          ],
+          "dependencyRoots": [
+            {
+              "name": "@opentui/core-darwin-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-arm64",
+              "requested": "0.6.0",
+              "type": "optional",
+              "version": "0.6.0"
+            },
+            {
+              "name": "@opentui/core-darwin-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-x64",
+              "requested": "0.6.0",
+              "type": "optional",
+              "version": "0.6.0"
+            },
+            {
+              "name": "@opentui/core-linux-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64",
+              "requested": "0.6.0",
+              "type": "optional",
+              "version": "0.6.0"
+            },
+            {
+              "name": "@opentui/core-linux-arm64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64-musl",
+              "requested": "0.6.0",
+              "type": "optional",
+              "version": "0.6.0"
+            },
+            {
+              "name": "@opentui/core-linux-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64",
+              "requested": "0.6.0",
+              "type": "optional",
+              "version": "0.6.0"
+            },
+            {
+              "name": "@opentui/core-linux-x64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64-musl",
+              "requested": "0.6.0",
+              "type": "optional",
+              "version": "0.6.0"
+            },
+            {
+              "name": "@opentui/core-win32-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-arm64",
+              "requested": "0.6.0",
+              "type": "optional",
+              "version": "0.6.0"
+            },
+            {
+              "name": "@opentui/core-win32-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-x64",
+              "requested": "0.6.0",
+              "type": "optional",
+              "version": "0.6.0"
+            },
+            {
+              "name": "bun-ffi-structs",
+              "optionalPeer": false,
+              "packageName": "bun-ffi-structs",
+              "requested": "0.3.1",
+              "type": "dependency",
+              "version": "0.3.1"
+            },
+            {
+              "name": "diff",
+              "optionalPeer": false,
+              "packageName": "diff",
+              "requested": "9.0.0",
+              "type": "dependency",
+              "version": "9.0.0"
+            },
+            {
+              "name": "marked",
+              "optionalPeer": false,
+              "packageName": "marked",
+              "requested": "17.0.1",
+              "type": "dependency",
+              "version": "17.0.1"
+            },
+            {
+              "name": "string-width",
+              "optionalPeer": false,
+              "packageName": "string-width",
+              "requested": "7.2.0",
+              "type": "dependency",
+              "version": "7.2.0"
+            },
+            {
+              "name": "strip-ansi",
+              "optionalPeer": false,
+              "packageName": "strip-ansi",
+              "requested": "7.1.2",
+              "type": "dependency",
+              "version": "7.1.2"
+            },
+            {
+              "name": "web-tree-sitter",
+              "optionalPeer": false,
+              "packageName": "web-tree-sitter",
+              "requested": "0.25.10",
+              "type": "peer",
+              "version": "0.25.10"
+            }
+          ],
+          "integrity": "sha512-c/fxRSmdiwVTitOc4k33NK0ijnkCZ0orS0vmZtwl9Bv7rIcQr5krWKKgWodEB6jTGHJE9fF9ucQfxOEiJa9jxA==",
+          "libc": [],
+          "optionalDependencies": {
+            "@opentui/core-darwin-arm64": "0.6.0",
+            "@opentui/core-darwin-x64": "0.6.0",
+            "@opentui/core-linux-arm64": "0.6.0",
+            "@opentui/core-linux-arm64-musl": "0.6.0",
+            "@opentui/core-linux-x64": "0.6.0",
+            "@opentui/core-linux-x64-musl": "0.6.0",
+            "@opentui/core-win32-arm64": "0.6.0",
+            "@opentui/core-win32-x64": "0.6.0"
+          },
+          "os": [],
+          "peerDependencies": {
+            "web-tree-sitter": "0.25.10"
+          },
+          "peerDependenciesMeta": {},
+          "registry": "https://registry.npmjs.org",
+          "shasum": "05f0b7cf97563f572c45893569dd17eb44d20950",
+          "tarball": "https://registry.npmjs.org/@opentui/core/-/core-0.6.0.tgz",
+          "tarballSha256": "08d1ad24ffec31abf5808e9eed49e227957e3f2cf7ddd248f8f0f1e8d5090a87"
+        },
+        "state": "red",
+        "version": "0.6.0"
+      },
+      {
+        "candidateDigest": "sha256:33ef5860dba072f4ef53e595e10603665d9cd6408968965aa9ac6d3493e43876",
+        "certificationRevision": 3,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:9df88d44bb2cd217a17dbc3bc17fab26b96b68e244bab9b469d55b9f81b95e1f",
+          "cpu": [],
+          "dependencies": {
+            "bun-ffi-structs": "0.3.1",
+            "diff": "9.0.0",
+            "marked": "17.0.1",
+            "string-width": "7.2.0"
+          },
+          "dependencyClosure": [
+            {
+              "dependencies": [],
+              "integrity": "sha512-yU5TdLeacaIZi+cwD12fbfqwgcFQHzJ9xAdZHlWodIZAMXqhZJuOuI9o406I6axiSYyl7NTA9dOPJBkcc6UHXQ==",
+              "name": "@opentui/core-darwin-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "18858dc84d127730f3125523eba5a4bd88d32606",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.6.1.tgz",
+              "tarballSha256": "248fc7c998e0270c876b510ef95cc8fb568b6029249e50a3c36e28a6a3c3cf74",
+              "version": "0.6.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-1ZX1W9amrGxq3yvZqgV/ejaBqb7rj/4UjTQ8Fm8oekDz+birTpxtTj2CBU1vP63OkNxwIL1TlPdlw2McVLOdhA==",
+              "name": "@opentui/core-darwin-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "dc35559c447c7dc1f91b35b31369e9bf0baaff3c",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-x64/-/core-darwin-x64-0.6.1.tgz",
+              "tarballSha256": "8e17a853420c7e1242b7c9b0d116a8ac0ab04340128635f29875254460568a35",
+              "version": "0.6.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KUkwDY8ZyNtr49G04iMgK9IDfOTzHk/J5DWXdvdzwqUpBuBZYSBDh8OLxSEx8f/bpDFhO/PFLQKo0XPlDtiKOw==",
+              "name": "@opentui/core-linux-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "e70495177ae9dafc9da42c5a4e58f5794f861c62",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64/-/core-linux-arm64-0.6.1.tgz",
+              "tarballSha256": "239720583a863550681961b411a31969a3bc219e16c6dcc90d0bc2413103b173",
+              "version": "0.6.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-kIyHCHFdceIuteA9QX0bnGA2TNggQRk+t2xqo80TI4NDbcBZL4AHnUn0HcPh53PlHRNZjFf6IhwY+EEiultq1Q==",
+              "name": "@opentui/core-linux-arm64-musl",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "f5734e7ef18d6996bdb388321f12c3e4a4e6e680",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64-musl/-/core-linux-arm64-musl-0.6.1.tgz",
+              "tarballSha256": "a29d43b111f996b04c8a02f2994dd196bc61e10501f8541f74ecdfd26050d015",
+              "version": "0.6.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-fwpZ3iCfKmvFb98m05LuGEZRklnT8h0A03pnYv95b52lixTpXbkmQfh0iw7PHHYOOS3cfDxK7sPqleQO7FAhgQ==",
+              "name": "@opentui/core-linux-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "c2780132600911ae2cecd78309be5d77a5499487",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64/-/core-linux-x64-0.6.1.tgz",
+              "tarballSha256": "502dc2dbd4760fec1bfab2916efa2ac50c6a71c5c88190b03609e627f592a816",
+              "version": "0.6.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-DsrOEM+i8un4NoeI21iM1p4oK390mFHBXPr4JQHwYekTGXNTtk+fCLdy1TDvciijFjb0phaVq4ISoGhO3ewzHA==",
+              "name": "@opentui/core-linux-x64-musl",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "49bfbacaa71479fb8b68d1ab7a9a445e7dfc1b8b",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64-musl/-/core-linux-x64-musl-0.6.1.tgz",
+              "tarballSha256": "57e989c96f9fe3173f434c7eac989978d92f8c8252c63bd232766e32494fc8a3",
+              "version": "0.6.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-m/4fLjCxNzyzTuLAK0yKj85EwS44nl+5p1lG5IEKB7GNi0DeGIonEXEu7kb902OPWlUxGwDOFX2RIwou0UvjGQ==",
+              "name": "@opentui/core-win32-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "829255a25a0704c040dd7b9af99a3b3537dcb829",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-arm64/-/core-win32-arm64-0.6.1.tgz",
+              "tarballSha256": "37b06d6d94de487e422fa35dd56d7ac407f9b7d5faa20408b7eeeecba5abc94e",
+              "version": "0.6.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-2A0ksCH9V3CLrLEhR5EuFg5dMUrDK8LnO6ci8n/FMoZ9KbCd5Mj+i0f7hHRK6Q54LZtZOHU5aGXZhcRK1YH7rA==",
+              "name": "@opentui/core-win32-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "09ebc0b5e757d8d42b07eb2a612a8a48e9df6f85",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-x64/-/core-win32-x64-0.6.1.tgz",
+              "tarballSha256": "fc276d6f4e82d1455063b7539b04c0ad9af432ee5e38f1ba7515aac186455774",
+              "version": "0.6.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==",
+              "name": "@types/emscripten",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "0d852a4c29fc2c035ed9232f00135717f1a920f1",
+              "tarball": "https://registry.npmjs.org/@types/emscripten/-/emscripten-1.41.6.tgz",
+              "tarballSha256": "2a8a74381f2d0e134ed01b2dddab92ec90897c2268e131f35aabadb9b37b1174",
+              "version": "1.41.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
+              "name": "ansi-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "typescript",
+                  "optionalPeer": false,
+                  "packageName": "typescript",
+                  "requested": "^5",
+                  "type": "peer",
+                  "version": "5.9.3"
+                }
+              ],
+              "integrity": "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ==",
+              "name": "bun-ffi-structs",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "8af2f351a51310a8673dbe60c30dbad11d78a6ec",
+              "tarball": "https://registry.npmjs.org/bun-ffi-structs/-/bun-ffi-structs-0.3.1.tgz",
+              "tarballSha256": "bfe8c37f6d3ed44e930bc3ee7f4e784324583dd9f753d7dafdd0e493a37c8350",
+              "version": "0.3.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+              "name": "diff",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "297c31cd7c280f13dfe335791ec2063bd4a73a6f",
+              "tarball": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+              "tarballSha256": "b898bf23c95594607576e25ddd4013f1d51ed0e862aaf0732815830c87b3b58f",
+              "version": "9.0.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+              "name": "emoji-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "bf3d6e8f7f8fd22a65d9703475bc0147357a6b0d",
+              "tarball": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+              "tarballSha256": "9f40e54c0586f30882ece0ee0d22654394b89321e89cb55e8faf12ed8ccff981",
+              "version": "10.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
+              "name": "get-east-asian-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==",
+              "name": "marked",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "9db34197ac145e5929572ee49ef701e37ee9b2e6",
+              "tarball": "https://registry.npmjs.org/marked/-/marked-17.0.1.tgz",
+              "tarballSha256": "d09bc4067748b71af131a261550193cfefba014f67971f3890f2269293f5a60b",
+              "version": "17.0.1"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "emoji-regex",
+                  "optionalPeer": false,
+                  "packageName": "emoji-regex",
+                  "requested": "^10.3.0",
+                  "type": "dependency",
+                  "version": "10.6.0"
+                },
+                {
+                  "name": "get-east-asian-width",
+                  "optionalPeer": false,
+                  "packageName": "get-east-asian-width",
+                  "requested": "^1.0.0",
+                  "type": "dependency",
+                  "version": "1.7.0"
+                },
+                {
+                  "name": "strip-ansi",
+                  "optionalPeer": false,
+                  "packageName": "strip-ansi",
+                  "requested": "^7.1.0",
+                  "type": "dependency",
+                  "version": "7.2.0"
+                }
+              ],
+              "integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+              "name": "string-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b5bb8e2165ce275d4d43476dd2700ad9091db6dc",
+              "tarball": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+              "tarballSha256": "3e90901a98cadef6986fe2953e6d181f49730d81c7855776a6337fef93bbf1f3",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "ansi-regex",
+                  "optionalPeer": false,
+                  "packageName": "ansi-regex",
+                  "requested": "^6.2.2",
+                  "type": "dependency",
+                  "version": "6.4.0"
+                }
+              ],
+              "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+              "name": "strip-ansi",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "d22a269522836a627af8d04b5c3fd2c7fa3e32e3",
+              "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+              "tarballSha256": "2fa01de86a5022ef32773abbc4e84a53a1c5d31f5a5cbf03ed2575f10408543f",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+              "name": "typescript",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "5b4f59e15310ab17a216f5d6cf53ee476ede670f",
+              "tarball": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+              "tarballSha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+              "version": "5.9.3"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "@types/emscripten",
+                  "optionalPeer": true,
+                  "packageName": "@types/emscripten",
+                  "requested": "^1.40.0",
+                  "type": "peer",
+                  "version": "1.41.6"
+                }
+              ],
+              "integrity": "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA==",
+              "name": "web-tree-sitter",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b21f1df7aaa87ad235b4c3d07005168349496706",
+              "tarball": "https://registry.npmjs.org/web-tree-sitter/-/web-tree-sitter-0.25.10.tgz",
+              "tarballSha256": "6636457aca5e6945fb73671362ae19c9c4e513bb516a53d58c4a2b4d12533e0f",
+              "version": "0.25.10"
+            }
+          ],
+          "dependencyRoots": [
+            {
+              "name": "@opentui/core-darwin-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-arm64",
+              "requested": "0.6.1",
+              "type": "optional",
+              "version": "0.6.1"
+            },
+            {
+              "name": "@opentui/core-darwin-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-x64",
+              "requested": "0.6.1",
+              "type": "optional",
+              "version": "0.6.1"
+            },
+            {
+              "name": "@opentui/core-linux-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64",
+              "requested": "0.6.1",
+              "type": "optional",
+              "version": "0.6.1"
+            },
+            {
+              "name": "@opentui/core-linux-arm64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64-musl",
+              "requested": "0.6.1",
+              "type": "optional",
+              "version": "0.6.1"
+            },
+            {
+              "name": "@opentui/core-linux-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64",
+              "requested": "0.6.1",
+              "type": "optional",
+              "version": "0.6.1"
+            },
+            {
+              "name": "@opentui/core-linux-x64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64-musl",
+              "requested": "0.6.1",
+              "type": "optional",
+              "version": "0.6.1"
+            },
+            {
+              "name": "@opentui/core-win32-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-arm64",
+              "requested": "0.6.1",
+              "type": "optional",
+              "version": "0.6.1"
+            },
+            {
+              "name": "@opentui/core-win32-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-x64",
+              "requested": "0.6.1",
+              "type": "optional",
+              "version": "0.6.1"
+            },
+            {
+              "name": "bun-ffi-structs",
+              "optionalPeer": false,
+              "packageName": "bun-ffi-structs",
+              "requested": "0.3.1",
+              "type": "dependency",
+              "version": "0.3.1"
+            },
+            {
+              "name": "diff",
+              "optionalPeer": false,
+              "packageName": "diff",
+              "requested": "9.0.0",
+              "type": "dependency",
+              "version": "9.0.0"
+            },
+            {
+              "name": "marked",
+              "optionalPeer": false,
+              "packageName": "marked",
+              "requested": "17.0.1",
+              "type": "dependency",
+              "version": "17.0.1"
+            },
+            {
+              "name": "string-width",
+              "optionalPeer": false,
+              "packageName": "string-width",
+              "requested": "7.2.0",
+              "type": "dependency",
+              "version": "7.2.0"
+            },
+            {
+              "name": "web-tree-sitter",
+              "optionalPeer": false,
+              "packageName": "web-tree-sitter",
+              "requested": "0.25.10",
+              "type": "peer",
+              "version": "0.25.10"
+            }
+          ],
+          "integrity": "sha512-zDb6HyzprBp9AJRk/zRx9jRPKsyd3zEJNN3WUOrTqFzjf+PIytW9+s77tONM5Pb57QoLvnTVeM6evFzXV831ww==",
+          "libc": [],
+          "optionalDependencies": {
+            "@opentui/core-darwin-arm64": "0.6.1",
+            "@opentui/core-darwin-x64": "0.6.1",
+            "@opentui/core-linux-arm64": "0.6.1",
+            "@opentui/core-linux-arm64-musl": "0.6.1",
+            "@opentui/core-linux-x64": "0.6.1",
+            "@opentui/core-linux-x64-musl": "0.6.1",
+            "@opentui/core-win32-arm64": "0.6.1",
+            "@opentui/core-win32-x64": "0.6.1"
+          },
+          "os": [],
+          "peerDependencies": {
+            "web-tree-sitter": "0.25.10"
+          },
+          "peerDependenciesMeta": {},
+          "registry": "https://registry.npmjs.org",
+          "shasum": "bc2d624dab6c63c3741f0f03b7b7ca294039c626",
+          "tarball": "https://registry.npmjs.org/@opentui/core/-/core-0.6.1.tgz",
+          "tarballSha256": "e199956c6f2d82de3691f0ef8545a557cf4591acf70a0465b2b9df994ebbf550"
+        },
+        "state": "red",
+        "version": "0.6.1"
+      },
+      {
+        "candidateDigest": "sha256:75a16c1f6ee78e3589242cd01069221ee085277926e9bd5c96e012912ec0aef8",
+        "certificationRevision": 3,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:b998b5692e122be467d7f02ae849e007ef5338b7be9caaf542db242bad96c4bb",
+          "cpu": [],
+          "dependencies": {
+            "bun-ffi-structs": "0.3.1",
+            "diff": "9.0.0",
+            "marked": "17.0.1",
+            "string-width": "7.2.0"
+          },
+          "dependencyClosure": [
+            {
+              "dependencies": [],
+              "integrity": "sha512-BzjkMA+1PQdZfQ221WLiTKETq3d2h1MILpMbtMhMGg0bBXExr6E205jCnnze/3ZxqFnQYROQpxvAu6FSqKcuiA==",
+              "name": "@opentui/core-darwin-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "d9fb77e16d759971767032dabba1918ddef90032",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.6.2.tgz",
+              "tarballSha256": "9c2ecd344396f605ff507d6c3a39156e62569694525e0c6039a3f372832c9442",
+              "version": "0.6.2"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-q0UhQ8f0Q9wc0+CHE99aO68o6lCwSMFsZwIsDs738k1idNY+sLS0uPxDtYr26HrOUw8AvqQ+wqPz9sst2HWmZQ==",
+              "name": "@opentui/core-darwin-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "d2261761e159884c39e538a76d1aefee4e9ea592",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-x64/-/core-darwin-x64-0.6.2.tgz",
+              "tarballSha256": "683cac41c5bdbd07d52347901d1aebcfdbab885b1bfc3ab5defb2116bb519d1d",
+              "version": "0.6.2"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-3TXZj471XruW8idOKSB2YeTJ/dW8XhZasJSigqlHya7rdXVAd/TIl50RUCnL5EyLpUpKjHvj8XDljpO3CluBqQ==",
+              "name": "@opentui/core-linux-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "0887208da1b127fec8b06eaf5d096652b99f7ba2",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64/-/core-linux-arm64-0.6.2.tgz",
+              "tarballSha256": "41db036add34da72948daa8df1174c2fc9db82bb2c26a05699878896a045e36f",
+              "version": "0.6.2"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-IsBAr1m0DsljfwfMpBvnTIew2xehoP6L9j/nxdH7+fhYEcmnd1eMObaVasdUBFog+VCZHDFUabM8JbX8eQ60rQ==",
+              "name": "@opentui/core-linux-arm64-musl",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "9d7db100ca71888aafb0833e66748e90bf1aabf1",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64-musl/-/core-linux-arm64-musl-0.6.2.tgz",
+              "tarballSha256": "b84d664e8cb9f1a563ad7564ce31e33c0d5d97704156e53326742295c5bd3c09",
+              "version": "0.6.2"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-dRjB5f13W3UH/5eM/+fL7+G6ZCsQlxteAWOcMoVuA1xYbditF1HUtFvPGt/q651yMMmB3uA541O5gK6D+ssgsQ==",
+              "name": "@opentui/core-linux-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "7c573b2fcd18a5d28daa7804317c78c0af750375",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64/-/core-linux-x64-0.6.2.tgz",
+              "tarballSha256": "9ee0571362a96b3b100a9896b6897360ea5987931b5dd7204971544b9fe724f7",
+              "version": "0.6.2"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-7g1X66UtnOC+ahVYt/cF2A6p81//Wkrr2km71K1WR36dOuJToJ4x5c4w1B4BuD87h3o7ilgKJz7HvY//VB4Txw==",
+              "name": "@opentui/core-linux-x64-musl",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "cc006cbd6ab416b8a842e20b760f67aace9d5f99",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64-musl/-/core-linux-x64-musl-0.6.2.tgz",
+              "tarballSha256": "a9faa7419635c5893d022a2d5834b1390e900202c55fbaf91a4dc354079b06f6",
+              "version": "0.6.2"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-fZ9u6Adqz573hJ3rUJS6oVtKntSgkSHqZj4Srz+qXw3lDoG/EVdU9vyBWBrXtGIuSQ5O7t1HPDHYOyOBH/bb/w==",
+              "name": "@opentui/core-win32-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "3210638e5cc9dd348cef7366e11a22086798ce3f",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-arm64/-/core-win32-arm64-0.6.2.tgz",
+              "tarballSha256": "0274d7669e4bc4beecbe067ea95221c294d4693d9609a8c87ee858e4a7781b62",
+              "version": "0.6.2"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-ZBWSOWdopTsplyyVaeh49kJaD2nRNExmrzhz+KoD1/zPFjtgH6lN5FSyXQLXBkWSv44zlFSQa+tKhypHePqs/Q==",
+              "name": "@opentui/core-win32-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "78aaf71eeb684c030ca7fc5dc4b96b2626584002",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-x64/-/core-win32-x64-0.6.2.tgz",
+              "tarballSha256": "9095735dded04d2b4ff682572992b119ceabe51907f85de371a8185460feb827",
+              "version": "0.6.2"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==",
+              "name": "@types/emscripten",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "0d852a4c29fc2c035ed9232f00135717f1a920f1",
+              "tarball": "https://registry.npmjs.org/@types/emscripten/-/emscripten-1.41.6.tgz",
+              "tarballSha256": "2a8a74381f2d0e134ed01b2dddab92ec90897c2268e131f35aabadb9b37b1174",
+              "version": "1.41.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
+              "name": "ansi-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "typescript",
+                  "optionalPeer": false,
+                  "packageName": "typescript",
+                  "requested": "^5",
+                  "type": "peer",
+                  "version": "5.9.3"
+                }
+              ],
+              "integrity": "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ==",
+              "name": "bun-ffi-structs",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "8af2f351a51310a8673dbe60c30dbad11d78a6ec",
+              "tarball": "https://registry.npmjs.org/bun-ffi-structs/-/bun-ffi-structs-0.3.1.tgz",
+              "tarballSha256": "bfe8c37f6d3ed44e930bc3ee7f4e784324583dd9f753d7dafdd0e493a37c8350",
+              "version": "0.3.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+              "name": "diff",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "297c31cd7c280f13dfe335791ec2063bd4a73a6f",
+              "tarball": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+              "tarballSha256": "b898bf23c95594607576e25ddd4013f1d51ed0e862aaf0732815830c87b3b58f",
+              "version": "9.0.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+              "name": "emoji-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "bf3d6e8f7f8fd22a65d9703475bc0147357a6b0d",
+              "tarball": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+              "tarballSha256": "9f40e54c0586f30882ece0ee0d22654394b89321e89cb55e8faf12ed8ccff981",
+              "version": "10.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
+              "name": "get-east-asian-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==",
+              "name": "marked",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "9db34197ac145e5929572ee49ef701e37ee9b2e6",
+              "tarball": "https://registry.npmjs.org/marked/-/marked-17.0.1.tgz",
+              "tarballSha256": "d09bc4067748b71af131a261550193cfefba014f67971f3890f2269293f5a60b",
+              "version": "17.0.1"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "emoji-regex",
+                  "optionalPeer": false,
+                  "packageName": "emoji-regex",
+                  "requested": "^10.3.0",
+                  "type": "dependency",
+                  "version": "10.6.0"
+                },
+                {
+                  "name": "get-east-asian-width",
+                  "optionalPeer": false,
+                  "packageName": "get-east-asian-width",
+                  "requested": "^1.0.0",
+                  "type": "dependency",
+                  "version": "1.7.0"
+                },
+                {
+                  "name": "strip-ansi",
+                  "optionalPeer": false,
+                  "packageName": "strip-ansi",
+                  "requested": "^7.1.0",
+                  "type": "dependency",
+                  "version": "7.2.0"
+                }
+              ],
+              "integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+              "name": "string-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b5bb8e2165ce275d4d43476dd2700ad9091db6dc",
+              "tarball": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+              "tarballSha256": "3e90901a98cadef6986fe2953e6d181f49730d81c7855776a6337fef93bbf1f3",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "ansi-regex",
+                  "optionalPeer": false,
+                  "packageName": "ansi-regex",
+                  "requested": "^6.2.2",
+                  "type": "dependency",
+                  "version": "6.4.0"
+                }
+              ],
+              "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+              "name": "strip-ansi",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "d22a269522836a627af8d04b5c3fd2c7fa3e32e3",
+              "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+              "tarballSha256": "2fa01de86a5022ef32773abbc4e84a53a1c5d31f5a5cbf03ed2575f10408543f",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+              "name": "typescript",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "5b4f59e15310ab17a216f5d6cf53ee476ede670f",
+              "tarball": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+              "tarballSha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+              "version": "5.9.3"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "@types/emscripten",
+                  "optionalPeer": true,
+                  "packageName": "@types/emscripten",
+                  "requested": "^1.40.0",
+                  "type": "peer",
+                  "version": "1.41.6"
+                }
+              ],
+              "integrity": "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA==",
+              "name": "web-tree-sitter",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b21f1df7aaa87ad235b4c3d07005168349496706",
+              "tarball": "https://registry.npmjs.org/web-tree-sitter/-/web-tree-sitter-0.25.10.tgz",
+              "tarballSha256": "6636457aca5e6945fb73671362ae19c9c4e513bb516a53d58c4a2b4d12533e0f",
+              "version": "0.25.10"
+            }
+          ],
+          "dependencyRoots": [
+            {
+              "name": "@opentui/core-darwin-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-arm64",
+              "requested": "0.6.2",
+              "type": "optional",
+              "version": "0.6.2"
+            },
+            {
+              "name": "@opentui/core-darwin-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-x64",
+              "requested": "0.6.2",
+              "type": "optional",
+              "version": "0.6.2"
+            },
+            {
+              "name": "@opentui/core-linux-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64",
+              "requested": "0.6.2",
+              "type": "optional",
+              "version": "0.6.2"
+            },
+            {
+              "name": "@opentui/core-linux-arm64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64-musl",
+              "requested": "0.6.2",
+              "type": "optional",
+              "version": "0.6.2"
+            },
+            {
+              "name": "@opentui/core-linux-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64",
+              "requested": "0.6.2",
+              "type": "optional",
+              "version": "0.6.2"
+            },
+            {
+              "name": "@opentui/core-linux-x64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64-musl",
+              "requested": "0.6.2",
+              "type": "optional",
+              "version": "0.6.2"
+            },
+            {
+              "name": "@opentui/core-win32-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-arm64",
+              "requested": "0.6.2",
+              "type": "optional",
+              "version": "0.6.2"
+            },
+            {
+              "name": "@opentui/core-win32-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-x64",
+              "requested": "0.6.2",
+              "type": "optional",
+              "version": "0.6.2"
+            },
+            {
+              "name": "bun-ffi-structs",
+              "optionalPeer": false,
+              "packageName": "bun-ffi-structs",
+              "requested": "0.3.1",
+              "type": "dependency",
+              "version": "0.3.1"
+            },
+            {
+              "name": "diff",
+              "optionalPeer": false,
+              "packageName": "diff",
+              "requested": "9.0.0",
+              "type": "dependency",
+              "version": "9.0.0"
+            },
+            {
+              "name": "marked",
+              "optionalPeer": false,
+              "packageName": "marked",
+              "requested": "17.0.1",
+              "type": "dependency",
+              "version": "17.0.1"
+            },
+            {
+              "name": "string-width",
+              "optionalPeer": false,
+              "packageName": "string-width",
+              "requested": "7.2.0",
+              "type": "dependency",
+              "version": "7.2.0"
+            },
+            {
+              "name": "web-tree-sitter",
+              "optionalPeer": false,
+              "packageName": "web-tree-sitter",
+              "requested": "0.25.10",
+              "type": "peer",
+              "version": "0.25.10"
+            }
+          ],
+          "integrity": "sha512-zK5fxhp57OAJrAON0rNu2Y/sBPLy407rlHj+J9fmsWLCOIcXvsrWkXg2+mDala8yvrsB2afNeXweYA6jSH3F3w==",
+          "libc": [],
+          "optionalDependencies": {
+            "@opentui/core-darwin-arm64": "0.6.2",
+            "@opentui/core-darwin-x64": "0.6.2",
+            "@opentui/core-linux-arm64": "0.6.2",
+            "@opentui/core-linux-arm64-musl": "0.6.2",
+            "@opentui/core-linux-x64": "0.6.2",
+            "@opentui/core-linux-x64-musl": "0.6.2",
+            "@opentui/core-win32-arm64": "0.6.2",
+            "@opentui/core-win32-x64": "0.6.2"
+          },
+          "os": [],
+          "peerDependencies": {
+            "web-tree-sitter": "0.25.10"
+          },
+          "peerDependenciesMeta": {},
+          "registry": "https://registry.npmjs.org",
+          "shasum": "233a501c6091e7c61bf31fd50b89af19cd566382",
+          "tarball": "https://registry.npmjs.org/@opentui/core/-/core-0.6.2.tgz",
+          "tarballSha256": "97e7dd5ec0b2de22329c93f808716b5c88610b708025391ff5bffdbffca2d15e"
+        },
+        "state": "red",
+        "version": "0.6.2"
+      },
+      {
+        "candidateDigest": "sha256:d77e16967eaf51f517d000d49037cb708626c911de1be9d5dfa47bbecbe90df2",
+        "certificationRevision": 3,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:e7f684c2ab669d51f1e3819cfb165f895d9e0371f721761d228fb1078add94a7",
+          "cpu": [],
+          "dependencies": {
+            "bun-ffi-structs": "0.3.1",
+            "diff": "9.0.0",
+            "marked": "17.0.1",
+            "string-width": "7.2.0"
+          },
+          "dependencyClosure": [
+            {
+              "dependencies": [],
+              "integrity": "sha512-BX/FiIPsdVMB/AKC+FvEoF0oMWOAyRq86FKfREUfBHXznlI7EzyxcBrd8dd+47uW/UG7GYjYuVy10+jRP9s/vQ==",
+              "name": "@opentui/core-darwin-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "a23a40cb79e2a292fc3fcb30e2a9cf2ad040c3f4",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.6.3.tgz",
+              "tarballSha256": "c2f99829e6d816d500925d36e97956038be74f533dc97713334d11013cc4682d",
+              "version": "0.6.3"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-c7RuqQ3VJlur24g5RVOWZyPZLbAjIvR1Bjb6wv2YCFzZ8DYnwVyV7DySFRJUas5V0GLwKt5Cq8Kka3rvHDAE8Q==",
+              "name": "@opentui/core-darwin-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "f5f46fe6dcb50b94c80ed8affce5a9d01b46ce35",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-x64/-/core-darwin-x64-0.6.3.tgz",
+              "tarballSha256": "92d5431501a8118a42c9227dbea4bf7c2068d76bd3e2eecaf07181cfb3fdc71b",
+              "version": "0.6.3"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jUuyoxMslnEZxHyWVSCBSvPjG5xntXqo1HmUWdMWSSqNGCwTFyqCyoMT/F96Yhbu6Fn8W3jyu0Y2QURLzr4xrQ==",
+              "name": "@opentui/core-linux-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "a331b0f85188a4a9683942c16f7ab99174c2e7f1",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64/-/core-linux-arm64-0.6.3.tgz",
+              "tarballSha256": "569106c59699b535ca31819637487228aa8eb4ae89c6e0f08de92ead8fda9c0d",
+              "version": "0.6.3"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-P2AC9Azi1Yy0cpDdjzVS/LmEdynxFlDEI6q02lJ62DffftpZF3ai3ECmPN5/6ALKyfTUWgRaWEmzWYG0aSO1RA==",
+              "name": "@opentui/core-linux-arm64-musl",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "302cf962a0d464712c37750dfa2cfb78b551e806",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64-musl/-/core-linux-arm64-musl-0.6.3.tgz",
+              "tarballSha256": "d5f36f0c05f02549edeac4f11ecae36e4ef38683714e9869981cf1082762d949",
+              "version": "0.6.3"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-phUWTK/hDtyfYjQpqCUBSOSMDjyXKifD0lAu3cwKBZYcRX0wbRkxVR12oByGpG+G0rq7Ymti+tHxQhfXLR2VdA==",
+              "name": "@opentui/core-linux-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "f1e307709151fa939bfb00a39aa09230f18a6e0e",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64/-/core-linux-x64-0.6.3.tgz",
+              "tarballSha256": "1426550c191643337ad357b0808944843f18155876c339a116f9a22ad21f7c19",
+              "version": "0.6.3"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-NuoRzxRvrxfhIsSwwvdfCUwj8ZsF0nUOGM/wxNkHB25oefelyB8tmoF6vlPc4oLz0MOoP63Hqh96IvlCjmi7ZQ==",
+              "name": "@opentui/core-linux-x64-musl",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "219cc550fd72a65789b798119a127c2b8bcd12d9",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64-musl/-/core-linux-x64-musl-0.6.3.tgz",
+              "tarballSha256": "90d050c02d85bed8d83d376f56b4d06ae69a9f5429de8c7d87c9a5d624555c2f",
+              "version": "0.6.3"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-lntu7T0/W3PlR4euQ0ZiCiq/OWb9jw3DmzS4hB/CzPg4mH89K4Y/9HtSt7YxqvJiI7Mu5W1m/KQbz0jm0tV8Yw==",
+              "name": "@opentui/core-win32-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "2792898e450557f8ac262eab18190bb58211649f",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-arm64/-/core-win32-arm64-0.6.3.tgz",
+              "tarballSha256": "2c21128eded29c92cfa442ed11bb6d07db2854ffc004db372b4483cd9eb08371",
+              "version": "0.6.3"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-3C+WBOOYmWgbtYBxVLGgOjZs0hQxrOrQEMJaM93yvqzDYIQZdgtVNsl5tNB77dA97WQz8b4BQe0AyP2XJcAHlg==",
+              "name": "@opentui/core-win32-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "52990e1078311c4fbb21fa7b53f7040f95491184",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-x64/-/core-win32-x64-0.6.3.tgz",
+              "tarballSha256": "37126c46c1d165bfa12da3e5b31fc91b6a0a2090c53b597f2e08c6bc103ae083",
+              "version": "0.6.3"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==",
+              "name": "@types/emscripten",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "0d852a4c29fc2c035ed9232f00135717f1a920f1",
+              "tarball": "https://registry.npmjs.org/@types/emscripten/-/emscripten-1.41.6.tgz",
+              "tarballSha256": "2a8a74381f2d0e134ed01b2dddab92ec90897c2268e131f35aabadb9b37b1174",
+              "version": "1.41.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
+              "name": "ansi-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "typescript",
+                  "optionalPeer": false,
+                  "packageName": "typescript",
+                  "requested": "^5",
+                  "type": "peer",
+                  "version": "5.9.3"
+                }
+              ],
+              "integrity": "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ==",
+              "name": "bun-ffi-structs",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "8af2f351a51310a8673dbe60c30dbad11d78a6ec",
+              "tarball": "https://registry.npmjs.org/bun-ffi-structs/-/bun-ffi-structs-0.3.1.tgz",
+              "tarballSha256": "bfe8c37f6d3ed44e930bc3ee7f4e784324583dd9f753d7dafdd0e493a37c8350",
+              "version": "0.3.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+              "name": "diff",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "297c31cd7c280f13dfe335791ec2063bd4a73a6f",
+              "tarball": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+              "tarballSha256": "b898bf23c95594607576e25ddd4013f1d51ed0e862aaf0732815830c87b3b58f",
+              "version": "9.0.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+              "name": "emoji-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "bf3d6e8f7f8fd22a65d9703475bc0147357a6b0d",
+              "tarball": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+              "tarballSha256": "9f40e54c0586f30882ece0ee0d22654394b89321e89cb55e8faf12ed8ccff981",
+              "version": "10.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
+              "name": "get-east-asian-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==",
+              "name": "marked",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "9db34197ac145e5929572ee49ef701e37ee9b2e6",
+              "tarball": "https://registry.npmjs.org/marked/-/marked-17.0.1.tgz",
+              "tarballSha256": "d09bc4067748b71af131a261550193cfefba014f67971f3890f2269293f5a60b",
+              "version": "17.0.1"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "emoji-regex",
+                  "optionalPeer": false,
+                  "packageName": "emoji-regex",
+                  "requested": "^10.3.0",
+                  "type": "dependency",
+                  "version": "10.6.0"
+                },
+                {
+                  "name": "get-east-asian-width",
+                  "optionalPeer": false,
+                  "packageName": "get-east-asian-width",
+                  "requested": "^1.0.0",
+                  "type": "dependency",
+                  "version": "1.7.0"
+                },
+                {
+                  "name": "strip-ansi",
+                  "optionalPeer": false,
+                  "packageName": "strip-ansi",
+                  "requested": "^7.1.0",
+                  "type": "dependency",
+                  "version": "7.2.0"
+                }
+              ],
+              "integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+              "name": "string-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b5bb8e2165ce275d4d43476dd2700ad9091db6dc",
+              "tarball": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+              "tarballSha256": "3e90901a98cadef6986fe2953e6d181f49730d81c7855776a6337fef93bbf1f3",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "ansi-regex",
+                  "optionalPeer": false,
+                  "packageName": "ansi-regex",
+                  "requested": "^6.2.2",
+                  "type": "dependency",
+                  "version": "6.4.0"
+                }
+              ],
+              "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+              "name": "strip-ansi",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "d22a269522836a627af8d04b5c3fd2c7fa3e32e3",
+              "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+              "tarballSha256": "2fa01de86a5022ef32773abbc4e84a53a1c5d31f5a5cbf03ed2575f10408543f",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+              "name": "typescript",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "5b4f59e15310ab17a216f5d6cf53ee476ede670f",
+              "tarball": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+              "tarballSha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+              "version": "5.9.3"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "@types/emscripten",
+                  "optionalPeer": true,
+                  "packageName": "@types/emscripten",
+                  "requested": "^1.40.0",
+                  "type": "peer",
+                  "version": "1.41.6"
+                }
+              ],
+              "integrity": "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA==",
+              "name": "web-tree-sitter",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b21f1df7aaa87ad235b4c3d07005168349496706",
+              "tarball": "https://registry.npmjs.org/web-tree-sitter/-/web-tree-sitter-0.25.10.tgz",
+              "tarballSha256": "6636457aca5e6945fb73671362ae19c9c4e513bb516a53d58c4a2b4d12533e0f",
+              "version": "0.25.10"
+            }
+          ],
+          "dependencyRoots": [
+            {
+              "name": "@opentui/core-darwin-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-arm64",
+              "requested": "0.6.3",
+              "type": "optional",
+              "version": "0.6.3"
+            },
+            {
+              "name": "@opentui/core-darwin-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-x64",
+              "requested": "0.6.3",
+              "type": "optional",
+              "version": "0.6.3"
+            },
+            {
+              "name": "@opentui/core-linux-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64",
+              "requested": "0.6.3",
+              "type": "optional",
+              "version": "0.6.3"
+            },
+            {
+              "name": "@opentui/core-linux-arm64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64-musl",
+              "requested": "0.6.3",
+              "type": "optional",
+              "version": "0.6.3"
+            },
+            {
+              "name": "@opentui/core-linux-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64",
+              "requested": "0.6.3",
+              "type": "optional",
+              "version": "0.6.3"
+            },
+            {
+              "name": "@opentui/core-linux-x64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64-musl",
+              "requested": "0.6.3",
+              "type": "optional",
+              "version": "0.6.3"
+            },
+            {
+              "name": "@opentui/core-win32-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-arm64",
+              "requested": "0.6.3",
+              "type": "optional",
+              "version": "0.6.3"
+            },
+            {
+              "name": "@opentui/core-win32-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-x64",
+              "requested": "0.6.3",
+              "type": "optional",
+              "version": "0.6.3"
+            },
+            {
+              "name": "bun-ffi-structs",
+              "optionalPeer": false,
+              "packageName": "bun-ffi-structs",
+              "requested": "0.3.1",
+              "type": "dependency",
+              "version": "0.3.1"
+            },
+            {
+              "name": "diff",
+              "optionalPeer": false,
+              "packageName": "diff",
+              "requested": "9.0.0",
+              "type": "dependency",
+              "version": "9.0.0"
+            },
+            {
+              "name": "marked",
+              "optionalPeer": false,
+              "packageName": "marked",
+              "requested": "17.0.1",
+              "type": "dependency",
+              "version": "17.0.1"
+            },
+            {
+              "name": "string-width",
+              "optionalPeer": false,
+              "packageName": "string-width",
+              "requested": "7.2.0",
+              "type": "dependency",
+              "version": "7.2.0"
+            },
+            {
+              "name": "web-tree-sitter",
+              "optionalPeer": false,
+              "packageName": "web-tree-sitter",
+              "requested": "0.25.10",
+              "type": "peer",
+              "version": "0.25.10"
+            }
+          ],
+          "integrity": "sha512-7ox4DpYUPZYH4fXFbEwHVw9FGt/pP81BsfBbr+BmBT1Dvequi2EJSpTMCnM2h2fVTb9vFdsZznSgnwrzCSFTQg==",
+          "libc": [],
+          "optionalDependencies": {
+            "@opentui/core-darwin-arm64": "0.6.3",
+            "@opentui/core-darwin-x64": "0.6.3",
+            "@opentui/core-linux-arm64": "0.6.3",
+            "@opentui/core-linux-arm64-musl": "0.6.3",
+            "@opentui/core-linux-x64": "0.6.3",
+            "@opentui/core-linux-x64-musl": "0.6.3",
+            "@opentui/core-win32-arm64": "0.6.3",
+            "@opentui/core-win32-x64": "0.6.3"
+          },
+          "os": [],
+          "peerDependencies": {
+            "web-tree-sitter": "0.25.10"
+          },
+          "peerDependenciesMeta": {},
+          "registry": "https://registry.npmjs.org",
+          "shasum": "2142a4193b53b24591089d531d5456ee7827bd29",
+          "tarball": "https://registry.npmjs.org/@opentui/core/-/core-0.6.3.tgz",
+          "tarballSha256": "4cf262c10130c0276fcd0735550254c01aafcb3bfa07d6cee8dbc83985117ad4"
+        },
+        "state": "red",
+        "version": "0.6.3"
+      },
+      {
+        "candidateDigest": "sha256:a6974f04a8153819469f4ad66179e7c4ff5bc8d116d01ce961c967156a664438",
+        "certificationRevision": 3,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:63307cb29427c53a4f952456aa3a68f9e5f69555e0a1ce69a3f24bc8b404b65e",
+          "cpu": [],
+          "dependencies": {
+            "bun-ffi-structs": "0.3.1",
+            "diff": "9.0.0",
+            "marked": "17.0.1",
+            "string-width": "7.2.0"
+          },
+          "dependencyClosure": [
+            {
+              "dependencies": [],
+              "integrity": "sha512-mZRj5dwR9+wvota0WDgGwYe3xiNzr4ZTpXcSDB2/vPCjuT5npvO9Y1KQWnNBtI85aOtszBHKirXtVqMk0/kjPQ==",
+              "name": "@opentui/core-darwin-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "3b00ea8c84d9a4b4b2be15155a7a8d4cf8dd185c",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.6.4.tgz",
+              "tarballSha256": "f62fa33352c334290b798c825d93dbd9ed7d1aa44534ff3994dea9d2b8dd6d50",
+              "version": "0.6.4"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-9Oa2QPLwg0AFy5EAXCQnIxOphPyCo/g476PBfyl32hUKbSxscKJeq1fvepZBdD3kAzSZFGzIroUZ2FhLg2b2kw==",
+              "name": "@opentui/core-darwin-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "3f715b5fba8a76970c07e091d10313e6033478f8",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-x64/-/core-darwin-x64-0.6.4.tgz",
+              "tarballSha256": "b11ccbae5e3262eb2dcc8fc5fe11e228f63c9a63e2645310dfab8a4f5a061e90",
+              "version": "0.6.4"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-pstmXbojEysbDiP6SSfDxk7nD6Sy/xFy+AhEfZstV8SKUHGZAbrLep4GnggL5Q5/soy5gQtQTcaaFhK4LtQNxw==",
+              "name": "@opentui/core-linux-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "df76919096d8a16c8437c70762e6ac8492a31f57",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64/-/core-linux-arm64-0.6.4.tgz",
+              "tarballSha256": "30edfe00752367973caf9a8a61ba7bfa6753311e6b13df4a4bb35aee4c2fa040",
+              "version": "0.6.4"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-eKRQ13r146JPCuL2NeHcj9i86arZOk9XGJkFc63x7y1iH7YFxgA5sx/KevsqmLNl3F8LE3j+RhX3HPAlmR/KrQ==",
+              "name": "@opentui/core-linux-arm64-musl",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "31079700e9ef304b2f61df4c20fad0203d72a0f0",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64-musl/-/core-linux-arm64-musl-0.6.4.tgz",
+              "tarballSha256": "82cf74f2841b083ba54911e123d20fb541c6c02f0aa8319107933433c8039361",
+              "version": "0.6.4"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-QVEzBYhjq0T2kzrH2qpvn4trUA+XPJyp5ASEsDbcnihyMFtStdj6wggJ8Ufp+EIeEuf1bi7STv7Ui9MtvgQ2+w==",
+              "name": "@opentui/core-linux-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "3877bd966a9ee075888f1c0783177059d27c2324",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64/-/core-linux-x64-0.6.4.tgz",
+              "tarballSha256": "2b1ef5ed7964b92078111c9900453a5066ce8cb3a3736f4af94b64e4fe981e98",
+              "version": "0.6.4"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-1DW/t/7hJc9HpDzmkrZ6pKbXH2uEjOY3Uwo1FlHGZSRy6XMjireF2iU+ucJKO+Krsu07c8hVAOxFQb+sqkLscQ==",
+              "name": "@opentui/core-linux-x64-musl",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "71086c5804b6142106b098f269e0f268c3eeb02f",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64-musl/-/core-linux-x64-musl-0.6.4.tgz",
+              "tarballSha256": "912533785f53cf77e4e6f3c466f65435fcbd1c4cd232c65eebecb3651ade0dad",
+              "version": "0.6.4"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KmFGqYoQ+ZbDbZrx7GNXxu/mt06zyBOwIDXKdsiUFgC6sZODz69QGN4xpLhF+popDVCjDyLtFxKW0vMfIOXSXA==",
+              "name": "@opentui/core-win32-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "3a0027680f6791ad3808547715dd3048d9742ef1",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-arm64/-/core-win32-arm64-0.6.4.tgz",
+              "tarballSha256": "388a1c1c990d69ea099dcf671e7a93865ef22b4d9072c96e155ac8057ce3d272",
+              "version": "0.6.4"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-NzgXKe+AIrQGXMESc+ScyL6T55h4m7IEA09r8BpxgjwfzMSRzGvI9//0Ps8bQNnGXIDURH8zuS11SWneKhbL3A==",
+              "name": "@opentui/core-win32-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "e0bc202838b4cba2696a6b45aad66b0188c202b5",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-x64/-/core-win32-x64-0.6.4.tgz",
+              "tarballSha256": "e5547b9e6b3d1b48d0cd285e827f7491f3f73fc1f8c13da0015ec4d5f2c40267",
+              "version": "0.6.4"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==",
+              "name": "@types/emscripten",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "0d852a4c29fc2c035ed9232f00135717f1a920f1",
+              "tarball": "https://registry.npmjs.org/@types/emscripten/-/emscripten-1.41.6.tgz",
+              "tarballSha256": "2a8a74381f2d0e134ed01b2dddab92ec90897c2268e131f35aabadb9b37b1174",
+              "version": "1.41.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
+              "name": "ansi-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "typescript",
+                  "optionalPeer": false,
+                  "packageName": "typescript",
+                  "requested": "^5",
+                  "type": "peer",
+                  "version": "5.9.3"
+                }
+              ],
+              "integrity": "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ==",
+              "name": "bun-ffi-structs",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "8af2f351a51310a8673dbe60c30dbad11d78a6ec",
+              "tarball": "https://registry.npmjs.org/bun-ffi-structs/-/bun-ffi-structs-0.3.1.tgz",
+              "tarballSha256": "bfe8c37f6d3ed44e930bc3ee7f4e784324583dd9f753d7dafdd0e493a37c8350",
+              "version": "0.3.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+              "name": "diff",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "297c31cd7c280f13dfe335791ec2063bd4a73a6f",
+              "tarball": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+              "tarballSha256": "b898bf23c95594607576e25ddd4013f1d51ed0e862aaf0732815830c87b3b58f",
+              "version": "9.0.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+              "name": "emoji-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "bf3d6e8f7f8fd22a65d9703475bc0147357a6b0d",
+              "tarball": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+              "tarballSha256": "9f40e54c0586f30882ece0ee0d22654394b89321e89cb55e8faf12ed8ccff981",
+              "version": "10.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
+              "name": "get-east-asian-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==",
+              "name": "marked",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "9db34197ac145e5929572ee49ef701e37ee9b2e6",
+              "tarball": "https://registry.npmjs.org/marked/-/marked-17.0.1.tgz",
+              "tarballSha256": "d09bc4067748b71af131a261550193cfefba014f67971f3890f2269293f5a60b",
+              "version": "17.0.1"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "emoji-regex",
+                  "optionalPeer": false,
+                  "packageName": "emoji-regex",
+                  "requested": "^10.3.0",
+                  "type": "dependency",
+                  "version": "10.6.0"
+                },
+                {
+                  "name": "get-east-asian-width",
+                  "optionalPeer": false,
+                  "packageName": "get-east-asian-width",
+                  "requested": "^1.0.0",
+                  "type": "dependency",
+                  "version": "1.7.0"
+                },
+                {
+                  "name": "strip-ansi",
+                  "optionalPeer": false,
+                  "packageName": "strip-ansi",
+                  "requested": "^7.1.0",
+                  "type": "dependency",
+                  "version": "7.2.0"
+                }
+              ],
+              "integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+              "name": "string-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b5bb8e2165ce275d4d43476dd2700ad9091db6dc",
+              "tarball": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+              "tarballSha256": "3e90901a98cadef6986fe2953e6d181f49730d81c7855776a6337fef93bbf1f3",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "ansi-regex",
+                  "optionalPeer": false,
+                  "packageName": "ansi-regex",
+                  "requested": "^6.2.2",
+                  "type": "dependency",
+                  "version": "6.4.0"
+                }
+              ],
+              "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+              "name": "strip-ansi",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "d22a269522836a627af8d04b5c3fd2c7fa3e32e3",
+              "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+              "tarballSha256": "2fa01de86a5022ef32773abbc4e84a53a1c5d31f5a5cbf03ed2575f10408543f",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+              "name": "typescript",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "5b4f59e15310ab17a216f5d6cf53ee476ede670f",
+              "tarball": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+              "tarballSha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+              "version": "5.9.3"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "@types/emscripten",
+                  "optionalPeer": true,
+                  "packageName": "@types/emscripten",
+                  "requested": "^1.40.0",
+                  "type": "peer",
+                  "version": "1.41.6"
+                }
+              ],
+              "integrity": "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA==",
+              "name": "web-tree-sitter",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b21f1df7aaa87ad235b4c3d07005168349496706",
+              "tarball": "https://registry.npmjs.org/web-tree-sitter/-/web-tree-sitter-0.25.10.tgz",
+              "tarballSha256": "6636457aca5e6945fb73671362ae19c9c4e513bb516a53d58c4a2b4d12533e0f",
+              "version": "0.25.10"
+            }
+          ],
+          "dependencyRoots": [
+            {
+              "name": "@opentui/core-darwin-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-arm64",
+              "requested": "0.6.4",
+              "type": "optional",
+              "version": "0.6.4"
+            },
+            {
+              "name": "@opentui/core-darwin-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-x64",
+              "requested": "0.6.4",
+              "type": "optional",
+              "version": "0.6.4"
+            },
+            {
+              "name": "@opentui/core-linux-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64",
+              "requested": "0.6.4",
+              "type": "optional",
+              "version": "0.6.4"
+            },
+            {
+              "name": "@opentui/core-linux-arm64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64-musl",
+              "requested": "0.6.4",
+              "type": "optional",
+              "version": "0.6.4"
+            },
+            {
+              "name": "@opentui/core-linux-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64",
+              "requested": "0.6.4",
+              "type": "optional",
+              "version": "0.6.4"
+            },
+            {
+              "name": "@opentui/core-linux-x64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64-musl",
+              "requested": "0.6.4",
+              "type": "optional",
+              "version": "0.6.4"
+            },
+            {
+              "name": "@opentui/core-win32-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-arm64",
+              "requested": "0.6.4",
+              "type": "optional",
+              "version": "0.6.4"
+            },
+            {
+              "name": "@opentui/core-win32-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-x64",
+              "requested": "0.6.4",
+              "type": "optional",
+              "version": "0.6.4"
+            },
+            {
+              "name": "bun-ffi-structs",
+              "optionalPeer": false,
+              "packageName": "bun-ffi-structs",
+              "requested": "0.3.1",
+              "type": "dependency",
+              "version": "0.3.1"
+            },
+            {
+              "name": "diff",
+              "optionalPeer": false,
+              "packageName": "diff",
+              "requested": "9.0.0",
+              "type": "dependency",
+              "version": "9.0.0"
+            },
+            {
+              "name": "marked",
+              "optionalPeer": false,
+              "packageName": "marked",
+              "requested": "17.0.1",
+              "type": "dependency",
+              "version": "17.0.1"
+            },
+            {
+              "name": "string-width",
+              "optionalPeer": false,
+              "packageName": "string-width",
+              "requested": "7.2.0",
+              "type": "dependency",
+              "version": "7.2.0"
+            },
+            {
+              "name": "web-tree-sitter",
+              "optionalPeer": false,
+              "packageName": "web-tree-sitter",
+              "requested": "0.25.10",
+              "type": "peer",
+              "version": "0.25.10"
+            }
+          ],
+          "integrity": "sha512-8ZCywvSi9A8H5IoDyrw3sKpPkzimsJ+CoUuQWg0bSKLVLh/tYJDmOsFFOnlRzUZPnhGRV8rtLlR613NoEIytig==",
+          "libc": [],
+          "optionalDependencies": {
+            "@opentui/core-darwin-arm64": "0.6.4",
+            "@opentui/core-darwin-x64": "0.6.4",
+            "@opentui/core-linux-arm64": "0.6.4",
+            "@opentui/core-linux-arm64-musl": "0.6.4",
+            "@opentui/core-linux-x64": "0.6.4",
+            "@opentui/core-linux-x64-musl": "0.6.4",
+            "@opentui/core-win32-arm64": "0.6.4",
+            "@opentui/core-win32-x64": "0.6.4"
+          },
+          "os": [],
+          "peerDependencies": {
+            "web-tree-sitter": "0.25.10"
+          },
+          "peerDependenciesMeta": {},
+          "registry": "https://registry.npmjs.org",
+          "shasum": "58cef815c4d2997a622e55fabc63280a6433ec75",
+          "tarball": "https://registry.npmjs.org/@opentui/core/-/core-0.6.4.tgz",
+          "tarballSha256": "b265ae5a95483f8a981afc4f3dd951e715cc729b7d00ec4ecea9536e588830a9"
+        },
+        "state": "red",
+        "version": "0.6.4"
+      },
+      {
+        "candidateDigest": "sha256:61bf5e99aa412b64429adca985b026058b440c346451e77d461a600e467279f7",
+        "certificationRevision": 3,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:558a74517d01a3a77a35a82ef051c034065881aab44ead93d6b321098298385e",
+          "cpu": [],
+          "dependencies": {
+            "bun-ffi-structs": "0.3.1",
+            "diff": "9.0.0",
+            "marked": "17.0.1",
+            "string-width": "7.2.0"
+          },
+          "dependencyClosure": [
+            {
+              "dependencies": [],
+              "integrity": "sha512-jg/GUWi0Z2hvprY317M43LI/pu6yvmp26vRutcCFUlSTuE3dwGir4cg0v22iY+6lu9h6w/GPRGbYIkVp0VXqIw==",
+              "name": "@opentui/core-darwin-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "4159371cacae2f582a676400389d7d3c12b1deee",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.6.5.tgz",
+              "tarballSha256": "dff6f1e85fefbba3410e9315ce754fd590594f61cba56a82db1f981280562a98",
+              "version": "0.6.5"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-ZT3P3jcg3cxVYRN9dHCq/G8Gn99RzPRMsCMUtOEMggpAC0x0jE40MlrE6VbOEgK4cZYTDDVJeKGIwMH1arnxyg==",
+              "name": "@opentui/core-darwin-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "ebeda41b4d10ead00d158139aea77a2a1e040c7f",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-x64/-/core-darwin-x64-0.6.5.tgz",
+              "tarballSha256": "5bb677a55d4cff834f74337da599d1032e15769e5da3d80ada0f8f5a75461976",
+              "version": "0.6.5"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-B4t4pLmGyJ8925dKkztPK6Yx/W5XRNvCr0Hy5JbSDYqu+m/aSMWuQcmoVC6sHXNLMjoBbcaY+EGdwMavIAjf+Q==",
+              "name": "@opentui/core-linux-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "423362ffbf4c02843e36116d6488f67bc35f2eed",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64/-/core-linux-arm64-0.6.5.tgz",
+              "tarballSha256": "11589cc10b3083aa16b2511cd2baedf48a4199dc2d0f8eb589331eeee0e95908",
+              "version": "0.6.5"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-Rf9DbmkEyNjb/sgH6l+7S3MqQm+OBi3ibi4pEkljLUiS3wQhWMb5xpCAbY7KrK39t1F2s3A9xqh+ZFHRcn+bLQ==",
+              "name": "@opentui/core-linux-arm64-musl",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "9c214fc834725e4381de74051b1a11c860219b26",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64-musl/-/core-linux-arm64-musl-0.6.5.tgz",
+              "tarballSha256": "14d68bab67a5a353665a4a75e896084a3e6e9a360739c491c5f29b07db89e9ee",
+              "version": "0.6.5"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-SBV/ehX7DX4YnfCTF4Xu5sVvv0cGXX+TUxYrOAxjFmgSQToTOL819DmbaPDP20TL5QmVkK+G3HPr+MLFF2ztXQ==",
+              "name": "@opentui/core-linux-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "7034f324f99c877dd6700368b0c3217064cac830",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64/-/core-linux-x64-0.6.5.tgz",
+              "tarballSha256": "24839d2eb5e04acc97d2243c7e8e824b8c976b205ba0ae901025d5043bd78b70",
+              "version": "0.6.5"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-Mvq6DHcJMIKxMkrcgCp91sGENt8AW01ZgXPyQpcYsKh0B02XCJA0mrYn12EI0I+JltvefJygrg9hzUhfrAm3MA==",
+              "name": "@opentui/core-linux-x64-musl",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "8e1485d3a045bd67228721afb246c94306cf062b",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64-musl/-/core-linux-x64-musl-0.6.5.tgz",
+              "tarballSha256": "99c55cb994f049da40f978773a64cb12b7000682627d01300d9b9a1b6c594c22",
+              "version": "0.6.5"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-uQdUN/TNv2FJgeKzCdjetkBI1XF9MyU4ndFMjjh5SHWVMPNLvrNET1Hmeqc12Wy4ycwEhV5f0zL0XLsOcbk7pA==",
+              "name": "@opentui/core-win32-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "a0429bf7faa2f9f7683069ee5ecc2793fa00c4d2",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-arm64/-/core-win32-arm64-0.6.5.tgz",
+              "tarballSha256": "f7a0ebd6a38a6d70ecf220a201cfebaf735d8c990f39d2b3c433005297229735",
+              "version": "0.6.5"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-3l6NtgQUZxmS+RtywqeLTe41MTg0cClT7pDJOYRMLjrVfJ2mjZB3KtFt8Kz9mP8v8QKeA35peZRNoYIgINJkkA==",
+              "name": "@opentui/core-win32-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "0970717618deb9d73d539d47e9b87ac68d56f98a",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-x64/-/core-win32-x64-0.6.5.tgz",
+              "tarballSha256": "4a2cebfdd88661f2502a9a5da94d9991ad9bd57ded8d8a8592e241dc65588e41",
+              "version": "0.6.5"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==",
+              "name": "@types/emscripten",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "0d852a4c29fc2c035ed9232f00135717f1a920f1",
+              "tarball": "https://registry.npmjs.org/@types/emscripten/-/emscripten-1.41.6.tgz",
+              "tarballSha256": "2a8a74381f2d0e134ed01b2dddab92ec90897c2268e131f35aabadb9b37b1174",
+              "version": "1.41.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
+              "name": "ansi-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "typescript",
+                  "optionalPeer": false,
+                  "packageName": "typescript",
+                  "requested": "^5",
+                  "type": "peer",
+                  "version": "5.9.3"
+                }
+              ],
+              "integrity": "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ==",
+              "name": "bun-ffi-structs",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "8af2f351a51310a8673dbe60c30dbad11d78a6ec",
+              "tarball": "https://registry.npmjs.org/bun-ffi-structs/-/bun-ffi-structs-0.3.1.tgz",
+              "tarballSha256": "bfe8c37f6d3ed44e930bc3ee7f4e784324583dd9f753d7dafdd0e493a37c8350",
+              "version": "0.3.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+              "name": "diff",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "297c31cd7c280f13dfe335791ec2063bd4a73a6f",
+              "tarball": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+              "tarballSha256": "b898bf23c95594607576e25ddd4013f1d51ed0e862aaf0732815830c87b3b58f",
+              "version": "9.0.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+              "name": "emoji-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "bf3d6e8f7f8fd22a65d9703475bc0147357a6b0d",
+              "tarball": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+              "tarballSha256": "9f40e54c0586f30882ece0ee0d22654394b89321e89cb55e8faf12ed8ccff981",
+              "version": "10.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
+              "name": "get-east-asian-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==",
+              "name": "marked",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "9db34197ac145e5929572ee49ef701e37ee9b2e6",
+              "tarball": "https://registry.npmjs.org/marked/-/marked-17.0.1.tgz",
+              "tarballSha256": "d09bc4067748b71af131a261550193cfefba014f67971f3890f2269293f5a60b",
+              "version": "17.0.1"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "emoji-regex",
+                  "optionalPeer": false,
+                  "packageName": "emoji-regex",
+                  "requested": "^10.3.0",
+                  "type": "dependency",
+                  "version": "10.6.0"
+                },
+                {
+                  "name": "get-east-asian-width",
+                  "optionalPeer": false,
+                  "packageName": "get-east-asian-width",
+                  "requested": "^1.0.0",
+                  "type": "dependency",
+                  "version": "1.7.0"
+                },
+                {
+                  "name": "strip-ansi",
+                  "optionalPeer": false,
+                  "packageName": "strip-ansi",
+                  "requested": "^7.1.0",
+                  "type": "dependency",
+                  "version": "7.2.0"
+                }
+              ],
+              "integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+              "name": "string-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b5bb8e2165ce275d4d43476dd2700ad9091db6dc",
+              "tarball": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+              "tarballSha256": "3e90901a98cadef6986fe2953e6d181f49730d81c7855776a6337fef93bbf1f3",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "ansi-regex",
+                  "optionalPeer": false,
+                  "packageName": "ansi-regex",
+                  "requested": "^6.2.2",
+                  "type": "dependency",
+                  "version": "6.4.0"
+                }
+              ],
+              "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+              "name": "strip-ansi",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "d22a269522836a627af8d04b5c3fd2c7fa3e32e3",
+              "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+              "tarballSha256": "2fa01de86a5022ef32773abbc4e84a53a1c5d31f5a5cbf03ed2575f10408543f",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+              "name": "typescript",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "5b4f59e15310ab17a216f5d6cf53ee476ede670f",
+              "tarball": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+              "tarballSha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+              "version": "5.9.3"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "@types/emscripten",
+                  "optionalPeer": true,
+                  "packageName": "@types/emscripten",
+                  "requested": "^1.40.0",
+                  "type": "peer",
+                  "version": "1.41.6"
+                }
+              ],
+              "integrity": "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA==",
+              "name": "web-tree-sitter",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b21f1df7aaa87ad235b4c3d07005168349496706",
+              "tarball": "https://registry.npmjs.org/web-tree-sitter/-/web-tree-sitter-0.25.10.tgz",
+              "tarballSha256": "6636457aca5e6945fb73671362ae19c9c4e513bb516a53d58c4a2b4d12533e0f",
+              "version": "0.25.10"
+            }
+          ],
+          "dependencyRoots": [
+            {
+              "name": "@opentui/core-darwin-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-arm64",
+              "requested": "0.6.5",
+              "type": "optional",
+              "version": "0.6.5"
+            },
+            {
+              "name": "@opentui/core-darwin-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-x64",
+              "requested": "0.6.5",
+              "type": "optional",
+              "version": "0.6.5"
+            },
+            {
+              "name": "@opentui/core-linux-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64",
+              "requested": "0.6.5",
+              "type": "optional",
+              "version": "0.6.5"
+            },
+            {
+              "name": "@opentui/core-linux-arm64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64-musl",
+              "requested": "0.6.5",
+              "type": "optional",
+              "version": "0.6.5"
+            },
+            {
+              "name": "@opentui/core-linux-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64",
+              "requested": "0.6.5",
+              "type": "optional",
+              "version": "0.6.5"
+            },
+            {
+              "name": "@opentui/core-linux-x64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64-musl",
+              "requested": "0.6.5",
+              "type": "optional",
+              "version": "0.6.5"
+            },
+            {
+              "name": "@opentui/core-win32-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-arm64",
+              "requested": "0.6.5",
+              "type": "optional",
+              "version": "0.6.5"
+            },
+            {
+              "name": "@opentui/core-win32-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-x64",
+              "requested": "0.6.5",
+              "type": "optional",
+              "version": "0.6.5"
+            },
+            {
+              "name": "bun-ffi-structs",
+              "optionalPeer": false,
+              "packageName": "bun-ffi-structs",
+              "requested": "0.3.1",
+              "type": "dependency",
+              "version": "0.3.1"
+            },
+            {
+              "name": "diff",
+              "optionalPeer": false,
+              "packageName": "diff",
+              "requested": "9.0.0",
+              "type": "dependency",
+              "version": "9.0.0"
+            },
+            {
+              "name": "marked",
+              "optionalPeer": false,
+              "packageName": "marked",
+              "requested": "17.0.1",
+              "type": "dependency",
+              "version": "17.0.1"
+            },
+            {
+              "name": "string-width",
+              "optionalPeer": false,
+              "packageName": "string-width",
+              "requested": "7.2.0",
+              "type": "dependency",
+              "version": "7.2.0"
+            },
+            {
+              "name": "web-tree-sitter",
+              "optionalPeer": false,
+              "packageName": "web-tree-sitter",
+              "requested": "0.25.10",
+              "type": "peer",
+              "version": "0.25.10"
+            }
+          ],
+          "integrity": "sha512-OAonnjtLIIgg1rW7uwJ8IA8Weft9St7eG3LCq4rppkNqIYbCQlUR03Pv9a10ooc2SXM9bqkHH/47/S1Og39I1w==",
+          "libc": [],
+          "optionalDependencies": {
+            "@opentui/core-darwin-arm64": "0.6.5",
+            "@opentui/core-darwin-x64": "0.6.5",
+            "@opentui/core-linux-arm64": "0.6.5",
+            "@opentui/core-linux-arm64-musl": "0.6.5",
+            "@opentui/core-linux-x64": "0.6.5",
+            "@opentui/core-linux-x64-musl": "0.6.5",
+            "@opentui/core-win32-arm64": "0.6.5",
+            "@opentui/core-win32-x64": "0.6.5"
+          },
+          "os": [],
+          "peerDependencies": {
+            "web-tree-sitter": "0.25.10"
+          },
+          "peerDependenciesMeta": {},
+          "registry": "https://registry.npmjs.org",
+          "shasum": "ab436614111b40965f030db87cabb2d4b8002fda",
+          "tarball": "https://registry.npmjs.org/@opentui/core/-/core-0.6.5.tgz",
+          "tarballSha256": "7358c16484f7f869188b6d054b224ca1233b51c038842fbb392195158f7d8cba"
+        },
+        "state": "red",
+        "version": "0.6.5"
+      },
+      {
+        "candidateDigest": "sha256:a828f75e3b6d5b9a3c5e8623ef9121b719a50ea9a72c6334b7a20584259da07f",
+        "certificationRevision": 3,
+        "source": {
+          "bundledDependencies": [],
+          "closureComplete": true,
+          "closureDigest": "sha256:7991099910edc7cd55612745685e6712719ebe8cf19361286840cf67f71c7d8e",
+          "cpu": [],
+          "dependencies": {
+            "bun-ffi-structs": "0.3.1",
+            "diff": "9.0.0",
+            "marked": "17.0.1",
+            "string-width": "7.2.0"
+          },
+          "dependencyClosure": [
+            {
+              "dependencies": [],
+              "integrity": "sha512-pETue+Rm0lVUzJQfdd4ra0zqdqtzObxC4aBsPsRnAg/wc8RCSisT7oxudZyGaTq39Lashnp5R6i7QWPK4HvxLQ==",
+              "name": "@opentui/core-darwin-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "a1dcc99c051960b7c4a73e40a97e130bf8e5b0e0",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.6.6.tgz",
+              "tarballSha256": "75ef23fec80bf7a9fe9c977456701729ec763f6a2dada06631662e0c5f654dfc",
+              "version": "0.6.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-nexiM1l4rrUEz68t9XgdpaU5RcBH2ebHCsxw9UAGHBSlE477x6vjlaO8bvfdvx1k8vBbGir8y8zDWgkraE0cdA==",
+              "name": "@opentui/core-darwin-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "darwin"
+                ]
+              },
+              "shasum": "1dc41f9fc1a79bbc17436f89a13dc70a9acbd5f6",
+              "tarball": "https://registry.npmjs.org/@opentui/core-darwin-x64/-/core-darwin-x64-0.6.6.tgz",
+              "tarballSha256": "af2dfea9cc57284978271a3112f7b89f6442d4ef6f38864a4d0d0f908134093d",
+              "version": "0.6.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-EXKW3Rmhnv3zkca2sqNBmVXm43TWCHqC/UI4fSDml9WfjZcvdbw+mJ8TEBMe818hwkLOn16bJ/behb3GIVZiZQ==",
+              "name": "@opentui/core-linux-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "c8fa8374c95375dd8ce19e46d25597f64d764cec",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64/-/core-linux-arm64-0.6.6.tgz",
+              "tarballSha256": "3751b60b3603bfc6c33dc764d0bcf9ca43481e4298d695ae6dd89556e727cf54",
+              "version": "0.6.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-FU10EOCQT0+B6JU6oo/RmFCZqKJ2XNB8diLXCsAJzspMrtRngXV84MfyOiNcR6o033O7SdHdep+6PoXfU6RZQw==",
+              "name": "@opentui/core-linux-arm64-musl",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "9173c27ff5f2b883a25aaf82f286ca312d037c9e",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-arm64-musl/-/core-linux-arm64-musl-0.6.6.tgz",
+              "tarballSha256": "f4e8ce8209bb55b2cb2fd9e2c85ae3542fa7acc376d193a653f438b269b04060",
+              "version": "0.6.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-MNAAsU2+ywpYfJkZ+EYr02nh0yc9egBWRCFAcKvZiYiCbxCoSTmO1c03LbUMlZ/zUlYOi5ZtwzSNi6rhrQZNkw==",
+              "name": "@opentui/core-linux-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "a617d984f80582b301cf22855c528f1a9daab204",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64/-/core-linux-x64-0.6.6.tgz",
+              "tarballSha256": "5487434c6a138e7a474a57df78cead6ab168cae4938c34496c2c851abf6ad14e",
+              "version": "0.6.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-NtRUvk2j7O88JYdVy6aIZyEN31wuHg2cDTsQ13UAoXaGkTc/o3cz8Z7Z1PAA8y5lduZkHWmUd9jhItsfWU8uQw==",
+              "name": "@opentui/core-linux-x64-musl",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [
+                  "musl"
+                ],
+                "os": [
+                  "linux"
+                ]
+              },
+              "shasum": "d8ef4c1d7088c30d6fec05a42ba7101aa3bf50ac",
+              "tarball": "https://registry.npmjs.org/@opentui/core-linux-x64-musl/-/core-linux-x64-musl-0.6.6.tgz",
+              "tarballSha256": "9e1664ca16a1569cc1c30d2c6894b97373b6447d558f8de1fec09fd9217a3633",
+              "version": "0.6.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-Z4bJDA04uCDvXFCquDnbCihof5hMVDP7cGBME4fv/zrKuVMQlQlLGwyExQiG+8vmSZeSeNU0ks+p1g3ewL+3ew==",
+              "name": "@opentui/core-win32-arm64",
+              "platform": {
+                "cpu": [
+                  "arm64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "32f433174a522909a70c7107899afba1789ae149",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-arm64/-/core-win32-arm64-0.6.6.tgz",
+              "tarballSha256": "6f66f88bfb20da4eb64c04cc21f7c050ec8a9a68ab87b28686f5ea392b89496d",
+              "version": "0.6.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-i3IMd1uviUlJICRjzxPf8LJaxQXkZGHHm/ExqWkymvbUI+FjP/2XWC/JMqO7pD39GIb+lkv5Wte3bxQGvXx8Hg==",
+              "name": "@opentui/core-win32-x64",
+              "platform": {
+                "cpu": [
+                  "x64"
+                ],
+                "libc": [],
+                "os": [
+                  "win32"
+                ]
+              },
+              "shasum": "8c57649958c4c743dc4944308c6d2e8c5f004fce",
+              "tarball": "https://registry.npmjs.org/@opentui/core-win32-x64/-/core-win32-x64-0.6.6.tgz",
+              "tarballSha256": "4e73e96c3a220e04ff7bf072a59d9a641a8a0a5fedba4d82989d4e70abd57870",
+              "version": "0.6.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==",
+              "name": "@types/emscripten",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "0d852a4c29fc2c035ed9232f00135717f1a920f1",
+              "tarball": "https://registry.npmjs.org/@types/emscripten/-/emscripten-1.41.6.tgz",
+              "tarballSha256": "2a8a74381f2d0e134ed01b2dddab92ec90897c2268e131f35aabadb9b37b1174",
+              "version": "1.41.6"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
+              "name": "ansi-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+              "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+              "tarballSha256": "4cc0f907dd4cb056ff929ee28c031f4084c702ee4969973025a418a5e3fffca7",
+              "version": "6.4.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "typescript",
+                  "optionalPeer": false,
+                  "packageName": "typescript",
+                  "requested": "^5",
+                  "type": "peer",
+                  "version": "5.9.3"
+                }
+              ],
+              "integrity": "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ==",
+              "name": "bun-ffi-structs",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "8af2f351a51310a8673dbe60c30dbad11d78a6ec",
+              "tarball": "https://registry.npmjs.org/bun-ffi-structs/-/bun-ffi-structs-0.3.1.tgz",
+              "tarballSha256": "bfe8c37f6d3ed44e930bc3ee7f4e784324583dd9f753d7dafdd0e493a37c8350",
+              "version": "0.3.1"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+              "name": "diff",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "297c31cd7c280f13dfe335791ec2063bd4a73a6f",
+              "tarball": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+              "tarballSha256": "b898bf23c95594607576e25ddd4013f1d51ed0e862aaf0732815830c87b3b58f",
+              "version": "9.0.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+              "name": "emoji-regex",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "bf3d6e8f7f8fd22a65d9703475bc0147357a6b0d",
+              "tarball": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+              "tarballSha256": "9f40e54c0586f30882ece0ee0d22654394b89321e89cb55e8faf12ed8ccff981",
+              "version": "10.6.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
+              "name": "get-east-asian-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "7ee99f0bd5ab7c622002deeabba232923726d1d4",
+              "tarball": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+              "tarballSha256": "371c7b094731ec5848025a7139eb05facc23cf18bd56ed8f755364e4b90ebd35",
+              "version": "1.7.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==",
+              "name": "marked",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "9db34197ac145e5929572ee49ef701e37ee9b2e6",
+              "tarball": "https://registry.npmjs.org/marked/-/marked-17.0.1.tgz",
+              "tarballSha256": "d09bc4067748b71af131a261550193cfefba014f67971f3890f2269293f5a60b",
+              "version": "17.0.1"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "emoji-regex",
+                  "optionalPeer": false,
+                  "packageName": "emoji-regex",
+                  "requested": "^10.3.0",
+                  "type": "dependency",
+                  "version": "10.6.0"
+                },
+                {
+                  "name": "get-east-asian-width",
+                  "optionalPeer": false,
+                  "packageName": "get-east-asian-width",
+                  "requested": "^1.0.0",
+                  "type": "dependency",
+                  "version": "1.7.0"
+                },
+                {
+                  "name": "strip-ansi",
+                  "optionalPeer": false,
+                  "packageName": "strip-ansi",
+                  "requested": "^7.1.0",
+                  "type": "dependency",
+                  "version": "7.2.0"
+                }
+              ],
+              "integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+              "name": "string-width",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b5bb8e2165ce275d4d43476dd2700ad9091db6dc",
+              "tarball": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+              "tarballSha256": "3e90901a98cadef6986fe2953e6d181f49730d81c7855776a6337fef93bbf1f3",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "ansi-regex",
+                  "optionalPeer": false,
+                  "packageName": "ansi-regex",
+                  "requested": "^6.2.2",
+                  "type": "dependency",
+                  "version": "6.4.0"
+                }
+              ],
+              "integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+              "name": "strip-ansi",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "d22a269522836a627af8d04b5c3fd2c7fa3e32e3",
+              "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+              "tarballSha256": "2fa01de86a5022ef32773abbc4e84a53a1c5d31f5a5cbf03ed2575f10408543f",
+              "version": "7.2.0"
+            },
+            {
+              "dependencies": [],
+              "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+              "name": "typescript",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "5b4f59e15310ab17a216f5d6cf53ee476ede670f",
+              "tarball": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+              "tarballSha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+              "version": "5.9.3"
+            },
+            {
+              "dependencies": [
+                {
+                  "name": "@types/emscripten",
+                  "optionalPeer": true,
+                  "packageName": "@types/emscripten",
+                  "requested": "^1.40.0",
+                  "type": "peer",
+                  "version": "1.41.6"
+                }
+              ],
+              "integrity": "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA==",
+              "name": "web-tree-sitter",
+              "platform": {
+                "cpu": [],
+                "libc": [],
+                "os": []
+              },
+              "shasum": "b21f1df7aaa87ad235b4c3d07005168349496706",
+              "tarball": "https://registry.npmjs.org/web-tree-sitter/-/web-tree-sitter-0.25.10.tgz",
+              "tarballSha256": "6636457aca5e6945fb73671362ae19c9c4e513bb516a53d58c4a2b4d12533e0f",
+              "version": "0.25.10"
+            }
+          ],
+          "dependencyRoots": [
+            {
+              "name": "@opentui/core-darwin-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-arm64",
+              "requested": "0.6.6",
+              "type": "optional",
+              "version": "0.6.6"
+            },
+            {
+              "name": "@opentui/core-darwin-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-darwin-x64",
+              "requested": "0.6.6",
+              "type": "optional",
+              "version": "0.6.6"
+            },
+            {
+              "name": "@opentui/core-linux-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64",
+              "requested": "0.6.6",
+              "type": "optional",
+              "version": "0.6.6"
+            },
+            {
+              "name": "@opentui/core-linux-arm64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-arm64-musl",
+              "requested": "0.6.6",
+              "type": "optional",
+              "version": "0.6.6"
+            },
+            {
+              "name": "@opentui/core-linux-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64",
+              "requested": "0.6.6",
+              "type": "optional",
+              "version": "0.6.6"
+            },
+            {
+              "name": "@opentui/core-linux-x64-musl",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-linux-x64-musl",
+              "requested": "0.6.6",
+              "type": "optional",
+              "version": "0.6.6"
+            },
+            {
+              "name": "@opentui/core-win32-arm64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-arm64",
+              "requested": "0.6.6",
+              "type": "optional",
+              "version": "0.6.6"
+            },
+            {
+              "name": "@opentui/core-win32-x64",
+              "optionalPeer": false,
+              "packageName": "@opentui/core-win32-x64",
+              "requested": "0.6.6",
+              "type": "optional",
+              "version": "0.6.6"
+            },
+            {
+              "name": "bun-ffi-structs",
+              "optionalPeer": false,
+              "packageName": "bun-ffi-structs",
+              "requested": "0.3.1",
+              "type": "dependency",
+              "version": "0.3.1"
+            },
+            {
+              "name": "diff",
+              "optionalPeer": false,
+              "packageName": "diff",
+              "requested": "9.0.0",
+              "type": "dependency",
+              "version": "9.0.0"
+            },
+            {
+              "name": "marked",
+              "optionalPeer": false,
+              "packageName": "marked",
+              "requested": "17.0.1",
+              "type": "dependency",
+              "version": "17.0.1"
+            },
+            {
+              "name": "string-width",
+              "optionalPeer": false,
+              "packageName": "string-width",
+              "requested": "7.2.0",
+              "type": "dependency",
+              "version": "7.2.0"
+            },
+            {
+              "name": "web-tree-sitter",
+              "optionalPeer": false,
+              "packageName": "web-tree-sitter",
+              "requested": "0.25.10",
+              "type": "peer",
+              "version": "0.25.10"
+            }
+          ],
+          "integrity": "sha512-GhlGB8iG4YDzL6hIaxAYUZpHXDy76sQKuI6mQiCFCKXjfv6xH53pEcPX5gn+qYYYPjfjSaUevAVZBaS5Srtl/g==",
+          "libc": [],
+          "optionalDependencies": {
+            "@opentui/core-darwin-arm64": "0.6.6",
+            "@opentui/core-darwin-x64": "0.6.6",
+            "@opentui/core-linux-arm64": "0.6.6",
+            "@opentui/core-linux-arm64-musl": "0.6.6",
+            "@opentui/core-linux-x64": "0.6.6",
+            "@opentui/core-linux-x64-musl": "0.6.6",
+            "@opentui/core-win32-arm64": "0.6.6",
+            "@opentui/core-win32-x64": "0.6.6"
+          },
+          "os": [],
+          "peerDependencies": {
+            "web-tree-sitter": "0.25.10"
+          },
+          "peerDependenciesMeta": {},
+          "registry": "https://registry.npmjs.org",
+          "shasum": "2ef1019352c7a76fc87993fba7667ff7ef3b7d29",
+          "tarball": "https://registry.npmjs.org/@opentui/core/-/core-0.6.6.tgz",
+          "tarballSha256": "25142af92caa4d1c12ea46d140a634f06a87abb16402646e89c321e7c6b727c8"
+        },
+        "state": "red",
+        "version": "0.6.6"
       }
     ]
   }
